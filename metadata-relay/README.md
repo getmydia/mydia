@@ -578,6 +578,15 @@ batches are kept 14 days, reports 90.
 - `./dev relay logs "Work MacBook" --since 2h --level warn` from the repo root,
   with `MYDIA_RELAY_DASHBOARD_USER` and `MYDIA_RELAY_DASHBOARD_PASSWORD` set.
 
+### Player Backup
+
+`/backup/v1` stores end-to-end encrypted player backups: ciphertext slots and
+public keys only, so the relay never sees plaintext. Requests are signed with
+the device's Ed25519 key. Limits: 4 MiB per slot, 16 members per vault, 120
+writes per vault per hour, and a vault with no write for 180 days is deleted.
+Files live under `BACKUP_DIR` (default `backup/` beside `SQLITE_DB_PATH`).
+The full wire format is in [docs/backup.md](docs/backup.md).
+
 ### Update Check
 
 Mydia installs ask for the newest release shortly after boot and weekly.

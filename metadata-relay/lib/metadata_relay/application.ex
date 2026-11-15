@@ -32,6 +32,8 @@ defmodule MetadataRelay.Application do
         MetadataRelay.RateLimiter,
         # Hourly retention and disk cap for uploaded player logs
         MetadataRelay.PlayerLogs.Sweeper,
+        # Hourly deletion of player backup vaults idle for 180 days
+        MetadataRelay.Backup.Sweeper,
         # Per-address daily byte budget for kind: "report" player log uploads
         MetadataRelay.PlayerLogs.ReportBudget,
         # Hourly read of the newest Mydia release, for update checks

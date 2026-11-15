@@ -384,6 +384,7 @@ Read the relevant one before working in that area:
 | `.github/ci.md`, `.github/ci-flakes.md` | CI mechanics, releases, the flake catalogue |
 | `player/docs/` | player workflow, testing, Riverpod, packaging |
 | `player/lib/core/sources/README.md` | Plex, Stash and Jellyfin sources: storage, connection race, credentials, playback seam |
+| `player/lib/core/backup/README.md` | the player's encrypted cloud backup: keys, record kinds, live vs restore, the recovery key on paired devices, failures |
 | `design/README.md` | specs, plans and planning notes: layout and naming |
 
 ### Phoenix v1.8 guidelines

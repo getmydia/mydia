@@ -776,6 +776,8 @@ pub enum FlutterPeerSyncRequest {
         device_name: String,
         platform: String,
         endpoint_addr_json: Option<String>,
+        backup_signer: Option<String>,
+        backup_box: Option<String>,
     },
     Sync {
         auth_proof: String,
@@ -795,6 +797,7 @@ pub enum FlutterPeerSyncResponse {
         roster: Vec<FlutterWirePeerMember>,
         watch_records: Vec<FlutterWireWatchRecord>,
         pin_records: Vec<FlutterWirePinRecord>,
+        vault_id: Option<String>,
     },
     PairRejected {
         reason: String,
@@ -1134,11 +1137,15 @@ impl From<FlutterPeerSyncRequest> for PeerSyncRequest {
                 device_name,
                 platform,
                 endpoint_addr_json,
+                backup_signer,
+                backup_box,
             } => PeerSyncRequest::Pair {
                 claim_code,
                 device_name,
                 platform,
                 endpoint_addr_json,
+                backup_signer,
+                backup_box,
             },
             FlutterPeerSyncRequest::Sync {
                 auth_proof,
@@ -1167,11 +1174,15 @@ impl From<PeerSyncRequest> for FlutterPeerSyncRequest {
                 device_name,
                 platform,
                 endpoint_addr_json,
+                backup_signer,
+                backup_box,
             } => FlutterPeerSyncRequest::Pair {
                 claim_code,
                 device_name,
                 platform,
                 endpoint_addr_json,
+                backup_signer,
+                backup_box,
             },
             PeerSyncRequest::Sync {
                 auth_proof,
@@ -1200,11 +1211,13 @@ impl From<FlutterPeerSyncResponse> for PeerSyncResponse {
                 roster,
                 watch_records,
                 pin_records,
+                vault_id,
             } => PeerSyncResponse::Paired {
                 group_secret_base64,
                 roster: roster.into_iter().map(Into::into).collect(),
                 watch_records: watch_records.into_iter().map(Into::into).collect(),
                 pin_records: pin_records.into_iter().map(Into::into).collect(),
+                vault_id,
             },
             FlutterPeerSyncResponse::PairRejected { reason } => {
                 PeerSyncResponse::PairRejected { reason }
@@ -1233,11 +1246,13 @@ impl From<PeerSyncResponse> for FlutterPeerSyncResponse {
                 roster,
                 watch_records,
                 pin_records,
+                vault_id,
             } => FlutterPeerSyncResponse::Paired {
                 group_secret_base64,
                 roster: roster.into_iter().map(Into::into).collect(),
                 watch_records: watch_records.into_iter().map(Into::into).collect(),
                 pin_records: pin_records.into_iter().map(Into::into).collect(),
+                vault_id,
             },
             PeerSyncResponse::PairRejected { reason } => {
                 FlutterPeerSyncResponse::PairRejected { reason }
@@ -2460,6 +2475,8 @@ mod event_dispatcher_tests {
                 device_name: "Test Device".to_string(),
                 platform: "linux".to_string(),
                 endpoint_addr_json: None,
+                backup_signer: None,
+                backup_box: None,
             }),
             request_id: request_id.to_string(),
         }

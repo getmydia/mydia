@@ -32,6 +32,7 @@ import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_folder_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/backup/restore_backup_screen.dart';
 import '../../presentation/screens/sources/add_smb_screen.dart';
 import '../../presentation/screens/sources/add_webdav_screen.dart';
 import '../sources/files/files_account.dart'
@@ -241,10 +242,12 @@ String? appRedirect({
 
   final isLoginRoute = location == '/login';
   // Reached from the login screen's "Connect another server instead" and
-  // "Show hidden servers" (Manage servers, after the unlock screen).
+  // "Show hidden servers" (Manage servers, after the unlock screen), and
+  // "Restore from backup" on both.
   final isSignedOutSourcesRoute = location == '/sources/add' ||
       location.startsWith('/sources/add/') ||
-      location == '/sources/manage';
+      location == '/sources/manage' ||
+      location == restoreBackupLocation;
 
   // With any one source the app is usable; `/` has already moved to All
   // servers or the active source. With none, the only place to go is add-a-server.
@@ -348,6 +351,16 @@ GoRouter appRouter(Ref ref) {
         name: 'add_source',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const AddSourceScreen(),
+      ),
+      // Reached from the add-server and sign-in screens. The web player has
+      // no cloud backup.
+      GoRoute(
+        path: restoreBackupLocation,
+        name: 'restore_backup',
+        parentNavigatorKey: rootNavigatorKey,
+        redirect: (context, state) =>
+            ref.read(isWebProvider) ? '/sources/add' : null,
+        builder: (context, state) => const RestoreBackupScreen(),
       ),
       GoRoute(
         path: '/sources/add/plex',

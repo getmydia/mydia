@@ -39,6 +39,10 @@ pub enum PeerSyncRequest {
         device_name: String,
         platform: String,
         endpoint_addr_json: Option<String>,
+        #[serde(default)]
+        backup_signer: Option<String>,
+        #[serde(default)]
+        backup_box: Option<String>,
     },
     Sync {
         auth_proof: String,
@@ -57,6 +61,8 @@ pub enum PeerSyncResponse {
         roster: Vec<WirePeerMember>,
         watch_records: Vec<WireWatchRecord>,
         pin_records: Vec<WirePinRecord>,
+        #[serde(default)]
+        vault_id: Option<String>,
     },
     PairRejected {
         reason: String,
@@ -81,11 +87,104 @@ mod tests {
             device_name: "Pixel 9".into(),
             platform: "android".into(),
             endpoint_addr_json: Some("{\"node_id\":\"abc\"}".into()),
+            backup_signer: None,
+            backup_box: None,
         };
         let bytes = serde_cbor::to_vec(&request).expect("serialize pair request");
         let decoded: PeerSyncRequest =
             serde_cbor::from_slice(&bytes).expect("deserialize pair request");
         assert_eq!(decoded, request);
+    }
+
+    #[derive(serde::Serialize)]
+    enum OldPeerSyncRequest {
+        Pair {
+            claim_code: String,
+            device_name: String,
+            platform: String,
+            endpoint_addr_json: Option<String>,
+        },
+    }
+
+    #[derive(serde::Serialize)]
+    enum OldPeerSyncResponse {
+        Paired {
+            group_secret_base64: String,
+            roster: Vec<WirePeerMember>,
+            watch_records: Vec<WireWatchRecord>,
+            pin_records: Vec<WirePinRecord>,
+        },
+    }
+
+    #[test]
+    fn old_pair_request_decodes_with_no_backup_fields() {
+        let old = OldPeerSyncRequest::Pair {
+            claim_code: "123456".into(),
+            device_name: "Pixel 9".into(),
+            platform: "android".into(),
+            endpoint_addr_json: None,
+        };
+        let bytes = serde_cbor::to_vec(&old).expect("serialize old pair");
+        let decoded: PeerSyncRequest = serde_cbor::from_slice(&bytes).expect("decode old pair");
+        assert_eq!(
+            decoded,
+            PeerSyncRequest::Pair {
+                claim_code: "123456".into(),
+                device_name: "Pixel 9".into(),
+                platform: "android".into(),
+                endpoint_addr_json: None,
+                backup_signer: None,
+                backup_box: None,
+            }
+        );
+    }
+
+    #[test]
+    fn old_paired_response_decodes_with_no_vault_id() {
+        let old = OldPeerSyncResponse::Paired {
+            group_secret_base64: "c2VjcmV0".into(),
+            roster: vec![],
+            watch_records: vec![],
+            pin_records: vec![],
+        };
+        let bytes = serde_cbor::to_vec(&old).expect("serialize old paired");
+        let decoded: PeerSyncResponse = serde_cbor::from_slice(&bytes).expect("decode old paired");
+        assert_eq!(
+            decoded,
+            PeerSyncResponse::Paired {
+                group_secret_base64: "c2VjcmV0".into(),
+                roster: vec![],
+                watch_records: vec![],
+                pin_records: vec![],
+                vault_id: None,
+            }
+        );
+    }
+
+    #[test]
+    fn backup_fields_round_trip_cbor() {
+        let request = PeerSyncRequest::Pair {
+            claim_code: "123456".into(),
+            device_name: "Living Room TV".into(),
+            platform: "android".into(),
+            endpoint_addr_json: None,
+            backup_signer: Some("signer_b64".into()),
+            backup_box: Some("box_b64".into()),
+        };
+        let bytes = serde_cbor::to_vec(&request).expect("serialize");
+        let decoded: PeerSyncRequest = serde_cbor::from_slice(&bytes).expect("decode");
+        assert_eq!(decoded, request);
+
+        let response = PeerSyncResponse::Paired {
+            group_secret_base64: "c2VjcmV0".into(),
+            roster: vec![],
+            watch_records: vec![],
+            pin_records: vec![],
+            vault_id: Some("0123456789abcdef0123456789abcdef".into()),
+        };
+        let bytes = serde_cbor::to_vec(&response).expect("serialize");
+        let decoded: PeerSyncResponse = serde_cbor::from_slice(&bytes).expect("decode");
+        assert_eq!(decoded, response);
     }
 
     #[test]
@@ -144,6 +243,7 @@ mod tests {
                 updated_at_ms: 2100,
             }],
             pin_records: vec![],
+            vault_id: None,
         };
         let bytes = serde_cbor::to_vec(&response).expect("serialize paired response");
         let decoded: PeerSyncResponse =
