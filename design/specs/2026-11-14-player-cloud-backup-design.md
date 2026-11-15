@@ -43,7 +43,8 @@ servers added.
 
 - **User's own cloud (iCloud, Google Drive, Dropbox, WebDAV, S3).** Per-platform
   SDK and OAuth work, and setup the user must do. A relay-hosted vault needs
-  none.
+  none. Later added as an alternative store for iCloud and Google Drive:
+  `design/specs/2026-11-14-player-cloud-drive-backup-design.md`.
 - **A passphrase instead of, or alongside, the recovery key.** The relay would
   hold a blob open to offline guessing, and a second unlock path doubles the
   UI for a screen used once.
