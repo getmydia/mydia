@@ -52,7 +52,7 @@ relay-only features. It is split:
 | Unit | Job |
 | --- | --- |
 | `slot_sync_engine.dart` (`SlotSyncEngine`) | Extracted from `BackupSyncService`: dirty flag and 2-minute debounce, flush on background, polling (foreground, after a p2p sync, every 15 minutes) and backoff to 30 minutes, downloading only slots whose version moved, `_apply` and merge, pending account offers, device names. Talks only to a `SlotTransport` |
-| `slot_transport.dart` | The interface below, plus `SlotListing`, `SlotRef`, `SlotVersion` and the transport error kinds |
+| `slot_transport.dart` | The interface below, plus `SlotListing` and `SlotInfo`. Errors reuse #1414's `BackupRelayError` kinds |
 | `relay_slot_transport.dart` | The relay client plus `VaultCrypto` sealing and opening, behind `SlotTransport` |
 | `backup_sync_service.dart` (`BackupSyncService` keeps its name) | What remains of it: vault creation, recovery key, rotation, member removal, adding a member on pairing, vault choice. Owns an engine over `RelaySlotTransport`. Behaviour identical to #1414, and the name stays so 1414's fakes and screens keep compiling |
 | `cloud/cloud_slot_transport.dart` | `SlotTransport` over a `CloudBackend`. Plaintext gzip JSON |
@@ -63,10 +63,12 @@ relay-only features. It is split:
 
 ```dart
 abstract class SlotTransport {
+  String get ownSlotId;
+
   /// Null when nothing changed since [cursor].
   Future<SlotListing?> list({String? cursor});
-  Future<BackupPayload> read(SlotRef slot);
-  Future<SlotVersion> writeOwn(BackupPayload payload);
+  Future<BackupPayload> read(SlotInfo slot);
+  Future<void> writeOwn(BackupPayload payload);
   Future<void> delete(String slotId);
 
   /// Hint that [list] would now return something. Empty for the relay and
@@ -76,8 +78,12 @@ abstract class SlotTransport {
 ```
 
 `SlotListing` carries an opaque `cursor` (the relay's manifest ETag, Drive's
-newest `modifiedTime` plus file versions, CloudKit's server change token) and,
-per slot, its id, version, device name and size.
+newest `modifiedTime` plus file versions, CloudKit's server change token), the
+list of `SlotInfo` and an `ownStale` flag the relay sets when this device's
+epoch is behind the vault's. Each `SlotInfo` holds the slot id, an opaque
+version, and optionally the device name, update time and size. The engine
+keeps the version of each slot it has merged per store, so two stores that
+happen to produce the same version string never mask each other.
 
 The slot id on every store is #1414's per-install id from `BackupIdentity`,
 so switching stores keeps a device's identity. A cloud slot's body is the
@@ -111,8 +117,11 @@ an optional `movedTo` (see Switching).
 - **Layout**: one file per device, `slot-<slotId>.json.gz`, with
   `appProperties` `slotId` and `deviceName`. `list` is
   `files.list(spaces=appDataFolder, fields=id,name,version,modifiedTime,size,appProperties)`.
-  `writeOwn` is a multipart `files.update`, or `files.create` the first time;
-  the own file id is cached in `backup_meta`. Freshness is #1414's polling.
+  File names are `slot-<slotId>.json.gz`. `writeOwn` is a multipart
+  `files.update`, or `files.create` the first time; the own file id is cached
+  in `backup_meta`, and when it is missing the file is looked up by its own
+  name before a create, so a lost cache never leaves two files. Freshness is
+  #1414's polling.
 - **Client ids**: one OAuth client per platform in a Mydia-owned Google Cloud
   project. They are public identifiers, compiled in through `--dart-define`;
   the relay is not involved.
@@ -120,11 +129,13 @@ an optional `movedTo` (see Switching).
 ## iCloud
 
 - **Plugin**: a `CloudKitPlugin.swift` handler in each Runner target (iOS and
-  macOS), the `NativeTabBarPlugin.swift` pattern, not a package. It exposes a
+  macOS), the `NativeTabBarPlugin.swift` pattern, not a package. Each Runner
+  carries its own copy of the handler. It exposes a
   MethodChannel plus an EventChannel for change pushes. Container
   `iCloud.dev.mydia.player`, private database, custom zone `Backup`.
 - **Records**: type `Slot`, record name `slot-<slotId>`, fields `slotId`,
-  `deviceName`, `platform`, `updatedAt`, `payload` (`CKAsset`, the gzip JSON).
+  `deviceName`, `platform`, `updatedAt`, `size`, `payload` (`CKAsset`, the gzip
+  JSON).
 - **Listing**: `CKFetchRecordZoneChangesOperation` with the stored server
   change token as the cursor.
 - **Freshness**: a `CKDatabaseSubscription` with silent notifications; each
@@ -134,9 +145,13 @@ an optional `movedTo` (see Switching).
   an account the option shows greyed with "Sign in to iCloud in Settings".
   `CKAccountChanged` re-checks.
 - **Entitlements**: CloudKit and `aps-environment` on the iOS and macOS Runner
-  targets. macOS needs a Developer ID provisioning profile with iCloud, which
-  the release pipeline must gain. iCloud is never offered on Linux, Windows or
-  Android.
+  targets, opt in per build: the build setting `MYDIA_CLOUDKIT` (`NO` by
+  default) selects the entitlements file and is surfaced to the app as the
+  Info.plist key `MydiaCloudKitEnabled`. A build without it never touches
+  CloudKit and the app hides iCloud, so releases show no iCloud option until
+  the signing setup (`player/docs/packaging.md`) is done. macOS needs a
+  Developer ID provisioning profile with iCloud, which the release pipeline
+  must gain. iCloud is never offered on Linux, Windows or Android.
 
 ## What a cloud store holds and excludes
 
@@ -175,7 +190,10 @@ the account, and the group secret has no business sitting in plaintext.
   accounts appear as "N sources added on {device}" offers.
 - **Switching**: confirmed explicitly. The device rewrites its slot in the old
   store as a stub `{movedTo: "<store>"}`, offers to delete the old backup,
-  then uploads to the new store. Other devices reading the stub show
+  then uploads to the new store. The new store is brought up before the old
+  one is left, so a failed sign-in keeps the old store active. Deleting the
+  old backup keeps this device's own moved stub, so other devices still learn
+  where it went. Other devices reading the stub show
   "{device} moved backup to Google Drive" with a Switch button. Nothing
   migrates silently.
 - **Pairing**: with the relay, #1414's add-member-on-pair is unchanged. With a
@@ -195,6 +213,8 @@ On top of #1414's backoff:
 | Drive 403 `storageQuotaExceeded` | Status "Google storage full". No retry until the next change or foreground |
 | Drive 429 or 5xx | Backoff |
 | CloudKit `notAuthenticated`, `accountTemporarilyUnavailable` | Status "iCloud unavailable"; `CKAccountChanged` re-checks |
+| CloudKit network and rate-limit failures | Mapped to `network`: backoff, honouring the server's retry-after |
+| A slot that vanishes while a restore preview reads it | Skipped; the preview covers the rest |
 | CloudKit `zoneNotFound`, `changeTokenExpired` | Recreate the zone or drop the token, then a full list |
 | CloudKit `serverRecordChanged` on the own slot | Overwrite: only this device writes it |
 | Slot that fails to decode | Skipped and logged, as in #1414 |
