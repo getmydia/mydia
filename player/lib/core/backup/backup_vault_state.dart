@@ -14,6 +14,7 @@ class BackupVaultState {
     this.lastSuccessMs,
     this.manifestEtag,
     this.pendingRecoveryKeyText,
+    this.recoveryKeyUnacknowledged = false,
   }) : keysByEpoch = Map.unmodifiable({
           for (final e in keysByEpoch.entries)
             e.key: Uint8List.fromList(e.value),
@@ -35,6 +36,12 @@ class BackupVaultState {
   /// [recoveryKeyText] once the manifest shows its signer, else dropped.
   final String? pendingRecoveryKeyText;
 
+  /// [recoveryKeyText] replaced the old key, and the viewer has not pressed
+  /// Done on the sheet showing it: set when a replacement lands (or a
+  /// pending one is promoted after a lost reply), cleared only by that
+  /// Done.
+  final bool recoveryKeyUnacknowledged;
+
   /// Nullable fields take a closure so they can be set to null explicitly.
   BackupVaultState copyWith({
     String? vaultId,
@@ -45,6 +52,7 @@ class BackupVaultState {
     int? Function()? lastSuccessMs,
     String? Function()? manifestEtag,
     String? Function()? pendingRecoveryKeyText,
+    bool? recoveryKeyUnacknowledged,
   }) =>
       BackupVaultState(
         vaultId: vaultId ?? this.vaultId,
@@ -58,6 +66,8 @@ class BackupVaultState {
         pendingRecoveryKeyText: pendingRecoveryKeyText != null
             ? pendingRecoveryKeyText()
             : this.pendingRecoveryKeyText,
+        recoveryKeyUnacknowledged:
+            recoveryKeyUnacknowledged ?? this.recoveryKeyUnacknowledged,
       );
 
   /// Keeps only the two highest epochs of [keysByEpoch].
@@ -81,6 +91,7 @@ class BackupVaultState {
         'manifestEtag': manifestEtag,
         if (pendingRecoveryKeyText != null)
           'pendingRecoveryKey': pendingRecoveryKeyText,
+        if (recoveryKeyUnacknowledged) 'recoveryKeyUnacknowledged': true,
       };
 
   /// Throws [FormatException] on a wrong version or missing/mistyped fields.
@@ -96,7 +107,9 @@ class BackupVaultState {
     final lastSuccess = json['lastSuccessMs'];
     final etag = json['manifestEtag'];
     final pending = json['pendingRecoveryKey'];
+    final unacknowledged = json['recoveryKeyUnacknowledged'] ?? false;
     if (vaultId is! String ||
+        unacknowledged is! bool ||
         epoch is! int ||
         keys is! Map ||
         (recovery != null && recovery is! String) ||
@@ -132,6 +145,7 @@ class BackupVaultState {
       lastSuccessMs: lastSuccess as int?,
       manifestEtag: etag as String?,
       pendingRecoveryKeyText: pending as String?,
+      recoveryKeyUnacknowledged: unacknowledged,
     );
   }
 }

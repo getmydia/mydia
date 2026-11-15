@@ -87,6 +87,7 @@ class BackupSyncService {
   final _status = ValueNotifier<BackupStatus>(const BackupOff());
   final _unreadable = ValueNotifier<Set<String>>(const {});
   final _recoveryMismatch = ValueNotifier<bool>(false);
+  final _unsavedKey = ValueNotifier<bool>(false);
   late final _joinedNotice = ValueNotifier<bool>(_meta.joinedNoticePending);
   final _vaultChoice = ValueNotifier<VaultChoice?>(null);
 
@@ -109,6 +110,12 @@ class BackupSyncService {
   /// was replaced from another device, or a replacement here was lost): the
   /// key shown would not restore the backup.
   ValueListenable<bool> get recoveryKeyMismatch => _recoveryMismatch;
+
+  /// True while the recovery key this device keeps replaced the old one and
+  /// the viewer has not pressed Done on the sheet showing it, as when the
+  /// relay took a new key but the reply was lost or the app died first.
+  /// Cleared by [acknowledgeNewRecoveryKey], or by leaving the vault.
+  ValueListenable<bool> get unsavedRecoveryKey => _unsavedKey;
 
   /// Slots that could not be read, by the seq that failed: not downloaded
   /// again until their seq changes.
@@ -184,6 +191,7 @@ class BackupSyncService {
           return _set(
               BackupError(BackupRelayError.server, _state?.lastSuccessMs));
         }
+        _publishUnsavedKey();
         _set(BackupIdle(_state!.lastSuccessMs));
         _startPolling();
         // A change made just before the app was killed may never have gone
@@ -200,6 +208,7 @@ class BackupSyncService {
     _status.dispose();
     _unreadable.dispose();
     _recoveryMismatch.dispose();
+    _unsavedKey.dispose();
     _joinedNotice.dispose();
     _vaultChoice.dispose();
     _members.dispose();
@@ -400,6 +409,19 @@ class BackupSyncService {
   /// Replaces the recovery key (and rotates). The old key stops working.
   Future<RecoveryKey> regenerateRecoveryKey() =>
       _userOp(() => _replaceRecoveryKey());
+
+  /// The viewer pressed Done on the sheet showing the new recovery key:
+  /// [unsavedRecoveryKey] clears, here and across restarts.
+  Future<void> acknowledgeNewRecoveryKey() => _serialise(() async {
+        final state = _state;
+        if (state == null || !state.recoveryKeyUnacknowledged) return;
+        try {
+          await _save(state.copyWith(recoveryKeyUnacknowledged: false));
+        } on StateError catch (e) {
+          // Shown again on the next start: better than losing the prompt.
+          debugPrint('[Backup] Could not save the acknowledgement: $e');
+        }
+      });
 
   /// A rotation to a new recovery key, removing [removeSlotId]'s member in
   /// it when given, then this device's upload under the new epoch.
@@ -988,9 +1010,12 @@ class BackupSyncService {
     final pending = state.pendingRecoveryKeyText;
     if (pending != null) {
       final took = await _isRecoverySigner(pending, m.recoverySigner);
+      // A promoted key was never shown (the reply was lost or the app died
+      // first): flagged until the viewer saves it.
       state = state.copyWith(
         recoveryKeyText: took ? pending : null,
         pendingRecoveryKeyText: () => null,
+        recoveryKeyUnacknowledged: took ? true : null,
       );
       await _save(state);
     }
@@ -1078,6 +1103,8 @@ class BackupSyncService {
       keysByEpoch: {..._state!.keysByEpoch, rotation.epoch: rotation.vaultKey},
       recoveryKeyText: newRecovery?.key.display,
       pendingRecoveryKeyText: newRecovery == null ? null : () => null,
+      // Until the viewer presses Done on the sheet showing it.
+      recoveryKeyUnacknowledged: newRecovery == null ? null : true,
       manifestEtag: () => null,
     ));
     if (newRecovery != null) _setMismatch(false);
@@ -1108,7 +1135,18 @@ class BackupSyncService {
   /// throws [StateError], which callers report as `Error(server)`.
   Future<void> _save(BackupVaultState state) async {
     _state = state;
+    _publishUnsavedKey();
     await _store.save(state);
+  }
+
+  /// A pending key is not flagged: it may yet be dropped.
+  void _publishUnsavedKey() {
+    if (_disposed) return;
+    final s = _state;
+    _unsavedKey.value = s != null &&
+        s.recoveryKeyUnacknowledged &&
+        s.pendingRecoveryKeyText == null &&
+        s.recoveryKeyText != null;
   }
 
   Future<void> _join(BackupVaultState state, BackupIdentity identity) async {
@@ -1130,6 +1168,7 @@ class BackupSyncService {
     _tooLarge = false;
     _failedSlots.clear();
     _setMismatch(false);
+    _publishUnsavedKey();
     _accountRecords.clear();
     _setMembers(const []);
     _setChoice(null);

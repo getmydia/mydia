@@ -54,9 +54,10 @@ Future<void> showRecoveryKeySheet(BuildContext context, String keyText) =>
 
 /// Shows [keyText], the recovery key that just replaced the old one, and
 /// stays up until the viewer presses Done: a tap outside or Back does not
-/// close it, since the old key no longer works.
-Future<void> showReplacedRecoveryKeySheet(
-        BuildContext context, String keyText) =>
+/// close it, since the old key no longer works. [onDone] runs when Done is
+/// pressed, and only then.
+Future<void> showReplacedRecoveryKeySheet(BuildContext context, String keyText,
+        {required VoidCallback onDone}) =>
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -65,7 +66,8 @@ Future<void> showReplacedRecoveryKeySheet(
         child: GlassDialog(
           content: SizedBox(
             width: 460,
-            child: RecoveryKeySheet.show(keyText: keyText, replaced: true),
+            child: RecoveryKeySheet.show(
+                keyText: keyText, replaced: true, onDone: onDone),
           ),
         ),
       ),
@@ -74,14 +76,18 @@ Future<void> showReplacedRecoveryKeySheet(
 class RecoveryKeySheet extends StatefulWidget {
   const RecoveryKeySheet.enable({super.key, required this.service})
       : keyText = null,
-        replaced = false;
+        replaced = false,
+        onDone = null;
 
   const RecoveryKeySheet.show(
-      {super.key, required this.keyText, this.replaced = false})
+      {super.key, required this.keyText, this.replaced = false, this.onDone})
       : service = null;
 
   /// The key just replaced the old one: says so above the key.
   final bool replaced;
+
+  /// Runs when the viewer presses Done, before the sheet closes.
+  final VoidCallback? onDone;
 
   /// Set when turning backup on.
   final BackupSyncService? service;
@@ -345,7 +351,10 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
                 alignment: Alignment.centerRight,
                 child: FilledButton(
                   key: const Key('recovery-key-done'),
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () {
+                    widget.onDone?.call();
+                    Navigator.of(context).pop();
+                  },
                   child: Text(l10n.commonDone),
                 ),
               ),

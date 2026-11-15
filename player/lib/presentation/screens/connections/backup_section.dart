@@ -3,6 +3,8 @@
 /// deleting it.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -141,9 +143,15 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       return;
     }
     final key = await _run(() => _service.removeMember(slotId));
-    if (key != null && mounted) {
-      await showReplacedRecoveryKeySheet(context, key.display);
-    }
+    if (key != null) await _showNewKey(key.display);
+  }
+
+  /// Shows the recovery key that replaced the old one until Done, which
+  /// alone acknowledges it.
+  Future<void> _showNewKey(String keyText) async {
+    if (!mounted) return;
+    await showReplacedRecoveryKeySheet(context, keyText,
+        onDone: () => unawaited(_service.acknowledgeNewRecoveryKey()));
   }
 
   Future<void> _regenerate() async {
@@ -157,9 +165,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       return;
     }
     final key = await _run(_service.regenerateRecoveryKey);
-    if (key != null && mounted) {
-      await showReplacedRecoveryKeySheet(context, key.display);
-    }
+    if (key != null) await _showNewKey(key.display);
   }
 
   Future<void> _delete() async {
@@ -185,6 +191,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
         s.pendingVaultChoice,
         s.unreadableSlots,
         s.recoveryKeyMismatch,
+        s.unsavedRecoveryKey,
         s.members,
         s.pendingRemovals,
       ]),
@@ -298,6 +305,18 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
         m.deviceName ??
         (m.isThisDevice ? l10n.backupThisDevice : l10n.backupUnknownDevice);
     return [
+      if (s.unsavedRecoveryKey.value && keyText != null)
+        _Notice(
+          key: const Key('backup-unsaved-key'),
+          icon: Icons.key_rounded,
+          warning: true,
+          text: l10n.backupUnsavedKey,
+          action: TextButton(
+            key: const Key('backup-unsaved-key-show'),
+            onPressed: _busy ? null : () => _showNewKey(keyText),
+            child: Text(l10n.backupUnsavedKeyShow),
+          ),
+        ),
       if (s.recoveryKeyMismatch.value)
         _Line(
           key: const Key('backup-key-mismatch'),

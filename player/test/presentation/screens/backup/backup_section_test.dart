@@ -126,9 +126,37 @@ void main() {
     await navigator.maybePop();
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
+    expect(fake.calls, isNot(contains('acknowledgeNewRecoveryKey')));
     await tester.tap(find.byKey(const Key('recovery-key-done')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recovery-key-replaced')), findsNothing);
+    expect(fake.calls, ['removeMember tv', 'acknowledgeNewRecoveryKey']);
+    expect(find.byKey(const Key('backup-unsaved-key')), findsNothing);
+  });
+
+  testWidgets(
+      'a new recovery key never acknowledged is flagged until Done on its '
+      'sheet', (tester) async {
+    final fake = _enabled()..unsavedKeyNotifier.value = true;
+    await _pump(tester, fake);
+    expect(find.byKey(const Key('backup-unsaved-key')), findsOneWidget);
+    expect(find.text('Your recovery key was replaced. Save the new one.'),
+        findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('backup-unsaved-key-show')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
+    expect(find.text(fake.keyText!), findsOneWidget);
+    // Not dismissable: a tap outside leaves it up and acknowledges nothing.
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
+    expect(fake.calls, isEmpty);
+
+    await tester.tap(find.byKey(const Key('recovery-key-done')));
+    await tester.pumpAndSettle();
+    expect(fake.calls, ['acknowledgeNewRecoveryKey']);
+    expect(find.byKey(const Key('backup-unsaved-key')), findsNothing);
   });
 
   testWidgets('a revoked device still in the backup is flagged with Remove',

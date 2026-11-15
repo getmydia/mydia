@@ -63,6 +63,16 @@ void main() {
     expect((await store.load())!.pendingRecoveryKeyText, isNull);
   });
 
+  test('an unacknowledged new recovery key round-trips and clears', () async {
+    final store = BackupVaultStateStore(MockAuthStorage());
+    expect(_state().recoveryKeyUnacknowledged, isFalse);
+    await store.save(_state().copyWith(recoveryKeyUnacknowledged: true));
+    expect((await store.load())!.recoveryKeyUnacknowledged, isTrue);
+    await store
+        .save((await store.load())!.copyWith(recoveryKeyUnacknowledged: false));
+    expect((await store.load())!.recoveryKeyUnacknowledged, isFalse);
+  });
+
   test('unparseable stored JSON does not echo it in the error', () async {
     final auth = MockAuthStorage();
     await auth.write(

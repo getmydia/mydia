@@ -109,6 +109,14 @@ otherwise still read the manifest and open the next epoch's envelope. The new
 key is stored as pending before the relay call, like `regenerateRecoveryKey`,
 and the UI shows it until the viewer presses Done.
 
+A replaced key is unsaved until that Done (`acknowledgeNewRecoveryKey`):
+`backup/vault` carries `recoveryKeyUnacknowledged`, set when the rotation
+lands or when `_reconcileRecovery` promotes a pending key whose reply was
+lost or whose app died before the sheet came up. While it is set,
+`unsavedRecoveryKey` is true and Backup & sync shows "Your recovery key was
+replaced. Save the new one." with Show, which opens the same sheet. Leaving
+or switching vaults drops it with the rest of the vault state.
+
 Revoking a paired device writes nothing to the relay, since a removal needs
 the viewer to save a new key. `notePeerRevoked` records a pending removal in
 `backup_meta`, keyed by node id, with the slot the trusted node to slot rules

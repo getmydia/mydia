@@ -11,6 +11,7 @@ class FakeBackupSyncService implements BackupSyncService {
   final vaultChoiceNotifier = ValueNotifier<VaultChoice?>(null);
   final unreadableNotifier = ValueNotifier<Set<String>>(const {});
   final mismatchNotifier = ValueNotifier<bool>(false);
+  final unsavedKeyNotifier = ValueNotifier<bool>(false);
   final membersNotifier = ValueNotifier<List<BackupMemberInfo>>(const []);
   final offersNotifier = ValueNotifier<List<PendingAccountOffer>>(const []);
   final removalsNotifier = ValueNotifier<List<PendingRemoval>>(const []);
@@ -39,6 +40,8 @@ class FakeBackupSyncService implements BackupSyncService {
   ValueListenable<Set<String>> get unreadableSlots => unreadableNotifier;
   @override
   ValueListenable<bool> get recoveryKeyMismatch => mismatchNotifier;
+  @override
+  ValueListenable<bool> get unsavedRecoveryKey => unsavedKeyNotifier;
   @override
   ValueListenable<List<BackupMemberInfo>> get members => membersNotifier;
   @override
@@ -97,6 +100,7 @@ class FakeBackupSyncService implements BackupSyncService {
     ];
     final key = RecoveryKey.generate();
     keyText = key.display;
+    unsavedKeyNotifier.value = true;
     return key;
   }
 
@@ -105,7 +109,14 @@ class FakeBackupSyncService implements BackupSyncService {
     calls.add('regenerateRecoveryKey');
     final key = RecoveryKey.generate();
     keyText = key.display;
+    unsavedKeyNotifier.value = true;
     return key;
+  }
+
+  @override
+  Future<void> acknowledgeNewRecoveryKey() async {
+    calls.add('acknowledgeNewRecoveryKey');
+    unsavedKeyNotifier.value = false;
   }
 
   @override

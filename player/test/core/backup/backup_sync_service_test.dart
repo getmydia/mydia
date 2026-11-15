@@ -597,6 +597,10 @@ void main() {
       expect(settled.pendingRecoveryKeyText, isNull);
       expect(rig.relay.onlyVault.members.values.map((m) => m.slotId),
           isNot(contains(await b.slotId())));
+      // The viewer never saw the new key: it is flagged until acknowledged.
+      expect(a.service.unsavedRecoveryKey.value, isTrue);
+      await a.service.acknowledgeNewRecoveryKey();
+      expect(a.service.unsavedRecoveryKey.value, isFalse);
     });
 
     test('recovers_epoch_after_crash_mid_rotation', () async {
@@ -671,6 +675,25 @@ void main() {
       expect(b.service.status.value, isA<BackupIdle>());
       expect((await a.state())!.pendingRecoveryKeyText, isNull);
       expect(a.service.recoveryKeyMismatch.value, isFalse);
+
+      // Shown by the caller, but unsaved until Done acknowledges it.
+      expect(a.service.unsavedRecoveryKey.value, isTrue);
+      await a.service.acknowledgeNewRecoveryKey();
+      expect(a.service.unsavedRecoveryKey.value, isFalse);
+      expect((await a.state())!.recoveryKeyUnacknowledged, isFalse);
+    });
+
+    test('an unacknowledged new key survives a restart and clears on leave',
+        () async {
+      final (a, _) = await rig.enabled('Living Room TV');
+      expect(a.service.unsavedRecoveryKey.value, isFalse);
+      await a.service.regenerateRecoveryKey();
+      a.service.dispose();
+      a.build();
+      await a.service.start();
+      expect(a.service.unsavedRecoveryKey.value, isTrue);
+      await a.service.disable();
+      expect(a.service.unsavedRecoveryKey.value, isFalse);
     });
 
     test('a new recovery key the relay took survives a lost reply', () async {
@@ -692,6 +715,8 @@ void main() {
       expect(settled.pendingRecoveryKeyText, isNull);
       expect(settled.epoch, 2);
       expect(a.service.recoveryKeyMismatch.value, isFalse);
+      expect(settled.recoveryKeyUnacknowledged, isTrue);
+      expect(a.service.unsavedRecoveryKey.value, isTrue);
 
       final b = rig.device('Laptop');
       await b.service.start();
@@ -714,6 +739,7 @@ void main() {
       expect(state.recoveryKeyText, oldKey.display);
       expect(state.pendingRecoveryKeyText, isNull);
       expect(a.service.recoveryKeyMismatch.value, isFalse);
+      expect(a.service.unsavedRecoveryKey.value, isFalse);
     });
 
     test('a stored recovery key that is not the vault\'s is flagged', () async {

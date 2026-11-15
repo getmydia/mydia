@@ -2893,6 +2893,14 @@
   "@backupKeyMismatch": {
     "description": "Warning that the recovery key this device keeps is no longer the backup's key."
   },
+  "backupUnsavedKey": "Your recovery key was replaced. Save the new one.",
+  "@backupUnsavedKey": {
+    "description": "Backup & sync row shown when a new recovery key replaced the old one but the user never pressed Done on the sheet showing it (for example, the app closed first)."
+  },
+  "backupUnsavedKeyShow": "Show",
+  "@backupUnsavedKeyShow": {
+    "description": "Button on the unsaved recovery key row that opens the sheet showing the new key."
+  },
   "backupDelete": "Delete cloud backup",
   "@backupDelete": {
     "description": "Button that deletes the cloud backup for every device."
