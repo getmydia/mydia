@@ -1113,13 +1113,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # Periodic live-progress refresh. Reschedules unconditionally so it resumes
   # when the operator switches back to the Downloads tab or a new download
   # starts, but only re-polls clients when the Downloads tab actually has
-  # active work. Idle tabs cost nothing.
+  # live work. Idle tabs cost nothing.
   def handle_info(:refresh_progress, socket) do
     schedule_progress_refresh()
 
     socket =
-      if socket.assigns.active_tab == :downloads and socket.assigns.view != :imported and
-           socket.assigns.summary.active > 0 and not socket.assigns.selection_mode do
+      if live_progress?(socket.assigns) do
         load_downloads(socket)
       else
         socket
@@ -1146,6 +1145,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp schedule_progress_refresh do
     Process.send_after(self(), :refresh_progress, @progress_refresh_interval_ms)
   end
+
+  # Torrents still seeding after import count as live work on every view:
+  # skipping them froze their ratio, seed time and upload speed until the
+  # seeding goal was met (issue #1422).
+  defp live_progress?(%{active_tab: :downloads, selection_mode: false} = assigns) do
+    (assigns.view != :imported and assigns.summary.active > 0) or assigns.summary.seeding > 0
+  end
+
+  defp live_progress?(_assigns), do: false
 
   defp schedule_reload(%{assigns: %{reload_pending: true}} = socket), do: socket
 
@@ -1438,7 +1446,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     active = Downloads.filter_downloads(all, :active)
 
     socket
-    |> assign(:summary, ListView.summarize(active))
+    |> assign(:summary, ListView.summarize(active, all: all))
     |> assign(:client_options, ListView.clients(all))
     |> assign(:tab_counts, %{
       downloads: length(active),

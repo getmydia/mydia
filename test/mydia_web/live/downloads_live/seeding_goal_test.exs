@@ -159,4 +159,41 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     view |> element("#row-cancel-#{guarded.id}") |> render_click()
     assert Mydia.Downloads.get_download!(guarded.id).removal_requested_at
   end
+
+  # Issue #1422: with only imported torrents left, the refresh tick stopped
+  # polling, so the chip and upload speed froze until the goal was met.
+  test "an imported torrent's seeding progress updates on the refresh tick", %{
+    conn: conn,
+    client: client
+  } do
+    seeding =
+      download!(client, @unmet_hash,
+        metadata: %{"tracker_terms" => @terms},
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+    ListAdapter.put([%{status(@unmet_hash, :seeding, 0.42, 86_400) | upload_speed: 2048}])
+    {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
+
+    assert has_element?(view, "#download-seeding-#{seeding.id}", "0.42 / 1.0")
+    assert has_element?(view, "#download-upload-#{seeding.id}", "2.0 KB/s")
+
+    ListAdapter.put([%{status(@unmet_hash, :seeding, 0.61, 2 * 86_400) | upload_speed: 4096}])
+    send(view.pid, :refresh_progress)
+
+    assert has_element?(view, "#download-seeding-#{seeding.id}", "0.61 / 1.0 · 2d / 3d")
+    assert has_element?(view, "#download-upload-#{seeding.id}", "4.0 KB/s")
+  end
+
+  test "a downloading row shows its upload speed", %{conn: conn, client: client} do
+    downloading = download!(client, @guarded_hash, [])
+
+    ListAdapter.put([
+      %{status(@guarded_hash, :downloading, 0.1, nil) | progress: 40.0, upload_speed: 3072}
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+
+    assert has_element?(view, "#download-upload-#{downloading.id}", "3.0 KB/s")
+  end
 end
