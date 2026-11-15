@@ -10,20 +10,23 @@ here silently replaces the project's front page with this document. It did, from
 46cbdfdb0 until it was noticed. Any new doc in this directory needs a name other
 than `README.md`.
 
-## The Nix jobs never run on pull requests
+## The Nix jobs run on pull requests only when flake.lock changes
 
-Both jobs in `ci-nix.yml` carry `if: github.event_name != 'pull_request'`:
+Both jobs in `ci-nix.yml` are gated on its `Changes` job, which is true on push
+and on a PR that changes `flake.lock`:
 
 - `Test / NixOS Module (SQLite)`, running `nix build .#checks.x86_64-linux.nixos-module`
 - `Test / NixOS Module (PostgreSQL)`, running `nix build .#checks.x86_64-linux.nixos-module-postgres`
 
-They show as skipping on every PR. The comment in the file says this is
+They show as skipping on every other PR. The flake.lock exception exists for
+nixpkgs bumps, Dependabot's monthly one in particular, which are the change
+most likely to break the package. The comment in the file says skipping is
 deliberate: they are the slowest and least reliable jobs, and breaking the NixOS
 module is rare enough to be worth catching on master. The former
 `Build / Packages` job no longer exists, deleted as redundant because these two
 build `packages.default` and `packages.postgres` as inputs via
-`nix/checks/flake-module.nix`. So a green PR says nothing about whether Nix
-builds.
+`nix/checks/flake-module.nix`. So a green PR that leaves flake.lock alone says
+nothing about whether Nix builds.
 
 For any `.nix` or `assets/` change, verify locally before merge and then watch
 master's push-triggered `CI / Nix` run after. Do not report a nix fix as proven
@@ -230,7 +233,7 @@ without the App's secrets still works; it just never retries.
 ## Dependabot: cadence, groups and the fixup
 
 `.github/dependabot.yml` runs monthly, in five multi-ecosystem groups plus
-actions:
+nix and actions:
 
 | Group | Covers |
 |---|---|
@@ -239,6 +242,7 @@ actions:
 | `player` | pub, the player's Rust crate, both fastlane Gemfiles |
 | `rust` | `/server`, `native/*`, `plugins/*` |
 | `tooling` | `/site`, `/docs` |
+| `nix` | `flake.lock`, and `devenv.lock` through the fixup (below) |
 | `actions` | github-actions, alone because the gate cannot merge it (above) |
 
 Majors are ignored everywhere except actions, and every entry has a seven-day
@@ -260,8 +264,32 @@ rather than merging.
 `dependabot-fixup.yml` runs `scripts/regenerate-derived.sh` on every Dependabot
 pull request except github-actions bumps, which touch no manifest it regenerates from. The script rewrites `deps.nix` from `mix.lock` with `mix2nix`,
 refreshes every Cargo.lock listed in `scripts/lib/cargo-lock-dirs.sh`, and
-recomputes `npmDeps.hash` with `prefetch-npm-deps`, then runs
+recomputes `npmDeps.hash` with `prefetch-npm-deps`, copies flake.lock's nixpkgs
+node into `devenv.lock` (`scripts/sync-devenv-nixpkgs.sh`), then runs
 `check-generated-freshness.sh`. Run it locally the same way.
+
+### nixpkgs bumps carry devenv with them
+
+Dependabot's `nix` ecosystem reads `flake.lock` only and has no security
+updates. `devenv.lock` is invisible to it, yet `devenv.yaml` requires its
+nixpkgs on flake.lock's revision, and the freshness check fails any tree where
+they differ. So when the fixup sees flake.lock's nixpkgs ahead of devenv.lock's,
+it first runs `devenv update`, moving devenv, git-hooks and rust-overlay, and the
+regenerate step then pins devenv.lock's nixpkgs back to flake.lock's revision.
+The devenv CLI in CI comes from that same nixpkgs (`--inputs-from .`), so it
+moves too.
+
+Every check a nix bump needs runs on its pull request, because the gate's
+merge starts no workflows on master (the trap that left the Cardigann guest
+unpublished). `devenv.lock` moving gates in the full `ci.yml` suite, `flake.lock`
+moving gates in the NixOS module tests, and the fixup touches nothing under
+`.github/workflows/`, which the gate could not merge. `nixpkgs-android` is
+ignored: it moves by hand, with Flutter.
+
+A bump can fail for reasons no fixup can repair: `beam-version.nix` aborts when
+the new nixpkgs no longer ships the OTP major in `.otp-version`, and the NixOS
+module tests (which run on flake.lock PRs, above) catch a package that no
+longer builds. Fix those by hand on the Dependabot branch.
 
 If anything changed, the workflow pushes one commit,
 `chore(deps): regenerate derived files`, with the App token. A push made with

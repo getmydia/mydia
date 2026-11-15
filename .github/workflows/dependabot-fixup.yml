@@ -3,7 +3,8 @@ name: Dependabot fixup
 # Dependabot edits manifests and lockfiles and nothing else, so a bump that
 # moves anything derived from them fails `Check / Generated Freshness`:
 # deps.nix behind mix.lock, a Cargo.lock behind a shared path crate,
-# npmDeps.hash behind assets/package-lock.json. This job regenerates them with
+# npmDeps.hash behind assets/package-lock.json, devenv.lock behind flake.lock.
+# This job regenerates them with
 # scripts/regenerate-derived.sh and pushes the result onto the Dependabot
 # branch.
 #
@@ -80,6 +81,23 @@ jobs:
       # rustup reads rust-toolchain.toml, as `Check / Generated Freshness` does.
       - name: Install the pinned Rust toolchain
         run: rustup show active-toolchain || rustup toolchain install
+
+      # Dependabot's nix ecosystem bumps flake.lock and cannot see devenv.lock.
+      # When flake.lock's nixpkgs has moved past devenv.lock's, this is that
+      # bump: update devenv's other inputs (devenv, git-hooks, rust-overlay) so
+      # they ride along. `devenv update` also moves nixpkgs to the channel's
+      # head; regenerate-derived.sh then puts it back on flake.lock's revision.
+      # Detected from the locks rather than the branch name, which Dependabot
+      # does not document for nix.
+      - name: Update devenv inputs alongside a nixpkgs bump
+        run: |
+          set -euo pipefail
+          if scripts/sync-devenv-nixpkgs.sh --check; then
+            echo "nixpkgs did not move. Leaving devenv's inputs alone."
+            exit 0
+          fi
+          nix profile install --inputs-from . nixpkgs#devenv
+          devenv update
 
       - name: Regenerate
         run: ./scripts/regenerate-derived.sh

@@ -208,6 +208,15 @@ $(echo "$err" | sed 's/^/    /')
   fi
 fi
 
+# --- devenv.lock nixpkgs: on flake.lock's revision --------------------------
+#
+# Dependabot's nix ecosystem bumps flake.lock only. Without this a nixpkgs bump
+# would leave the devenv shell, which every ci.yml job tests in, on the old
+# package set while the Nix build moved on.
+if ! scripts/sync-devenv-nixpkgs.sh --check; then
+  fail "devenv.lock and flake.lock pin different nixpkgs revisions (see above)."
+fi
+
 # --- Nix npm dependencies: lockfile matches the pinned hash -----------------
 #
 # Recomputes the hash and compares strings. Building `.#...npmDeps` instead
