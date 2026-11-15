@@ -756,6 +756,55 @@ void main() {
     expect(await auth.currentEmail(), isNull);
   });
 
+  test('paused write restores prior grant even when superseding sign-in fails',
+      () async {
+    final pausing = _PausingAuthStorage()
+      ..seedData({
+        googleDriveStorageKey: jsonEncode({
+          'email': 'prior@example.test',
+          'refreshToken': 'rt-prior',
+          'clientKind': 'tv',
+        }),
+      })
+      ..pauseFirstWrite = Completer<void>();
+    final auth = GoogleTokenAuth(
+      storage: pausing,
+      client: MockClient((_) async => fail('no request')),
+      clientId: 'cid',
+      clientSecret: 'csecret',
+      clientKind: 'tv',
+    );
+
+    final first = auth.completeSignIn({
+      ..._grant(
+        access: 'at-stale',
+        refresh: 'rt-stale',
+        email: 'stale@example.test',
+      ),
+      'scope': googleDriveAppDataScope,
+    });
+    await pausing.firstWriteStarted.future;
+
+    // A newer attempt supersedes generation, then fails before replacing storage.
+    await expectLater(
+      auth.completeSignIn({..._grant(), 'scope': 'openid email'}),
+      throwsA(isA<BackupRelayException>()
+          .having((e) => e.code, 'code', googleScopeMissingCode)),
+    );
+
+    pausing.pauseFirstWrite!.complete();
+    await expectLater(
+      first,
+      throwsA(isA<BackupRelayException>()
+          .having((e) => e.code, 'code', 'cancelled')),
+    );
+
+    final saved = jsonDecode(pausing.contents[googleDriveStorageKey]!)
+        as Map<String, dynamic>;
+    expect(saved['email'], 'prior@example.test');
+    expect(saved['refreshToken'], 'rt-prior');
+  });
+
   test('GoogleSignInAuth is constructible without touching the plugin', () {
     final auth = GoogleSignInAuth(
       storage: storage,

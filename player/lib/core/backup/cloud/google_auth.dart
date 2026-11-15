@@ -270,10 +270,9 @@ class GoogleTokenAuth implements GoogleAuth {
     final scope = grant['scope'];
     if (scope is String && !_grantsDriveAppData(scope)) throw _scopeMissing;
 
-    final (previousRaw, refreshToken, initialEmail) =
-        await _serialiseStorage(() async {
+    final (refreshToken, initialEmail) = await _serialiseStorage(() async {
       checkActive();
-      final (raw, stored) = await _readGrantRaw();
+      final stored = await _readGrant();
       checkActive();
       // Never carry a token or email over from the other client's grant.
       final existing = stored?['clientKind'] == clientKind ? stored : null;
@@ -285,7 +284,7 @@ class GoogleTokenAuth implements GoogleAuth {
         );
       }
       final em = _emailFromIdToken(grant['id_token']) ?? existing?['email'];
-      return (raw, rt, em);
+      return (rt, em);
     });
 
     var email = initialEmail;
@@ -303,6 +302,8 @@ class GoogleTokenAuth implements GoogleAuth {
 
     await _serialiseStorage(() async {
       checkActive();
+      final previousRaw = await _storage.read(googleDriveStorageKey);
+      checkActive();
       await _storage.write(
         googleDriveStorageKey,
         jsonEncode({
@@ -312,15 +313,13 @@ class GoogleTokenAuth implements GoogleAuth {
         }),
       );
       if (cancelled()) {
-        // Restore the pre-write storage only if no newer sign-in/sign-out has
-        // superseded this generation; otherwise leave ownership to the queued
-        // successor and never poison the access-token cache.
-        if (_signInGeneration == generation) {
-          if (previousRaw == null) {
-            await _storage.delete(googleDriveStorageKey);
-          } else {
-            await _storage.write(googleDriveStorageKey, previousRaw);
-          }
+        // Restore pre-write storage before releasing the lock: queued
+        // successors have not written yet, and if a superseding sign-in fails
+        // later (e.g. missing scope), the cancelled grant must not remain.
+        if (previousRaw == null) {
+          await _storage.delete(googleDriveStorageKey);
+        } else {
+          await _storage.write(googleDriveStorageKey, previousRaw);
         }
         checkActive();
       }
@@ -402,23 +401,18 @@ class GoogleTokenAuth implements GoogleAuth {
     _accessExpiry = null;
   }
 
-  Future<Map<String, String>?> _readGrant() async => (await _readGrantRaw()).$2;
-
-  Future<(String? raw, Map<String, String>? grant)> _readGrantRaw() async {
+  Future<Map<String, String>?> _readGrant() async {
     final raw = await _storage.read(googleDriveStorageKey);
-    if (raw == null) return (null, null);
+    if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, Object?>) return (raw, null);
-      return (
-        raw,
-        {
-          for (final e in decoded.entries)
-            if (e.value is String) e.key: e.value as String,
-        },
-      );
+      if (decoded is! Map<String, Object?>) return null;
+      return {
+        for (final e in decoded.entries)
+          if (e.value is String) e.key: e.value as String,
+      };
     } on FormatException {
-      return (raw, null);
+      return null;
     }
   }
 }
