@@ -78,14 +78,21 @@ bool openSettingsFromShortcut() =>
 
 /// Servers & devices leads the dialog, so the plain settings route (Ctrl+,
 /// and the Settings nav entry) opens on it.
-SettingsCategory? _categoryFor(String route) => switch (route) {
-      '/settings' ||
-      '/sources/manage' ||
-      '/settings/paired-devices' =>
-        SettingsCategory.connections,
-      '/settings/diagnostics' => SettingsCategory.diagnostics,
-      _ => null,
-    };
+SettingsCategory? _categoryFor(String route) {
+  // Backup & sync requests carry a per-request value (backupRequestLocation).
+  final uri = Uri.tryParse(route);
+  if (uri != null && uri.path == '/settings' && backupRequestOf(uri) != null) {
+    return SettingsCategory.backup;
+  }
+  return switch (route) {
+    '/settings' ||
+    '/sources/manage' ||
+    '/settings/paired-devices' =>
+      SettingsCategory.connections,
+    '/settings/diagnostics' => SettingsCategory.diagnostics,
+    _ => null,
+  };
+}
 
 /// Opens the dialog in place of [route] when [route] is a settings route and
 /// the dialog is on. False means the caller should navigate as usual.
@@ -119,6 +126,8 @@ Future<void> openSettings(
     switch (initial) {
       case SettingsCategory.playback || SettingsCategory.about:
         router.go('/settings');
+      case SettingsCategory.backup:
+        router.go(backupRequestLocation());
       case SettingsCategory.diagnostics:
         unawaited(router.push<void>('/settings/diagnostics'));
       case SettingsCategory.connections:

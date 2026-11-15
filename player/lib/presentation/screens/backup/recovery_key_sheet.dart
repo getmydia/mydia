@@ -1,10 +1,9 @@
 /// The backup recovery key: shown with its QR code, copy and save, and, when
-/// turning backup on, typed back one group before the vault is created.
+/// turning backup on, confirmed as saved before the vault is created.
 library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
@@ -39,8 +38,8 @@ Future<T?> _showAdaptive<T>(BuildContext context, Widget child) {
   );
 }
 
-/// Turns backup on: shows a new recovery key and creates the vault once one
-/// group of it was typed back. True when backup is now on.
+/// Turns backup on: shows a new recovery key and creates the vault once the
+/// viewer ticked that they saved it. True when backup is now on.
 Future<bool> showEnableBackupSheet(
     BuildContext context, BackupSyncService service) async {
   final enabled = await _showAdaptive<bool>(
@@ -100,14 +99,11 @@ class RecoveryKeySheet extends StatefulWidget {
 }
 
 class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
-  final _confirm = TextEditingController();
-  final _random = Random();
-
   RecoveryKey? _key;
   late String? _display = widget.keyText;
 
-  /// The group to type back, counted from 0.
-  int _group = 0;
+  /// The viewer ticked that they saved the key on screen.
+  bool _saved = false;
   bool _busy = false;
 
   /// Turning on failed and [_display] is the replacement key.
@@ -115,12 +111,11 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
 
   bool get _enabling => widget.service != null;
 
-  List<String> get _groups => (_display ?? '').split(' ');
+  bool get _canTurnOn => _saved && _key != null && !_busy;
 
   @override
   void initState() {
     super.initState();
-    _confirm.addListener(() => setState(() {}));
     if (_enabling) _newKey();
   }
 
@@ -129,7 +124,6 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
 
   @override
   void dispose() {
-    _confirm.dispose();
     if (_copied.isNotEmpty) unawaited(_clearClipboard(_copied));
     super.dispose();
   }
@@ -153,20 +147,9 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
     setState(() {
       _key = key;
       _display = key.display;
-      _group = _random.nextInt(_groups.length);
-      _confirm.clear();
+      // A new key was not saved yet, whatever was ticked for the last one.
+      _saved = false;
     });
-  }
-
-  /// The typed group, read the way [RecoveryKey.parse] reads a key.
-  bool get _typedMatches {
-    final typed = _confirm.text
-        .toUpperCase()
-        .replaceAll(RegExp(r'[\s-]'), '')
-        .replaceAll('O', '0')
-        .replaceAll('I', '1')
-        .replaceAll('L', '1');
-    return _display != null && typed == _groups[_group];
   }
 
   Future<void> _turnOn() async {
@@ -308,23 +291,16 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
             ],
             const SizedBox(height: 16),
             if (_enabling && display != null) ...[
-              Text(l10n.backupKeyConfirmPrompt(_group + 1),
-                  key: const Key('recovery-key-confirm-prompt')),
-              const SizedBox(height: 8),
-              TextField(
-                key: const Key('recovery-key-confirm-field'),
-                controller: _confirm,
-                autocorrect: false,
-                enableSuggestions: false,
-                textCapitalization: TextCapitalization.characters,
-                decoration: InputDecoration(
-                  labelText: l10n.backupKeyConfirmLabel(_group + 1),
-                ),
-                onSubmitted: (_) {
-                  if (_typedMatches && !_busy) _turnOn();
-                },
+              CheckboxListTile(
+                key: const Key('recovery-key-saved-checkbox'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _saved,
+                onChanged:
+                    _busy ? null : (v) => setState(() => _saved = v ?? false),
+                title: Text(l10n.backupKeySavedCheckbox),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -336,7 +312,7 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
                   const SizedBox(width: 8),
                   FilledButton(
                     key: const Key('recovery-key-confirm-button'),
-                    onPressed: _typedMatches && !_busy ? _turnOn : null,
+                    onPressed: _canTurnOn ? _turnOn : null,
                     child: _busy
                         ? const SizedBox.square(
                             dimension: 18,

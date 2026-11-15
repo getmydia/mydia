@@ -38,13 +38,7 @@ Future<List<bool>> _open(
   return results;
 }
 
-/// The group the sheet asks for, counted from 1, read from its prompt.
-int _askedGroup(WidgetTester tester) {
-  final prompt = tester
-      .widget<Text>(find.byKey(const Key('recovery-key-confirm-prompt')))
-      .data!;
-  return int.parse(RegExp(r'group (\d+)').firstMatch(prompt)!.group(1)!);
-}
+final _savedBox = find.byKey(const Key('recovery-key-saved-checkbox'));
 
 FilledButton _confirm(WidgetTester tester) => tester
     .widget<FilledButton>(find.byKey(const Key('recovery-key-confirm-button')));
@@ -60,26 +54,24 @@ void main() {
     expect(find.byKey(const Key('recovery-key-copy')), findsOneWidget);
   });
 
-  testWidgets('confirm stays disabled until the asked group is typed',
+  testWidgets('turn on stays disabled until the saved box is ticked',
       (tester) async {
     final key = _key(42);
     final fake = FakeBackupSyncService()..keys.add(key);
     final results = await _open(tester, fake);
-    final groups = key.display.split(' ');
-    final asked = _askedGroup(tester);
-    expect(asked, inInclusiveRange(1, 13));
     expect(_confirm(tester).onPressed, isNull);
 
-    final field = find.byKey(const Key('recovery-key-confirm-field'));
-    // A group of another key is not the one asked for.
-    await tester.enterText(field, 'ZZZZ');
-    await tester.pump();
-    expect(_confirm(tester).onPressed, isNull);
-
-    // Typed in lower case, as a viewer might.
-    await tester.enterText(field, groups[asked - 1].toLowerCase());
+    await tester.tap(_savedBox);
     await tester.pump();
     expect(_confirm(tester).onPressed, isNotNull);
+
+    // Unticking takes it back.
+    await tester.tap(_savedBox);
+    await tester.pump();
+    expect(_confirm(tester).onPressed, isNull);
+
+    await tester.tap(_savedBox);
+    await tester.pump();
 
     await tester.tap(find.byKey(const Key('recovery-key-confirm-button')));
     await tester.pumpAndSettle();
@@ -94,9 +86,7 @@ void main() {
       ..keys.addAll([first, second])
       ..confirmError = const BackupRelayException(BackupRelayError.server);
     final results = await _open(tester, fake);
-    final asked = _askedGroup(tester);
-    await tester.enterText(find.byKey(const Key('recovery-key-confirm-field')),
-        first.display.split(' ')[asked - 1]);
+    await tester.tap(_savedBox);
     await tester.pump();
     await tester.tap(find.byKey(const Key('recovery-key-confirm-button')));
     await tester.pumpAndSettle();
@@ -105,7 +95,8 @@ void main() {
     expect(find.text(second.display), findsOneWidget);
     expect(find.text(first.display), findsNothing);
     expect(_confirm(tester).onPressed, isNull,
-        reason: 'the new key has to be typed back again');
+        reason: 'the new key has to be confirmed as saved again');
+    expect(tester.widget<CheckboxListTile>(_savedBox).value, isFalse);
     expect(results, isEmpty);
   });
 
@@ -201,7 +192,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text(key.display), findsOneWidget);
-    expect(find.byKey(const Key('recovery-key-confirm-field')), findsNothing);
+    expect(_savedBox, findsNothing);
     expect(find.byKey(const Key('recovery-key-done')), findsOneWidget);
   });
 }

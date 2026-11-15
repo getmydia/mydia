@@ -43,6 +43,8 @@ import '../../presentation/screens/sources/mydia_instance_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
 import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
 import '../../presentation/screens/sources/stash_connect_screen.dart';
+import '../../presentation/screens/settings/settings_nav.dart'
+    show backupRequestOf;
 import '../../presentation/screens/settings/settings_screen.dart';
 import '../../presentation/screens/settings/diagnostics_screen.dart';
 import '../../presentation/screens/player/queue_player_screen.dart';
@@ -535,7 +537,8 @@ GoRouter appRouter(Ref ref) {
           GoRoute(
             path: '/settings',
             name: 'settings',
-            builder: (context, state) => const SettingsScreen(),
+            builder: (context, state) =>
+                SettingsScreen(backupRequest: backupRequestOf(state.uri)),
           ),
           GoRoute(
             path: '/all',

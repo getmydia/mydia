@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +28,7 @@ GoRouter _router(String initial) => GoRouter(
       routes: [
         for (final path in [
           '/',
+          '/settings',
           '/settings/diagnostics',
           '/sources/manage',
           '/sources/manage/:id',
@@ -146,6 +149,18 @@ void main() {
     RouterSettingsNav(router).openPairedDevices();
     await tester.pumpAndSettle();
     expect(find.text('at /sources/manage?section=devices'), findsOneWidget);
+  });
+
+  testWidgets('openBackup leaves the hub for Settings at Backup & sync',
+      (tester) async {
+    final router = await _pump(tester, '/');
+    unawaited(router.push('/sources/manage'));
+    await tester.pumpAndSettle();
+    RouterSettingsNav(router).openBackup();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('at /settings?section=backup&request='),
+        findsOneWidget);
+    expect(router.canPop(), isFalse, reason: 'the hub is not left behind');
   });
 
   testWidgets('paired-devices route redirects to the hub devices section',

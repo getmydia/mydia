@@ -8,14 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/p2p/peer_sync_service.dart';
 import '../../../core/sources/source.dart';
-import '../../../core/sources/sources_providers.dart' show isWebProvider;
 import '../../../core/theme/palette.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../settings/settings_nav.dart';
 import '../sources/source_lock_sheet.dart' show ShowHiddenSourcesRow;
 import 'account_detail_page.dart' show AddServerButton;
-import 'backup_section.dart';
 import 'connections_constellation_card.dart';
 import 'connections_hub_cards.dart';
 import 'connections_overview.dart';
@@ -52,7 +50,6 @@ class ConnectionsHubBody extends ConsumerStatefulWidget {
 
 class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
   final _devicesKey = GlobalKey();
-  final _backupKey = GlobalKey();
 
   /// A devices scroll asked for while the servers were still loading: their
   /// cards arrive later and push the devices back down, so it runs again
@@ -81,15 +78,9 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
     _scrollToDevicesAfterFrame();
   }
 
-  void _scrollToDevicesAfterFrame() => _scrollToAfterFrame(_devicesKey);
-
-  /// Shows Backup & sync: the action of the "now backed up with your group"
-  /// notice a pairing can raise.
-  void _scrollToBackup() => _scrollToAfterFrame(_backupKey);
-
-  void _scrollToAfterFrame(GlobalKey key) {
+  void _scrollToDevicesAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final target = key.currentContext;
+      final target = _devicesKey.currentContext;
       if (!mounted || target == null) return;
       Scrollable.ensureVisible(
         target,
@@ -187,26 +178,16 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
                   HubPairCta(
                     key: const Key('connections-pair-cta'),
                     onShowCode: () => showPairDeviceSheet(context,
-                        mode: PairSheetMode.show,
-                        onOpenBackup: _scrollToBackup),
+                        mode: PairSheetMode.show, onOpenBackup: nav.openBackup),
                     onEnterCode: () => showPairDeviceSheet(context,
                         mode: PairSheetMode.enter,
-                        onOpenBackup: _scrollToBackup),
+                        onOpenBackup: nav.openBackup),
                   ),
                 ],
               ),
               if (overview.isPaired) ...[
                 const SizedBox(height: 12),
                 _SyncFooter(onLeave: _confirmLeaveGroup),
-              ],
-              // The web player has no cloud backup.
-              if (!ref.watch(isWebProvider)) ...[
-                const SizedBox(height: _sectionGap),
-                KeyedSubtree(
-                  key: _backupKey,
-                  child: const BackupSection(
-                      key: Key('connections-backup-section')),
-                ),
               ],
             ],
           ),

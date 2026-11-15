@@ -89,10 +89,13 @@ recovery key" there and offers "Generate a new recovery key". When the key a
 device keeps is no longer the vault's (`recoveryKeyMismatch`), the UI warns
 and offers a new one.
 
-Turning backup on shows the key and requires one randomly chosen group typed
-back before `confirmEnable`. If `confirmEnable` fails, the UI asks
-`prepareEnable` for a new key: the relay may have created the vault with the
-old one, and its lookup handle is then taken.
+Turning backup on shows the key, and "Turn on backup" stays disabled until
+the viewer ticks "I saved my recovery key somewhere safe". An earlier version
+asked for one randomly chosen four-character group of the key typed back;
+nobody could tell what "group 6" meant, and the key sat on screen beside the
+field anyway, so it checked nothing. If `confirmEnable` fails, the UI asks
+`prepareEnable` for a new key and unticks the box: the relay may have created
+the vault with the old one, and its lookup handle is then taken.
 
 ## Pairing hook
 
@@ -157,7 +160,10 @@ section says so.
 ## UI
 
 - Backup & sync: `presentation/screens/connections/backup_section.dart`, on
-  the Servers & devices hub after the paired devices.
+  the main Settings screen under the Servers & devices card (phone, TV), and
+  its own category in the desktop settings dialog. The pairing notice's "View"
+  reaches it through `SettingsNav.openBackup` (`/settings?section=backup`
+  scrolls it into view). The web player has no backup.
 - Recovery key sheet, restore screen (`/backup/restore`, reached from Add
   server and the sign-in screen), pending sources row and the vault choice
   dialog: `presentation/screens/backup/`.

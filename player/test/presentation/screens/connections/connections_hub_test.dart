@@ -111,16 +111,10 @@ void _phone(WidgetTester tester, {double height = 600}) {
 }
 
 void main() {
-  testWidgets('Backup & sync follows the paired devices', (tester) async {
+  testWidgets('Backup & sync lives in Settings, not the hub', (tester) async {
     _phone(tester, height: 2400);
     await _pump(tester, _populated());
-    final section = find.byKey(const Key('connections-backup-section'));
-    expect(section, findsOneWidget);
-    expect(
-        tester.getTopLeft(section).dy,
-        greaterThan(tester
-            .getTopLeft(find.byKey(const Key('connections-devices-section')))
-            .dy));
+    expect(find.byKey(const Key('backup-switch')), findsNothing);
   });
 
   testWidgets('a join into the group backup toasts once, with a way there',
@@ -129,10 +123,7 @@ void main() {
     final backup = FakeBackupSyncService()
       ..isEnabled = true
       ..statusNotifier.value = const BackupIdle(null);
-    await _pump(tester, _populated(), backup: backup);
-    final section = find.byKey(const Key('connections-backup-section'));
-    // Below the fold on a phone.
-    expect(tester.getTopLeft(section).dy, greaterThan(600));
+    final harness = await _pump(tester, _populated(), backup: backup);
 
     await tester.ensureVisible(find.byKey(const Key('connections-enter-code')));
     await tester.tap(find.byKey(const Key('connections-enter-code')));
@@ -151,14 +142,7 @@ void main() {
 
     await tester.tap(find.text('View'));
     await tester.pumpAndSettle();
-    final top = tester.getTopLeft(section).dy;
-    expect(top, lessThan(600), reason: 'Backup & sync scrolled into view');
-  });
-
-  testWidgets('Backup & sync is absent on web', (tester) async {
-    _phone(tester, height: 2400);
-    await _pump(tester, _populated(), isWeb: true);
-    expect(find.byKey(const Key('connections-backup-section')), findsNothing);
+    expect(harness.nav.calls, contains('backup'));
   });
 
   testWidgets('renders sections', (tester) async {

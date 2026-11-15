@@ -13,6 +13,7 @@ import 'settings_dialog_sidebar.dart';
 
 enum SettingsCategory {
   connections(Icons.hub_outlined),
+  backup(Icons.cloud_upload_outlined),
   playback(Icons.play_circle_outline),
   diagnostics(Icons.lan_outlined),
   about(Icons.info_outline);
@@ -24,6 +25,7 @@ enum SettingsCategory {
   /// The sidebar label, which is also the category's root page title.
   String label(AppLocalizations l10n) => switch (this) {
         connections => l10n.connectionsTitle,
+        backup => l10n.backupSectionTitle,
         playback => l10n.settingsPlayback,
         diagnostics => l10n.settingsDiagnostics,
         about => l10n.settingsAbout,
@@ -39,8 +41,15 @@ class SettingsDialogController extends ValueNotifier<SettingsCategory> {
   /// is open, the dialog returns the pane to the hub and selects it.
   final ValueNotifier<String?> connectionsSection;
 
+  /// False once disposed. `openSettings` disposes the controller as soon as
+  /// `showDialog` completes, which is when the dialog starts closing, so the
+  /// panes (and a toast action holding their nav) can outlive it briefly.
+  bool get isOpen => !_disposed;
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     connectionsSection.dispose();
     super.dispose();
   }
@@ -127,6 +136,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
     return SettingsDialogScope(
       close: _close,
+      isOpen: () => widget.controller.isOpen,
       select: (c) => widget.controller.value = c,
       paneNavigator: (c) => _navigators[c]?.currentState,
       connectionsSection: widget.controller.connectionsSection,
@@ -194,11 +204,16 @@ class SettingsDialogScope extends InheritedWidget {
   const SettingsDialogScope({
     super.key,
     required this.close,
+    required this.isOpen,
     required this.select,
     required this.paneNavigator,
     required this.connectionsSection,
     required super.child,
   });
+
+  /// False once the dialog's controller is disposed: [select] and
+  /// [connectionsSection] must not be written then.
+  final bool Function() isOpen;
 
   final VoidCallback close;
   final ValueChanged<SettingsCategory> select;

@@ -293,6 +293,54 @@ void main() {
     expect(nav.instanceRemoved, returnsNormally);
   });
 
+  testWidgets(
+      'a toast asking for Backup & sync after the dialog closed is a '
+      'no-op', (tester) async {
+    await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
+    await open(tester);
+    final nav = dialogNav(tester);
+
+    await tester.tap(find.byKey(const Key('settings-dialog-close')).first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-dialog')), findsNothing);
+
+    // The pairing notice's "View" outlives the dialog (and its controller).
+    expect(nav.openBackup, returnsNormally);
+    expect(nav.openDiagnostics, returnsNormally);
+    expect(nav.openConnections, returnsNormally);
+    expect(nav.openPairedDevices, returnsNormally);
+  });
+
+  testWidgets(
+      'a toast asking for Backup & sync while the dialog closes is a '
+      'no-op', (tester) async {
+    await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
+    await open(tester);
+    final nav = dialogNav(tester);
+
+    await tester.tap(find.byKey(const Key('settings-dialog-close')).first);
+    // One frame in: showDialog has completed and the controller is disposed,
+    // but the dialog (and its pane navigators) is still animating out.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
+
+    expect(nav.openBackup, returnsNormally);
+    expect(nav.openDiagnostics, returnsNormally);
+    expect(nav.openConnections, returnsNormally);
+    expect(nav.openPairedDevices, returnsNormally);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a Backup & sync request maps to the backup category',
+      (tester) async {
+    await pumpApp(tester, dialog: true);
+    final context = tester.element(find.text('open'));
+    expect(openSettingsForRoute(context, backupRequestLocation()), isTrue);
+    await tester.pumpAndSettle();
+    expect(selected(tester), SettingsCategory.backup);
+  });
+
   testWidgets('a second open retargets instead of stacking', (tester) async {
     await pumpApp(tester, dialog: true);
     await open(tester);
@@ -351,6 +399,19 @@ void main() {
       devices.top,
       greaterThanOrEqualTo(dialog.top),
     );
+  });
+
+  testWidgets('Backup & sync has its own pane; openBackup selects it',
+      (tester) async {
+    await pumpApp(tester, dialog: true);
+    await open(tester);
+    expect(selected(tester), SettingsCategory.playback);
+
+    dialogNav(tester).openBackup();
+    await tester.pumpAndSettle();
+    expect(selected(tester), SettingsCategory.backup);
+    expect(find.byKey(const Key('settings-backup-section')), findsOneWidget);
+    expect(find.byKey(const Key('backup-switch')), findsOneWidget);
   });
 
   testWidgets('paired devices is no longer pushed onto playback',

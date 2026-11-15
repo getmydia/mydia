@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/core/backup/backup_providers.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/p2p/p2p_service.dart';
@@ -36,6 +37,7 @@ import 'package:player/presentation/widgets/focus_highlight.dart';
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/tv_shell_harness.dart';
+import '../backup/fake_backup_sync_service.dart';
 
 class _FakeSettingsController extends SettingsController {
   @override
@@ -125,6 +127,7 @@ void main() {
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
           ...noHiveOverrides,
+          backupSyncServiceProvider.overrideWithValue(FakeBackupSyncService()),
         ],
       );
     }
@@ -173,6 +176,10 @@ void main() {
         isTrue,
       );
 
+      // Backup & sync sits between the card and the first section.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(const Key('backup-switch'));
+
       await press(tester, LogicalKeyboardKey.arrowDown);
 
       expectFocusIn(const Key('default-quality-row'));
@@ -184,7 +191,8 @@ void main() {
         (tester) async {
       await pumpSettings(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      for (var i = 0; i < 6; i++) {
+      // One more press than rows: the backup switch is not a ringed row.
+      for (var i = 0; i < 7; i++) {
         await press(tester, LogicalKeyboardKey.arrowDown);
       }
       expectOnRow(tester, 6);
@@ -201,7 +209,8 @@ void main() {
         (tester) async {
       await pumpSettings(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      for (var i = 0; i < 4; i++) {
+      // One more press than rows: the backup switch is not a ringed row.
+      for (var i = 0; i < 5; i++) {
         await press(tester, LogicalKeyboardKey.arrowDown);
       }
       expectOnRow(tester, 4);

@@ -11,6 +11,7 @@ import '../../../../core/sources/sources_providers.dart';
 import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
 import '../../connections/account_detail_page.dart';
+import '../../connections/backup_section.dart';
 import '../../connections/connections_hub.dart';
 import '../../sources/mydia_instance_screen.dart';
 import '../diagnostics_screen.dart';
@@ -23,6 +24,13 @@ const _bodyPadding = EdgeInsets.fromLTRB(24, 8, 24, 24);
 
 Widget settingsRootPage(SettingsCategory category) => switch (category) {
       SettingsCategory.connections => const _ConnectionsPage(),
+      SettingsCategory.backup => const _CategoryPane(
+          category: SettingsCategory.backup,
+          child: SingleChildScrollView(
+            padding: _bodyPadding,
+            child: BackupSection(key: Key('settings-backup-section')),
+          ),
+        ),
       SettingsCategory.playback => const _PlaybackPage(),
       SettingsCategory.diagnostics => const _CategoryPane(
           category: SettingsCategory.diagnostics,
@@ -192,16 +200,30 @@ class DialogSettingsNav implements SettingsNav {
         builder: (_) => _MydiaInstancePage(sourceId: id),
       ));
 
+  /// Selects [category] while the dialog is open. Its controller is disposed
+  /// as the dialog starts closing, and a toast action (the pairing notice's
+  /// "View") can fire after that; then this does nothing.
+  void _select(SettingsCategory category) {
+    if (!scope.isOpen()) return;
+    scope.select(category);
+  }
+
   @override
-  void openDiagnostics() => scope.select(SettingsCategory.diagnostics);
+  void openDiagnostics() => _select(SettingsCategory.diagnostics);
 
   /// Paired devices are a section of the hub; the dialog returns the pane to
   /// its root and selects it.
   @override
-  void openPairedDevices() => scope.connectionsSection.value = 'devices';
+  void openPairedDevices() {
+    if (!scope.isOpen()) return;
+    scope.connectionsSection.value = 'devices';
+  }
 
   @override
-  void openConnections() => scope.select(SettingsCategory.connections);
+  void openBackup() => _select(SettingsCategory.backup);
+
+  @override
+  void openConnections() => _select(SettingsCategory.connections);
 
   @override
   void openAccount(String accountId) =>
