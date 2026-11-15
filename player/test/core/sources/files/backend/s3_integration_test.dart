@@ -12,7 +12,10 @@ import 'package:player/core/sources/files/backend/s3_signer.dart';
 
 // Runs S3Backend against a real S3 server: RustFS, started locally by
 // devenv's `mydia-s3` and in CI as a service container on `Test / Player`.
-// Skipped when MYDIA_TEST_S3_ENDPOINT is unset.
+// Skipped when MYDIA_TEST_S3_ENDPOINT is unset, and locally when nothing
+// listens there (devenv always sets it, `mydia-s3` may not be running). In CI
+// an unreachable server fails instead, so a broken service container cannot
+// pass as a skip.
 
 const _region = 'us-east-1';
 const _filmKey = 'lib/Films/Fictional Title (2020)/a.mkv';
@@ -27,12 +30,27 @@ final _endpoint = _env['MYDIA_TEST_S3_ENDPOINT'];
 /// 64 KiB where byte i is i mod 251, so any range is checkable.
 final _filmBytes = Uint8List.fromList(List.generate(65536, (i) => i % 251));
 
+/// Why the group is skipped, or null to run it.
+String? _skipReason() {
+  final endpoint = _endpoint;
+  if (endpoint == null || endpoint.isEmpty) {
+    return 'MYDIA_TEST_S3_ENDPOINT is unset (start one with `mydia-s3`)';
+  }
+  if (_env.containsKey('CI')) return null;
+  final uri = Uri.parse(endpoint);
+  try {
+    RawSynchronousSocket.connectSync(uri.host, uri.port).closeSync();
+    return null;
+  } on SocketException {
+    return 'nothing listens at $endpoint (start it with `mydia-s3`)';
+  }
+}
+
 void main() {
+  final skip = _skipReason();
   group(
     'S3Backend against a real S3 server',
-    skip: _endpoint == null || _endpoint!.isEmpty
-        ? 'MYDIA_TEST_S3_ENDPOINT is unset (start one with `mydia-s3`)'
-        : false,
+    skip: skip ?? false,
     () {
       final accessKey = _env['MYDIA_TEST_S3_ACCESS_KEY_ID'] ?? '';
       final secretKey = _env['MYDIA_TEST_S3_SECRET_ACCESS_KEY'] ?? '';
