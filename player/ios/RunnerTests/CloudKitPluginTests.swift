@@ -73,6 +73,9 @@ class CloudKitPluginTests: XCTestCase {
   func testEnabledOnlyByYes() {
     XCTAssertTrue(CloudKitPlugin.isEnabledValue("YES"))
     XCTAssertFalse(CloudKitPlugin.isEnabledValue("NO"))
+    // The entitlements exist only for `YES`, so `yes` must not enable.
+    XCTAssertFalse(CloudKitPlugin.isEnabledValue("yes"))
+    XCTAssertFalse(CloudKitPlugin.isEnabledValue("Yes"))
     XCTAssertFalse(CloudKitPlugin.isEnabledValue(""))
     XCTAssertFalse(CloudKitPlugin.isEnabledValue(nil))
     // An unexpanded build setting is off, not on.

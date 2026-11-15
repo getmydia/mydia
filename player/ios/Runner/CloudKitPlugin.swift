@@ -91,9 +91,11 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
     isEnabledValue(Bundle.main.object(forInfoDictionaryKey: infoPlistKey))
   }
 
-  /// `MydiaCloudKitEnabled` is `$(MYDIA_CLOUDKIT)`: only `YES` enables.
+  /// `MydiaCloudKitEnabled` is `$(MYDIA_CLOUDKIT)`: only `YES` enables. The match is
+  /// case-sensitive because the entitlements are selected by
+  /// `..._$(MYDIA_CLOUDKIT)` build settings that exist only for `YES` and `NO`.
   static func isEnabledValue(_ value: Any?) -> Bool {
-    (value as? String)?.uppercased() == "YES"
+    (value as? String) == "YES"
   }
 
   deinit {
