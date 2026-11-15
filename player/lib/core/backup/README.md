@@ -89,7 +89,12 @@ the spec.
 - `AuthStorage` `backup/gdrive`: the Google account email and, on desktop
   and TV, the refresh token and client kind. Never backed up. A refused
   refresh (`invalid_grant`) shows "Signed out" with Reconnect and keeps local
-  data.
+  data. Google's consent screen lets the viewer untick Drive: a sign-in
+  whose granted scopes (the token response's `scope`, or tokeninfo for the
+  platform plugin) lack `drive.appdata` stores no grant and fails with code
+  `scope_missing`, and a Drive 403 `insufficientPermissions` /
+  `ACCESS_TOKEN_SCOPE_INSUFFICIENT` is signed out too, so Reconnect asks
+  again.
 
 ## Cloud stores
 

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/backup/backup_relay_client.dart';
+import 'package:player/core/backup/cloud/google_auth.dart';
 import 'package:player/core/backup/cloud/google_oauth_flows.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/backup/google_device_code_sheet.dart';
@@ -37,6 +39,9 @@ Future<List<bool?>> _open(
   await tester.pump();
   return result;
 }
+
+const _scopeMissingText = 'Mydia needs permission to store its backup in '
+    'your Google Drive. Sign in again and allow it.';
 
 DeviceCodePending _pending(String code) => DeviceCodePending(
       userCode: code,
@@ -93,6 +98,54 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result, [false]);
+  });
+
+  testWidgets('a grant without Drive access shows the scope message',
+      (tester) async {
+    final flow = StreamController<DeviceCodeState>();
+    final result = await _open(tester, [flow]);
+    flow.add(_pending('ABCD-EFGH'));
+    await tester.pumpAndSettle();
+
+    flow.addError(const BackupRelayException(BackupRelayError.signedOut,
+        code: googleScopeMissingCode));
+    await flow.close();
+    await tester.pumpAndSettle();
+
+    expect(result, [false]);
+    expect(find.text(_scopeMissingText), findsOneWidget);
+  });
+
+  testWidgets('signInToGoogle shows the scope message for a Drive-less grant',
+      (tester) async {
+    bool? signedIn;
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: toastLayerBuilder,
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            key: const Key('sign-in'),
+            onPressed: () async => signedIn = await signInToGoogle(
+              context,
+              GoogleSignInMethod(
+                currentEmail: () async => null,
+                signIn: () async => throw const BackupRelayException(
+                    BackupRelayError.signedOut,
+                    code: googleScopeMissingCode),
+              ),
+            ),
+            child: const Text('sign in'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('sign-in')));
+    await tester.pumpAndSettle();
+
+    expect(signedIn, isFalse);
+    expect(find.text(_scopeMissingText), findsOneWidget);
   });
 
   testWidgets('cancel closes the sheet and stops listening', (tester) async {

@@ -3223,6 +3223,10 @@
   "@backupGoogleConnectionsLink": {
     "description": "Link to the Google account page where an app's access can be removed."
   },
+  "backupGoogleScopeMissing": "Mydia needs permission to store its backup in your Google Drive. Sign in again and allow it.",
+  "@backupGoogleScopeMissing": {
+    "description": "Toast when the viewer signed in to Google but did not allow Drive access on the consent screen."
+  },
   "backupCloudDeleteConfirm": "Delete the backup in {store}? Devices still signed in will back it up again until you turn backup off on them.",
   "@backupCloudDeleteConfirm": {
     "description": "Confirmation before deleting a cloud backup. store is iCloud or Google Drive.",

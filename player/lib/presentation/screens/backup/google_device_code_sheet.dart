@@ -67,6 +67,7 @@ Future<bool> signInToGoogle(BuildContext context, GoogleSignInMethod? method,
   if (method == null) return false;
   final toaster = Toaster.of(context);
   final failed = context.l10n.backupActionFailed;
+  final scopeMissing = context.l10n.backupGoogleScopeMissing;
   try {
     if (!force && await method.currentEmail() != null) return true;
     final signIn = method.signIn;
@@ -77,7 +78,9 @@ Future<bool> signInToGoogle(BuildContext context, GoogleSignInMethod? method,
     if (!context.mounted) return false;
     return await showGoogleDeviceCodeSheet(context, method.deviceCode!);
   } on BackupRelayException catch (e) {
-    if (e.kind != BackupRelayError.signedOut) {
+    if (e.code == googleScopeMissingCode) {
+      toaster.show(scopeMissing, kind: ToastKind.error);
+    } else if (e.kind != BackupRelayError.signedOut) {
       toaster.show(failed, kind: ToastKind.error);
     }
     debugPrint('[Backup] Google sign-in failed: ${e.kind.name}');
@@ -170,7 +173,13 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
   void _onError(Object e) {
     debugPrint('[Backup] Google device code sign-in failed: ${e.runtimeType}');
     if (!mounted) return;
-    showToast(context, context.l10n.backupActionFailed, kind: ToastKind.error);
+    final l10n = context.l10n;
+    showToast(
+        context,
+        e is BackupRelayException && e.code == googleScopeMissingCode
+            ? l10n.backupGoogleScopeMissing
+            : l10n.backupActionFailed,
+        kind: ToastKind.error);
     Navigator.of(context).pop(false);
   }
 

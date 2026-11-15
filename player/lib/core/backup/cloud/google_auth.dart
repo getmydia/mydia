@@ -40,6 +40,27 @@ final Uri googleRevokeEndpoint =
 final Uri googleUserInfoEndpoint =
     Uri.parse('https://openidconnect.googleapis.com/v1/userinfo');
 
+/// Where [GoogleSignInAuth] reads the scopes a token was granted, since the
+/// plugin's authorization result does not say.
+final Uri googleTokenInfoEndpoint =
+    Uri.parse('https://oauth2.googleapis.com/tokeninfo');
+
+/// The [BackupRelayException.code] of a grant without
+/// [googleDriveAppDataScope]: Google's granular consent screen lets the
+/// viewer untick Drive while still signing in. Signed out, so the UI asks
+/// again.
+const String googleScopeMissingCode = 'scope_missing';
+
+const BackupRelayException _scopeMissing = BackupRelayException(
+  BackupRelayError.signedOut,
+  code: googleScopeMissingCode,
+);
+
+/// Whether a space-separated OAuth `scope` value includes
+/// [googleDriveAppDataScope].
+bool _grantsDriveAppData(String scope) =>
+    scope.split(' ').contains(googleDriveAppDataScope);
+
 /// A signed-in Google account that hands out Drive access tokens.
 abstract class GoogleAuth {
   /// The signed-in account's email, or null when signed out.
@@ -152,7 +173,13 @@ class GoogleTokenAuth implements GoogleAuth {
   ///
   /// Google rotates refresh tokens only sometimes, so a grant without one
   /// keeps the stored token.
+  ///
+  /// A grant whose `scope` lacks [googleDriveAppDataScope] is signed out
+  /// ([googleScopeMissingCode]) and nothing is stored. A grant without a
+  /// `scope` field is taken as the requested scopes (RFC 6749, 5.1).
   Future<String> completeSignIn(Map<String, Object?> grant) async {
+    final scope = grant['scope'];
+    if (scope is String && !_grantsDriveAppData(scope)) throw _scopeMissing;
     final stored = await _readGrant();
     // Never carry a token or email over from the other client's grant.
     final existing = stored?['clientKind'] == clientKind ? stored : null;
@@ -385,13 +412,17 @@ class GoogleSignInAuth implements GoogleAuth {
   GoogleSignInException? _restoreError;
 
   /// Asks the user to grant Drive access; call from a button press. Returns
-  /// the account email.
+  /// the account email. A grant without [googleDriveAppDataScope] is signed
+  /// out ([googleScopeMissingCode]) and nothing is stored.
   Future<String> signIn() async {
     final String token;
     try {
       token = await _backend.authorizeScopes(googleOAuthScopes);
     } on GoogleSignInException catch (e) {
       throw _mapException(e);
+    }
+    if (!_grantsDriveAppData(await _fetchGrantedScope(token))) {
+      throw _scopeMissing;
     }
     _lastToken = token;
     _restored = true;
@@ -463,13 +494,30 @@ class GoogleSignInAuth implements GoogleAuth {
     }
   }
 
-  Future<String> _fetchEmail(String accessToken) async {
+  /// The space-separated scopes [accessToken] was granted, from Google's
+  /// tokeninfo endpoint.
+  Future<String> _fetchGrantedScope(String accessToken) async {
+    final body = await _getJson(googleTokenInfoEndpoint
+        .replace(queryParameters: {'access_token': accessToken}));
+    final scope = body is Map ? body['scope'] : null;
+    if (scope is! String) {
+      throw const BackupRelayException(
+        BackupRelayError.server,
+        code: 'tokeninfo_malformed',
+      );
+    }
+    return scope;
+  }
+
+  /// GETs [url] and decodes its JSON body (null when not JSON). Transport
+  /// failures are [BackupRelayError.network], HTTP errors server or
+  /// unauthorized.
+  Future<Object?> _getJson(Uri url, {Map<String, String>? headers}) async {
     final http.Response res;
     try {
-      res = await _client.get(
-        googleUserInfoEndpoint,
-        headers: {'authorization': 'Bearer $accessToken'},
-      ).timeout(const Duration(seconds: 30));
+      res = await _client
+          .get(url, headers: headers)
+          .timeout(const Duration(seconds: 30));
     } on http.ClientException {
       throw const BackupRelayException(BackupRelayError.network);
     } on TimeoutException {
@@ -482,12 +530,16 @@ class GoogleSignInAuth implements GoogleAuth {
             : BackupRelayError.unauthorized,
       );
     }
-    Object? body;
     try {
-      body = jsonDecode(res.body);
+      return jsonDecode(res.body);
     } on FormatException {
-      body = null;
+      return null;
     }
+  }
+
+  Future<String> _fetchEmail(String accessToken) async {
+    final body = await _getJson(googleUserInfoEndpoint,
+        headers: {'authorization': 'Bearer $accessToken'});
     final email = body is Map ? body['email'] : null;
     if (email is! String) {
       throw const BackupRelayException(

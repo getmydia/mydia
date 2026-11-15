@@ -267,23 +267,36 @@ class GoogleDriveBackend implements CloudBackend {
             reasons.contains('userRateLimitExceeded')) {
           return rateLimited();
         }
+        // The token lacks drive.appdata (the box was unticked on Google's
+        // granular consent screen): signed out, so the UI offers Reconnect
+        // instead of backing off on a server error forever.
+        if (reasons.contains('insufficientPermissions') ||
+            reasons.contains('ACCESS_TOKEN_SCOPE_INSUFFICIENT')) {
+          return const BackupRelayException(BackupRelayError.signedOut,
+              code: googleScopeMissingCode);
+        }
         return const BackupRelayException(BackupRelayError.server);
       default:
         return const BackupRelayException(BackupRelayError.server);
     }
   }
 
-  /// `error.errors[0].reason` and `error.status` of a Drive error body.
+  /// `error.errors[0].reason`, `error.status` and every
+  /// `error.details[].reason` of a Drive error body.
   Set<String> _reasons(String body) {
     try {
       final error = (jsonDecode(body) as Map)['error'];
       if (error is! Map) return {};
       final errors = error['errors'];
+      final details = error['details'];
       return {
         if (errors is List && errors.isNotEmpty && errors.first is Map)
           if ((errors.first as Map)['reason'] is String)
             (errors.first as Map)['reason'] as String,
         if (error['status'] is String) error['status'] as String,
+        if (details is List)
+          for (final d in details)
+            if (d is Map && d['reason'] is String) d['reason'] as String,
       };
     } catch (_) {
       return {};

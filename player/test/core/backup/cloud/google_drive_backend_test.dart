@@ -250,6 +250,43 @@ void main() {
               (e as BackupRelayException).retryAfterMs == 3000)));
     });
 
+    test('insufficient_scope_403_is_signed_out', () async {
+      Matcher scopeMissing() => throwsA(predicate((e) =>
+          _kindOf(e) == BackupRelayError.signedOut &&
+          (e as BackupRelayException).code == googleScopeMissingCode));
+      // The v3 shape: a legacy reason in errors[].
+      server.failOnce(
+          'GET',
+          FakeDriveFailure(403,
+              body: jsonEncode({
+                'error': {
+                  'code': 403,
+                  'errors': [
+                    {'reason': 'insufficientPermissions'}
+                  ],
+                  'status': 'PERMISSION_DENIED',
+                }
+              })));
+      await expectLater(backend.list(), scopeMissing());
+      // The google.rpc shape: the reason in an ErrorInfo detail.
+      server.failOnce(
+          'GET',
+          FakeDriveFailure(403,
+              body: jsonEncode({
+                'error': {
+                  'code': 403,
+                  'status': 'PERMISSION_DENIED',
+                  'details': [
+                    {
+                      '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                      'reason': 'ACCESS_TOKEN_SCOPE_INSUFFICIENT',
+                    }
+                  ],
+                }
+              })));
+      await expectLater(backend.list(), scopeMissing());
+    });
+
     test('other_403_and_5xx_are_server', () async {
       server.failOnce('GET', FakeDriveFailure(403, body: 'nope'));
       await expectLater(backend.list(),

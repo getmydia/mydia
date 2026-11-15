@@ -529,6 +529,31 @@ void main() {
     expect(stored()['refreshToken'], 'tv-rt');
   });
 
+  test('completeSignIn without drive.appdata is signed out, storing nothing',
+      () async {
+    final auth = tokenAuth(MockClient((_) async => fail('no request')));
+
+    await expectLater(
+      auth.completeSignIn({..._grant(), 'scope': 'openid email'}),
+      throwsA(
+        isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.signedOut)
+            .having((e) => e.code, 'code', googleScopeMissingCode),
+      ),
+    );
+    expect(storage.containsKey(googleDriveStorageKey), isFalse);
+
+    // The full grant, as Google lists it, is accepted.
+    expect(
+        await auth.completeSignIn({
+          ..._grant(),
+          'scope': '$googleDriveAppDataScope openid '
+              'https://www.googleapis.com/auth/userinfo.email',
+        }),
+        'viewer@example.test');
+    expect(stored()['refreshToken'], 'rt-1');
+  });
+
   test('GoogleSignInAuth is constructible without touching the plugin', () {
     final auth = GoogleSignInAuth(
       storage: storage,
@@ -627,24 +652,49 @@ void main() {
       expect(backend.cleared, ['at-1']);
     });
 
+    /// Answers tokeninfo with [scope] and userinfo with [userInfo].
+    MockClient googleApis(
+            {String scope = 'openid email $googleDriveAppDataScope',
+            http.Response? userInfo}) =>
+        MockClient((req) async {
+          if (req.url.path == '/tokeninfo') {
+            expect(req.url.host, 'oauth2.googleapis.com');
+            expect(req.url.queryParameters['access_token'], 'consent-at');
+            return _json(200, {'scope': scope});
+          }
+          expect(req.url.toString(),
+              'https://openidconnect.googleapis.com/v1/userinfo');
+          expect(req.headers['authorization'], 'Bearer consent-at');
+          return userInfo ?? _json(200, {'email': 'viewer@example.test'});
+        });
+
     test('signIn stores only the email from userinfo', () async {
       storage.clear();
       backend.interactiveToken = 'consent-at';
-      final client = MockClient((req) async {
-        expect(req.url.toString(),
-            'https://openidconnect.googleapis.com/v1/userinfo');
-        expect(req.headers['authorization'], 'Bearer consent-at');
-        return _json(200, {'email': 'viewer@example.test'});
-      });
 
-      expect(await signInAuth(client: client).signIn(), 'viewer@example.test');
+      expect(await signInAuth(client: googleApis()).signIn(),
+          'viewer@example.test');
       expect(stored(), {'email': 'viewer@example.test'});
+    });
+
+    test('signIn without drive.appdata granted is signed out, storing nothing',
+        () async {
+      storage.clear();
+      backend.interactiveToken = 'consent-at';
+
+      await expectLater(
+        signInAuth(client: googleApis(scope: 'openid email')).signIn(),
+        throwsA(isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.signedOut)
+            .having((e) => e.code, 'code', googleScopeMissingCode)),
+      );
+      expect(storage.containsKey(googleDriveStorageKey), isFalse);
     });
 
     test('a non-JSON userinfo body is a server error', () async {
       storage.clear();
       backend.interactiveToken = 'consent-at';
-      final client = MockClient((_) async => http.Response('<html>', 200));
+      final client = googleApis(userInfo: http.Response('<html>', 200));
 
       await expectLater(
         signInAuth(client: client).signIn(),
