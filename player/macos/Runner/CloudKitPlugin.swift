@@ -250,7 +250,7 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
 
   // MARK: Method channel
 
-  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
     if call.method == "completePush" {
       let outcome = args["result"] as? String ?? "newData"
