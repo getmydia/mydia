@@ -11,6 +11,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
   # nil when the status could not be read.
   attr :status, Status, default: nil
   attr :vpn?, :boolean, required: true
+  attr :priority, :integer, default: nil, doc: "the running client's priority; nil when off"
   attr :display, Mydia.TimeDisplay, required: true
   attr :off_reason, :any, default: nil, doc: "Settings.off_reason/2 when the client is off"
   attr :enable_locked?, :boolean, default: false, doc: "enabled comes from the environment"
@@ -31,6 +32,14 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
             class="badge badge-sm badge-warning badge-soft"
           >
             {gettext("VPN experimental")}
+          </span>
+          <span
+            :if={@running? && @priority}
+            id="built-in-priority"
+            class="badge badge-sm badge-outline"
+            title={gettext("Grabs go to the enabled client with the lowest priority")}
+          >
+            {gettext("Priority %{priority}", priority: @priority)}
           </span>
           <div class="flex items-center gap-2 ml-auto">
             <button

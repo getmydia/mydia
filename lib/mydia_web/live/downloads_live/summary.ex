@@ -1,11 +1,13 @@
 defmodule MydiaWeb.DownloadsLive.Summary do
   @moduledoc """
   Queue totals for the Downloads stats bar, built by
-  `MydiaWeb.DownloadsLive.ListView.summarize/1` from the unfiltered Queue list
-  so the numbers hold still while the operator types a search.
+  `MydiaWeb.DownloadsLive.ListView.summarize/2` from the unfiltered Queue list
+  so the numbers hold still while the operator types a search. `seeding`
+  counts torrents still seeding after import (see `summarize/2`).
   """
 
   defstruct active: 0,
+            seeding: 0,
             stalled: 0,
             download_speed: 0,
             upload_speed: 0,
@@ -15,6 +17,7 @@ defmodule MydiaWeb.DownloadsLive.Summary do
 
   @type t :: %__MODULE__{
           active: non_neg_integer(),
+          seeding: non_neg_integer(),
           stalled: non_neg_integer(),
           download_speed: number(),
           upload_speed: number(),

@@ -32,6 +32,18 @@ defmodule Mydia.Downloads.BuiltInTest do
     assert client.download_directory == "/data/downloads"
     assert client.connection_settings == %{"managed" => true}
     assert BuiltIn.managed?(%{options: client.connection_settings})
+    # Unchanged from the old hard-coded value, so upgrades keep their routing.
+    assert client.priority == 10
+  end
+
+  test "client_configs/0 carries the configured priority" do
+    BuiltIn.put_runtime(%Runtime{
+      api_port: 3030,
+      credentials: {"mydia", "s3cret"},
+      config: %Config{priority: 1}
+    })
+
+    assert [%DownloadClientConfig{priority: 1}] = BuiltIn.client_configs()
   end
 
   describe "seeding_target/0" do

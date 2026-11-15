@@ -191,6 +191,12 @@ defmodule Mydia.Downloads.BuiltIn.SettingsTest do
       assert Keyword.has_key?(cs.errors, :listen_port)
     end
 
+    test "priority must be a positive integer" do
+      assert changeset(%{"priority" => "1"}).valid?
+      assert Keyword.has_key?(changeset(%{"priority" => "0"}).errors, :priority)
+      assert Keyword.has_key?(changeset(%{"priority" => "abc"}).errors, :priority)
+    end
+
     test "min_free_space_gb accepts zero and rejects negatives" do
       assert changeset(%{"min_free_space_gb" => "0"}).valid?
       assert changeset(%{"min_free_space_gb" => "12"}).valid?

@@ -103,11 +103,15 @@ defmodule Mydia.Media.Deletion do
         # have to go before `Repo.delete(media_item)` cascades to the
         # episodes themselves, since `media_files.episode_id` is
         # `ON DELETE NO ACTION`.
+        torrents = client_torrents([media_item.id])
+
         if delete_files do
           delete_media_item_episode_files(media_item)
         else
           park_media_item_files(media_item)
         end
+
+        enqueue_client_removals(torrents, delete_files)
 
         case Repo.delete(media_item) do
           {:ok, deleted} -> deleted
@@ -119,6 +123,55 @@ defmodule Mydia.Media.Deletion do
       {:ok, deleted} -> {:ok, deleted, remove_from_disk(plan)}
       {:error, changeset} -> {:error, changeset}
     end
+  end
+
+  # `downloads.media_item_id` and `downloads.episode_id` are ON DELETE CASCADE,
+  # so the delete takes the download rows with it and nothing would tell the
+  # client. Its torrents then sat in Issues as unmatched, with no way to remove
+  # them (issue #1422). The jobs are inserted inside the delete's transaction,
+  # so they run only if it commits. The torrent's data goes only when the
+  # operator asked for the files to go; otherwise the client just forgets it.
+  #
+  # A torrent whose download row Clear Completed already deleted can still be
+  # seeding; only its imported files' provenance names it then. Read before
+  # the files are parked or deleted.
+  defp client_torrents(media_item_ids) do
+    episode_ids = from(e in Episode, where: e.media_item_id in ^media_item_ids, select: e.id)
+
+    from_downloads =
+      from(d in Mydia.Downloads.Download,
+        where:
+          (d.media_item_id in ^media_item_ids or d.episode_id in subquery(episode_ids)) and
+            not is_nil(d.download_client) and not is_nil(d.download_client_id),
+        select: {d.download_client, d.download_client_id}
+      )
+      |> Repo.all()
+
+    from_files =
+      from(f in MediaFile,
+        where: f.media_item_id in ^media_item_ids or f.episode_id in subquery(episode_ids),
+        select: f.metadata
+      )
+      |> Repo.all()
+      |> Enum.map(&provenance/1)
+
+    Enum.uniq(from_downloads ++ for({client, id} = pair <- from_files, client && id, do: pair))
+  end
+
+  # download_client / download_client_id are not declared FileMetadata fields,
+  # so they live in the `extra` catch-all (see Mydia.Library.DownloadImports).
+  defp provenance(metadata) do
+    extra = (metadata && metadata.extra) || %{}
+    {extra["download_client"], extra["download_client_id"]}
+  end
+
+  defp enqueue_client_removals(pairs, delete_files) do
+    Enum.each(pairs, fn {client, client_id} ->
+      {:ok, _job} =
+        client
+        |> Mydia.Jobs.RemoveClientTorrent.new_for(client_id, delete_files)
+        |> Mydia.Jobs.insert()
+    end)
   end
 
   defp remove_from_disk(nil), do: %DiskRemoval{}
@@ -178,6 +231,8 @@ defmodule Mydia.Media.Deletion do
           |> where([m], m.id in ^ids)
           |> Repo.all()
 
+        torrents = client_torrents(ids)
+
         if delete_files do
           items
           |> Enum.filter(&(&1.type == "tv_show"))
@@ -185,6 +240,8 @@ defmodule Mydia.Media.Deletion do
         else
           Enum.each(items, &park_media_item_files/1)
         end
+
+        enqueue_client_removals(torrents, delete_files)
 
         # Delete the media items (and cascade delete all related DB records).
         MediaItem

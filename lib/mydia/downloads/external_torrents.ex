@@ -26,6 +26,7 @@ defmodule Mydia.Downloads.ExternalTorrents do
   require Logger
 
   alias Mydia.Downloads
+  alias Mydia.Downloads.ClientRemoval
   alias Mydia.Downloads.ExternalPolicy
   alias Mydia.Downloads.ExternalTorrents.Classifier
   alias Mydia.Downloads.Structs.{CandidatePool, DownloadStatus, ExternalScan, ExternalTorrent}
@@ -86,6 +87,39 @@ defmodule Mydia.Downloads.ExternalTorrents do
     scan = get()
 
     Enum.find(scan.needs_matching ++ scan.external, &(&1.id == id))
+  end
+
+  @doc """
+  Removes a torrent Mydia does not manage from its client, deleting its data
+  when `delete_files: true`, and drops it from the cached scan.
+
+  This is how an operator gets rid of a torrent stranded in Issues, for
+  example one whose media item was deleted before the cascade learned to tell
+  the client (issue #1422). A torrent already gone from the client counts as
+  removed. The scan is updated in place rather than re-run, so the click never
+  waits on every client.
+  """
+  @spec remove(ExternalTorrent.t(), keyword()) :: :ok | {:error, term()}
+  def remove(%ExternalTorrent{} = torrent, opts) do
+    delete_files = Keyword.fetch!(opts, :delete_files)
+
+    with :ok <- ClientRemoval.remove_torrent(torrent.client_name, torrent.client_id, delete_files) do
+      forget(torrent.id)
+    end
+  end
+
+  defp forget(id) do
+    scan = get()
+    keep = &(&1.id != id)
+
+    put(%{
+      scan
+      | needs_matching: Enum.filter(scan.needs_matching, keep),
+        external: Enum.filter(scan.external, keep)
+    })
+
+    PubSub.broadcast(Mydia.PubSub, "downloads", :external_scan_updated)
+    :ok
   end
 
   @doc """

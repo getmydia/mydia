@@ -494,6 +494,15 @@
                     )}
                   </span>
                   <span
+                    id={"download-upload-#{download.id}"}
+                    class="inline-flex items-center gap-1"
+                    title={gettext("Upload speed")}
+                  >
+                    <.icon name="hero-arrow-up-tray" class="size-3 opacity-70" />{format_speed(
+                      download.upload_speed
+                    )}
+                  </span>
+                  <span
                     class="inline-flex items-center gap-1 tabular-nums"
                     title={gettext("Size")}
                   >
@@ -516,7 +525,11 @@
                   </span>
                 <% end %>
                 <%= if kind == :completed do %>
-                  <span class="inline-flex items-center gap-1" title={gettext("Upload speed")}>
+                  <span
+                    id={"download-upload-#{download.id}"}
+                    class="inline-flex items-center gap-1"
+                    title={gettext("Upload speed")}
+                  >
                     <.icon name="hero-arrow-up-tray" class="size-3 opacity-70" />{format_speed(
                       download.upload_speed
                     )}
@@ -716,6 +729,8 @@
         </div>
       <% end %>
     </ListComponents.tab_bar>
+
+    <RemoveConfirm.remove_confirm_modal confirm={@remove_confirm} />
 
     <%!-- Clear Completed modal (with opt-in delete-from-disk) --%>
     <.modal

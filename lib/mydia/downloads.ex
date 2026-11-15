@@ -462,6 +462,16 @@ defmodule Mydia.Downloads do
     to: Mydia.Downloads.Queue
 
   @doc """
+  Removes a torrent Mydia does not manage from its client. See
+  `Mydia.Downloads.ExternalTorrents.remove/2`.
+  """
+  @spec remove_external_torrent(Mydia.Downloads.Structs.ExternalTorrent.t(), keyword()) ::
+          :ok | {:error, term()}
+  defdelegate remove_external_torrent(torrent, opts),
+    to: Mydia.Downloads.ExternalTorrents,
+    as: :remove
+
+  @doc """
   Resolves file-to-episode mappings for an unresolved download and triggers re-import.
 
   Accepts a list of `%{path: string, episode_id: binary_id}` mappings.
