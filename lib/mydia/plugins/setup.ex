@@ -94,24 +94,13 @@ defmodule Mydia.Plugins.Setup do
   """
   @spec endpoint_from_url(String.t()) :: {:ok, map()} | :error
   def endpoint_from_url(url) when is_binary(url) do
-    case parse_url(String.trim(url)) do
+    case Mydia.URL.parse(String.trim(url)) do
       %URI{scheme: scheme, host: host, port: port}
       when scheme in ["http", "https"] and is_binary(host) and host != "" ->
         {:ok, %{"scheme" => scheme, "host" => String.downcase(host), "port" => port}}
 
       _ ->
         :error
-    end
-  end
-
-  # URI.parse/1 turns an out-of-range port such as 99999 into nil (since Elixir
-  # 1.20.5), which would hide the port the operator typed from the "not valid"
-  # message. URI.new/1 keeps it, so Instances.approve_endpoints/2 rejects it by
-  # value. URI.parse/1 stays the fallback for URLs URI.new/1 refuses outright.
-  defp parse_url(url) do
-    case URI.new(url) do
-      {:ok, uri} -> uri
-      {:error, _} -> URI.parse(url)
     end
   end
 
