@@ -135,7 +135,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       port: section.listen_port || @default_port,
       api_port: section.api_port || @default_api_port,
       min_free_space_bytes: (section.min_free_space_gb || @default_min_free_space_gb) * @gb,
-      priority: section.priority || @default_priority,
+      priority: priority(section.priority),
       download_limit_bps: kib_to_bps(section.download_limit_kib),
       upload_limit_bps: kib_to_bps(section.upload_limit_kib),
       vpn?: section.vpn_enabled == true,
@@ -310,6 +310,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   defp reserved_warnings(env) do
     for name <- @reserved, Map.has_key?(env, "MYDIA_VPN_" <> name), do: {:reserved_variable, name}
   end
+
+  defp priority(priority) when is_integer(priority), do: priority
+  defp priority(_unset), do: @default_priority
 
   defp seed_goal_action("remove"), do: :remove
   defp seed_goal_action(_other), do: :pause

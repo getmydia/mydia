@@ -22,6 +22,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
   alias MydiaWeb.DownloadsLive.Paths
+  alias MydiaWeb.DownloadsLive.PathMappingIssues
+  alias MydiaWeb.DownloadsLive.RemovedClients
   alias MydiaWeb.DownloadsLive.RemoveConfirm
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
@@ -383,7 +385,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
              local_prefix: local_prefix
            }) do
         {:ok, mapping} ->
-          count = retry_mismatches_under_prefix(mapping.remote_prefix)
+          count = PathMappingIssues.retry_under_prefix(mapping.remote_prefix)
 
           {:noreply,
            socket
@@ -1177,10 +1179,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp adopt(socket, torrent_id, media_item_id, episode_id) do
     case ExternalTorrents.find(torrent_id) do
       nil ->
-        {:noreply,
-         socket
-         |> put_flash(:error, gettext("That torrent is no longer in the client"))
-         |> load_downloads()}
+        {:noreply, torrent_vanished(socket)}
 
       torrent ->
         case Downloads.adopt_external_torrent(torrent, media_item_id, episode_id) do
@@ -1366,23 +1365,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp confirm_remove(socket, {:torrent, id}, delete_files) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      case ExternalTorrents.find(id) do
-        nil ->
-          {:noreply, torrent_vanished(socket)}
-
-        torrent ->
-          case Downloads.remove_external_torrent(torrent, delete_files: delete_files) do
-            :ok ->
-              {:noreply,
-               socket
-               |> put_flash(:info, gettext("Removed from the download client"))
-               |> load_downloads()}
-
-            {:error, _reason} ->
-              {:noreply,
-               put_flash(socket, :error, gettext("Could not remove that torrent from the client"))}
-          end
-      end
+      {level, message} = RemoveConfirm.remove_torrent(id, delete_files)
+      {:noreply, socket |> put_flash(level, message) |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -1519,7 +1503,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         [download] =
           [download]
           |> Rows.annotate()
-          |> enrich_path_mapping_counts()
+          |> PathMappingIssues.enrich_counts()
 
         assign(socket, :drawer_download, download)
     end
@@ -1527,7 +1511,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp load_issues_downloads(socket, all_downloads) do
     {issues, shown} = filtered_issues(socket, all_downloads)
-    shown = enrich_issue_path_mappings(shown)
+    shown = PathMappingIssues.enrich_issues(shown)
 
     # Drop selections that are no longer on screen (filtered out, resolved).
     visible_ids = for issue <- shown, Issue.selectable?(issue), into: MapSet.new(), do: issue.id
@@ -1539,7 +1523,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:downloads_empty?, shown == [])
     |> assign(:selectable_issues?, Enum.any?(shown, &Issue.selectable?/1))
     |> assign(:issue_counts, IssueList.counts(issues))
-    |> assign(:removed_client_groups, removed_client_groups())
+    |> assign(:removed_client_groups, RemovedClients.groups())
     |> stream(:issues, shown, reset: true)
   end
 
@@ -1586,17 +1570,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp refresh_issue_rows(socket, _ids), do: socket
 
-  # The affected count is a query, so it runs only for the rows on screen.
-  defp enrich_issue_path_mappings(issues) do
-    downloads = for %Issue{download: d} <- issues, d, do: d
-    by_id = downloads |> enrich_path_mapping_counts() |> Map.new(&{&1.id, &1})
-
-    Enum.map(issues, fn
-      %Issue{download: %{id: id}} = issue -> %{issue | download: Map.fetch!(by_id, id)}
-      issue -> issue
-    end)
-  end
-
   defp load_external(socket) do
     scan = socket.assigns.scan
     external = ListView.filter_scan(scan.external, socket.assigns.filters)
@@ -1607,108 +1580,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:downloads_empty?, external == [])
     |> assign(:scan, scan)
     |> stream(:external_torrents, external, reset: true)
-  end
-
-  # Orphan groups annotated with a DOM-safe slug. Client names come from
-  # operator-supplied config (env vars), so unlike most other ids in this
-  # LiveView they aren't guaranteed to already be DOM-id-safe — a name with
-  # spaces or punctuation would otherwise produce an invalid id/CSS selector.
-  # The raw name is preserved in `download_client` for display and for the
-  # `phx-value-client` sent back to `clear_removed_client/2`.
-  defp removed_client_groups do
-    Downloads.removed_client_groups()
-    |> Enum.map_reduce(MapSet.new(), fn group, taken ->
-      {slug, taken} = unique_slug(ListView.slugify(group.download_client), taken)
-      {Map.put(group, :slug, slug), taken}
-    end)
-    |> elem(0)
-  end
-
-  # Distinct client names can slugify to the same string ("Qbit Old" and
-  # "qbit-old"), and anything with no alphanumerics collapses to "client".
-  # Duplicate DOM ids are invalid HTML and make LiveView's id-keyed patching
-  # apply an update to the wrong banner, so the first claimant keeps the bare
-  # slug and later ones get a numeric suffix. `removed_client_groups/0` orders
-  # by client name, so which one is "first" is stable across renders.
-  defp unique_slug(base, taken) do
-    if MapSet.member?(taken, base) do
-      next_free_slug(base, 2, taken)
-    else
-      {base, MapSet.put(taken, base)}
-    end
-  end
-
-  # Skips past a suffix a real client name already claimed, so a group named
-  # "qbit-old-2" cannot be stolen from underneath by a disambiguated sibling.
-  defp next_free_slug(base, n, taken) do
-    candidate = "#{base}-#{n}"
-
-    if MapSet.member?(taken, candidate) do
-      next_free_slug(base, n + 1, taken)
-    else
-      {candidate, MapSet.put(taken, candidate)}
-    end
-  end
-
-  # Re-enqueue every failed mismatch download whose reported path is under the
-  # applied prefix, clearing its import-failure fields. Oban uniqueness keyed on
-  # download_id skips any import already in flight. Returns the count.
-  defp retry_mismatches_under_prefix(remote_prefix) do
-    downloads = Downloads.list_path_mapping_mismatches_under_prefix(remote_prefix)
-
-    Enum.each(downloads, fn download ->
-      case Downloads.update_download(
-             download,
-             Mydia.Downloads.Download.cleared_import_failure_attrs()
-           ) do
-        {:ok, updated} ->
-          %{
-            "download_id" => updated.id,
-            "save_path" => nil,
-            "cleanup_client" => true,
-            "use_hardlinks" => true
-          }
-          # MediaImport declares worker-level uniqueness keyed on download_id,
-          # so an import already queued/running for this download is not
-          # double-enqueued.
-          |> Mydia.Jobs.MediaImport.new()
-          |> Oban.insert()
-
-        {:error, _changeset} ->
-          :ok
-      end
-    end)
-
-    length(downloads)
-  end
-
-  # The suggestion itself is computed when the import fails
-  # (Mydia.Jobs.MediaImport.Failure) and arrives on the row, so rendering never
-  # touches the filesystem (#1315). This only counts how many downloads a
-  # one-click apply would re-run, once per remote prefix.
-  defp enrich_path_mapping_counts(downloads) do
-    {enriched, _counts} =
-      Enum.map_reduce(downloads, %{}, fn
-        %{path_mapping_suggestion: %{remote_prefix: prefix}} = d, counts ->
-          {count, counts} =
-            Map.get_and_update(counts, prefix, fn
-              nil ->
-                count =
-                  prefix |> Downloads.list_path_mapping_mismatches_under_prefix() |> length()
-
-                {count, count}
-
-              count ->
-                {count, count}
-            end)
-
-          {%{d | path_mapping_affected_count: count}, counts}
-
-        d, counts ->
-          {d, counts}
-      end)
-
-    enriched
   end
 
   defp submit_match(socket, media_item_id, episode_id) do

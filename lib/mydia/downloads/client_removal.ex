@@ -92,15 +92,17 @@ defmodule Mydia.Downloads.ClientRemoval do
           :ok | {:error, :no_client} | {:error, term()}
   def remove_torrent(client_name, client_id, delete_files) when is_boolean(delete_files) do
     with {:ok, adapter, config} <- Mydia.Downloads.Queue.client_for(client_name) do
-      case Client.remove_download(adapter, config, client_id, delete_files: delete_files) do
-        :ok ->
-          :ok
-
-        {:error, error} ->
-          if not_found_error?(error), do: :ok, else: {:error, error}
-      end
+      adapter
+      |> Client.remove_download(config, client_id, delete_files: delete_files)
+      |> gone_is_removed()
     end
   end
+
+  defp gone_is_removed({:error, error}) do
+    if not_found_error?(error), do: :ok, else: {:error, error}
+  end
+
+  defp gone_is_removed(result), do: result
 
   def list_pending_removals(configs \\ nil) do
     configs = configs || Settings.list_download_client_configs()

@@ -11,6 +11,9 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
 
   use MydiaWeb, :html
 
+  alias Mydia.Downloads
+  alias Mydia.Downloads.ExternalTorrents
+  alias Mydia.Downloads.Structs.ExternalTorrent
   alias MydiaWeb.SeedingComponents
 
   @enforce_keys [:target, :title]
@@ -41,6 +44,20 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
   @doc "The dialog for a client torrent Mydia does not track."
   @spec for_torrent(Mydia.Downloads.Structs.ExternalTorrent.t()) :: t()
   def for_torrent(torrent), do: %__MODULE__{target: {:torrent, torrent.id}, title: torrent.title}
+
+  @doc """
+  Removes a client torrent Mydia does not track, returning the flash to show.
+  """
+  @spec remove_torrent(String.t(), boolean()) :: {:info | :error, String.t()}
+  def remove_torrent(id, delete_files) do
+    with %ExternalTorrent{} = torrent <- ExternalTorrents.find(id) || :gone,
+         :ok <- Downloads.remove_external_torrent(torrent, delete_files: delete_files) do
+      {:info, gettext("Removed from the download client")}
+    else
+      :gone -> {:error, gettext("That torrent is no longer in the client")}
+      {:error, _reason} -> {:error, gettext("Could not remove that torrent from the client")}
+    end
+  end
 
   attr :confirm, __MODULE__, default: nil
 
