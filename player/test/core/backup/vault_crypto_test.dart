@@ -66,6 +66,11 @@ void main() {
       final id = VaultCrypto.slotIdFor(List.filled(32, 9));
       expect(id, matches(RegExp(r'^[0-9a-f]{16}$')));
     });
+
+    test('slotIdFor matches a pinned vector', () {
+      // sha256(bytes([9]) * 32).hexdigest()[:16], computed with Python.
+      expect(VaultCrypto.slotIdFor(List.filled(32, 9)), '8c0cc17a04942cc4');
+    });
   });
 
   group('envelopes', () {

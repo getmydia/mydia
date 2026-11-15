@@ -24,7 +24,13 @@ enum BackupRelayError {
   /// The relay has no `/backup/v1` routes (404 whose body is not relay JSON).
   unavailable,
   notFound,
+
+  /// 403 `not_member` (or a 403 with no code): this signer is not in the
+  /// vault, so this device was removed.
   notMember,
+
+  /// 403 `not_owner`: a slot write this signer may not make. Not a removal.
+  notOwner,
   conflict,
   preconditionFailed,
   tooLarge,
@@ -474,7 +480,13 @@ class BackupRelayClient {
       case 401:
         return e(BackupRelayError.unauthorized);
       case 403:
-        return e(BackupRelayError.notMember);
+        // Only not_member means this device is out of the vault; reading
+        // any other 403 that way would drop the vault state.
+        return switch (code) {
+          null || 'not_member' => e(BackupRelayError.notMember),
+          'not_owner' => e(BackupRelayError.notOwner),
+          _ => e(BackupRelayError.invalid),
+        };
       case 404:
         return code == null
             ? e(BackupRelayError.unavailable)

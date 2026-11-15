@@ -255,6 +255,16 @@ void main() {
       expect(b.meta.slotClaims()[aSlot], {'node-a'});
     });
 
+    test('restoring while backup is on says so and changes nothing', () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final preview = await a.service.previewRestore(key.display);
+      final before = rig.relay.requests.length;
+      await expectLater(a.service.commitRestore(preview),
+          throwsA(isA<BackupAlreadyOnException>()));
+      expect(rig.relay.requests.length, before);
+      expect(a.service.enabled, isTrue);
+    });
+
     test('a wrong key finds no backup', () async {
       await rig.enabled('Living Room TV');
       final b = rig.device('Laptop');
@@ -405,6 +415,19 @@ void main() {
   });
 
   group('poll', () {
+    test('a 403 not_owner on upload is an error, not a removal', () async {
+      final (a, _) = await rig.enabled('Living Room TV');
+      rig.relay.override = (r) => r.method == 'PUT'
+          ? http.Response('{"error":"not_owner"}', 403)
+          : null;
+      await a.watch('tmdb:movie:5');
+      a.service.markDirty();
+      await a.service.flush();
+      expect(a.service.status.value, _errorOf(BackupRelayError.notOwner));
+      expect(await a.state(), isNotNull);
+      expect(a.service.enabled, isTrue);
+    });
+
     test('a corrupted slot of one device is skipped and the rest merge',
         () async {
       final (a, key) = await rig.enabled('Living Room TV');

@@ -67,7 +67,10 @@ added to the allowlist.
 
 ## Timing
 
-An upload follows a change to a backed-up record, at most once per 2 minutes,
+An upload follows a change to a backed-up record (a watch or pin write, a
+source account change, or a backed-up setting written through any
+`SettingsService` or `SubtitleLanguagePrefs`, see `watchBackedUpSettings`),
+at most once per 2 minutes,
 and is forced when the app goes to the background. The manifest is polled on
 foreground, after every p2p sync and every 15 minutes; only slots whose seq
 moved are downloaded. Failures back off exponentially to 30 minutes.
@@ -125,7 +128,9 @@ and all of them when this device leaves or switches vaults.
 | A slot fails to open | Skipped, the rest merge; "Couldn't read Living Room TV's backup" |
 | 409 on rotation, or an unknown epoch | Refetch the manifest and envelope, retry once |
 | 412 on upload | Refetch the manifest, upload again at the current seq |
-| 403 not a member, vault gone | `BackupRemoved`: `backup/vault` is cleared, local data kept |
+| 403 `not_member` (or a 403 with no code), vault gone | `BackupRemoved`: `backup/vault` is cleared, local data kept |
+| 403 `not_owner` | `BackupRelayError.notOwner`: a status error and a retry, never a removal |
+| Restore while backup is on | `BackupAlreadyOnException`; the restore screen says to turn backup off first |
 | Lookup 404 on restore | "No backup matches this key" |
 | 413 slot too large | Status error; no partial upload |
 

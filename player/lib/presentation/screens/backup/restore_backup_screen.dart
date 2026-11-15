@@ -21,7 +21,14 @@ import '../connections/pair_device_sheet.dart' show qrScanSupported;
 const restoreBackupLocation = '/backup/restore';
 
 /// Why the key did not lead to a preview, worded in `build`.
-enum _RestoreFailure { malformed, notFound, unavailable, network, other }
+enum _RestoreFailure {
+  malformed,
+  notFound,
+  unavailable,
+  network,
+  alreadyOn,
+  other
+}
 
 class RestoreBackupScreen extends ConsumerStatefulWidget {
   const RestoreBackupScreen({super.key});
@@ -88,6 +95,8 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
       await ref.read(backupSyncServiceProvider).commitRestore(preview);
       toaster.show(l10n.backupRestoreDone, kind: ToastKind.success);
       router?.go('/');
+    } on BackupAlreadyOnException {
+      if (mounted) setState(() => _failure = _RestoreFailure.alreadyOn);
     } on BackupRelayException catch (e) {
       if (mounted) setState(() => _failure = _failureOf(e.kind));
     } catch (e) {
@@ -131,6 +140,7 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
         _RestoreFailure.notFound => l10n.backupRestoreNotFound,
         _RestoreFailure.unavailable => l10n.backupUnavailable,
         _RestoreFailure.network => l10n.backupErrorNetwork,
+        _RestoreFailure.alreadyOn => l10n.backupRestoreAlreadyOn,
         _RestoreFailure.other => l10n.backupRestoreFailed,
       };
 
@@ -144,18 +154,23 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            shrinkWrap: true,
-            children: [
-              if (service.enabled)
-                Text(l10n.backupRestoreAlreadyOn,
-                    key: const Key('restore-already-on'))
-              else if (preview == null)
-                ..._keyEntry(l10n)
-              else
-                ..._summary(l10n, preview),
-            ],
+          // Backup can turn on while this screen is up (pairing joins the
+          // group's vault): the status change brings up the explanation.
+          child: ValueListenableBuilder(
+            valueListenable: service.status,
+            builder: (context, _, __) => ListView(
+              padding: const EdgeInsets.all(24),
+              shrinkWrap: true,
+              children: [
+                if (service.enabled)
+                  Text(l10n.backupRestoreAlreadyOn,
+                      key: const Key('restore-already-on'))
+                else if (preview == null)
+                  ..._keyEntry(l10n)
+                else
+                  ..._summary(l10n, preview),
+              ],
+            ),
           ),
         ),
       ),

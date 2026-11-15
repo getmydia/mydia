@@ -132,6 +132,32 @@ void main() {
     final (tv, _, _) = await _setUp(tester);
     await _pump(tester, tv);
     expect(find.byKey(const Key('restore-already-on')), findsOneWidget);
+    expect(
+        find.text('This device is already in a backup. Turn backup off in '
+            'Servers & devices to restore another one.'),
+        findsOneWidget);
     expect(find.byKey(const Key('restore-key-field')), findsNothing);
+  });
+
+  testWidgets('backup turning on after the preview says so, not an error',
+      (tester) async {
+    final (_, fresh, key) = await _setUp(tester);
+    await _pump(tester, fresh);
+    await tester.enterText(
+        find.byKey(const Key('restore-key-field')), key.display);
+    await tester.tap(find.byKey(const Key('restore-find-button')));
+    await settleEngine(tester,
+        until: () =>
+            find.byKey(const Key('restore-summary')).evaluate().isNotEmpty);
+
+    // Pairing, say, turned backup on meanwhile.
+    await tester.runAsync(fresh.enable);
+    await tester.pump();
+
+    expect(find.byKey(const Key('restore-already-on')), findsOneWidget);
+    expect(find.byKey(const Key('restore-confirm-button')), findsNothing);
+    expect(find.byKey(const Key('restore-error')), findsNothing);
+    fresh.dispose();
+    await tester.pump(const Duration(seconds: 10));
   });
 }

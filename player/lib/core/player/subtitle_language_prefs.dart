@@ -73,10 +73,15 @@ class SubtitleLanguagePrefs {
     }
   }
 
+  /// Fires after every [save] that persisted. The cloud backup listens.
+  static Stream<void> get changes => _changes.stream;
+  static final _changes = StreamController<void>.broadcast();
+
   static Future<void> save(List<String> languages) async {
     try {
       final box = await _box();
       await box.put(_key, languages);
+      _changes.add(null);
     } catch (e) {
       debugPrint('[SubtitleLanguagePrefs] Box unavailable, not persisting: $e');
     }

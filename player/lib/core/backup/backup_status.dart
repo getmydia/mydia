@@ -46,6 +46,15 @@ final class BackupRemoved extends BackupStatus {
   const BackupRemoved();
 }
 
+/// A restore asked for while this device is already in a vault: backup has
+/// to be turned off first.
+class BackupAlreadyOnException implements Exception {
+  const BackupAlreadyOnException();
+
+  @override
+  String toString() => 'BackupAlreadyOnException';
+}
+
 /// One device in the vault, for the settings screen's member list. The
 /// recovery member is not one.
 class BackupMemberInfo {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -10,6 +11,7 @@ import '../auth/auth_storage.dart';
 import '../p2p/peer_group_secret.dart';
 import '../p2p/peer_sync_records.dart';
 import '../p2p/peer_sync_store.dart';
+import '../player/subtitle_language_prefs.dart';
 import '../settings/settings_service.dart';
 import '../sources/files/files_account.dart' show kFilesLocalAccountId;
 import '../sources/files/index/index_records.dart' show LibraryRoot;
@@ -35,6 +37,21 @@ const kBackupSettingKeys = [
 /// Setting key of the subtitle search languages, a JSON list of language
 /// codes (`SubtitleLanguagePrefs`).
 const kBackupSubtitleLanguagesKey = 'subtitle_search_languages';
+
+/// Calls [onChange] after a backed-up setting is written, through any
+/// [SettingsService] or [SubtitleLanguagePrefs]. Call the returned function
+/// to stop.
+Future<void> Function() watchBackedUpSettings(void Function() onChange) {
+  final settings = SettingsService.changes
+      .where((k) =>
+          kBackupSettingKeys.contains(k) || SettingsService.isLibrarySortKey(k))
+      .listen((_) => onChange());
+  final subtitles = SubtitleLanguagePrefs.changes.listen((_) => onChange());
+  return () async {
+    await settings.cancel();
+    await subtitles.cancel();
+  };
+}
 
 /// `AuthStorage` key of the per-install HMAC key fingerprints are made with.
 /// Fingerprints cover secrets (share passwords among them) and sit in the

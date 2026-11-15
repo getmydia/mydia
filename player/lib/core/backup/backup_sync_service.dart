@@ -297,9 +297,11 @@ class BackupSyncService {
 
   /// Joins [preview]'s vault (added by the recovery member, no rotation),
   /// applies its records in restore mode, and uploads this device's slot.
+  /// Throws [BackupAlreadyOnException], touching nothing, when this device
+  /// is already in a vault.
   Future<ApplyResult> commitRestore(RestorePreview preview) =>
       _userOp(() async {
-        if (_state != null) throw StateError('backup is already on');
+        if (_state != null) throw const BackupAlreadyOnException();
         final identity = await _loadIdentity();
         final signer =
             backupB64((await identity.signer.extractPublicKey()).bytes);

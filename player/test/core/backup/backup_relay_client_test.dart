@@ -225,6 +225,13 @@ void main() {
   group('status mapping', () {
     final cases = <String, (http.Response, BackupRelayError)>{
       '403': (_err(403, 'not_member'), BackupRelayError.notMember),
+      '403 without a code': (
+        http.Response('{}', 403),
+        BackupRelayError.notMember,
+      ),
+      // Not this device's removal: a write to a slot it does not own.
+      '403 not_owner': (_err(403, 'not_owner'), BackupRelayError.notOwner),
+      '403 other code': (_err(403, 'forbidden'), BackupRelayError.invalid),
       '404 vault': (_err(404, 'vault_not_found'), BackupRelayError.notFound),
       '404 slot': (_err(404, 'not_found'), BackupRelayError.notFound),
       '404 plain': (

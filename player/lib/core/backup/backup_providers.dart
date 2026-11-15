@@ -126,6 +126,9 @@ final Provider<BackupSyncService> backupSyncServiceProvider =
     }
   });
 
+  // A backed-up setting or the subtitle search languages changed.
+  final stopSettings = watchBackedUpSettings(service.markDirty);
+
   // Another device may have uploaded around a p2p sync.
   final peerStateSub = ref
       .watch(peerSyncServiceProvider)
@@ -135,6 +138,7 @@ final Provider<BackupSyncService> backupSyncServiceProvider =
   ref.onDispose(() {
     peerSyncSub?.cancel();
     peerStateSub.cancel();
+    unawaited(stopSettings());
     service.dispose();
   });
   return service;
