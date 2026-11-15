@@ -9,6 +9,6 @@
   },
   "devDependencies": {
     "daisyui": "^5.7.50",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.5"
   }
 }
