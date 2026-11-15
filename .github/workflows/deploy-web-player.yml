@@ -82,11 +82,11 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           extraPullNames: devenv
 
-      # Pinned to the same nixpkgs revision as ci.yml's devenv install, so this
-      # workflow resolves the identical toolchain (Rust, Flutter, wasm-pack,
-      # binaryen) that PRs already build and test against.
+      # From the nixpkgs flake.lock pins, as in .github/actions/setup-devenv,
+      # so this workflow resolves the identical toolchain (Rust, Flutter,
+      # wasm-pack, binaryen) that PRs already build and test against.
       - name: Install devenv
-        run: nix profile install github:NixOS/nixpkgs/d5cc6833999746cffdfe0598f7bc801a57b887a9#devenv
+        run: nix profile install --inputs-from . nixpkgs#devenv
 
       - name: Warm devenv environment
         run: |

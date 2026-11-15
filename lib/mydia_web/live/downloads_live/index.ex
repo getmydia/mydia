@@ -22,6 +22,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
   alias MydiaWeb.DownloadsLive.Paths
+  alias MydiaWeb.DownloadsLive.PathMappingIssues
+  alias MydiaWeb.DownloadsLive.RemovedClients
+  alias MydiaWeb.DownloadsLive.RemoveConfirm
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
@@ -83,6 +86,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:has_more, true)
      # Clear-completed modal state
      |> assign(show_clear_modal: false, delete_files: false, clearable_count: 0)
+     |> assign(:remove_confirm, nil)
      # Issues tab state
      |> assign(:issue_counts, IssueList.counts([]))
      |> assign(:selectable_issues?, false)
@@ -381,7 +385,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
              local_prefix: local_prefix
            }) do
         {:ok, mapping} ->
-          count = retry_mismatches_under_prefix(mapping.remote_prefix)
+          count = PathMappingIssues.retry_under_prefix(mapping.remote_prefix)
 
           {:noreply,
            socket
@@ -587,8 +591,48 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  def handle_event("clear_single_completed", %{"id" => id}, socket) do
-    start_removal(socket, id, fn _download -> {"clear", [delete_files: false]} end)
+  # --- Remove-from-client confirm (one finished download, or a client torrent
+  # stranded in Issues). Opening is non-destructive; the submit is gated. ---
+
+  def handle_event("open_remove_confirm", %{"kind" => "download", "id" => id}, socket) do
+    # The rendered row carries the client's ratio, which the seeding-goal
+    # warning needs; the database row does not.
+    case Map.get(socket.assigns.rows_by_id, id) || Downloads.get_download(id) do
+      nil ->
+        {:noreply, download_vanished(socket)}
+
+      download ->
+        {:noreply, assign(socket, :remove_confirm, RemoveConfirm.for_download(download))}
+    end
+  end
+
+  def handle_event("open_remove_confirm", %{"kind" => "torrent", "id" => id}, socket) do
+    case ExternalTorrents.find(id) do
+      nil -> {:noreply, torrent_vanished(socket)}
+      torrent -> {:noreply, assign(socket, :remove_confirm, RemoveConfirm.for_torrent(torrent))}
+    end
+  end
+
+  def handle_event("toggle_remove_delete_files", params, socket) do
+    {:noreply,
+     update(socket, :remove_confirm, fn
+       nil -> nil
+       confirm -> %{confirm | delete_files: delete_files?(params)}
+     end)}
+  end
+
+  def handle_event("close_remove_confirm", _params, socket) do
+    {:noreply, assign(socket, :remove_confirm, nil)}
+  end
+
+  def handle_event("confirm_remove", params, socket) do
+    confirm = socket.assigns.remove_confirm
+    socket = assign(socket, :remove_confirm, nil)
+
+    case confirm do
+      nil -> {:noreply, socket}
+      %RemoveConfirm{target: target} -> confirm_remove(socket, target, delete_files?(params))
+    end
   end
 
   def handle_event("load_more", _params, socket) do
@@ -1071,13 +1115,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # Periodic live-progress refresh. Reschedules unconditionally so it resumes
   # when the operator switches back to the Downloads tab or a new download
   # starts, but only re-polls clients when the Downloads tab actually has
-  # active work. Idle tabs cost nothing.
+  # live work. Idle tabs cost nothing.
   def handle_info(:refresh_progress, socket) do
     schedule_progress_refresh()
 
     socket =
-      if socket.assigns.active_tab == :downloads and socket.assigns.view != :imported and
-           socket.assigns.summary.active > 0 and not socket.assigns.selection_mode do
+      if live_progress?(socket.assigns) do
         load_downloads(socket)
       else
         socket
@@ -1105,6 +1148,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
     Process.send_after(self(), :refresh_progress, @progress_refresh_interval_ms)
   end
 
+  # Torrents still seeding after import count as live work on every view:
+  # skipping them froze their ratio, seed time and upload speed until the
+  # seeding goal was met (issue #1422).
+  defp live_progress?(%{active_tab: :downloads, selection_mode: false} = assigns) do
+    (assigns.view != :imported and assigns.summary.active > 0) or assigns.summary.seeding > 0
+  end
+
+  defp live_progress?(_assigns), do: false
+
   defp schedule_reload(%{assigns: %{reload_pending: true}} = socket), do: socket
 
   defp schedule_reload(socket) do
@@ -1127,10 +1179,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp adopt(socket, torrent_id, media_item_id, episode_id) do
     case ExternalTorrents.find(torrent_id) do
       nil ->
-        {:noreply,
-         socket
-         |> put_flash(:error, gettext("That torrent is no longer in the client"))
-         |> load_downloads()}
+        {:noreply, torrent_vanished(socket)}
 
       torrent ->
         case Downloads.adopt_external_torrent(torrent, media_item_id, episode_id) do
@@ -1310,6 +1359,25 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  defp confirm_remove(socket, {:download, id}, delete_files) do
+    start_removal(socket, id, fn _download -> {"clear", [delete_files: delete_files]} end)
+  end
+
+  defp confirm_remove(socket, {:torrent, id}, delete_files) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      {level, message} = RemoveConfirm.remove_torrent(id, delete_files)
+      {:noreply, socket |> put_flash(level, message) |> load_downloads()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  defp torrent_vanished(socket) do
+    socket
+    |> put_flash(:error, gettext("That torrent is no longer in the client"))
+    |> load_downloads()
+  end
+
   # A cancel on a stalled download also blacklists the release (see
   # Mydia.Downloads.Queue.cancel_bans_release?/1), so the operator is told.
   defp removal_flash(socket, "cancel", download) do
@@ -1362,7 +1430,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     active = Downloads.filter_downloads(all, :active)
 
     socket
-    |> assign(:summary, ListView.summarize(active))
+    |> assign(:summary, ListView.summarize(active, all: all))
     |> assign(:client_options, ListView.clients(all))
     |> assign(:tab_counts, %{
       downloads: length(active),
@@ -1435,7 +1503,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         [download] =
           [download]
           |> Rows.annotate()
-          |> enrich_path_mapping_counts()
+          |> PathMappingIssues.enrich_counts()
 
         assign(socket, :drawer_download, download)
     end
@@ -1443,7 +1511,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp load_issues_downloads(socket, all_downloads) do
     {issues, shown} = filtered_issues(socket, all_downloads)
-    shown = enrich_issue_path_mappings(shown)
+    shown = PathMappingIssues.enrich_issues(shown)
 
     # Drop selections that are no longer on screen (filtered out, resolved).
     visible_ids = for issue <- shown, Issue.selectable?(issue), into: MapSet.new(), do: issue.id
@@ -1455,7 +1523,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:downloads_empty?, shown == [])
     |> assign(:selectable_issues?, Enum.any?(shown, &Issue.selectable?/1))
     |> assign(:issue_counts, IssueList.counts(issues))
-    |> assign(:removed_client_groups, removed_client_groups())
+    |> assign(:removed_client_groups, RemovedClients.groups())
     |> stream(:issues, shown, reset: true)
   end
 
@@ -1502,17 +1570,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp refresh_issue_rows(socket, _ids), do: socket
 
-  # The affected count is a query, so it runs only for the rows on screen.
-  defp enrich_issue_path_mappings(issues) do
-    downloads = for %Issue{download: d} <- issues, d, do: d
-    by_id = downloads |> enrich_path_mapping_counts() |> Map.new(&{&1.id, &1})
-
-    Enum.map(issues, fn
-      %Issue{download: %{id: id}} = issue -> %{issue | download: Map.fetch!(by_id, id)}
-      issue -> issue
-    end)
-  end
-
   defp load_external(socket) do
     scan = socket.assigns.scan
     external = ListView.filter_scan(scan.external, socket.assigns.filters)
@@ -1523,108 +1580,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:downloads_empty?, external == [])
     |> assign(:scan, scan)
     |> stream(:external_torrents, external, reset: true)
-  end
-
-  # Orphan groups annotated with a DOM-safe slug. Client names come from
-  # operator-supplied config (env vars), so unlike most other ids in this
-  # LiveView they aren't guaranteed to already be DOM-id-safe — a name with
-  # spaces or punctuation would otherwise produce an invalid id/CSS selector.
-  # The raw name is preserved in `download_client` for display and for the
-  # `phx-value-client` sent back to `clear_removed_client/2`.
-  defp removed_client_groups do
-    Downloads.removed_client_groups()
-    |> Enum.map_reduce(MapSet.new(), fn group, taken ->
-      {slug, taken} = unique_slug(ListView.slugify(group.download_client), taken)
-      {Map.put(group, :slug, slug), taken}
-    end)
-    |> elem(0)
-  end
-
-  # Distinct client names can slugify to the same string ("Qbit Old" and
-  # "qbit-old"), and anything with no alphanumerics collapses to "client".
-  # Duplicate DOM ids are invalid HTML and make LiveView's id-keyed patching
-  # apply an update to the wrong banner, so the first claimant keeps the bare
-  # slug and later ones get a numeric suffix. `removed_client_groups/0` orders
-  # by client name, so which one is "first" is stable across renders.
-  defp unique_slug(base, taken) do
-    if MapSet.member?(taken, base) do
-      next_free_slug(base, 2, taken)
-    else
-      {base, MapSet.put(taken, base)}
-    end
-  end
-
-  # Skips past a suffix a real client name already claimed, so a group named
-  # "qbit-old-2" cannot be stolen from underneath by a disambiguated sibling.
-  defp next_free_slug(base, n, taken) do
-    candidate = "#{base}-#{n}"
-
-    if MapSet.member?(taken, candidate) do
-      next_free_slug(base, n + 1, taken)
-    else
-      {candidate, MapSet.put(taken, candidate)}
-    end
-  end
-
-  # Re-enqueue every failed mismatch download whose reported path is under the
-  # applied prefix, clearing its import-failure fields. Oban uniqueness keyed on
-  # download_id skips any import already in flight. Returns the count.
-  defp retry_mismatches_under_prefix(remote_prefix) do
-    downloads = Downloads.list_path_mapping_mismatches_under_prefix(remote_prefix)
-
-    Enum.each(downloads, fn download ->
-      case Downloads.update_download(
-             download,
-             Mydia.Downloads.Download.cleared_import_failure_attrs()
-           ) do
-        {:ok, updated} ->
-          %{
-            "download_id" => updated.id,
-            "save_path" => nil,
-            "cleanup_client" => true,
-            "use_hardlinks" => true
-          }
-          # MediaImport declares worker-level uniqueness keyed on download_id,
-          # so an import already queued/running for this download is not
-          # double-enqueued.
-          |> Mydia.Jobs.MediaImport.new()
-          |> Oban.insert()
-
-        {:error, _changeset} ->
-          :ok
-      end
-    end)
-
-    length(downloads)
-  end
-
-  # The suggestion itself is computed when the import fails
-  # (Mydia.Jobs.MediaImport.Failure) and arrives on the row, so rendering never
-  # touches the filesystem (#1315). This only counts how many downloads a
-  # one-click apply would re-run, once per remote prefix.
-  defp enrich_path_mapping_counts(downloads) do
-    {enriched, _counts} =
-      Enum.map_reduce(downloads, %{}, fn
-        %{path_mapping_suggestion: %{remote_prefix: prefix}} = d, counts ->
-          {count, counts} =
-            Map.get_and_update(counts, prefix, fn
-              nil ->
-                count =
-                  prefix |> Downloads.list_path_mapping_mismatches_under_prefix() |> length()
-
-                {count, count}
-
-              count ->
-                {count, count}
-            end)
-
-          {%{d | path_mapping_affected_count: count}, counts}
-
-        d, counts ->
-          {d, counts}
-      end)
-
-    enriched
   end
 
   defp submit_match(socket, media_item_id, episode_id) do

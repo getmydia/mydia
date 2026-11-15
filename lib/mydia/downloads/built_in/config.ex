@@ -19,6 +19,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @default_port 51413
   @default_api_port 3030
   @default_min_free_space_gb 5
+  @default_priority 10
   # `min_free_space_gb` is decimal gigabytes, like `DiskSpace.format_gb/1`.
   @gb 1_000_000_000
   @default_download_path "/data/downloads"
@@ -36,9 +37,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   @section_vpn_fields for {field, _var} <- BuiltInTorrent.env_vars(),
                           String.starts_with?(Atom.to_string(field), "vpn_"),
                           do: field
-  # Seeding targets are read by Mydia's own policies, never by the engine, so
+  # Seeding targets and the priority are read by Mydia, never by the engine, so
   # changing one needs no restart. Speed limits are engine flags and do.
-  @live_keys [:seed_ratio, :seed_time, :seed_goal_action]
+  @live_keys [:seed_ratio, :seed_time, :seed_goal_action, :priority]
   @secret_fragments ~w(SECRET PASSWORD TOKEN)
 
   @type t :: %__MODULE__{
@@ -49,6 +50,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           port: pos_integer(),
           api_port: pos_integer(),
           min_free_space_bytes: non_neg_integer(),
+          priority: pos_integer(),
           download_limit_bps: pos_integer() | nil,
           upload_limit_bps: pos_integer() | nil,
           vpn?: boolean(),
@@ -72,6 +74,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
             port: @default_port,
             api_port: @default_api_port,
             min_free_space_bytes: @default_min_free_space_gb * @gb,
+            priority: @default_priority,
             download_limit_bps: nil,
             upload_limit_bps: nil,
             vpn?: false,
@@ -132,6 +135,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
       port: section.listen_port || @default_port,
       api_port: section.api_port || @default_api_port,
       min_free_space_bytes: (section.min_free_space_gb || @default_min_free_space_gb) * @gb,
+      priority: priority(section.priority),
       download_limit_bps: kib_to_bps(section.download_limit_kib),
       upload_limit_bps: kib_to_bps(section.upload_limit_kib),
       vpn?: section.vpn_enabled == true,
@@ -149,6 +153,7 @@ defmodule Mydia.Downloads.BuiltIn.Config do
           port_warnings(env["MYDIA_TORRENT_PORT"], :invalid_port) ++
           port_warnings(env["MYDIA_TORRENT_API_PORT"], :invalid_api_port) ++
           reserve_warnings(env["MYDIA_TORRENT_MIN_FREE_SPACE_GB"]) ++
+          priority_warnings(env["MYDIA_TORRENT_PRIORITY"]) ++
           rate_limit_warnings(env["MYDIA_TORRENT_DOWNLOAD_LIMIT"], :invalid_download_limit) ++
           rate_limit_warnings(env["MYDIA_TORRENT_UPLOAD_LIMIT"], :invalid_upload_limit) ++
           reserved_warnings(env)
@@ -157,9 +162,10 @@ defmodule Mydia.Downloads.BuiltIn.Config do
 
   @doc """
   What `BuiltIn.Manager` compares to decide whether a reload needs a restart:
-  the config minus `warnings`, the seeding fields (read by Mydia, not by the
-  engine), the disk reserve (`min_free_space_bytes`; the disk guard reads it
-  live, the engine never does) and, while the VPN is off, minus every VPN
+  the config minus `warnings`, the seeding fields and the priority (read by
+  Mydia, not by the engine), the disk reserve (`min_free_space_bytes`; the
+  disk guard reads it live, the engine never does) and, while the VPN is off,
+  minus every VPN
   field, since those do not reach a client running without it. Turning the
   VPN on still changes the key.
   """
@@ -255,6 +261,19 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   end
 
   # The env loader drops anything but a whole number >= 0.
+  defp priority_warnings(value) do
+    case blank_to_nil(value) do
+      nil ->
+        []
+
+      value ->
+        case Integer.parse(String.trim(value)) do
+          {priority, ""} when priority >= 1 -> []
+          _ -> [{:invalid_priority, value}]
+        end
+    end
+  end
+
   defp reserve_warnings(value) do
     case blank_to_nil(value) do
       nil ->
@@ -305,6 +324,9 @@ defmodule Mydia.Downloads.BuiltIn.Config do
   defp reserved_warnings(env) do
     for name <- @reserved, Map.has_key?(env, "MYDIA_VPN_" <> name), do: {:reserved_variable, name}
   end
+
+  defp priority(priority) when is_integer(priority), do: priority
+  defp priority(_unset), do: @default_priority
 
   defp seed_goal_action("remove"), do: :remove
   defp seed_goal_action(_other), do: :pause

@@ -187,6 +187,20 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
       </.text_field>
       <.text_field
         form={@form}
+        field={:priority}
+        sources={@sources}
+        type="number"
+        min="1"
+        label={gettext("Priority")}
+      >
+        <:hint>
+          {gettext(
+            "When several download clients are enabled, grabs go to the one with the lowest number, and the built-in client wins a tie. External clients default to 1, so set this to 1 to make the built-in client the default."
+          )}
+        </:hint>
+      </.text_field>
+      <.text_field
+        form={@form}
         field={:listen_port}
         sources={@sources}
         type="number"

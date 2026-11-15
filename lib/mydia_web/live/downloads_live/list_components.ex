@@ -433,14 +433,9 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             icon="hero-trash"
             title={gettext("Clear completed download")}
             destructive
-            phx-click="clear_single_completed"
+            phx-click="open_remove_confirm"
+            phx-value-kind="download"
             phx-value-id={@download.id}
-            data-confirm={
-              SeedingComponents.confirm_text(
-                @download,
-                gettext("Remove from client and clear from history?")
-              )
-            }
           />
         <% end %>
       </.row_actions>

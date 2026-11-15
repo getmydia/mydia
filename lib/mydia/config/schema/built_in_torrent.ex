@@ -25,6 +25,8 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     field :listen_port, :integer, default: 51413
     field :api_port, :integer, default: 3030
     field :min_free_space_gb, :integer, default: 5
+    # Lower wins against the other download clients, as on theirs.
+    field :priority, :integer, default: 10
     # KiB/s; nil is unlimited.
     field :download_limit_kib, :integer
     field :upload_limit_kib, :integer
@@ -54,6 +56,7 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     listen_port: "MYDIA_TORRENT_PORT",
     api_port: "MYDIA_TORRENT_API_PORT",
     min_free_space_gb: "MYDIA_TORRENT_MIN_FREE_SPACE_GB",
+    priority: "MYDIA_TORRENT_PRIORITY",
     download_limit_kib: "MYDIA_TORRENT_DOWNLOAD_LIMIT",
     upload_limit_kib: "MYDIA_TORRENT_UPLOAD_LIMIT",
     vpn_enabled: "MYDIA_VPN_SERVICE_PROVIDER",
@@ -112,6 +115,7 @@ defmodule Mydia.Config.Schema.BuiltInTorrent do
     |> validate_number(:listen_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:api_port, greater_than_or_equal_to: 1, less_than_or_equal_to: 65_535)
     |> validate_number(:min_free_space_gb, greater_than_or_equal_to: 0)
+    |> validate_number(:priority, greater_than_or_equal_to: 1)
     |> validate_number(:seed_ratio, greater_than_or_equal_to: 0)
     |> validate_number(:seed_time, greater_than_or_equal_to: 0)
     |> validate_inclusion(:seed_goal_action, @seed_goal_actions)

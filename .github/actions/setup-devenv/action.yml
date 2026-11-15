@@ -53,11 +53,13 @@ runs:
         extraPullNames: devenv
         skipPush: ${{ inputs.skip-push }}
 
-    # Pin the devenv CLI to the SAME nixpkgs the repo locks (KTD6); rev mirrors
-    # devenv.lock's nixpkgs node — bump both together.
+    # The devenv CLI comes from the nixpkgs flake.lock pins, which
+    # check-generated-freshness.sh holds equal to devenv.lock's, so a
+    # Dependabot nixpkgs bump moves the CLI with it and nothing here needs
+    # editing.
     - name: Install devenv
       shell: bash
-      run: nix profile install github:NixOS/nixpkgs/d5cc6833999746cffdfe0598f7bc801a57b887a9#devenv
+      run: nix profile install --inputs-from . nixpkgs#devenv
 
     # patches/** is in the deps and build keys because `mix deps.get`
     # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it

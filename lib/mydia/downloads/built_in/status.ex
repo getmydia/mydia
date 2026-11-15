@@ -88,6 +88,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "MYDIA_TORRENT_MIN_FREE_SPACE_GB is #{inspect(value)}, not a whole number of gigabytes. Using the saved setting or 5."
 
+  def describe({:invalid_priority, value}),
+    do:
+      "MYDIA_TORRENT_PRIORITY is #{inspect(value)}, not a whole number of 1 or more. Using the saved setting or 10."
+
   def describe({:invalid_download_limit, value}),
     do: rate_limit_description("MYDIA_TORRENT_DOWNLOAD_LIMIT", value)
 

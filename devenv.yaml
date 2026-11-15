@@ -2,7 +2,9 @@
 #
 # Pinned to nixos-unstable for parity with flake.nix, which resolves the
 # Elixir/OTP pair through beam-version.nix from this same channel. devenv.lock
-# pins the exact rev; keep it on the same rev as flake.lock's nixpkgs. The
+# pins the exact rev and must stay on flake.lock's: run
+# scripts/sync-devenv-nixpkgs.sh after updating either, and
+# check-generated-freshness.sh fails CI when they differ. The
 # Android shell (nix/devShells) deliberately uses its own `nixpkgs-android`
 # input instead, so its SDK/NDK set does not drift with this.
 inputs:

@@ -11,6 +11,8 @@
 #                  unsatisfied
 #   npmDeps.hash   fixed-output hash of assets/package-lock.json, in
 #                  nix/packages/flake-module.nix
+#   devenv.lock    its nixpkgs node, copied from flake.lock's so the devenv
+#                  shell and the Nix build share one package set
 #
 # The flutter_rust_bridge bindings and the hand-pinned Nix hashes for fine,
 # wasmex, tailwind, heroicons and lexbor are not regenerated here;
@@ -53,5 +55,8 @@ done
 
 echo "npmDeps.hash <- assets/package-lock.json"
 npm_deps_hash_write "$(npm_deps_hash)"
+
+echo "devenv.lock nixpkgs <- flake.lock nixpkgs"
+scripts/sync-devenv-nixpkgs.sh
 
 ./scripts/check-generated-freshness.sh
