@@ -155,6 +155,10 @@ class CloudBackupService {
           } on FormatException {
             debugPrint('[Backup] Slot ${s.slotId} is unreadable');
             unreadable.add(s.slotId);
+          } on BackupRelayException catch (e) {
+            // Deleted between the listing and the read.
+            if (e.kind != BackupRelayError.notFound) rethrow;
+            unreadable.add(s.slotId);
           }
         }
         if (payloads.isEmpty && unreadable.isEmpty) {
@@ -218,8 +222,10 @@ class CloudBackupService {
 
   /// Moves this device's backup to the store [to]: rewrites its slot as a
   /// stub naming [to], so the other devices offer to follow, then deletes
-  /// every slot (the stub included) when [deleteOld], and stops syncing
-  /// here. The caller enables the new store.
+  /// every other slot when [deleteOld], and stops syncing here. The stub
+  /// stays either way: without it a device still signed in would never see
+  /// the move, and would write its own slot again. The caller enables the
+  /// new store.
   Future<void> switchAway(String to, {required bool deleteOld}) =>
       _userOp(() async {
         if (!enabled) throw StateError('backup is off');
@@ -230,7 +236,7 @@ class CloudBackupService {
           records: const [],
           movedTo: to,
         ));
-        if (deleteOld) await _deleteAll();
+        if (deleteOld) await _deleteAll(keepOwn: true);
         await _leave();
       });
 
@@ -273,9 +279,10 @@ class CloudBackupService {
         writeCursor: (c) => _meta.setCloudCursor(kind.name, c),
       );
 
-  Future<void> _deleteAll() async {
+  Future<void> _deleteAll({bool keepOwn = false}) async {
     final listing = await _transport.list();
     for (final s in listing?.slots ?? const <SlotInfo>[]) {
+      if (keepOwn && s.slotId == _transport.ownSlotId) continue;
       await _transport.delete(s.slotId);
     }
   }

@@ -272,6 +272,21 @@ void main() {
     expect(preview.payloads, hasLength(1));
   });
 
+  test('slot_deleted_during_preview_is_skipped', () async {
+    final a = await enabled('Living Room TV');
+    final c = await enabled('Phone');
+    final cSlot = await c.slotId();
+    final b = device('Laptop');
+    final sb = await b.service();
+    // C's slot is listed, then removed before B reads it.
+    b.backends[CloudStoreKind.gdrive]!.beforeRead = (slotId) async {
+      if (slotId == cSlot) drive.bytes.remove(cSlot);
+    };
+    final preview = await sb.previewRestore();
+    expect(preview.payloads.keys, [await a.slotId()]);
+    expect(preview.unreadableSlots, {cSlot});
+  });
+
   test('live_join_offers_accounts_not_applies', () async {
     final a = device('Living Room TV');
     await a.sources.putAccount(_plex());
@@ -344,13 +359,23 @@ void main() {
     expect(sb.movedSlots.value, {aSlot: 'icloud'});
   });
 
-  test('switch away deleting the old backup removes every slot', () async {
+  test('switch away deleting the old backup keeps only the moved stub',
+      () async {
     final a = await enabled('Living Room TV');
-    await enabled('Laptop');
+    final b = await enabled('Laptop');
     final sa = await a.service();
     await sa.switchAway('icloud', deleteOld: true);
-    expect(drive.bytes, isEmpty);
     expect(sa.enabled, isFalse);
+
+    final aSlot = await a.slotId();
+    expect(drive.bytes.keys, [aSlot]);
+    expect(drive.deletes, [await b.slotId()]);
+    expect(BackupPayload.decode(drive.bytes[aSlot]!).movedTo, 'icloud');
+
+    // B, still signed in, is told where A went.
+    final sb = await b.service();
+    await sb.poll();
+    expect(sb.movedSlots.value, {aSlot: 'icloud'});
   });
 
   test('crossed_switch_shows_prompt_both_ways', () async {

@@ -33,6 +33,10 @@ class InMemoryCloudBackend implements CloudBackend {
   bool signedIn = true;
   bool reachable = true;
   int signOuts = 0;
+
+  /// Runs at the start of every [readBytes], as when another device acts
+  /// between a listing and a read.
+  Future<void> Function(String slotId)? beforeRead;
   BackupRelayException? _failNext;
   final _changes = StreamController<void>.broadcast();
 
@@ -79,6 +83,7 @@ class InMemoryCloudBackend implements CloudBackend {
   @override
   Future<List<int>> readBytes(String slotId) async {
     _maybeFail();
+    await beforeRead?.call(slotId);
     final b = store.bytes[slotId];
     if (b == null) throw const BackupRelayException(BackupRelayError.notFound);
     return b;
