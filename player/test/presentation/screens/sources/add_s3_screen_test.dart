@@ -379,7 +379,8 @@ void main() {
         ['/Films/']);
   });
 
-  testWidgets('sign in again locks the location', (tester) async {
+  testWidgets('sign in again locks the location and saves the keys',
+      (tester) async {
     final h = await _pump(tester);
     await _connectOther(tester,
         endpoint: 'https://s3.example.test:9000', prefix: 'media');
@@ -387,7 +388,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('s3-save')));
     await tester.pumpAndSettle();
-    final accountId = (await h.store.load()).accounts.single.account.id;
+    final saved = (await h.store.load()).accounts.single;
+    final accountId = saved.account.id;
+    // The keys stopped working: sign in again changes only them.
+    await h.store.putAccount(
+        saved.copyWith(account: saved.account.copyWith(needsReauth: true)));
 
     await tester.pumpWidget(const SizedBox());
     final again = await _pump(tester, reauthAccountId: accountId, reuse: h);
@@ -438,6 +443,91 @@ void main() {
     expect(S3Credentials.fromJson(secret!).secretAccessKey, 'new');
     expect(FileLibraryIndex(h.box, accountId: accountId).roots(), hasLength(1));
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
+  });
+
+  /// Saves a bucket with the folder `/Films`, then reopens it from its
+  /// management screen.
+  Future<(_Harness, String)> reopen(WidgetTester tester) async {
+    final h = await _pump(tester);
+    await _connectOther(tester, prefix: 'media');
+    await tester.tap(find.byKey(const Key('s3-tick-/Films')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('s3-save')));
+    await tester.pumpAndSettle();
+    final accountId = (await h.store.load()).accounts.single.account.id;
+    await tester.pumpWidget(const SizedBox());
+    return (
+      await _pump(tester, reauthAccountId: accountId, reuse: h),
+      accountId
+    );
+  }
+
+  testWidgets('change keys or folders reaches the folders', (tester) async {
+    final (h, accountId) = await reopen(tester);
+    expect(_field(tester, 's3-bucket').readOnly, isTrue);
+    await _enter(tester, 's3-access-key', 'AK2');
+    await _enter(tester, 's3-secret-key', 'newer');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('s3-connect')));
+    await tester.pumpAndSettle();
+
+    // The folders, with the location still locked.
+    expect(find.byKey(const Key('s3-folder-picker')), findsOneWidget);
+    expect(_field(tester, 's3-bucket').readOnly, isTrue);
+    await tester.tap(find.byKey(const Key('s3-tick-/Shows')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('s3-save')));
+    await tester.pumpAndSettle();
+
+    final record = (await h.store.load()).accounts.single;
+    expect(record.account.id, accountId);
+    final secret = await h.storage
+        .read('${record.account.storageNamespace}/account_token');
+    expect(S3Credentials.fromJson(secret!).secretAccessKey, 'newer');
+    expect(
+        FileLibraryIndex(h.box, accountId: accountId)
+            .roots()
+            .map((r) => r.path),
+        unorderedEquals(['/Films', '/Shows']));
+    expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
+  });
+
+  testWidgets('leaving during the probe saves nothing and does not throw',
+      (tester) async {
+    final (h, accountId) = await reopen(tester);
+    final saved = (await h.store.load()).accounts.single;
+    await h.store.putAccount(
+        saved.copyWith(account: saved.account.copyWith(needsReauth: true)));
+    // Reopen so the screen reads needsReauth.
+    await tester.pumpWidget(const SizedBox());
+    final again = await _pump(tester, reauthAccountId: accountId, reuse: h);
+    final hold = Completer<void>();
+    again.backend.probeHold = hold;
+    await _enter(tester, 's3-access-key', 'AK2');
+    await _enter(tester, 's3-secret-key', 'abandoned');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('s3-connect')));
+    await tester.pump();
+
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) logged.add(message);
+    };
+    addTearDown(() => debugPrint = original);
+    await tester.pumpWidget(const SizedBox());
+    hold.complete();
+    await tester.pumpAndSettle();
+    debugPrint = original;
+
+    expect(tester.takeException(), isNull);
+    // A save after the screen went would call setState on a disposed state,
+    // which the connect handler swallows and logs.
+    expect(logged.where((l) => l.startsWith('[AddS3]')), isEmpty);
+    final record = (await h.store.load()).accounts.single;
+    final secret = await h.storage
+        .read('${record.account.storageNamespace}/account_token');
+    expect(S3Credentials.fromJson(secret!).secretAccessKey, 'sk');
   });
 }
 

@@ -30,8 +30,10 @@ typedef _Problem = String Function(AppLocalizations l10n);
 class AddS3Screen extends ConsumerStatefulWidget {
   const AddS3Screen({super.key, this.reauthAccountId});
 
-  /// A saved bucket to sign in to again: its location is filled in and
-  /// locked, and only the keys can change.
+  /// A saved bucket to reopen: its location is filled in and locked. When
+  /// its keys stopped working, signing in saves the new ones and leaves;
+  /// otherwise ("Change keys or folders") the folders follow, as for a new
+  /// bucket.
   final String? reauthAccountId;
 
   @override
@@ -59,6 +61,10 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
   /// form waits, so the provider list starts on the right choice.
   S3Location? _stored;
   late bool _loading = widget.reauthAccountId != null;
+
+  /// Whether the reopened bucket's keys stopped working: connecting then
+  /// saves them and leaves, with no folder step. Read with [_stored].
+  bool _signInAgain = false;
 
   /// Shared by every backend this screen builds, closed with it.
   final _client = http.Client();
@@ -112,16 +118,13 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
   /// Fills in the saved bucket's location once the records have loaded.
   Future<void> _prefill(String accountId) async {
     S3Location? stored;
+    var signInAgain = true;
     try {
       final snapshot = await ref.read(sourceRecordsProvider.future);
-      final uri = snapshot.accounts
-          .where((a) => a.account.id == accountId)
-          .firstOrNull
-          ?.servers
-          .firstOrNull
-          ?.connections
-          .firstOrNull
-          ?.uri;
+      final record =
+          snapshot.accounts.where((a) => a.account.id == accountId).firstOrNull;
+      signInAgain = record?.account.needsReauth ?? true;
+      final uri = record?.servers.firstOrNull?.connections.firstOrNull?.uri;
       stored = uri == null ? null : S3Location.fromConnectionUri(uri);
     } catch (e) {
       debugPrint('[AddS3] Could not read the saved bucket: ${e.runtimeType}');
@@ -131,6 +134,7 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
       _loading = false;
       if (stored == null) return;
       _stored = stored;
+      _signInAgain = signInAgain;
       _preset = S3Preset.other;
       _chosenStyle = stored.style;
       _endpoint.text = stored.endpoint.toString();
@@ -274,7 +278,8 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         ref.read(s3ConnectorProvider)(location, credentials, _client);
     try {
       await backend.probe();
-      if (_locked) {
+      if (!mounted) return;
+      if (_locked && _signInAgain) {
         // Signing in again changes only the keys: save once they work.
         _location = location;
         _credentials = credentials;

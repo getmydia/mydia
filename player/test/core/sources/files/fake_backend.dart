@@ -33,6 +33,10 @@ class FakeBackend implements FileSystemBackend {
   /// When set, [probe] throws it.
   BackendFailure? probeFailure;
 
+  /// When set, [probe] waits on it before answering, as a slow server
+  /// would.
+  Completer<void>? probeHold;
+
   /// Every directory passed to [list], in order.
   final List<String> listed = [];
 
@@ -144,6 +148,7 @@ class FakeBackend implements FileSystemBackend {
 
   @override
   Future<void> probe() async {
+    await probeHold?.future;
     final f = probeFailure;
     if (f != null) throw f;
   }
