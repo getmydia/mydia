@@ -40,9 +40,12 @@ defmodule MetadataRelay.Backup do
   32-byte X25519 public keys. The recovery signer can
   authenticate but never writes a slot. `lookup_hash` is the lowercase hex
   SHA-256 of the lookup handle.
+
+  `:relay_full` once the relay holds `backup.max_vaults` vaults: a bound that
+  holds whether or not the per-address limits are on.
   """
   @spec create_vault(map()) ::
-          {:ok, vault_id()} | {:error, :vault_taken | :lookup_taken | :invalid}
+          {:ok, vault_id()} | {:error, :vault_taken | :lookup_taken | :invalid | :relay_full}
   def create_vault(attrs) when is_map(attrs) do
     with {:ok, a} <- validate_create(attrs) do
       vault_id = a.vault_id
@@ -52,6 +55,9 @@ defmodule MetadataRelay.Backup do
         fn ->
           if Repo.exists?(from(v in Vault, where: v.id == ^vault_id)),
             do: Repo.rollback(:vault_taken)
+
+          if Repo.aggregate(Vault, :count) >= cap(:max_vaults),
+            do: Repo.rollback(:relay_full)
 
           vault =
             %Vault{
@@ -215,7 +221,8 @@ defmodule MetadataRelay.Backup do
 
   The rate limit is charged before the conditional update, so a write that
   then fails with `:precondition_failed` still counts. The recovery signer
-  never owns a slot and always gets `:not_owner`.
+  never owns a slot and always gets `:not_owner`. `:relay_full` when the
+  write would take every slot of every vault past `backup.max_bytes`.
   """
   @spec put_slot(String.t(), binary(), String.t(), binary(), integer() | nil, integer()) ::
           {:ok, pos_integer()}
@@ -225,6 +232,7 @@ defmodule MetadataRelay.Backup do
              | :too_large
              | :stale_epoch
              | :rate_limited
+             | :relay_full
              | :storage}
   def put_slot(vault_id, signer, slot_id, body, if_match, epoch) do
     cond do
@@ -253,6 +261,8 @@ defmodule MetadataRelay.Backup do
             :ok -> :ok
             {:error, :rate_limited} -> Repo.rollback(:rate_limited)
           end
+
+          check_capacity!(vault_id, slot_id, byte_size(body))
 
           new_seq = (if_match || 0) + 1
           path = Store.slot_path(vault_id, slot_id, new_seq, Store.new_gen())
@@ -309,6 +319,23 @@ defmodule MetadataRelay.Backup do
       _ -> Repo.rollback(:not_owner)
     end
   end
+
+  # Every slot of every vault counts, less the one this write replaces. Runs
+  # under the write lock, so two writes cannot both slip under the cap.
+  defp check_capacity!(vault_id, slot_id, size) do
+    total = Repo.one(from(s in Slot, select: coalesce(sum(s.size), 0)))
+
+    replaced =
+      Repo.one(
+        from(s in Slot, where: s.vault_id == ^vault_id and s.slot_id == ^slot_id, select: s.size)
+      ) || 0
+
+    if total - replaced + size > cap(:max_bytes), do: Repo.rollback(:relay_full)
+  end
+
+  @default_limits [max_bytes: 10 * 1024 * 1024 * 1024, max_vaults: 100_000]
+
+  defp cap(key), do: config(key) || Keyword.fetch!(@default_limits, key)
 
   defp check_epoch!(vault_id, epoch) do
     case Repo.one(from(v in Vault, where: v.id == ^vault_id, select: v.epoch)) do

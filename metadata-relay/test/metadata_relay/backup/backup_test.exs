@@ -184,6 +184,46 @@ defmodule MetadataRelay.BackupTest do
 
   defp file_of(v), do: Repo.get_by!(Slot, vault_id: v.vault, slot_id: v.slot).path
 
+  defp set_cap(key, value) do
+    env = Application.fetch_env!(:metadata_relay, :backup)
+    Application.put_env(:metadata_relay, :backup, Keyword.put(env, key, value))
+  end
+
+  test "slot bytes across every vault are capped, counting a rewrite only by its growth" do
+    v = create()
+    w = create()
+    total = Repo.one(from(s in Slot, select: coalesce(sum(s.size), 0)))
+    set_cap(:max_bytes, total + 10)
+
+    {:ok, 1} = Backup.put_slot(v.vault, v.signer, v.slot, "123456", nil, 1)
+    # Replacing 6 bytes with 10 fits; another vault's 5 more does not.
+    {:ok, 2} = Backup.put_slot(v.vault, v.signer, v.slot, "1234567890", 1, 1)
+    assert {:error, :relay_full} = Backup.put_slot(w.vault, w.signer, w.slot, "12345", nil, 1)
+    assert {:error, :not_found} = Backup.get_slot(w.vault, w.slot)
+  end
+
+  test "the number of vaults is capped" do
+    create()
+    set_cap(:max_vaults, Repo.aggregate(Vault, :count))
+
+    s = signer()
+    r = signer()
+
+    assert {:error, :relay_full} =
+             Backup.create_vault(%{
+               vault_id: vault_id(),
+               signer: s,
+               slot_id: slot_id(s),
+               envelope: "e",
+               box_pub: box(s),
+               recovery_signer: r,
+               recovery_slot_id: slot_id(r),
+               recovery_envelope: "r",
+               recovery_box_pub: box(r),
+               lookup_hash: Base.encode16(:crypto.hash(:sha256, handle()), case: :lower)
+             })
+  end
+
   test "the previous seq's file is deleted and failed writes leave no file", %{dir: dir} do
     v = create()
     {:ok, 1} = Backup.put_slot(v.vault, v.signer, v.slot, "one", nil, 1)

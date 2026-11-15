@@ -250,7 +250,10 @@ writes are guarded by sequence and epoch CAS.
   deleted by the sweeper. The settings screen states this.
 - The per-IP limits on `POST /vaults` and `POST /lookup` ship off
   (`RELAY_BACKUP_ADDRESS_LIMITS`): behind Cloudflare every install resolves
-  to one address, so they would be a single bucket for all of them.
+  to one address, so they would be a single bucket for all of them. The
+  relay-wide caps `BACKUP_MAX_BYTES` (10 GiB of slots) and
+  `BACKUP_MAX_VAULTS` (100,000) apply regardless and answer 507, which the
+  player retries like any server error.
 - The relay logs no request bodies for these routes.
 
 ### Compatibility window

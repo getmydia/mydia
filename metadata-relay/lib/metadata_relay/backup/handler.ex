@@ -174,9 +174,10 @@ defmodule MetadataRelay.Backup.Handler do
   # Behind Cloudflare `ClientIp.resolve/1` sees a shared edge or Traefik
   # address, so these limits would be one bucket for every install: the
   # eleventh install of the hour could not turn backup on. They wait for the
-  # same precondition as `MetadataRelay.Plug.ProxyRateLimit`. Meanwhile a
-  # vault is a small row the idle sweep removes, and a lookup handle is a
-  # 256-bit secret, so neither limit is what keeps the data safe.
+  # same precondition as `MetadataRelay.Plug.ProxyRateLimit`. What bounds the
+  # relay meanwhile is relay-wide and enforced in `MetadataRelay.Backup`
+  # either way: `backup.max_vaults` and `backup.max_bytes` (507). A lookup
+  # handle is a 256-bit secret, so the lookup limit protects no data.
   defp limit(conn, name, max) do
     if Backup.config(:address_limits) == true do
       key = "backup:#{name}:#{ClientIp.resolve(conn)}"
@@ -435,6 +436,7 @@ defmodule MetadataRelay.Backup.Handler do
   defp status(reason) when reason in [:conflict, :stale_epoch, :vault_taken], do: 409
   defp status(:too_large), do: 413
   defp status(reason) when reason in [:invalid, :lookup_taken, :too_many_members], do: 422
+  defp status(:relay_full), do: 507
   defp status(_storage), do: 503
 
   defp json(conn, status, body) do

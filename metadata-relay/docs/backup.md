@@ -78,6 +78,7 @@ vault from a missing slot.
 | 422 | `too_many_members` | More than 16 members |
 | 429 | `rate_limited` | With `retry-after: 3600` |
 | 503 | `storage` | The relay could not write the file |
+| 507 | `relay_full` | Vault creation past `BACKUP_MAX_VAULTS` (default 100,000), or a slot write that would take the bytes stored across every vault past `BACKUP_MAX_BYTES` (default 10 GiB). Enforced whether or not the address limits are on |
 
 ## Endpoints
 
@@ -247,3 +248,5 @@ Cloudflare the relay resolves every caller to a shared address, so the limits
 would be one bucket for all installs. They can be turned on once the origin
 accepts traffic only from Cloudflare and the relay keys on
 `CF-Connecting-IP`, the same precondition as `RELAY_PROXY_RATE_LIMIT`.
+Until then the relay-wide caps behind 507 `relay_full` bound what callers can
+store.
