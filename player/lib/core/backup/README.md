@@ -58,8 +58,9 @@ the spec.
 - `AuthStorage` `backup/identity`: the device signer and box key. Never
   backed up, never leaves the install. Read with `StrictAuthRead` where the
   storage offers it, so a keyring that fails to answer is an error, never
-  "absent" (which would generate a new identity over the old one). The
-  service loads it once even when pairing and a user action ask together.
+  "absent" (which would generate a new identity over the old one).
+  Overlapping loads on one storage share one load, so pairing, a user
+  action and the relay and cloud stores starting together never create two.
 - `AuthStorage` `backup/vault`: vault id, epoch, the vault key per known
   epoch, this device's slot seq, the last success, and the recovery key text
   when this device holds it. Kept dormant (`relayDormant` in `backup_meta`)

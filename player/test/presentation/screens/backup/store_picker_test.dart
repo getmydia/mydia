@@ -115,15 +115,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('backup-store-relay')));
     await tester.pumpAndSettle();
-    final prompt = tester
-        .widget<Text>(find.byKey(const Key('recovery-key-confirm-prompt')))
-        .data!;
-    final group = int.parse(RegExp(r'\d+').firstMatch(prompt)!.group(0)!);
-    final keyText = tester
-        .widget<SelectableText>(find.byKey(const Key('recovery-key-text')))
-        .data!;
-    await tester.enterText(find.byKey(const Key('recovery-key-confirm-field')),
-        keyText.split(' ')[group - 1]);
+    expect(find.byKey(const Key('recovery-key-text')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('recovery-key-saved-checkbox')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('recovery-key-confirm-button')));
     await tester.pumpAndSettle();

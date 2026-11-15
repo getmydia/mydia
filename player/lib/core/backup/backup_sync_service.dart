@@ -177,6 +177,36 @@ class BackupSyncService {
   BackupVaultState? get _state => _transport?.state ?? _stored;
 
   BackupIdentity? _identity;
+
+  /// The vault a [commitRestore] asked the relay to add this device to and
+  /// then failed (or lost the reply), so running it again asks the relay
+  /// whether it did instead of adding the device twice, which it refuses.
+  String? _restoreTried;
+
+  /// This device's key for [vaultId] when an earlier [commitRestore] of it
+  /// may have joined: read from the relay as this device. Null when no
+  /// earlier attempt ran or the relay says this device is not a member.
+  Future<Rotation?> _joinedEarlier(
+      String vaultId, BackupIdentity identity) async {
+    if (_restoreTried != vaultId) return null;
+    final BackupManifest m;
+    try {
+      m = (await _relay.manifest(vaultId, identity.signer))!;
+    } on BackupRelayException catch (e) {
+      if (e.kind == BackupRelayError.notMember) return null;
+      rethrow;
+    }
+    return (
+      epoch: m.epoch,
+      vaultKey: await VaultCrypto.openEnvelope(
+        box: identity.box,
+        envelope: m.envelope,
+        vaultId: vaultId,
+        epoch: m.epoch,
+      ),
+    );
+  }
+
   bool _disposed = false;
 
   /// Whether this device is in a vault. Read by the settings screen.
@@ -204,7 +234,7 @@ class BackupSyncService {
         try {
           _stored = await _store.load();
           if (_stored == null) return _set(const BackupOff());
-          _identity = await BackupIdentity.loadOrCreate(_auth);
+          await _identityOnce();
         } catch (e) {
           debugPrint(
               '[Backup] Could not load the backup state: ${e.runtimeType}');
@@ -298,6 +328,12 @@ class BackupSyncService {
   /// applies its records in restore mode, and uploads this device's slot.
   /// Throws [BackupAlreadyOnException], touching nothing, when this device
   /// is already in a vault.
+  ///
+  /// The records are applied before the vault state is saved, so a restore
+  /// that fails part way leaves backup off and can simply run again: a rerun
+  /// for the same vault first asks the relay whether the earlier attempt
+  /// added this device (its reply may have been lost), and after a restart a
+  /// fresh preview's manifest lists it.
   Future<ApplyResult> commitRestore(RestorePreview preview) =>
       _userOp(() async {
         if (_state != null) throw const BackupAlreadyOnException();
@@ -306,15 +342,26 @@ class BackupSyncService {
             backupB64((await identity.signer.extractPublicKey()).bytes);
         final member = preview.manifest.members
             .any((m) => !m.recovery && backupB64(m.signer) == signer);
-        final joined = member
-            ? (epoch: preview.epoch, vaultKey: preview.vaultKey)
-            : await _ops.addSelfWithRecovery(
-                vaultId: preview.vaultId,
-                recovery: preview.recovery,
-                identity: identity,
-                epoch: preview.epoch,
-                vaultKey: preview.vaultKey,
-              );
+        final Rotation joined;
+        if (member) {
+          joined = (epoch: preview.epoch, vaultKey: preview.vaultKey);
+        } else {
+          final earlier = await _joinedEarlier(preview.vaultId, identity);
+          if (earlier != null) {
+            joined = earlier;
+          } else {
+            // From here until the state is saved the outcome is uncertain:
+            // the relay may add this device and the reply still be lost.
+            _restoreTried = preview.vaultId;
+            joined = await _ops.addSelfWithRecovery(
+              vaultId: preview.vaultId,
+              recovery: preview.recovery,
+              identity: identity,
+              epoch: preview.epoch,
+              vaultKey: preview.vaultKey,
+            );
+          }
+        }
         final own = preview.manifest.slots
             .where((s) => s.slotId == identity.slotId)
             .firstOrNull;
@@ -325,13 +372,6 @@ class BackupSyncService {
           recoveryKeyText: preview.recovery.key.display,
           ownSeq: own?.seq ?? 0,
         );
-        try {
-          await _save(state);
-        } catch (_) {
-          _stored = null;
-          _set(const BackupError(BackupRelayError.server, null));
-          rethrow;
-        }
         await _meta.clearMergedSeqs();
         final result =
             await _engine.apply(preview.payloads, BackupApplyMode.restore);
@@ -341,6 +381,14 @@ class BackupSyncService {
         for (final e in preview.payloads.entries) {
           await _engine.rememberName(e.key, e.value.deviceName);
         }
+        try {
+          await _save(state);
+        } catch (_) {
+          _stored = null;
+          _set(const BackupError(BackupRelayError.server, null));
+          rethrow;
+        }
+        _restoreTried = null;
         _engine.refreshOffers();
         await _publishMembers(preview.manifest, identity.slotId);
         await _join(state, identity);
@@ -506,7 +554,7 @@ class BackupSyncService {
   /// fails the pairing.
   Future<({String signer, String box})?> pairKeys() async {
     try {
-      final identity = _identity ??= await BackupIdentity.loadOrCreate(_auth);
+      final identity = await _identityOnce();
       return (
         signer: backupB64((await identity.signer.extractPublicKey()).bytes),
         box: backupB64((await identity.box.extractPublicKey()).bytes),
@@ -523,7 +571,8 @@ class BackupSyncService {
   /// id. Null when backup is off, the add failed, or [deadline] (wall
   /// clock) passed before the relay write: the host has stopped waiting by
   /// then, and a late write would leave a member that never adopts the
-  /// vault. Pairing goes on without it.
+  /// vault. A write that finishes after [deadline] is undone the same way
+  /// (see [_dropLateMember]). Pairing goes on without it.
   ///
   /// A signer already in the vault is not recorded against [nodeId]: the
   /// joiner proved nothing about owning it, and a revocation must not
@@ -532,7 +581,7 @@ class BackupSyncService {
   Future<String?> addMemberForPair(String signerB64, String boxB64,
           {String? nodeId, DateTime? deadline}) =>
       _engine.serialise(() async {
-        bool late() => deadline != null && DateTime.now().isAfter(deadline);
+        bool late() => deadline != null && _clock().isAfter(deadline);
         if (!_active || late()) return null;
         try {
           final signerPub = backupUnb64(signerB64);
@@ -558,16 +607,29 @@ class BackupSyncService {
                 memberBox: boxPub,
               );
             } on BackupRelayException catch (e) {
-              if (e.kind != BackupRelayError.conflict || attempt > 0) {
-                rethrow;
+              if (e.kind == BackupRelayError.conflict && attempt == 0) {
+                continue;
               }
-              continue;
+              if (late()) await _dropLateMember(signerPub);
+              rethrow;
+            } catch (_) {
+              if (late()) await _dropLateMember(signerPub);
+              rethrow;
             }
             if (nodeId != null) {
               await _meta.setNodeToSlot(
                   nodeId, VaultCrypto.slotIdFor(signerPub));
-              markDirty();
             }
+            // Checked after the last await: the host's timer fires no
+            // earlier than [deadline], so a vault id returned now reaches
+            // it. Past that, the host replied without one and the joiner
+            // will never adopt the vault: undo the membership.
+            if (late()) {
+              if (nodeId != null) await _meta.removeNode(nodeId);
+              await _dropLateMember(signerPub);
+              return null;
+            }
+            if (nodeId != null) markDirty();
             return vaultId;
           }
         } catch (e) {
@@ -575,6 +637,20 @@ class BackupSyncService {
           return null;
         }
       });
+
+  /// Takes out a member [addMemberForPair] added, or may have added, after
+  /// the host stopped waiting. The rotation keeps the recovery key: unlike a
+  /// device removed later, the joiner never held it (pairing does not share
+  /// it, and a device that restored with it is already listed, so never
+  /// added here). Best effort: on failure the joiner stays a member that
+  /// never uploads, which Backup & sync can remove.
+  Future<void> _dropLateMember(List<int> signerPub) async {
+    try {
+      await _rotate(removeSlotId: VaultCrypto.slotIdFor(signerPub));
+    } catch (e) {
+      debugPrint('[Backup] Late pairing member not removed: ${e.runtimeType}');
+    }
+  }
 
   /// The joiner side of pairing: takes up [vaultId], which the host just
   /// added this device to, and raises [joinedNotice]. Uploading this
@@ -932,18 +1008,19 @@ class BackupSyncService {
 
   // Rotation
 
-  /// Rotates after taking up the current epoch (so slots still at it stay
-  /// readable), and saves the new key as soon as the relay accepted it.
+  /// Rotates after taking up the epoch of every manifest the rotation reads
+  /// (so slots still at it stay readable, even when a conflict moves it on),
+  /// and saves the new key as soon as the relay accepted it.
   Future<Rotation?> _rotate(
       {String? removeSlotId, RecoveryMember? newRecovery}) async {
-    var (state, identity) = _require();
-    final m = (await _relay.manifest(state.vaultId, identity.signer))!;
-    state = await _requireTransport().adoptEpoch(m);
+    final (state, identity) = _require();
+    final transport = _requireTransport();
     final rotation = await _ops.rotate(
       vaultId: state.vaultId,
       signer: identity.signer,
       removeSlotId: removeSlotId,
       newRecovery: newRecovery,
+      onManifest: (m) => transport.adoptEpoch(m),
     );
     if (rotation == null) return null;
     await _save(_state!.copyWith(
@@ -976,9 +1053,17 @@ class BackupSyncService {
     return transport;
   }
 
+  /// The identity, loaded or created once. [pairKeys] runs outside the
+  /// queue, so two first uses can overlap: [BackupIdentity.loadOrCreate]
+  /// hands both the one load running on this storage, or each would read
+  /// "absent" and create its own, and membership made with the one that
+  /// lost the write could never authenticate again.
+  Future<BackupIdentity> _identityOnce() async =>
+      _identity ??= await BackupIdentity.loadOrCreate(_auth);
+
   Future<BackupIdentity> _loadIdentity() async {
     try {
-      return _identity ??= await BackupIdentity.loadOrCreate(_auth);
+      return await _identityOnce();
     } on StateError {
       _set(const BackupError(BackupRelayError.server, null));
       rethrow;

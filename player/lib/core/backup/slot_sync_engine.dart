@@ -480,8 +480,20 @@ class SlotSyncEngine {
   Future<ApplyResult> apply(
       Map<String, BackupPayload> payloads, BackupApplyMode mode) async {
     for (final p in payloads.values) {
+      // The newest version wins, whatever order the slots (or polls) come
+      // in: an accepted offer gets the credentials the merge chose.
       for (final r in p.records.whereType<AccountBackupRecord>()) {
-        if (!r.deleted) _accountRecords[r.accountId] = r;
+        if (r.deleted) continue;
+        final held = _accountRecords[r.accountId];
+        if (held == null ||
+            identical(
+                lwwMerge([
+                  [held],
+                  [r]
+                ]).single,
+                r)) {
+          _accountRecords[r.accountId] = r;
+        }
       }
     }
     await beforeApply?.call(payloads);
@@ -536,9 +548,13 @@ class SlotSyncEngine {
     if (!_active) return;
     try {
       await op();
-      _failures = 0;
-      _retryTimer?.cancel();
-      _retryTimer = null;
+      // A poll can succeed while an upload still waits for its retry: the
+      // debounce has already fired, so the retry is what sends it.
+      if (!_dirty) {
+        _failures = 0;
+        _retryTimer?.cancel();
+        _retryTimer = null;
+      }
       if (_status.value is BackupError) idle();
     } on BackupRelayException catch (e) {
       await _failed(e.kind, e);
