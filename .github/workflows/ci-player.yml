@@ -146,7 +146,8 @@ jobs:
     # test the same server; its default command serves /data on port 9000.
     # The credentials are devenv.nix's MYDIA_TEST_S3_* values. Services take
     # no `if:`, so the image is empty, which starts nothing, when the
-    # steps below are skipped.
+    # steps below are skipped. GitHub documents that for services:
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idservicesservice_idimage
     services:
       rustfs:
         image: ${{ needs.changes.outputs.player == 'true' && 'rustfs/rustfs:1.0.0-rc.6' || '' }}
