@@ -317,8 +317,12 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
     // Read before the awaits: the screen may be gone by the time they end.
     final selected = ref.read(selectedSourceIdProvider.notifier);
     try {
+      // Signing in again or changing folders: the bucket the screen was
+      // opened for, and only while it is still saved.
       final id = await accounts.addS3Account(
-          location: location, credentials: credentials);
+          location: location,
+          credentials: credentials,
+          signInAgain: widget.reauthAccountId != null);
       for (final MapEntry(key: path, value: kind) in _chosen.entries) {
         await accounts.addS3Root(id, path: path, kind: kind);
       }

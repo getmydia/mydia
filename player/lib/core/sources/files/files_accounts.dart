@@ -238,9 +238,14 @@ class FilesAccounts {
   /// [location] may be as typed (a prefix `media` or `/media/`): it is
   /// canonicalized first, so the id, connection and name agree with what
   /// [normalizeS3Url] makes of the stored connection.
+  ///
+  /// [signInAgain] only replaces the keys of a stored bucket: one removed
+  /// while the sign-in was in flight throws [StateError] and its keys are
+  /// not left behind, as [addSmbAccount] does.
   Future<SourceId> addS3Account({
     required S3Location location,
     required S3Credentials credentials,
+    bool signInAgain = false,
   }) async {
     // Built by toConnectionUri, so it always parses.
     final loc = S3Location.fromConnectionUri(location.toConnectionUri())!;
@@ -251,6 +256,9 @@ class FilesAccounts {
         ? loc.bucket
         : '${loc.bucket}/${prefix.substring(0, prefix.length - 1)}';
     final existing = await _stored(id);
+    if (signInAgain && existing == null) {
+      throw StateError('S3 account $id was removed');
+    }
     final account = existing?.account.copyWith(needsReauth: false) ??
         ProviderAccount(
           id: id,
@@ -262,27 +270,39 @@ class FilesAccounts {
     await _ref
         .read(sourceSecretsProvider)
         .writeAccountToken(account, credentials.toJson());
-    final record = existing?.copyWith(account: account) ??
-        SourceAccountRecord(
-          account: account,
-          profiles: [_owner(id)],
-          servers: [
-            SourceServer(
-              id: id,
-              accountId: id,
-              profileId: kOwnerProfileId,
-              name: name,
-              connections: [
-                ServerConnection(
-                  uri: connection,
-                  local: isPrivateHost(loc.endpoint.host),
+    // No locks of its own: `putAccount` keeps the stored ones, and those
+    // read above may be stale by now (a lock changed while the keys were
+    // written), and would win over the current ones.
+    final record =
+        existing?.copyWith(account: account, serverLocks: const {}) ??
+            SourceAccountRecord(
+              account: account,
+              profiles: [_owner(id)],
+              servers: [
+                SourceServer(
+                  id: id,
+                  accountId: id,
+                  profileId: kOwnerProfileId,
+                  name: name,
+                  connections: [
+                    ServerConnection(
+                      uri: connection,
+                      local: isPrivateHost(loc.endpoint.host),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-          addedAtMs: DateTime.now().millisecondsSinceEpoch,
-        );
-    return _save(record);
+              addedAtMs: DateTime.now().millisecondsSinceEpoch,
+            );
+    if (!signInAgain) return _save(record);
+    try {
+      return await _save(record, replaceOnly: true);
+    } on StateError {
+      // Removed after the check above: its keys were deleted with it, and
+      // the ones just written must go too.
+      await _ref.read(sourceSecretsProvider).deleteAccountToken(account);
+      rethrow;
+    }
   }
 
   /// Saves an SMB share. The credentials are written before the record. A

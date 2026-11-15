@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/peer_files_host.dart'
@@ -339,6 +341,58 @@ void main() {
       final newer =
           await c.read(sourceSecretsProvider).accountToken(after.account);
       expect(S3Credentials.fromJson(newer!).secretAccessKey, 'newer');
+    });
+
+    test('re-saving a bucket keeps a lock changed while its keys were written',
+        () async {
+      final gated = _GatedStorage();
+      storage = gated;
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      await accounts.addS3Account(location: location, credentials: creds);
+      final id = (await store.load()).accounts.single.account.id;
+      final records = c.read(sourceRecordsProvider.notifier);
+      await records.setServerLock(id, id, SourceLock.locked);
+
+      final gate = gated.hold();
+      final resave =
+          accounts.addS3Account(location: location, credentials: creds);
+      await gated.entered;
+      // The lock changes after the stored record was read, before it is
+      // written back.
+      await records.setServerLock(id, id, SourceLock.hidden);
+      gate.complete();
+      await resave;
+
+      final after = (await store.load()).accounts.single;
+      expect(after.lockOf(id), SourceLock.hidden);
+    });
+
+    test('signing in again never brings back a removed bucket', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final id = s3AccountId(location.toConnectionUri());
+      final namespace = SourceSecrets.newStorageNamespace(id);
+
+      await expectLater(
+          accounts.addS3Account(
+              location: location, credentials: creds, signInAgain: true),
+          throwsStateError);
+      expect((await store.load()).accounts, isEmpty);
+      expect(await storage.read('$namespace/account_token'), isNull);
+
+      await accounts.addS3Account(location: location, credentials: creds);
+      final storedNamespace =
+          (await store.load()).accounts.single.account.storageNamespace;
+      // The removal lands while the sign-in is in flight.
+      final signIn = accounts.addS3Account(
+          location: location, credentials: creds, signInAgain: true);
+      final removal = accounts.removeFilesAccount(id);
+      await expectLater(signIn, throwsStateError);
+      await removal;
+
+      expect((await store.load()).accounts, isEmpty);
+      expect(await storage.read('$storedNamespace/account_token'), isNull);
     });
 
     test('a bucket without a prefix is named by the bucket', () async {
@@ -877,4 +931,27 @@ void main() {
       expect((await store.load()).accounts.single.account.needsReauth, isFalse);
     });
   });
+}
+
+/// Storage whose next write waits until the test lets it through.
+class _GatedStorage extends MockAuthStorage {
+  Completer<void>? _gate;
+  final _entered = Completer<void>();
+
+  /// Completes once a held write has started.
+  Future<void> get entered => _entered.future;
+
+  /// Holds the next write until the returned completer completes.
+  Completer<void> hold() => _gate = Completer<void>();
+
+  @override
+  Future<void> write(String key, String value) async {
+    final gate = _gate;
+    if (gate != null) {
+      _gate = null;
+      _entered.complete();
+      await gate.future;
+    }
+    return super.write(key, value);
+  }
 }
