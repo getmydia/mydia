@@ -781,7 +781,7 @@ void main() {
         // and the provider is disposed.
         sub.close();
         async.elapse(const Duration(seconds: 1));
-        expect(c.exists(ambientPlayingProvider), isFalse,
+        expect(c.read(ambientPlayingProvider.exists), isFalse,
             reason: 'baseline: autodispose ran');
 
         // Detached: the bar listens for the banner again.

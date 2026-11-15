@@ -128,7 +128,7 @@ void main() {
     final peerId = c.read(sourcesProvider).last.id;
     expect(c.read(mediaSourceProvider(peerId)), isA<FilesMediaSource>());
     await _settle();
-    expect(c.exists(filesScanProvider(peerId)), isFalse);
+    expect(c.read(filesScanProvider(peerId).exists), isFalse);
     final peerBackend =
         h.backends.entries.where((e) => isPeerFilesSource(e.key)).single.value;
     expect(peerBackend.listed, isEmpty);

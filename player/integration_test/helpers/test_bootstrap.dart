@@ -114,7 +114,7 @@ Future<void> unmountApp(
 /// chain that, on an unauthenticated app, never resolves, which is the exact
 /// state this is trying to avoid being in at disposal.
 bool _startupLoading(ProviderContainer container) {
-  if (container.exists(castSessionManagerProvider) &&
+  if (container.read(castSessionManagerProvider.exists) &&
       container.read(castSessionManagerProvider).isLoading) {
     return true;
   }
