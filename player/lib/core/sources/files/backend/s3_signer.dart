@@ -156,11 +156,13 @@ class S3Signer {
         'T${p(t.hour)}${p(t.minute)}${p(t.second)}Z';
   }
 
+  /// The `host` value a client sends for [uri], which [sign] and [presign]
+  /// both sign. `Uri.host` drops an IPv6 literal's brackets; the header
+  /// keeps them, and S3 signs what it receives.
   String _hostHeader(Uri uri) {
     final defaultPort = uri.scheme == 'https' ? 443 : 80;
-    return uri.hasPort && uri.port != defaultPort
-        ? '${uri.host}:${uri.port}'
-        : uri.host;
+    final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
+    return uri.hasPort && uri.port != defaultPort ? '$host:${uri.port}' : host;
   }
 
   /// Each segment is decoded and re-encoded so the canonical path matches what

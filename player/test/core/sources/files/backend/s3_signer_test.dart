@@ -123,4 +123,22 @@ void main() {
     )['authorization'];
     expect(sigFor('https://h.example.com/b/Sp%20ace%C3%A9'), decoded);
   });
+  test('an IPv6 endpoint signs its host bracketed, as it is sent', () {
+    // `Uri.host` drops the brackets; the Host header a client sends keeps
+    // them, and S3 signs what it receives.
+    expect(
+        signer().sign(
+            method: 'GET',
+            uri: Uri.parse('https://[fe80::1]:9000/b/k'))['host'],
+        '[fe80::1]:9000');
+    expect(
+        signer().sign(
+            method: 'GET', uri: Uri.parse('https://[FE80::1]:443/b/k'))['host'],
+        '[fe80::1]');
+    expect(
+        signer().sign(
+            method: 'GET',
+            uri: Uri.parse('http://192.168.1.5:9000/b/k'))['host'],
+        '192.168.1.5:9000');
+  });
 }
