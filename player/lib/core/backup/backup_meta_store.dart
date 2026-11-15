@@ -385,4 +385,13 @@ class BackupMetaStore {
       : _storage.put('$_cloudCursorPrefix$kind', cursor);
 
   static const _cloudCursorPrefix = 'cloudCursor:';
+
+  /// The Drive file id of this device's own slot, null when not created yet.
+  String? get gdriveOwnFileId => _storage.get(_gdriveOwnFileIdKey);
+
+  Future<void> setGdriveOwnFileId(String? id) => id == null
+      ? _storage.delete(_gdriveOwnFileIdKey)
+      : _storage.put(_gdriveOwnFileIdKey, id);
+
+  static const _gdriveOwnFileIdKey = 'gdriveOwnFileId';
 }
