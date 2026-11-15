@@ -11,6 +11,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # True when a PR moves flake.lock, which gates the NixOS module tests below
+  # onto that PR. Without it a nixpkgs bump, Dependabot's monthly one included,
+  # is first built on master. On push it is forced true.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      nix-inputs: ${{ github.event_name != 'pull_request' || steps.filter.outputs.nix-inputs == 'true' }}
+    steps:
+      - name: Detect a flake.lock change
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            nix-inputs:
+              - 'flake.lock'
+
   flutter-pin:
     name: Check / Flutter Pin
     runs-on: ubuntu-latest
@@ -307,11 +328,13 @@ jobs:
       - name: Assert the Dependabot merge gate against its fixtures
         run: ./scripts/tests/dependabot-gate-test.sh
 
-  # Both NixOS VM tests run on push only. They are the slowest and least
-  # reliable jobs in CI, combining a QEMU boot with a full Nix build on top of
-  # the FlakeHub cache 503s that can hit any Nix job, and breaking the NixOS
-  # module is rare enough that catching it on master costs less than paying for
-  # it on every PR.
+  # Both NixOS VM tests run on push, and on a PR only when it changes
+  # flake.lock. They are the slowest and least reliable jobs in CI, combining a
+  # QEMU boot with a full Nix build on top of the FlakeHub cache 503s that can
+  # hit any Nix job, and breaking the NixOS module is rare enough that catching
+  # it on master costs less than paying for it on every PR. A nixpkgs bump is
+  # the exception: it is the change most likely to break the package, and
+  # Dependabot's arrive monthly through a merge gate no person reviews.
   #
   # They also build packages.default and packages.postgres as inputs, via
   # nix/checks/flake-module.nix, which is why the former `Build / Packages` job
@@ -319,7 +342,8 @@ jobs:
   test-sqlite-module:
     name: Test / NixOS Module (SQLite)
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.nix-inputs == 'true'
 
     steps:
       - name: Checkout
@@ -331,7 +355,7 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      # Read-only: these jobs only run on master and their closure (the NixOS VM,
+      # Read-only: these jobs run mostly on master and their closure (the NixOS VM,
       # the mydia package and its vendored FODs) is large; pushing it to Cachix
       # could evict the devenv paths every ci.yml job pulls.
       - name: Setup Cachix
@@ -354,7 +378,8 @@ jobs:
   test-postgres-module:
     name: Test / NixOS Module (PostgreSQL)
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.nix-inputs == 'true'
 
     steps:
       - name: Checkout
@@ -366,7 +391,7 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      # Read-only: these jobs only run on master and their closure (the NixOS VM,
+      # Read-only: these jobs run mostly on master and their closure (the NixOS VM,
       # the mydia package and its vendored FODs) is large; pushing it to Cachix
       # could evict the devenv paths every ci.yml job pulls.
       - name: Setup Cachix

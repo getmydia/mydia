@@ -240,6 +240,29 @@ updates:
     cooldown:
       default-days: 7
 
+  # --- nix: flake.lock, and devenv.lock through the fixup --------------------
+  #
+  # Dependabot reads flake.lock only. devenv.lock is not a file it knows, and
+  # devenv.yaml requires its nixpkgs on the same revision as flake.lock's. The
+  # fixup closes both: when flake.lock's nixpkgs moves it runs `devenv update`,
+  # then scripts/regenerate-derived.sh copies flake.lock's nixpkgs node into
+  # devenv.lock, and check-generated-freshness.sh fails any tree where the two
+  # differ. The NixOS module tests in ci-nix.yml run on any PR that changes
+  # flake.lock, so a nixpkgs that breaks the package fails here, not on master.
+  #
+  # Version updates only: the nix ecosystem has no security updates. Inputs
+  # track commits rather than versions, so there is no semver and no major to
+  # ignore. Without `groups` Dependabot opens one pull request per input.
+  - package-ecosystem: nix
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      nix:
+        patterns: ["*"]
+    cooldown:
+      default-days: 7
+
   # --- actions ----------------------------------------------------------------
   #
   # Not in a multi-ecosystem group. The merge gate's GITHUB_TOKEN may not land
