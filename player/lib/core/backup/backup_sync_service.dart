@@ -1,11 +1,7 @@
 export 'backup_status.dart';
 
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 
-import 'package:crypto/crypto.dart' show sha256;
-import 'package:cryptography/cryptography.dart' show SimpleKeyPair;
 import 'package:flutter/foundation.dart';
 
 import '../auth/auth_storage.dart';
@@ -18,18 +14,23 @@ import 'backup_status.dart';
 import 'backup_vault_ops.dart';
 import 'backup_vault_state.dart';
 import 'recovery_key.dart';
+import 'relay_slot_transport.dart';
+import 'slot_sync_engine.dart';
 import 'vault_crypto.dart';
 
 /// The vault this device is in and the one pairing offered it.
 typedef VaultChoice = ({String current, String offered});
 
-/// Uploads this device's slot of the end-to-end encrypted cloud backup,
-/// polls and merges the other members' slots, and runs the vault's member
-/// changes. Free of Riverpod: `backupSyncServiceProvider` wires the
-/// triggers ([markDirty], [poll], [flush]) and the stores.
+/// The relay backup: this device's slot of the end-to-end encrypted vault
+/// and the vault's member changes. Uploading, polling, merging, backoff and
+/// offers run in a [SlotSyncEngine] over a [RelaySlotTransport] of the
+/// joined vault; this service owns the vault state, the recovery key, the
+/// members and pairing. Free of Riverpod: `backupSyncServiceProvider` wires
+/// the triggers ([markDirty], [poll], [flush]) and the stores.
 ///
-/// Every relay sequence runs one at a time, so the vault state (own seq,
-/// epoch, keys) is never read and written by two at once.
+/// Every relay sequence runs one at a time through the engine's queue, so
+/// the vault state (own seq, epoch, keys) is never read and written by two
+/// at once.
 class BackupSyncService {
   BackupSyncService({
     required BackupRelayClient relay,
@@ -46,31 +47,49 @@ class BackupSyncService {
         _auth = authStorage,
         _store = BackupVaultStateStore(authStorage),
         _meta = meta,
-        _snapshot = snapshot,
-        _deviceName = deviceName,
-        _platform = platform,
         _clock = clock ?? DateTime.now,
         _localNodeId = localNodeId,
         _delay = delay ?? Future<void>.delayed {
-    // Filled here, not lazily: a lazy notifier could first be created by
-    // dispose().
-    _offers.value = meta.pendingAccounts();
+    _engine = SlotSyncEngine(
+      meta: meta,
+      snapshot: snapshot,
+      deviceName: deviceName,
+      platform: platform,
+      clock: _clock,
+      beforeApply: _recordSlotClaims,
+      beforeUpload: () async {
+        final identity = _identity;
+        if (identity != null) await _recordOwnNode(identity);
+      },
+      afterUpload: _ownUploaded,
+      afterPoll: (_) async {
+        final t = _transport;
+        final m = t?.lastManifest;
+        if (t != null && m != null) await _publishMembers(m, t.ownSlotId);
+      },
+      handleFatal: (e) => _gone(e) ? _leave(const BackupRemoved()) : null,
+    );
   }
 
-  static const debounce = Duration(minutes: 2);
-  static const pollInterval = Duration(minutes: 15);
-  static const maxBackoff = Duration(minutes: 30);
-  static const maxSlotBytes = 4194304;
+  static const debounce = SlotSyncEngine.debounce;
+  static const pollInterval = SlotSyncEngine.pollInterval;
+  static const maxBackoff = SlotSyncEngine.maxBackoff;
+  static const maxSlotBytes = RelaySlotTransport.maxSlotBytes;
 
   final BackupRelayClient _relay;
   final BackupVaultOps _ops;
   final AuthStorage _auth;
   final BackupVaultStateStore _store;
   final BackupMetaStore _meta;
-  final BackupSnapshot _snapshot;
-  final Future<String> Function() _deviceName;
-  final String _platform;
   final DateTime Function() _clock;
+
+  /// Uploads, polls, merges, backs off and keeps the offers, over
+  /// [_transport] while in a vault.
+  late final SlotSyncEngine _engine;
+
+  /// The joined vault as a slot store, null while off. Owns the vault state
+  /// from [_join] until [_detach].
+  RelaySlotTransport? _transport;
 
   /// This device's p2p node id, null while p2p is not up. Recorded with
   /// the own slot id so the group record maps every member.
@@ -84,14 +103,12 @@ class BackupSyncService {
   static const adoptRetries = 3;
   static const adoptRetryDelay = Duration(milliseconds: 500);
 
-  final _status = ValueNotifier<BackupStatus>(const BackupOff());
-  final _unreadable = ValueNotifier<Set<String>>(const {});
   final _recoveryMismatch = ValueNotifier<bool>(false);
   final _unsavedKey = ValueNotifier<bool>(false);
   late final _joinedNotice = ValueNotifier<bool>(_meta.joinedNoticePending);
   final _vaultChoice = ValueNotifier<VaultChoice?>(null);
 
-  ValueListenable<BackupStatus> get status => _status;
+  ValueListenable<BackupStatus> get status => _engine.status;
 
   /// True from the moment pairing joined this device to its group's vault
   /// until [acknowledgeJoinedNotice]: "This device is now backed up with
@@ -104,7 +121,7 @@ class BackupSyncService {
   ValueListenable<VaultChoice?> get pendingVaultChoice => _vaultChoice;
 
   /// Slot ids whose last download could not be opened or decoded.
-  ValueListenable<Set<String>> get unreadableSlots => _unreadable;
+  ValueListenable<Set<String>> get unreadableSlots => _engine.unreadableSlots;
 
   /// True when the recovery key this device keeps is not the vault's (it
   /// was replaced from another device, or a replacement here was lost): the
@@ -117,10 +134,6 @@ class BackupSyncService {
   /// Cleared by [acknowledgeNewRecoveryKey], or by leaving the vault.
   ValueListenable<bool> get unsavedRecoveryKey => _unsavedKey;
 
-  /// Slots that could not be read, by the seq that failed: not downloaded
-  /// again until their seq changes.
-  final _failedSlots = <String, int>{};
-
   /// Recovery signer public keys by key text, so a poll does not derive
   /// them every time.
   final _recoverySigners = <String, Uint8List?>{};
@@ -130,7 +143,6 @@ class BackupSyncService {
   Map<String, String> get slotDeviceNames => _meta.slotNames();
 
   final _members = ValueNotifier<List<BackupMemberInfo>>(const []);
-  final _offers = ValueNotifier<List<PendingAccountOffer>>(const []);
   final _removals = ValueNotifier<List<PendingRemoval>>(const []);
 
   /// Every device in the vault, this one first, as of the last manifest
@@ -139,61 +151,22 @@ class BackupSyncService {
 
   /// Accounts other devices backed up that this one has not added or
   /// dismissed.
-  ValueListenable<List<PendingAccountOffer>> get pendingOffers => _offers;
+  ValueListenable<List<PendingAccountOffer>> get pendingOffers =>
+      _engine.pendingOffers;
 
   /// Devices revoked from the p2p group that are still in the vault: each
   /// can read the backup until [removeMember] takes it out.
   ValueListenable<List<PendingRemoval>> get pendingRemovals => _removals;
 
-  BackupVaultState? _state;
+  /// The vault state while no transport owns it: loaded but not joined,
+  /// or saved before [_join].
+  BackupVaultState? _stored;
+
+  /// The transport's state while joined, else what was stored.
+  BackupVaultState? get _state => _transport?.state ?? _stored;
+
   BackupIdentity? _identity;
-
-  /// The vault a [commitRestore] asked the relay to add this device to and
-  /// then failed (or lost the reply), so running it again asks the relay
-  /// whether it did instead of adding the device twice, which it refuses.
-  String? _restoreTried;
-
-  /// This device's key for [vaultId] when an earlier [commitRestore] of it
-  /// may have joined: read from the relay as this device. Null when no
-  /// earlier attempt ran or the relay says this device is not a member.
-  Future<Rotation?> _joinedEarlier(
-      String vaultId, BackupIdentity identity) async {
-    if (_restoreTried != vaultId) return null;
-    final BackupManifest m;
-    try {
-      m = (await _relay.manifest(vaultId, identity.signer))!;
-    } on BackupRelayException catch (e) {
-      if (e.kind == BackupRelayError.notMember) return null;
-      rethrow;
-    }
-    return (
-      epoch: m.epoch,
-      vaultKey: await VaultCrypto.openEnvelope(
-        box: identity.box,
-        envelope: m.envelope,
-        vaultId: vaultId,
-        epoch: m.epoch,
-      ),
-    );
-  }
-
-  bool _halted = false;
   bool _disposed = false;
-  bool _dirty = false;
-
-  /// The last upload was refused as too large; a successful poll keeps
-  /// showing that until an upload succeeds.
-  bool _tooLarge = false;
-  int _failures = 0;
-  String? _uploadedHash;
-  Timer? _debounceTimer;
-  Timer? _pollTimer;
-  Timer? _retryTimer;
-  Future<void> _queue = Future.value();
-
-  /// The latest merged account records, by account id, so an offer can be
-  /// accepted: the offer itself holds no credentials.
-  final _accountRecords = <String, AccountBackupRecord>{};
 
   /// Whether this device is in a vault. Read by the settings screen.
   bool get enabled => _state != null;
@@ -201,7 +174,7 @@ class BackupSyncService {
   /// The recovery key text this device keeps, null when off.
   String? get recoveryKeyText => _state?.recoveryKeyText;
 
-  bool get _active => _state != null && !_halted && !_disposed;
+  bool get _active => _state != null && !_engine.halted && !_disposed;
 
   int get _nowMs => _clock().millisecondsSinceEpoch;
 
@@ -209,12 +182,13 @@ class BackupSyncService {
 
   /// Loads the vault state and, when in a vault, polls and schedules the
   /// periodic poll. Clears an earlier [BackupUnavailable].
-  Future<void> start() => _serialise(() async {
-        _halted = false;
+  Future<void> start() => _engine.serialise(() async {
+        _engine.halted = false;
+        if (_transport != null) await _detach();
         try {
-          _state = await _store.load();
-          if (_state == null) return _set(const BackupOff());
-          await _identityOnce();
+          _stored = await _store.load();
+          if (_stored == null) return _set(const BackupOff());
+          _identity = await BackupIdentity.loadOrCreate(_auth);
         } catch (e) {
           debugPrint(
               '[Backup] Could not load the backup state: ${e.runtimeType}');
@@ -222,69 +196,39 @@ class BackupSyncService {
               BackupError(BackupRelayError.server, _state?.lastSuccessMs));
         }
         _publishUnsavedKey();
-        _set(BackupIdle(_state!.lastSuccessMs));
-        _startPolling();
+        await _join(_stored!, _identity!);
         // A change made just before the app was killed may never have gone
         // up.
         markDirty();
         // Unconditional, so the recovery key check (in-memory) runs once
         // per launch even when nothing changed since the stored ETag.
-        unawaited(_background(() => _pollOnce(conditional: false)));
+        unawaited(
+            _engine.background(() => _engine.pollOnce(conditional: false)));
       });
 
   void dispose() {
     _disposed = true;
-    _cancelTimers();
-    _status.dispose();
-    _unreadable.dispose();
+    _engine.dispose();
+    unawaited(_transport?.close());
     _recoveryMismatch.dispose();
     _unsavedKey.dispose();
     _joinedNotice.dispose();
     _vaultChoice.dispose();
     _members.dispose();
-    _offers.dispose();
     _removals.dispose();
   }
 
   // Triggers
 
   /// A backed-up record changed. Uploads at most once per [debounce].
-  void markDirty() {
-    if (!_active) return;
-    _dirty = true;
-    _debounceTimer ??= Timer(debounce, () {
-      _debounceTimer = null;
-      unawaited(_background(_uploadIfDirty));
-    });
-  }
+  void markDirty() => _engine.markDirty();
 
   /// Uploads a pending change now, as the app goes to the background.
-  Future<void> flush() async {
-    _debounceTimer?.cancel();
-    _debounceTimer = null;
-    if (!_active || !_dirty) return;
-    await _background(_uploadIfDirty);
-  }
+  Future<void> flush() => _engine.flush();
 
   /// Reads the manifest and merges every slot that changed. A poll asked
   /// for while one is still waiting its turn joins it.
-  Future<void> poll() {
-    if (!_active) return Future.value();
-    final waiting = _pendingPoll;
-    if (waiting != null) return waiting;
-    late final Future<void> mine;
-    void release() {
-      if (identical(_pendingPoll, mine)) _pendingPoll = null;
-    }
-
-    mine = _background(() {
-      release();
-      return _pollOnce();
-    }).whenComplete(release);
-    return _pendingPoll = mine;
-  }
-
-  Future<void>? _pendingPoll;
+  Future<void> poll() => _engine.poll();
 
   // Enable and restore
 
@@ -310,7 +254,7 @@ class BackupSyncService {
         try {
           await _save(state);
         } catch (_) {
-          _state = null;
+          _stored = null;
           _set(const BackupError(BackupRelayError.server, null));
           // Nothing on this device knows the vault: free its lookup hash.
           await _relay
@@ -321,7 +265,7 @@ class BackupSyncService {
         await _join(state, identity);
         _setMembers(
             [BackupMemberInfo(slotId: identity.slotId, isThisDevice: true)]);
-        await _attempt(() => _upload(force: true));
+        await _engine.uploadNow(force: true);
       });
 
   /// Finds [keyText]'s vault and reads every slot, as its recovery member.
@@ -338,12 +282,6 @@ class BackupSyncService {
   /// applies its records in restore mode, and uploads this device's slot.
   /// Throws [BackupAlreadyOnException], touching nothing, when this device
   /// is already in a vault.
-  ///
-  /// The records are applied before the vault state is saved, so a restore
-  /// that fails part way leaves backup off and can simply run again: a rerun
-  /// for the same vault first asks the relay whether the earlier attempt
-  /// added this device (its reply may have been lost), and after a restart a
-  /// fresh preview's manifest lists it.
   Future<ApplyResult> commitRestore(RestorePreview preview) =>
       _userOp(() async {
         if (_state != null) throw const BackupAlreadyOnException();
@@ -352,26 +290,15 @@ class BackupSyncService {
             backupB64((await identity.signer.extractPublicKey()).bytes);
         final member = preview.manifest.members
             .any((m) => !m.recovery && backupB64(m.signer) == signer);
-        final Rotation joined;
-        if (member) {
-          joined = (epoch: preview.epoch, vaultKey: preview.vaultKey);
-        } else {
-          final earlier = await _joinedEarlier(preview.vaultId, identity);
-          if (earlier != null) {
-            joined = earlier;
-          } else {
-            // From here until the state is saved the outcome is uncertain:
-            // the relay may add this device and the reply still be lost.
-            _restoreTried = preview.vaultId;
-            joined = await _ops.addSelfWithRecovery(
-              vaultId: preview.vaultId,
-              recovery: preview.recovery,
-              identity: identity,
-              epoch: preview.epoch,
-              vaultKey: preview.vaultKey,
-            );
-          }
-        }
+        final joined = member
+            ? (epoch: preview.epoch, vaultKey: preview.vaultKey)
+            : await _ops.addSelfWithRecovery(
+                vaultId: preview.vaultId,
+                recovery: preview.recovery,
+                identity: identity,
+                epoch: preview.epoch,
+                vaultKey: preview.vaultKey,
+              );
         final own = preview.manifest.slots
             .where((s) => s.slotId == identity.slotId)
             .firstOrNull;
@@ -382,26 +309,26 @@ class BackupSyncService {
           recoveryKeyText: preview.recovery.key.display,
           ownSeq: own?.seq ?? 0,
         );
-        await _meta.clearMergedSeqs();
-        final result = await _apply(preview.payloads, BackupApplyMode.restore);
-        for (final e in preview.slotSeqs.entries) {
-          await _meta.setMergedSeq(e.key, e.value);
-        }
-        for (final e in preview.payloads.entries) {
-          await _rememberName(e.key, e.value.deviceName);
-        }
         try {
           await _save(state);
         } catch (_) {
-          _state = null;
+          _stored = null;
           _set(const BackupError(BackupRelayError.server, null));
           rethrow;
         }
-        _restoreTried = null;
-        _refreshOffers();
+        await _meta.clearMergedSeqs();
+        final result =
+            await _engine.apply(preview.payloads, BackupApplyMode.restore);
+        for (final e in preview.slotSeqs.entries) {
+          await _meta.setMergedVersion(e.key, '${e.value}');
+        }
+        for (final e in preview.payloads.entries) {
+          await _engine.rememberName(e.key, e.value.deviceName);
+        }
+        _engine.refreshOffers();
         await _publishMembers(preview.manifest, identity.slotId);
         await _join(state, identity);
-        await _attempt(() => _upload(force: true));
+        await _engine.uploadNow(force: true);
         return result;
       });
 
@@ -409,28 +336,11 @@ class BackupSyncService {
 
   /// Adds an account another device backed up. Polls first when its record
   /// is no longer in memory (after a restart).
-  Future<void> acceptPendingAccount(String accountId) => _userOp(() async {
-        try {
-          if (!_accountRecords.containsKey(accountId) && _state != null) {
-            await _pollOnce(full: true);
-          }
-          final record = _accountRecords[accountId];
-          if (record == null) {
-            throw StateError('account $accountId is not in the backup');
-          }
-          if (!await _snapshot.addAccount(record)) {
-            throw StateError('account $accountId could not be added');
-          }
-        } finally {
-          _refreshOffers();
-        }
-      });
+  Future<void> acceptPendingAccount(String accountId) =>
+      _userOp(() => _engine.acceptOffer(accountId));
 
-  Future<void> dismissPendingAccount(String accountId) async {
-    final offer = _meta.pendingAccount(accountId);
-    if (offer != null) await _meta.dismiss(accountId, offer.updatedAt);
-    _refreshOffers();
-  }
+  Future<void> dismissPendingAccount(String accountId) =>
+      _engine.dismissOffer(accountId);
 
   // Member changes
 
@@ -460,7 +370,7 @@ class BackupSyncService {
 
   /// The viewer pressed Done on the sheet showing the new recovery key:
   /// [unsavedRecoveryKey] clears, here and across restarts.
-  Future<void> acknowledgeNewRecoveryKey() => _serialise(() async {
+  Future<void> acknowledgeNewRecoveryKey() => _engine.serialise(() async {
         final state = _state;
         if (state == null || !state.recoveryKeyUnacknowledged) return;
         try {
@@ -485,7 +395,7 @@ class BackupSyncService {
     ));
     await _rotate(
         removeSlotId: removeSlotId, newRecovery: await RecoveryMember.of(key));
-    await _attempt(() => _upload(force: true));
+    await _engine.uploadNow(force: true);
     return key;
   }
 
@@ -532,7 +442,7 @@ class BackupSyncService {
   /// fails the pairing.
   Future<({String signer, String box})?> pairKeys() async {
     try {
-      final identity = await _identityOnce();
+      final identity = _identity ??= await BackupIdentity.loadOrCreate(_auth);
       return (
         signer: backupB64((await identity.signer.extractPublicKey()).bytes),
         box: backupB64((await identity.box.extractPublicKey()).bytes),
@@ -549,8 +459,7 @@ class BackupSyncService {
   /// id. Null when backup is off, the add failed, or [deadline] (wall
   /// clock) passed before the relay write: the host has stopped waiting by
   /// then, and a late write would leave a member that never adopts the
-  /// vault. A write that finishes after [deadline] is undone the same way
-  /// (see [_dropLateMember]). Pairing goes on without it.
+  /// vault. Pairing goes on without it.
   ///
   /// A signer already in the vault is not recorded against [nodeId]: the
   /// joiner proved nothing about owning it, and a revocation must not
@@ -558,18 +467,19 @@ class BackupSyncService {
   /// which node it is.
   Future<String?> addMemberForPair(String signerB64, String boxB64,
           {String? nodeId, DateTime? deadline}) =>
-      _serialise(() async {
-        bool late() => deadline != null && _clock().isAfter(deadline);
+      _engine.serialise(() async {
+        bool late() => deadline != null && DateTime.now().isAfter(deadline);
         if (!_active || late()) return null;
         try {
           final signerPub = backupUnb64(signerB64);
           final boxPub = backupUnb64(boxB64);
           if (signerPub.length != 32 || boxPub.length != 32) return null;
           final (_, identity) = _require();
+          final transport = _requireTransport();
           for (var attempt = 0;; attempt++) {
             final vaultId = _state!.vaultId;
             final m = (await _relay.manifest(vaultId, identity.signer))!;
-            final state = await _adoptEpoch(m);
+            final state = await transport.adoptEpoch(m);
             final listed = m.members
                 .any((x) => !x.recovery && listEquals(x.signer, signerPub));
             if (listed) return vaultId;
@@ -584,29 +494,16 @@ class BackupSyncService {
                 memberBox: boxPub,
               );
             } on BackupRelayException catch (e) {
-              if (e.kind == BackupRelayError.conflict && attempt == 0) {
-                continue;
+              if (e.kind != BackupRelayError.conflict || attempt > 0) {
+                rethrow;
               }
-              if (late()) await _dropLateMember(signerPub);
-              rethrow;
-            } catch (_) {
-              if (late()) await _dropLateMember(signerPub);
-              rethrow;
+              continue;
             }
             if (nodeId != null) {
               await _meta.setNodeToSlot(
                   nodeId, VaultCrypto.slotIdFor(signerPub));
+              markDirty();
             }
-            // Checked after the last await: the host's timer fires no
-            // earlier than [deadline], so a vault id returned now reaches
-            // it. Past that, the host replied without one and the joiner
-            // will never adopt the vault: undo the membership.
-            if (late()) {
-              if (nodeId != null) await _meta.removeNode(nodeId);
-              await _dropLateMember(signerPub);
-              return null;
-            }
-            if (nodeId != null) markDirty();
             return vaultId;
           }
         } catch (e) {
@@ -615,26 +512,12 @@ class BackupSyncService {
         }
       });
 
-  /// Takes out a member [addMemberForPair] added, or may have added, after
-  /// the host stopped waiting. The rotation keeps the recovery key: unlike a
-  /// device removed later, the joiner never held it (pairing does not share
-  /// it, and a device that restored with it is already listed, so never
-  /// added here). Best effort: on failure the joiner stays a member that
-  /// never uploads, which Backup & sync can remove.
-  Future<void> _dropLateMember(List<int> signerPub) async {
-    try {
-      await _rotate(removeSlotId: VaultCrypto.slotIdFor(signerPub));
-    } catch (e) {
-      debugPrint('[Backup] Late pairing member not removed: ${e.runtimeType}');
-    }
-  }
-
   /// The joiner side of pairing: takes up [vaultId], which the host just
   /// added this device to, and raises [joinedNotice]. Uploading this
   /// device's slot and merging the group's is queued, not awaited, so
   /// pairing does not wait on a 4 MB transfer. A device already in another
   /// vault is not switched: [pendingVaultChoice] asks the viewer instead.
-  Future<void> adoptVault(String vaultId) => _serialise(() async {
+  Future<void> adoptVault(String vaultId) => _engine.serialise(() async {
         // Null before start() ran: read the stored state, so a vault this
         // device is already in is never overwritten. A load that fails
         // aborts the adoption. Not kept in memory: start() loads it with
@@ -650,12 +533,12 @@ class BackupSyncService {
         await _switchTo(await _openAsMember(vaultId, identity), identity);
         await _meta.setJoinedNoticePending(true);
         if (!_disposed) _joinedNotice.value = true;
-        unawaited(_background(_uploadAndMerge));
+        unawaited(_engine.background(_uploadAndMerge));
       });
 
   /// Completes once every operation queued so far has run.
   @visibleForTesting
-  Future<void> settled() => _serialise(() async {});
+  Future<void> settled() => _engine.serialise(() async {});
 
   void acknowledgeJoinedNotice() {
     if (!_disposed) _joinedNotice.value = false;
@@ -668,7 +551,7 @@ class BackupSyncService {
   /// only one. Keeping the current vault takes this device out of the
   /// offered one (best effort), where the host had added it.
   Future<void> resolveVaultChoice({required bool keepOffered}) =>
-      _serialise(() async {
+      _engine.serialise(() async {
         final choice = _vaultChoice.value;
         if (choice == null) return;
         if (!keepOffered) {
@@ -694,7 +577,7 @@ class BackupSyncService {
         }
         _setChoice(null);
         await _switchTo(next, identity);
-        await _attempt(_uploadAndMerge);
+        await _engine.attempt(_uploadAndMerge);
         if (choice.current == choice.offered) return;
         try {
           await _leaveOnRelay(choice.current, identity);
@@ -838,9 +721,7 @@ class BackupSyncService {
   /// (merged seqs, slot names, failures) is dropped first.
   Future<void> _switchTo(
       BackupVaultState state, BackupIdentity identity) async {
-    _cancelTimers();
-    _failedSlots.clear();
-    _accountRecords.clear();
+    await _detach();
     _setMismatch(false);
     _setMembers(const []);
     await _meta.clearMergedSeqs();
@@ -848,11 +729,11 @@ class BackupSyncService {
     await _meta.clearSlotNames();
     await _meta.clearOffers();
     await _meta.clearPendingRemovals();
-    _refreshOffers();
+    _engine.refreshOffers();
     try {
       await _save(state);
     } catch (_) {
-      _state = null;
+      _stored = null;
       _set(const BackupError(BackupRelayError.server, null));
       rethrow;
     }
@@ -860,168 +741,30 @@ class BackupSyncService {
   }
 
   Future<void> _uploadAndMerge() async {
-    await _upload(force: true);
-    await _pollOnce(full: true);
+    await _engine.uploadOnce(force: true);
+    await _engine.pollOnce(full: true);
   }
 
   void _setChoice(VaultChoice? choice) {
     if (!_disposed) _vaultChoice.value = choice;
   }
 
-  // Upload
+  // Engine hooks
 
-  Future<void> _uploadIfDirty() async {
-    if (_dirty) await _upload();
-  }
-
-  /// Seals this device's records into its slot. Skipped when the records
-  /// are what was last uploaded, unless [force]d (a new epoch, a join).
-  Future<void> _upload({bool force = false}) async {
-    var (state, identity) = _require();
-    _dirty = false;
-    try {
-      await _recordOwnNode(identity);
-      final records = lwwMerge([await _snapshot.collect(nowMs: _nowMs)]);
-      final hash = sha256
-          .convert(
-              utf8.encode(jsonEncode([for (final r in records) r.toJson()])))
-          .toString();
-      if (!force && hash == _uploadedHash) return;
-      final plaintext = BackupPayload(
-        deviceName: await _deviceName(),
-        platform: _platform,
-        createdAt: _nowMs,
-        records: records,
-      ).encode();
-      for (var attempt = 0;; attempt++) {
-        final seq = state.ownSeq + 1;
-        final sealed = await VaultCrypto.sealSlot(
-          vaultKey: state.keysByEpoch[state.epoch]!,
-          vaultId: state.vaultId,
-          epoch: state.epoch,
-          slotId: identity.slotId,
-          seq: seq,
-          plaintext: plaintext,
-        );
-        if (sealed.length > maxSlotBytes) {
-          throw const BackupRelayException(BackupRelayError.tooLarge);
-        }
-        _set(const BackupUploading());
-        final int newSeq;
-        try {
-          newSeq = await _relay.putSlot(
-              state.vaultId, identity.signer, identity.slotId, sealed,
-              ifMatch: state.ownSeq == 0 ? null : state.ownSeq,
-              epoch: state.epoch);
-        } on BackupRelayException catch (e) {
-          // 412: another seq is stored; 409: the epoch moved. Read the
-          // manifest and write again once.
-          if (attempt > 0 ||
-              (e.kind != BackupRelayError.preconditionFailed &&
-                  e.kind != BackupRelayError.conflict)) {
-            rethrow;
-          }
-          final m = (await _relay.manifest(state.vaultId, identity.signer))!;
-          state = await _adoptEpoch(m);
-          final own =
-              m.slots.where((s) => s.slotId == identity.slotId).firstOrNull;
-          state = state.copyWith(ownSeq: own?.seq ?? 0);
-          _state = state;
-          continue;
-        }
-        state = state.copyWith(ownSeq: newSeq, lastSuccessMs: () => _nowMs);
-        await _save(state);
-        _uploadedHash = hash;
-        _tooLarge = false;
-        _setMembers([
-          for (final m in _members.value)
-            m.isThisDevice
-                ? BackupMemberInfo(
-                    slotId: m.slotId,
-                    isThisDevice: true,
-                    deviceName: m.deviceName,
-                    lastUploadMs: state.lastSuccessMs,
-                  )
-                : m,
-        ]);
-        _set(BackupIdle(state.lastSuccessMs));
-        return;
-      }
-    } catch (_) {
-      _dirty = true;
-      rethrow;
-    }
-  }
-
-  // Poll
-
-  /// Reads the manifest (with the stored ETag when [conditional] and not
-  /// [full]), takes up a new epoch, and merges every slot whose seq is above
-  /// what was merged (every slot when [full]) in live mode.
-  Future<void> _pollOnce({bool full = false, bool conditional = true}) async {
-    var (state, identity) = _require();
-    final m = await _relay.manifest(state.vaultId, identity.signer,
-        etag: full || !conditional ? null : state.manifestEtag);
-    if (m == null) return _idle();
-    state = await _reconcileRecovery(state, m);
-    state = await _adoptEpoch(m);
-
-    final own = m.slots.where((s) => s.slotId == identity.slotId).firstOrNull;
-    if (own != null && own.seq > state.ownSeq) {
-      state = state.copyWith(ownSeq: own.seq);
-    }
-    final payloads = <String, BackupPayload>{};
-    final unreadable = <String>{};
-    for (final s in m.slots) {
-      if (s.slotId == identity.slotId) continue;
-      if (!full && s.seq <= _meta.mergedSeq(s.slotId)) continue;
-      if (_failedSlots[s.slotId] == s.seq) {
-        unreadable.add(s.slotId);
-        continue;
-      }
-      final p =
-          await _readSlot(state.vaultId, identity.signer, s, state.keysByEpoch);
-      if (p == null) {
-        unreadable.add(s.slotId);
-        _failedSlots[s.slotId] = s.seq;
-      } else {
-        payloads[s.slotId] = p;
-        _failedSlots.remove(s.slotId);
-      }
-    }
-    await _apply(payloads, BackupApplyMode.live);
-    for (final s in m.slots) {
-      if (payloads.containsKey(s.slotId)) {
-        await _meta.setMergedSeq(s.slotId, s.seq);
-      }
-    }
-    _refreshOffers();
-    await _publishMembers(m, identity.slotId);
-    if (!_disposed) _unreadable.value = unreadable;
-    // An unreadable slot keeps the ETag unset, so the next poll reads the
-    // manifest again (the slot itself only once its seq moves) and the
-    // unreadable list stays current.
-    final etag = unreadable.isEmpty ? m.etag : null;
-    if (etag != state.manifestEtag || state.ownSeq != _state!.ownSeq) {
-      state = state.copyWith(manifestEtag: () => etag);
-      await _save(state);
-    }
-    _idle();
-    // After a rotation every member re-uploads under the new key.
-    if (own != null && own.epoch < m.epoch) await _upload(force: true);
-  }
-
-  Future<BackupPayload?> _readSlot(String vaultId, SimpleKeyPair signer,
-      ManifestSlot slot, Map<int, Uint8List> keys) async {
-    final payload = await _ops.readSlot(vaultId, signer, slot, keys);
-    if (payload != null) await _rememberName(slot.slotId, payload.deviceName);
-    return payload;
-  }
-
-  Future<void> _rememberName(String slotId, String name) async {
-    if (_meta.slotNames()[slotId] != name) {
-      await _meta.setSlotName(slotId, name);
-    }
+  /// This device's member entry takes the upload's time.
+  void _ownUploaded() {
+    final at = _state?.lastSuccessMs;
+    _setMembers([
+      for (final m in _members.value)
+        m.isThisDevice
+            ? BackupMemberInfo(
+                slotId: m.slotId,
+                isThisDevice: true,
+                deviceName: m.deviceName,
+                lastUploadMs: at,
+              )
+            : m,
+    ]);
   }
 
   /// [m]'s devices (not the recovery member), this device first and listed
@@ -1049,28 +792,9 @@ class BackupSyncService {
     _publishRemovals();
   }
 
-  void _refreshOffers() {
-    if (!_disposed) _offers.value = _meta.pendingAccounts();
-  }
-
-  Future<ApplyResult> _apply(
-      Map<String, BackupPayload> payloads, BackupApplyMode mode) async {
+  /// Records each slot's p2p node claims before its payload is applied.
+  Future<void> _recordSlotClaims(Map<String, BackupPayload> payloads) async {
     for (final MapEntry(key: slotId, value: p) in payloads.entries) {
-      // The newest version wins, whatever order the slots (or polls) come
-      // in: an accepted offer gets the credentials the merge chose.
-      for (final r in p.records.whereType<AccountBackupRecord>()) {
-        if (r.deleted) continue;
-        final held = _accountRecords[r.accountId];
-        if (held == null ||
-            identical(
-                lwwMerge([
-                  [held],
-                  [r]
-                ]).single,
-                r)) {
-          _accountRecords[r.accountId] = r;
-        }
-      }
       // Each slot's group record, not only the winning one, but only for
       // the nodes it says are its own: a member's word about another
       // member's slot would let it aim a revocation at that member.
@@ -1085,7 +809,6 @@ class BackupSyncService {
         });
       }
     }
-    return applyByOrigin(_snapshot, payloads, mode: mode, nowMs: _nowMs);
   }
 
   // Recovery key
@@ -1143,47 +866,20 @@ class BackupSyncService {
     if (!_disposed) _recoveryMismatch.value = value;
   }
 
-  // Epochs and rotation
+  // Rotation
 
-  /// Takes up [m]'s epoch when this device does not hold its key yet,
-  /// opening its own envelope, and saves at once.
-  Future<BackupVaultState> _adoptEpoch(BackupManifest m) async {
-    final state = _state!;
-    if (m.epoch == state.epoch && state.keysByEpoch.containsKey(m.epoch)) {
-      return state;
-    }
-    final Uint8List key;
-    try {
-      key = await VaultCrypto.openEnvelope(
-        box: _identity!.box,
-        envelope: m.envelope,
-        vaultId: state.vaultId,
-        epoch: m.epoch,
-      );
-    } on VaultCryptoException {
-      throw const BackupRelayException(BackupRelayError.invalid);
-    }
-    final next = state.copyWith(
-      epoch: m.epoch,
-      keysByEpoch: {...state.keysByEpoch, m.epoch: key},
-      manifestEtag: () => null,
-    );
-    await _save(next);
-    return next;
-  }
-
-  /// Rotates after taking up the epoch of every manifest the rotation reads
-  /// (so slots still at it stay readable, even when a conflict moves it on),
-  /// and saves the new key as soon as the relay accepted it.
+  /// Rotates after taking up the current epoch (so slots still at it stay
+  /// readable), and saves the new key as soon as the relay accepted it.
   Future<Rotation?> _rotate(
       {String? removeSlotId, RecoveryMember? newRecovery}) async {
-    final (state, identity) = _require();
+    var (state, identity) = _require();
+    final m = (await _relay.manifest(state.vaultId, identity.signer))!;
+    state = await _requireTransport().adoptEpoch(m);
     final rotation = await _ops.rotate(
       vaultId: state.vaultId,
       signer: identity.signer,
       removeSlotId: removeSlotId,
       newRecovery: newRecovery,
-      onManifest: (m) => _adoptEpoch(m),
     );
     if (rotation == null) return null;
     await _save(_state!.copyWith(
@@ -1210,33 +906,28 @@ class BackupSyncService {
     return (state, identity);
   }
 
-  /// The identity, loaded or created once. [pairKeys] runs outside the
-  /// queue, so two first uses can overlap: they share one load, or each
-  /// would read "absent" and create its own, and membership made with the
-  /// one that lost the write could never authenticate again.
-  Future<BackupIdentity> _identityOnce() {
-    final known = _identity;
-    if (known != null) return Future.value(known);
-    return _identityLoad ??= BackupIdentity.loadOrCreate(_auth)
-        .then((identity) => _identity = identity)
-        .whenComplete(() => _identityLoad = null);
+  RelaySlotTransport _requireTransport() {
+    final transport = _transport;
+    if (transport == null) throw StateError('backup is off');
+    return transport;
   }
-
-  Future<BackupIdentity>? _identityLoad;
 
   Future<BackupIdentity> _loadIdentity() async {
     try {
-      return await _identityOnce();
+      return _identity ??= await BackupIdentity.loadOrCreate(_auth);
     } on StateError {
       _set(const BackupError(BackupRelayError.server, null));
       rethrow;
     }
   }
 
-  /// Persists [state] and makes it current. A storage that cannot persist
+  /// Persists [state] and makes it current, through the transport while
+  /// joined so its state is never stale. A storage that cannot persist
   /// throws [StateError], which callers report as `Error(server)`.
   Future<void> _save(BackupVaultState state) async {
-    _state = state;
+    final transport = _transport;
+    if (transport != null) return transport.save(state);
+    _stored = state;
     _publishUnsavedKey();
     await _store.save(state);
   }
@@ -1251,27 +942,53 @@ class BackupSyncService {
         s.recoveryKeyText != null;
   }
 
+  /// Makes [state] the joined vault: a [RelaySlotTransport] owns it from
+  /// here, and the engine syncs over it (Idle, periodic poll).
   Future<void> _join(BackupVaultState state, BackupIdentity identity) async {
-    _halted = false;
-    _state = state;
     _identity = identity;
-    _uploadedHash = null;
-    _failures = 0;
-    _set(BackupIdle(state.lastSuccessMs));
-    _startPolling();
+    final transport = RelaySlotTransport(
+      relay: _relay,
+      store: _store,
+      identity: identity,
+      state: state,
+      nowMs: () => _nowMs,
+    );
+    transport
+      ..beforeAdopt = ((m) => _reconcileRecovery(transport.state, m))
+      ..onSaved = ((_) => _publishUnsavedKey());
+    _transport = transport;
+    _stored = null;
+    _engine.attach(
+      transport,
+      lastSuccessMs: state.lastSuccessMs,
+      // The manifest ETag lives in the vault state, as before the engine.
+      readCursor: () => transport.state.manifestEtag,
+      writeCursor: (etag) =>
+          transport.save(transport.state.copyWith(manifestEtag: () => etag)),
+    );
+  }
+
+  /// Hands the vault state back from the transport and stops the engine
+  /// syncing over it.
+  Future<void> _detach() async {
+    final transport = _transport;
+    if (transport != null) {
+      _stored = transport.state;
+      transport
+        ..beforeAdopt = null
+        ..onSaved = null;
+      _transport = null;
+      unawaited(transport.close());
+    }
+    await _engine.detach();
   }
 
   /// Clears `backup/vault` and the merged seqs; local data is kept.
   Future<void> _leave(BackupStatus next) async {
-    _cancelTimers();
-    _state = null;
-    _dirty = false;
-    _uploadedHash = null;
-    _tooLarge = false;
-    _failedSlots.clear();
+    await _detach();
+    _stored = null;
     _setMismatch(false);
     _publishUnsavedKey();
-    _accountRecords.clear();
     _setMembers(const []);
     _setChoice(null);
     if (!_disposed) _joinedNotice.value = false;
@@ -1281,10 +998,9 @@ class BackupSyncService {
     await _meta.clearSlotNames();
     await _meta.clearOffers();
     await _meta.clearPendingRemovals();
-    _refreshOffers();
+    _engine.refreshOffers();
     _publishRemovals();
     await _meta.setJoinedNoticePending(false);
-    if (!_disposed) _unreadable.value = const {};
     _set(next);
   }
 
@@ -1304,12 +1020,6 @@ class BackupSyncService {
 
   // Running operations
 
-  Future<T> _serialise<T>(Future<T> Function() op) {
-    final result = _queue.then((_) => op());
-    _queue = result.then((_) {}, onError: (Object _) {});
-    return result;
-  }
-
   /// An operation the viewer asked for: errors are rethrown to the caller
   /// after the status reflects a removal or a missing relay feature.
   ///
@@ -1318,16 +1028,16 @@ class BackupSyncService {
   /// means this device was removed only when the op addressed this
   /// device's own vault ([ownVault]), not, say, a preview of another one.
   Future<T> _userOp<T>(Future<T> Function() op, {bool ownVault = true}) =>
-      _serialise(() async {
+      _engine.serialise(() async {
         final vaultId = _state?.vaultId;
-        final wasHalted = _halted;
-        _halted = false;
+        final wasHalted = _engine.halted;
+        _engine.halted = false;
         try {
           final result = await op();
-          if (wasHalted && !_halted) {
-            if (_state != null && _pollTimer == null) _startPolling();
-            if (_status.value is BackupUnavailable) {
-              _state == null ? _set(const BackupOff()) : _idle();
+          if (wasHalted && !_engine.halted) {
+            if (_state != null) _engine.ensurePolling();
+            if (status.value is BackupUnavailable) {
+              _state == null ? _set(const BackupOff()) : _engine.idle();
             }
           }
           return result;
@@ -1338,95 +1048,16 @@ class BackupSyncService {
               _state?.vaultId == vaultId) {
             await _leave(const BackupRemoved());
           } else if (e.kind == BackupRelayError.unavailable) {
-            _halt();
+            _engine.halt();
           } else if (wasHalted) {
-            _halted = true;
+            _engine.halted = true;
           }
           rethrow;
         } catch (_) {
-          if (wasHalted) _halted = true;
+          if (wasHalted) _engine.halted = true;
           rethrow;
         }
       });
 
-  /// A background operation, queued: errors become the status and a retry.
-  Future<void> _background(Future<void> Function() op) =>
-      _serialise(() => _attempt(op));
-
-  /// Runs [op] in the current queue slot, reporting failure as status.
-  Future<void> _attempt(Future<void> Function() op) async {
-    if (!_active) return;
-    try {
-      await op();
-      // A poll can succeed while an upload still waits for its retry: the
-      // debounce has already fired, so the retry is what sends it.
-      if (!_dirty) {
-        _failures = 0;
-        _retryTimer?.cancel();
-        _retryTimer = null;
-      }
-      if (_status.value is BackupError) _idle();
-    } on BackupRelayException catch (e) {
-      await _failed(e.kind, e);
-    } on Object catch (e) {
-      // Malformed 2xx bodies and storage failures are server-side errors.
-      debugPrint('[Backup] Sync failed: ${e.runtimeType}');
-      await _failed(BackupRelayError.server, null);
-    }
-  }
-
-  Future<void> _failed(BackupRelayError kind, BackupRelayException? e) async {
-    if (_disposed) return;
-    if (e != null && _gone(e)) return _leave(const BackupRemoved());
-    if (kind == BackupRelayError.unavailable) return _halt();
-    _set(BackupError(kind, _state?.lastSuccessMs));
-    // An oversize slot fails the same way until the data shrinks: the next
-    // change tries again, not a timer.
-    if (kind == BackupRelayError.tooLarge) {
-      _tooLarge = true;
-      return;
-    }
-    _failures++;
-    var delay = Duration(minutes: 1 << min(_failures - 1, 5));
-    if (delay > maxBackoff) delay = maxBackoff;
-    final retryAfter = e?.retryAfterMs;
-    if (retryAfter != null && retryAfter > delay.inMilliseconds) {
-      delay = Duration(milliseconds: retryAfter);
-    }
-    _retryTimer?.cancel();
-    _retryTimer = Timer(delay, () {
-      _retryTimer = null;
-      unawaited(_background(() async {
-        await _pollOnce();
-        await _uploadIfDirty();
-      }));
-    });
-  }
-
-  void _halt() {
-    _halted = true;
-    _cancelTimers();
-    _set(const BackupUnavailable());
-  }
-
-  void _idle() {
-    if (_tooLarge) return;
-    _set(BackupIdle(_state?.lastSuccessMs));
-  }
-
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(pollInterval, (_) => unawaited(poll()));
-  }
-
-  void _cancelTimers() {
-    _debounceTimer?.cancel();
-    _pollTimer?.cancel();
-    _retryTimer?.cancel();
-    _debounceTimer = _pollTimer = _retryTimer = null;
-  }
-
-  void _set(BackupStatus s) {
-    if (!_disposed) _status.value = s;
-  }
+  void _set(BackupStatus s) => _engine.setStatus(s);
 }

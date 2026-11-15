@@ -51,6 +51,10 @@ class RelaySlotTransport implements SlotTransport {
   /// replacement here.
   Future<BackupVaultState> Function(BackupManifest)? beforeAdopt;
 
+  /// Runs on every [save], before the state is persisted (the service
+  /// publishes its unsaved recovery key flag here).
+  void Function(BackupVaultState)? onSaved;
+
   /// Current, saved after every change.
   BackupVaultState get state => _state;
 
@@ -74,16 +78,16 @@ class RelaySlotTransport implements SlotTransport {
     final m =
         await _relay.manifest(_state.vaultId, _identity.signer, etag: cursor);
     if (m == null) return null;
-    _manifests.add(m);
+    _emit(m);
     final hook = beforeAdopt;
     if (hook != null) {
       final next = await hook(m);
-      if (!identical(next, _state)) await _save(next);
+      if (!identical(next, _state)) await save(next);
     }
-    await _adoptEpoch(m);
+    await adoptEpoch(m);
     final own = m.slots.where((s) => s.slotId == ownSlotId).firstOrNull;
     if (own != null && own.seq > _state.ownSeq) {
-      await _save(_state.copyWith(ownSeq: own.seq));
+      await save(_state.copyWith(ownSeq: own.seq));
     }
     _lastManifest = m;
     return SlotListing(
@@ -154,15 +158,14 @@ class RelaySlotTransport implements SlotTransport {
           rethrow;
         }
         final m = (await _relay.manifest(state.vaultId, _identity.signer))!;
-        _manifests.add(m);
-        state = await _adoptEpoch(m);
+        _emit(m);
+        state = await adoptEpoch(m);
         final own = m.slots.where((s) => s.slotId == ownSlotId).firstOrNull;
         state = state.copyWith(ownSeq: own?.seq ?? 0);
         _state = state;
         continue;
       }
-      await _save(
-          state.copyWith(ownSeq: newSeq, lastSuccessMs: () => _nowMs()));
+      await save(state.copyWith(ownSeq: newSeq, lastSuccessMs: () => _nowMs()));
       _names[ownSlotId] = payload.deviceName;
       return;
     }
@@ -175,8 +178,9 @@ class RelaySlotTransport implements SlotTransport {
       throw UnsupportedError('the relay deletes a slot only with its member');
 
   /// Takes up [m]'s epoch when this device does not hold its key yet,
-  /// opening its own envelope, and saves at once.
-  Future<BackupVaultState> _adoptEpoch(BackupManifest m) async {
+  /// opening its own envelope, and saves at once. Public for the service's
+  /// member changes, which read the manifest themselves.
+  Future<BackupVaultState> adoptEpoch(BackupManifest m) async {
     final state = _state;
     if (m.epoch == state.epoch && state.keysByEpoch.containsKey(m.epoch)) {
       return state;
@@ -197,14 +201,25 @@ class RelaySlotTransport implements SlotTransport {
       keysByEpoch: {...state.keysByEpoch, m.epoch: key},
       manifestEtag: () => null,
     );
-    await _save(next);
+    await save(next);
     return next;
   }
 
-  /// Makes [state] current and persists it. A storage that cannot persist
-  /// throws [StateError].
-  Future<void> _save(BackupVaultState state) async {
+  /// Makes [state] current, tells [onSaved], and persists it. A storage
+  /// that cannot persist throws [StateError]. The service saves its own
+  /// changes (recovery key, rotation) here too, so this transport's state
+  /// is never stale.
+  Future<void> save(BackupVaultState state) async {
     _state = state;
+    onSaved?.call(state);
     await _store.save(state);
+  }
+
+  /// Closes [manifests]. An operation still running finishes; it emits
+  /// nothing more.
+  Future<void> close() => _manifests.close();
+
+  void _emit(BackupManifest m) {
+    if (!_manifests.isClosed) _manifests.add(m);
   }
 }

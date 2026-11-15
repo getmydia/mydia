@@ -125,6 +125,7 @@ class BackupMetaStore {
   static const _pendingPrefix = 'pending:';
   static const _dismissedPrefix = 'dismissed:';
   static const _seqPrefix = 'seq:';
+  static const _versionPrefix = 'ver:';
   static const _nodePrefix = 'node:';
   static const _claimPrefix = 'claim:';
   static const _namePrefix = 'name:';
@@ -248,12 +249,25 @@ class BackupMetaStore {
   Future<void> setMergedSeq(String slotId, int seq) =>
       _storage.put('$_seqPrefix$slotId', '$seq');
 
-  /// Forgets every merged seq, when this device leaves a vault: slot ids
-  /// derive from signers, so a later vault holding the same devices starts
-  /// their seqs at 1 again.
+  /// The store version of [slotId] already merged, null when none. An
+  /// install that recorded int seqs ([setMergedSeq]) reads its seq as the
+  /// version, which is how the relay names its versions, so an upgrade
+  /// does not merge every slot again.
+  String? mergedVersion(String slotId) =>
+      _storage.get('$_versionPrefix$slotId') ??
+      _storage.get('$_seqPrefix$slotId');
+
+  Future<void> setMergedVersion(String slotId, String version) =>
+      _storage.put('$_versionPrefix$slotId', version);
+
+  /// Forgets every merged seq and version, when this device leaves a vault:
+  /// slot ids derive from signers, so a later vault holding the same devices
+  /// starts their seqs at 1 again.
   Future<void> clearMergedSeqs() async {
     for (final k in _storage.keys.toList()) {
-      if (k.startsWith(_seqPrefix)) await _storage.delete(k);
+      if (k.startsWith(_seqPrefix) || k.startsWith(_versionPrefix)) {
+        await _storage.delete(k);
+      }
     }
   }
 

@@ -28,7 +28,10 @@ the spec.
 | `backup_relay_client.dart` | Signed `/backup/v1` calls and the error kinds (`BackupRelayError`) |
 | `backup_vault_ops.dart` | Multi-call relay sequences: create, preview a restore, add, rotate |
 | `backup_snapshot.dart` | Collects this device's records and applies other devices' records |
-| `backup_sync_service.dart` | Debounced upload, polling, merge, member changes, pending offers. Free of Riverpod |
+| `slot_transport.dart` | `SlotTransport`: a store of per-device slots (list, read, write own, delete, changes), plaintext payloads |
+| `relay_slot_transport.dart` | The relay vault as a `SlotTransport`: seals, compare-and-swaps on seq and epoch, takes up new epochs. Owns the vault state while joined |
+| `slot_sync_engine.dart` | Store-agnostic sync: debounced upload, polling, merge by slot version, backoff, pending offers, the one operation queue. Free of Riverpod |
+| `backup_sync_service.dart` | The relay backup: runs a `SlotSyncEngine` over a `RelaySlotTransport`, and owns enable, restore, member changes, the recovery key and pairing. Free of Riverpod |
 | `backup_providers.dart` | Wires the stores, the change triggers and the pairing hooks |
 
 ## Where state lives
@@ -43,7 +46,8 @@ the spec.
   when this device holds it.
 - Hive box `backup_meta` (`BackupMetaStore`): record stamps, pending account
   offers and dismissals, accounts added from the backup whose folder roots
-  have not landed yet, the seq of each slot already merged, each slot's
+  have not landed yet, the version of each slot already merged (`ver:`,
+  falling back to the `seq:` an older install wrote), each slot's
   device name, the p2p node to slot map and each slot's node claims, revoked
   devices still to be removed from the vault, and whether the
   joined-by-pairing notice is still to be seen. Not backed up.
