@@ -204,6 +204,8 @@ void main() {
     final storage = _CountingStorage();
     await SettingsService(storage: storage)
         .setLibrarySort('${fakeSourceId.value}/movies', 'added|asc');
+    // The seed write reads too; count only what the screen does.
+    storage.reads = 0;
     final container = ProviderContainer(overrides: [
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
       coreSettingsServiceProvider
