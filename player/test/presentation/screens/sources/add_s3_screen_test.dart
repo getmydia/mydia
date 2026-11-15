@@ -43,7 +43,9 @@ int _boxes = 0;
 final _l10n = AppLocalizationsEn();
 
 Future<_Harness> _pump(WidgetTester tester,
-    {String? reauthAccountId, _Harness? reuse}) async {
+    {String? reauthAccountId,
+    _Harness? reuse,
+    FileSystemBackend? backend}) async {
   var box = reuse?.box;
   if (box == null) {
     final opened = (await tester.runAsync(() =>
@@ -89,7 +91,7 @@ Future<_Harness> _pump(WidgetTester tester,
           .overrideWithValue((ref, source) => FakeBackend({})),
       s3ConnectorProvider.overrideWithValue((location, credentials, client) {
         h.connects.add((location, credentials));
-        return h.backend;
+        return backend ?? h.backend;
       }),
     ],
     child: MaterialApp.router(
@@ -335,6 +337,48 @@ void main() {
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
   });
 
+  testWidgets('S3 folders that differ by a trailing slash stay apart',
+      (tester) async {
+    final h = await _pump(tester, backend: _SlashBackend());
+    await _connectOther(tester, prefix: 'media');
+
+    // Open `/Films`: its own row and the folder `/Films/` (key
+    // `media/Films//`) inside it are two rows with two keys.
+    await tester.tap(find.byKey(const ValueKey('s3-folder-/Films')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('s3-folder-/Films')), findsOneWidget);
+    expect(find.byKey(const ValueKey('s3-folder-/Films/')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('s3-tick-/Films/')));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<Checkbox>(find.byKey(const ValueKey('s3-tick-/Films')))
+            .value,
+        isFalse);
+
+    // Into `/Films/` and back up lands in `/Films`, not the bucket root.
+    // Its name, not the row's centre, which the kind picker now covers.
+    await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('s3-folder-/Films/')),
+        matching: find.text('/')));
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<Text>(find.byKey(const Key('s3-dir'))).data, '/Films/');
+    await tester.tap(find.byKey(const Key('s3-up')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const Key('s3-dir'))).data, '/Films');
+
+    await tester.tap(find.byKey(const Key('s3-save')));
+    await tester.pumpAndSettle();
+    final accountId = (await h.store.load()).accounts.single.account.id;
+    expect(
+        FileLibraryIndex(h.box, accountId: accountId)
+            .roots()
+            .map((r) => r.path),
+        ['/Films/']);
+  });
+
   testWidgets('sign in again locks the location', (tester) async {
     final h = await _pump(tester);
     await _connectOther(tester,
@@ -395,4 +439,31 @@ void main() {
     expect(FileLibraryIndex(h.box, accountId: accountId).roots(), hasLength(1));
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
   });
+}
+
+/// A bucket under `media/` holding the keys `media/Films/a.mkv` and
+/// `media/Films//b.mkv`: the folder `/Films`, and inside it the folder
+/// `/Films/`, as [S3Backend] lists them.
+class _SlashBackend implements FileSystemBackend {
+  static final _epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+  FileEntry _dir(String path, String name) =>
+      FileEntry(path: path, name: name, isDir: true, size: 0, modified: _epoch);
+
+  @override
+  Future<List<FileEntry>> list(String dir) async => switch (dir) {
+        '/' || '' => [_dir('/Films', 'Films')],
+        '/Films' => [_dir('/Films/', '/')],
+        _ => const [],
+      };
+
+  @override
+  Future<FileEntry?> stat(String path) async => null;
+
+  @override
+  Future<PlayableFile> playable(String path) async =>
+      const PlayableFile(url: 'https://example.invalid/x');
+
+  @override
+  Future<void> probe() async {}
 }

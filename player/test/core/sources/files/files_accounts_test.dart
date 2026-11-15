@@ -446,8 +446,44 @@ void main() {
       expect(built, isA<LazyS3Backend>());
       (built as LazyS3Backend).close();
       final accountId = id.value.split(':').first;
+      // An S3 path is kept as is: `/Films/` is the folder whose key is
+      // `media/Films//`, not `/Films` (`media/Films/`).
       expect(
-          c.read(filesIndexProvider(accountId)).roots().single.path, '/Films');
+          c.read(filesIndexProvider(accountId)).roots().single.path, '/Films/');
+    });
+
+    test('S3 folders that differ by a trailing slash are two roots', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final id =
+          await accounts.addS3Account(location: location, credentials: creds);
+      await accounts.addS3Root(id,
+          path: '/Films', kind: FilesLibraryKind.movies);
+      await accounts.addS3Root(id,
+          path: '/Films/', kind: FilesLibraryKind.series);
+      await accounts.addS3Root(id, path: '/', kind: FilesLibraryKind.mixed);
+      final roots =
+          c.read(filesIndexProvider(id.value.split(':').first)).roots();
+      expect(roots.map((r) => r.path),
+          unorderedEquals(['/Films', '/Films/', '/']));
+      expect(roots.map((r) => r.id).toSet(), hasLength(3));
+    });
+
+    test('WebDAV and SMB roots still drop trailing slashes', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final id = await accounts.addWebDavAccount(
+          url: Uri.parse('https://nas.example.test/dav'),
+          user: 'viewer',
+          password: 'pw');
+      await accounts.addWebDavRoot(id,
+          path: '/dav/Films/', kind: FilesLibraryKind.movies);
+      await accounts.addSmbRoot(id,
+          path: '/dav/Shows//', kind: FilesLibraryKind.series);
+      final roots =
+          c.read(filesIndexProvider(id.value.split(':').first)).roots();
+      expect(roots.map((r) => r.path),
+          unorderedEquals(['/dav/Films', '/dav/Shows']));
     });
   });
 

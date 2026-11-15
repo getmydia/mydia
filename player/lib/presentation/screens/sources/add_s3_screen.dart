@@ -347,7 +347,8 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
 
   Widget _folderRow(String path, String name,
       {required bool busy, required VoidCallback? onOpen}) {
-    final key = trimRootPath(path);
+    // The path as listed: `/Films/` and `/Films` are two folders.
+    final key = path;
     final kind = _chosen[key];
     return ListTile(
       key: ValueKey('s3-folder-$key'),
@@ -480,7 +481,8 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
           const SizedBox(height: 8),
         ],
         footer: _actionButton(l10n, connected: true),
-        onPicked: (path) => _toggle(trimRootPath(path), true),
+        exactPaths: true,
+        onPicked: (path) => _toggle(path, true),
         rowBuilder: (context,
                 {required path,
                 required title,

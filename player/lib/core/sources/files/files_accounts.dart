@@ -127,9 +127,14 @@ class FilesAccounts {
   Future<void> _bumpPeerFiles(String accountId) =>
       _ref.read(peerFilesHostProvider).bumpRevision(accountId);
 
+  /// Adds [path] as a root. With [exact] the path is stored as given (an
+  /// empty one is `/`); otherwise trailing separators are dropped, for
+  /// backends where `/a/` and `/a` are one folder.
   Future<void> _addRoot(SourceId id, String accountId,
-      {required String path, required FilesLibraryKind kind}) async {
-    final p = trimRootPath(path);
+      {required String path,
+      required FilesLibraryKind kind,
+      bool exact = false}) async {
+    final p = exact ? (path.isEmpty ? '/' : path) : trimRootPath(path);
     await _ref.read(filesIndexProvider(accountId)).putRoot(LibraryRoot(
           id: filesRootId(p),
           path: p,
@@ -520,18 +525,26 @@ class FilesAccounts {
           {required String path, required FilesLibraryKind kind}) =>
       addWebDavRoot(id, path: path, kind: kind);
 
-  /// Adds [path], a path under the bucket's prefix, as a root of [id].
+  /// Adds [path], a path under the bucket's prefix, as a root of [id]. The
+  /// path is kept exactly: `/a/` is the folder whose key is `<prefix>a//`,
+  /// another folder than `/a` (`<prefix>a/`), so no slash is trimmed.
   Future<void> addS3Root(SourceId id,
           {required String path, required FilesLibraryKind kind}) =>
-      addWebDavRoot(id, path: path, kind: kind);
+      _addRemoteRoot(id, path: path, kind: kind, exact: true);
 
   /// Adds [path], a server path on the share, as a root of [id].
   Future<void> addWebDavRoot(SourceId id,
-      {required String path, required FilesLibraryKind kind}) async {
+          {required String path, required FilesLibraryKind kind}) =>
+      _addRemoteRoot(id, path: path, kind: kind);
+
+  Future<void> _addRemoteRoot(SourceId id,
+      {required String path,
+      required FilesLibraryKind kind,
+      bool exact = false}) async {
     final source =
         _ref.read(sourcesProvider).where((s) => s.id == id).firstOrNull;
     if (source == null) throw StateError('No files source $id');
-    await _addRoot(id, source.account.id, path: path, kind: kind);
+    await _addRoot(id, source.account.id, path: path, kind: kind, exact: exact);
   }
 
   /// Drops [rootId] and its files from [id]'s index.
