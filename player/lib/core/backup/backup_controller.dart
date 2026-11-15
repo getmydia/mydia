@@ -277,6 +277,17 @@ class BackupController {
       // The key outlived the vault (it was cleared elsewhere).
       if (active == BackupStoreKind.relay && !hasVault) active = null;
     }
+    if (active != null &&
+        active != BackupStoreKind.relay &&
+        !_cloud.containsKey(active)) {
+      // The stored cloud store could not be built (or is no longer offered):
+      // off for this run, so the viewer gets the picker instead of a relay
+      // switch that throws. The key is kept, and nothing in that store or
+      // in the meta store is touched, so a later launch that builds it
+      // picks the backup up again; enabling another store overwrites it.
+      debugPrint('[Backup] Active store ${active.name} unavailable; off');
+      active = null;
+    }
     final hint = await _auth.read(hintKey);
     if (_disposed) return;
     _active.value = active;

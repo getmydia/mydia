@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/backup/backup_providers.dart';
 import 'package:player/core/backup/backup_relay_client.dart';
+import 'package:player/l10n/l10n.dart';
+import 'package:player/presentation/screens/backup/google_device_code_sheet.dart';
+import 'package:player/presentation/screens/connections/backup_section.dart';
 
+import '../../../core/backup/cloud/in_memory_cloud_backend.dart';
+import '../../../core/backup/fake_backup_relay.dart';
+import '../../../test_utils/toast_harness.dart';
+import 'backup_device_rig.dart';
 import 'backup_section_harness.dart';
 import 'fake_backup_controller.dart';
 import 'fake_backup_sync_service.dart';
@@ -123,6 +131,65 @@ void main() {
 
     expect(controller.calls, ['switchTo relay deleteOld=false key']);
     expect(relay.calls.last, startsWith('confirmEnable'));
+  });
+
+  testWidgets(
+      'a stored cloud store that cannot be built shows the picker, and the '
+      'relay can still be turned on', (tester) async {
+    final device = BackupTestDevice(FakeBackupRelay(), 'Living Room TV');
+    addTearDown(device.dispose);
+    device.auth.seedData({BackupController.storeKey: 'gdrive'});
+    final icloud = InMemoryCloudStore();
+    final controller = BackupController(
+      relay: device.service,
+      authStorage: device.auth,
+      resolveOffered: () async => _all,
+      buildCloud: (kind) async {
+        if (kind == BackupStoreKind.gdrive) throw StateError('no backend');
+        return buildCloudBackupService(
+          backend: InMemoryCloudBackend(icloud, kind: kind.cloudKind!),
+          authStorage: device.auth,
+          meta: device.meta,
+          snapshot: device.snapshot,
+          deviceName: () async => device.name,
+          platform: 'linux',
+        );
+      },
+    );
+    addTearDown(controller.dispose);
+    await tester.runAsync(() async {
+      await controller.ready;
+      await controller.start();
+    });
+
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        backupSyncServiceProvider.overrideWithValue(device.service),
+        backupControllerProvider.overrideWithValue(controller),
+        googleSignInMethodProvider.overrideWithValue(null),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Scaffold(body: SingleChildScrollView(child: BackupSection())),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Off, so the picker, not a relay switch whose toggle would throw for
+    // the missing store. Turning the relay on from here is covered by
+    // `stored_cloud_store_that_cannot_be_built_is_off_not_stuck`.
+    expect(controller.active.value, isNull);
+    expect(find.byKey(const Key('backup-store-relay')), findsOneWidget);
+    expect(find.byKey(const Key('backup-store-icloud')), findsOneWidget);
+    expect(find.byKey(const Key('backup-store-gdrive')), findsNothing);
+    expect(find.byKey(const Key('backup-switch')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('picking a dormant relay wakes it without a new key',

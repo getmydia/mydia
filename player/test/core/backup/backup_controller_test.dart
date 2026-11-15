@@ -710,6 +710,62 @@ void main() {
     expect(c.active.value, BackupStoreKind.gdrive);
   });
 
+  test('stored_cloud_store_that_cannot_be_built_is_off_not_stuck', () async {
+    final a = net.device('Living Room TV');
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+    await _settled(a.controller);
+    final slot = await a.slotId();
+    final drive = net.stores[BackupStoreKind.gdrive]!;
+    final driveBytes = drive.bytes[slot];
+    expect(driveBytes, isNotNull);
+
+    // Next launch, Drive cannot be built (a broken backend, say).
+    a.controller.dispose();
+    final relay = a.relay = BackupSyncService(
+      relay: net.relay.relayClient(),
+      authStorage: a.auth,
+      meta: a.meta,
+      snapshot: a.snapshot,
+      deviceName: () async => a.name,
+      platform: 'linux',
+      clock: () => DateTime.fromMillisecondsSinceEpoch(_t0),
+    );
+    final c = a.controller = BackupController(
+      relay: relay,
+      authStorage: a.auth,
+      resolveOffered: () async => _allStores,
+      buildCloud: (kind) async {
+        if (kind == BackupStoreKind.gdrive) throw StateError('no backend');
+        return buildCloudBackupService(
+          backend:
+              InMemoryCloudBackend(net.stores[kind]!, kind: kind.cloudKind!),
+          authStorage: a.auth,
+          meta: a.meta,
+          snapshot: a.snapshot,
+          deviceName: () async => a.name,
+          platform: 'linux',
+        );
+      },
+    );
+    addTearDown(c.dispose);
+    await c.ready;
+    await c.start();
+
+    // Off, so the section shows the picker, and nothing was deleted.
+    expect(c.active.value, isNull);
+    expect(c.offered.value, isNot(contains(BackupStoreKind.gdrive)));
+    expect(await a.auth.read(BackupController.storeKey), 'gdrive');
+    expect(drive.bytes[slot], driveBytes);
+
+    // Turning the relay on works instead of throwing.
+    final key = await relay.prepareEnable();
+    await c.switchTo(BackupStoreKind.relay, deleteOld: false, relayKey: key);
+    expect(c.active.value, BackupStoreKind.relay);
+    expect(relay.enabled, isTrue);
+    expect(await a.auth.read(BackupController.storeKey), 'relay');
+  });
+
   test('a host that leaves its group while naming its store rejects pairing',
       () async {
     final host = net.device('Living Room TV', 'node-a');
