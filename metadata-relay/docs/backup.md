@@ -20,13 +20,14 @@ is built against this file. Code: `MetadataRelay.Backup.Handler` (HTTP),
 - A relay without these routes answers 404 with a body that is not JSON
   (`Not found`). A 404 from this API always has a JSON `error`.
 - Limits: slot 4 MiB (4,194,304 bytes), JSON body 64 KiB, 16 members per
-  vault (the recovery member counts), 120 writes per vault per hour (slot
-  writes and member changes share it), vault idle expiry 180 days.
+  vault (the recovery member counts), 600 writes per vault per hour (slot
+  writes and member changes share it; enough for several devices playing at
+  once), vault idle expiry 180 days.
 - Request bodies are never logged.
 
 ## Authentication
 
-Every route except `POST /vaults` and `GET /lookup/:handle`:
+Every route except `POST /vaults` and `POST /lookup`:
 
 ```
 Authorization: MydiaSig signer=<b64url pubkey>, ts=<unix ms>, sig=<b64url>
@@ -110,11 +111,22 @@ Content-Type: application/vnd.mydia.backup
 `vault_taken` (the id is in use: pick a new one and seal again), 429.
 `slot_id` and `recovery_slot_id` must differ, as must the two signers.
 
-### `GET /lookup/:handle`
+### `POST /lookup`
 
-Unauthenticated, 30 per hour per client address. `:handle` is the base64url of
-the raw 32-byte lookup handle. `200 {"vault_id": "..."}`. A miss or a malformed
-handle is 404 `not_found`. 429 when limited.
+Unauthenticated (the handle is the credential), 30 per hour per client
+address. The handle travels in the body, never the URL, so it stays out of
+access logs and caches.
+
+```
+POST /backup/v1/lookup
+Content-Type: application/vnd.mydia.backup
+
+{"handle": "<b64url of the raw 32-byte lookup handle>"}
+```
+
+`200 {"vault_id": "..."}`. A miss or a handle that is not base64url is 404
+`not_found`. A body that is not JSON or has no string `handle` is 422
+`invalid`; a body over 1 KiB is 413. 429 when limited.
 
 ### `GET /vaults/:id`
 

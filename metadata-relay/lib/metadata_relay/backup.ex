@@ -19,7 +19,7 @@ defmodule MetadataRelay.Backup do
   alias MetadataRelay.Repo
 
   @max_slot_bytes 4_194_304
-  @write_limit 120
+  @write_limit 600
   @write_window_ms 3_600_000
   @read_attempts 3
   @max_members 16
@@ -263,7 +263,7 @@ defmodule MetadataRelay.Backup do
   end
 
   @doc """
-  Charges one write against the vault's hourly budget (120 per vault). Slot
+  Charges one write against the vault's hourly budget (600 per vault). Slot
   writes and member changes share it.
   """
   @spec charge_write(String.t()) :: :ok | {:error, :rate_limited}

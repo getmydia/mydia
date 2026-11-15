@@ -108,7 +108,12 @@ void main() {
     expect((jsonDecode(seen[0].body) as Map)['vault_id'],
         '0123456789abcdef0123456789abcdef');
     expect((jsonDecode(seen[0].body) as Map)['recovery_box_pub'], 'BQ');
-    expect(seen[1].url.path, '/backup/v1/lookup/__4');
+    // The handle travels in the body, never the URL.
+    expect(seen[1].method, 'POST');
+    expect(seen[1].url.path, '/backup/v1/lookup');
+    expect(seen[1].url.toString(), isNot(contains('__4')));
+    expect(seen[1].headers['content-type'], backupJsonContentType);
+    expect(jsonDecode(seen[1].body), {'handle': '__4'});
     for (final r in seen) {
       expect(r.headers.containsKey('authorization'), isFalse);
     }

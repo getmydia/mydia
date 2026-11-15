@@ -233,7 +233,7 @@ writes are guarded by sequence and epoch CAS.
 | Method and path | Who | Does |
 | --- | --- | --- |
 | `POST /vaults` | anyone, rate-limited per IP | Creates a vault under a vault id the client chose (random 128 bits, so the epoch-1 envelopes can bind it): first member signer and envelope, recovery signer and envelope, `sha256(lookup handle)`, epoch 1. A taken id answers 409 |
-| `GET /lookup/:handle` | holder of the handle | Returns the vault id |
+| `POST /lookup` | holder of the handle, rate-limited per IP | Body `{"handle": b64url}`, so the handle never appears in a URL or access log. Returns the vault id |
 | `GET /vaults/:id` | member | Manifest: epoch, member signers with their slot ids, the requester's own envelope, each slot's `seq`, `epoch`, size and `updated_at`. ETag, `If-None-Match` answers 304 |
 | `PUT /vaults/:id/slots/:slot` | the slot's owner | Writes ciphertext. `If-Match: <seq>` (absent for the first write); 412 on mismatch |
 | `GET /vaults/:id/slots/:slot` | member | Reads ciphertext. ETag |
@@ -242,7 +242,9 @@ writes are guarded by sequence and epoch CAS.
 
 ### Limits and retention
 
-- 4 MB per slot, 16 members per vault, 120 writes per vault per hour.
+- 4 MB per slot, 16 members per vault, 600 writes per vault per hour (slot
+  writes and member changes share it), so four devices playing at once stay
+  well clear of 429.
   Exceeding them answers 413 or 429, which the player shows as a status.
 - A vault with no write for 180 days is deleted by the sweeper. The settings
   screen states this.

@@ -125,8 +125,10 @@ class FakeBackupRelay {
     if (r.method == 'POST' && parts.length == 1 && parts[0] == 'vaults') {
       return _create(r);
     }
-    if (r.method == 'GET' && parts.length == 2 && parts[0] == 'lookup') {
-      return _lookup(parts[1]);
+    if (r.method == 'POST' && parts.length == 1 && parts[0] == 'lookup') {
+      final handle = (jsonDecode(r.body) as Map)['handle'];
+      if (handle is! String) return _err(422, 'invalid');
+      return _lookup(handle);
     }
     if (parts.length < 2 || parts[0] != 'vaults') {
       return http.Response('Not found', 404);

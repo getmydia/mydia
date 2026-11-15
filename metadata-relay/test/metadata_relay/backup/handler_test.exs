@@ -90,6 +90,14 @@ defmodule MetadataRelay.Backup.HandlerTest do
     |> Router.call([])
   end
 
+  defp post_lookup(body) do
+    Plug.Test.conn(:post, "/backup/v1/lookup", body)
+    |> Plug.Conn.put_req_header("content-type", @json)
+    |> Router.call([])
+  end
+
+  defp lookup_body(handle), do: Jason.encode!(%{handle: b64(handle)})
+
   defp new_vault do
     first = key()
     recovery = key()
@@ -106,7 +114,7 @@ defmodule MetadataRelay.Backup.HandlerTest do
     %{id: id, first: first, handle: handle} = new_vault()
     assert id =~ ~r/\A[0-9a-f]{32}\z/
 
-    lookup = Plug.Test.conn(:get, "/backup/v1/lookup/#{b64(handle)}") |> Router.call([])
+    lookup = post_lookup(lookup_body(handle))
     assert lookup.status == 200
     assert %{"vault_id" => ^id} = Jason.decode!(lookup.resp_body)
 
@@ -193,10 +201,27 @@ defmodule MetadataRelay.Backup.HandlerTest do
     assert missing.status == 404
     assert error(missing) == "not_found"
 
-    miss = Plug.Test.conn(:get, "/backup/v1/lookup/#{b64(:crypto.strong_rand_bytes(32))}")
-    miss = Router.call(miss, [])
+    miss = post_lookup(lookup_body(:crypto.strong_rand_bytes(32)))
     assert miss.status == 404
     assert error(miss) == "not_found"
+  end
+
+  test "lookup takes the handle in the body, never in the URL" do
+    %{id: id, handle: handle} = new_vault()
+
+    old = Plug.Test.conn(:get, "/backup/v1/lookup/#{b64(handle)}") |> Router.call([])
+    assert old.status == 404
+    assert error(old) == "not_found"
+
+    found = post_lookup(Jason.encode!(%{handle: b64(handle) <> "="}))
+    assert found.status == 200
+    assert %{"vault_id" => ^id} = Jason.decode!(found.resp_body)
+
+    assert post_lookup(Jason.encode!(%{handle: "not base64!"})).status == 404
+    assert error(post_lookup("not json")) == "invalid"
+    assert error(post_lookup(Jason.encode!(%{handle: 7}))) == "invalid"
+    assert error(post_lookup(Jason.encode!(%{}))) == "invalid"
+    assert post_lookup(String.duplicate("a", 2048)).status == 413
   end
 
   test "unsigned and badly signed requests are 401" do
@@ -331,9 +356,9 @@ defmodule MetadataRelay.Backup.HandlerTest do
     for _ <- 1..10, do: post_vaults("not json")
     assert post_vaults("not json").status == 429
 
-    path = "/backup/v1/lookup/#{b64(:crypto.strong_rand_bytes(32))}"
-    for _ <- 1..30, do: Router.call(Plug.Test.conn(:get, path), [])
-    assert Router.call(Plug.Test.conn(:get, path), []).status == 429
+    body = lookup_body(:crypto.strong_rand_bytes(32))
+    for _ <- 1..30, do: post_lookup(body)
+    assert post_lookup(body).status == 429
   end
 
   test "members: add a device, rotate to remove one" do
@@ -415,9 +440,9 @@ defmodule MetadataRelay.Backup.HandlerTest do
     assert {:ok, ^id} = Backup.lookup(handle)
   end
 
-  test "member changes share the 120 writes per hour budget" do
+  test "member changes share the 600 writes per hour budget" do
     %{id: id, first: first} = new_vault()
-    for _ <- 1..120, do: Backup.charge_write(id)
+    for _ <- 1..600, do: Backup.charge_write(id)
 
     conn =
       signed(

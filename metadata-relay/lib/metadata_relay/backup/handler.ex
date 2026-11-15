@@ -26,6 +26,7 @@ defmodule MetadataRelay.Backup.Handler do
   @hour_ms 3_600_000
   @create_limit 10
   @lookup_limit 30
+  @max_lookup_bytes 1024
 
   plug(:match)
   plug(:dispatch)
@@ -41,13 +42,16 @@ defmodule MetadataRelay.Backup.Handler do
     end
   end
 
-  get "/lookup/:handle" do
+  # The handle travels in the body, not the URL, so it stays out of access
+  # logs and proxy caches. Unsigned: the handle is the credential.
+  post "/lookup" do
     with :ok <- limit(conn, "lookup", @lookup_limit),
-         {:ok, raw} <- decode_b64(handle),
-         {:ok, vault_id} <- Backup.lookup(raw) do
+         {:ok, body, conn} <- read_body_capped(conn, @max_lookup_bytes),
+         {:ok, m} <- decode_json(body),
+         {:ok, handle} <- text(m, "handle"),
+         {:ok, vault_id} <- lookup_handle(handle) do
       json(conn, 200, %{vault_id: vault_id})
     else
-      {:error, :invalid} -> reject(conn, :not_found)
       {:error, reason} -> reject(conn, reason)
     end
   end
@@ -181,6 +185,14 @@ defmodule MetadataRelay.Backup.Handler do
     case Jason.decode(body) do
       {:ok, %{} = map} -> {:ok, map}
       _ -> {:error, :invalid}
+    end
+  end
+
+  # A handle that is not base64url finds nothing, like a miss.
+  defp lookup_handle(handle) do
+    case decode_b64(handle) do
+      {:ok, raw} -> Backup.lookup(raw)
+      {:error, :invalid} -> {:error, :not_found}
     end
   end
 

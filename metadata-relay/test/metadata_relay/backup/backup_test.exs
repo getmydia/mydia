@@ -243,16 +243,16 @@ defmodule MetadataRelay.BackupTest do
     assert {:error, :not_found} = Backup.get_slot(v.vault, v.slot)
   end
 
-  test "the 121st write in an hour is rate limited" do
+  test "the 601st write in an hour is rate limited" do
     v = create()
 
-    Enum.reduce(1..120, nil, fn i, prev ->
+    Enum.reduce(1..600, nil, fn i, prev ->
       assert {:ok, ^i} = Backup.put_slot(v.vault, v.signer, v.slot, "b#{i}", prev, 1)
       i
     end)
 
-    assert {:error, :rate_limited} = Backup.put_slot(v.vault, v.signer, v.slot, "late", 120, 1)
-    assert {:ok, "b120", 120} = Backup.get_slot(v.vault, v.slot)
+    assert {:error, :rate_limited} = Backup.put_slot(v.vault, v.signer, v.slot, "late", 600, 1)
+    assert {:ok, "b600", 600} = Backup.get_slot(v.vault, v.slot)
   end
 
   test "put_slot records last_write_at and the manifest lists the slot" do

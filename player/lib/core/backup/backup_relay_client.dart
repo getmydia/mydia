@@ -295,8 +295,15 @@ class BackupRelayClient {
     return _json(r)['vault_id'] as String;
   }
 
+  /// The vault [handle] opens. Unsigned; the handle goes in the body so it
+  /// never lands in a URL or an access log.
   Future<String> lookup(Uint8List handle) async {
-    final r = await _send('GET', '$_api/lookup/${backupB64(handle)}');
+    final r = await _send(
+      'POST',
+      '$_api/lookup',
+      body: utf8.encode(jsonEncode({'handle': backupB64(handle)})),
+      contentType: backupJsonContentType,
+    );
     return _json(r)['vault_id'] as String;
   }
 
