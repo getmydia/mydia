@@ -237,6 +237,10 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     do: listed |> Enum.map(& &1.index) |> Enum.sort()
 
   defp add_only_files(%WantedFiles{only_files: only_files}, _listed), do: only_files
+
+  # Listing worked but the selection raised: the fallback promises every file,
+  # so name them all rather than let a narrower managed selection stand.
+  defp add_only_files(nil, [_ | _] = listed), do: listed |> Enum.map(& &1.index) |> Enum.sort()
   defp add_only_files(nil, _listed), do: nil
 
   defp torrent_input?({:magnet, _}, download_type), do: download_type in [nil, :torrent]

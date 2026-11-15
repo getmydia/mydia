@@ -188,10 +188,31 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
         end)
 
       assert_received {:add, add_params}
-      refute Map.has_key?(add_params, "only_files")
-      # Listing succeeded, so its peers still seed the add.
+      # Listing succeeded, so every listed file is named and its peers seed the add.
+      assert add_params["only_files"] == "0,1,2,3,4,5,6,7,8,9"
       assert add_params["initial_peers"] == "10.0.0.2:6881"
       assert log =~ "File selection failed; adding every file"
+    end
+
+    test "a failed selection widens an already-managed torrent's narrower selection", ctx do
+      expect_rqbit(ctx.bypass, listing: :ok, add_included: Enum.map(0..9, &(&1 >= 4)))
+      test_pid = self()
+
+      Bypass.expect_once(ctx.bypass, "POST", "/torrents/#{@hash}/update_only_files", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:update_only_files, Jason.decode!(body)})
+        json_resp(conn, 200, %{})
+      end)
+
+      capture_log(fn ->
+        assert {:ok, _config, @hash, :torrent, nil} =
+                 Queue.select_and_add_to_client(pack_result(ctx.eps),
+                   episode_id: 123,
+                   download_type: :torrent
+                 )
+      end)
+
+      assert_received {:update_only_files, %{"only_files" => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}}
     end
 
     test "a keep-everything selection is returned and recorded without only_files", ctx do
