@@ -52,7 +52,8 @@ Deeper reference lives alongside this file in `player/docs/`:
 ./dev player icons        # Regenerate web icons from assets/*.svg (--check verifies)
 ./dev flutter pub get     # Install dependencies
 ./dev flutter analyze     # Run static analysis
-./dev flutter test        # Run tests
+./dev player test         # Whole suite, parallel bundles (~95s)
+./dev flutter test --concurrency=1 <paths>  # Specific files
 ```
 
 ### Android and Android TV

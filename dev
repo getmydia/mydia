@@ -149,6 +149,7 @@ ${YELLOW}User Management:${NC}
 ${YELLOW}Player (Flutter):${NC}
   flutter <args>       Run any flutter command (in player/)
   player setup         Install deps and run code generation
+  player test [args]   Run the whole player suite as parallel bundles
   player build         Build + deploy web assets to priv/static/player
   player icons [--check]
                        Regenerate web icons from assets/*.svg (--check verifies
@@ -550,6 +551,12 @@ case "$COMMAND" in
                     exec player/tool/gen-web-icons.sh "$@"
                 fi
                 in_shell_sh "player/tool/gen-web-icons.sh"
+                ;;
+            test)
+                # Whole suite as parallel very_good-style bundles. For single
+                # files use ./dev flutter test --concurrency=1 <paths>.
+                echo -e "${GREEN}Running player tests...${NC}"
+                in_shell ./scripts/player-test-sharded.sh "${@:2}"
                 ;;
             setup)
                 echo -e "${GREEN}Setting up player project (pub get + build_runner)...${NC}"
@@ -1021,7 +1028,7 @@ case "$COMMAND" in
                 ;;
             *)
                 echo -e "${RED}Error: Unknown player command: $1${NC}"
-                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos|flatpak|glass-diff>"
+                echo "Usage: ./dev player <logs|build|setup|test|shell|restart|e2e|e2e-build|android|macos|flatpak|glass-diff>"
                 exit 1
                 ;;
         esac
