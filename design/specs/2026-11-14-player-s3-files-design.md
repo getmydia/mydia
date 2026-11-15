@@ -144,7 +144,7 @@ accept. An advanced toggle overrides it.
 | Backblaze B2 | `s3.<region>.backblazeb2.com` | from the endpoint | path | Application keys scoped to one bucket cannot list buckets; probe lists the bucket, so they work |
 | Cloudflare R2 | `<account id>.r2.cloudflarestorage.com` | `auto` | path | Signs with region `auto` |
 | Wasabi | `s3.<region>.wasabisys.com` | the bucket's | path | |
-| Other / self-hosted | typed in full; `http://` allowed | `us-east-1` unless set | path | RustFS, MinIO, Garage. Garage's default region is `garage` and is typed by hand |
+| Other / self-hosted | typed in full; no scheme means `https`; `http://` only for a private host | `us-east-1` unless set | path | RustFS, MinIO, Garage. Garage's default region is `garage` and is typed by hand |
 
 ### Existing code that learns about S3
 
@@ -191,7 +191,7 @@ Mapped onto the existing `BackendFailure` kinds from the HTTP status and the
 | `InvalidAccessKeyId`, `SignatureDoesNotMatch` | `BackendUnauthorized` | The access key or secret is wrong |
 | `RequestTimeTooSkewed` | `BackendUnauthorized` | This device's clock is more than 15 minutes off |
 | `AccessDenied` on probe or list | `BackendUnauthorized` | These keys can't list this bucket |
-| `AccessDenied` on one object's `HEAD` | entry marked `unreadable` | (none; the listing goes on) |
+| `AccessDenied` on one object's `HEAD` or GET | `BackendPermissionLost` | (the listing itself is unaffected) |
 | `NoSuchBucket` | `BackendNotFound` | No bucket with this name at this endpoint |
 | `PermanentRedirect`, `AuthorizationHeaderMalformed` | `BackendUnreachable` | The bucket is in region X (X read from the error body when present) |
 | Any other 4xx or 5xx | `BackendUnreachable` with the status | The server answered with an error |
@@ -204,6 +204,8 @@ The server's rule (`lib/mydia/storage/README.md`, "Secrets and presigned
 URLs") applies here too: a presigned URL or an `Authorization` header never
 reaches a log, a `toString`, an error message or a crash report.
 
+- The Rust peer host's `reqwest` errors carry the request URL; it logs them
+  with `without_url()`.
 - `redactS3Url` drops the query string. Every `debugPrint` that mentions an S3
   URL goes through it.
 - `BackendFailure` messages built by `S3Backend` name the endpoint, bucket and
