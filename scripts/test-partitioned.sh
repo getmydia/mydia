@@ -48,8 +48,10 @@ base="${TMPDIR:-/tmp}/mydia-t$tag"
 # A second run in this checkout would share the partition databases, logs and
 # exit records, and could report the other run's results as its own.
 # In the checkout, not under TMPDIR, so runs with different TMPDIRs still
-# exclude each other. _build is gitignored and already exists after compile.
+# exclude each other. _build is gitignored; MIX_BUILD_PATH can put the build
+# elsewhere, so create it rather than assume compile did.
 lock="$root/_build/.test-partitioned.lock"
+mkdir -p "$root/_build"
 if ! mkdir "$lock" 2>/dev/null; then
     echo "Another partitioned test run is active in this checkout ($lock)." >&2
     echo "If none is, remove that directory and retry." >&2
