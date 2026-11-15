@@ -82,6 +82,26 @@ defmodule Mydia.Downloads.ClientRemoval do
   def not_found_error?(%Error{type: :not_found}), do: true
   def not_found_error?(_), do: false
 
+  @doc """
+  Removes one torrent from a client by name and id, with no download row
+  involved: a torrent Mydia does not track, or one whose row is being deleted
+  with its media item. A torrent already gone from the client counts as
+  removed.
+  """
+  @spec remove_torrent(String.t(), String.t(), boolean()) ::
+          :ok | {:error, :no_client} | {:error, term()}
+  def remove_torrent(client_name, client_id, delete_files) when is_boolean(delete_files) do
+    with {:ok, adapter, config} <- Mydia.Downloads.Queue.client_for(client_name) do
+      case Client.remove_download(adapter, config, client_id, delete_files: delete_files) do
+        :ok ->
+          :ok
+
+        {:error, error} ->
+          if not_found_error?(error), do: :ok, else: {:error, error}
+      end
+    end
+  end
+
   def list_pending_removals(configs \\ nil) do
     configs = configs || Settings.list_download_client_configs()
 

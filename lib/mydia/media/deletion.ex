@@ -109,6 +109,8 @@ defmodule Mydia.Media.Deletion do
           park_media_item_files(media_item)
         end
 
+        enqueue_client_removals([media_item.id], delete_files)
+
         case Repo.delete(media_item) do
           {:ok, deleted} -> deleted
           {:error, changeset} -> Repo.rollback(changeset)
@@ -119,6 +121,31 @@ defmodule Mydia.Media.Deletion do
       {:ok, deleted} -> {:ok, deleted, remove_from_disk(plan)}
       {:error, changeset} -> {:error, changeset}
     end
+  end
+
+  # `downloads.media_item_id` and `downloads.episode_id` are ON DELETE CASCADE,
+  # so the delete takes the download rows with it and nothing would tell the
+  # client. Its torrents then sat in Issues as unmatched, with no way to remove
+  # them (issue #1422). The jobs are inserted inside the delete's transaction,
+  # so they run only if it commits. The torrent's data goes only when the
+  # operator asked for the files to go; otherwise the client just forgets it.
+  defp enqueue_client_removals(media_item_ids, delete_files) do
+    episode_ids = from(e in Episode, where: e.media_item_id in ^media_item_ids, select: e.id)
+
+    from(d in Mydia.Downloads.Download,
+      where:
+        (d.media_item_id in ^media_item_ids or d.episode_id in subquery(episode_ids)) and
+          not is_nil(d.download_client) and not is_nil(d.download_client_id),
+      distinct: true,
+      select: {d.download_client, d.download_client_id}
+    )
+    |> Repo.all()
+    |> Enum.each(fn {client, client_id} ->
+      {:ok, _job} =
+        client
+        |> Mydia.Jobs.RemoveClientTorrent.new_for(client_id, delete_files)
+        |> Mydia.Jobs.insert()
+    end)
   end
 
   defp remove_from_disk(nil), do: %DiskRemoval{}
@@ -185,6 +212,8 @@ defmodule Mydia.Media.Deletion do
         else
           Enum.each(items, &park_media_item_files/1)
         end
+
+        enqueue_client_removals(ids, delete_files)
 
         # Delete the media items (and cascade delete all related DB records).
         MediaItem

@@ -22,6 +22,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
   alias MydiaWeb.DownloadsLive.Paths
+  alias MydiaWeb.DownloadsLive.RemoveConfirm
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
@@ -83,6 +84,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:has_more, true)
      # Clear-completed modal state
      |> assign(show_clear_modal: false, delete_files: false, clearable_count: 0)
+     |> assign(:remove_confirm, nil)
      # Issues tab state
      |> assign(:issue_counts, IssueList.counts([]))
      |> assign(:selectable_issues?, false)
@@ -587,8 +589,48 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  def handle_event("clear_single_completed", %{"id" => id}, socket) do
-    start_removal(socket, id, fn _download -> {"clear", [delete_files: false]} end)
+  # --- Remove-from-client confirm (one finished download, or a client torrent
+  # stranded in Issues). Opening is non-destructive; the submit is gated. ---
+
+  def handle_event("open_remove_confirm", %{"kind" => "download", "id" => id}, socket) do
+    # The rendered row carries the client's ratio, which the seeding-goal
+    # warning needs; the database row does not.
+    case Map.get(socket.assigns.rows_by_id, id) || Downloads.get_download(id) do
+      nil ->
+        {:noreply, download_vanished(socket)}
+
+      download ->
+        {:noreply, assign(socket, :remove_confirm, RemoveConfirm.for_download(download))}
+    end
+  end
+
+  def handle_event("open_remove_confirm", %{"kind" => "torrent", "id" => id}, socket) do
+    case ExternalTorrents.find(id) do
+      nil -> {:noreply, torrent_vanished(socket)}
+      torrent -> {:noreply, assign(socket, :remove_confirm, RemoveConfirm.for_torrent(torrent))}
+    end
+  end
+
+  def handle_event("toggle_remove_delete_files", params, socket) do
+    {:noreply,
+     update(socket, :remove_confirm, fn
+       nil -> nil
+       confirm -> %{confirm | delete_files: delete_files?(params)}
+     end)}
+  end
+
+  def handle_event("close_remove_confirm", _params, socket) do
+    {:noreply, assign(socket, :remove_confirm, nil)}
+  end
+
+  def handle_event("confirm_remove", params, socket) do
+    confirm = socket.assigns.remove_confirm
+    socket = assign(socket, :remove_confirm, nil)
+
+    case confirm do
+      nil -> {:noreply, socket}
+      %RemoveConfirm{target: target} -> confirm_remove(socket, target, delete_files?(params))
+    end
   end
 
   def handle_event("load_more", _params, socket) do
@@ -1308,6 +1350,40 @@ defmodule MydiaWeb.DownloadsLive.Index do
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
+  end
+
+  defp confirm_remove(socket, {:download, id}, delete_files) do
+    start_removal(socket, id, fn _download -> {"clear", [delete_files: delete_files]} end)
+  end
+
+  defp confirm_remove(socket, {:torrent, id}, delete_files) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      case ExternalTorrents.find(id) do
+        nil ->
+          {:noreply, torrent_vanished(socket)}
+
+        torrent ->
+          case Downloads.remove_external_torrent(torrent, delete_files: delete_files) do
+            :ok ->
+              {:noreply,
+               socket
+               |> put_flash(:info, gettext("Removed from the download client"))
+               |> load_downloads()}
+
+            {:error, _reason} ->
+              {:noreply,
+               put_flash(socket, :error, gettext("Could not remove that torrent from the client"))}
+          end
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  defp torrent_vanished(socket) do
+    socket
+    |> put_flash(:error, gettext("That torrent is no longer in the client"))
+    |> load_downloads()
   end
 
   # A cancel on a stalled download also blacklists the release (see

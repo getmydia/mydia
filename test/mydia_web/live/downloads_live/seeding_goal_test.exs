@@ -143,11 +143,18 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
 
     assert has_element?(view, "#row-cancel-#{guarded.id}[data-confirm*='hit-and-run']")
 
-    # Goal met, or no goal at all: the plain confirm.
-    refute has_element?(view, "#row-clear-#{met.id}[data-confirm*='hit-and-run']")
-    assert has_element?(view, "#row-clear-#{met.id}[data-confirm]")
-    refute has_element?(view, "#row-clear-#{plain.id}[data-confirm*='hit-and-run']")
-    assert has_element?(view, "#row-clear-#{unmet.id}[data-confirm*='hit-and-run']")
+    # Goal met, or no goal at all: the remove dialog has no warning.
+    for download <- [met, plain] do
+      view |> element("#row-clear-#{download.id}") |> render_click()
+      assert has_element?(view, "#remove-confirm-modal[open]")
+      refute has_element?(view, "#remove-confirm-warning")
+      view |> element("#remove-confirm-cancel") |> render_click()
+    end
+
+    view |> element("#row-clear-#{unmet.id}") |> render_click()
+    assert has_element?(view, "#remove-confirm-warning", "hit-and-run")
+    view |> element("#remove-confirm-cancel") |> render_click()
+    refute has_element?(view, "#remove-confirm-modal")
 
     view |> element("#row-cancel-#{guarded.id}") |> render_click()
     assert Mydia.Downloads.get_download!(guarded.id).removal_requested_at
