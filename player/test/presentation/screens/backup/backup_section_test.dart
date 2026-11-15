@@ -7,6 +7,7 @@ import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/connections/backup_section.dart';
 
 import '../../../test_utils/toast_harness.dart';
+import 'fake_backup_controller.dart';
 import 'fake_backup_sync_service.dart';
 
 Future<FakeBackupSyncService> _pump(WidgetTester tester,
@@ -16,7 +17,11 @@ Future<FakeBackupSyncService> _pump(WidgetTester tester,
   addTearDown(tester.view.reset);
   final fake = service ?? FakeBackupSyncService();
   await tester.pumpWidget(ProviderScope(
-    overrides: [backupSyncServiceProvider.overrideWithValue(fake)],
+    overrides: [
+      backupSyncServiceProvider.overrideWithValue(fake),
+      backupControllerProvider
+          .overrideWithValue(FakeBackupController(relay: fake)),
+    ],
     child: const MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

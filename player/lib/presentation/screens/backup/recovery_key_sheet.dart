@@ -39,11 +39,14 @@ Future<T?> _showAdaptive<T>(BuildContext context, Widget child) {
 }
 
 /// Turns backup on: shows a new recovery key and creates the vault once the
-/// viewer ticked that they saved it. True when backup is now on.
+/// viewer ticked that they saved it. True when backup is now on. [confirm]
+/// creates the vault with the key (the backup controller's switch to the
+/// relay); without it, [service] does.
 Future<bool> showEnableBackupSheet(
-    BuildContext context, BackupSyncService service) async {
+    BuildContext context, BackupSyncService service,
+    {Future<void> Function(RecoveryKey key)? confirm}) async {
   final enabled = await _showAdaptive<bool>(
-      context, RecoveryKeySheet.enable(service: service));
+      context, RecoveryKeySheet.enable(service: service, confirm: confirm));
   return enabled ?? false;
 }
 
@@ -73,14 +76,20 @@ Future<void> showReplacedRecoveryKeySheet(BuildContext context, String keyText,
     );
 
 class RecoveryKeySheet extends StatefulWidget {
-  const RecoveryKeySheet.enable({super.key, required this.service})
+  const RecoveryKeySheet.enable(
+      {super.key, required this.service, this.confirm})
       : keyText = null,
         replaced = false,
         onDone = null;
 
   const RecoveryKeySheet.show(
       {super.key, required this.keyText, this.replaced = false, this.onDone})
-      : service = null;
+      : service = null,
+        confirm = null;
+
+  /// Creates the vault with the key the viewer saved; [service]'s
+  /// `confirmEnable` when null.
+  final Future<void> Function(RecoveryKey key)? confirm;
 
   /// The key just replaced the old one: says so above the key.
   final bool replaced;
@@ -157,7 +166,12 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
     if (key == null) return;
     setState(() => _busy = true);
     try {
-      await widget.service!.confirmEnable(key);
+      final confirm = widget.confirm;
+      if (confirm != null) {
+        await confirm(key);
+      } else {
+        await widget.service!.confirmEnable(key);
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       debugPrint('[Backup] Turning on failed: ${e.runtimeType}');

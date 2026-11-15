@@ -24,7 +24,8 @@ import '../widgets/window_chrome/window_title_row.dart';
 import '../widgets/channel_badge.dart';
 import 'detail/detail_links.dart';
 import 'login/login_controller.dart';
-import 'backup/restore_backup_screen.dart' show RestoreFromBackupButton;
+import 'backup/restore_backup_screen.dart'
+    show RestoreFromBackupButton, RestoreFromICloudButton;
 import 'sources/add_source_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -513,6 +514,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         if (widget.reauthAccountId == null) ...const [
           SizedBox(height: 16),
           ConnectOtherServerButton(),
+          RestoreFromICloudButton(),
           RestoreFromBackupButton(),
           ShowHiddenSourcesButton(),
         ],

@@ -100,6 +100,9 @@ class CloudBackupService {
 
   Map<String, String> get slotDeviceNames => _meta.slotNames();
 
+  /// This device's slot, the first of [slots] once uploaded.
+  String get ownSlotId => _transport.ownSlotId;
+
   // Lifecycle
 
   /// Syncs with the store from now on, as on app start when this store is

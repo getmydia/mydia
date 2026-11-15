@@ -15,10 +15,13 @@ class FakeBackupSyncService implements BackupSyncService {
   final membersNotifier = ValueNotifier<List<BackupMemberInfo>>(const []);
   final offersNotifier = ValueNotifier<List<PendingAccountOffer>>(const []);
   final removalsNotifier = ValueNotifier<List<PendingRemoval>>(const []);
+  final movedNotifier = ValueNotifier<Map<String, String>>(const {});
+  final newerNotifier = ValueNotifier<bool>(false);
 
   final calls = <String>[];
 
   bool isEnabled = false;
+  bool isDormant = false;
   String? keyText;
   Map<String, String> names = {};
 
@@ -49,6 +52,12 @@ class FakeBackupSyncService implements BackupSyncService {
       offersNotifier;
   @override
   ValueListenable<List<PendingRemoval>> get pendingRemovals => removalsNotifier;
+  @override
+  ValueListenable<Map<String, String>> get movedSlots => movedNotifier;
+  @override
+  ValueListenable<bool> get newerVersionSeen => newerNotifier;
+  @override
+  bool get dormant => isDormant;
   @override
   bool get enabled => isEnabled;
   @override

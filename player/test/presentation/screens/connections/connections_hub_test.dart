@@ -21,6 +21,7 @@ import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
 import 'connections_hub_fixtures.dart';
+import '../backup/fake_backup_controller.dart';
 import '../backup/fake_backup_sync_service.dart';
 import 'fake_peer_sync_service.dart';
 
@@ -75,6 +76,7 @@ Future<_Harness> _pump(
     localNodeId: () => service.localNodeId,
     isPeerConnected: (_) => true,
   );
+  final relay = backup ?? FakeBackupSyncService();
   await tester.pumpWidget(ProviderScope(
     overrides: [
       connectionsOverviewProvider.overrideWithValue(overview),
@@ -83,8 +85,9 @@ Future<_Harness> _pump(
       peerSyncStoreProvider.overrideWithValue(store),
       peerGroupRosterProvider.overrideWithValue(roster),
       isWebProvider.overrideWithValue(isWeb),
-      backupSyncServiceProvider
-          .overrideWithValue(backup ?? FakeBackupSyncService()),
+      backupSyncServiceProvider.overrideWithValue(relay),
+      backupControllerProvider
+          .overrideWithValue(FakeBackupController(relay: relay)),
     ],
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -204,6 +207,7 @@ void main() {
         connectionsOverviewProvider
             .overrideWithValue(hubOverview(servers: [server])),
         connectionsDirectSourceProvider.overrideWithValue(null),
+        backupControllerProvider.overrideWithValue(FakeBackupController()),
       ],
       child: MaterialApp(
         navigatorKey: navigatorKey,
