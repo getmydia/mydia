@@ -281,7 +281,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           switch (kind) {
             BackupRelayError.network => l10n.backupErrorNetwork,
             BackupRelayError.rateLimited => l10n.backupErrorRateLimited,
-            BackupRelayError.tooLarge => l10n.backupErrorTooLarge,
+            BackupRelayError.tooLarge ||
+            BackupRelayError.quotaFull =>
+              l10n.backupErrorTooLarge,
             _ => l10n.backupErrorGeneric,
           },
           last(lastSuccessMs),

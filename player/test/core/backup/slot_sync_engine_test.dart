@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/backup/backup_gzip.dart';
 import 'package:player/core/backup/backup_meta_store.dart';
 import 'package:player/core/backup/backup_records.dart';
 import 'package:player/core/backup/backup_relay_client.dart';
@@ -256,6 +259,107 @@ void main() {
     expect(a.watched('tmdb:movie:21'), isTrue);
     expect(a.meta.slotNames()['slot-b'], 'b');
     expect(a.engine.slots.value.map((s) => s.slotId).first, 'slot-a');
+  });
+
+  test('newer_version_slot_is_flagged_not_merged', () async {
+    final a = device('a');
+    final b = device('b');
+    await a.upload();
+    await b.watch('tmdb:movie:20');
+    await b.upload();
+    server['slot-b'] = gzipEncode(utf8.encode(jsonEncode({
+      'v': 2,
+      'deviceName': 'b',
+      'platform': 'p',
+      'createdAt': 1,
+      'records': <Object>[],
+    })));
+    await a.pollOnce();
+    expect(a.engine.newerVersionSeen.value, isTrue);
+    expect(a.engine.unreadableSlots.value, {'slot-b'});
+    expect(a.watched('tmdb:movie:20'), isFalse);
+
+    // Same version: not read again, still flagged.
+    await a.pollOnce();
+    expect(a.transport.reads['slot-b'], 1);
+    expect(a.engine.newerVersionSeen.value, isTrue);
+
+    // The slot is rewritten by a build this one understands.
+    await b.watch('tmdb:movie:21');
+    await b.upload();
+    await a.pollOnce();
+    expect(a.engine.newerVersionSeen.value, isFalse);
+    expect(a.engine.unreadableSlots.value, isEmpty);
+    expect(a.watched('tmdb:movie:21'), isTrue);
+  });
+
+  test('moved_slot_is_listed_not_merged', () async {
+    final a = device('a');
+    final b = device('b');
+    await a.upload();
+    await b.watch('tmdb:movie:20');
+    await b.upload();
+    await b.transport.writeOwn(const BackupPayload(
+        deviceName: 'b',
+        platform: 'p',
+        createdAt: 1,
+        records: [],
+        movedTo: 'icloud'));
+    await a.pollOnce();
+    expect(a.engine.movedSlots.value, {'slot-b': 'icloud'});
+    expect(a.engine.unreadableSlots.value, isEmpty);
+    expect(a.watched('tmdb:movie:20'), isFalse);
+
+    await b.watch('tmdb:movie:21');
+    await b.upload(force: true);
+    await a.pollOnce();
+    expect(a.engine.movedSlots.value, isEmpty);
+    expect(a.watched('tmdb:movie:21'), isTrue);
+  });
+
+  for (final kind in [
+    BackupRelayError.signedOut,
+    BackupRelayError.cloudUnavailable,
+  ]) {
+    _fake('${kind.name}_halts_without_clearing', (async) {
+      final a = device('a');
+      _settle(async, a.watch('tmdb:movie:1'));
+      a.transport.failing = false;
+      a.engine.reportFailure(kind);
+      async.flushMicrotasks();
+      final status = a.engine.status.value;
+      expect(status, isA<BackupError>());
+      expect((status as BackupError).kind, kind);
+      expect(a.engine.halted, isTrue);
+      expect(async.pendingTimers, isEmpty);
+      expect(a.watched('tmdb:movie:1'), isTrue, reason: 'local data kept');
+      a.engine.markDirty();
+      expect(async.pendingTimers, isEmpty);
+      async.elapse(const Duration(hours: 2));
+      expect(a.transport.writes, 0);
+
+      a.engine.resume();
+      expect(a.engine.halted, isFalse);
+      expect(a.engine.status.value, isA<BackupIdle>());
+      _settle(async, a.engine.poll());
+      expect(a.transport.lists, greaterThan(0));
+    });
+  }
+
+  _fake('quota_full_waits_for_next_change', (async) {
+    final a = device('a');
+    _settle(async, a.watch('tmdb:movie:1'));
+    a.transport.failing = false;
+    a.engine.reportFailure(BackupRelayError.quotaFull);
+    async.flushMicrotasks();
+    expect((a.engine.status.value as BackupError).kind,
+        BackupRelayError.quotaFull);
+    expect(async.pendingTimers.where((t) => !t.isPeriodic), isEmpty);
+    expect(a.engine.halted, isFalse);
+    a.engine.markDirty();
+    async.elapse(SlotSyncEngine.debounce + const Duration(seconds: 1));
+    expect(a.transport.writes, 1);
+    expect(a.engine.status.value, isA<BackupIdle>());
   });
 
   test('legacy_int_mergedSeq_read_as_version', () async {

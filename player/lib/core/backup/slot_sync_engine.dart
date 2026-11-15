@@ -80,6 +80,7 @@ class SlotSyncEngine {
   final _status = ValueNotifier<BackupStatus>(const BackupOff());
   final _unreadable = ValueNotifier<Set<String>>(const {});
   final _newerVersion = ValueNotifier<bool>(false);
+  final _moved = ValueNotifier<Map<String, String>>(const {});
   final _offers = ValueNotifier<List<PendingAccountOffer>>(const []);
   final _slots = ValueNotifier<List<SlotInfo>>(const []);
 
@@ -88,7 +89,11 @@ class SlotSyncEngine {
   /// Slot ids whose last download could not be opened or decoded.
   ValueListenable<Set<String>> get unreadableSlots => _unreadable;
 
-  /// True once a slot written by a newer app version was seen.
+  /// Slots whose device moved its backup to another store: slot id to the
+  /// store id. They are not merged.
+  ValueListenable<Map<String, String>> get movedSlots => _moved;
+
+  /// True while a listed slot was written by a newer app version.
   ValueListenable<bool> get newerVersionSeen => _newerVersion;
 
   /// Accounts other devices backed up that this one has not added or
@@ -125,6 +130,12 @@ class SlotSyncEngine {
   /// Slots that could not be read, by the version that failed: not
   /// downloaded again until their version changes.
   final _failedSlots = <String, String>{};
+
+  /// The [_failedSlots] that failed as a newer version.
+  final _newerSlots = <String>{};
+
+  /// Slots found moved, by slot id: the version read and the store id.
+  final _movedSlots = <String, (String, String)>{};
 
   /// The latest merged account records, by account id, so an offer can be
   /// accepted: the offer itself holds no credentials.
@@ -179,9 +190,13 @@ class SlotSyncEngine {
     _uploadedHash = null;
     _tooLarge = false;
     _failedSlots.clear();
+    _newerSlots.clear();
+    _movedSlots.clear();
     _accountRecords.clear();
     if (!_disposed) {
       _unreadable.value = const {};
+      _newerVersion.value = false;
+      _moved.value = const {};
       _slots.value = const [];
     }
     await changes?.cancel();
@@ -195,6 +210,7 @@ class SlotSyncEngine {
     _status.dispose();
     _unreadable.dispose();
     _newerVersion.dispose();
+    _moved.dispose();
     _offers.dispose();
     _slots.dispose();
   }
@@ -298,20 +314,47 @@ class SlotSyncEngine {
     final ownSlotId = transport.ownSlotId;
     final payloads = <String, BackupPayload>{};
     final unreadable = <String>{};
+    final moved = <String, String>{};
+    final listed = {for (final s in listing.slots) s.slotId};
+    _failedSlots.removeWhere((id, _) => !listed.contains(id));
+    _newerSlots.removeWhere((id) => !_failedSlots.containsKey(id));
+    _movedSlots.removeWhere((id, _) => !listed.contains(id));
     for (final s in listing.slots) {
       if (s.slotId == ownSlotId) continue;
+      final known = _movedSlots[s.slotId];
+      if (!full && known != null && known.$1 == s.version) {
+        moved[s.slotId] = known.$2;
+        continue;
+      }
       if (!full && s.version == _meta.mergedVersion(s.slotId)) continue;
       if (_failedSlots[s.slotId] == s.version) {
         unreadable.add(s.slotId);
         continue;
       }
-      final p = await _read(transport, s);
+      final BackupPayload? p;
+      try {
+        p = await _read(transport, s);
+      } on NewerBackupVersionException {
+        unreadable.add(s.slotId);
+        _failedSlots[s.slotId] = s.version;
+        _newerSlots.add(s.slotId);
+        continue;
+      }
+      _movedSlots.remove(s.slotId);
       if (p == null) {
         unreadable.add(s.slotId);
         _failedSlots[s.slotId] = s.version;
+        _newerSlots.remove(s.slotId);
       } else {
-        payloads[s.slotId] = p;
         _failedSlots.remove(s.slotId);
+        _newerSlots.remove(s.slotId);
+        final to = p.movedTo;
+        if (to != null) {
+          moved[s.slotId] = to;
+          _movedSlots[s.slotId] = (s.version, to);
+        } else {
+          payloads[s.slotId] = p;
+        }
       }
     }
     await apply(payloads, BackupApplyMode.live);
@@ -324,6 +367,8 @@ class SlotSyncEngine {
     await afterPoll?.call(listing);
     if (!_disposed) {
       _unreadable.value = unreadable;
+      _newerVersion.value = unreadable.any(_newerSlots.contains);
+      _moved.value = Map.unmodifiable(moved);
       _slots.value = List.unmodifiable([
         ...listing.slots.where((s) => s.slotId == ownSlotId),
         ...listing.slots.where((s) => s.slotId != ownSlotId),
@@ -352,11 +397,14 @@ class SlotSyncEngine {
     }
   }
 
-  /// Null when the slot is undecodable; other failures throw.
+  /// Null when the slot is undecodable; a [NewerBackupVersionException] and
+  /// other failures throw.
   Future<BackupPayload?> _read(SlotTransport transport, SlotInfo slot) async {
     final BackupPayload payload;
     try {
       payload = await transport.read(slot);
+    } on NewerBackupVersionException {
+      rethrow;
     } on FormatException {
       return null;
     }
@@ -472,9 +520,18 @@ class SlotSyncEngine {
     if (fatal != null) return fatal;
     if (kind == BackupRelayError.unavailable) return halt();
     _set(BackupError(kind, _lastSuccessMs));
-    // An oversize slot fails the same way until the data shrinks: the next
-    // change tries again, not a timer.
-    if (kind == BackupRelayError.tooLarge) {
+    // A signed-out or unreachable cloud store stays so until the user acts
+    // (see [resume]): nothing is retried meanwhile.
+    if (kind == BackupRelayError.signedOut ||
+        kind == BackupRelayError.cloudUnavailable) {
+      halted = true;
+      _cancelTimers();
+      return;
+    }
+    // An oversize slot (or a full account) fails the same way until the data
+    // shrinks: the next change tries again, not a timer.
+    if (kind == BackupRelayError.tooLarge ||
+        kind == BackupRelayError.quotaFull) {
       _tooLarge = true;
       return;
     }
@@ -501,6 +558,16 @@ class SlotSyncEngine {
     halted = true;
     _cancelTimers();
     _set(const BackupUnavailable());
+  }
+
+  /// Lifts a [halt] or a signed-out or unreachable halt after the user fixed
+  /// the cause (Reconnect): idle again, polling restarted. Does not poll.
+  void resume() {
+    if (_transport == null) return;
+    halted = false;
+    _failures = 0;
+    _set(BackupIdle(_lastSuccessMs));
+    ensurePolling();
   }
 
   /// Idle, unless an oversize upload is still being reported.
