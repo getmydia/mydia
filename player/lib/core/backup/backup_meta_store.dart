@@ -375,4 +375,14 @@ class BackupMetaStore {
       : _storage.delete(_joinedNoticeKey);
 
   static const _joinedNoticeKey = 'notice:joined';
+
+  /// The listing cursor of the cloud store [kind] (a `CloudStoreKind`
+  /// name), null when none is kept.
+  String? cloudCursor(String kind) => _storage.get('$_cloudCursorPrefix$kind');
+
+  Future<void> setCloudCursor(String kind, String? cursor) => cursor == null
+      ? _storage.delete('$_cloudCursorPrefix$kind')
+      : _storage.put('$_cloudCursorPrefix$kind', cursor);
+
+  static const _cloudCursorPrefix = 'cloudCursor:';
 }
