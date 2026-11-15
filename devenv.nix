@@ -155,12 +155,21 @@ in
     # Database CLI (SQLite is the default adapter)
     sqlite
 
-    # S3 server for storage tests and local S3 libraries (MinIO is archived)
-    rustfs
+    # S3 server for storage tests and local S3 libraries (MinIO is archived).
+    # Supply pkg-config, aws-lc, and zstd for nixpkgs' cargoUseSystemLibs hook.
+    (rustfs.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+      buildInputs = (old.buildInputs or [ ]) ++ [
+        aws-lc
+        zstd
+      ];
+    }))
 
     # Built-in torrent engine, started by Mydia in the native dev loop. The
-    # VPN is Docker-only.
-    rqbit
+    # VPN is Docker-only. Supply aws-lc for nixpkgs' cargoUseSystemLibs hook.
+    (rqbit.overrideAttrs (old: {
+      buildInputs = (old.buildInputs or [ ]) ++ [ aws-lc ];
+    }))
 
     # Media processing
     ffmpeg

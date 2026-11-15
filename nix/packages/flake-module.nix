@@ -395,9 +395,11 @@
           # skipped.
           MYDIA_SKIP_CARDIGANN_FETCH = "1";
 
-          # Create missing deps symlinks and set up Cargo vendoring for Rust NIF
-          postConfigure = ''
-            echo "=== postConfigure: Creating missing deps symlinks ==="
+          # Create missing deps symlinks, set up Cargo vendoring, and compile assets
+          preBuild = ''
+            echo "=== preBuild: Creating missing deps symlinks ==="
+
+            mkdir -p deps
 
             # Create deps symlinks for packages linked in _build/prod/lib
             # but missing from deps/ (e.g., buildRebar3 packages like hackney, luerl)
@@ -412,7 +414,7 @@
               fi
             done
 
-            echo "=== postConfigure: Done. deps/ count ==="
+            echo "=== preBuild: Done. deps/ count ==="
             ls deps/ | wc -l
 
             # Set up Cargo vendoring for the Rust p2p NIF
@@ -466,10 +468,7 @@
             [source.vendored-sources]
             directory = "${subsyncCargoDeps}"
             CARGO_EOF
-          '';
 
-          # Configure asset compilation
-          preBuild = ''
             # Copy heroicons to deps (git dependency, not handled by mixNixDeps)
             mkdir -p deps/heroicons
             cp -r ${heroicons}/optimized deps/heroicons/
