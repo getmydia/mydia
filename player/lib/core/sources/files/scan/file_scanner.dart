@@ -325,11 +325,20 @@ class FileScanner {
     while (root.length > 1 && root.endsWith('/')) {
       root = root.substring(0, root.length - 1);
     }
-    var rel = path.startsWith(root) ? path.substring(root.length) : path;
-    while (rel.startsWith('/')) {
-      rel = rel.substring(1);
+    if (!path.startsWith(root)) {
+      var rel = path;
+      while (rel.startsWith('/')) {
+        rel = rel.substring(1);
+      }
+      return rel;
     }
-    return rel;
+    // One separator goes, never more: [filesBackendPath] puts exactly one
+    // back. On S3 a path may hold `//` (the folder `/a/` is the key
+    // `<prefix>a//`), so `/a//x.mkv` under `/a` or `/a/` is `/x.mkv`, and
+    // stays apart from `/a/x.mkv` (`x.mkv`). A path without `//` is
+    // relative as it always was.
+    final rel = path.substring(root.length);
+    return rel.startsWith('/') ? rel.substring(1) : rel;
   }
 
   static bool _sameList(List<String> a, List<String> b) {

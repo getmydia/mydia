@@ -11,6 +11,8 @@ import 'package:player/core/sources/files/backend/webdav_backend.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/backend/s3_backend.dart';
 import 'package:player/core/sources/files/backend/local_path_backend.dart';
+import 'package:player/core/sources/files/files_queries.dart'
+    show filesBackendPath;
 import 'package:player/core/sources/files/index/file_library_index.dart';
 import 'package:player/core/sources/files/media_names.dart';
 import 'package:player/core/sources/files/scan/file_scanner.dart';
@@ -348,6 +350,99 @@ void main() {
       'Glass Harbor/Glass Harbor S01E01.mkv',
       'Glass Harbor//Glass Harbor S01E02.mkv',
     });
+  });
+
+  group('an S3 folder whose path ends in /', () {
+    // The bucket under `media/` holds `media/Films/a.mkv` and
+    // `media/Films//a.mkv`: the file `/Films/a.mkv`, and `/Films//a.mkv`
+    // in the folder `/Films/`.
+    String obj(String key) => '<Contents><Key>$key</Key>'
+        '<LastModified>2026-01-02T03:04:05.000Z</LastModified>'
+        '<Size>10</Size><StorageClass>STANDARD</StorageClass></Contents>';
+    String pfx(String p) => '<CommonPrefixes><Prefix>$p</Prefix>'
+        '</CommonPrefixes>';
+    String page(String inner) => '<ListBucketResult>'
+        '<IsTruncated>false</IsTruncated>$inner</ListBucketResult>';
+    final listings = {
+      'media/': page(pfx('media/Films/')),
+      'media/Films/': page(obj('media/Films/a.mkv') + pfx('media/Films//')),
+      'media/Films//': page(obj('media/Films//a.mkv')),
+    };
+    final location = S3Location(
+      endpoint: Uri.parse('https://s3.example.test'),
+      bucket: 'bkt',
+      prefix: 'media/',
+      region: 'us-east-1',
+      style: S3Style.path,
+    );
+    S3Backend s3() => S3Backend(
+          location: location,
+          accessKeyId: 'AKIDEXAMPLE',
+          secretAccessKey: 'secret',
+          client: MockClient((r) async {
+            final body = r.method == 'GET'
+                ? listings[r.url.queryParameters['prefix']]
+                : null;
+            return body == null
+                ? http.Response('', 404)
+                : http.Response(body, 200);
+          }),
+        );
+
+    /// The object key the presigned URL for [path] reads.
+    Future<String> keyPlayed(String path) async {
+      final url = Uri.parse((await s3().playable(path)).url);
+      return url.pathSegments.skip(1).join('/');
+    }
+
+    LibraryRoot rootAt(String path) => LibraryRoot(
+          id: 'r${path.length}',
+          path: path,
+          kind: FilesLibraryKind.mixed,
+          title: 'Films',
+        );
+
+    for (final (rootPath, keys) in [
+      ('/Films/', {'media/Films//a.mkv'}),
+      ('/Films', {'media/Films/a.mkv', 'media/Films//a.mkv'}),
+    ]) {
+      test('under the root $rootPath each file plays its own key', () async {
+        final root = rootAt(rootPath);
+        await FileScanner(backend: s3(), names: names, index: index).scan(root);
+        final files = index.files().values.toList();
+        expect(files, hasLength(keys.length));
+        final played = {
+          for (final f in files)
+            await keyPlayed(filesBackendPath(root, f.path)),
+        };
+        expect(played, keys);
+      });
+    }
+  });
+
+  test('relative paths under ordinary roots are unchanged', () async {
+    final b = FakeBackend({
+      '/lib/A.mkv': 1,
+      '/lib/sub/B.mkv': 1,
+      '/lib/sub/deeper/C.mkv': 1,
+    });
+    await scanner(b).scan(root);
+    expect(index.files().values.map((f) => f.path).toSet(),
+        {'A.mkv', 'sub/B.mkv', 'sub/deeper/C.mkv'});
+    for (final f in index.files().values) {
+      expect(filesBackendPath(root, f.path), '/lib/${f.path}');
+    }
+
+    const top = LibraryRoot(
+        id: 'rtop', path: '/', kind: FilesLibraryKind.mixed, title: 'Top');
+    await scanner(FakeBackend({'/A.mkv': 1, '/sub/B.mkv': 1})).scan(top);
+    expect(
+        index
+            .files()
+            .values
+            .where((f) => f.rootId == 'rtop')
+            .map((f) => f.path),
+        unorderedEquals(['A.mkv', 'sub/B.mkv']));
   });
 
   group('webdav entries the server refuses', () {
