@@ -17,6 +17,28 @@ void main() {
     expect(storage.containsKey('backup/identity'), isTrue);
   });
 
+  test('concurrent_load_or_create_returns_one_identity', () async {
+    final storage = _CountingAuthStorage();
+    final results = await Future.wait([
+      BackupIdentity.loadOrCreate(storage),
+      BackupIdentity.loadOrCreate(storage),
+    ]);
+    expect(results[1].slotId, results[0].slotId);
+    expect(storage.identityWrites, 1);
+    final later = await BackupIdentity.loadOrCreate(storage);
+    expect(later.slotId, results[0].slotId);
+    expect(storage.identityWrites, 1);
+  });
+
+  test('a failed create is not remembered', () async {
+    final storage = MockAuthStorage()..degradedValue = true;
+    await expectLater(
+        BackupIdentity.loadOrCreate(storage), throwsA(isA<StateError>()));
+    storage.degradedValue = false;
+    final id = await BackupIdentity.loadOrCreate(storage);
+    expect(id.slotId, isNotEmpty);
+  });
+
   test('slotId derives from signer public key', () async {
     final id = await BackupIdentity.loadOrCreate(MockAuthStorage());
     final pub = await id.signer.extractPublicKey();
@@ -108,4 +130,15 @@ class _FlakyReadBackend implements SecretBackend {
 
   @override
   Future<void> deleteAll() async => data.clear();
+}
+
+/// Counts the writes of the identity, so a test can see how many were made.
+class _CountingAuthStorage extends MockAuthStorage {
+  int identityWrites = 0;
+
+  @override
+  Future<void> write(String key, String value) {
+    if (key == BackupIdentity.storageKey) identityWrites++;
+    return super.write(key, value);
+  }
 }

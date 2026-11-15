@@ -663,8 +663,6 @@ void main() {
   test('cloud_to_relay_new_vault_merges_slot_with_colliding_version', () async {
     final a = net.device('Living Room TV');
     final b = net.device('Night Harbor Laptop');
-    // After B's controller created B's identity.
-    await b.controller.ready;
     final bSlot = await b.slotId();
     await a.controller.ready;
     await a.controller.enableCloud(BackupStoreKind.gdrive);
