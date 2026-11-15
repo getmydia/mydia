@@ -142,8 +142,8 @@ class S3Backend implements FileSystemBackend {
     DateTime Function()? clock,
     Duration timeout = kS3Timeout,
   })  : _location = location,
-        _owned = client == null ? http.Client() : null,
-        _given = client,
+        _client = client ?? http.Client(),
+        _ownsClient = client == null,
         _timeout = timeout,
         _signer = S3Signer(
           accessKeyId: accessKeyId,
@@ -153,15 +153,15 @@ class S3Backend implements FileSystemBackend {
         );
 
   final S3Location _location;
-  final http.Client? _owned;
-  final http.Client? _given;
+  final http.Client _client;
+  final bool _ownsClient;
   final Duration _timeout;
   final S3Signer _signer;
 
-  http.Client get _client => (_given ?? _owned)!;
-
   /// Closes the client this backend made; a given one is its owner's.
-  void close() => _owned?.close();
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 
   @override
   Future<List<FileEntry>> list(String dir) async {
