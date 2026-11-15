@@ -216,18 +216,25 @@ class BackupMetaStore {
     }
   }
 
-  /// Marks [accountId] as being added from the backup until
-  /// [finishAccount]: its record is written before its folder roots, and a
-  /// failure in between must not leave it looking complete.
-  Future<void> startAccount(String accountId) =>
-      _storage.put('$_unfinishedPrefix$accountId', '1');
+  /// Marks [accountId] as being added from the backup, at record version
+  /// [updatedAt], until [finishAccount]: its record is written before its
+  /// folder roots, and a failure in between must not leave it looking
+  /// complete.
+  Future<void> startAccount(String accountId, int updatedAt) =>
+      _storage.put('$_unfinishedPrefix$accountId', '$updatedAt');
 
   Future<void> finishAccount(String accountId) =>
       _storage.delete('$_unfinishedPrefix$accountId');
 
+  /// The record version an unfinished add of [accountId] was for, or null
+  /// when there is none. A retry must not use an older version.
+  int? unfinishedAt(String accountId) {
+    final raw = _storage.get('$_unfinishedPrefix$accountId');
+    return raw == null ? null : int.tryParse(raw) ?? 0;
+  }
+
   /// Whether adding [accountId] from the backup started and did not finish.
-  bool isUnfinished(String accountId) =>
-      _storage.get('$_unfinishedPrefix$accountId') != null;
+  bool isUnfinished(String accountId) => unfinishedAt(accountId) != null;
 
   bool isDismissed(String accountId, int updatedAt) {
     final raw = _storage.get('$_dismissedPrefix$accountId');

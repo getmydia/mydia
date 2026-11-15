@@ -139,8 +139,8 @@ and all of them when this device leaves or switches vaults.
 | 404 on `/backup/v1` (relay without the routes) | `BackupUnavailable`, "Cloud backup isn't available yet"; no retries until the next start or a user action |
 | A slot fails to open | Skipped, the rest merge; "Couldn't read Living Room TV's backup" |
 | 409 on rotation, or an unknown epoch | Refetch the manifest and envelope, retry once. Every manifest a rotation reads has its epoch's key kept, so a slot still at the epoch it lost to stays readable |
-| A restore fails while applying records | The vault state is saved only after the apply, so backup stays off and the restore screen offers Restore again; the relay membership already made is reused |
-| An account's folder roots fail to land | The account stays marked unfinished in `backup_meta`: it is not uploaded, and the next apply (restore or poll) adds it again |
+| A restore fails while applying records | The vault state is saved only after the apply, so backup stays off and the restore screen offers Restore again; a rerun first asks the relay whether the earlier attempt added this device (its reply may have been lost) |
+| An account's folder roots fail to land | The account stays marked unfinished in `backup_meta`, with the record version it was for: it is not uploaded, and the next apply (restore or poll) that carries that version or a newer one adds it again, as does accepting its offer |
 | An upload fails, then a poll succeeds | The upload's retry stays scheduled while records are dirty |
 | A pairing add finishes after the host's 10 s timeout | The host has replied without a vault id, so it rotates the joiner back out (keeping the recovery key, which the joiner never held) |
 | 412 on upload | Refetch the manifest, upload again at the current seq |

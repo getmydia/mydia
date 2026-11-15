@@ -380,9 +380,13 @@ class BackupSnapshot {
     // Tombstones are never applied: removing an account stays local.
     for (final r in merged.whereType<AccountBackupRecord>()) {
       if (r.deleted) continue;
-      // Already chosen (restored or accepted), so finished in either mode.
-      if (local.contains(r.accountId) && _meta.isUnfinished(r.accountId)) {
-        await addAccount(r);
+      // Already chosen (restored or accepted), so finished in either mode,
+      // but only with the version that was chosen or a newer one: a poll
+      // may bring only an older copy from another slot. The pending offer
+      // (kept until the add finishes) is the other way to finish it.
+      final unfinishedAt = _meta.unfinishedAt(r.accountId);
+      if (local.contains(r.accountId) && unfinishedAt != null) {
+        if (r.updatedAt >= unfinishedAt) await addAccount(r);
         continue;
       }
       if (local.contains(r.accountId)) {
@@ -496,7 +500,7 @@ class BackupSnapshot {
     // again rather than skip it as local, and [collect] leaves it out, so
     // a record without its folders never goes up and outranks the one that
     // has them.
-    await _meta.startAccount(account.id);
+    await _meta.startAccount(account.id, r.updatedAt);
     await _putAccount(record);
     if (roots.isNotEmpty) await _putRoots(account.id, roots);
     await _meta.removePending(account.id);

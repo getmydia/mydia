@@ -468,6 +468,23 @@ void main() {
       expect(b.service.status.value, isA<BackupIdle>());
     });
 
+    test('a restore whose join reply was lost can be retried', () async {
+      final (_, key) = await rig.enabled('Living Room TV');
+      final b = rig.device('Laptop');
+      await b.service.start();
+      final preview = await b.service.previewRestore(key.display);
+      rig.relay.dropNextMembersResponse = true;
+      await expectLater(b.service.commitRestore(preview), throwsA(anything));
+      expect(b.service.enabled, isFalse);
+      expect(rig.relay.onlyVault.members, hasLength(3),
+          reason: 'the relay did add it');
+
+      await b.service.commitRestore(preview);
+      expect(b.service.enabled, isTrue);
+      expect(rig.relay.onlyVault.members, hasLength(3));
+      expect(b.service.status.value, isA<BackupIdle>());
+    });
+
     test('two first uses of the identity at once make one identity', () async {
       final d = rig.device('Living Room TV');
       final keys =

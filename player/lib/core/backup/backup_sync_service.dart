@@ -148,9 +148,35 @@ class BackupSyncService {
   BackupVaultState? _state;
   BackupIdentity? _identity;
 
-  /// The vault a [commitRestore] that then failed already joined, so running
-  /// it again does not ask the relay to add this device twice.
-  ({String vaultId, Rotation joined})? _restoreJoin;
+  /// The vault a [commitRestore] asked the relay to add this device to and
+  /// then failed (or lost the reply), so running it again asks the relay
+  /// whether it did instead of adding the device twice, which it refuses.
+  String? _restoreTried;
+
+  /// This device's key for [vaultId] when an earlier [commitRestore] of it
+  /// may have joined: read from the relay as this device. Null when no
+  /// earlier attempt ran or the relay says this device is not a member.
+  Future<Rotation?> _joinedEarlier(
+      String vaultId, BackupIdentity identity) async {
+    if (_restoreTried != vaultId) return null;
+    final BackupManifest m;
+    try {
+      m = (await _relay.manifest(vaultId, identity.signer))!;
+    } on BackupRelayException catch (e) {
+      if (e.kind == BackupRelayError.notMember) return null;
+      rethrow;
+    }
+    return (
+      epoch: m.epoch,
+      vaultKey: await VaultCrypto.openEnvelope(
+        box: identity.box,
+        envelope: m.envelope,
+        vaultId: vaultId,
+        epoch: m.epoch,
+      ),
+    );
+  }
+
   bool _halted = false;
   bool _disposed = false;
   bool _dirty = false;
@@ -314,9 +340,10 @@ class BackupSyncService {
   /// is already in a vault.
   ///
   /// The records are applied before the vault state is saved, so a restore
-  /// that fails part way leaves backup off and can simply run again: the
-  /// relay membership it made is remembered for this preview's vault, and
-  /// after a restart a fresh preview's manifest lists it.
+  /// that fails part way leaves backup off and can simply run again: a rerun
+  /// for the same vault first asks the relay whether the earlier attempt
+  /// added this device (its reply may have been lost), and after a restart a
+  /// fresh preview's manifest lists it.
   Future<ApplyResult> commitRestore(RestorePreview preview) =>
       _userOp(() async {
         if (_state != null) throw const BackupAlreadyOnException();
@@ -325,19 +352,26 @@ class BackupSyncService {
             backupB64((await identity.signer.extractPublicKey()).bytes);
         final member = preview.manifest.members
             .any((m) => !m.recovery && backupB64(m.signer) == signer);
-        final earlier = _restoreJoin;
-        final joined = member
-            ? (epoch: preview.epoch, vaultKey: preview.vaultKey)
-            : earlier != null && earlier.vaultId == preview.vaultId
-                ? earlier.joined
-                : await _ops.addSelfWithRecovery(
-                    vaultId: preview.vaultId,
-                    recovery: preview.recovery,
-                    identity: identity,
-                    epoch: preview.epoch,
-                    vaultKey: preview.vaultKey,
-                  );
-        _restoreJoin = (vaultId: preview.vaultId, joined: joined);
+        final Rotation joined;
+        if (member) {
+          joined = (epoch: preview.epoch, vaultKey: preview.vaultKey);
+        } else {
+          final earlier = await _joinedEarlier(preview.vaultId, identity);
+          if (earlier != null) {
+            joined = earlier;
+          } else {
+            // From here until the state is saved the outcome is uncertain:
+            // the relay may add this device and the reply still be lost.
+            _restoreTried = preview.vaultId;
+            joined = await _ops.addSelfWithRecovery(
+              vaultId: preview.vaultId,
+              recovery: preview.recovery,
+              identity: identity,
+              epoch: preview.epoch,
+              vaultKey: preview.vaultKey,
+            );
+          }
+        }
         final own = preview.manifest.slots
             .where((s) => s.slotId == identity.slotId)
             .firstOrNull;
@@ -363,7 +397,7 @@ class BackupSyncService {
           _set(const BackupError(BackupRelayError.server, null));
           rethrow;
         }
-        _restoreJoin = null;
+        _restoreTried = null;
         _refreshOffers();
         await _publishMembers(preview.manifest, identity.slotId);
         await _join(state, identity);
@@ -525,7 +559,7 @@ class BackupSyncService {
   Future<String?> addMemberForPair(String signerB64, String boxB64,
           {String? nodeId, DateTime? deadline}) =>
       _serialise(() async {
-        bool late() => deadline != null && DateTime.now().isAfter(deadline);
+        bool late() => deadline != null && _clock().isAfter(deadline);
         if (!_active || late()) return null;
         try {
           final signerPub = backupUnb64(signerB64);

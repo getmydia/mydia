@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:player/core/backup/backup_identity.dart';
@@ -41,6 +43,7 @@ class _Node {
       snapshot: snapshot,
       deviceName: () async => name,
       platform: 'linux',
+      clock: () => clockOverride ?? DateTime.now(),
       localNodeId: () => reportsNode ? nodeId : null,
       delay: (d) async {
         delays.add(d);
@@ -69,6 +72,10 @@ class _Node {
   /// When false the backup does not know this device's node id, so its
   /// group record carries only what the test put in [meta].
   bool reportsNode = true;
+
+  /// When set, the backup's clock: lets a test move past a deadline at the
+  /// exact point it means to.
+  DateTime? clockOverride;
 
   final String name;
   final String nodeId;
@@ -437,23 +444,32 @@ void main() {
       expect(host.store.member('node-b')!.revoked, isFalse);
     });
 
-    test('an add that lands after the host replied is taken out again',
+    test('an add that lands after the host\'s deadline is taken out again',
         () async {
       final host = await net.node('Living Room TV', 'node-a');
       final joiner = await net.node('Night Harbor Laptop', 'node-b');
       await host.enableBackup();
-      net.backupRelay.hangWhen =
-          (r) => r.method == 'POST' && r.url.path.endsWith('/members');
+      final keys = (await joiner.backup.pairKeys())!;
+      final posted = Completer<void>();
+      net.backupRelay.hangWhen = (r) {
+        final add = r.method == 'POST' && r.url.path.endsWith('/members');
+        if (add && !posted.isCompleted) posted.complete();
+        return add;
+      };
 
-      final offer = await host.peers.startPairingOffer();
-      await joiner.peers.pairWithCode(offer.code);
-      expect(joiner.peers.isPaired, isTrue);
-      expect(joiner.backup.enabled, isFalse);
-
-      // The relay applies the add only now, after the reply went out.
+      final deadline = DateTime.now().add(const Duration(hours: 1));
+      final result = host.backup.addMemberForPair(keys.signer, keys.box,
+          nodeId: 'node-b', deadline: deadline);
+      // The POST is in flight, so the deadline check before it has passed.
+      await posted.future;
+      // The host gives up while the relay still holds the write, which it
+      // then applies.
+      host.clockOverride = deadline.add(const Duration(seconds: 1));
       net.backupRelay.hangWhen = null;
       net.backupRelay.releaseHung();
-      await host.backup.settled();
+
+      expect(await result, isNull);
+      expect(joiner.backup.enabled, isFalse);
 
       final vault = net.backupRelay.onlyVault;
       expect(vault.members, hasLength(2),

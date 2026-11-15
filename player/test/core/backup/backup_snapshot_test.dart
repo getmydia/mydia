@@ -846,6 +846,38 @@ void main() {
       expect(_account(again, smbId).updatedAt, _now);
     });
 
+    test('an unfinished account is never finished with an older version',
+        () async {
+      final a = _Device();
+      await addSmb(a);
+      final older = _viaWire(await a.snapshot.collect(nowMs: _now));
+      const shows = LibraryRoot(
+          id: 'rfedcba987654',
+          path: 'Shows',
+          kind: FilesLibraryKind.series,
+          title: 'Shows');
+      a.roots[smbId] = [root, shows];
+      final newer = _viaWire(await a.snapshot.collect(nowMs: _now + 5));
+
+      final b = _Device();
+      b.failNextPutRoots = true;
+      await expectLater(
+          b.snapshot.apply(newer,
+              mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 6),
+          throwsStateError);
+
+      // A poll that brings only an older copy leaves it unfinished.
+      await b.snapshot.apply(older,
+          mode: BackupApplyMode.live, fromDevice: 'B', nowMs: _now + 7);
+      expect(b.putRootsCalls[smbId], isNull);
+      expect(b.meta.isUnfinished(smbId), isTrue);
+
+      await b.snapshot.apply(newer,
+          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now + 8);
+      expect(b.putRootsCalls[smbId]!.map((r) => r.id), [root.id, shows.id]);
+      expect(b.meta.isUnfinished(smbId), isFalse);
+    });
+
     test('a root change re-stamps the account', () async {
       final a = _Device();
       await addSmb(a);
