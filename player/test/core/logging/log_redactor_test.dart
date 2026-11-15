@@ -27,6 +27,10 @@ void main() {
       'token=abc123 and more text': 'token=[REDACTED] and more text',
       'refresh_token = xyz789': 'refresh_token = [REDACTED]',
       '{"token": abc}': '{"token": [REDACTED]}',
+      'uri=https://b.s3.example/v.mkv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIDEXAMPLE%2F20261114%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=43200&X-Amz-Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7':
+          'uri=https://b.s3.example/v.mkv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=[REDACTED]&X-Amz-Expires=43200&X-Amz-Signature=[REDACTED]',
+      'https://b.s3.example/v.mkv?x-amz-security-token=FwoGZXIvYXdzEJr&x-amz-signature=abc':
+          'https://b.s3.example/v.mkv?x-amz-security-token=[REDACTED]&x-amz-signature=[REDACTED]',
     };
 
     for (final MapEntry(key: input, value: expected) in cases.entries) {

@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/cast/files_cast_bridge.dart';
@@ -258,6 +260,40 @@ void main() {
     final text = utf8.decode(subResp.bodyBytes);
     expect(text, startsWith('WEBVTT\n\n'));
     expect(text, contains('Harbor dusk'));
+  });
+
+  test('an upstream failure never logs the presigned URL', () async {
+    const signed = 'https://b.s3.example/films/harbor.mkv'
+        '?X-Amz-Credential=AKIDEXAMPLE&X-Amz-Signature=deadbeefcafe';
+    final failing = FilesCastBridge(
+      lanAddressResolver: () async => '127.0.0.1',
+      client: MockClient(
+        (req) async => throw http.ClientException('Connection reset', req.url),
+      ),
+    );
+    addTearDown(failing.dispose);
+
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) logged.add(message);
+    };
+    addTearDown(() => debugPrint = original);
+
+    final session = await failing.openSession(
+      media: const PlayableFile(url: signed),
+      mime: 'video/x-matroska',
+      subtitles: const {},
+    );
+    final resp = await http.get(Uri.parse(session.mediaUrl));
+
+    expect(resp.statusCode, HttpStatus.badGateway);
+    final errors = logged.where((l) => l.contains('Request error')).toList();
+    expect(errors, hasLength(1));
+    expect(errors.single, contains('ClientException'));
+    expect(errors.single, contains('https://b.s3.example/films/harbor.mkv'));
+    expect(errors.single, isNot(contains('X-Amz')));
+    expect(errors.single, isNot(contains('deadbeefcafe')));
   });
 
   test(

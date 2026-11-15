@@ -10,6 +10,7 @@ import '../../../../domain/sources/source_error.dart';
 import '../../../p2p/local_proxy_service.dart';
 import '../../../p2p/media_proxy.dart';
 import '../backend/file_system_backend.dart';
+import '../backend/s3_errors.dart';
 import 'subtitle_vtt.dart';
 
 /// A sidecar subtitle track registered on a [FilesCastBridge] session.
@@ -276,7 +277,12 @@ class FilesCastBridge {
       response.statusCode = HttpStatus.notFound;
       await response.close();
     } catch (e) {
-      debugPrint('[FilesCastBridge] Request error: $e');
+      // Never `$e`: an `http.ClientException` quotes the upstream URL, and an
+      // S3 file's URL is presigned. The type and the query-less URL suffice.
+      final target =
+          segments.length == 3 ? _redactedUrl(session.media.url) : 'a subtitle';
+      debugPrint('[FilesCastBridge] Request error: ${e.runtimeType} '
+          'serving $target');
       try {
         response.statusCode = HttpStatus.badGateway;
       } catch (_) {}
@@ -445,6 +451,11 @@ class FilesCastBridge {
     );
     if (resp.statusCode != HttpStatus.ok) return null;
     return utf8.decode(resp.bodyBytes, allowMalformed: true);
+  }
+
+  static String _redactedUrl(String url) {
+    final uri = Uri.tryParse(url);
+    return uri == null ? 'an unparseable URL' : redactS3Url(uri);
   }
 
   static File? _asLocalFile(String url) {
