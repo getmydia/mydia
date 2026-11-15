@@ -176,7 +176,7 @@ defmodule Mydia.Settings.IndexerConfig do
 
   defp validate_base_url(changeset) do
     validate_change(changeset, :base_url, fn :base_url, url ->
-      case URI.parse(url) do
+      case Mydia.URL.parse(url) do
         %URI{host: nil} ->
           [base_url: "must include a valid host"]
 

@@ -160,7 +160,17 @@ in
 
     # Built-in torrent engine, started by Mydia in the native dev loop. The
     # VPN is Docker-only.
-    rqbit
+    #
+    # nixpkgs' cargo setup hook now exports AWS_LC_SYS_USE_SYSTEM=1 for every
+    # Rust package, but its rqbit lists only openssl, so aws-lc-sys finds no
+    # AWS-LC and the build panics (not on cache.nixos.org either). Supplying
+    # aws-lc fixes it; drop this once nixpkgs' rqbit carries aws-lc itself.
+    # rqbit adds pkg-config only on Linux, and aws-lc-sys uses it to find
+    # AWS-LC, so it is added here for macOS too.
+    (rqbit.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+      buildInputs = (old.buildInputs or [ ]) ++ [ aws-lc ];
+    }))
 
     # Media processing
     ffmpeg

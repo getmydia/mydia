@@ -45,6 +45,13 @@ defmodule Mydia.Settings.IndexerConfigTest do
       assert "port must be between 1 and 65535" in errors_on(changeset).base_url
     end
 
+    test "rejects an out-of-range port in a URL URI.new/1 refuses" do
+      attrs = Map.put(@valid_attrs, :base_url, "http://localhost:80192/?foo[bar]=baz")
+      changeset = IndexerConfig.changeset(%IndexerConfig{}, attrs)
+      refute changeset.valid?
+      assert "port must be between 1 and 65535" in errors_on(changeset).base_url
+    end
+
     test "rejects port number of 0" do
       attrs = Map.put(@valid_attrs, :base_url, "http://localhost:0")
       changeset = IndexerConfig.changeset(%IndexerConfig{}, attrs)

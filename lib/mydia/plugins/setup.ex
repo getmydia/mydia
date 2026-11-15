@@ -94,7 +94,7 @@ defmodule Mydia.Plugins.Setup do
   """
   @spec endpoint_from_url(String.t()) :: {:ok, map()} | :error
   def endpoint_from_url(url) when is_binary(url) do
-    case URI.parse(String.trim(url)) do
+    case Mydia.URL.parse(String.trim(url)) do
       %URI{scheme: scheme, host: host, port: port}
       when scheme in ["http", "https"] and is_binary(host) and host != "" ->
         {:ok, %{"scheme" => scheme, "host" => String.downcase(host), "port" => port}}
