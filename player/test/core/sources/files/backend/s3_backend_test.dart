@@ -135,6 +135,76 @@ void main() {
     expect(entries.map((e) => e.path), ['/a.mkv', '/b.mkv']);
   });
 
+  test('a truncated listing without a token fails', () async {
+    // A V1-style answer: NextMarker, no NextContinuationToken.
+    final seen = <http.Request>[];
+    await expectLater(
+      backend(MockClient((r) async {
+        seen.add(r);
+        return http.Response(
+            listing(contents: [object('media/a.mkv')], truncated: true), 200);
+      })).list('/'),
+      throwsA(isA<BackendUnreachable>()
+          .having((e) => e.message, 'message', contains('incomplete listing'))),
+    );
+    expect(seen, hasLength(1));
+  });
+
+  test('a repeated continuation token fails', () async {
+    final seen = <http.Request>[];
+    await expectLater(
+      backend(MockClient((r) async {
+        seen.add(r);
+        return http.Response(
+            listing(
+                contents: [object('media/a.mkv')],
+                truncated: true,
+                token: 't1'),
+            200);
+      })).list('/'),
+      throwsA(isA<BackendUnreachable>()),
+    );
+    expect(seen, hasLength(2));
+  });
+
+  test('folders whose key holds // are reachable', () async {
+    final heads = <http.Request>[];
+    final b = backend(MockClient((r) async {
+      if (r.method == 'HEAD') {
+        heads.add(r);
+        return http.Response('', 200, headers: {'content-length': '10'});
+      }
+      return switch (r.url.queryParameters['prefix']) {
+        'media/a/' => http.Response(listing(prefixes: ['media/a//']), 200),
+        'media/a//' =>
+          http.Response(listing(contents: [object('media/a//x.mkv')]), 200),
+        final p => http.Response('unexpected prefix $p', 500),
+      };
+    }));
+
+    final dir = (await b.list('/a')).single;
+    expect(dir.isDir, isTrue);
+    expect(dir.path, '/a/');
+
+    final file = (await b.list(dir.path)).single;
+    expect(file.isDir, isFalse);
+    expect(file.path, '/a//x.mkv');
+    expect(file.name, 'x.mkv');
+
+    final entry = await b.stat(file.path);
+    expect(entry?.isDir, isFalse);
+    expect(heads.single.url.path, '/bkt/media/a//x.mkv');
+
+    final u = Uri.parse((await b.playable(file.path)).url);
+    expect(u.path, '/bkt/media/a//x.mkv');
+  });
+
+  test('an empty first segment at the root is not listed', () async {
+    final entries = await backend(MockClient((_) async => http.Response(
+        listing(prefixes: ['media//', 'media/Movies/']), 200))).list('/');
+    expect(entries.map((e) => e.path), ['/Movies']);
+  });
+
   test('skips the folder marker', () async {
     final entries = await backend(MockClient((_) async => http.Response(
         listing(contents: [

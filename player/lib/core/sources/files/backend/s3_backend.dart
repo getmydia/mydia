@@ -167,7 +167,12 @@ class S3Backend implements FileSystemBackend {
         if (token != null) 'continuation-token': token,
       });
       for (final p in page.prefixes) {
-        final path = _pathOf(p);
+        // A folder's key ends in exactly one `/` of its own: `media/a//`
+        // is the folder `/a/`, which holds `media/a//x.mkv`.
+        final path = _pathOf(p.substring(0, p.length - 1));
+        // `<prefix>/` at the root, an empty first segment, has no path
+        // apart from the root itself.
+        if (path == '/') continue;
         entries.add(FileEntry(
           path: path,
           name: _nameOf(path),
@@ -189,17 +194,24 @@ class S3Backend implements FileSystemBackend {
           unreadable: _archivedClasses.contains(o.storageClass),
         ));
       }
-      // A truncated page without a token cannot be continued; stop rather
-      // than ask for the same page again.
-      token = page.truncated ? page.nextToken : null;
-    } while (token != null);
+      if (!page.truncated) break;
+      // A truncated page that cannot be continued (no token, as a V1-style
+      // server answers, or the same token again) would read as a complete
+      // listing and drop every indexed file past it.
+      final next = page.nextToken;
+      if (next == null || next == token) {
+        throw BackendUnreachable(
+            'S3 at ${_location.displayHost} sent an incomplete listing');
+      }
+      token = next;
+    } while (true);
     return entries;
   }
 
   @override
   Future<FileEntry?> stat(String path) async {
     final key = _keyOf(path);
-    if (key.isEmpty || key == _location.prefix) {
+    if (_isRoot(path)) {
       return FileEntry(
           path: '/', name: '/', isDir: true, size: 0, modified: _epoch);
     }
@@ -225,10 +237,9 @@ class S3Backend implements FileSystemBackend {
       'max-keys': '1',
     });
     if (page.objects.isEmpty && page.prefixes.isEmpty) return null;
-    final dirPath = _trimSlashes(path);
     return FileEntry(
-      path: dirPath,
-      name: _nameOf(dirPath),
+      path: path,
+      name: _nameOf(path),
       isDir: true,
       size: 0,
       modified: _epoch,
@@ -260,31 +271,25 @@ class S3Backend implements FileSystemBackend {
   String _keyOf(String path) =>
       _location.prefix + (path.startsWith('/') ? path.substring(1) : path);
 
-  /// The key prefix that lists [dir]: its key with one trailing `/`, or the
-  /// location's prefix for the root.
-  String _dirKey(String dir) {
-    final key = _keyOf(dir);
-    if (key.isEmpty || key.endsWith('/')) return key;
-    return '$key/';
-  }
+  static bool _isRoot(String path) => path.isEmpty || path == '/';
 
-  /// The backend path of [key], a key under the prefix; a folder's trailing
-  /// `/` is dropped.
+  /// The key prefix that lists [dir]: the location's prefix for the root,
+  /// otherwise its key plus one `/`, always. A path is never trimmed: the
+  /// folder `/a/` is the key prefix `<prefix>a//`, not `<prefix>a/`.
+  String _dirKey(String dir) =>
+      _isRoot(dir) ? _location.prefix : '${_keyOf(dir)}/';
+
+  /// The backend path of [key], a key under the prefix, kept as is: keys
+  /// may hold `//` and end in `/`, and each is its own path.
   String _pathOf(String key) {
     final rel = key.startsWith(_location.prefix)
         ? key.substring(_location.prefix.length)
         : key;
-    return _trimSlashes('/$rel');
+    return '/$rel';
   }
 
-  static String _trimSlashes(String path) {
-    var p = path;
-    while (p.length > 1 && p.endsWith('/')) {
-      p = p.substring(0, p.length - 1);
-    }
-    return p;
-  }
-
+  /// The last segment of [path]; `/` for one that is empty (a folder whose
+  /// key ends in `//`), which a viewer cannot otherwise see.
   static String _nameOf(String path) {
     final i = path.lastIndexOf('/');
     final name = i < 0 ? path : path.substring(i + 1);
