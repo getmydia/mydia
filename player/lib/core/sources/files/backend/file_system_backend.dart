@@ -46,9 +46,15 @@ class PlayableFile {
 
 /// Why a backend call failed. Later layers match on the subclasses.
 sealed class BackendFailure implements Exception {
-  const BackendFailure([this.message]);
+  const BackendFailure([this.message, this.code, this.hint]);
 
   final String? message;
+
+  /// The provider's machine-readable reason, when it gave one.
+  final String? code;
+
+  /// A value the user-facing message needs (a region, a bucket name).
+  final String? hint;
 
   String get _label;
 
@@ -58,7 +64,12 @@ sealed class BackendFailure implements Exception {
 
 /// The host or folder could not be reached (offline, DNS, timeout, bad status).
 final class BackendUnreachable extends BackendFailure {
-  const BackendUnreachable([super.message, this.status]);
+  const BackendUnreachable([
+    String? message,
+    this.status,
+    String? code,
+    String? hint,
+  ]) : super(message, code, hint);
 
   /// The HTTP status a remote answered with, when one did. A paired
   /// player's 502 means it is up but cannot reach its own share, which
@@ -71,21 +82,21 @@ final class BackendUnreachable extends BackendFailure {
 
 /// The server rejected the credentials.
 final class BackendUnauthorized extends BackendFailure {
-  const BackendUnauthorized([super.message]);
+  const BackendUnauthorized([super.message, super.code, super.hint]);
   @override
   String get _label => 'BackendUnauthorized';
 }
 
 /// The OS denied access to a local folder that used to be readable.
 final class BackendPermissionLost extends BackendFailure {
-  const BackendPermissionLost([super.message]);
+  const BackendPermissionLost([super.message, super.code, super.hint]);
   @override
   String get _label => 'BackendPermissionLost';
 }
 
 /// The requested path does not exist.
 final class BackendNotFound extends BackendFailure {
-  const BackendNotFound([super.message]);
+  const BackendNotFound([super.message, super.code, super.hint]);
   @override
   String get _label => 'BackendNotFound';
 }
