@@ -384,7 +384,7 @@ void main() {
   _fake('markDirty_while_paused_uploads_after_unpause', (async) {
     final a = device('a');
     _settle(async, a.watch('tmdb:movie:1'));
-    a.engine.pause();
+    _settle(async, a.engine.pause());
     a.engine.markDirty();
     async.elapse(SlotSyncEngine.debounce + const Duration(seconds: 1));
     expect(a.transport.writes, 0);

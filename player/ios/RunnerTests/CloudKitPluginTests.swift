@@ -137,4 +137,26 @@ class CloudKitPluginTests: XCTestCase {
     waitForExpectations(timeout: 1.0)
     XCTAssertEqual(second, "noData")
   }
+
+  func testPushCompletionQueuePreservesEarlierDeadlineAcrossOverlappingPushes() {
+    let queue = CloudKitPlugin.PushCompletionQueue()
+    let firstTimedOut = expectation(description: "first push keeps its earlier deadline")
+    var first: String?
+    var second: String?
+
+    queue.enqueue({
+      first = $0
+      firstTimedOut.fulfill()
+    }, timeoutSeconds: 0.05)
+    // A second push arriving before the first finishes must not reset the
+    // earlier deadline past Apple's ~30s background-fetch limit.
+    queue.enqueue({ second = $0 }, timeoutSeconds: 10)
+
+    waitForExpectations(timeout: 1.0)
+    XCTAssertEqual(first, "noData")
+    XCTAssertNil(second)
+
+    queue.complete("newData")
+    XCTAssertEqual(second, "newData")
+  }
 }

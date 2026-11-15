@@ -154,12 +154,13 @@ class CloudBackupService {
 
   /// Checks the account, then uploads this device's slot and merges every
   /// other one. Throws `BackupRelayException` (`signedOut` or
-  /// `cloudUnavailable`), touching nothing, when the account is not usable.
+  /// `cloudUnavailable`), or an upload failure such as `quotaFull`, detaching
+  /// cleanly and leaving the store off.
   Future<void> enable() => _userOp(() async {
         if (enabled) throw StateError('backup is already on');
         final label = await _availableLabel();
-        await _forgetStore();
-        await _join(label);
+        await _forgetStore(shared: false);
+        await _join(label, clearSharedOnUpload: true);
       });
 
   /// Reads every other device's slot. Changes nothing. Throws
@@ -307,10 +308,27 @@ class CloudBackupService {
       };
 
   /// Attaches, uploads this device's slot and merges every other one.
-  Future<void> _join(String? label) async {
+  ///
+  /// The initial upload runs outside `SlotSyncEngine.attempt` so failures such
+  /// as `quotaFull` propagate instead of leaving the service appearing joined;
+  /// on failure the engine is detached cleanly and [enable] keeps shared
+  /// metadata untouched.
+  Future<void> _join(String? label, {bool clearSharedOnUpload = false}) async {
     _accountLabel.value = label;
     _attach();
-    await _engine.uploadNow(force: true);
+    try {
+      await _engine.uploadOnce(force: true);
+    } catch (_) {
+      await _engine.detach();
+      _accountLabel.value = null;
+      _engine.setStatus(const BackupOff());
+      rethrow;
+    }
+    if (clearSharedOnUpload) {
+      await _meta.clearSlotNames();
+      await _meta.clearOffers();
+      _engine.refreshOffers();
+    }
     await _engine.attempt(() => _engine.pollOnce(full: true));
   }
 

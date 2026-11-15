@@ -50,35 +50,87 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
   let pushCompletions = PushCompletionQueue()
 
   final class PushCompletionQueue {
-    private var completions: [(String) -> Void] = []
+    private struct Entry {
+      let deadline: TimeInterval
+      let completion: (String) -> Void
+    }
+
+    private var entries: [Entry] = []
     private var timeoutWork: DispatchWorkItem?
+    private var scheduledDeadline: TimeInterval?
 
     func enqueue(
       _ completion: @escaping (String) -> Void,
       timeoutSeconds: TimeInterval = 25
     ) {
-      completions.append(completion)
-      timeoutWork?.cancel()
-      let work = DispatchWorkItem { [weak self] in
-        self?.complete("noData")
+      let work = {
+        let now = ProcessInfo.processInfo.systemUptime
+        let deadline = now + max(0, timeoutSeconds)
+        self.entries.append(Entry(deadline: deadline, completion: completion))
+        self.scheduleNextTimeoutIfNeeded(now: now)
       }
-      timeoutWork = work
-      DispatchQueue.main.asyncAfter(deadline: .now() + timeoutSeconds, execute: work)
+      if Thread.isMainThread {
+        work()
+      } else {
+        DispatchQueue.main.async(execute: work)
+      }
     }
 
     func complete(_ outcome: String) {
       let flush = {
         self.timeoutWork?.cancel()
         self.timeoutWork = nil
-        let pending = self.completions
-        self.completions.removeAll()
-        for done in pending { done(outcome) }
+        self.scheduledDeadline = nil
+        let pending = self.entries
+        self.entries.removeAll()
+        for entry in pending { entry.completion(outcome) }
       }
       if Thread.isMainThread {
         flush()
       } else {
         DispatchQueue.main.async(execute: flush)
       }
+    }
+
+    private func scheduleNextTimeoutIfNeeded(now: TimeInterval) {
+      guard let earliest = entries.map(\.deadline).min() else {
+        timeoutWork?.cancel()
+        timeoutWork = nil
+        scheduledDeadline = nil
+        return
+      }
+      if timeoutWork != nil, let current = scheduledDeadline, earliest >= current {
+        return
+      }
+      timeoutWork?.cancel()
+      let item = DispatchWorkItem { [weak self] in
+        self?.expireDueEntries()
+      }
+      timeoutWork = item
+      scheduledDeadline = earliest
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + max(0, earliest - now),
+        execute: item
+      )
+    }
+
+    private func expireDueEntries() {
+      timeoutWork = nil
+      scheduledDeadline = nil
+      guard !entries.isEmpty else { return }
+      let now = ProcessInfo.processInfo.systemUptime
+      var expired: [(String) -> Void] = []
+      var remaining: [Entry] = []
+      for entry in entries {
+        if entry.deadline <= now + 0.001 {
+          expired.append(entry.completion)
+        } else {
+          remaining.append(entry)
+        }
+      }
+      entries = remaining
+      scheduleNextTimeoutIfNeeded(now: now)
+      for done in expired { done("noData") }
     }
   }
 

@@ -444,4 +444,18 @@ void main() {
     await s.reconnect();
     expect(s.status.value, isA<BackupIdle>());
   });
+
+  test('enable_write_failure_detaches_and_stays_off', () async {
+    final a = device('Living Room TV');
+    final s = await a.service();
+    a.backends[CloudStoreKind.gdrive]!
+        .failNext(const BackupRelayException(BackupRelayError.quotaFull));
+
+    await expectLater(s.enable(), _throwsRelay(BackupRelayError.quotaFull));
+
+    expect(s.enabled, isFalse);
+    expect(s.status.value, isA<BackupOff>());
+    expect(s.accountLabel.value, isNull);
+    expect(drive.bytes, isEmpty);
+  });
 }

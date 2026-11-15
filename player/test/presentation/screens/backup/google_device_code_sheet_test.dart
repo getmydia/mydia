@@ -182,4 +182,59 @@ void main() {
     expect(find.byKey(const Key('open')), findsOneWidget);
     await flow.close();
   });
+
+  testWidgets(
+      'external_barrier_dismissal_cancels_subscription_and_ignores_late_done',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final flow = StreamController<DeviceCodeState>.broadcast();
+    final result = <bool?>[];
+    final navKey = GlobalKey<NavigatorState>();
+
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: navKey,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: toastLayerBuilder,
+      home: const Scaffold(key: Key('home-route')),
+    ));
+
+    unawaited(navKey.currentState!.push(MaterialPageRoute<void>(
+      builder: (context) => Scaffold(
+        key: const Key('backup-route'),
+        body: TextButton(
+          key: const Key('open'),
+          onPressed: () async => result
+              .add(await showGoogleDeviceCodeSheet(context, () => flow.stream)),
+          child: const Text('open'),
+        ),
+      ),
+    )));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('open')));
+    await tester.pump();
+    flow.add(_pending('ABCD-EFGH'));
+    await tester.pumpAndSettle();
+
+    // Tap outside the dialog on the modal barrier so dismissal starts without
+    // going through the sheet's Cancel button.
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pump();
+
+    expect(flow.hasListener, isFalse);
+
+    // A late DeviceCodeDone emitted while the dialog exit animation is still
+    // running must not call Navigator.pop again and pop backup-route.
+    flow.add(const DeviceCodeDone('ana@example.com'));
+    await tester.pumpAndSettle();
+
+    expect(result, [false]);
+    expect(find.byKey(const Key('backup-route')), findsOneWidget);
+    expect(find.byKey(const Key('home-route')), findsNothing);
+    await flow.close();
+  });
 }

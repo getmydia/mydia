@@ -948,6 +948,7 @@ void main() {
         platform: 'linux',
       ),
     );
+    addTearDown(c.dispose);
 
     final first = c.enableCloud(BackupStoreKind.gdrive);
     await Future<void>.delayed(Duration.zero);
@@ -957,6 +958,48 @@ void main() {
     );
     gate.complete();
     await first;
+  });
+
+  test('switchTo_target_upload_failure_keeps_old_store_without_moved_stub',
+      () async {
+    final a = net.device('Living Room TV');
+    final b = net.device('Night Harbor Laptop');
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+    await b.controller.ready;
+    await b.controller.enableCloud(BackupStoreKind.gdrive);
+    await a.controller.poll();
+    await _settled(a.controller);
+    final aSlot = await a.slotId();
+    final bSlot = await b.slotId();
+    final drive = net.stores[BackupStoreKind.gdrive]!;
+    final driveWrites = drive.writes[aSlot];
+
+    a.backends[BackupStoreKind.icloud]!
+        .failNext(const BackupRelayException(BackupRelayError.quotaFull));
+
+    await expectLater(
+      a.controller.switchTo(BackupStoreKind.icloud, deleteOld: true),
+      throwsA(
+        isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.quotaFull),
+      ),
+    );
+
+    expect(a.controller.active.value, BackupStoreKind.gdrive);
+    expect(await a.auth.read(BackupController.storeKey), 'gdrive');
+    expect(a.controller.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+    expect(a.controller.cloud(BackupStoreKind.icloud).enabled, isFalse);
+    expect(
+      a.controller.cloud(BackupStoreKind.icloud).status.value,
+      isA<BackupOff>(),
+    );
+    expect(drive.writes[aSlot], driveWrites, reason: 'no moved stub written');
+    expect(drive.deletes, isEmpty, reason: 'old slots not deleted');
+    expect(drive.bytes.keys, containsAll([aSlot, bSlot]));
+    expect(net.stores[BackupStoreKind.icloud]!.bytes, isEmpty);
+    expect(a.meta.slotNames()[bSlot], 'Night Harbor Laptop',
+        reason: 'shared store metadata preserved');
   });
 }
 

@@ -602,6 +602,68 @@ void main() {
     expect(stored()['email'], 'userinfo@example.test');
   });
 
+  test('cancelled completeSignIn while awaiting userinfo never overwrites',
+      () async {
+    final staleUserInfoStarted = Completer<void>();
+    final staleUserInfoGate = Completer<void>();
+    const staleToken = 'at-stale';
+    final client = MockClient((req) async {
+      if (req.url.toString() == _deviceUrl) {
+        return _json(200, {
+          'device_code': 'dc-stale',
+          'user_code': 'STALE-1234',
+          'verification_url': 'https://www.google.com/device',
+          'expires_in': 1800,
+          'interval': 1,
+        });
+      }
+      if (req.url.toString() == _tokenUrl) {
+        return _json(200, {
+          'access_token': staleToken,
+          'expires_in': 3599,
+          'refresh_token': 'rt-stale',
+          'scope': googleDriveAppDataScope,
+          'token_type': 'Bearer',
+        });
+      }
+      expect(
+        req.url.toString(),
+        'https://openidconnect.googleapis.com/v1/userinfo',
+      );
+      if (!staleUserInfoStarted.isCompleted) staleUserInfoStarted.complete();
+      await staleUserInfoGate.future;
+      return _json(200, {'email': 'stale@example.test'});
+    });
+    final auth = tokenAuth(client, clientKind: 'tv');
+    final deviceFlow = DeviceCodeFlow(delay: (_) async {});
+
+    final states = <DeviceCodeState>[];
+    final errors = <Object>[];
+    final sub = deviceFlow.signIn(auth).listen(states.add, onError: errors.add);
+    await staleUserInfoStarted.future;
+
+    // Cancel the first attempt while /userinfo is in flight, then finish a
+    // newer sign-in.
+    await sub.cancel();
+    await auth.completeSignIn({
+      ..._grant(
+        access: 'at-fresh',
+        refresh: 'rt-fresh',
+        email: 'fresh@example.test',
+      ),
+      'scope': googleDriveAppDataScope,
+    });
+
+    staleUserInfoGate.complete();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(errors, isEmpty);
+    expect(states, [isA<DeviceCodePending>()]);
+    expect(await auth.currentEmail(), 'fresh@example.test');
+    expect(stored()['refreshToken'], 'rt-fresh');
+    expect(await auth.accessToken(), 'at-fresh');
+  });
+
   test('GoogleSignInAuth is constructible without touching the plugin', () {
     final auth = GoogleSignInAuth(
       storage: storage,

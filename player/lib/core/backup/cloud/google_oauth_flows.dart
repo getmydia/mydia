@@ -252,7 +252,10 @@ class DeviceCodeFlow {
           }
           if (cancelled) return;
           if (res.status == 200) {
-            final email = await auth.completeSignIn(res.json);
+            final email = await auth.completeSignIn(
+              res.json,
+              isCancelled: () => cancelled,
+            );
             if (!cancelled) controller.add(DeviceCodeDone(email));
             return;
           }

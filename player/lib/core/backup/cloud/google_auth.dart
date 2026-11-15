@@ -221,10 +221,28 @@ class GoogleTokenAuth implements GoogleAuth {
   /// A grant whose `scope` lacks [googleDriveAppDataScope] is signed out
   /// ([googleScopeMissingCode]) and nothing is stored. A grant without a
   /// `scope` field is taken as the requested scopes (RFC 6749, 5.1).
-  Future<String> completeSignIn(Map<String, Object?> grant) async {
+  ///
+  /// When [isCancelled] returns true (including after awaiting userinfo),
+  /// throws `BackupRelayException(signedOut, code: 'cancelled')` before
+  /// overwriting stored credentials or caching the access token.
+  Future<String> completeSignIn(
+    Map<String, Object?> grant, {
+    bool Function()? isCancelled,
+  }) async {
+    void checkCancelled() {
+      if (isCancelled != null && isCancelled()) {
+        throw const BackupRelayException(
+          BackupRelayError.signedOut,
+          code: 'cancelled',
+        );
+      }
+    }
+
+    checkCancelled();
     final scope = grant['scope'];
     if (scope is String && !_grantsDriveAppData(scope)) throw _scopeMissing;
     final stored = await _readGrant();
+    checkCancelled();
     // Never carry a token or email over from the other client's grant.
     final existing = stored?['clientKind'] == clientKind ? stored : null;
     final refreshToken =
@@ -242,6 +260,7 @@ class GoogleTokenAuth implements GoogleAuth {
         email = await _fetchUserInfoEmail(_client, accessToken);
       }
     }
+    checkCancelled();
     if (email == null) {
       throw const FormatException('token response names no account');
     }

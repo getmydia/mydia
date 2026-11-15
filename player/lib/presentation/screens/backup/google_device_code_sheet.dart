@@ -175,16 +175,23 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
     _sub = widget.start().listen(_onState, onError: _onError);
   }
 
-  void _close(bool result) {
-    if (_closing || !mounted) return;
+  void _stopListening() {
     _closing = true;
     unawaited(_sub?.cancel());
     _sub = null;
-    Navigator.of(context).pop(result);
+  }
+
+  void _close(bool result) {
+    if (_closing || !mounted) return;
+    final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    _stopListening();
+    if (isCurrent) Navigator.of(context).pop(result);
   }
 
   void _onState(DeviceCodeState state) {
-    if (!mounted || _closing) return;
+    if (!mounted || _closing || !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
     switch (state) {
       case final DeviceCodePending p:
         setState(() => _pending = p);
@@ -207,7 +214,9 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
 
   void _onError(Object e) {
     debugPrint('[Backup] Google device code sign-in failed: ${e.runtimeType}');
-    if (!mounted || _closing) return;
+    if (!mounted || _closing || !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
     final l10n = context.l10n;
     showToast(
         context,
@@ -223,78 +232,83 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
     final l10n = context.l10n;
     final palette = context.palette;
     final pending = _pending;
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(l10n.googleDeviceCodeTitle,
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 12),
-          if (_expired)
-            Text(
-              l10n.googleDeviceCodeExpired,
-              key: const Key('google-device-code-expired'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            )
-          else if (pending == null)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else ...[
-            Text(
-              l10n.googleDeviceCodeBody(pending.verificationUrl.toString()),
-              style: TextStyle(color: palette.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            SelectableText(
-              pending.userCode,
-              key: const Key('google-device-code'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 4,
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _stopListening();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(l10n.googleDeviceCodeTitle,
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            if (_expired)
+              Text(
+                l10n.googleDeviceCodeExpired,
+                key: const Key('google-device-code-expired'),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              )
+            else if (pending == null)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else ...[
+              Text(
+                l10n.googleDeviceCodeBody(pending.verificationUrl.toString()),
+                style: TextStyle(color: palette.textSecondary),
               ),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: QrImageView(
-                key: const Key('google-device-code-qr'),
-                data: pending.verificationUrl.toString(),
-                size: 160,
-                backgroundColor: Colors.white,
-                eyeStyle: const QrEyeStyle(color: Colors.black),
-                dataModuleStyle: const QrDataModuleStyle(color: Colors.black),
+              const SizedBox(height: 16),
+              SelectableText(
+                pending.userCode,
+                key: const Key('google-device-code'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 4,
+                ),
               ),
+              const SizedBox(height: 16),
+              Center(
+                child: QrImageView(
+                  key: const Key('google-device-code-qr'),
+                  data: pending.verificationUrl.toString(),
+                  size: 160,
+                  backgroundColor: Colors.white,
+                  eyeStyle: const QrEyeStyle(color: Colors.black),
+                  dataModuleStyle: const QrDataModuleStyle(color: Colors.black),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Nothing to type here: on a TV focus waits on Cancel.
+                TextButton(
+                  key: const Key('google-device-code-cancel'),
+                  autofocus: true,
+                  onPressed: () => _close(false),
+                  child: Text(l10n.commonCancel),
+                ),
+                if (_expired) ...[
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    key: const Key('google-device-code-retry'),
+                    focusNode: _retryFocus,
+                    onPressed: _retry,
+                    child: Text(l10n.commonTryAgain),
+                  ),
+                ],
+              ],
             ),
           ],
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // Nothing to type here: on a TV focus waits on Cancel.
-              TextButton(
-                key: const Key('google-device-code-cancel'),
-                autofocus: true,
-                onPressed: () => _close(false),
-                child: Text(l10n.commonCancel),
-              ),
-              if (_expired) ...[
-                const SizedBox(width: 8),
-                FilledButton(
-                  key: const Key('google-device-code-retry'),
-                  focusNode: _retryFocus,
-                  onPressed: _retry,
-                  child: Text(l10n.commonTryAgain),
-                ),
-              ],
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
