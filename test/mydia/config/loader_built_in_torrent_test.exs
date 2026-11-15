@@ -47,6 +47,15 @@ defmodule Mydia.Config.LoaderBuiltInTorrentTest do
     end
   end
 
+  test "priority takes a positive integer and ignores zero, negatives and junk" do
+    var = "MYDIA_TORRENT_PRIORITY"
+    assert BuiltInTorrentEnv.load(env(%{var => "3"})).priority == 3
+
+    for bad <- ["0", "-1", "abc"] do
+      refute Map.has_key?(BuiltInTorrentEnv.load(env(%{var => bad})), :priority)
+    end
+  end
+
   test "rate limits parse in KiB/s, and bad or out-of-range ones are left out" do
     loaded =
       BuiltInTorrentEnv.load(

@@ -68,23 +68,24 @@ class _Visitor extends RecursiveAstVisitor<void> {
     }
     final index = _uiPositionalCalls[node.methodName.name];
     if (node.target == null && index != null) {
-      final positional = node.argumentList.arguments
-          .where((a) => a is! NamedExpression)
-          .toList();
+      final positional =
+          node.argumentList.arguments.whereType<Expression>().toList();
       if (positional.length > index) _check(positional[index]);
     }
     super.visitMethodInvocation(node);
   }
 
   @override
-  void visitNamedExpression(NamedExpression node) {
-    if (_uiArguments.contains(node.name.label.name)) _check(node.expression);
-    super.visitNamedExpression(node);
+  void visitNamedArgument(NamedArgument node) {
+    if (_uiArguments.contains(node.name.lexeme)) {
+      _check(node.argumentExpression);
+    }
+    super.visitNamedArgument(node);
   }
 
   void _checkFirstPositional(ArgumentList args) {
     final first = args.arguments.firstOrNull;
-    if (first != null && first is! NamedExpression) _check(first);
+    if (first is Expression) _check(first);
   }
 
   void _check(Expression e) {

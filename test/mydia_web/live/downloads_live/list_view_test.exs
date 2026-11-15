@@ -240,6 +240,29 @@ defmodule MydiaWeb.DownloadsLive.ListViewTest do
     test "an empty list is all zeros" do
       assert ListView.summarize([]) == %Summary{}
     end
+
+    # Issue #1422: imported torrents still seeding upload too, and the page
+    # needs to know they exist to keep polling.
+    test "counts torrents seeding after import and adds their upload once" do
+      active = download(%{upload_speed: 5})
+      seeding = download(%{status: "seeding", imported_at: DateTime.utc_now(), upload_speed: 40})
+      # An active row that is also seeding (awaiting import) is not doubled.
+      both = download(%{status: "seeding", upload_speed: 7})
+
+      assert %Summary{active: 2, seeding: 2, upload_speed: 52} =
+               ListView.summarize([active, both], all: [active, seeding, both])
+    end
+
+    test "a seeding row whose client did not answer this poll is not live" do
+      stale =
+        download(%{
+          status: "seeding",
+          imported_at: DateTime.utc_now(),
+          status_as_of: ~U[2026-10-16 10:00:00Z]
+        })
+
+      assert %Summary{seeding: 0} = ListView.summarize([], all: [stale])
+    end
   end
 
   describe "clients/1, media_item_id/1 and display_title/1" do

@@ -65,6 +65,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
       <:badges>
         <span class="badge badge-sm badge-outline">{@client.type}</span>
         <span
+          id={"client-priority-#{@client.id}"}
+          class="badge badge-sm badge-outline"
+          title={gettext("Grabs go to the enabled client with the lowest priority")}
+        >
+          {gettext("Priority %{priority}", priority: @client.priority)}
+        </span>
+        <span
           :if={client_remote_fetch_enabled?(@client)}
           class="badge badge-sm badge-outline gap-1"
           title={gettext("Pulls completed torrents from a remote seedbox over SFTP")}

@@ -10,6 +10,7 @@ defmodule MydiaWeb.DownloadsLive.ListView do
 
   use Gettext, backend: MydiaWeb.Gettext
 
+  alias Mydia.Downloads.SeedingGoal
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.StatusFilter
   alias Mydia.Downloads.Structs.DownloadMetadata
@@ -183,13 +184,22 @@ defmodule MydiaWeb.DownloadsLive.ListView do
     end
   end
 
-  @spec summarize(list()) :: Summary.t()
-  def summarize(downloads) do
+  @doc """
+  Totals for the stats bar from the active rows. `all:` is every polled row:
+  torrents still seeding after import are counted in `seeding` and add their
+  upload, so the page keeps polling them and the upload total includes them.
+  """
+  @spec summarize(list(), keyword()) :: Summary.t()
+  def summarize(downloads, opts \\ []) do
+    seeding = opts |> Keyword.get(:all, []) |> Enum.filter(&SeedingGoal.currently_seeding?/1)
+    uploading = Enum.uniq_by(downloads ++ seeding, & &1.id)
+
     %Summary{
       active: length(downloads),
+      seeding: length(seeding),
       stalled: Enum.count(downloads, &soft_stalled?/1),
       download_speed: sum_by(downloads, & &1.download_speed),
-      upload_speed: sum_by(downloads, & &1.upload_speed),
+      upload_speed: sum_by(uploading, & &1.upload_speed),
       remaining_bytes: sum_by(downloads, &remaining_bytes/1),
       eta_seconds:
         downloads

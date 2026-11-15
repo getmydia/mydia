@@ -395,28 +395,8 @@
           # skipped.
           MYDIA_SKIP_CARDIGANN_FETCH = "1";
 
-          # Create missing deps symlinks, set up Cargo vendoring, and compile assets
-          preBuild = ''
-            echo "=== preBuild: Creating missing deps symlinks ==="
-
-            mkdir -p deps
-
-            # Create deps symlinks for packages linked in _build/prod/lib
-            # but missing from deps/ (e.g., buildRebar3 packages like hackney, luerl)
-            for lib_dir in _build/prod/lib/*; do
-              dep_name=$(basename "$lib_dir")
-              if [ ! -e "deps/$dep_name" ]; then
-                # Follow the symlink to get the actual nix store path
-                real_lib=$(readlink -f "$lib_dir")
-                # Link to the full app directory (not just /src) so Mix can find .app files
-                echo "  Creating symlink: deps/$dep_name -> $real_lib"
-                ln -s "$real_lib" "deps/$dep_name"
-              fi
-            done
-
-            echo "=== preBuild: Done. deps/ count ==="
-            ls deps/ | wc -l
-
+          # Set up Cargo vendoring for the Rust NIFs and plugin guests
+          postConfigure = ''
             # Set up Cargo vendoring for the Rust p2p NIF
             mkdir -p native/mydia_p2p/.cargo
             cat > native/mydia_p2p/.cargo/config.toml <<CARGO_EOF
@@ -468,6 +448,25 @@
             [source.vendored-sources]
             directory = "${subsyncCargoDeps}"
             CARGO_EOF
+          '';
+
+          # Configure asset compilation
+          preBuild = ''
+            # Create deps symlinks for packages linked in _build/prod/lib but
+            # missing from deps/ (e.g. buildRebar3 packages like hackney, luerl).
+            # This runs here rather than in postConfigure: nixpkgs links the
+            # mixNixDeps sources into deps/ from a postConfigure hook, and the
+            # postConfigure attribute runs before those hooks, when deps/ does
+            # not exist yet.
+            mkdir -p deps
+            for lib_dir in _build/prod/lib/*; do
+              dep_name=$(basename "$lib_dir")
+              if [ ! -e "deps/$dep_name" ]; then
+                # Link the full app directory (not just /src) so Mix finds .app files
+                ln -s "$(readlink -f "$lib_dir")" "deps/$dep_name"
+              fi
+            done
+            echo "deps/ holds $(ls deps/ | wc -l) entries"
 
             # Copy heroicons to deps (git dependency, not handled by mixNixDeps)
             mkdir -p deps/heroicons

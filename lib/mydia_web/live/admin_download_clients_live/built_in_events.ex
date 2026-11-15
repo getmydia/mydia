@@ -27,12 +27,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
     :enabled,
     :download_path,
     :min_free_space_gb,
+    :priority,
     :listen_port,
     :state_path,
     :api_port
   ]
   # Values a segmented control sends as a click rather than a form change.
-  @choice_keys ["enabled", "vpn_type"]
+  # Every non-secret field is accepted: a hand-kept list of the controls
+  # silently dropped `seed_goal_action` (issue #1422).
+  @choice_keys (Keyword.keys(BuiltInTorrent.env_vars()) -- @secret_fields)
+               |> Enum.map(&Atom.to_string/1)
 
   @doc "The events `handle_event/3` answers."
   def events, do: @events
@@ -87,6 +91,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
     socket
     |> assign(:built_in?, runtime != nil)
     |> assign(:built_in_vpn?, runtime != nil and runtime.config.vpn?)
+    |> assign(:built_in_priority, runtime && runtime.config.priority)
     |> assign(:built_in_status, status)
   end
 

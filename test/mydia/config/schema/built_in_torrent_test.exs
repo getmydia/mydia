@@ -45,10 +45,11 @@ defmodule Mydia.Config.Schema.BuiltInTorrentTest do
 
   test "env_vars/0 has one row per field" do
     rows = BuiltInTorrent.env_vars()
-    assert length(rows) == 23
-    assert rows |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> length() == 23
+    assert length(rows) == 24
+    assert rows |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> length() == 24
     assert {:seed_ratio, "MYDIA_TORRENT_SEED_RATIO"} in rows
     assert {:min_free_space_gb, "MYDIA_TORRENT_MIN_FREE_SPACE_GB"} in rows
+    assert {:priority, "MYDIA_TORRENT_PRIORITY"} in rows
     assert {:vpn_enabled, "MYDIA_VPN_SERVICE_PROVIDER"} in rows
     assert {:listen_port, "MYDIA_TORRENT_PORT"} in rows
     assert {:download_limit_kib, "MYDIA_TORRENT_DOWNLOAD_LIMIT"} in rows

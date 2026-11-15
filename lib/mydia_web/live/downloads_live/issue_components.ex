@@ -206,6 +206,9 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
 
   attr :issue, Issue, required: true
 
+  # A torrent with no download row has no overflow menu, so its removal sits
+  # next to Match. Without it a torrent stranded here (its media item deleted,
+  # issue #1422) could only be removed in the client itself.
   defp primary_action(%{issue: %Issue{kind: :needs_matching}} = assigns) do
     ~H"""
     <button
@@ -217,6 +220,18 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
     >
       <.icon name="hero-magnifying-glass" class="size-4" />
       <span class="hidden sm:inline">{gettext("Match…")}</span>
+    </button>
+    <button
+      id={"issue-remove-torrent-#{@issue.id}"}
+      type="button"
+      class="btn btn-sm btn-ghost btn-square text-error"
+      title={gettext("Remove from client")}
+      aria-label={gettext("Remove from client")}
+      phx-click="open_remove_confirm"
+      phx-value-kind="torrent"
+      phx-value-id={@issue.id}
+    >
+      <.icon name="hero-trash" class="size-4" />
     </button>
     """
   end
