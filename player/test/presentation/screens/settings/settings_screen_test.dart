@@ -35,7 +35,7 @@ import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart'
-    show settingsBackupLocation;
+    show backupRequestLocation, backupRequestOf, settingsBackupLocation;
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
@@ -258,8 +258,7 @@ Future<void> _pump(
               path: '/settings',
               builder: (context, state) => inShell
                   ? shellScaffold(child: const SettingsScreen())
-                  : SettingsScreen(
-                      initialSection: state.uri.queryParameters['section']),
+                  : SettingsScreen(backupRequest: backupRequestOf(state.uri)),
             ),
             GoRoute(
               path: '/settings/diagnostics',
@@ -372,6 +371,25 @@ void main() {
         reason: 'below the fold without the request');
 
     await _pump(tester, size: size, initialLocation: settingsBackupLocation);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(backup).dy, lessThan(size.height));
+  });
+
+  testWidgets('asking for Backup & sync again scrolls back to it',
+      (tester) async {
+    const size = Size(400, 400);
+    await _pump(tester, size: size, initialLocation: backupRequestLocation());
+    await tester.pumpAndSettle();
+    final backup = find.byKey(const Key('settings-backup-section'));
+    expect(tester.getTopLeft(backup).dy, lessThan(size.height));
+
+    // The viewer scrolls back to the top, leaving the route as it was.
+    Scrollable.of(tester.element(backup)).position.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(backup).dy, greaterThan(size.height));
+
+    GoRouter.of(tester.element(find.byType(SettingsScreen)))
+        .go(backupRequestLocation());
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(backup).dy, lessThan(size.height));
   });

@@ -50,6 +50,15 @@ abstract interface class SettingsNav {
 /// Settings, scrolled to Backup & sync.
 const settingsBackupLocation = '/settings?section=backup';
 
+/// [settingsBackupLocation] with a value unique to this request, so asking
+/// again while Settings already shows the section still scrolls to it.
+String backupRequestLocation() =>
+    '$settingsBackupLocation&request=${DateTime.now().microsecondsSinceEpoch}';
+
+/// The [SettingsScreen.backupRequest] a Settings route at [uri] carries.
+String? backupRequestOf(Uri uri) =>
+    uri.queryParameters['section'] == 'backup' ? uri.query : null;
+
 /// Where adding a server of [kind] starts; the kind picker when null.
 String addServerLocation(SourceKind? kind) =>
     kind == null ? '/sources/add' : '/sources/add/${kind.name}';
@@ -71,7 +80,7 @@ class RouterSettingsNav implements SettingsNav {
 
   /// Backup & sync is a section of Settings itself.
   @override
-  void openBackup() => _router.go(settingsBackupLocation);
+  void openBackup() => _router.go(backupRequestLocation());
 
   @override
   void openConnections() => _router.push('/sources/manage');

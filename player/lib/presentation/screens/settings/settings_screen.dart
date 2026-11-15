@@ -37,10 +37,13 @@ export 'widgets/settings_sections.dart' show updateCheckSubtitle;
 /// screen down with it: someone opening settings while something is broken is
 /// quite likely there to sign out or collect diagnostics.
 class SettingsScreen extends ConsumerWidget {
-  const SettingsScreen({super.key, this.initialSection});
+  const SettingsScreen({super.key, this.backupRequest});
 
-  /// `'backup'` scrolls Backup & sync into view once laid out.
-  final String? initialSection;
+  /// Set when the route asks for Backup & sync (`section=backup`), which is
+  /// then scrolled into view once laid out. Each request carries a new value
+  /// (see [backupRequestLocation]), so asking again while Settings is already
+  /// on that route scrolls back to it.
+  final String? backupRequest;
 
   /// Builds Settings' title-bar header.
   ///
@@ -160,7 +163,7 @@ class SettingsScreen extends ConsumerWidget {
                             id: 'backup-section',
                             index: 2,
                             child: _RevealOnRequest(
-                              reveal: initialSection == 'backup',
+                              request: backupRequest,
                               child: const BackupSection(
                                   key: Key('settings-backup-section')),
                             ),
@@ -192,12 +195,12 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-/// Scrolls [child] into view after layout when [reveal] turns true, as the
-/// pairing notice's "View" asks for Backup & sync.
+/// Scrolls [child] into view after layout for each new non-null [request],
+/// as the pairing notice's "View" asks for Backup & sync.
 class _RevealOnRequest extends StatefulWidget {
-  const _RevealOnRequest({required this.reveal, required this.child});
+  const _RevealOnRequest({required this.request, required this.child});
 
-  final bool reveal;
+  final String? request;
   final Widget child;
 
   @override
@@ -208,13 +211,15 @@ class _RevealOnRequestState extends State<_RevealOnRequest> {
   @override
   void initState() {
     super.initState();
-    if (widget.reveal) _revealAfterFrame();
+    if (widget.request != null) _revealAfterFrame();
   }
 
   @override
   void didUpdateWidget(_RevealOnRequest oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.reveal && !oldWidget.reveal) _revealAfterFrame();
+    if (widget.request != null && widget.request != oldWidget.request) {
+      _revealAfterFrame();
+    }
   }
 
   void _revealAfterFrame() {

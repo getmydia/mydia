@@ -158,7 +158,8 @@ void main() {
     await tester.pumpAndSettle();
     RouterSettingsNav(router).openBackup();
     await tester.pumpAndSettle();
-    expect(find.text('at /settings?section=backup'), findsOneWidget);
+    expect(find.textContaining('at /settings?section=backup&request='),
+        findsOneWidget);
     expect(router.canPop(), isFalse, reason: 'the hub is not left behind');
   });
 

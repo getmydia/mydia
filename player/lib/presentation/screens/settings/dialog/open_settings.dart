@@ -121,7 +121,7 @@ Future<void> openSettings(
       case SettingsCategory.playback || SettingsCategory.about:
         router.go('/settings');
       case SettingsCategory.backup:
-        router.go(settingsBackupLocation);
+        router.go(backupRequestLocation());
       case SettingsCategory.diagnostics:
         unawaited(router.push<void>('/settings/diagnostics'));
       case SettingsCategory.connections:
