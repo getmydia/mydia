@@ -125,6 +125,9 @@ void main() {
     expect(
         find.text("Add a friend's or family member's server"), findsOneWidget);
     expect(find.textContaining('coming soon'), findsNothing);
+    // The list outgrows a 600px screen, so scroll to the last tile.
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
     await tester.tap(tile);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('guest-marker')), findsOneWidget);
@@ -206,6 +209,51 @@ void main() {
       ),
     ));
     expect(find.byKey(const Key('add-source-smb')), findsNothing);
+  });
+
+  testWidgets('S3 is offered off web, marked experimental, and opens its form',
+      (tester) async {
+    final router = GoRouter(routes: [
+      GoRoute(
+          path: '/', builder: (_, __) => const AddSourceScreen(isWeb: false)),
+      GoRoute(
+        path: '/sources/add/s3',
+        builder: (_, __) => const SizedBox(key: Key('s3-marker')),
+      ),
+    ]);
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final tile = find.byKey(const Key('add-source-s3'));
+    expect(find.descendant(of: tile, matching: find.text('Experimental')),
+        findsOneWidget);
+    expect(
+        find.text(
+            'Amazon S3, Backblaze B2, Cloudflare R2, Wasabi or a self-hosted server'),
+        findsOneWidget);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('s3-marker')), findsOneWidget);
+  });
+
+  testWidgets('S3 is hidden on web', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: true),
+      ),
+    ));
+    expect(find.byKey(const Key('add-source-s3')), findsNothing);
   });
 
   test('the add Mydia route redirects home on an instance-hosted web only', () {

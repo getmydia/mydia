@@ -85,6 +85,15 @@ class AddSourceScreen extends ConsumerWidget {
                   subtitle: Text(context.l10n.sourcesAddSmbSubtitle),
                   onTap: () => context.push('/sources/add/smb'),
                 ),
+              if (!isWeb)
+                ListTile(
+                  key: const Key('add-source-s3'),
+                  leading: const Icon(Icons.cloud_rounded),
+                  title: const ExperimentalTitle(
+                      title: Text('S3')), // l10n-ignore: protocol name
+                  subtitle: Text(context.l10n.sourcesAddS3Subtitle),
+                  onTap: () => context.push('/sources/add/s3'),
+                ),
               ListTile(
                 key: const Key('add-source-mydia'),
                 leading: const Icon(Icons.dns_rounded),

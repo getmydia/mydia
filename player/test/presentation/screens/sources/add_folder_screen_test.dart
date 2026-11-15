@@ -75,6 +75,8 @@ void main() {
     expect(filesReauthLocation('wabc'), '/sources/add/webdav?account=wabc');
     expect(filesReauthLocation('s0123456789abcdef'),
         '/sources/add/smb?account=s0123456789abcdef');
+    expect(filesReauthLocation('30123456789abcdef'),
+        '/sources/add/s3?account=30123456789abcdef');
   });
 
   testWidgets('picks a folder and adds it with its kind', (tester) async {
