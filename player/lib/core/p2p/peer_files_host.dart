@@ -112,17 +112,19 @@ List<SourceAccountRecord> lentFilesAccounts(
         if (!hasHiddenServer(a)) a,
     ];
 
-/// The wire kind of a files account: `local`, `smb` or `webdav`.
+/// The wire kind of a files account: `local`, `smb`, `s3` or `webdav`.
 String filesAccountKind(String accountId) {
   if (accountId == kFilesLocalAccountId) return 'local';
   if (isSmbAccountId(accountId)) return 'smb';
+  if (isS3AccountId(accountId)) return 's3';
   return 'webdav';
 }
 
 /// What says two files accounts are the same share, whoever stored them:
-/// [normalizeSmbUrl] of an SMB share (host, port and share name), or
-/// [normalizeWebDavUrl] of a WebDAV base. Folders on a device have none,
-/// since a path names a different folder on every device.
+/// [normalizeSmbUrl] of an SMB share (host, port and share name),
+/// [normalizeS3Url] of an S3 bucket's connection, or [normalizeWebDavUrl]
+/// of a WebDAV base. Folders on a device have none, since a path names a
+/// different folder on every device.
 ///
 /// An SMB account keeps every address its share answered at, the last one
 /// that answered first. A hostname is preferred over an IP literal so two
@@ -139,6 +141,7 @@ String? filesDedupeKey(SourceAccountRecord record) {
         connections.where((c) => !isIpLiteral(c.uri.host)).firstOrNull;
     return normalizeSmbUrl((named ?? connections.first).uri);
   }
+  if (isS3AccountId(id)) return normalizeS3Url(connections.first.uri);
   return normalizeWebDavUrl(connections.first.uri);
 }
 
@@ -367,7 +370,8 @@ class PeerFilesHost {
       debugPrint('[PeerFilesHost] A read in $accountId names a gone file: $e');
       return notShared;
     } on BackendFailure catch (e) {
-      debugPrint('[PeerFilesHost] No grant for a read in $accountId: $e');
+      debugPrint(
+          '[PeerFilesHost] No grant for a read in $accountId: ${e.runtimeType}');
       return failed;
     }
   }

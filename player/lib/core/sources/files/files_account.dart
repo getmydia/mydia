@@ -3,13 +3,16 @@
 /// Folders on this device are one account, [kFilesLocalAccountId], whose one
 /// server is [kFilesLocalServerId]. Each WebDAV share is its own account,
 /// [webDavAccountId], whose server id is the account id and whose first
-/// connection is the share's base URL.
+/// connection is the share's base URL. Each S3 bucket (at a key prefix) is
+/// its own account, [s3AccountId], whose one connection is its
+/// [S3Location.toConnectionUri].
 library;
 
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'backend/s3_backend.dart' show S3Location;
 import 'smb_native.dart' show SmbTarget;
 
 const kFilesLocalAccountId = 'flocal';
@@ -58,6 +61,27 @@ final _smbAccountId = RegExp(r'^s[0-9a-f]{16}$');
 
 bool isSmbAccountId(String id) => _smbAccountId.hasMatch(id);
 
+/// [connection], an S3 connection URI, in its one canonical form: scheme
+/// and host lowercased, the scheme's default port dropped, the prefix with
+/// no leading `/` and a trailing one unless empty, the query sorted. Keys
+/// keep their case. Throws [ArgumentError] when [connection] is not one.
+String normalizeS3Url(Uri connection) {
+  final location = S3Location.fromConnectionUri(connection);
+  if (location == null) {
+    throw ArgumentError.value(
+        connection.scheme, 'connection', 'Not an S3 connection URI');
+  }
+  return location.toConnectionUri().toString();
+}
+
+/// `3` + the first 16 hex characters of SHA-256 over [normalizeS3Url].
+String s3AccountId(Uri connection) =>
+    '3${sha256.convert(utf8.encode(normalizeS3Url(connection))).toString().substring(0, 16)}';
+
+final _s3AccountId = RegExp(r'^3[0-9a-f]{16}$');
+
+bool isS3AccountId(String id) => _s3AccountId.hasMatch(id);
+
 /// Where the share named by [normalized] lives; port 445 when absent.
 SmbTarget smbTargetOf(Uri normalized) => SmbTarget(
       host: normalized.host,
@@ -88,6 +112,39 @@ class WebDavCredentials {
       password: json['password'] as String,
     );
   }
+}
+
+/// What an S3 account stores as its account token (`SourceSecrets`). The
+/// connection URI never carries either key.
+class S3Credentials {
+  const S3Credentials({
+    required this.accessKeyId,
+    required this.secretAccessKey,
+  });
+
+  final String accessKeyId;
+  final String secretAccessKey;
+
+  String toJson() => jsonEncode(
+      {'accessKeyId': accessKeyId, 'secretAccessKey': secretAccessKey});
+
+  /// Throws [FormatException] when [s] is not a stored credential.
+  static S3Credentials fromJson(String s) {
+    final json = jsonDecode(s);
+    if (json is! Map ||
+        json['accessKeyId'] is! String ||
+        json['secretAccessKey'] is! String) {
+      throw const FormatException('Not S3 credentials');
+    }
+    return S3Credentials(
+      accessKeyId: json['accessKeyId'] as String,
+      secretAccessKey: json['secretAccessKey'] as String,
+    );
+  }
+
+  /// The access key id only: the secret never reaches a log.
+  @override
+  String toString() => 'S3Credentials(accessKeyId: $accessKeyId)';
 }
 
 /// What an SMB account stores as its account token (`SourceSecrets`). An empty

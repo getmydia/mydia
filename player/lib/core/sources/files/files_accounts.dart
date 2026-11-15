@@ -19,6 +19,7 @@ import '../store/source_records.dart';
 import '../store/source_secrets.dart';
 import 'backend/file_system_backend.dart';
 import 'backend/local_path_backend.dart';
+import 'backend/s3_backend.dart';
 import 'backend/webdav_backend.dart';
 import 'files_account.dart';
 import 'files_media_source.dart';
@@ -66,6 +67,21 @@ typedef WebDavConnector = FileSystemBackend Function(
 final webDavConnectorProvider = Provider<WebDavConnector>(
   (_) => (base, user, password, client) =>
       WebDavBackend(base: base, user: user, password: password, client: client),
+);
+
+/// Builds an S3 backend from what the viewer typed, before anything is
+/// saved. A given [http.Client] is the caller's to close; without one the
+/// backend makes its own. Tests override it with a fake.
+typedef S3Connector = FileSystemBackend Function(
+    S3Location location, S3Credentials credentials, http.Client? client);
+
+final s3ConnectorProvider = Provider<S3Connector>(
+  (_) => (location, credentials, client) => S3Backend(
+        location: location,
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+        client: client,
+      ),
 );
 
 final filesAccountsProvider =
@@ -206,6 +222,55 @@ class FilesAccounts {
               name: base.host,
               connections: [
                 ServerConnection(uri: base, local: isPrivateHost(base.host)),
+              ],
+            ),
+          ],
+          addedAtMs: DateTime.now().millisecondsSinceEpoch,
+        );
+    return _save(record);
+  }
+
+  /// Saves an S3 bucket at [location]'s prefix. The credentials are written
+  /// before the record, which holds neither key. A location already saved
+  /// reuses its account: the credentials are replaced and `needsReauth`
+  /// clears.
+  Future<SourceId> addS3Account({
+    required S3Location location,
+    required S3Credentials credentials,
+  }) async {
+    final connection = location.toConnectionUri();
+    final id = s3AccountId(connection);
+    final prefix = location.prefix;
+    final name = prefix.isEmpty
+        ? location.bucket
+        : '${location.bucket}/${prefix.substring(0, prefix.length - 1)}';
+    final existing = await _stored(id);
+    final account = existing?.account.copyWith(needsReauth: false) ??
+        ProviderAccount(
+          id: id,
+          kind: SourceKind.files,
+          displayName: name,
+          storageNamespace: SourceSecrets.newStorageNamespace(id),
+          activeProfileId: kOwnerProfileId,
+        );
+    await _ref
+        .read(sourceSecretsProvider)
+        .writeAccountToken(account, credentials.toJson());
+    final record = existing?.copyWith(account: account) ??
+        SourceAccountRecord(
+          account: account,
+          profiles: [_owner(id)],
+          servers: [
+            SourceServer(
+              id: id,
+              accountId: id,
+              profileId: kOwnerProfileId,
+              name: name,
+              connections: [
+                ServerConnection(
+                  uri: connection,
+                  local: isPrivateHost(location.endpoint.host),
+                ),
               ],
             ),
           ],
@@ -426,6 +491,11 @@ class FilesAccounts {
 
   /// Adds [path], a path on the share, as a root of [id].
   Future<void> addSmbRoot(SourceId id,
+          {required String path, required FilesLibraryKind kind}) =>
+      addWebDavRoot(id, path: path, kind: kind);
+
+  /// Adds [path], a path under the bucket's prefix, as a root of [id].
+  Future<void> addS3Root(SourceId id,
           {required String path, required FilesLibraryKind kind}) =>
       addWebDavRoot(id, path: path, kind: kind);
 

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/peer_files_host.dart'
     show peerFilesHostProvider, peerFilesRevisionsProvider;
+import 'package:player/core/sources/files/backend/s3_backend.dart';
 import 'package:player/core/sources/files/backend/smb_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_accounts.dart';
@@ -286,6 +287,84 @@ void main() {
     final accountId = id.value.split(':').first;
     await accounts.removeFilesAccount(accountId);
     expect(smb.closedAccounts, [accountId]);
+  });
+
+  group('s3', () {
+    final location = S3Location(
+      endpoint: Uri.parse('https://S3.Example.test'),
+      bucket: 'bkt',
+      prefix: 'media/',
+      region: 'r',
+      style: S3Style.path,
+    );
+    const creds =
+        S3Credentials(accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'sekrit');
+
+    test('addS3Account stores the secret only in SourceSecrets', () async {
+      final c = await container();
+      final accounts = c.read(filesAccountsProvider);
+      final first =
+          await accounts.addS3Account(location: location, credentials: creds);
+
+      final record = (await store.load()).accounts.single;
+      expect(record.account.id, s3AccountId(location.toConnectionUri()));
+      expect(record.account.displayName, 'bkt/media');
+      final uri = record.servers.single.connections.single.uri;
+      expect(uri.toString(), normalizeS3Url(location.toConnectionUri()));
+      expect(uri.toString(), isNot(contains('sekrit')));
+      expect(uri.toString(), isNot(contains('AKIDEXAMPLE')));
+      expect(record.servers.single.connections.single.local, isFalse);
+      final token =
+          await c.read(sourceSecretsProvider).accountToken(record.account);
+      final stored = S3Credentials.fromJson(token!);
+      expect((stored.accessKeyId, stored.secretAccessKey),
+          ('AKIDEXAMPLE', 'sekrit'));
+
+      await store.putAccount(
+          record.copyWith(account: record.account.copyWith(needsReauth: true)));
+      c.invalidate(sourceRecordsProvider);
+      await c.read(sourceRecordsProvider.future);
+      final second = await accounts.addS3Account(
+          location: location,
+          credentials: const S3Credentials(
+              accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'newer'));
+      expect(second, first);
+      final after = (await store.load()).accounts.single;
+      expect(after.account.needsReauth, isFalse);
+      final newer =
+          await c.read(sourceSecretsProvider).accountToken(after.account);
+      expect(S3Credentials.fromJson(newer!).secretAccessKey, 'newer');
+    });
+
+    test('a bucket without a prefix is named by the bucket', () async {
+      final c = await container();
+      await c.read(filesAccountsProvider).addS3Account(
+          location: S3Location(
+            endpoint: Uri.parse('http://192.168.1.5:9000'),
+            bucket: 'bkt',
+            prefix: '',
+            region: 'r',
+            style: S3Style.path,
+          ),
+          credentials: creds);
+      final record = (await store.load()).accounts.single;
+      expect(record.account.displayName, 'bkt');
+      expect(record.servers.single.connections.single.local, isTrue);
+    });
+
+    test('a saved bucket gets a LazyS3Backend and roots', () async {
+      final c = await container(smb: FakeSmbNative());
+      final accounts = c.read(filesAccountsProvider);
+      final id =
+          await accounts.addS3Account(location: location, credentials: creds);
+      await accounts.addS3Root(id,
+          path: '/Films/', kind: FilesLibraryKind.movies);
+      final source = c.read(mediaSourceProvider(id))! as FilesMediaSource;
+      expect(source.backend, isA<LazyS3Backend>());
+      final accountId = id.value.split(':').first;
+      expect(
+          c.read(filesIndexProvider(accountId)).roots().single.path, '/Films');
+    });
   });
 
   test('remove_account_clears_index_and_secrets', () async {

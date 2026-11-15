@@ -29,6 +29,18 @@ class _AuthBackend extends FakeBackend {
       url: 'https://dav.example$path', headers: {'Authorization': 'Basic x'});
 }
 
+/// Mints a new URL on every call, as a presigning backend does.
+class _CountingBackend extends FakeBackend {
+  _CountingBackend(super.files);
+  final playableCalls = <String>[];
+  @override
+  Future<PlayableFile> playable(String path) async {
+    playableCalls.add(path);
+    return PlayableFile(
+        url: 'https://s3.example$path?X-Amz-Date=${playableCalls.length}');
+  }
+}
+
 class _FailingSubBackend extends FakeBackend {
   _FailingSubBackend(super.files);
   @override
@@ -159,6 +171,29 @@ void main() {
     expect(await fetch(const {}), contains('Café'));
     expect(await fetch({'content-type': 'text/plain; charset=utf-8'}),
         contains('Café'));
+  });
+
+  test('every open asks the backend for a fresh URL', () async {
+    // An S3 URL is presigned and expires: reopening a file must mint a new
+    // one, never reuse the URL an earlier open was given.
+    final backend = _CountingBackend({_file: 10});
+    final b = await _build(backend);
+    final session =
+        FilesPlaybackSession(source: b.source, item: movie(b), fileId: key);
+    final prep = await session.prepareStreaming(
+        owner: Object(), onProgress: (_) {}, isCurrent: () => true);
+    final transport =
+        (prep as StreamingReady).setup.createTransport(relayed: false);
+    Future<String> open(Duration at) async => (await transport.open(
+            const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+            fileId: key,
+            startAt: at))
+        .url;
+
+    final first = await open(Duration.zero);
+    final second = await open(const Duration(minutes: 5));
+    expect(backend.playableCalls, [_file, _file]);
+    expect(second, isNot(first));
   });
 
   test('an unreachable source still lets a present file play', () async {

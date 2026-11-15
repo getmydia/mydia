@@ -27,6 +27,7 @@ import '../source.dart';
 import '../sources_providers.dart' show sourceSecretsProvider;
 import 'backend/file_system_backend.dart';
 import 'backend/local_path_backend.dart';
+import 'backend/s3_backend.dart';
 import 'backend/smb_backend.dart';
 import 'backend/webdav_backend.dart';
 import 'cast/files_cast_bridge.dart';
@@ -157,7 +158,7 @@ final filesBackendBuilderProvider =
     Provider<FilesBackendBuilder>((_) => defaultFilesBackend);
 
 /// Folders on this device probe each of the account's roots. A WebDAV or SMB
-/// share reads its credentials on first use.
+/// share, or an S3 bucket, reads its credentials on first use.
 FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
   if (isPeerFilesSource(source)) {
     final p2p = ref.read(p2pServiceProvider);
@@ -188,6 +189,12 @@ FileSystemBackend defaultFilesBackend(Ref ref, Source source) {
       onReachedVia: (t, d) => ref
           .read(filesAccountsProvider)
           .promoteSmbAddress(source.account.id, t, discovered: d),
+    );
+  }
+  if (isS3AccountId(source.account.id)) {
+    return LazyS3Backend(
+      connection: source.server.connections.first.uri,
+      credentials: () => secrets.accountToken(source.account),
     );
   }
   return LazyWebDavBackend(
@@ -307,6 +314,7 @@ FilesMediaSource buildFilesSource(
     onDispose: () {
       unawaited(events.cancel());
       if (backend is LazyWebDavBackend) backend.close();
+      if (backend is LazyS3Backend) backend.close();
     },
   );
   unawaited(media.probe());
@@ -440,6 +448,89 @@ class LazyWebDavBackend implements FileSystemBackend {
     }
     return WebDavBackend(
         base: base, user: c.user, password: c.password, client: _client);
+  }
+
+  @override
+  Future<List<FileEntry>> list(String dir) => _call((b) => b.list(dir));
+
+  @override
+  Future<FileEntry?> stat(String path) => _call((b) => b.stat(path));
+
+  @override
+  Future<PlayableFile> playable(String path) => _call((b) => b.playable(path));
+
+  @override
+  Future<void> probe() => _call((b) => b.probe());
+}
+
+/// An [S3Backend] built on first use from the stored credentials, as
+/// [LazyWebDavBackend] builds its backend: a missing or unreadable
+/// credential is a refused one, and a refused call drops the built backend,
+/// so the next call reads the credentials again.
+///
+/// Every backend it builds shares one HTTP client. [close] closes that
+/// client unless it was given one, which its owner closes.
+class LazyS3Backend implements FileSystemBackend {
+  LazyS3Backend({
+    required this.connection,
+    required this.credentials,
+    http.Client? client,
+  })  : _owned = client == null ? http.Client() : null,
+        _given = client;
+
+  /// The account's S3 connection URI; it carries no key.
+  final Uri connection;
+  final Future<String?> Function() credentials;
+  final http.Client? _owned;
+  final http.Client? _given;
+  Future<S3Backend>? _backend;
+
+  http.Client get _client => (_given ?? _owned)!;
+
+  /// Closes the client this backend made. Called when its source goes.
+  void close() => _owned?.close();
+
+  Future<T> _call<T>(Future<T> Function(S3Backend b) run) async {
+    final b = await _resolve();
+    try {
+      return await run(b);
+    } on BackendUnauthorized {
+      _backend = null;
+      rethrow;
+    }
+  }
+
+  Future<S3Backend> _resolve() => _backend ??= _build().then(
+        (b) => b,
+        onError: (Object e, StackTrace st) {
+          _backend = null;
+          Error.throwWithStackTrace(e, st);
+        },
+      );
+
+  Future<S3Backend> _build() async {
+    final location = S3Location.fromConnectionUri(connection);
+    // Only a damaged record: signing in again keeps the stored connection,
+    // so this is not worded as a refusal.
+    if (location == null) {
+      throw const BackendUnreachable('not an S3 connection');
+    }
+    final stored = await credentials();
+    if (stored == null) throw const BackendUnauthorized('no credentials');
+    final S3Credentials c;
+    try {
+      c = S3Credentials.fromJson(stored);
+    } on FormatException catch (e) {
+      // The exception's text quotes the stored JSON, which holds the secret.
+      debugPrint('[FilesSource] Unreadable S3 credentials: ${e.message}');
+      throw const BackendUnauthorized('unreadable credentials');
+    }
+    return S3Backend(
+      location: location,
+      accessKeyId: c.accessKeyId,
+      secretAccessKey: c.secretAccessKey,
+      client: _client,
+    );
   }
 
   @override

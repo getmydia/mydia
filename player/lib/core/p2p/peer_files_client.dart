@@ -381,7 +381,7 @@ class PeerFilesClient {
   /// never are.
   static bool _dedupable(FlutterWireSharedAccount wire) =>
       wire.accountId != kFilesLocalAccountId &&
-      (wire.kind == 'smb' || wire.kind == 'webdav') &&
+      (wire.kind == 'smb' || wire.kind == 'webdav' || wire.kind == 's3') &&
       wire.dedupeKey != null;
 
   /// Reads every page of [wire] at its revision into a new generation. Any

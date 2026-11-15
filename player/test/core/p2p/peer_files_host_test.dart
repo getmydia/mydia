@@ -527,6 +527,19 @@ void main() {
     expect(filesDedupeKey(_filesRecord(kFilesLocalAccountId, 'Here')), isNull);
   });
 
+  test('an S3 account is kind s3, deduped by its normalized connection', () {
+    final connection = Uri.parse(
+        's3+https://S3.Example.org:443/bkt//media?style=path&region=r');
+    final id = s3AccountId(connection);
+    expect(filesAccountKind(id), 's3');
+    expect(filesAccountKind(kFilesLocalAccountId), 'local');
+    expect(filesAccountKind(_smbAccount), 'smb');
+    expect(filesAccountKind('w0123456789abcdef'), 'webdav');
+    final s3 = _filesRecord(id, 'bkt/media',
+        connections: [ServerConnection(uri: connection)]);
+    expect(filesDedupeKey(s3), normalizeS3Url(connection));
+  });
+
   test('pages_stay_under_budget_and_cover_every_record', () async {
     final roots = <LibraryRoot>[];
     final files = <IndexedFile>[];

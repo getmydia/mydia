@@ -490,6 +490,20 @@ void main() {
       expect(l.style, S3Style.vhost);
     });
 
+    test('host is lowercased and the default port dropped', () {
+      String canon(String u) => S3Location.fromConnectionUri(Uri.parse(u))!
+          .toConnectionUri()
+          .toString();
+      expect(canon('S3+HTTPS://H.Example.com:443/bkt?style=path&region=r'),
+          's3+https://h.example.com/bkt/?region=r&style=path');
+      expect(canon('s3+http://H:80/bkt?region=r&style=path'),
+          's3+http://h/bkt/?region=r&style=path');
+      expect(canon('s3+http://h:443/bkt?region=r&style=path'),
+          's3+http://h:443/bkt/?region=r&style=path');
+      expect(canon('s3+https://[FE80::1]:9000/bkt?region=r&style=path'),
+          's3+https://[fe80::1]:9000/bkt/?region=r&style=path');
+    });
+
     test('an empty prefix stays empty', () {
       final l = S3Location.fromConnectionUri(
           Uri.parse('s3+https://h/bkt?region=r&style=path'))!;
