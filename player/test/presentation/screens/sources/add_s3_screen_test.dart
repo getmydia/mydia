@@ -180,6 +180,34 @@ void main() {
     expect(h.connects.single.$1.style, S3Style.path);
   });
 
+  testWidgets('a typed AWS endpoint is virtual-hosted', (tester) async {
+    final h = await _pump(tester);
+    await _connectOther(tester, endpoint: 'https://S3.eu-west-1.amazonaws.com');
+    expect(h.connects.single.$1.style, S3Style.vhost);
+  });
+
+  testWidgets('any other typed endpoint is path-style', (tester) async {
+    final h = await _pump(tester);
+    await _connectOther(tester, endpoint: 'http://10.0.0.5:9000');
+    expect(h.connects.single.$1.style, S3Style.path);
+  });
+
+  testWidgets('the switch wins over a typed AWS endpoint', (tester) async {
+    final h = await _pump(tester);
+    await _choose(tester, 'Other or self-hosted');
+    await _enter(tester, 's3-endpoint', 'https://s3.eu-west-1.amazonaws.com');
+    await tester.pump();
+    expect(
+        tester.widget<SwitchListTile>(find.byKey(const Key('s3-style'))).value,
+        isFalse);
+    await tester.tap(find.byKey(const Key('s3-style')));
+    await tester.pumpAndSettle();
+    // Retyping the endpoint keeps the viewer's choice.
+    await _enter(tester, 's3-endpoint', 'https://s3.us-east-2.amazonaws.com');
+    await _fillAndConnect(tester);
+    expect(h.connects.single.$1.style, S3Style.path);
+  });
+
   testWidgets('http on a public host is refused without a request',
       (tester) async {
     final h = await _pump(tester);

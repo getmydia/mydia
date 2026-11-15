@@ -40,7 +40,11 @@ class AddS3Screen extends ConsumerStatefulWidget {
 
 class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
   S3Preset _preset = S3Preset.aws;
-  S3Style _style = S3Preset.aws.defaultStyle;
+
+  /// The style the viewer set with the switch (or the stored one when
+  /// signing in again); null follows [_defaultStyle]. Cleared when the
+  /// provider changes.
+  S3Style? _chosenStyle;
   final _region = TextEditingController(text: S3Preset.aws.defaultRegion);
   final _accountId = TextEditingController();
   final _endpoint = TextEditingController();
@@ -72,6 +76,16 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
   Duration _revealDuration = Duration.zero;
 
   bool get _locked => _stored != null;
+
+  S3Style get _style => _chosenStyle ?? _defaultStyle;
+
+  /// The preset's style; for a typed endpoint, virtual-hosted on AWS (which
+  /// no longer serves path style for new buckets) and path everywhere else.
+  S3Style get _defaultStyle {
+    if (!_preset.needsEndpoint) return _preset.defaultStyle;
+    final host = parseS3Endpoint(_endpoint.text)?.host.toLowerCase() ?? '';
+    return host.endsWith('.amazonaws.com') ? S3Style.vhost : S3Style.path;
+  }
 
   @override
   void initState() {
@@ -118,7 +132,7 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
       if (stored == null) return;
       _stored = stored;
       _preset = S3Preset.other;
-      _style = stored.style;
+      _chosenStyle = stored.style;
       _endpoint.text = stored.endpoint.toString();
       _region.text = stored.region;
       _bucket.text = stored.bucket;
@@ -149,7 +163,7 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
     if (preset == null || preset == _preset) return;
     setState(() {
       _preset = preset;
-      _style = preset.defaultStyle;
+      _chosenStyle = null;
       _region.text = preset.defaultRegion ?? '';
       _problem = null;
     });
@@ -416,8 +430,8 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         value: _style == S3Style.path,
         onChanged: fixed
             ? null
-            : (on) =>
-                setState(() => _style = on ? S3Style.path : S3Style.vhost),
+            : (on) => setState(
+                () => _chosenStyle = on ? S3Style.path : S3Style.vhost),
       ),
       // Once connected the form scrolls away, so the folder picker's
       // pinned location bar shows it.
