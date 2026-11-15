@@ -185,6 +185,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
         class="drawer-toggle peer"
         tabindex="-1"
         phx-update="ignore"
+        phx-focus={JS.focus(to: "#manual-search-filters-button")}
         aria-label={gettext("Show filters")}
       />
       <%!-- Phones only: the sheet covers nearly the whole dialog, so once it has
