@@ -34,6 +34,10 @@ defmodule Mydia.Downloads.FfmpegMp4TranscoderTest do
 
     @tag :requires_ffmpeg
     test "fails with invalid input path" do
+      # ffmpeg can exit before Port.info/2 reads its os_pid, and the linked
+      # GenServer then stops with {:ffmpeg_start_failed, :no_os_pid}. That is
+      # the failure this test provokes; it must not take the test down.
+      Process.flag(:trap_exit, true)
       output_path = "/tmp/test_output.mp4"
 
       result =
