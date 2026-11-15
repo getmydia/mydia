@@ -201,10 +201,10 @@ class DialogSettingsNav implements SettingsNav {
       ));
 
   /// Selects [category] while the dialog is open. Its controller is disposed
-  /// once it closes, and a toast action (the pairing notice's "View") can
-  /// fire after that; then this does nothing.
+  /// as the dialog starts closing, and a toast action (the pairing notice's
+  /// "View") can fire after that; then this does nothing.
   void _select(SettingsCategory category) {
-    if (_connections == null) return;
+    if (!scope.isOpen()) return;
     scope.select(category);
   }
 
@@ -215,7 +215,7 @@ class DialogSettingsNav implements SettingsNav {
   /// its root and selects it.
   @override
   void openPairedDevices() {
-    if (_connections == null) return;
+    if (!scope.isOpen()) return;
     scope.connectionsSection.value = 'devices';
   }
 

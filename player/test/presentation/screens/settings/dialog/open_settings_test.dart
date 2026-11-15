@@ -311,6 +311,27 @@ void main() {
     expect(nav.openPairedDevices, returnsNormally);
   });
 
+  testWidgets(
+      'a toast asking for Backup & sync while the dialog closes is a '
+      'no-op', (tester) async {
+    await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
+    await open(tester);
+    final nav = dialogNav(tester);
+
+    await tester.tap(find.byKey(const Key('settings-dialog-close')).first);
+    // One frame in: showDialog has completed and the controller is disposed,
+    // but the dialog (and its pane navigators) is still animating out.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
+
+    expect(nav.openBackup, returnsNormally);
+    expect(nav.openDiagnostics, returnsNormally);
+    expect(nav.openConnections, returnsNormally);
+    expect(nav.openPairedDevices, returnsNormally);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('a Backup & sync request maps to the backup category',
       (tester) async {
     await pumpApp(tester, dialog: true);
