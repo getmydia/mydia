@@ -54,7 +54,7 @@ relay-only features. It is split:
 | `slot_sync_engine.dart` (`SlotSyncEngine`) | Extracted from `BackupSyncService`: dirty flag and 2-minute debounce, flush on background, polling (foreground, after a p2p sync, every 15 minutes) and backoff to 30 minutes, downloading only slots whose version moved, `_apply` and merge, pending account offers, device names. Talks only to a `SlotTransport` |
 | `slot_transport.dart` | The interface below, plus `SlotListing`, `SlotRef`, `SlotVersion` and the transport error kinds |
 | `relay_slot_transport.dart` | The relay client plus `VaultCrypto` sealing and opening, behind `SlotTransport` |
-| `relay_backup_service.dart` (`RelayBackupService`) | What remains of `BackupSyncService`: vault creation, recovery key, rotation, member removal, adding a member on pairing, vault choice. Owns an engine over `RelaySlotTransport`. Behaviour identical to #1414 |
+| `backup_sync_service.dart` (`BackupSyncService` keeps its name) | What remains of it: vault creation, recovery key, rotation, member removal, adding a member on pairing, vault choice. Owns an engine over `RelaySlotTransport`. Behaviour identical to #1414, and the name stays so 1414's fakes and screens keep compiling |
 | `cloud/cloud_slot_transport.dart` | `SlotTransport` over a `CloudBackend`. Plaintext gzip JSON |
 | `cloud/google_drive_backend.dart` | Drive v3 REST against `appDataFolder` |
 | `cloud/google_auth.dart` | Sign-in per platform and token refresh |
@@ -81,7 +81,7 @@ per slot, its id, version, device name and size.
 
 The slot id on every store is #1414's per-install id from `BackupIdentity`,
 so switching stores keeps a device's identity. A cloud slot's body is the
-#1414 record list wrapped in a header: `schema` (1), `slotId`, `deviceName`,
+#1414 record list wrapped in a header: `schema` (#1414's `BackupPayload.version`), `slotId`, `deviceName`,
 `platform`, `writtenAt`, and an optional `movedTo` (see Switching).
 
 ## Google Drive
@@ -99,8 +99,10 @@ so switching stores keeps a device's identity. A cloud slot's body is the
 
   The refresh token and account email live in `AuthStorage` `backup/gdrive`.
 - **Open risk**: Google's limited-input flow accepts only an allowlist of
-  scopes, and it is unconfirmed that `drive.appdata` is on it. The first plan
-  task is a probe against the device-code endpoint. If the scope is refused,
+  scopes, and it is unconfirmed that `drive.appdata` is on it. The probe
+  script at `player/tool/gdrive_device_probe.dart` posts the scope to the
+  device-code endpoint and must be run with the TV client id before release.
+  If the scope is refused,
   Android TV signs in by handing off from a paired phone: the phone sends its
   Drive refresh token and its (public) client id over the encrypted p2p
   channel, and the TV refreshes with them. Revoking either device's access
@@ -116,7 +118,8 @@ so switching stores keeps a device's identity. A cloud slot's body is the
 
 ## iCloud
 
-- **Plugin**: `player/packages/mydia_cloudkit`, Swift, iOS and macOS, over a
+- **Plugin**: a `CloudKitPlugin.swift` handler in each Runner target (iOS and
+  macOS), the `NativeTabBarPlugin.swift` pattern, not a package. It exposes a
   MethodChannel plus an EventChannel for change pushes. Container
   `iCloud.dev.mydia.player`, private database, custom zone `Backup`.
 - **Records**: type `Slot`, record name `slot-<slotId>`, fields `slotId`,
