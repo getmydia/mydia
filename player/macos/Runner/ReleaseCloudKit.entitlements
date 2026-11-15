@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	    Release.entitlements plus iCloud, used only when the build opts in
+	    with MYDIA_CLOUDKIT = YES (see docs/packaging.md). Keep the shared
+	    keys in sync with Release.entitlements, and read its comment before
+	    adding com.apple.security.app-sandbox.
+	-->
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!--
+	    iCloud backup (CloudKitPlugin.swift) and its silent change pushes.
+	    The Developer ID provisioning profile must carry iCloud (CloudKit,
+	    this container) and Push Notifications; see docs/packaging.md.
+	-->
+	<key>com.apple.developer.aps-environment</key>
+	<string>production</string>
+	<!-- Developer ID builds have no App Store step to pick the environment. -->
+	<key>com.apple.developer.icloud-container-environment</key>
+	<string>Production</string>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.dev.mydia.player</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+</dict>
+</plist>

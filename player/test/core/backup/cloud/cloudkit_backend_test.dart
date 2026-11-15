@@ -111,6 +111,8 @@ class _FakeCloudKit {
         return null;
       case 'subscribe':
         return null;
+      case 'isEnabled':
+        return status != 'disabled';
     }
     throw MissingPluginException(call.method);
   }
@@ -338,6 +340,37 @@ void main() {
       }
       fake.failures['accountStatus'] = ['other'];
       expect(await backend.availability(), isA<CloudUnavailable>());
+    });
+
+    test('disabled_build_is_unavailable', () async {
+      fake.status = 'disabled';
+      expect(await backend.availability(), isA<CloudUnavailable>());
+      await expectLater(
+          backend.list(),
+          throwsA(predicate(
+              (e) => _kindOf(e) == BackupRelayError.cloudUnavailable)));
+      expect(fake.tokensSent(), isEmpty);
+    });
+
+    test('transient_account_status_error_is_not_unavailable', () async {
+      fake.failures['accountStatus'] = ['network'];
+      await expectLater(backend.availability(),
+          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.network)));
+      // Recovers on the next check.
+      expect(await backend.availability(), isA<CloudAvailable>());
+    });
+
+    test('is_enabled_reads_the_channel', () async {
+      expect(await CloudKitBackend.isEnabled(channel: channelA), isTrue);
+      fake.status = 'disabled';
+      expect(await CloudKitBackend.isEnabled(channel: channelA), isFalse);
+      fake.failures['isEnabled'] = ['other'];
+      expect(await CloudKitBackend.isEnabled(channel: channelA), isFalse);
+      // No plugin at all (any platform but iOS and macOS).
+      expect(
+          await CloudKitBackend.isEnabled(
+              channel: const MethodChannel('test/cloudkit-none')),
+          isFalse);
     });
 
     test('read_of_missing_slot_is_not_found', () async {

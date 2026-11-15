@@ -2,6 +2,9 @@
 **/Flutter/ephemeral/
 **/Pods/
 
+# iCloud backup opt-in; see docs/packaging.md.
+Runner/Configs/CloudKit.xcconfig
+
 # Xcode-related
 **/dgph
 **/xcuserdata/

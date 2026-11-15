@@ -160,9 +160,13 @@ class AppDelegate: FlutterAppDelegate {
     }
     appMenu = menu
 
-    cloudKitPlugin = CloudKitPlugin(messenger: controller.engine.binaryMessenger)
-    // Silent CloudKit pushes need no notification permission.
-    NSApp.registerForRemoteNotifications()
+    let cloudKit = CloudKitPlugin(messenger: controller.engine.binaryMessenger)
+    cloudKitPlugin = cloudKit
+    // Silent CloudKit pushes need no notification permission, only a build
+    // that opted in to iCloud (and so carries the push entitlement).
+    if cloudKit.enabled {
+      NSApp.registerForRemoteNotifications()
+    }
   }
 
   // FlutterAppDelegate does not implement this, so there is no super to call.

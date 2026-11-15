@@ -41,16 +41,37 @@ class CloudKitBackend implements CloudBackend {
   late final Stream<void> _changes =
       _events.receiveBroadcastStream().map<void>((_) {});
 
+  /// Whether this build carries iCloud (it is opt-in per build; see
+  /// docs/packaging.md), for gating the iCloud option. False on any error,
+  /// and where there is no plugin (every platform but iOS and macOS).
+  static Future<bool> isEnabled({MethodChannel? channel}) async {
+    try {
+      return await (channel ?? const MethodChannel(channelName))
+              .invokeMethod<bool>('isEnabled') ??
+          false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   @override
   CloudStoreKind get kind => CloudStoreKind.icloud;
 
-  /// iCloud has no account name to show, so the label is null.
+  /// iCloud has no account name to show, so the label is null. A build
+  /// without iCloud (`disabled`) and a signed-out or restricted account are
+  /// [CloudUnavailable]; a transient error reaching the account status
+  /// throws instead (`network` or `rateLimited`), so it is retried rather
+  /// than halting until Reconnect.
   @override
   Future<CloudAvailability> availability() async {
     try {
       await _requireAccount();
       return const CloudAvailable(null);
-    } on BackupRelayException {
+    } on BackupRelayException catch (e) {
+      if (e.kind == BackupRelayError.network ||
+          e.kind == BackupRelayError.rateLimited) {
+        rethrow;
+      }
       return const CloudUnavailable();
     }
   }

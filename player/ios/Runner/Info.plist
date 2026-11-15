@@ -47,6 +47,8 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>MydiaCloudKitEnabled</key>
+	<string>$(MYDIA_CLOUDKIT)</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

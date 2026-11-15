@@ -20,9 +20,12 @@ import VideoToolbox
     // Configure audio session for AirPlay
     configureAudioSession()
 
-    // Silent CloudKit pushes for the iCloud backup (CloudKitPlugin). They
-    // need no notification permission, only the device token.
-    application.registerForRemoteNotifications()
+    // Silent CloudKit pushes for the iCloud backup (CloudKitPlugin), in
+    // builds that opted in to iCloud. They need no notification permission,
+    // only the device token.
+    if CloudKitPlugin.enabledInBundle() {
+      application.registerForRemoteNotifications()
+    }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

@@ -268,41 +268,72 @@ include when present:
 
     GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.<the id's first part>
 
-## iCloud backup needs the container, the capabilities and profiles
+## iCloud backup is opt-in per build
 
 The iCloud backup store (`lib/core/backup/cloud/cloudkit_backend.dart`, over
-`CloudKitPlugin.swift` in each Runner target) stores slots in the CloudKit
-container `iCloud.dev.mydia.player`, private database, zone `Backup`, record
-type `Slot`, and learns of other devices' writes from silent pushes of the
-`backup-changes` database subscription. None of that works until the Apple
-developer account has it:
+`CloudKitPlugin.swift` in each Runner target) keeps slots in the CloudKit
+container `iCloud.dev.mydia.player`: private database, zone `Backup`, record
+type `Slot`. It learns of other devices' writes from silent pushes of the
+`backup-changes` database subscription.
 
-- The container `iCloud.dev.mydia.player` exists (Certificates, Identifiers
-  and Profiles, iCloud Containers) and is assigned to the `dev.mydia.player`
-  App ID, with the iCloud (CloudKit) and Push Notifications capabilities on.
-- The `Slot` record type is deployed from the development to the production
-  CloudKit schema in the CloudKit Console before a release build uses it.
-  Development builds create it on first save; production never does.
-- Every provisioning profile is regenerated after the capabilities change:
-  the iOS App Store profile CI installs (`IOS_PROVISIONING_PROFILE_BASE64`)
-  and a macOS Developer ID profile.
+iCloud and push are restricted entitlements. An app signed with them needs a
+development team and a provisioning profile that grants them, which ad-hoc
+contributor builds and the current release workflows do not have. So iCloud
+is off by default: builds sign with the plain entitlements, and
+`CloudKitBackend.isEnabled()` answers false, which hides iCloud in the app.
+Every release keeps it hidden until the steps below are done.
 
-Entitlements:
+The switch is the build setting `MYDIA_CLOUDKIT` (`NO` by default):
 
-| File | `aps-environment` | Notes |
+| | Default | Override (git-ignored) | Entitlements when `YES` |
+| --- | --- | --- | --- |
+| iOS | `ios/Flutter/{Debug,Release}.xcconfig` | `ios/Flutter/CloudKit.xcconfig` | `ios/Runner/RunnerCloudKit.entitlements` (none when `NO`) |
+| macOS | `macos/Runner/Configs/AppInfo.xcconfig` | `macos/Runner/Configs/CloudKit.xcconfig` | `macos/Runner/{DebugProfile,Release}CloudKit.entitlements` |
+
+The override holds one line:
+
+    MYDIA_CLOUDKIT = YES
+
+`CODE_SIGN_ENTITLEMENTS` picks the file from it, and `Info.plist` passes it on
+as `MydiaCloudKitEnabled`. With anything but `YES` the Swift plugin never
+touches CloudKit: `isEnabled` is false, `accountStatus` answers `disabled`
+and every other method fails with `unavailable`.
+
+To opt in:
+
+1. In the Apple developer account, create the container
+   `iCloud.dev.mydia.player` (Certificates, Identifiers and Profiles, iCloud
+   Containers). Turn on iCloud (CloudKit, with that container) and Push
+   Notifications for the `dev.mydia.player` App ID.
+2. Sign with the team: iOS already sets `DEVELOPMENT_TEAM`. macOS signs ad
+   hoc (`CODE_SIGN_IDENTITY = "-"`) and needs a team and identity for an
+   opted-in build.
+3. Regenerate the provisioning profiles after the capability change: the iOS
+   App Store profile CI installs (`IOS_PROVISIONING_PROFILE_BASE64`), and a
+   macOS Developer ID profile.
+4. In CI, write the override file before building. On macOS,
+   `player-macos.yml` re-signs with
+   `codesign --entitlements macos/Runner/Release.entitlements`; an opted-in
+   release must sign with `ReleaseCloudKit.entitlements` and embed the
+   Developer ID profile as `Contents/embedded.provisionprofile`, or macOS
+   refuses to launch it.
+5. Deploy the `Slot` record type, with fields `slotId`, `deviceName`,
+   `platform`, `updatedAt`, `size` and `payload`, from the development to
+   the production CloudKit schema in the CloudKit Console. Development builds
+   create it on first save; production never does.
+
+Push environments:
+
+| File | push key | value |
 | --- | --- | --- |
-| `ios/Runner/Runner.entitlements` | `development` | App Store and TestFlight signing takes `production` from the distribution profile |
-| `macos/Runner/DebugProfile.entitlements` | `development` | key is `com.apple.developer.aps-environment` on macOS |
-| `macos/Runner/Release.entitlements` | `production` | also `com.apple.developer.icloud-container-environment` `Production`, which a Developer ID app must set itself |
+| `ios/Runner/RunnerCloudKit.entitlements` | `aps-environment` | `development`; App Store and TestFlight signing takes `production` from the distribution profile |
+| `macos/Runner/DebugProfileCloudKit.entitlements` | `com.apple.developer.aps-environment` | `development` |
+| `macos/Runner/ReleaseCloudKit.entitlements` | `com.apple.developer.aps-environment` | `production`, plus `com.apple.developer.icloud-container-environment` `Production`, which a Developer ID app sets itself |
 
-iCloud and push are restricted entitlements: macOS only launches an app
-signed with them when a provisioning profile that grants them is embedded
-(`Contents/embedded.provisionprofile`). The macOS workflow signs with
-`codesign --entitlements macos/Runner/Release.entitlements` and a Developer
-ID certificate, so it must embed the Developer ID profile before signing,
-and local macOS builds need a development team instead of ad-hoc (`-`)
-signing.
+Keep the `*CloudKit` macOS entitlements in sync with their plain
+counterparts: they are full copies with the iCloud keys added.
 
-iOS gets silent pushes through `remote-notification` in `UIBackgroundModes`;
-no notification permission is asked. macOS plugins have no push hook, so
-`macos/Runner/AppDelegate.swift` forwards them to the plugin.
+iOS gets silent pushes through `remote-notification` in `UIBackgroundModes`
+and registers for them only when opted in; no notification permission is
+asked. macOS plugins have no push hook, so `macos/Runner/AppDelegate.swift`
+forwards them to the plugin.

@@ -1,4 +1,5 @@
 import CloudKit
+import Flutter
 import XCTest
 
 @testable import Runner
@@ -67,6 +68,32 @@ class CloudKitPluginTests: XCTestCase {
     XCTAssertTrue(CloudKitPlugin.isAlreadyGone(CKError(.unknownItem)))
     XCTAssertTrue(CloudKitPlugin.isAlreadyGone(CKError(.zoneNotFound)))
     XCTAssertFalse(CloudKitPlugin.isAlreadyGone(CKError(.networkFailure)))
+  }
+
+  func testEnabledOnlyByYes() {
+    XCTAssertTrue(CloudKitPlugin.isEnabledValue("YES"))
+    XCTAssertFalse(CloudKitPlugin.isEnabledValue("NO"))
+    XCTAssertFalse(CloudKitPlugin.isEnabledValue(""))
+    XCTAssertFalse(CloudKitPlugin.isEnabledValue(nil))
+    // An unexpanded build setting is off, not on.
+    XCTAssertFalse(CloudKitPlugin.isEnabledValue("$(MYDIA_CLOUDKIT)"))
+  }
+
+  func testDisabledBuildAnswersWithoutCloudKit() {
+    XCTAssertNil(CloudKitPlugin.disabledAnswer(method: "fetchChanges", enabled: true))
+    XCTAssertEqual(CloudKitPlugin.disabledAnswer(method: "isEnabled", enabled: false) as? Bool, false)
+    XCTAssertEqual(
+      (CloudKitPlugin.disabledAnswer(method: "accountStatus", enabled: false)
+        as? [String: String])?["status"],
+      "disabled")
+    for method in ["fetchChanges", "fetchPayload", "save", "delete", "subscribe"] {
+      XCTAssertEqual(
+        (CloudKitPlugin.disabledAnswer(method: method, enabled: false) as? FlutterError)?.code,
+        "unavailable", method)
+    }
+    XCTAssertTrue(
+      CloudKitPlugin.disabledAnswer(method: "nope", enabled: false) as AnyObject
+        === FlutterMethodNotImplemented as AnyObject)
   }
 
   func testStatusNames() {

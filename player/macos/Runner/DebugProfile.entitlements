@@ -14,16 +14,5 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<!-- iCloud backup (CloudKitPlugin.swift) and its silent change pushes. -->
-	<key>com.apple.developer.aps-environment</key>
-	<string>development</string>
-	<key>com.apple.developer.icloud-container-identifiers</key>
-	<array>
-		<string>iCloud.dev.mydia.player</string>
-	</array>
-	<key>com.apple.developer.icloud-services</key>
-	<array>
-		<string>CloudKit</string>
-	</array>
 </dict>
 </plist>

@@ -16,7 +16,14 @@ import CloudKit
 /// iOS registers it as a plugin so `FlutterAppDelegate` forwards silent
 /// pushes to it; macOS has no plugin hook for pushes, so its `AppDelegate`
 /// forwards them to `handleRemoteNotification`.
+///
+/// iCloud is opt-in per build (`MYDIA_CLOUDKIT`, read from the Info.plist
+/// key `MydiaCloudKitEnabled`; see docs/packaging.md). A build without it
+/// has no iCloud entitlement, so the plugin then never touches CloudKit:
+/// `isEnabled` answers false, `accountStatus` answers `disabled` and every
+/// other method fails with `unavailable`.
 final class CloudKitPlugin: NSObject, FlutterStreamHandler {
+  static let infoPlistKey = "MydiaCloudKitEnabled"
   static let channelName = "mydia/cloudkit"
   static let eventChannelName = "mydia/cloudkit/changes"
   static let containerIdentifier = "iCloud.dev.mydia.player"
@@ -40,25 +47,53 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
   private var sink: FlutterEventSink?
   private var accountObserver: NSObjectProtocol?
 
-  /// Created on first use: `CKContainer(identifier:)` raises when the
-  /// iCloud entitlement is missing, and Dart only calls in once it gated
-  /// iCloud on.
-  private lazy var container = CKContainer(identifier: Self.containerIdentifier)
+  /// Whether this build opted in to iCloud. When false nothing below
+  /// touches CloudKit.
+  let enabled: Bool
+
+  /// Created on first use, under [containerLock] because the async methods
+  /// run off the main thread: `CKContainer(identifier:)` raises when the
+  /// iCloud entitlement is missing, so it is only reached when [enabled].
+  private var cachedContainer: CKContainer?
+  private let containerLock = NSLock()
+
+  private var container: CKContainer {
+    containerLock.lock()
+    defer { containerLock.unlock() }
+    if let cachedContainer { return cachedContainer }
+    let created = CKContainer(identifier: Self.containerIdentifier)
+    cachedContainer = created
+    return created
+  }
+
   private var database: CKDatabase { container.privateCloudDatabase }
 
-  init(messenger: FlutterBinaryMessenger) {
+  init(messenger: FlutterBinaryMessenger, enabled: Bool = CloudKitPlugin.enabledInBundle()) {
     channel = FlutterMethodChannel(name: Self.channelName, binaryMessenger: messenger)
     events = FlutterEventChannel(name: Self.eventChannelName, binaryMessenger: messenger)
+    self.enabled = enabled
     super.init()
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
     }
     events.setStreamHandler(self)
-    accountObserver = NotificationCenter.default.addObserver(
-      forName: .CKAccountChanged, object: nil, queue: .main
-    ) { [weak self] _ in
-      self?.emit("account")
+    if enabled {
+      accountObserver = NotificationCenter.default.addObserver(
+        forName: .CKAccountChanged, object: nil, queue: .main
+      ) { [weak self] _ in
+        self?.emit("account")
+      }
     }
+  }
+
+  /// Whether the running app's Info.plist opts in to iCloud.
+  static func enabledInBundle() -> Bool {
+    isEnabledValue(Bundle.main.object(forInfoDictionaryKey: infoPlistKey))
+  }
+
+  /// `MydiaCloudKitEnabled` is `$(MYDIA_CLOUDKIT)`: only `YES` enables.
+  static func isEnabledValue(_ value: Any?) -> Bool {
+    (value as? String)?.uppercased() == "YES"
   }
 
   deinit {
@@ -73,7 +108,7 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
   /// push. Returns whether it was.
   @discardableResult
   func handleRemoteNotification(_ userInfo: [AnyHashable: Any]) -> Bool {
-    guard Self.isBackupPush(userInfo) else { return false }
+    guard enabled, Self.isBackupPush(userInfo) else { return false }
     emit("push")
     return true
   }
@@ -104,8 +139,13 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
+    if let answer = Self.disabledAnswer(method: call.method, enabled: enabled) {
+      return result(answer)
+    }
     let work: () async throws -> Any?
     switch call.method {
+    case "isEnabled":
+      return result(true)
     case "accountStatus":
       work = { try await self.accountStatus() }
     case "fetchChanges":
@@ -186,11 +226,11 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func fetchAll(since start: CKServerChangeToken?) async throws -> [String: Any] {
-    var token = start
+    var next = start
     var changed: [String: [String: Any]] = [:]
     var deleted = Set<String>()
     while true {
-      let page = try await fetchPage(since: token)
+      let page = try await fetchPage(since: next)
       for record in page.changed {
         guard let map = Self.recordToMap(record), let slotId = map["slotId"] as? String else {
           continue
@@ -202,14 +242,14 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
         changed.removeValue(forKey: slotId)
         deleted.insert(slotId)
       }
-      token = page.token
+      next = page.token
       if !page.moreComing { break }
     }
-    guard let token else { throw PluginError(code: "other") }
+    guard let last = next else { throw PluginError(code: "other") }
     return [
       "records": Array(changed.values),
       "deleted": Array(deleted),
-      "token": try Self.archiveToken(token),
+      "token": try Self.archiveToken(last),
     ]
   }
 
@@ -336,6 +376,26 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
   }
 
   // MARK: Pure helpers (RunnerTests/CloudKitPluginTests.swift)
+
+  static let channelMethods: Set<String> = [
+    "isEnabled", "accountStatus", "fetchChanges", "fetchPayload", "save", "delete", "subscribe",
+  ]
+
+  /// The answer to [method] in a build without iCloud, which never reaches
+  /// CloudKit; nil when [enabled], so the call runs.
+  static func disabledAnswer(method: String, enabled: Bool) -> Any? {
+    if enabled { return nil }
+    switch method {
+    case "isEnabled":
+      return false
+    case "accountStatus":
+      return ["status": "disabled"]
+    case _ where channelMethods.contains(method):
+      return FlutterError(code: "unavailable", message: "iCloud is off in this build", details: nil)
+    default:
+      return FlutterMethodNotImplemented
+    }
+  }
 
   static func recordID(slotId: String) -> CKRecord.ID {
     CKRecord.ID(recordName: recordNamePrefix + slotId, zoneID: zoneID)

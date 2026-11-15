@@ -4,3 +4,11 @@
 // Google Drive backup sign-in URL scheme; see docs/packaging.md.
 GOOGLE_REVERSED_CLIENT_ID=
 #include? "GoogleClient.xcconfig"
+
+// iCloud backup, off unless the git-ignored CloudKit.xcconfig sets
+// MYDIA_CLOUDKIT = YES; see docs/packaging.md. Off, the app carries no
+// iCloud or push entitlements and hides iCloud.
+MYDIA_CLOUDKIT = NO
+#include? "CloudKit.xcconfig"
+MYDIA_CLOUDKIT_ENTITLEMENTS_YES = Runner/RunnerCloudKit.entitlements
+MYDIA_CLOUDKIT_ENTITLEMENTS_NO =

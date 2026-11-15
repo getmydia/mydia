@@ -12,3 +12,12 @@ PRODUCT_BUNDLE_IDENTIFIER = dev.mydia.player
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2025 Mydia Player. All rights reserved.
+
+// iCloud backup, off unless the git-ignored CloudKit.xcconfig next to this
+// file sets MYDIA_CLOUDKIT = YES; see docs/packaging.md. Off, the app is
+// signed with DebugProfile/Release.entitlements (no iCloud, no push) and
+// hides iCloud; on, with their *CloudKit variants.
+MYDIA_CLOUDKIT = NO
+#include? "CloudKit.xcconfig"
+MYDIA_CLOUDKIT_SUFFIX_YES = CloudKit
+MYDIA_CLOUDKIT_SUFFIX_NO =
