@@ -260,6 +260,9 @@ class FakeGoogleSignIn {
   /// Makes the next sign-in fail with this.
   Exception? signInError;
 
+  /// When set, [method.signIn] waits on this before completing.
+  Completer<void>? signInWaiter;
+
   /// The device code flow's states, for a TV sign-in. The test owns it.
   // ignore: close_sinks
   StreamController<DeviceCodeState>? deviceCode;
@@ -269,6 +272,10 @@ class FakeGoogleSignIn {
         signIn: deviceCode == null
             ? () async {
                 calls.add('signIn');
+                final waiter = signInWaiter;
+                if (waiter != null && !waiter.isCompleted) {
+                  await waiter.future;
+                }
                 final error = signInError;
                 if (error != null) {
                   signInError = null;

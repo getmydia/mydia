@@ -46,7 +46,7 @@ the spec.
 | `backup_controller.dart` | `BackupController`: the one active store (relay, iCloud or Google Drive), switching between them, the pairing store hint, and the triggers forwarded to the active store only. Free of Riverpod |
 | `backup_providers.dart` | Wires the stores, the controller, the change triggers and the pairing hooks |
 | `cloud/cloud_backend.dart` | `CloudBackend`: the raw file-like store a cloud transport sits on (list, read, write own, delete, changes) and `CloudStoreKind` |
-| `cloud/cloud_slot_transport.dart` | `SlotTransport` over a `CloudBackend`: plaintext gzip JSON with a header (`schema`, `slotId`, `deviceName`, `platform`, `writtenAt`, optional `movedTo`). A newer `schema` or a corrupt body is skipped |
+| `cloud/cloud_slot_transport.dart` | `SlotTransport` over a `CloudBackend`: plaintext gzip `BackupPayload` JSON (`v`, `deviceName`, `platform`, `createdAt`, `records`, optional `movedTo`) with `p2pGroup` records stripped. A newer `v` throws `NewerBackupVersionException`; a corrupt body is skipped |
 | `cloud/cloud_backup_service.dart` | One cloud store's service: enable, sign-in state, restore preview (skips slots that vanish mid-read), switching away, error kinds. Runs a `SlotSyncEngine` over a `CloudSlotTransport`. Free of Riverpod |
 | `cloud/google_auth.dart` | Google sign-in per platform (`google_sign_in` on Android and iOS), token refresh, and the signed-out state |
 | `cloud/google_oauth_flows.dart` | Loopback redirect with PKCE for macOS, Linux and Windows, and the device-code flow for Android TV |

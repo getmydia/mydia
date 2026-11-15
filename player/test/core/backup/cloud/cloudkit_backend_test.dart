@@ -56,7 +56,9 @@ class _FakeCloudKit {
       });
 
   Object? _handle(MethodCall call) {
-    final args = (call.arguments as Map?)?.cast<String, Object?>() ?? {};
+    final args =
+        (call.arguments as Map<Object?, Object?>?)?.cast<String, Object?>() ??
+            {};
     switch (call.method) {
       case 'accountStatus':
         return {
@@ -113,13 +115,16 @@ class _FakeCloudKit {
         return null;
       case 'isEnabled':
         return status != 'disabled';
+      case 'completePush':
+        return null;
     }
     throw MissingPluginException(call.method);
   }
 
   List<Object?> tokensSent() => [
         for (final c in calls)
-          if (c.method == 'fetchChanges') (c.arguments as Map)['token'],
+          if (c.method == 'fetchChanges')
+            (c.arguments as Map<Object?, Object?>)['token'],
       ];
 }
 
@@ -333,11 +338,17 @@ void main() {
       final ok = await backend.availability();
       expect((ok as CloudAvailable).accountLabel, isNull);
       expect(backend.kind, CloudStoreKind.icloud);
-      for (final s in ['noAccount', 'restricted', 'temporarilyUnavailable']) {
+      for (final s in ['noAccount', 'restricted']) {
         fake.status = s;
         expect(await backend.availability(), isA<CloudUnavailable>(),
             reason: s);
       }
+      fake.status = 'temporarilyUnavailable';
+      await expectLater(
+        backend.availability(),
+        throwsA(isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.network)),
+      );
       fake.failures['accountStatus'] = ['other'];
       expect(await backend.availability(), isA<CloudUnavailable>());
     });
@@ -421,6 +432,49 @@ void main() {
       sink.success('account');
       await pumpEventQueue();
       expect(got, hasLength(2));
+      await sub.cancel();
+    });
+
+    test('list_with_null_cursor_resets_stale_table', () async {
+      await write(backend, _a, [1]);
+      final first = (await backend.list())!;
+      expect(first.slots.map((s) => s.slotId), [_a]);
+
+      await other.delete(_a);
+      await meta.setCloudkitToken(null);
+
+      // Even though meta.cloudkitSlots still held _a, a null-cursor list
+      // resets the cached table instead of resurrecting deleted records.
+      final freshBackend =
+          CloudKitBackend(channel: channelA, events: events, meta: meta);
+      final afterReset = (await freshBackend.list())!;
+      expect(afterReset.slots, isEmpty);
+    });
+
+    test('completePush_reports_outcome_only_when_push_is_pending', () async {
+      late MockStreamHandlerEventSink sink;
+      messenger.setMockStreamHandler(
+          events,
+          MockStreamHandler.inline(
+              onListen: (_, s) => sink = s, onCancel: (_) {}));
+      final sub = backend.changes.listen((_) {});
+      await pumpEventQueue();
+
+      await backend.completePush('noData');
+      sink.success('account');
+      await pumpEventQueue();
+      await backend.completePush('noData');
+      expect(fake.calls.where((c) => c.method == 'completePush'), isEmpty);
+
+      sink.success('push');
+      await pumpEventQueue();
+      await backend.completePush('newData');
+      await backend.completePush('noData');
+      final pushCalls =
+          fake.calls.where((c) => c.method == 'completePush').toList();
+      expect(pushCalls, hasLength(1));
+      expect((pushCalls.single.arguments as Map<Object?, Object?>)['result'],
+          'newData');
       await sub.cancel();
     });
   });

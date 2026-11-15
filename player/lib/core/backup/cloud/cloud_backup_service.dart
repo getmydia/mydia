@@ -137,6 +137,15 @@ class CloudBackupService {
   /// Undoes [pauseSync].
   void resumeSync() => _engine.unpause();
 
+  /// Detaches locally without writing a moved stub, used to roll back a store
+  /// enable when persisting the active store fails.
+  Future<void> rollbackEnable() => _engine.serialise(() async {
+        if (!enabled) return;
+        await _engine.detach();
+        _accountLabel.value = null;
+        _engine.setStatus(const BackupOff());
+      });
+
   void markDirty() => _engine.markDirty();
   Future<void> flush() => _engine.flush();
   Future<void> poll() => _engine.poll();

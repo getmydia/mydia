@@ -34,8 +34,11 @@ class GoogleDriveBackend implements CloudBackend {
   final http.Client _client;
   final BackupMetaStore _meta;
 
-  /// Slot id to Drive file id, from the last listing.
+  /// Slot id to the newest Drive file id, from the last listing.
   final _fileIds = <String, String>{};
+
+  /// Slot id to every Drive file id seen for that slot, for complete delete.
+  final _allFileIds = <String, List<String>>{};
 
   @override
   CloudStoreKind get kind => CloudStoreKind.gdrive;
@@ -66,7 +69,7 @@ class GoogleDriveBackend implements CloudBackend {
     } while (pageToken != null);
 
     final pairs = [
-      for (final f in files) '${f['name']}:${f['version']}',
+      for (final f in files) '${f['name']}:${f['id']}:${f['version']}',
     ]..sort();
     final current = sha256.convert(utf8.encode(pairs.join('\n'))).toString();
 
@@ -74,13 +77,16 @@ class GoogleDriveBackend implements CloudBackend {
     // a second); the newest by modifiedTime stands for the slot.
     final newest = <String, SlotInfo>{};
     final newestFile = <String, String>{};
+    final allFiles = <String, List<String>>{};
     for (final f in files) {
       final props = (f['appProperties'] as Map?)?.cast<String, dynamic>();
       final slotId = props?['slotId'] as String?;
       if (slotId == null) continue;
+      final fileId = f['id'] as String;
+      (allFiles[slotId] ??= []).add(fileId);
       final info = SlotInfo(
         slotId: slotId,
-        version: '${f['version']}',
+        version: '$fileId:${f['version']}',
         deviceName: props?['deviceName'] as String?,
         updatedAtMs:
             DateTime.tryParse('${f['modifiedTime']}')?.millisecondsSinceEpoch,
@@ -91,11 +97,14 @@ class GoogleDriveBackend implements CloudBackend {
         continue;
       }
       newest[slotId] = info;
-      newestFile[slotId] = f['id'] as String;
+      newestFile[slotId] = fileId;
     }
     _fileIds
       ..clear()
       ..addAll(newestFile);
+    _allFileIds
+      ..clear()
+      ..addAll(allFiles);
     if (cursor == current) return null;
     return CloudListing(cursor: current, slots: newest.values.toList());
   }
@@ -153,17 +162,24 @@ class GoogleDriveBackend implements CloudBackend {
 
   @override
   Future<void> delete(String slotId) async {
-    var id = _fileIds[slotId];
-    if (id == null) {
-      await list();
-      id = _fileIds[slotId];
+    var ids = _allFileIds[slotId];
+    if (ids == null || ids.isEmpty) {
+      final cached = _fileIds[slotId];
+      if (cached != null) {
+        ids = [cached];
+      } else {
+        await list();
+        ids = _allFileIds[slotId];
+      }
     }
-    if (id == null) return;
-    final r = await _send('DELETE', Uri.parse('$_filesUrl/$id'));
-    if (r.statusCode == 404) return;
-    _expectOk(r);
+    if (ids == null || ids.isEmpty) return;
+    for (final id in ids.toList()) {
+      final r = await _send('DELETE', Uri.parse('$_filesUrl/$id'));
+      if (r.statusCode != 404) _expectOk(r);
+      if (_meta.gdriveOwnFileId == id) await _meta.setGdriveOwnFileId(null);
+    }
     _fileIds.remove(slotId);
-    if (_meta.gdriveOwnFileId == id) await _meta.setGdriveOwnFileId(null);
+    _allFileIds.remove(slotId);
   }
 
   @override

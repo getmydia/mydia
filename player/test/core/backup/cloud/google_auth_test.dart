@@ -360,6 +360,34 @@ void main() {
       expect(deniedStates.last, isA<DeviceCodeDenied>());
       expect(storage.containsKey(googleDriveStorageKey), isFalse);
     });
+
+    test('device_code_cancel_stops_polling_immediately', () async {
+      final delayStarted = Completer<void>();
+      final neverFinishes = Completer<void>();
+      var tokenPolls = 0;
+      final client = MockClient((req) async {
+        if (req.url.toString() == _deviceUrl) return deviceCode(interval: 30);
+        tokenPolls++;
+        return _json(428, {'error': 'authorization_pending'});
+      });
+      final auth = tokenAuth(client, now: () => clock, clientKind: 'tv');
+      final cancellingFlow = DeviceCodeFlow(
+        now: () => clock,
+        delay: (_) {
+          if (!delayStarted.isCompleted) delayStarted.complete();
+          return neverFinishes.future;
+        },
+      );
+
+      final states = <DeviceCodeState>[];
+      final sub = cancellingFlow.signIn(auth).listen(states.add);
+      await delayStarted.future;
+      expect(states, [isA<DeviceCodePending>()]);
+
+      // Must complete immediately without waiting for `neverFinishes`.
+      await sub.cancel().timeout(const Duration(milliseconds: 500));
+      expect(tokenPolls, 0);
+    });
   });
 
   test('refresh_invalid_grant_reports_signed_out', () async {
@@ -555,6 +583,23 @@ void main() {
         }),
         'viewer@example.test');
     expect(stored()['refreshToken'], 'rt-1');
+  });
+
+  test('completeSignIn falls back to userinfo when id_token lacks email',
+      () async {
+    final auth = tokenAuth(MockClient((req) async {
+      expect(req.url.toString(),
+          'https://openidconnect.googleapis.com/v1/userinfo');
+      expect(req.headers['authorization'], 'Bearer at-1');
+      return _json(200, {'email': 'userinfo@example.test'});
+    }));
+
+    final grant = _grant()
+      ..remove('id_token')
+      ..['scope'] = googleDriveAppDataScope;
+    expect(await auth.completeSignIn(grant), 'userinfo@example.test');
+    expect(await auth.currentEmail(), 'userinfo@example.test');
+    expect(stored()['email'], 'userinfo@example.test');
   });
 
   test('GoogleSignInAuth is constructible without touching the plugin', () {

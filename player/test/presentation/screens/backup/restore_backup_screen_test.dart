@@ -280,6 +280,44 @@ void main() {
 
       expect(find.byKey(const Key('restore-summary')), findsOneWidget);
     });
+
+    testWidgets('double tapping Google Drive ignores re-entry while signing in',
+        (tester) async {
+      final waiter = Completer<void>();
+      final c = FakeBackupController(offered: all);
+      c.clouds[BackupStoreKind.gdrive]!.preview = fakeCloudPreview(watched);
+      final google = FakeGoogleSignIn(c.calls)..signInWaiter = waiter;
+      await _pumpCloud(tester, c, google: google);
+
+      await tester.tap(find.byKey(const Key('restore-entry-gdrive')));
+      await tester.pump();
+      expect(c.calls, ['signIn']);
+
+      await tester.tap(find.byKey(const Key('restore-entry-gdrive')));
+      await tester.pump();
+      expect(c.calls, ['signIn']);
+
+      waiter.complete();
+      await tester.pumpAndSettle();
+      expect(c.calls, ['signIn', 'previewRestore gdrive']);
+      expect(find.byKey(const Key('restore-summary')), findsOneWidget);
+    });
+
+    testWidgets('key entry offers Back when cloud stores are offered',
+        (tester) async {
+      final c = FakeBackupController(offered: all);
+      await _pumpCloud(tester, c);
+
+      await tester.tap(find.byKey(const Key('restore-entry-key')));
+      await tester.pumpAndSettle();
+
+      final back = find.byKey(const Key('restore-key-back'));
+      expect(back, findsOneWidget);
+      await tester.tap(back);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('restore-entry-gdrive')), findsOneWidget);
+    });
   });
 
   group('login', () {

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:player/core/backup/backup_gzip.dart';
 import 'package:player/core/backup/backup_identity.dart';
 import 'package:player/core/backup/backup_records.dart';
 import 'package:player/core/backup/backup_relay_client.dart';
@@ -11,6 +12,7 @@ import 'package:player/core/backup/backup_vault_ops.dart';
 import 'package:player/core/backup/backup_vault_state.dart';
 import 'package:player/core/backup/recovery_key.dart';
 import 'package:player/core/backup/relay_slot_transport.dart';
+import 'package:player/core/backup/vault_crypto.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
 import 'fake_backup_relay.dart';
@@ -287,6 +289,48 @@ void main() {
     test('delete_is_unsupported', () async {
       final a = v.transport(v.a);
       await expectLater(a.delete(v.b.slotId), throwsUnsupportedError);
+    });
+
+    test('readSlot_rethrows_and_preview_skips_NewerBackupVersionException',
+        () async {
+      final fake = FakeBackupRelay(now: () => _t0);
+      final client = fake.relayClient();
+      final ops = BackupVaultOps(client);
+      final member = await _Member.create();
+      final recovery = await RecoveryMember.of(RecoveryKey.generate());
+      final vaultKey = randomVaultKey();
+      final vaultId =
+          await ops.createVault(member.identity, recovery, vaultKey);
+
+      final futurePlaintext = gzipEncode(utf8.encode(jsonEncode({
+        'v': BackupPayload.version + 1,
+        'deviceName': 'Future',
+        'platform': 'ios',
+        'createdAt': _t0,
+        'records': const <Object?>[],
+      })));
+      final sealed = await VaultCrypto.sealSlot(
+        vaultKey: vaultKey,
+        vaultId: vaultId,
+        epoch: 1,
+        slotId: member.slotId,
+        seq: 1,
+        plaintext: futurePlaintext,
+      );
+      await client.putSlot(
+          vaultId, member.identity.signer, member.slotId, sealed,
+          ifMatch: null, epoch: 1);
+
+      final opened = await ops.openWithRecovery(recovery);
+      await expectLater(
+        ops.readSlot(vaultId, recovery.signer, opened.manifest.slots.single,
+            {opened.manifest.epoch: vaultKey}),
+        throwsA(isA<NewerBackupVersionException>()),
+      );
+
+      final preview = await ops.preview(recovery);
+      expect(preview.unreadableSlots, contains(member.slotId));
+      expect(preview.records, isEmpty);
     });
   });
 }

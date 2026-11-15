@@ -86,10 +86,10 @@ keeps the version of each slot it has merged per store, so two stores that
 happen to produce the same version string never mask each other.
 
 The slot id on every store is #1414's per-install id from `BackupIdentity`,
-so switching stores keeps a device's identity. A cloud slot's body is the
-#1414 record list wrapped in a header: `schema` (#1414's
-`BackupPayload.version`), `slotId`, `deviceName`, `platform`, `writtenAt`, and
-an optional `movedTo` (see Switching).
+so switching stores keeps a device's identity. A cloud slot's body is #1414's
+gzipped `BackupPayload` JSON (without `p2pGroup` records): `v` (#1414's
+`BackupPayload.version`), `deviceName`, `platform`, `createdAt`, `records`,
+and an optional `movedTo` (see Switching), keyed by `slotId` in the backend.
 
 ## Google Drive
 

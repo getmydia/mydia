@@ -91,6 +91,7 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   CloudRestorePreview? _cloudPreview;
   _RestoreFailure? _failure;
   bool _busy = false;
+  int _opToken = 0;
 
   /// The cloud stores this device offers, in picker order.
   List<BackupStoreKind> get _clouds => [
@@ -150,29 +151,38 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   /// Reads the backup in the cloud store [kind], signing in to Google
   /// first when needed.
   Future<void> _findCloud(BackupStoreKind kind) async {
-    setState(() => _failure = null);
-    if (kind == BackupStoreKind.gdrive &&
-        !await signInToGoogle(context, ref.read(googleSignInMethodProvider))) {
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _busy = true);
+    if (_busy) return;
+    final token = ++_opToken;
+    setState(() {
+      _busy = true;
+      _failure = null;
+    });
     try {
-      await _controller.ready;
-      final preview = await _controller.cloud(kind).previewRestore();
-      if (mounted) {
-        setState(() {
-          _source = kind;
-          _cloudPreview = preview;
-        });
+      if (kind == BackupStoreKind.gdrive &&
+          !await signInToGoogle(
+              context, ref.read(googleSignInMethodProvider))) {
+        return;
       }
+      if (!mounted || _opToken != token) return;
+      await _controller.ready;
+      if (!mounted || _opToken != token) return;
+      final preview = await _controller.cloud(kind).previewRestore();
+      if (!mounted || _opToken != token) return;
+      setState(() {
+        _source = kind;
+        _cloudPreview = preview;
+      });
     } on BackupRelayException catch (e) {
-      if (mounted) setState(() => _failure = _failureOf(e.kind, kind));
+      if (mounted && _opToken == token) {
+        setState(() => _failure = _failureOf(e.kind, kind));
+      }
     } catch (e) {
       debugPrint('[Backup] Cloud restore preview failed: ${e.runtimeType}');
-      if (mounted) setState(() => _failure = _RestoreFailure.other);
+      if (mounted && _opToken == token) {
+        setState(() => _failure = _RestoreFailure.other);
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && _opToken == token) setState(() => _busy = false);
     }
   }
 
@@ -223,10 +233,12 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   }
 
   void _back() => setState(() {
+        _opToken++;
+        _busy = false;
         _preview = null;
         _cloudPreview = null;
         _failure = null;
-        if (_source != BackupStoreKind.relay) _source = null;
+        _source = null;
       });
 
   Future<void> _scan() async {
@@ -420,6 +432,12 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
         spacing: 8,
         runSpacing: 8,
         children: [
+          if (_clouds.isNotEmpty)
+            TextButton(
+              key: const Key('restore-key-back'),
+              onPressed: _busy ? null : _back,
+              child: Text(l10n.commonBack),
+            ),
           if (qrScanSupported)
             OutlinedButton.icon(
               key: const Key('restore-scan-button'),

@@ -10,6 +10,7 @@ import 'backup_records.dart';
 import 'backup_relay_client.dart';
 import 'backup_snapshot.dart';
 import 'backup_status.dart';
+import 'cloud/cloud_slot_transport.dart';
 import 'slot_transport.dart';
 
 /// The store-agnostic half of the cloud backup: debounced upload of this
@@ -122,6 +123,8 @@ class SlotSyncEngine {
   bool _paused = false;
   bool _disposed = false;
   bool _dirty = false;
+  bool _forceUpload = false;
+  String _lastPollOutcome = 'noData';
 
   /// The last upload was refused as too large; a successful poll keeps
   /// showing that until an upload succeeds.
@@ -183,10 +186,12 @@ class SlotSyncEngine {
     _lastSuccessMs = lastSuccessMs;
     halted = false;
     _uploadedHash = null;
+    _forceUpload = false;
+    _lastPollOutcome = 'noData';
     _failures = 0;
     _set(BackupIdle(lastSuccessMs));
     _startPolling();
-    _changes = transport.changes.listen((_) => unawaited(poll()));
+    _changes = transport.changes.listen((_) => unawaited(_onTransportChange()));
   }
 
   /// Stops the timers and the change subscription and forgets what was
@@ -202,6 +207,8 @@ class SlotSyncEngine {
     _writeCursor = null;
     _cursor = null;
     _dirty = false;
+    _forceUpload = false;
+    _lastPollOutcome = 'noData';
     _uploadedHash = null;
     _tooLarge = false;
     _failedSlots.clear();
@@ -254,12 +261,34 @@ class SlotSyncEngine {
 
   /// A backed-up record changed. Uploads at most once per [debounce].
   void markDirty() {
-    if (!_active) return;
+    if (_transport == null || _disposed) return;
     _dirty = true;
+    if (!_active) return;
     _debounceTimer ??= Timer(debounce, () {
       _debounceTimer = null;
       unawaited(background(_uploadIfDirty));
     });
+  }
+
+  Future<void> _onTransportChange() async {
+    final transport = _transport;
+    if (transport == null || _disposed) return;
+    if (halted && !_paused) {
+      if (_status.value
+          case BackupError(kind: BackupRelayError.cloudUnavailable)) {
+        resume();
+      }
+    }
+    if (!_active) {
+      if (transport is CloudSlotTransport) {
+        await transport.completePush('noData');
+      }
+      return;
+    }
+    await poll();
+    if (transport is CloudSlotTransport) {
+      await transport.completePush(_lastPollOutcome);
+    }
   }
 
   /// Uploads a pending change now, as the app goes to the background.
@@ -304,6 +333,8 @@ class SlotSyncEngine {
   /// uploaded, unless [force]d (a new epoch, a join).
   Future<void> uploadOnce({bool force = false}) async {
     final transport = _require();
+    if (force) _forceUpload = true;
+    final effectiveForce = _forceUpload;
     _dirty = false;
     try {
       await beforeUpload?.call();
@@ -314,7 +345,13 @@ class SlotSyncEngine {
           .convert(
               utf8.encode(jsonEncode([for (final r in records) r.toJson()])))
           .toString();
-      if (!force && hash == _uploadedHash) return;
+      if (!effectiveForce && hash == _uploadedHash) {
+        if (_tooLarge) {
+          _tooLarge = false;
+          _set(BackupIdle(_lastSuccessMs));
+        }
+        return;
+      }
       final payload = BackupPayload(
         deviceName: await _deviceName(),
         platform: _platform,
@@ -325,6 +362,7 @@ class SlotSyncEngine {
       await transport.writeOwn(payload);
       _lastSuccessMs = _nowMs;
       _uploadedHash = hash;
+      _forceUpload = false;
       _tooLarge = false;
       afterUpload?.call();
       _set(BackupIdle(_lastSuccessMs));
@@ -343,12 +381,14 @@ class SlotSyncEngine {
   /// slot is stale.
   Future<void> pollOnce({bool full = false, bool conditional = true}) async {
     final transport = _require();
+    _lastPollOutcome = 'noData';
     // Taken now: a detach while this awaits must not move the versions
     // into another store's record.
     final store = _mergedStore;
     final listing = await transport.list(
         cursor: full || !conditional ? null : _currentCursor);
     if (listing == null) return idle();
+    _lastPollOutcome = 'newData';
     final ownSlotId = transport.ownSlotId;
     final payloads = <String, BackupPayload>{};
     final unreadable = <String>{};
@@ -557,10 +597,12 @@ class SlotSyncEngine {
       }
       if (_status.value is BackupError) idle();
     } on BackupRelayException catch (e) {
+      _lastPollOutcome = 'failed';
       await _failed(e.kind, e);
     } on Object catch (e) {
       // Malformed 2xx bodies and storage failures are server-side errors.
       debugPrint('[Backup] Sync failed: ${e.runtimeType}');
+      _lastPollOutcome = 'failed';
       await _failed(BackupRelayError.server, null);
     }
   }

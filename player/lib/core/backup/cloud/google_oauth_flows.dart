@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../l10n/current_l10n.dart';
 import '../backup_relay_client.dart';
 import 'google_auth.dart';
 
@@ -117,12 +118,14 @@ class LoopbackPkceFlow {
         await res.close();
         continue;
       }
+      final l10n = currentAppLocalizations();
+      const esc = HtmlEscape();
       if (params['state'] != state) {
         res.statusCode = HttpStatus.badRequest;
         res.headers.contentType = ContentType.html;
         res.write(
           '<!doctype html><meta charset="utf-8"><title>Mydia</title>'
-          '<p>This sign-in link is not the one Mydia opened.</p>',
+          '<p>${esc.convert(l10n.googleSignInBrowserStateMismatch)}</p>',
         );
         await res.close();
         continue;
@@ -130,7 +133,7 @@ class LoopbackPkceFlow {
       res.headers.contentType = ContentType.html;
       res.write(
         '<!doctype html><meta charset="utf-8"><title>Mydia</title>'
-        '<p>You can close this window and return to Mydia.</p>',
+        '<p>${esc.convert(l10n.googleSignInBrowserDone)}</p>',
       );
       await res.close();
       return params;
@@ -192,69 +195,96 @@ class DeviceCodeFlow {
   /// [DeviceCodeDenied] or [DeviceCodeExpired], then closes. A refused
   /// device-code request or an unexpected token error ends the stream with
   /// a [BackupRelayException].
-  Stream<DeviceCodeState> signIn(GoogleTokenAuth auth) async* {
-    final start = await auth.postForm(googleDeviceCodeEndpoint, {
-      'client_id': auth.clientId,
-      'scope': googleOAuthScopes.join(' '),
-    });
-    if (start.status != 200) throw auth.oauthError(start);
-    final json = start.json;
-    final deviceCode = json['device_code'];
-    final userCode = json['user_code'];
-    // Google says verification_url; RFC 8628 says verification_uri.
-    final verification = json['verification_url'] ?? json['verification_uri'];
-    final expiresIn = json['expires_in'];
-    if (deviceCode is! String ||
-        userCode is! String ||
-        verification is! String ||
-        expiresIn is! num) {
-      throw const FormatException('malformed device code response');
-    }
-    final expiresAt = _now().add(Duration(seconds: expiresIn.toInt()));
-    var interval = Duration(seconds: (json['interval'] as num?)?.toInt() ?? 5);
-    yield DeviceCodePending(
-      userCode: userCode,
-      verificationUrl: Uri.parse(verification),
-      expiresAt: expiresAt,
-    );
+  Stream<DeviceCodeState> signIn(GoogleTokenAuth auth) {
+    var cancelled = false;
+    final done = Completer<void>();
+    late final StreamController<DeviceCodeState> controller;
 
-    while (true) {
-      await _delay(interval);
-      if (!_now().isBefore(expiresAt)) {
-        yield const DeviceCodeExpired();
-        return;
-      }
-      final GoogleOAuthResponse res;
+    Future<void> run() async {
       try {
-        res = await auth.postForm(googleTokenEndpoint, {
-          'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-          'device_code': deviceCode,
+        final start = await auth.postForm(googleDeviceCodeEndpoint, {
           'client_id': auth.clientId,
-          'client_secret': auth.clientSecret,
+          'scope': googleOAuthScopes.join(' '),
         });
-      } on BackupRelayException catch (e) {
-        // A dropped poll is not a failed sign-in; try again next interval.
-        if (e.kind == BackupRelayError.network) continue;
-        rethrow;
-      }
-      if (res.status == 200) {
-        yield DeviceCodeDone(await auth.completeSignIn(res.json));
-        return;
-      }
-      switch (res.error) {
-        case 'authorization_pending':
-          continue;
-        case 'slow_down':
-          interval += _slowDownStep;
-        case 'access_denied':
-          yield const DeviceCodeDenied();
-          return;
-        case 'expired_token':
-          yield const DeviceCodeExpired();
-          return;
-        default:
-          throw auth.oauthError(res);
+        if (cancelled) return;
+        if (start.status != 200) throw auth.oauthError(start);
+        final json = start.json;
+        final deviceCode = json['device_code'];
+        final userCode = json['user_code'];
+        // Google says verification_url; RFC 8628 says verification_uri.
+        final verification =
+            json['verification_url'] ?? json['verification_uri'];
+        final expiresIn = json['expires_in'];
+        if (deviceCode is! String ||
+            userCode is! String ||
+            verification is! String ||
+            expiresIn is! num) {
+          throw const FormatException('malformed device code response');
+        }
+        final expiresAt = _now().add(Duration(seconds: expiresIn.toInt()));
+        var interval =
+            Duration(seconds: (json['interval'] as num?)?.toInt() ?? 5);
+        controller.add(DeviceCodePending(
+          userCode: userCode,
+          verificationUrl: Uri.parse(verification),
+          expiresAt: expiresAt,
+        ));
+
+        while (!cancelled) {
+          await Future.any<void>([_delay(interval), done.future]);
+          if (cancelled) return;
+          if (!_now().isBefore(expiresAt)) {
+            controller.add(const DeviceCodeExpired());
+            return;
+          }
+          final GoogleOAuthResponse res;
+          try {
+            res = await auth.postForm(googleTokenEndpoint, {
+              'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+              'device_code': deviceCode,
+              'client_id': auth.clientId,
+              'client_secret': auth.clientSecret,
+            });
+          } on BackupRelayException catch (e) {
+            // A dropped poll is not a failed sign-in; try again next interval.
+            if (e.kind == BackupRelayError.network) continue;
+            rethrow;
+          }
+          if (cancelled) return;
+          if (res.status == 200) {
+            final email = await auth.completeSignIn(res.json);
+            if (!cancelled) controller.add(DeviceCodeDone(email));
+            return;
+          }
+          switch (res.error) {
+            case 'authorization_pending':
+              continue;
+            case 'slow_down':
+              interval += _slowDownStep;
+            case 'access_denied':
+              controller.add(const DeviceCodeDenied());
+              return;
+            case 'expired_token':
+              controller.add(const DeviceCodeExpired());
+              return;
+            default:
+              throw auth.oauthError(res);
+          }
+        }
+      } catch (e, st) {
+        if (!cancelled) controller.addError(e, st);
+      } finally {
+        if (!controller.isClosed) await controller.close();
       }
     }
+
+    controller = StreamController<DeviceCodeState>(
+      onListen: () => unawaited(run()),
+      onCancel: () {
+        cancelled = true;
+        if (!done.isCompleted) done.complete();
+      },
+    );
+    return controller.stream;
   }
 }

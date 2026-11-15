@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -37,9 +36,26 @@ class CloudKitBackend implements CloudBackend {
 
   /// Whether this instance saved the database subscription already.
   bool _subscribed = false;
+  bool _pendingPush = false;
 
   late final Stream<void> _changes =
-      _events.receiveBroadcastStream().map<void>((_) {});
+      _events.receiveBroadcastStream().map((event) {
+    if (event == 'push') _pendingPush = true;
+  });
+
+  /// Acknowledges a pending push notification to the native plugin with the
+  /// background poll outcome (`newData`, `noData`, or `failed`).
+  Future<void> completePush(String result) async {
+    if (!_pendingPush) return;
+    _pendingPush = false;
+    try {
+      await _channel.invokeMethod<void>('completePush', {'result': result});
+    } on PlatformException {
+      // Best-effort completion; native timeout cleans up otherwise.
+    } on MissingPluginException {
+      // Non-Apple or test host without channel handler.
+    }
+  }
 
   /// Whether this build carries iCloud (it is opt-in per build; see
   /// docs/packaging.md), for gating the iCloud option. False on any error,
@@ -81,9 +97,10 @@ class CloudKitBackend implements CloudBackend {
     await _requireAccount();
     final before = _meta.cloudkitToken;
     var table = _readTable();
-    // A token without a readable table cannot be applied to: start over.
-    var reset = before != null && table == null;
-    if (reset) await _forgetZone();
+    // A missing token or unreadable table cannot be applied to: start over.
+    var reset = before == null || table == null;
+    if (reset && (before != null || table != null)) await _forgetZone();
+    if (reset) table = null;
     Map<String, Object?> result;
     try {
       result = await _fetchChanges(reset ? null : before);
@@ -205,6 +222,9 @@ class CloudKitBackend implements CloudBackend {
       throw _error(e);
     } on MissingPluginException {
       throw const BackupRelayException(BackupRelayError.cloudUnavailable);
+    }
+    if (status['status'] == 'temporarilyUnavailable') {
+      throw const BackupRelayException(BackupRelayError.network);
     }
     if (status['status'] != 'available') {
       throw const BackupRelayException(BackupRelayError.cloudUnavailable);

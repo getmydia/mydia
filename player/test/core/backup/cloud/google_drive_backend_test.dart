@@ -141,7 +141,7 @@ void main() {
 
       final l = (await backend.list())!;
       expect(l.slots, hasLength(1));
-      expect(l.slots.single.version, '5');
+      expect(l.slots.single.version, 'new:5');
       expect(await backend.readBytes('a1b2c3d4e5f60001'), [5]);
     });
 
@@ -169,7 +169,10 @@ void main() {
       expect(slot.deviceName, 'Den');
       expect(slot.size, 3);
       expect(slot.updatedAtMs, isNotNull);
-      expect(slot.version, '${server.files[meta.gdriveOwnFileId]!.version}');
+      expect(
+        slot.version,
+        '${meta.gdriveOwnFileId}:${server.files[meta.gdriveOwnFileId]!.version}',
+      );
     });
 
     test('read_of_unlisted_slot_lists_first_then_not_found', () async {
@@ -326,6 +329,56 @@ void main() {
           await backend.changes.isEmpty
               .timeout(const Duration(milliseconds: 50), onTimeout: () => true),
           isTrue);
+    });
+
+    test('replacing_file_with_same_version_changes_slot_version_and_cursor',
+        () async {
+      await _write(backend, 'a1b2c3d4e5f60001', [1, 2]);
+      final first = (await backend.list())!;
+      final oldId = meta.gdriveOwnFileId!;
+      final sameVersion = server.files[oldId]!.version;
+
+      server.files.remove(oldId);
+      server.files['replacement-id'] = FakeDriveFile(
+        'replacement-id',
+        'slot_a1b2c3d4e5f60001.json',
+        {
+          'slotId': 'a1b2c3d4e5f60001',
+          'deviceName': 'Replaced',
+          'platform': 'ios',
+        },
+      )
+        ..bytes = [3, 4]
+        ..version = sameVersion
+        ..modified = DateTime.utc(2026, 1, 2);
+
+      final second = await backend.list(cursor: first.cursor);
+      expect(second, isNotNull);
+      expect(second!.cursor, isNot(first.cursor));
+      expect(second.slots.single.version, 'replacement-id:$sameVersion');
+      expect(second.slots.single.version, isNot(first.slots.single.version));
+    });
+
+    test('delete_removes_all_duplicate_files_and_clears_own_file_id', () async {
+      FakeDriveFile makeFile(String id, int minute) => FakeDriveFile(
+            id,
+            'slot_a1b2c3d4e5f60001.json',
+            {
+              'slotId': 'a1b2c3d4e5f60001',
+              'deviceName': 'Living Room',
+              'platform': 'ios',
+            },
+          )
+            ..bytes = [minute]
+            ..version = minute
+            ..modified = DateTime.utc(2026, 1, 1, 0, minute);
+      server.files['dup-1'] = makeFile('dup-1', 1);
+      server.files['dup-2'] = makeFile('dup-2', 5);
+      await meta.setGdriveOwnFileId('dup-2');
+
+      await backend.delete('a1b2c3d4e5f60001');
+      expect(server.files, isEmpty);
+      expect(meta.gdriveOwnFileId, isNull);
     });
   });
 }

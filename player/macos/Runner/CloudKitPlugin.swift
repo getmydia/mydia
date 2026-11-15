@@ -46,6 +46,41 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
   private let events: FlutterEventChannel
   private var sink: FlutterEventSink?
   private var accountObserver: NSObjectProtocol?
+  private var pendingPush = false
+  let pushCompletions = PushCompletionQueue()
+
+  final class PushCompletionQueue {
+    private var completions: [(String) -> Void] = []
+    private var timeoutWork: DispatchWorkItem?
+
+    func enqueue(
+      _ completion: @escaping (String) -> Void,
+      timeoutSeconds: TimeInterval = 25
+    ) {
+      completions.append(completion)
+      timeoutWork?.cancel()
+      let work = DispatchWorkItem { [weak self] in
+        self?.complete("noData")
+      }
+      timeoutWork = work
+      DispatchQueue.main.asyncAfter(deadline: .now() + timeoutSeconds, execute: work)
+    }
+
+    func complete(_ outcome: String) {
+      let flush = {
+        self.timeoutWork?.cancel()
+        self.timeoutWork = nil
+        let pending = self.completions
+        self.completions.removeAll()
+        for done in pending { done(outcome) }
+      }
+      if Thread.isMainThread {
+        flush()
+      } else {
+        DispatchQueue.main.async(execute: flush)
+      }
+    }
+  }
 
   /// Whether this build opted in to iCloud. When false nothing below
   /// touches CloudKit.
@@ -107,11 +142,29 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
   // MARK: Pushes and events
 
   /// Emits a change when [userInfo] is the `backup-changes` subscription's
-  /// push. Returns whether it was.
+  /// push, retaining any [completion] until `completePush` acknowledges it (or
+  /// a bounded timeout expires). Returns whether it was a backup push.
   @discardableResult
-  func handleRemoteNotification(_ userInfo: [AnyHashable: Any]) -> Bool {
+  func handleRemoteNotification(
+    _ userInfo: [AnyHashable: Any],
+    completion: ((String) -> Void)? = nil
+  ) -> Bool {
     guard enabled, Self.isBackupPush(userInfo) else { return false }
-    emit("push")
+    let dispatch = {
+      if let completion {
+        self.pushCompletions.enqueue(completion)
+      }
+      if let sink = self.sink {
+        sink("push")
+      } else {
+        self.pendingPush = true
+      }
+    }
+    if Thread.isMainThread {
+      dispatch()
+    } else {
+      DispatchQueue.main.async(execute: dispatch)
+    }
     return true
   }
 
@@ -123,6 +176,12 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
     -> FlutterError?
   {
     sink = events
+    if pendingPush {
+      pendingPush = false
+      DispatchQueue.main.async { [weak self] in
+        self?.sink?("push")
+      }
+    }
     return nil
   }
 
@@ -141,6 +200,11 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
+    if call.method == "completePush" {
+      let outcome = args["result"] as? String ?? "newData"
+      pushCompletions.complete(outcome)
+      return result(nil)
+    }
     if let answer = Self.disabledAnswer(method: call.method, enabled: enabled) {
       return result(answer)
     }
@@ -274,9 +338,15 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
       // The operation runs its blocks serially.
       var changed: [CKRecord] = []
       var deleted: [String] = []
+      var recordError: Error?
       var zoneResult: Result<(CKServerChangeToken, Bool), Error>?
       operation.recordWasChangedBlock = { _, result in
-        if case .success(let record) = result { changed.append(record) }
+        switch result {
+        case .success(let record):
+          changed.append(record)
+        case .failure(let error):
+          if recordError == nil { recordError = error }
+        }
       }
       operation.recordWithIDWasDeletedBlock = { recordID, _ in
         if let slotId = Self.slotId(fromRecordName: recordID.recordName) {
@@ -298,9 +368,13 @@ final class CloudKitPlugin: NSObject, FlutterStreamHandler {
         case (.failure(let error)?, _), (_, .failure(let error)):
           continuation.resume(throwing: error)
         case (.success(let value)?, .success):
-          continuation.resume(
-            returning: ChangePage(
-              changed: changed, deleted: deleted, token: value.0, moreComing: value.1))
+          if let error = recordError {
+            continuation.resume(throwing: error)
+          } else {
+            continuation.resume(
+              returning: ChangePage(
+                changed: changed, deleted: deleted, token: value.0, moreComing: value.1))
+          }
         case (nil, .success):
           continuation.resume(throwing: PluginError(code: "other"))
         }
@@ -543,15 +617,23 @@ extension CloudKitPlugin: FlutterPlugin {
     registrar.publish(plugin)
   }
 
-  /// Claims the backup subscription's silent push. The completion handler
-  /// is called at once: Dart polls on the event, and a background launch
-  /// gets the usual grace period to finish.
+  /// Claims the backup subscription's silent push and completes once Dart
+  /// finishes polling (or on a bounded timeout).
   func application(
     _ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) -> Bool {
-    guard handleRemoteNotification(userInfo) else { return false }
-    completionHandler(.newData)
+    guard
+      handleRemoteNotification(
+        userInfo,
+        completion: { outcome in
+          switch outcome {
+          case "failed": completionHandler(.failed)
+          case "noData": completionHandler(.noData)
+          default: completionHandler(.newData)
+          }
+        })
+    else { return false }
     return true
   }
 }

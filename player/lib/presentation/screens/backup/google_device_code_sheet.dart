@@ -62,21 +62,47 @@ final Provider<GoogleSignInMethod?> googleSignInMethodProvider =
 /// in. A sign-in the viewer declined or abandoned is not an error; any
 /// other failure is toasted. Sign-in failures never read as an unavailable
 /// store.
+bool _sameGoogleAccount(String a, String b) =>
+    a.trim().toLowerCase() == b.trim().toLowerCase();
+
 Future<bool> signInToGoogle(BuildContext context, GoogleSignInMethod? method,
-    {bool force = false}) async {
+    {bool force = false, String? expectedAccount}) async {
   if (method == null) return false;
+  final expected = expectedAccount?.trim();
+  final wantAccount = (expected == null || expected.isEmpty) ? null : expected;
+  final l10n = context.l10n;
   final toaster = Toaster.of(context);
-  final failed = context.l10n.backupActionFailed;
-  final scopeMissing = context.l10n.backupGoogleScopeMissing;
+  final failed = l10n.backupActionFailed;
+  final scopeMissing = l10n.backupGoogleScopeMissing;
   try {
-    if (!force && await method.currentEmail() != null) return true;
+    final current = force ? null : await method.currentEmail();
+    if (current != null &&
+        (wantAccount == null || _sameGoogleAccount(current, wantAccount))) {
+      return true;
+    }
+    var signedIn = false;
     final signIn = method.signIn;
     if (signIn != null) {
       await signIn();
-      return true;
+      signedIn = true;
+    } else {
+      if (!context.mounted) return false;
+      signedIn = await showGoogleDeviceCodeSheet(context, method.deviceCode!);
     }
-    if (!context.mounted) return false;
-    return await showGoogleDeviceCodeSheet(context, method.deviceCode!);
+    if (!signedIn) return false;
+    if (wantAccount != null) {
+      final actual = await method.currentEmail();
+      if (actual == null) {
+        toaster.show(failed, kind: ToastKind.error);
+        return false;
+      }
+      if (!_sameGoogleAccount(actual, wantAccount)) {
+        toaster.show(l10n.backupGoogleAccountMismatch(actual, wantAccount),
+            kind: ToastKind.error);
+        return false;
+      }
+    }
+    return true;
   } on BackupRelayException catch (e) {
     if (e.code == googleScopeMissingCode) {
       toaster.show(scopeMissing, kind: ToastKind.error);
@@ -123,6 +149,7 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
   StreamSubscription<DeviceCodeState>? _sub;
   DeviceCodePending? _pending;
   bool _expired = false;
+  bool _closing = false;
   final _retryFocus = FocusNode(debugLabel: 'google-device-code-retry');
 
   @override
@@ -148,15 +175,23 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
     _sub = widget.start().listen(_onState, onError: _onError);
   }
 
+  void _close(bool result) {
+    if (_closing || !mounted) return;
+    _closing = true;
+    unawaited(_sub?.cancel());
+    _sub = null;
+    Navigator.of(context).pop(result);
+  }
+
   void _onState(DeviceCodeState state) {
-    if (!mounted) return;
+    if (!mounted || _closing) return;
     switch (state) {
       case final DeviceCodePending p:
         setState(() => _pending = p);
       case DeviceCodeDone():
-        Navigator.of(context).pop(true);
+        _close(true);
       case DeviceCodeDenied():
-        Navigator.of(context).pop(false);
+        _close(false);
       case DeviceCodeExpired():
         setState(() {
           _pending = null;
@@ -165,14 +200,14 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
         // The retry replaces the code the viewer was looking at: on a TV,
         // OK should land on it.
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _expired) _retryFocus.requestFocus();
+          if (mounted && !_closing && _expired) _retryFocus.requestFocus();
         });
     }
   }
 
   void _onError(Object e) {
     debugPrint('[Backup] Google device code sign-in failed: ${e.runtimeType}');
-    if (!mounted) return;
+    if (!mounted || _closing) return;
     final l10n = context.l10n;
     showToast(
         context,
@@ -180,7 +215,7 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
             ? l10n.backupGoogleScopeMissing
             : l10n.backupActionFailed,
         kind: ToastKind.error);
-    Navigator.of(context).pop(false);
+    _close(false);
   }
 
   @override
@@ -245,7 +280,7 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
               TextButton(
                 key: const Key('google-device-code-cancel'),
                 autofocus: true,
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: () => _close(false),
                 child: Text(l10n.commonCancel),
               ),
               if (_expired) ...[

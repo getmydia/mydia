@@ -120,4 +120,21 @@ class CloudKitPluginTests: XCTestCase {
     XCTAssertNil(CloudKitPlugin.unarchiveToken("not base64!"))
     XCTAssertNil(CloudKitPlugin.unarchiveToken(Data("garbage".utf8).base64EncodedString()))
   }
+
+  func testPushCompletionQueueDeliversOutcomeAndTimeoutsFallback() {
+    let queue = CloudKitPlugin.PushCompletionQueue()
+    var first: String?
+    queue.enqueue({ first = $0 }, timeoutSeconds: 10)
+    queue.complete("newData")
+    XCTAssertEqual(first, "newData")
+
+    let timedOut = expectation(description: "push completion timeout")
+    var second: String?
+    queue.enqueue({
+      second = $0
+      timedOut.fulfill()
+    }, timeoutSeconds: 0.05)
+    waitForExpectations(timeout: 1.0)
+    XCTAssertEqual(second, "noData")
+  }
 }

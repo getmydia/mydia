@@ -3227,6 +3227,18 @@
   "@backupGoogleScopeMissing": {
     "description": "Toast when the viewer signed in to Google but did not allow Drive access on the consent screen."
   },
+  "backupGoogleAccountMismatch": "Signed in to {actual}. Sign in to {expected} to join this backup.",
+  "@backupGoogleAccountMismatch": {
+    "description": "Toast when joining a Google Drive backup requires a specific Google account, and the viewer signed in to another one.",
+    "placeholders": {
+      "actual": {
+        "type": "String"
+      },
+      "expected": {
+        "type": "String"
+      }
+    }
+  },
   "backupCloudDeleteConfirm": "Delete the backup in {store}? Devices still signed in will back it up again until you turn backup off on them.",
   "@backupCloudDeleteConfirm": {
     "description": "Confirmation before deleting a cloud backup. store is iCloud or Google Drive.",
@@ -3268,5 +3280,13 @@
   "googleDeviceCodeExpired": "The code expired. Try again.",
   "@googleDeviceCodeExpired": {
     "description": "TV sign-in: the code ran out before it was entered."
+  },
+  "googleSignInBrowserDone": "You can close this window and return to Mydia.",
+  "@googleSignInBrowserDone": {
+    "description": "Shown in the system browser tab after completing Google sign-in on desktop."
+  },
+  "googleSignInBrowserStateMismatch": "This sign-in link is not the one Mydia opened.",
+  "@googleSignInBrowserStateMismatch": {
+    "description": "Shown in the system browser tab when a Google sign-in redirect does not match the active request."
   }
 }

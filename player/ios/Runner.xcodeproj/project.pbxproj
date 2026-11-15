@@ -226,6 +226,7 @@
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				C62FD6400206165A2A11CB76 /* [CP] Embed Pods Frameworks */,
 				7D089D0CCE632B1BAF20D747 /* [CP] Copy Pods Resources */,
+				8A4E7B2C1F094D6E9B3A1102 /* Check or Strip Google URL Scheme */,
 			);
 			buildRules = (
 			);
@@ -312,6 +313,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+		};
+		8A4E7B2C1F094D6E9B3A1102 /* Check or Strip Google URL Scheme */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
+			);
+			name = "Check or Strip Google URL Scheme";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "plist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n[ -f \"$plist\" ] || exit 0\nif [ -z \"${GOOGLE_REVERSED_CLIENT_ID:-}\" ]; then\n  if [ -n \"${DART_DEFINES:-}\" ]; then\n    OLD_IFS=\"$IFS\"\n    IFS=','\n    for encoded in $DART_DEFINES; do\n      decoded=$(printf '%s' \"$encoded\" | base64 -D 2>/dev/null || printf '%s' \"$encoded\" | base64 -d 2>/dev/null || true)\n      case \"$decoded\" in\n        MYDIA_GDRIVE_CLIENT_ID_IOS=?*)\n          echo \"error: GOOGLE_REVERSED_CLIENT_ID is empty while MYDIA_GDRIVE_CLIENT_ID_IOS is set. Create ios/Flutter/GoogleClient.xcconfig.\" >&2\n          exit 1\n          ;;\n      esac\n    done\n    IFS=\"$OLD_IFS\"\n  fi\n  i=0\n  while /usr/libexec/PlistBuddy -c \"Print :CFBundleURLTypes:$i\" \"$plist\" >/dev/null 2>&1; do\n    scheme=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleURLTypes:$i:CFBundleURLSchemes:0\" \"$plist\" 2>/dev/null || true)\n    if [ -z \"$scheme\" ] || [ \"$scheme\" = '$(GOOGLE_REVERSED_CLIENT_ID)' ]; then\n      /usr/libexec/PlistBuddy -c \"Delete :CFBundleURLTypes:$i\" \"$plist\"\n      continue\n    fi\n    i=$((i + 1))\n  done\n  /usr/libexec/PlistBuddy -c \"Print :CFBundleURLTypes:0\" \"$plist\" >/dev/null 2>&1 || /usr/libexec/PlistBuddy -c \"Delete :CFBundleURLTypes\" \"$plist\" 2>/dev/null || true\nfi\n";
 		};
 		7D089D0CCE632B1BAF20D747 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;

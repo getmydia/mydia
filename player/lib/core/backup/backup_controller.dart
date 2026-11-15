@@ -265,8 +265,9 @@ class BackupController {
       follow(key, value.status);
     }
 
-    final raw = await _auth.read(storeKey);
-    final hasVault = await _auth.read(BackupVaultStateStore.storageKey) != null;
+    final raw = await _readStrict(storeKey);
+    final hasVault =
+        await _readStrict(BackupVaultStateStore.storageKey) != null;
     BackupStoreKind? active;
     if (raw == null) {
       // An install from before the key: a relay vault means the relay.
@@ -390,6 +391,9 @@ class BackupController {
   /// [StateError] while another store is active; use [switchTo].
   Future<void> enableCloud(BackupStoreKind kind) async {
     await ready;
+    if (_switching > 0) {
+      throw StateError('backup store change in progress');
+    }
     if (kind == BackupStoreKind.relay) {
       throw ArgumentError.value(kind, 'kind', 'is not a cloud store');
     }
@@ -400,7 +404,12 @@ class BackupController {
     _switching++;
     try {
       await service.enable();
-      await _setActive(kind);
+      try {
+        await _setActive(kind);
+      } catch (_) {
+        await service.rollbackEnable();
+        rethrow;
+      }
     } finally {
       _switching--;
     }
@@ -425,10 +434,16 @@ class BackupController {
   Future<void> switchTo(BackupStoreKind to,
       {required bool deleteOld, RecoveryKey? relayKey}) async {
     await ready;
+    if (_switching > 0) {
+      throw StateError('backup store change in progress');
+    }
     final from = _active.value;
     if (from == to) return;
     final target = to == BackupStoreKind.relay ? null : cloud(to);
-    if (to == BackupStoreKind.relay && !_relay.dormant && relayKey == null) {
+    if (to == BackupStoreKind.relay &&
+        !_relay.dormant &&
+        !_relay.enabled &&
+        relayKey == null) {
       throw ArgumentError.notNull('relayKey');
     }
     final old = switch (from) {
@@ -449,6 +464,8 @@ class BackupController {
       try {
         if (target != null) {
           await target.enable();
+        } else if (_relay.enabled) {
+          _relay.resumeSync();
         } else if (_relay.dormant) {
           await _relay.resumeDormant();
           if (!_relay.enabled) {
@@ -457,11 +474,20 @@ class BackupController {
         } else {
           await _relay.confirmEnable(relayKey!);
         }
+        try {
+          await _setActive(to);
+        } catch (_) {
+          if (target != null) {
+            await target.rollbackEnable();
+          } else {
+            await _relay.pauseSync();
+          }
+          rethrow;
+        }
       } catch (_) {
         old?.resume();
         rethrow;
       }
-      await _setActive(to);
       await old?.leave();
     } finally {
       _switching--;
@@ -551,23 +577,32 @@ class BackupController {
     if (on &&
         active == null &&
         (status is BackupIdle || status is BackupUploading)) {
-      unawaited(_setActive(kind));
+      _active.value = kind;
+      if (_hint.value?.kind == kind) acknowledgeHint();
+      unawaited(_auth.write(storeKey, kind.name).catchError((Object e) {
+        debugPrint('[Backup] Active store not saved: ${e.runtimeType}');
+      }));
     } else if (!on &&
         active == kind &&
         (status is BackupOff || status is BackupRemoved)) {
-      unawaited(_setActive(null));
+      _active.value = null;
+      unawaited(_auth.write(storeKey, _off).catchError((Object e) {
+        debugPrint('[Backup] Active store not saved: ${e.runtimeType}');
+      }));
     }
   }
 
+  Future<String?> _readStrict(String key) => switch (_auth) {
+        final StrictAuthRead s => s.readStrict(key),
+        final a => a.read(key),
+      };
+
   Future<void> _setActive(BackupStoreKind? kind) async {
+    if (_disposed) return;
+    await _auth.write(storeKey, kind?.name ?? _off);
     if (_disposed) return;
     _active.value = kind;
     if (kind != null && _hint.value?.kind == kind) acknowledgeHint();
-    try {
-      await _auth.write(storeKey, kind?.name ?? _off);
-    } catch (e) {
-      debugPrint('[Backup] Active store not saved: ${e.runtimeType}');
-    }
   }
 }
 

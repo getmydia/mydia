@@ -123,16 +123,20 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   /// Signs in to Google when [kind] is Drive. True when [kind] can be used
   /// now.
-  Future<bool> _signInFor(BackupStoreKind kind) async {
+  Future<bool> _signInFor(BackupStoreKind kind,
+      {String? expectedAccount}) async {
     if (kind != BackupStoreKind.gdrive) return true;
-    final ok =
-        await signInToGoogle(context, ref.read(googleSignInMethodProvider));
+    final ok = await signInToGoogle(
+      context,
+      ref.read(googleSignInMethodProvider),
+      expectedAccount: expectedAccount,
+    );
     return ok && mounted;
   }
 
   /// Turns backup on in [kind] while it is off. The relay shows a new
   /// recovery key first, unless its vault is only dormant.
-  Future<void> _pick(BackupStoreKind kind) async {
+  Future<void> _pick(BackupStoreKind kind, {String? expectedAccount}) async {
     if (kind == BackupStoreKind.relay) {
       if (_service.dormant) {
         await _run(() =>
@@ -145,15 +149,16 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       if (mounted) setState(() {});
       return;
     }
-    if (!await _signInFor(kind)) return;
+    if (!await _signInFor(kind, expectedAccount: expectedAccount)) return;
     await _run(() => _controller.enableCloud(kind), store: kind);
   }
 
   /// Moves the backup from the active store to [to], after asking (and
   /// whether to delete the old one) unless [ask] is false.
-  Future<void> _switch(BackupStoreKind to, {bool ask = true}) async {
+  Future<void> _switch(BackupStoreKind to,
+      {bool ask = true, String? expectedAccount}) async {
     final from = _controller.active.value;
-    if (from == null) return _pick(to);
+    if (from == null) return _pick(to, expectedAccount: expectedAccount);
     var deleteOld = false;
     if (ask) {
       final answer = await _askSwitch(from, to);
@@ -167,7 +172,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       if (mounted) setState(() {});
       return;
     }
-    if (!await _signInFor(to)) return;
+    if (!await _signInFor(to, expectedAccount: expectedAccount)) return;
     await _run(() => _controller.switchTo(to, deleteOld: deleteOld), store: to);
   }
 
@@ -409,7 +414,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           ),
           FilledButton.tonal(
             key: const Key('backup-hint-join'),
-            onPressed: _busy ? null : () => _switch(hint.kind),
+            onPressed: _busy
+                ? null
+                : () => _switch(hint.kind, expectedAccount: hint.account),
             child: Text(l10n.backupStoreHintJoin),
           ),
         ],

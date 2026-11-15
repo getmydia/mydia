@@ -31,6 +31,10 @@ class FakeBackupSyncService implements BackupSyncService {
   /// Makes the next [confirmEnable] fail with this.
   Exception? confirmError;
 
+  /// When true, a failing [confirmEnable] marks [isEnabled] true first to
+  /// mimic a post-enable persistence failure.
+  bool enableBeforeConfirmError = false;
+
   @override
   ValueListenable<BackupStatus> get status => statusNotifier;
   @override
@@ -76,6 +80,10 @@ class FakeBackupSyncService implements BackupSyncService {
     calls.add('confirmEnable ${key.display}');
     final error = confirmError;
     if (error != null) {
+      if (enableBeforeConfirmError) {
+        isEnabled = true;
+        keyText = key.display;
+      }
       confirmError = null;
       throw error;
     }

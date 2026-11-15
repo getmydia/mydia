@@ -268,6 +268,11 @@ include when present:
 
     GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.<the id's first part>
 
+The Runner target's **Check or Strip Google URL Scheme** build phase fails fast
+if `MYDIA_GDRIVE_CLIENT_ID_IOS` is set in `--dart-define` while
+`GOOGLE_REVERSED_CLIENT_ID` is empty, and strips the empty `CFBundleURLTypes`
+entry from the built `Info.plist` when neither is configured.
+
 ## iCloud backup is opt-in per build
 
 The iCloud backup store (`lib/core/backup/cloud/cloudkit_backend.dart`, over

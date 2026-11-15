@@ -162,6 +162,25 @@ void main() {
     expect(c.calls, ['signIn', 'enableCloud gdrive']);
   });
 
+  testWidgets('the hint rejects a Google sign-in on another account',
+      (tester) async {
+    final c = FakeBackupController(offered: _all)
+      ..hintNotifier.value =
+          const CloudStoreHint(BackupStoreKind.gdrive, 'ana@example.com');
+    final google = FakeGoogleSignIn(c.calls, signInAs: 'bob@example.com');
+    await pumpBackupSection(tester, c, google: google);
+
+    await tester.tap(find.byKey(const Key('backup-hint-join')));
+    await tester.pumpAndSettle();
+
+    expect(c.calls, ['signIn']);
+    expect(
+      find.text(
+          'Signed in to bob@example.com. Sign in to ana@example.com to join this backup.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('deleting a cloud backup warns about signed-in devices',
       (tester) async {
     final c = _onDrive();

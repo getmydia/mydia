@@ -183,9 +183,12 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
         return;
       }
       // The relay may have created the vault with this key before failing:
-      // its lookup handle is taken, so the next try needs a new key.
+      // its lookup handle is taken, so the next try needs a new key. Once
+      // enabled, keep the installed key so retrying only resumes the switch.
       setState(() => _retrying = true);
-      await _newKey();
+      if (!(widget.service?.enabled ?? false)) {
+        await _newKey();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

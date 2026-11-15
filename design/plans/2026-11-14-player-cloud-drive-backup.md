@@ -103,7 +103,7 @@ abstract class SlotTransport {
   - `read_roundtrips_payload` (records, deviceName, platform equal)
   - `delete_removes_from_listing`
   - `oversize_write_throws_tooLarge` (4194305-byte payload after encoding; use random incompressible bytes in a setting record)
-- [ ] **Step 2: Run** `./dev flutter test test/core/backup/in_memory_slot_transport_test.dart`. Expected: FAIL (types missing).
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/core/backup/in_memory_slot_transport_test.dart`. Expected: FAIL (types missing).
 - [ ] **Step 3: Implement** `slot_transport.dart` and the in-memory fake.
 - [ ] **Step 4: Run again.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat(player): SlotTransport interface and contract suite`.
@@ -142,7 +142,7 @@ class RelaySlotTransport implements SlotTransport {
   - `write_adopts_new_epoch_on_409`;
   - `list_sets_ownStale_after_rotation`;
   - `beforeAdopt_runs_before_epoch_adoption`.
-- [ ] **Step 2: Run** `./dev flutter test test/core/backup/relay_slot_transport_test.dart`. Expected: FAIL.
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/core/backup/relay_slot_transport_test.dart`. Expected: FAIL.
 - [ ] **Step 3: Implement** by moving code, not copying. `BackupSyncService` is not edited yet, so the logic temporarily exists twice until Task 3.
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat(player): relay slot transport`.
@@ -193,7 +193,7 @@ class SlotSyncEngine {
   - sets `beforeAdopt` to `_reconcileRecovery`;
   - runs member ops through `engine.serialise`.
 
-- [ ] **Step 1: Record the baseline.** `./dev flutter test test/core/backup test/presentation/screens/backup test/core/p2p/peer_sync_backup_pairing_test.dart`, all passing on the unmodified branch.
+- [ ] **Step 1: Record the baseline.** `./dev flutter test --concurrency=1 test/core/backup test/presentation/screens/backup test/core/p2p/peer_sync_backup_pairing_test.dart`, all passing on the unmodified branch.
 - [ ] **Step 2: Write engine tests** on `InMemorySlotTransport`:
   - `debounce_coalesces_marks_into_one_upload`;
   - `unchanged_records_skip_upload_unless_forced`;
@@ -230,7 +230,7 @@ class SlotSyncEngine {
   - `moved_slot_is_listed_not_merged`;
   - `signed_out_halts_without_clearing` (local stores untouched, no retry timer);
   - `quota_full_waits_for_next_change`.
-- [ ] **Step 2: Run** `./dev flutter test test/core/backup/backup_records_test.dart test/core/backup/slot_sync_engine_test.dart`. Expected: FAIL.
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/core/backup/backup_records_test.dart test/core/backup/slot_sync_engine_test.dart`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run.** Expected: PASS. Add `test/presentation/screens/backup` so status switches stay exhaustive.
 - [ ] **Step 5: Commit** `feat(player): moved and newer-version slots, cloud error kinds`.
@@ -284,7 +284,7 @@ abstract class CloudBackend {
   - `remove_device_deletes_slot_and_it_reappears_on_its_next_upload`;
   - `switch_away_leaves_stub_and_other_device_sees_moved`;
   - `crossed_switch_shows_prompt_both_ways`.
-- [ ] **Step 2: Run** `./dev flutter test test/core/backup/cloud`. Expected: FAIL.
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/core/backup/cloud`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat(player): cloud slot transport and service`.
@@ -343,7 +343,7 @@ GoogleAuth? googleAuthForPlatform(AuthStorage s);           // null when the def
   - `device_code_expired_and_denied`;
   - `refresh_invalid_grant_reports_signed_out` (clears `backup/gdrive`, throws `signedOut`);
   - `access_token_cached_until_expiry`.
-- [ ] **Step 2: Run** `./dev flutter test test/core/backup/cloud/google_auth_test.dart`. Expected: FAIL.
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/core/backup/cloud/google_auth_test.dart`. Expected: FAIL.
 - [ ] **Step 3: Implement.** Wrap `GoogleSignInAuth` thinly around `GoogleSignIn.instance.authorizationClient.authorizeScopes`; no unit test beyond a compile check.
 - [ ] **Step 4: Run.** Expected: PASS. Then `./dev flutter analyze`: clean.
 - [ ] **Step 5: Commit** `feat(player): Google sign-in for Drive backup`.
@@ -388,7 +388,7 @@ GoogleAuth? googleAuthForPlatform(AuthStorage s);           // null when the def
   - `rate_limit_carries_retry_after`.
 
   The fake asserts real request shapes: multipart boundary, `spaces`, `fields`, the `Authorization: Bearer` header.
-- [ ] **Step 2: Run** `./dev flutter test test/core/backup/cloud/google_drive_backend_test.dart`. Expected: FAIL.
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/core/backup/cloud/google_drive_backend_test.dart`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat(player): Google Drive backup backend`.
@@ -439,7 +439,7 @@ GoogleAuth? googleAuthForPlatform(AuthStorage s);           // null when the def
   - `testRecordToMapCarriesAllFields`;
   - `testErrorCodeMapping` (`CKError.notAuthenticated` to `notAuthenticated`, `.quotaExceeded`, `.changeTokenExpired`, `.zoneNotFound`, `.networkUnavailable` to `network`);
   - `testTokenArchiveRoundTrip`.
-- [ ] **Step 3: Run** `./dev flutter test test/core/backup/cloud/cloudkit_backend_test.dart`. Expected: FAIL.
+- [ ] **Step 3: Run** `./dev flutter test --concurrency=1 test/core/backup/cloud/cloudkit_backend_test.dart`. Expected: FAIL.
 - [ ] **Step 4: Implement** the Dart backend and the Swift handler.
 - [ ] **Step 5: Run** the Dart tests: PASS. On the Mac, `./dev player macos build` succeeds and the iOS XCTests pass from Xcode (`RunnerTests`). If no Mac is reachable this session, say so in the PR and leave it for Task 11's manual pass.
 - [ ] **Step 6: Commit** `feat(player): CloudKit backup backend`.
@@ -490,7 +490,7 @@ final backupControllerProvider = Provider<BackupController>(...);
   - `offered_excludes_icloud_off_apple`;
   - `paired_hint_sets_storeHint_without_joining`;
   - Rust `paired_without_backup_store_decodes`.
-- [ ] **Step 2: Run** `./dev flutter test test/core/backup/backup_controller_test.dart test/core/p2p` and `cd native/mydia_p2p_core && cargo test`. Expected: the new tests FAIL.
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/core/backup/backup_controller_test.dart test/core/p2p` and `cd native/mydia_p2p_core && cargo test`. Expected: the new tests FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run both.** Expected: PASS, including #1414's `peer_sync_backup_pairing_test.dart`.
 - [ ] **Step 5: Commit** `feat(player): BackupController and the cloud store pairing hint`.
@@ -551,7 +551,7 @@ Removal on Drive also shows a link to `https://myaccount.google.com/connections`
   - `login_offers_icloud_restore_when_slots_exist`;
   - `device_code_sheet_shows_code_and_qr_and_expiry`;
   - TV: `picker_and_device_code_sheet_reachable_by_dpad`.
-- [ ] **Step 2: Run** `./dev flutter test test/presentation/screens/backup test/presentation/screens/connections`. Expected: new tests FAIL.
+- [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/presentation/screens/backup test/presentation/screens/connections`. Expected: new tests FAIL.
 - [ ] **Step 3: Implement**, then `./dev flutter gen-l10n` (or the project's l10n step per `player/docs/l10n.md`).
 - [ ] **Step 4: Run.** Expected: PASS. `./dev flutter analyze` is clean.
 - [ ] **Step 5: Commit** `feat(player): store picker, cloud backup screens and restore entries`.
@@ -563,7 +563,7 @@ Removal on Drive also shows a link to `https://myaccount.google.com/connections`
 - Modify: `design/specs/2026-11-14-player-cloud-drive-backup-design.md` only if implementation diverged
 
 - [ ] **Step 1: Update the README.**
-- [ ] **Step 2: Full suite** in chunks (it outruns one Bash call): `./dev flutter test test/core`, `test/presentation`, the rest. Expected: all pass, except flakes already catalogued in `.github/ci-flakes.md`.
+- [ ] **Step 2: Full suite** using the wrapper `./dev player test` (which bundles concurrency=1 cleanly; or in chunks with `./dev flutter test --concurrency=1 test/core`, `test/presentation`, etc.). Expected: all pass, except flakes already catalogued in `.github/ci-flakes.md`.
 - [ ] **Step 3:** `./dev flutter analyze`, `cargo test -p mydia_p2p_core`, `./dev mix precommit`. Expected: clean.
 - [ ] **Step 4: Manual, with a real Google account and real client ids:**
   - enable on Linux;

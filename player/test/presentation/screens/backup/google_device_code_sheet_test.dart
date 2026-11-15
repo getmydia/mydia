@@ -162,4 +162,24 @@ void main() {
     // Nobody listens any more, so the close never reports done.
     unawaited(flow.close());
   });
+
+  testWidgets('cancel_closes_once_ignoring_subsequent_stream_events',
+      (tester) async {
+    // Broadcast stream allows pushing events synchronously/right after cancel
+    // even if a native stream does not drop events immediately.
+    final flow = StreamController<DeviceCodeState>.broadcast();
+    final result = await _open(tester, [flow]);
+    flow.add(_pending('ABCD-EFGH'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('google-device-code-cancel')));
+    // Emit both done and an error immediately before the frame settles.
+    flow.add(const DeviceCodeDone('ana@example.com'));
+    flow.addError(StateError('late'));
+    await tester.pumpAndSettle();
+
+    expect(result, [false]);
+    expect(find.byKey(const Key('open')), findsOneWidget);
+    await flow.close();
+  });
 }

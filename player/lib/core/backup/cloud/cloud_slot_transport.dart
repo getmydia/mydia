@@ -2,6 +2,7 @@ import '../backup_records.dart';
 import '../backup_relay_client.dart';
 import '../slot_transport.dart';
 import 'cloud_backend.dart';
+import 'cloudkit_backend.dart';
 
 /// [records] without the p2p group record: the group secret is never
 /// written to a cloud store, where it would sit in plaintext.
@@ -62,4 +63,11 @@ class CloudSlotTransport implements SlotTransport {
 
   @override
   Stream<void> get changes => backend.changes;
+
+  /// Delivers the background fetch completion outcome to the native plugin
+  /// when a CloudKit silent push triggered the poll.
+  Future<void> completePush(String outcome) async {
+    final b = backend;
+    if (b is CloudKitBackend) await b.completePush(outcome);
+  }
 }

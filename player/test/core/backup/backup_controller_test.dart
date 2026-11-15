@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/backup/backup_controller.dart';
+import 'package:player/core/backup/cloud/cloud_backend.dart';
 import 'package:player/core/backup/backup_identity.dart';
 import 'package:player/core/backup/backup_meta_store.dart';
 import 'package:player/core/backup/backup_relay_client.dart';
@@ -869,4 +873,111 @@ void main() {
     expect(net.relay.requests.length, greaterThan(requests));
     expect(a.relay.enabled, isTrue);
   });
+
+  test('init_uses_readStrict_on_StrictAuthRead_storage', () async {
+    final strict = _StrictStorage();
+    strict.failReadKeys.add(BackupController.storeKey);
+    final dev = _Device('Strict', 'strict-node', net);
+    final relay = BackupSyncService(
+      relay: net.relay.relayClient(),
+      authStorage: strict,
+      meta: dev.meta,
+      snapshot: dev.snapshot,
+      deviceName: () async => 'Strict',
+      platform: 'linux',
+      clock: () => DateTime.fromMillisecondsSinceEpoch(_t0),
+    );
+    final c = BackupController(
+      relay: relay,
+      authStorage: strict,
+      resolveOffered: () async => _allStores,
+      buildCloud: (kind) async => buildCloudBackupService(
+        backend: InMemoryCloudBackend(net.stores[kind]!, kind: kind.cloudKind!),
+        authStorage: strict,
+        meta: dev.meta,
+        snapshot: dev.snapshot,
+        deviceName: () async => 'Strict',
+        platform: 'linux',
+      ),
+    );
+    await expectLater(c.ready, throwsA(anything));
+    expect(strict.strictReads, contains(BackupController.storeKey));
+    c.dispose();
+    relay.dispose();
+  });
+
+  test('switchTo_storeKey_write_failure_rolls_back_target_and_keeps_old',
+      () async {
+    final a = net.device('Living Room TV');
+    final c = a.restart();
+    await c.enableCloud(BackupStoreKind.gdrive);
+    expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+
+    a.auth.failWriteKeys.add(BackupController.storeKey);
+    await expectLater(
+      c.switchTo(BackupStoreKind.icloud, deleteOld: true),
+      throwsA(anything),
+    );
+
+    expect(c.active.value, BackupStoreKind.gdrive);
+    expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+    expect(c.cloud(BackupStoreKind.icloud).enabled, isFalse);
+    expect(net.stores[BackupStoreKind.gdrive]!.deletes, isEmpty);
+    expect(net.stores[BackupStoreKind.gdrive]!.bytes, isNotEmpty);
+  });
+
+  test('concurrent_enableCloud_or_switchTo_throws_StateError', () async {
+    final a = net.device('Living Room TV');
+    final gate = Completer<void>();
+    final c = a.controller = BackupController(
+      relay: a.relay,
+      authStorage: a.auth,
+      resolveOffered: () async => _allStores,
+      buildCloud: (kind) async => buildCloudBackupService(
+        backend: kind == BackupStoreKind.gdrive
+            ? _BlockingCloudBackend(
+                net.stores[kind]!,
+                kind: kind.cloudKind!,
+                gate: gate,
+              )
+            : InMemoryCloudBackend(net.stores[kind]!, kind: kind.cloudKind!),
+        authStorage: a.auth,
+        meta: a.meta,
+        snapshot: a.snapshot,
+        deviceName: () async => a.name,
+        platform: 'linux',
+      ),
+    );
+
+    final first = c.enableCloud(BackupStoreKind.gdrive);
+    await Future<void>.delayed(Duration.zero);
+    await expectLater(
+      c.switchTo(BackupStoreKind.icloud, deleteOld: false),
+      throwsStateError,
+    );
+    gate.complete();
+    await first;
+  });
+}
+
+class _StrictStorage extends MockAuthStorage implements StrictAuthRead {
+  final List<String> strictReads = [];
+
+  @override
+  Future<String?> readStrict(String key) {
+    strictReads.add(key);
+    return super.read(key);
+  }
+}
+
+class _BlockingCloudBackend extends InMemoryCloudBackend {
+  _BlockingCloudBackend(super.store, {required super.kind, required this.gate});
+
+  final Completer<void> gate;
+
+  @override
+  Future<CloudAvailability> availability() async {
+    await gate.future;
+    return super.availability();
+  }
 }

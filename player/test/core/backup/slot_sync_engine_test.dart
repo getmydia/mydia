@@ -380,4 +380,67 @@ void main() {
     expect(a.meta.mergedVersion('slot-b'), isNull);
     expect(a.meta.mergedSeq('slot-b'), 0);
   });
+
+  _fake('markDirty_while_paused_uploads_after_unpause', (async) {
+    final a = device('a');
+    _settle(async, a.watch('tmdb:movie:1'));
+    a.engine.pause();
+    a.engine.markDirty();
+    async.elapse(SlotSyncEngine.debounce + const Duration(seconds: 1));
+    expect(a.transport.writes, 0);
+
+    a.engine.unpause();
+    async.elapse(SlotSyncEngine.debounce + const Duration(seconds: 1));
+    expect(a.transport.writes, 1);
+  });
+
+  test('failed_forced_upload_retains_force_until_success', () async {
+    final a = device('a');
+    await a.watch('tmdb:movie:1');
+    await a.upload();
+    expect(a.transport.writes, 1);
+
+    a.transport.failing = true;
+    await expectLater(a.upload(force: true), throwsA(anything));
+
+    a.transport.failing = false;
+    // Records match the last uploaded hash, yet the retained force bit uploads.
+    await a.upload();
+    expect(a.transport.writes, 2);
+
+    // Cleared on success, another unchanged upload skips.
+    await a.upload();
+    expect(a.transport.writes, 2);
+  });
+
+  _fake('tooLarge_cleared_when_unchanged_hash_matches', (async) {
+    final a = device('a');
+    _settle(async, a.watch('tmdb:movie:1'));
+    _settle(async, a.upload());
+    expect(a.transport.writes, 1);
+
+    a.engine.reportFailure(BackupRelayError.tooLarge);
+    async.flushMicrotasks();
+    expect(
+        (a.engine.status.value as BackupError).kind, BackupRelayError.tooLarge);
+
+    _settle(async, a.upload());
+    expect(a.engine.status.value, isA<BackupIdle>());
+    expect(a.transport.writes, 1);
+  });
+
+  _fake('cloudUnavailable_halt_resumes_and_polls_on_transport_change', (async) {
+    final a = device('a');
+    _settle(async, a.watch('tmdb:movie:1'));
+    a.engine.reportFailure(BackupRelayError.cloudUnavailable);
+    async.flushMicrotasks();
+    expect(a.engine.halted, isTrue);
+
+    a.transport.lists = 0;
+    a.transport.pushChange();
+    async.flushMicrotasks();
+    expect(a.engine.halted, isFalse);
+    expect(a.engine.status.value, isA<BackupIdle>());
+    expect(a.transport.lists, greaterThan(0));
+  });
 }

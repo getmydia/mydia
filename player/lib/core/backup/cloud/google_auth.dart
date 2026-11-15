@@ -61,6 +61,50 @@ const BackupRelayException _scopeMissing = BackupRelayException(
 bool _grantsDriveAppData(String scope) =>
     scope.split(' ').contains(googleDriveAppDataScope);
 
+/// GETs [url] and decodes its JSON body (null when not JSON). Transport
+/// failures are [BackupRelayError.network], HTTP errors server or
+/// unauthorized.
+Future<Object?> _getJson(http.Client client, Uri url,
+    {Map<String, String>? headers}) async {
+  final http.Response res;
+  try {
+    res = await client
+        .get(url, headers: headers)
+        .timeout(const Duration(seconds: 30));
+  } on http.ClientException {
+    throw const BackupRelayException(BackupRelayError.network);
+  } on TimeoutException {
+    throw const BackupRelayException(BackupRelayError.network);
+  }
+  if (res.statusCode != 200) {
+    throw BackupRelayException(
+      res.statusCode >= 500
+          ? BackupRelayError.server
+          : BackupRelayError.unauthorized,
+    );
+  }
+  try {
+    return jsonDecode(res.body);
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Fetches the signed-in user's email address from Google's userinfo endpoint.
+Future<String> _fetchUserInfoEmail(
+    http.Client client, String accessToken) async {
+  final body = await _getJson(client, googleUserInfoEndpoint,
+      headers: {'authorization': 'Bearer $accessToken'});
+  final email = body is Map ? body['email'] : null;
+  if (email is! String) {
+    throw const BackupRelayException(
+      BackupRelayError.server,
+      code: 'userinfo_malformed',
+    );
+  }
+  return email;
+}
+
 /// A signed-in Google account that hands out Drive access tokens.
 abstract class GoogleAuth {
   /// The signed-in account's email, or null when signed out.
@@ -185,12 +229,18 @@ class GoogleTokenAuth implements GoogleAuth {
     final existing = stored?['clientKind'] == clientKind ? stored : null;
     final refreshToken =
         grant['refresh_token'] as String? ?? existing?['refreshToken'];
-    final email = _emailFromIdToken(grant['id_token']) ?? existing?['email'];
     if (refreshToken == null) {
       throw const BackupRelayException(
         BackupRelayError.signedOut,
         code: 'no_refresh_token',
       );
+    }
+    var email = _emailFromIdToken(grant['id_token']) ?? existing?['email'];
+    if (email == null) {
+      final accessToken = grant['access_token'];
+      if (accessToken is String && accessToken.isNotEmpty) {
+        email = await _fetchUserInfoEmail(_client, accessToken);
+      }
     }
     if (email == null) {
       throw const FormatException('token response names no account');
@@ -497,8 +547,10 @@ class GoogleSignInAuth implements GoogleAuth {
   /// The space-separated scopes [accessToken] was granted, from Google's
   /// tokeninfo endpoint.
   Future<String> _fetchGrantedScope(String accessToken) async {
-    final body = await _getJson(googleTokenInfoEndpoint
-        .replace(queryParameters: {'access_token': accessToken}));
+    final body = await _getJson(
+        _client,
+        googleTokenInfoEndpoint
+            .replace(queryParameters: {'access_token': accessToken}));
     final scope = body is Map ? body['scope'] : null;
     if (scope is! String) {
       throw const BackupRelayException(
@@ -509,46 +561,8 @@ class GoogleSignInAuth implements GoogleAuth {
     return scope;
   }
 
-  /// GETs [url] and decodes its JSON body (null when not JSON). Transport
-  /// failures are [BackupRelayError.network], HTTP errors server or
-  /// unauthorized.
-  Future<Object?> _getJson(Uri url, {Map<String, String>? headers}) async {
-    final http.Response res;
-    try {
-      res = await _client
-          .get(url, headers: headers)
-          .timeout(const Duration(seconds: 30));
-    } on http.ClientException {
-      throw const BackupRelayException(BackupRelayError.network);
-    } on TimeoutException {
-      throw const BackupRelayException(BackupRelayError.network);
-    }
-    if (res.statusCode != 200) {
-      throw BackupRelayException(
-        res.statusCode >= 500
-            ? BackupRelayError.server
-            : BackupRelayError.unauthorized,
-      );
-    }
-    try {
-      return jsonDecode(res.body);
-    } on FormatException {
-      return null;
-    }
-  }
-
-  Future<String> _fetchEmail(String accessToken) async {
-    final body = await _getJson(googleUserInfoEndpoint,
-        headers: {'authorization': 'Bearer $accessToken'});
-    final email = body is Map ? body['email'] : null;
-    if (email is! String) {
-      throw const BackupRelayException(
-        BackupRelayError.server,
-        code: 'userinfo_malformed',
-      );
-    }
-    return email;
-  }
+  Future<String> _fetchEmail(String accessToken) =>
+      _fetchUserInfoEmail(_client, accessToken);
 
   /// Maps a plugin failure. Only a user cancel means signed out; an
   /// interrupted call is transient, anything else a platform failure. None
