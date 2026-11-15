@@ -386,6 +386,27 @@ class BackupMetaStore {
 
   static const _cloudCursorPrefix = 'cloudCursor:';
 
+  /// When this device's slot last went up to the cloud store [kind] (a
+  /// `CloudStoreKind` name), so the status line survives a restart. Null
+  /// before the first upload, or after leaving that store.
+  int? cloudLastSuccessMs(String kind) =>
+      int.tryParse(_storage.get('$_cloudLastSuccessPrefix$kind') ?? '');
+
+  Future<void> setCloudLastSuccessMs(String kind, int? ms) =>
+      _putOrDelete('$_cloudLastSuccessPrefix$kind', ms?.toString());
+
+  static const _cloudLastSuccessPrefix = 'cloudLastSuccess:';
+
+  /// True while the relay vault in `backup/vault` is kept dormant: this
+  /// device moved its backup to a cloud store and left a moved stub in its
+  /// slot. The relay does not sync a dormant vault.
+  bool get relayDormant => _storage.get(_relayDormantKey) == '1';
+
+  Future<void> setRelayDormant(bool dormant) =>
+      _putOrDelete(_relayDormantKey, dormant ? '1' : null);
+
+  static const _relayDormantKey = 'relayDormant';
+
   /// The Drive file id of this device's own slot, null when not created yet.
   String? get gdriveOwnFileId => _storage.get(_gdriveOwnFileIdKey);
 

@@ -121,6 +121,10 @@ class CloudBackupService {
     _accountLabel.dispose();
   }
 
+  /// Completes once every operation queued so far has run.
+  @visibleForTesting
+  Future<void> settled() => _engine.serialise(() async {});
+
   // Triggers
 
   void markDirty() => _engine.markDirty();
@@ -275,8 +279,18 @@ class CloudBackupService {
     await _engine.attempt(() => _engine.pollOnce(full: true));
   }
 
+  /// The engine's `afterUpload` for a cloud store: keeps the upload's time
+  /// in [meta], so the status line survives a restart.
+  static void Function() persistLastSuccess(
+          BackupMetaStore meta, CloudStoreKind kind, SlotSyncEngine engine) =>
+      () {
+        final at = engine.lastSuccessMs;
+        if (at != null) unawaited(meta.setCloudLastSuccessMs(kind.name, at));
+      };
+
   void _attach() => _engine.attach(
         _transport,
+        lastSuccessMs: _meta.cloudLastSuccessMs(kind.name),
         readCursor: () => _meta.cloudCursor(kind.name),
         writeCursor: (c) => _meta.setCloudCursor(kind.name, c),
       );
@@ -303,6 +317,7 @@ class CloudBackupService {
     await _meta.clearSlotNames();
     await _meta.clearOffers();
     await _meta.setCloudCursor(kind.name, null);
+    await _meta.setCloudLastSuccessMs(kind.name, null);
     _engine.refreshOffers();
   }
 

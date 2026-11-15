@@ -47,6 +47,8 @@ class BackupSyncService {
         _auth = authStorage,
         _store = BackupVaultStateStore(authStorage),
         _meta = meta,
+        _deviceName = deviceName,
+        _platform = platform,
         _clock = clock ?? DateTime.now,
         _localNodeId = localNodeId,
         _delay = delay ?? Future<void>.delayed {
@@ -81,6 +83,8 @@ class BackupSyncService {
   final AuthStorage _auth;
   final BackupVaultStateStore _store;
   final BackupMetaStore _meta;
+  final Future<String> Function() _deviceName;
+  final String _platform;
   final DateTime Function() _clock;
 
   /// Uploads, polls, merges, backs off and keeps the offers, over
@@ -122,6 +126,13 @@ class BackupSyncService {
 
   /// Slot ids whose last download could not be opened or decoded.
   ValueListenable<Set<String>> get unreadableSlots => _engine.unreadableSlots;
+
+  /// Slots whose device moved its backup to another store: slot id to the
+  /// store id (`icloud`, `gdrive`).
+  ValueListenable<Map<String, String>> get movedSlots => _engine.movedSlots;
+
+  /// True while a listed slot was written by a newer app version.
+  ValueListenable<bool> get newerVersionSeen => _engine.newerVersionSeen;
 
   /// True when the recovery key this device keeps is not the vault's (it
   /// was replaced from another device, or a replacement here was lost): the
@@ -181,10 +192,15 @@ class BackupSyncService {
   // Lifecycle
 
   /// Loads the vault state and, when in a vault, polls and schedules the
-  /// periodic poll. Clears an earlier [BackupUnavailable].
+  /// periodic poll. Clears an earlier [BackupUnavailable]. A [dormant]
+  /// vault is left alone: this device backs up to a cloud store.
   Future<void> start() => _engine.serialise(() async {
         _engine.halted = false;
         if (_transport != null) await _detach();
+        if (dormant) {
+          _stored = null;
+          return _set(const BackupOff());
+        }
         try {
           _stored = await _store.load();
           if (_stored == null) return _set(const BackupOff());
@@ -415,6 +431,47 @@ class BackupSyncService {
         await _leaveOnRelay(state.vaultId, identity);
         await _leave(const BackupOff());
       });
+
+  /// Moves this device's backup to the store [to] (a store id such as
+  /// `gdrive`): rewrites its slot as an empty stub naming [to], so the other
+  /// members offer to follow, and stops syncing. The vault state stays on
+  /// disk, [dormant], and this device stays a member, so the stub stays
+  /// readable to the others. [deleteOld] deletes the vault for every member
+  /// instead, as [deleteBackup] does. The caller enables the new store.
+  Future<void> switchAway(String to, {required bool deleteOld}) =>
+      _userOp(() async {
+        final (state, identity) = _require();
+        if (deleteOld) {
+          await _ignoreGone(
+              () => _relay.deleteVault(state.vaultId, identity.signer));
+          return _leave(const BackupOff());
+        }
+        await _requireTransport().writeOwn(BackupPayload(
+          deviceName: await _deviceName(),
+          platform: _platform,
+          createdAt: _nowMs,
+          records: const [],
+          movedTo: to,
+        ));
+        await _meta.setRelayDormant(true);
+        await _detach();
+        _stored = null;
+        _setMismatch(false);
+        _publishUnsavedKey();
+        _setMembers(const []);
+        _setChoice(null);
+        _set(const BackupOff());
+      });
+
+  /// Whether the vault on disk is dormant (see [switchAway]).
+  bool get dormant => _meta.relayDormant;
+
+  /// Syncs the [dormant] vault again, as when the viewer switches back to
+  /// the relay: its next upload replaces the moved stub.
+  Future<void> resumeDormant() async {
+    await _meta.setRelayDormant(false);
+    await start();
+  }
 
   /// Takes this device out of [vaultId] on the relay: a rotation that
   /// removes it, or deleting the vault when no other device is in it. A
@@ -945,6 +1002,8 @@ class BackupSyncService {
   /// Makes [state] the joined vault: a [RelaySlotTransport] owns it from
   /// here, and the engine syncs over it (Idle, periodic poll).
   Future<void> _join(BackupVaultState state, BackupIdentity identity) async {
+    // A vault made live (enabled, restored, adopted) is never dormant.
+    if (dormant) await _meta.setRelayDormant(false);
     _identity = identity;
     final transport = RelaySlotTransport(
       relay: _relay,
@@ -993,6 +1052,7 @@ class BackupSyncService {
     _setChoice(null);
     if (!_disposed) _joinedNotice.value = false;
     await _store.clear();
+    await _meta.setRelayDormant(false);
     await _meta.clearMergedSeqs();
     await _meta.clearSlotClaims();
     await _meta.clearSlotNames();

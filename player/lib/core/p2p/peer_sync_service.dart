@@ -106,6 +106,16 @@ typedef JoinerBackupKeysHook = Future<String?> Function(
 typedef PeerRevokedHook = Future<void> Function(
     String nodeId, String? deviceName);
 
+/// Host: the cloud store this device backs up to (`icloud` or `gdrive`) and
+/// its account label (the Google email; null for iCloud), or null when it
+/// backs up to the relay or not at all.
+typedef CloudStoreForPairHook = Future<({String store, String? account})?>
+    Function();
+
+/// Joiner: the host backs up to the cloud store [store] as [account].
+typedef CloudStoreHintHook = Future<void> Function(
+    String store, String? account);
+
 /// The cloud backup's part in pairing, as [PeerSyncService] takes it. All
 /// null when backup is not offered (web).
 class BackupPairingHooks {
@@ -114,12 +124,16 @@ class BackupPairingHooks {
     this.onJoinerBackupKeys,
     this.onJoinedVault,
     this.onPeerRevoked,
+    this.cloudStoreForPair,
+    this.onCloudStoreHint,
   });
 
   final Future<({String signer, String box})?> Function()? backupKeysForPair;
   final JoinerBackupKeysHook? onJoinerBackupKeys;
   final Future<void> Function(String vaultId)? onJoinedVault;
   final PeerRevokedHook? onPeerRevoked;
+  final CloudStoreForPairHook? cloudStoreForPair;
+  final CloudStoreHintHook? onCloudStoreHint;
 }
 
 class ActivePairingOffer {
@@ -161,12 +175,16 @@ class PeerSyncService {
     JoinerBackupKeysHook? onJoinerBackupKeys,
     Future<void> Function(String vaultId)? onJoinedVault,
     PeerRevokedHook? onPeerRevoked,
+    CloudStoreForPairHook? cloudStoreForPair,
+    CloudStoreHintHook? onCloudStoreHint,
     Duration backupHookTimeout = backupAdmitTimeout,
   })  : _backupHookTimeout = backupHookTimeout,
         _backupKeysForPair = backupKeysForPair,
         _onJoinerBackupKeys = onJoinerBackupKeys,
         _onJoinedVault = onJoinedVault,
         _onPeerRevoked = onPeerRevoked,
+        _cloudStoreForPair = cloudStoreForPair,
+        _onCloudStoreHint = onCloudStoreHint,
         _store = store,
         _authStorage = authStorage,
         _transport = transport,
@@ -208,6 +226,12 @@ class PeerSyncService {
 
   /// Flags a revoked device for removal from the vault.
   final PeerRevokedHook? _onPeerRevoked;
+
+  /// Host: the cloud store to name in `Paired` instead of a vault.
+  final CloudStoreForPairHook? _cloudStoreForPair;
+
+  /// Joiner: keeps the host's cloud store as a hint, joining nothing.
+  final CloudStoreHintHook? _onCloudStoreHint;
 
   /// How long pairing or a revocation waits on a backup hook: the host's
   /// vault add before replying without it (well inside the 30 s the joiner
@@ -541,6 +565,19 @@ class PeerSyncService {
             '${e.runtimeType}');
       }
     }
+    // The group backs up to a cloud store: this device signs in to join,
+    // so pairing only passes the hint on.
+    final store = res.backupStore;
+    if (store != null) {
+      try {
+        await _onCloudStoreHint
+            ?.call(store, res.backupAccount)
+            .timeout(_backupHookTimeout);
+      } catch (e) {
+        debugPrint('[PeerSyncService] Backup store hint not kept: '
+            '${e.runtimeType}');
+      }
+    }
   }
 
   Future<void> _handleInboundPeerSyncRequest(
@@ -616,12 +653,26 @@ class PeerSyncService {
       await _transport.addAddressHint(req.endpointAddrJson!);
     }
 
-    // The joiner joins this device's backup vault, when there is one.
+    // A host backing up to a cloud store names it instead: the joiner
+    // signs in to join, and is added to no vault.
+    ({String store, String? account})? cloudStore;
+    try {
+      cloudStore = await _cloudStoreForPair?.call().timeout(_backupHookTimeout);
+    } catch (e) {
+      debugPrint('[PeerSyncService] No backup store for the joiner: '
+          '${e.runtimeType}');
+    }
+
+    // Otherwise the joiner joins this device's backup vault, when there is
+    // one.
     String? vaultId;
     final backupSigner = req.backupSigner;
     final backupBox = req.backupBox;
     final admit = _onJoinerBackupKeys;
-    if (backupSigner != null && backupBox != null && admit != null) {
+    if (cloudStore == null &&
+        backupSigner != null &&
+        backupBox != null &&
+        admit != null) {
       final generation = _generation;
       try {
         vaultId = await admit(request.peer, backupSigner, backupBox,
@@ -657,6 +708,8 @@ class PeerSyncService {
         watchRecords: watchWire,
         pinRecords: pinWire,
         vaultId: vaultId,
+        backupStore: cloudStore?.store,
+        backupAccount: cloudStore?.account,
       ),
     );
 
@@ -1129,6 +1182,8 @@ final Provider<PeerSyncService> peerSyncServiceProvider =
     onJoinerBackupKeys: backup.onJoinerBackupKeys,
     onJoinedVault: backup.onJoinedVault,
     onPeerRevoked: backup.onPeerRevoked,
+    cloudStoreForPair: backup.cloudStoreForPair,
+    onCloudStoreHint: backup.onCloudStoreHint,
   );
 
   final refreshSub = ref.watch(connectionRefreshBusProvider).events.listen((_) {

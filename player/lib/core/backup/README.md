@@ -32,7 +32,8 @@ the spec.
 | `relay_slot_transport.dart` | The relay vault as a `SlotTransport`: seals, compare-and-swaps on seq and epoch, takes up new epochs. Owns the vault state while joined |
 | `slot_sync_engine.dart` | Store-agnostic sync: debounced upload, polling, merge by slot version, backoff, pending offers, the one operation queue. Free of Riverpod |
 | `backup_sync_service.dart` | The relay backup: runs a `SlotSyncEngine` over a `RelaySlotTransport`, and owns enable, restore, member changes, the recovery key and pairing. Free of Riverpod |
-| `backup_providers.dart` | Wires the stores, the change triggers and the pairing hooks |
+| `backup_controller.dart` | `BackupController`: the one active store (relay, iCloud or Google Drive), switching between them, the pairing store hint, and the triggers forwarded to the active store only. Free of Riverpod |
+| `backup_providers.dart` | Wires the stores, the controller, the change triggers and the pairing hooks |
 
 ## Where state lives
 
@@ -43,7 +44,14 @@ the spec.
   service loads it once even when pairing and a user action ask together.
 - `AuthStorage` `backup/vault`: vault id, epoch, the vault key per known
   epoch, this device's slot seq, the last success, and the recovery key text
-  when this device holds it.
+  when this device holds it. Kept dormant (`relayDormant` in `backup_meta`)
+  after moving to a cloud store: still a member, so the moved stub stays
+  readable, but never synced until the device switches back.
+- `AuthStorage` `backup/store`: the active store, `relay`, `icloud`,
+  `gdrive` or `off`. Missing on an install from before cloud stores, where a
+  `backup/vault` means the relay.
+- `AuthStorage` `backup/storeHint`: the cloud store pairing said the group
+  uses, until the viewer dismisses it or backs up there.
 - Hive box `backup_meta` (`BackupMetaStore`): record stamps, pending account
   offers and dismissals, accounts added from the backup whose folder roots
   have not landed yet, the version of each slot already merged (`ver:`,
@@ -110,6 +118,11 @@ vault id; the joiner adopts it (`adoptVault`) and raises the one-time notice
 "This device is now backed up with your group". A joiner already in another
 vault is not switched: `pendingVaultChoice` asks which to keep. A hook that
 fails or times out never fails pairing.
+
+A host whose active store is iCloud or Google Drive adds no one: `Paired`
+carries `backup_store` and `backup_account` (the Google email, never a
+token) instead of a vault id, and the joiner keeps them as
+`BackupController.storeHint` ("sign in to join") and does nothing else.
 
 ## Removing a device
 
