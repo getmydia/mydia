@@ -20,6 +20,10 @@ import VideoToolbox
     // Configure audio session for AirPlay
     configureAudioSession()
 
+    // Silent CloudKit pushes for the iCloud backup (CloudKitPlugin). They
+    // need no notification permission, only the device token.
+    application.registerForRemoteNotifications()
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -69,6 +73,12 @@ import VideoToolbox
 
     if let tabBarRegistrar = registry.registrar(forPlugin: "NativeTabBarPlugin") {
       nativeTabBarPlugin = NativeTabBarPlugin(messenger: tabBarRegistrar.messenger())
+    }
+
+    // iCloud backup. Registered as a plugin so FlutterAppDelegate forwards
+    // the subscription's silent pushes to it.
+    if let cloudKitRegistrar = registry.registrar(forPlugin: "CloudKitPlugin") {
+      CloudKitPlugin.register(with: cloudKitRegistrar)
     }
   }
 

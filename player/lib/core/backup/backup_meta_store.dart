@@ -394,4 +394,32 @@ class BackupMetaStore {
       : _storage.put(_gdriveOwnFileIdKey, id);
 
   static const _gdriveOwnFileIdKey = 'gdriveOwnFileId';
+
+  /// The base64 archived CloudKit change token of the `Backup` zone, null
+  /// before the first fetch.
+  String? get cloudkitToken => _storage.get(_cloudkitTokenKey);
+
+  Future<void> setCloudkitToken(String? token) =>
+      _putOrDelete(_cloudkitTokenKey, token);
+
+  /// The CloudKit slot table as of [cloudkitToken] (JSON, owned by
+  /// `CloudKitBackend`).
+  String? get cloudkitSlots => _storage.get(_cloudkitSlotsKey);
+
+  Future<void> setCloudkitSlots(String? json) =>
+      _putOrDelete(_cloudkitSlotsKey, json);
+
+  /// The iCloud user record name [cloudkitToken] and [cloudkitSlots]
+  /// belong to.
+  String? get cloudkitUser => _storage.get(_cloudkitUserKey);
+
+  Future<void> setCloudkitUser(String? user) =>
+      _putOrDelete(_cloudkitUserKey, user);
+
+  static const _cloudkitTokenKey = 'cloudkitToken';
+  static const _cloudkitSlotsKey = 'cloudkitSlots';
+  static const _cloudkitUserKey = 'cloudkitUser';
+
+  Future<void> _putOrDelete(String key, String? value) =>
+      value == null ? _storage.delete(key) : _storage.put(key, value);
 }

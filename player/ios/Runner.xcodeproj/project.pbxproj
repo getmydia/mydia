@@ -17,6 +17,8 @@
 		7AB0C0DE000000000000000A /* MydiaRootViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */; };
 		7AB0C0DE0000000000000004 /* CastAccessoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000003 /* CastAccessoryView.swift */; };
 		7AB0C0DE0000000000000006 /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */; };
+		7AB0C0DE000000000000000C /* CloudKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE000000000000000B /* CloudKitPlugin.swift */; };
+		7AB0C0DE000000000000000F /* CloudKitPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE000000000000000E /* CloudKitPluginTests.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
@@ -64,6 +66,9 @@
 		7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MydiaRootViewController.swift; sourceTree = "<group>"; };
 		7AB0C0DE0000000000000003 /* CastAccessoryView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CastAccessoryView.swift; sourceTree = "<group>"; };
 		7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
+		7AB0C0DE000000000000000B /* CloudKitPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CloudKitPlugin.swift; sourceTree = "<group>"; };
+		7AB0C0DE000000000000000D /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		7AB0C0DE000000000000000E /* CloudKitPluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitPluginTests.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -103,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				7AB0C0DE000000000000000E /* CloudKitPluginTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -155,6 +161,8 @@
 				7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */,
 				7AB0C0DE0000000000000003 /* CastAccessoryView.swift */,
 				7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */,
+				7AB0C0DE000000000000000B /* CloudKitPlugin.swift */,
+				7AB0C0DE000000000000000D /* Runner.entitlements */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -406,6 +414,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				7AB0C0DE000000000000000F /* CloudKitPluginTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -420,6 +429,7 @@
 				7AB0C0DE000000000000000A /* MydiaRootViewController.swift in Sources */,
 				7AB0C0DE0000000000000004 /* CastAccessoryView.swift in Sources */,
 				7AB0C0DE0000000000000006 /* NativeTabBarPlugin.swift in Sources */,
+				7AB0C0DE000000000000000C /* CloudKitPlugin.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -512,6 +522,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 2JK76VE4AR;
@@ -696,6 +707,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 2JK76VE4AR;
@@ -720,6 +732,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = 2JK76VE4AR;

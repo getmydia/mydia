@@ -256,7 +256,9 @@ class CloudBackupService {
 
   // Internals
 
-  Future<String> _availableLabel() async =>
+  /// The account's label; null when available with nothing to show
+  /// (iCloud). Throws when the account is not usable.
+  Future<String?> _availableLabel() async =>
       switch (await _backend.availability()) {
         CloudAvailable(:final accountLabel) => accountLabel,
         CloudSignedOut() =>
@@ -266,7 +268,7 @@ class CloudBackupService {
       };
 
   /// Attaches, uploads this device's slot and merges every other one.
-  Future<void> _join(String label) async {
+  Future<void> _join(String? label) async {
     _accountLabel.value = label;
     _attach();
     await _engine.uploadNow(force: true);

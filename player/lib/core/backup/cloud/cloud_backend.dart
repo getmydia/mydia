@@ -10,11 +10,11 @@ sealed class CloudAvailability {
 }
 
 /// Signed in; [accountLabel] names the account for the status line (the
-/// Google email, or the iCloud account's display text).
+/// Google email). Null when the store has no name to show (iCloud).
 class CloudAvailable extends CloudAvailability {
   const CloudAvailable(this.accountLabel);
 
-  final String accountLabel;
+  final String? accountLabel;
 }
 
 /// No account is signed in, or its grant was revoked.

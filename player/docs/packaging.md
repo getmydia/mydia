@@ -267,3 +267,42 @@ Set it in the git-ignored `ios/Flutter/GoogleClient.xcconfig`, which both
 include when present:
 
     GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.<the id's first part>
+
+## iCloud backup needs the container, the capabilities and profiles
+
+The iCloud backup store (`lib/core/backup/cloud/cloudkit_backend.dart`, over
+`CloudKitPlugin.swift` in each Runner target) stores slots in the CloudKit
+container `iCloud.dev.mydia.player`, private database, zone `Backup`, record
+type `Slot`, and learns of other devices' writes from silent pushes of the
+`backup-changes` database subscription. None of that works until the Apple
+developer account has it:
+
+- The container `iCloud.dev.mydia.player` exists (Certificates, Identifiers
+  and Profiles, iCloud Containers) and is assigned to the `dev.mydia.player`
+  App ID, with the iCloud (CloudKit) and Push Notifications capabilities on.
+- The `Slot` record type is deployed from the development to the production
+  CloudKit schema in the CloudKit Console before a release build uses it.
+  Development builds create it on first save; production never does.
+- Every provisioning profile is regenerated after the capabilities change:
+  the iOS App Store profile CI installs (`IOS_PROVISIONING_PROFILE_BASE64`)
+  and a macOS Developer ID profile.
+
+Entitlements:
+
+| File | `aps-environment` | Notes |
+| --- | --- | --- |
+| `ios/Runner/Runner.entitlements` | `development` | App Store and TestFlight signing takes `production` from the distribution profile |
+| `macos/Runner/DebugProfile.entitlements` | `development` | key is `com.apple.developer.aps-environment` on macOS |
+| `macos/Runner/Release.entitlements` | `production` | also `com.apple.developer.icloud-container-environment` `Production`, which a Developer ID app must set itself |
+
+iCloud and push are restricted entitlements: macOS only launches an app
+signed with them when a provisioning profile that grants them is embedded
+(`Contents/embedded.provisionprofile`). The macOS workflow signs with
+`codesign --entitlements macos/Runner/Release.entitlements` and a Developer
+ID certificate, so it must embed the Developer ID profile before signing,
+and local macOS builds need a development team instead of ad-hoc (`-`)
+signing.
+
+iOS gets silent pushes through `remote-notification` in `UIBackgroundModes`;
+no notification permission is asked. macOS plugins have no push hook, so
+`macos/Runner/AppDelegate.swift` forwards them to the plugin.
