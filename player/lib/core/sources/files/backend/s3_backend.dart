@@ -1,0 +1,420 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
+import 'package:xml/xml.dart';
+
+import 'file_system_backend.dart';
+import 's3_errors.dart';
+import 's3_signer.dart';
+
+/// How long a presigned playback URL stays valid. Matches the server's
+/// presigned URLs.
+const kS3PresignExpiry = Duration(hours: 12);
+
+/// How long one S3 request may take, headers and body each, before the
+/// endpoint counts as unreachable.
+const kS3Timeout = Duration(seconds: 20);
+
+/// How requests address the bucket: `<endpoint>/<bucket>/<key>` (path) or
+/// `<bucket>.<endpoint>/<key>` (virtual-hosted).
+enum S3Style { path, vhost }
+
+/// One bucket at one endpoint, narrowed to a key prefix.
+class S3Location {
+  const S3Location({
+    required this.endpoint,
+    required this.bucket,
+    required this.prefix,
+    required this.region,
+    required this.style,
+  });
+
+  /// `http` or `https`, a host, an optional port, no path.
+  final Uri endpoint;
+  final String bucket;
+
+  /// Empty, or ending in `/`; never starts with `/`. Case is kept: keys are
+  /// case sensitive.
+  final String prefix;
+  final String region;
+  final S3Style style;
+
+  /// `s3+<scheme>://<host>[:port]/<bucket>/<prefix>?region=<r>&style=<s>`.
+  Uri toConnectionUri() => Uri(
+        scheme: 's3+${endpoint.scheme}',
+        host: endpoint.host,
+        port: endpoint.hasPort ? endpoint.port : null,
+        path: '/$bucket/$prefix',
+        queryParameters: {'region': region, 'style': style.name},
+      );
+
+  /// The location [u] names, or null when [u] is not a complete S3
+  /// connection URI.
+  static S3Location? fromConnectionUri(Uri u) {
+    final scheme = switch (u.scheme.toLowerCase()) {
+      's3+https' => 'https',
+      's3+http' => 'http',
+      _ => null,
+    };
+    if (scheme == null || u.host.isEmpty) return null;
+    final region = u.queryParameters['region'];
+    if (region == null || region.isEmpty) return null;
+    final style = S3Style.values
+        .where((s) => s.name == u.queryParameters['style'])
+        .firstOrNull;
+    if (style == null) return null;
+
+    final segments = u.pathSegments.where((s) => s.isNotEmpty).toList();
+    if (segments.isEmpty) return null;
+    final rest = segments.skip(1).join('/');
+    return S3Location(
+      endpoint: Uri(
+        scheme: scheme,
+        host: u.host,
+        port: u.hasPort ? u.port : null,
+      ),
+      bucket: segments.first,
+      prefix: rest.isEmpty ? '' : '$rest/',
+      region: region,
+      style: style,
+    );
+  }
+
+  /// The host requests go to: the endpoint's, or the bucket's subdomain of it.
+  String get _host =>
+      style == S3Style.vhost ? '$bucket.${endpoint.host}' : endpoint.host;
+
+  String get _origin => Uri(
+        scheme: endpoint.scheme,
+        host: _host,
+        port: endpoint.hasPort ? endpoint.port : null,
+      ).toString();
+
+  String get _bucketPath =>
+      style == S3Style.path ? '/${s3UriEncode(bucket, encodeSlash: true)}' : '';
+
+  /// The URL of the object [key]. Encoded with [s3UriEncode] so the path on
+  /// the wire is the one the signer canonicalizes: `Uri(path:)` leaves
+  /// characters such as `+` and `&` raw.
+  Uri objectUri(String key) =>
+      Uri.parse('$_origin$_bucketPath/${s3UriEncode(key, encodeSlash: false)}');
+
+  /// The bucket's URL with [query], each key and value encoded with
+  /// [s3UriEncode], in the order given.
+  Uri bucketUri([Map<String, String> query = const {}]) {
+    final path = _bucketPath.isEmpty ? '/' : _bucketPath;
+    final q = query.entries
+        .map((e) => '${s3UriEncode(e.key, encodeSlash: true)}='
+            '${s3UriEncode(e.value, encodeSlash: true)}')
+        .join('&');
+    return Uri.parse('$_origin$path${q.isEmpty ? '' : '?$q'}');
+  }
+
+  /// Host and port for messages: never a URL, which could carry a query.
+  String get displayHost =>
+      endpoint.hasPort ? '${endpoint.host}:${endpoint.port}' : endpoint.host;
+}
+
+const _archivedClasses = {'GLACIER', 'DEEP_ARCHIVE'};
+
+/// Reads media from an S3-compatible bucket with SigV4-signed requests.
+///
+/// Paths are relative to the location's prefix and start with `/`: under
+/// prefix `media/`, the key `media/Movies/x.mkv` is the path `/Movies/x.mkv`.
+class S3Backend implements FileSystemBackend {
+  S3Backend({
+    required S3Location location,
+    required String accessKeyId,
+    required String secretAccessKey,
+    http.Client? client,
+    DateTime Function()? clock,
+    Duration timeout = kS3Timeout,
+  })  : _location = location,
+        _owned = client == null ? http.Client() : null,
+        _given = client,
+        _timeout = timeout,
+        _signer = S3Signer(
+          accessKeyId: accessKeyId,
+          secretAccessKey: secretAccessKey,
+          region: location.region,
+          clock: clock,
+        );
+
+  final S3Location _location;
+  final http.Client? _owned;
+  final http.Client? _given;
+  final Duration _timeout;
+  final S3Signer _signer;
+
+  http.Client get _client => (_given ?? _owned)!;
+
+  /// Closes the client this backend made; a given one is its owner's.
+  void close() => _owned?.close();
+
+  @override
+  Future<List<FileEntry>> list(String dir) async {
+    final listed = _dirKey(dir);
+    final entries = <FileEntry>[];
+    String? token;
+    do {
+      final page = await _listPage({
+        'list-type': '2',
+        'delimiter': '/',
+        'prefix': listed,
+        'max-keys': '1000',
+        if (token != null) 'continuation-token': token,
+      });
+      for (final p in page.prefixes) {
+        final path = _pathOf(p);
+        entries.add(FileEntry(
+          path: path,
+          name: _nameOf(path),
+          isDir: true,
+          size: 0,
+          modified: _epoch,
+        ));
+      }
+      for (final o in page.objects) {
+        // The zero-byte marker web consoles create for a folder.
+        if (o.key == listed) continue;
+        final path = _pathOf(o.key);
+        entries.add(FileEntry(
+          path: path,
+          name: _nameOf(path),
+          isDir: false,
+          size: o.size,
+          modified: o.modified,
+          unreadable: _archivedClasses.contains(o.storageClass),
+        ));
+      }
+      // A truncated page without a token cannot be continued; stop rather
+      // than ask for the same page again.
+      token = page.truncated ? page.nextToken : null;
+    } while (token != null);
+    return entries;
+  }
+
+  @override
+  Future<FileEntry?> stat(String path) async {
+    final key = _keyOf(path);
+    if (key.isEmpty || key == _location.prefix) {
+      return FileEntry(
+          path: '/', name: '/', isDir: true, size: 0, modified: _epoch);
+    }
+    final response = await _send('HEAD', _location.objectUri(key));
+    final status = response.statusCode;
+    if (status >= 200 && status < 300) {
+      return FileEntry(
+        path: path,
+        name: _nameOf(path),
+        isDir: false,
+        size: int.tryParse(response.headers['content-length'] ?? '') ?? 0,
+        modified: _httpDate(response.headers['last-modified']),
+      );
+    }
+    if (status != 404) {
+      // A HEAD answer has no body to read a code from.
+      throw _failure(response, atProbe: false);
+    }
+    // No object: a folder when anything sits under it.
+    final page = await _listPage({
+      'list-type': '2',
+      'prefix': _dirKey(path),
+      'max-keys': '1',
+    });
+    if (page.objects.isEmpty && page.prefixes.isEmpty) return null;
+    final dirPath = _trimSlashes(path);
+    return FileEntry(
+      path: dirPath,
+      name: _nameOf(dirPath),
+      isDir: true,
+      size: 0,
+      modified: _epoch,
+    );
+  }
+
+  @override
+  Future<PlayableFile> playable(String path) async => PlayableFile(
+        url: _signer
+            .presign(
+              method: 'GET',
+              uri: _location.objectUri(_keyOf(path)),
+              expires: kS3PresignExpiry,
+            )
+            .toString(),
+      );
+
+  @override
+  Future<void> probe() async {
+    await _listPage({
+      'list-type': '2',
+      'delimiter': '/',
+      'prefix': _location.prefix,
+      'max-keys': '1',
+    });
+  }
+
+  /// The key [path] names: the prefix, then [path] without its leading `/`.
+  String _keyOf(String path) =>
+      _location.prefix + (path.startsWith('/') ? path.substring(1) : path);
+
+  /// The key prefix that lists [dir]: its key with one trailing `/`, or the
+  /// location's prefix for the root.
+  String _dirKey(String dir) {
+    final key = _keyOf(dir);
+    if (key.isEmpty || key.endsWith('/')) return key;
+    return '$key/';
+  }
+
+  /// The backend path of [key], a key under the prefix; a folder's trailing
+  /// `/` is dropped.
+  String _pathOf(String key) {
+    final rel = key.startsWith(_location.prefix)
+        ? key.substring(_location.prefix.length)
+        : key;
+    return _trimSlashes('/$rel');
+  }
+
+  static String _trimSlashes(String path) {
+    var p = path;
+    while (p.length > 1 && p.endsWith('/')) {
+      p = p.substring(0, p.length - 1);
+    }
+    return p;
+  }
+
+  static String _nameOf(String path) {
+    final i = path.lastIndexOf('/');
+    final name = i < 0 ? path : path.substring(i + 1);
+    return name.isEmpty ? '/' : name;
+  }
+
+  Future<_ListPage> _listPage(Map<String, String> query) async {
+    final response = await _send('GET', _location.bucketUri(query));
+    final status = response.statusCode;
+    if (status < 200 || status >= 300) {
+      throw _failure(response, atProbe: true);
+    }
+    return _parseList(utf8.decode(response.bodyBytes, allowMalformed: true));
+  }
+
+  BackendFailure _failure(http.Response response, {required bool atProbe}) =>
+      s3Failure(
+        status: response.statusCode,
+        body: utf8.decode(response.bodyBytes, allowMalformed: true),
+        host: _location.displayHost,
+        bucket: _location.bucket,
+        atProbe: atProbe,
+        regionHeader: response.headers['x-amz-bucket-region'],
+      );
+
+  /// Signs and sends one request. Redirects are not followed: S3 answers a
+  /// wrong region with a 301, and following one would resend the signed
+  /// headers elsewhere.
+  Future<http.Response> _send(String method, Uri uri) async {
+    final request = http.Request(method, uri)
+      ..followRedirects = false
+      ..headers.addAll(_signer.sign(method: method, uri: uri));
+    try {
+      final streamed = await _client.send(request).timeout(_timeout);
+      return await http.Response.fromStream(streamed).timeout(_timeout);
+    } on Exception catch (e) {
+      // The error's text can carry the signed URL; it is dropped.
+      throw s3TransportFailure(e, host: _location.displayHost);
+    }
+  }
+
+  _ListPage _parseList(String body) {
+    final XmlElement? root;
+    try {
+      root = XmlDocument.parse(body).childElements.firstOrNull;
+    } on XmlException {
+      throw BackendUnreachable(
+          'S3 at ${_location.displayHost} sent a malformed listing');
+    }
+    // A proxy's or login page's XML read as an empty folder would drop
+    // every indexed file under it.
+    if (root == null || root.name.local != 'ListBucketResult') {
+      throw BackendUnreachable(
+          'S3 at ${_location.displayHost} did not send a bucket listing');
+    }
+    // Keys are not trimmed: a key may end in a space.
+    String? child(XmlElement e, String local) => e.childElements
+        .where((c) => c.name.local == local)
+        .map((c) => c.innerText)
+        .firstOrNull;
+
+    final objects = <_S3Object>[];
+    final prefixes = <String>[];
+    for (final e in root.childElements) {
+      switch (e.name.local) {
+        case 'Contents':
+          final key = child(e, 'Key');
+          if (key == null || key.isEmpty) continue;
+          objects.add(_S3Object(
+            key: key,
+            size: int.tryParse(child(e, 'Size')?.trim() ?? '') ?? 0,
+            modified: DateTime.tryParse(child(e, 'LastModified')?.trim() ?? '')
+                    ?.toUtc() ??
+                _epoch,
+            storageClass: child(e, 'StorageClass')?.trim(),
+          ));
+        case 'CommonPrefixes':
+          final p = child(e, 'Prefix');
+          if (p != null && p.isNotEmpty) prefixes.add(p);
+      }
+    }
+    final token = child(root, 'NextContinuationToken')?.trim();
+    return _ListPage(
+      objects: objects,
+      prefixes: prefixes,
+      truncated: child(root, 'IsTruncated')?.trim() == 'true',
+      nextToken: (token == null || token.isEmpty) ? null : token,
+    );
+  }
+
+  static DateTime _httpDate(String? text) {
+    if (text != null) {
+      try {
+        return HttpDate.parse(text);
+      } on HttpException {
+        // fall through
+      } on FormatException {
+        // fall through
+      }
+    }
+    return _epoch;
+  }
+
+  static final _epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+}
+
+class _S3Object {
+  const _S3Object({
+    required this.key,
+    required this.size,
+    required this.modified,
+    required this.storageClass,
+  });
+
+  final String key;
+  final int size;
+  final DateTime modified;
+  final String? storageClass;
+}
+
+class _ListPage {
+  const _ListPage({
+    required this.objects,
+    required this.prefixes,
+    required this.truncated,
+    required this.nextToken,
+  });
+
+  final List<_S3Object> objects;
+  final List<String> prefixes;
+  final bool truncated;
+  final String? nextToken;
+}
