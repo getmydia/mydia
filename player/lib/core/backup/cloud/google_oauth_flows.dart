@@ -38,8 +38,8 @@ class LoopbackPkceFlow {
 
   /// Opens the consent page with [launch] and stores the resulting grant in
   /// [auth]. Throws [BackupRelayException]: [BackupRelayError.signedOut] when
-  /// the user declines or never returns, [BackupRelayError.invalid] on a
-  /// redirect whose `state` is not ours.
+  /// the user declines or never returns within [timeout]. A redirect whose
+  /// `state` is not ours is answered with an error page and ignored.
   Future<void> signIn(
     GoogleTokenAuth auth, {
     Future<bool> Function(Uri) launch = launchUrl,
@@ -70,19 +70,13 @@ class LoopbackPkceFlow {
           code: 'launch_failed',
         );
       }
-      final params = await _awaitRedirect(server).timeout(
+      final params = await _awaitRedirect(server, state).timeout(
         timeout,
         onTimeout: () => throw const BackupRelayException(
           BackupRelayError.signedOut,
           code: 'timeout',
         ),
       );
-      if (params['state'] != state) {
-        throw const BackupRelayException(
-          BackupRelayError.invalid,
-          code: 'state_mismatch',
-        );
-      }
       final error = params['error'];
       if (error != null) {
         throw BackupRelayException(
@@ -107,14 +101,29 @@ class LoopbackPkceFlow {
     }
   }
 
-  /// The query of the first request that carries `code` or `error`. Other
-  /// requests, such as the browser's favicon fetch, get a 404.
-  Future<Map<String, String>> _awaitRedirect(HttpServer server) async {
+  /// The query of the first request that carries `code` or `error` with our
+  /// [state]. Other requests, such as the browser's favicon fetch, get a
+  /// 404; one with a foreign `state` gets a 400 and is ignored, so a forged
+  /// redirect can neither sign in nor end the real one.
+  Future<Map<String, String>> _awaitRedirect(
+    HttpServer server,
+    String state,
+  ) async {
     await for (final req in server) {
       final params = req.uri.queryParameters;
       final res = req.response;
       if (!params.containsKey('code') && !params.containsKey('error')) {
         res.statusCode = HttpStatus.notFound;
+        await res.close();
+        continue;
+      }
+      if (params['state'] != state) {
+        res.statusCode = HttpStatus.badRequest;
+        res.headers.contentType = ContentType.html;
+        res.write(
+          '<!doctype html><meta charset="utf-8"><title>Mydia</title>'
+          '<p>This sign-in link is not the one Mydia opened.</p>',
+        );
         await res.close();
         continue;
       }

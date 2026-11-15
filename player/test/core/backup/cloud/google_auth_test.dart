@@ -5,6 +5,8 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart'
+    show GoogleSignInException, GoogleSignInExceptionCode;
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/backup/backup_relay_client.dart';
@@ -83,12 +85,13 @@ void main() {
   });
 
   group('loopback', () {
-    Future<void> hitRedirect(Uri redirect) async {
+    Future<int> hitRedirect(Uri redirect) async {
       final io = HttpClient();
       try {
         final req = await io.getUrl(redirect);
         final res = await req.close();
         await res.drain<void>();
+        return res.statusCode;
       } finally {
         io.close(force: true);
       }
@@ -162,29 +165,42 @@ void main() {
         return _json(200, _grant());
       });
       final auth = tokenAuth(client);
+      int? forgedStatus;
+      int? tokenCallsAfterForged;
+      bool? storedAfterForged;
 
-      await expectLater(
-        LoopbackPkceFlow().signIn(
-          auth,
-          launch: (url) async {
-            final redirect = Uri.parse(url.queryParameters['redirect_uri']!);
-            unawaited(
-              hitRedirect(
-                redirect.replace(
-                  queryParameters: {'code': 'the-code', 'state': 'forged'},
-                ),
+      await LoopbackPkceFlow().signIn(
+        auth,
+        launch: (url) async {
+          final redirect = Uri.parse(url.queryParameters['redirect_uri']!);
+          unawaited(() async {
+            // A forged redirect first: refused, and the listener stays up.
+            forgedStatus = await hitRedirect(
+              redirect.replace(
+                queryParameters: {'code': 'forged-code', 'state': 'forged'},
               ),
             );
-            return true;
-          },
-        ),
-        throwsA(
-          isA<BackupRelayException>()
-              .having((e) => e.kind, 'kind', BackupRelayError.invalid),
-        ),
+            tokenCallsAfterForged = tokenCalls;
+            storedAfterForged = storage.containsKey(googleDriveStorageKey);
+            await hitRedirect(
+              redirect.replace(
+                queryParameters: {
+                  'code': 'the-code',
+                  'state': url.queryParameters['state'],
+                },
+              ),
+            );
+          }());
+          return true;
+        },
       );
-      expect(tokenCalls, 0);
-      expect(storage.containsKey(googleDriveStorageKey), isFalse);
+
+      expect(forgedStatus, HttpStatus.badRequest);
+      expect(tokenCallsAfterForged, 0);
+      expect(storedAfterForged, isFalse);
+      // The matching redirect then completed the sign-in.
+      expect(tokenCalls, 1);
+      expect(stored()['refreshToken'], 'rt-1');
     });
   });
 
@@ -492,6 +508,27 @@ void main() {
     });
   });
 
+  test('completeSignIn never falls back to the other client grant', () async {
+    storage.seedData({
+      googleDriveStorageKey: jsonEncode({
+        'email': 'tv@example.test',
+        'refreshToken': 'tv-rt',
+        'clientKind': 'tv',
+      }),
+    });
+    final auth = tokenAuth(MockClient((_) async => fail('no request')));
+
+    await expectLater(
+      auth.completeSignIn({'access_token': 'at', 'expires_in': 3600}),
+      throwsA(
+        isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.signedOut)
+            .having((e) => e.code, 'code', 'no_refresh_token'),
+      ),
+    );
+    expect(stored()['refreshToken'], 'tv-rt');
+  });
+
   test('GoogleSignInAuth is constructible without touching the plugin', () {
     final auth = GoogleSignInAuth(
       storage: storage,
@@ -500,4 +537,160 @@ void main() {
     );
     expect(auth, isA<GoogleAuth>());
   });
+
+  group('GoogleSignInAuth', () {
+    late _FakeSignInBackend backend;
+
+    setUp(() {
+      backend = _FakeSignInBackend();
+      storage.seedData({
+        googleDriveStorageKey: jsonEncode({'email': 'viewer@example.test'}),
+      });
+    });
+
+    GoogleSignInAuth signInAuth({http.Client? client}) => GoogleSignInAuth(
+          storage: storage,
+          client: client ?? MockClient((_) async => fail('no request')),
+          backend: backend,
+        );
+
+    Matcher relayError(BackupRelayError kind) => throwsA(
+        isA<BackupRelayException>().having((e) => e.kind, 'kind', kind));
+
+    test('restores the session before the first silent authorization',
+        () async {
+      backend.restoreResult = true;
+      backend.token = 'restored-at';
+
+      expect(await signInAuth().accessToken(), 'restored-at');
+      expect(backend.calls, ['restore', 'authorize']);
+      expect(storage.containsKey(googleDriveStorageKey), isTrue);
+    });
+
+    test('no session and no grant is a sign-out that clears the account',
+        () async {
+      backend.restoreResult = false;
+      backend.token = null;
+
+      await expectLater(
+        signInAuth().accessToken(),
+        relayError(BackupRelayError.signedOut),
+      );
+      expect(storage.containsKey(googleDriveStorageKey), isFalse);
+    });
+
+    test('a failed restore is never read as a sign-out', () async {
+      backend.restoreError = const GoogleSignInException(
+        code: GoogleSignInExceptionCode.unknownError,
+      );
+      backend.token = null;
+      final auth = signInAuth();
+
+      await expectLater(
+          auth.accessToken(), relayError(BackupRelayError.server));
+      expect(storage.containsKey(googleDriveStorageKey), isTrue);
+
+      // The restore is tried again on the next call, and can succeed.
+      backend.restoreError = null;
+      backend.restoreResult = true;
+      backend.token = 'later-at';
+      expect(await auth.accessToken(), 'later-at');
+      expect(backend.calls.where((c) => c == 'restore'), hasLength(2));
+    });
+
+    test('a platform exception maps to server or network, keeping the account',
+        () async {
+      backend.restoreResult = true;
+      backend.authorizeError = const GoogleSignInException(
+        code: GoogleSignInExceptionCode.interrupted,
+      );
+      final auth = signInAuth();
+      await expectLater(
+          auth.accessToken(), relayError(BackupRelayError.network));
+
+      backend.authorizeError = const GoogleSignInException(
+        code: GoogleSignInExceptionCode.clientConfigurationError,
+      );
+      await expectLater(
+          auth.accessToken(), relayError(BackupRelayError.server));
+      expect(storage.containsKey(googleDriveStorageKey), isTrue);
+    });
+
+    test('forceRefresh clears the last token first', () async {
+      backend.restoreResult = true;
+      backend.token = 'at-1';
+      final auth = signInAuth();
+      await auth.accessToken();
+      backend.token = 'at-2';
+
+      expect(await auth.accessToken(forceRefresh: true), 'at-2');
+      expect(backend.cleared, ['at-1']);
+    });
+
+    test('signIn stores only the email from userinfo', () async {
+      storage.clear();
+      backend.interactiveToken = 'consent-at';
+      final client = MockClient((req) async {
+        expect(req.url.toString(),
+            'https://openidconnect.googleapis.com/v1/userinfo');
+        expect(req.headers['authorization'], 'Bearer consent-at');
+        return _json(200, {'email': 'viewer@example.test'});
+      });
+
+      expect(await signInAuth(client: client).signIn(), 'viewer@example.test');
+      expect(stored(), {'email': 'viewer@example.test'});
+    });
+
+    test('a non-JSON userinfo body is a server error', () async {
+      storage.clear();
+      backend.interactiveToken = 'consent-at';
+      final client = MockClient((_) async => http.Response('<html>', 200));
+
+      await expectLater(
+        signInAuth(client: client).signIn(),
+        relayError(BackupRelayError.server),
+      );
+      expect(storage.containsKey(googleDriveStorageKey), isFalse);
+    });
+  });
+}
+
+/// Scripted stand-in for the google_sign_in calls.
+class _FakeSignInBackend implements GoogleSignInBackend {
+  bool restoreResult = false;
+  GoogleSignInException? restoreError;
+  String? token;
+  GoogleSignInException? authorizeError;
+  String interactiveToken = 'interactive-at';
+  final List<String> calls = [];
+  final List<String> cleared = [];
+
+  @override
+  Future<bool> restoreSession() async {
+    calls.add('restore');
+    final error = restoreError;
+    if (error != null) throw error;
+    return restoreResult;
+  }
+
+  @override
+  Future<String?> authorizationForScopes(List<String> scopes) async {
+    calls.add('authorize');
+    expect(scopes, googleOAuthScopes);
+    final error = authorizeError;
+    if (error != null) throw error;
+    return token;
+  }
+
+  @override
+  Future<String> authorizeScopes(List<String> scopes) async {
+    calls.add('consent');
+    return interactiveToken;
+  }
+
+  @override
+  Future<void> clearToken(String accessToken) async => cleared.add(accessToken);
+
+  @override
+  Future<void> disconnect() async => calls.add('disconnect');
 }

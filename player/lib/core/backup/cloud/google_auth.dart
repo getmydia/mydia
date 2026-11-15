@@ -153,7 +153,9 @@ class GoogleTokenAuth implements GoogleAuth {
   /// Google rotates refresh tokens only sometimes, so a grant without one
   /// keeps the stored token.
   Future<String> completeSignIn(Map<String, Object?> grant) async {
-    final existing = await _readGrant();
+    final stored = await _readGrant();
+    // Never carry a token or email over from the other client's grant.
+    final existing = stored?['clientKind'] == clientKind ? stored : null;
     final refreshToken =
         grant['refresh_token'] as String? ?? existing?['refreshToken'];
     final email = _emailFromIdToken(grant['id_token']) ?? existing?['email'];
@@ -281,20 +283,28 @@ String? _emailFromIdToken(Object? idToken) {
   }
 }
 
-/// Google sign-in through the platform SDK, on Android phones and iOS.
-///
-/// The plugin keeps the grant and its tokens; [googleDriveStorageKey] holds
-/// only `email`, for [currentEmail] to answer without the plugin.
-class GoogleSignInAuth implements GoogleAuth {
-  GoogleSignInAuth({
-    required AuthStorage storage,
-    required http.Client client,
-    this.clientId,
-  })  : _storage = storage,
-        _client = client;
+/// The google_sign_in calls [GoogleSignInAuth] makes, behind a seam so its
+/// signed-out decision can be tested without the plugin. Methods throw the
+/// plugin's [GoogleSignInException].
+abstract class GoogleSignInBackend {
+  /// Restores the previous session without UI. True when an account came
+  /// back; false when there is none to restore.
+  Future<bool> restoreSession();
 
-  final AuthStorage _storage;
-  final http.Client _client;
+  /// A token for [scopes] without UI, or null when the user must be asked.
+  Future<String?> authorizationForScopes(List<String> scopes);
+
+  /// A token for [scopes], showing the consent UI when needed.
+  Future<String> authorizeScopes(List<String> scopes);
+
+  Future<void> clearToken(String accessToken);
+
+  Future<void> disconnect();
+}
+
+/// [GoogleSignInBackend] over `GoogleSignIn.instance`.
+class PluginGoogleSignInBackend implements GoogleSignInBackend {
+  PluginGoogleSignInBackend({this.clientId});
 
   /// The iOS client id. Null on Android, which identifies the app by its
   /// package name and signing certificate instead.
@@ -303,7 +313,9 @@ class GoogleSignInAuth implements GoogleAuth {
   /// `GoogleSignIn.initialize` may run only once per process.
   static Future<void>? _initialized;
 
-  String? _lastToken;
+  /// The account [restoreSession] brought back, whose authorization client
+  /// carries its id so iOS asks for that account's grant.
+  GoogleSignInAccount? _account;
 
   Future<GoogleSignIn> _ready() async {
     await (_initialized ??=
@@ -311,20 +323,80 @@ class GoogleSignInAuth implements GoogleAuth {
     return GoogleSignIn.instance;
   }
 
+  Future<GoogleSignInAuthorizationClient> _authz() async =>
+      _account?.authorizationClient ?? (await _ready()).authorizationClient;
+
+  @override
+  Future<bool> restoreSession() async {
+    final attempt = (await _ready()).attemptLightweightAuthentication();
+    // A null future means the platform reports sign-ins only through the
+    // event stream (the web); there is nothing to wait for here.
+    final account = attempt == null ? null : await attempt;
+    if (account != null) _account = account;
+    return account != null;
+  }
+
+  @override
+  Future<String?> authorizationForScopes(List<String> scopes) async =>
+      (await (await _authz()).authorizationForScopes(scopes))?.accessToken;
+
+  @override
+  Future<String> authorizeScopes(List<String> scopes) async =>
+      (await (await _authz()).authorizeScopes(scopes)).accessToken;
+
+  @override
+  Future<void> clearToken(String accessToken) async =>
+      (await _authz()).clearAuthorizationToken(accessToken: accessToken);
+
+  @override
+  Future<void> disconnect() async {
+    _account = null;
+    await (await _ready()).disconnect();
+  }
+}
+
+/// Google sign-in through the platform SDK, on Android phones and iOS.
+///
+/// The plugin keeps the grant and its tokens; [googleDriveStorageKey] holds
+/// only `email`, for [currentEmail] to answer without the plugin.
+class GoogleSignInAuth implements GoogleAuth {
+  GoogleSignInAuth({
+    required AuthStorage storage,
+    required http.Client client,
+    String? clientId,
+    GoogleSignInBackend? backend,
+  })  : _storage = storage,
+        _client = client,
+        _backend = backend ?? PluginGoogleSignInBackend(clientId: clientId);
+
+  final AuthStorage _storage;
+  final http.Client _client;
+  final GoogleSignInBackend _backend;
+
+  String? _lastToken;
+
+  /// Whether this process has restored the plugin's session. After a cold
+  /// start iOS has no current user until it does, so a no-UI authorization
+  /// before it would read as signed out.
+  bool _restored = false;
+
+  /// Why the last restore failed, if it did. While set, a null authorization
+  /// is not proof of a sign-out.
+  GoogleSignInException? _restoreError;
+
   /// Asks the user to grant Drive access; call from a button press. Returns
   /// the account email.
   Future<String> signIn() async {
-    final signIn = await _ready();
-    final GoogleSignInClientAuthorization authz;
+    final String token;
     try {
-      authz = await signIn.authorizationClient.authorizeScopes(
-        googleOAuthScopes,
-      );
+      token = await _backend.authorizeScopes(googleOAuthScopes);
     } on GoogleSignInException catch (e) {
       throw _mapException(e);
     }
-    _lastToken = authz.accessToken;
-    final email = await _fetchEmail(authz.accessToken);
+    _lastToken = token;
+    _restored = true;
+    _restoreError = null;
+    final email = await _fetchEmail(token);
     await _storage.write(googleDriveStorageKey, jsonEncode({'email': email}));
     return email;
   }
@@ -346,26 +418,37 @@ class GoogleSignInAuth implements GoogleAuth {
     if (await currentEmail() == null) {
       throw const BackupRelayException(BackupRelayError.signedOut);
     }
-    final signIn = await _ready();
-    final GoogleSignInClientAuthorization? authz;
+    if (!_restored) {
+      try {
+        await _backend.restoreSession();
+        _restored = true;
+        _restoreError = null;
+      } on GoogleSignInException catch (e) {
+        // Android may refuse a lightweight sign-in it does not need for
+        // authorization; try the grant anyway and keep the reason.
+        _restoreError = e;
+      }
+    }
+    final String? token;
     try {
       final stale = _lastToken;
       if (forceRefresh && stale != null) {
-        await signIn.authorizationClient
-            .clearAuthorizationToken(accessToken: stale);
+        await _backend.clearToken(stale);
       }
-      authz = await signIn.authorizationClient.authorizationForScopes(
-        googleOAuthScopes,
-      );
+      token = await _backend.authorizationForScopes(googleOAuthScopes);
     } on GoogleSignInException catch (e) {
       throw _mapException(e);
     }
-    if (authz == null) {
-      // The grant needs the user again: revoked, or the account removed.
-      await _storage.delete(googleDriveStorageKey);
-      throw const BackupRelayException(BackupRelayError.signedOut);
+    if (token != null) return _lastToken = token;
+    final restoreError = _restoreError;
+    if (restoreError != null) {
+      // No session, but only because restoring it failed: not a sign-out.
+      throw _mapException(restoreError);
     }
-    return _lastToken = authz.accessToken;
+    // Restored (or nothing to restore) and still no grant: revoked, or the
+    // account was removed from the device.
+    await _storage.delete(googleDriveStorageKey);
+    throw const BackupRelayException(BackupRelayError.signedOut);
   }
 
   @override
@@ -373,7 +456,7 @@ class GoogleSignInAuth implements GoogleAuth {
     _lastToken = null;
     await _storage.delete(googleDriveStorageKey);
     try {
-      await (await _ready()).disconnect();
+      await _backend.disconnect();
     } on GoogleSignInException {
       // Local sign-out already happened; the grant stays listed on the
       // user's Google account page.
@@ -399,19 +482,32 @@ class GoogleSignInAuth implements GoogleAuth {
             : BackupRelayError.unauthorized,
       );
     }
-    final body = jsonDecode(res.body);
+    Object? body;
+    try {
+      body = jsonDecode(res.body);
+    } on FormatException {
+      body = null;
+    }
     final email = body is Map ? body['email'] : null;
     if (email is! String) {
-      throw const FormatException('userinfo names no account');
+      throw const BackupRelayException(
+        BackupRelayError.server,
+        code: 'userinfo_malformed',
+      );
     }
     return email;
   }
 
+  /// Maps a plugin failure. Only a user cancel means signed out; an
+  /// interrupted call is transient, anything else a platform failure. None
+  /// of them clears the stored account.
   BackupRelayException _mapException(GoogleSignInException e) =>
       BackupRelayException(
-        e.code == GoogleSignInExceptionCode.canceled
-            ? BackupRelayError.signedOut
-            : BackupRelayError.cloudUnavailable,
+        switch (e.code) {
+          GoogleSignInExceptionCode.canceled => BackupRelayError.signedOut,
+          GoogleSignInExceptionCode.interrupted => BackupRelayError.network,
+          _ => BackupRelayError.server,
+        },
         code: e.code.name,
       );
 }
