@@ -83,7 +83,7 @@ jobs:
         run: pwsh ${{ env.PLAYER_PATH }}/tool/bundle_windows_runtime.ps1
 
       - name: Build installer
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.9
+        uses: Minionguyjpro/Inno-Setup-Action@v1.3.0
         with:
           path: player/windows/installer.iss
           options: /DMyAppVersion=${{ inputs.version }}
