@@ -86,7 +86,7 @@ for i in $(seq 1 "$n"); do
     clean=$(sed 's/\x1b\[[0-9;]*m//g' "$log")
     result=$(echo "$clean" | grep -E '^Result: ' | tail -1)
     finished=$(echo "$clean" | grep -oE '^Finished in [0-9.]+ seconds' | grep -oE '[0-9.]+' | tail -1)
-    # Elixir 1.20 prints "Result: 940 passed, ..." or, with failures,
+    # ExUnit prints "Result: 940 passed, ..." or, with failures,
     # "Result: 1237/1238 passed, ...".
     counts=$(echo "$result" | grep -oE '[0-9]+(/[0-9]+)? passed' | grep -oE '[0-9/]+')
     p=${counts%%/*}
