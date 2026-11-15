@@ -207,6 +207,7 @@ class BackupSnapshot {
       if (!_backedUp(record.account)) continue;
       final id = record.account.id;
       present.add(id);
+      if (_meta.isUnfinished(id)) continue;
       final json = _sanitizedRecordJson(record);
       if (record.account.kind == SourceKind.files) {
         json[_rootsJsonKey] = _rootsJson(await _rootsFor(id));
@@ -379,6 +380,11 @@ class BackupSnapshot {
     // Tombstones are never applied: removing an account stays local.
     for (final r in merged.whereType<AccountBackupRecord>()) {
       if (r.deleted) continue;
+      // Already chosen (restored or accepted), so finished in either mode.
+      if (local.contains(r.accountId) && _meta.isUnfinished(r.accountId)) {
+        await addAccount(r);
+        continue;
+      }
       if (local.contains(r.accountId)) {
         if (_meta.pendingAccount(r.accountId) != null) {
           await _meta.removePending(r.accountId);
@@ -485,6 +491,12 @@ class BackupSnapshot {
     for (final MapEntry(:key, :value) in secrets.entries) {
       await _auth.write('${account.storageNamespace}/$key', value);
     }
+    // Roots land after the record (adding them scans the account's
+    // sources). Until they have, the account is unfinished: [apply] adds it
+    // again rather than skip it as local, and [collect] leaves it out, so
+    // a record without its folders never goes up and outranks the one that
+    // has them.
+    await _meta.startAccount(account.id);
     await _putAccount(record);
     if (roots.isNotEmpty) await _putRoots(account.id, roots);
     await _meta.removePending(account.id);
@@ -496,6 +508,7 @@ class BackupSnapshot {
         r.key,
         await _fingerprint({'recordJson': stamped, 'secrets': secrets}),
         r.updatedAt);
+    await _meta.finishAccount(account.id);
     return true;
   }
 

@@ -51,6 +51,10 @@ class _Device {
       putRoots: (id, r) async {
         // Roots land after the account record.
         expect(putAccountCalls, contains(id));
+        if (failNextPutRoots) {
+          failNextPutRoots = false;
+          throw StateError('index locked');
+        }
         roots[id] = [...?roots[id], ...r];
         putRootsCalls[id] = r;
       },
@@ -64,6 +68,7 @@ class _Device {
   late final meta = BackupMetaStore(metaStorage);
   final roots = <String, List<LibraryRoot>>{};
   final putRootsCalls = <String, List<LibraryRoot>>{};
+  bool failNextPutRoots = false;
 
   /// Storage keys other than the per-install fingerprint key.
   Iterable<String> get dataKeys =>
@@ -808,6 +813,36 @@ void main() {
       expect(await b.auth.read('source/$smbId/account_token'),
           '{"password":"pw"}');
       final again = await b.snapshot.collect(nowMs: _now + 9);
+      expect(_account(again, smbId).updatedAt, _now);
+    });
+
+    test('an account whose roots failed is finished by the next apply',
+        () async {
+      final a = _Device();
+      await addSmb(a);
+      final records = _viaWire(await a.snapshot.collect(nowMs: _now));
+
+      final b = _Device();
+      b.failNextPutRoots = true;
+      await expectLater(
+          b.snapshot.apply(records,
+              mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 1),
+          throwsStateError);
+      expect(
+          (await b.sources.load()).accounts.map((r) => r.account.id), [smbId]);
+      // Not uploaded without its folders, where it would outrank A's.
+      expect(
+          (await b.snapshot.collect(nowMs: _now + 2))
+              .whereType<AccountBackupRecord>(),
+          isEmpty);
+
+      // A live poll, not only a restore, finishes it.
+      await b.snapshot.apply(records,
+          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now + 3);
+      expect(b.putRootsCalls[smbId]!.single.toMap(), root.toMap());
+      expect(b.meta.pendingAccounts(), isEmpty);
+      final again = await b.snapshot.collect(nowMs: _now + 9);
+      expect(_account(again, smbId).recordJson['roots'], [root.toMap()]);
       expect(_account(again, smbId).updatedAt, _now);
     });
 

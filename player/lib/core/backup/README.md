@@ -34,12 +34,16 @@ the spec.
 ## Where state lives
 
 - `AuthStorage` `backup/identity`: the device signer and box key. Never
-  backed up, never leaves the install.
+  backed up, never leaves the install. Read with `StrictAuthRead` where the
+  storage offers it, so a keyring that fails to answer is an error, never
+  "absent" (which would generate a new identity over the old one). The
+  service loads it once even when pairing and a user action ask together.
 - `AuthStorage` `backup/vault`: vault id, epoch, the vault key per known
   epoch, this device's slot seq, the last success, and the recovery key text
   when this device holds it.
 - Hive box `backup_meta` (`BackupMetaStore`): record stamps, pending account
-  offers and dismissals, the seq of each slot already merged, each slot's
+  offers and dismissals, accounts added from the backup whose folder roots
+  have not landed yet, the seq of each slot already merged, each slot's
   device name, the p2p node to slot map and each slot's node claims, revoked
   devices still to be removed from the vault, and whether the
   joined-by-pairing notice is still to be seen. Not backed up.
@@ -134,7 +138,11 @@ and all of them when this device leaves or switches vaults.
 | Relay unreachable, 5xx, 429 | Backoff to 30 minutes; the status keeps the last success |
 | 404 on `/backup/v1` (relay without the routes) | `BackupUnavailable`, "Cloud backup isn't available yet"; no retries until the next start or a user action |
 | A slot fails to open | Skipped, the rest merge; "Couldn't read Living Room TV's backup" |
-| 409 on rotation, or an unknown epoch | Refetch the manifest and envelope, retry once |
+| 409 on rotation, or an unknown epoch | Refetch the manifest and envelope, retry once. Every manifest a rotation reads has its epoch's key kept, so a slot still at the epoch it lost to stays readable |
+| A restore fails while applying records | The vault state is saved only after the apply, so backup stays off and the restore screen offers Restore again; the relay membership already made is reused |
+| An account's folder roots fail to land | The account stays marked unfinished in `backup_meta`: it is not uploaded, and the next apply (restore or poll) adds it again |
+| An upload fails, then a poll succeeds | The upload's retry stays scheduled while records are dirty |
+| A pairing add finishes after the host's 10 s timeout | The host has replied without a vault id, so it rotates the joiner back out (keeping the recovery key, which the joiner never held) |
 | 412 on upload | Refetch the manifest, upload again at the current seq |
 | 403 `not_member`, vault gone | `BackupRemoved`: `backup/vault` is cleared, local data kept |
 | 403 with no JSON `error` code (a WAF or bot-check page) | `BackupRelayError.server`: backoff and retry, never a removal |

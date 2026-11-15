@@ -23,3 +23,13 @@ abstract class AuthStorage {
   /// telling the user the credentials were saved.
   bool get degraded;
 }
+
+/// An [AuthStorage] that can tell a read the backend failed from an absent
+/// key. [AuthStorage.read] answers null for both, which is fine for a token
+/// (the user signs in again) but not for a key that would be generated in
+/// its place and overwrite the one that exists.
+abstract interface class StrictAuthRead {
+  /// The value of [key], or null when the backend says it is absent. Throws
+  /// when the backend could not answer.
+  Future<String?> readStrict(String key);
+}

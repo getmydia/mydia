@@ -47,7 +47,7 @@ class _FlutterSecureStorageBackend implements SecretBackend {
   Future<void> deleteAll() => _storage.deleteAll();
 }
 
-class NativeAuthStorage implements AuthStorage {
+class NativeAuthStorage implements AuthStorage, StrictAuthRead {
   NativeAuthStorage({SecretBackend? backend})
       : _backend = backend ?? const _FlutterSecureStorageBackend();
 
@@ -162,6 +162,20 @@ class NativeAuthStorage implements AuthStorage {
     });
     _inflight[key] = started;
     return started;
+  }
+
+  /// Like [read], but a backend failure throws instead of answering null.
+  /// Does not join an in-flight [read], which may be about to fall back.
+  @override
+  Future<String?> readStrict(String key) async {
+    if (_memoryStorage.containsKey(key)) return _memoryStorage[key];
+    if (_readCache.containsKey(key)) return _readCache[key];
+    final generation = _generation;
+    final value = await _backend.read(key);
+    if (generation == _generation && !_memoryStorage.containsKey(key)) {
+      _readCache[key] = value;
+    }
+    return value;
   }
 
   /// Caches only a read the backend actually answered. A failed read falls

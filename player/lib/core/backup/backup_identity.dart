@@ -33,10 +33,22 @@ class BackupIdentity {
 
   /// Loads the stored identity or creates and persists a new one.
   ///
-  /// Throws [StateError] if stored data exists but is unreadable: replacing it
-  /// would orphan this device's vault membership, so the caller decides.
+  /// Throws [StateError] if stored data exists but is unreadable, or the
+  /// storage could not say whether it exists ([StrictAuthRead]): replacing
+  /// it would orphan this device's vault membership, so the caller decides.
+  ///
+  /// Not safe to run twice at once on one storage: both could create. The
+  /// caller serialises it.
   static Future<BackupIdentity> loadOrCreate(AuthStorage storage) async {
-    final raw = await storage.read(storageKey);
+    final String? raw;
+    try {
+      raw = await switch (storage) {
+        final StrictAuthRead strict => strict.readStrict(storageKey),
+        _ => storage.read(storageKey),
+      };
+    } on Object catch (e) {
+      throw StateError('backup identity could not be read (${e.runtimeType})');
+    }
     if (raw == null) {
       final signerSeed = _randomSeed();
       final boxSeed = _randomSeed();

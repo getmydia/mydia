@@ -1,5 +1,6 @@
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_storage_native.dart';
 import 'package:player/core/backup/backup_identity.dart';
 import 'package:player/core/backup/vault_crypto.dart';
 
@@ -60,4 +61,51 @@ void main() {
           .having((e) => e.toString(), 'text', isNot(contains('SECRETSEED')))),
     );
   });
+
+  group('on the native storage', () {
+    setUp(NativeAuthStorage.resetForTest);
+    tearDown(NativeAuthStorage.resetForTest);
+
+    test('a failed read throws and does not replace the stored identity',
+        () async {
+      final backend = _FlakyReadBackend();
+      final existing = await BackupIdentity.loadOrCreate(
+          NativeAuthStorage(backend: backend));
+      final stored = backend.data['backup/identity'];
+      NativeAuthStorage.resetForTest();
+
+      backend.failReads = true;
+      await expectLater(
+        BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
+        throwsA(isA<StateError>()),
+      );
+      expect(backend.data['backup/identity'], stored);
+
+      backend.failReads = false;
+      final again = await BackupIdentity.loadOrCreate(
+          NativeAuthStorage(backend: backend));
+      expect(again.slotId, existing.slotId);
+    });
+  });
+}
+
+/// A keyring whose reads can fail while writes still land.
+class _FlakyReadBackend implements SecretBackend {
+  final data = <String, String>{};
+  bool failReads = false;
+
+  @override
+  Future<String?> read(String key) async {
+    if (failReads) throw Exception('keyring locked');
+    return data[key];
+  }
+
+  @override
+  Future<void> write(String key, String value) async => data[key] = value;
+
+  @override
+  Future<void> delete(String key) async => data.remove(key);
+
+  @override
+  Future<void> deleteAll() async => data.clear();
 }

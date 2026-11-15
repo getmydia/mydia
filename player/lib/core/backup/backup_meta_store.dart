@@ -111,7 +111,8 @@ class PendingAccountOffer {
 
 /// Local bookkeeping of the cloud backup that is not itself backed up:
 /// fingerprints that keep a record's `updatedAt` stable while its value is
-/// unchanged, pending account offers and dismissals, the `seq` of each slot
+/// unchanged, pending account offers and dismissals, accounts whose add from
+/// the backup has not finished, the `seq` of each slot
 /// already merged, each slot's device name, the p2p node id to backup slot
 /// id map, revoked devices still to be removed from the vault, and whether
 /// the joined-by-pairing notice is pending.
@@ -128,6 +129,7 @@ class BackupMetaStore {
   static const _claimPrefix = 'claim:';
   static const _namePrefix = 'name:';
   static const _removalPrefix = 'removal:';
+  static const _unfinishedPrefix = 'unfinished:';
 
   final BackupMetaStorage _storage;
 
@@ -201,16 +203,31 @@ class BackupMetaStore {
     await removePending(accountId);
   }
 
-  /// Forgets every pending offer and dismissal, when this device leaves a
-  /// vault: the offers came from that vault's members, and a later vault
-  /// starts with nothing dismissed.
+  /// Forgets every pending offer, dismissal and unfinished add, when this
+  /// device leaves a vault: the offers came from that vault's members, and a
+  /// later vault starts with nothing dismissed.
   Future<void> clearOffers() async {
     for (final k in _storage.keys.toList()) {
-      if (k.startsWith(_pendingPrefix) || k.startsWith(_dismissedPrefix)) {
+      if (k.startsWith(_pendingPrefix) ||
+          k.startsWith(_dismissedPrefix) ||
+          k.startsWith(_unfinishedPrefix)) {
         await _storage.delete(k);
       }
     }
   }
+
+  /// Marks [accountId] as being added from the backup until
+  /// [finishAccount]: its record is written before its folder roots, and a
+  /// failure in between must not leave it looking complete.
+  Future<void> startAccount(String accountId) =>
+      _storage.put('$_unfinishedPrefix$accountId', '1');
+
+  Future<void> finishAccount(String accountId) =>
+      _storage.delete('$_unfinishedPrefix$accountId');
+
+  /// Whether adding [accountId] from the backup started and did not finish.
+  bool isUnfinished(String accountId) =>
+      _storage.get('$_unfinishedPrefix$accountId') != null;
 
   bool isDismissed(String accountId, int updatedAt) {
     final raw = _storage.get('$_dismissedPrefix$accountId');

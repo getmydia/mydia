@@ -34,7 +34,13 @@ class _Device {
       authStorage: auth,
       meta: meta,
       loadSources: sources.load,
-      putAccount: sources.putAccount,
+      putAccount: (r) async {
+        if (failNextPutAccount) {
+          failNextPutAccount = false;
+          throw StateError('disk full');
+        }
+        await sources.putAccount(r);
+      },
       settings: SettingsService(storage: auth),
       loadSubtitleLanguages: () async => null,
       saveSubtitleLanguages: (_) async {},
@@ -44,6 +50,9 @@ class _Device {
     );
     build();
   }
+
+  /// The next account write throws, as a full disk would.
+  bool failNextPutAccount = false;
 
   final FakeBackupRelay relay;
   final String name;
@@ -369,6 +378,38 @@ void main() {
       expect(c.meta.pendingAccount('p2'), isNull);
     });
 
+    test('accepting an offer adds the newest version, not the last read',
+        () async {
+      final a = rig.device('Living Room TV');
+      await a.sources.putAccount(_plex());
+      await a.service.start();
+      final key = await a.service.prepareEnable();
+      await a.service.confirmEnable(key);
+      final b = await rig.joined('Laptop', key);
+      final c = await rig.joined('Phone', key);
+      await c.sources.removeAccount('p1');
+
+      now = now.add(const Duration(minutes: 1));
+      await a.sources.putAccount(_plex('p1', 'Renamed'));
+      a.service.markDirty();
+      await a.service.flush();
+      await c.service.poll();
+      expect(c.meta.pendingAccount('p1'), isNotNull);
+
+      // Only B's slot moves, still holding the older version of p1.
+      now = now.add(const Duration(minutes: 1));
+      await b.watch('tmdb:movie:5');
+      b.service.markDirty();
+      await b.service.flush();
+      await c.service.poll();
+
+      await c.service.acceptPendingAccount('p1');
+      final added = (await c.sources.load())
+          .accounts
+          .singleWhere((r) => r.account.id == 'p1');
+      expect(added.account.displayName, 'Renamed Plex');
+    });
+
     test('accepting an offer after a restart polls for the record again',
         () async {
       final (a, key) = await rig.enabled('Living Room TV');
@@ -400,6 +441,40 @@ void main() {
       expect(b.meta.isDismissed('p1', offer.updatedAt), isTrue);
       await b.service.poll();
       expect(b.meta.pendingAccounts(), isEmpty);
+    });
+
+    test('a restore that fails while applying can be retried', () async {
+      final a = rig.device('Living Room TV');
+      await a.sources.putAccount(_plex());
+      await a.service.start();
+      final key = await a.service.prepareEnable();
+      await a.service.confirmEnable(key);
+
+      final b = rig.device('Laptop');
+      await b.service.start();
+      final preview = await b.service.previewRestore(key.display);
+      b.failNextPutAccount = true;
+      await expectLater(b.service.commitRestore(preview), throwsStateError);
+      expect(b.service.enabled, isFalse,
+          reason: 'the screen must offer the restore again');
+      expect(await b.state(), isNull);
+
+      // The same preview: this device is already a relay member by now.
+      await b.service.commitRestore(preview);
+      expect(b.service.enabled, isTrue);
+      expect(
+          (await b.sources.load()).accounts.map((r) => r.account.id), ['p1']);
+      expect(rig.relay.onlyVault.members, hasLength(3));
+      expect(b.service.status.value, isA<BackupIdle>());
+    });
+
+    test('two first uses of the identity at once make one identity', () async {
+      final d = rig.device('Living Room TV');
+      final keys =
+          await Future.wait([d.service.pairKeys(), d.service.pairKeys()]);
+      expect(keys[1]!.signer, keys[0]!.signer);
+      final stored = await BackupIdentity.loadOrCreate(d.auth);
+      expect(await stored.signerPublicB64(), keys[0]!.signer);
     });
 
     test('an unreadable identity puts the service in Error(server)', () async {
@@ -657,6 +732,23 @@ void main() {
       await c.service.flush();
       await a.service.poll();
       expect(a.watched('tmdb:movie:9'), isTrue);
+    });
+
+    test('a rotation retried after a conflict keeps the epoch it lost to',
+        () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Laptop', key);
+      rig.relay.holdMembersUntil = 2;
+
+      await Future.wait([
+        a.service.regenerateRecoveryKey(),
+        b.service.regenerateRecoveryKey(),
+      ]);
+      expect(rig.relay.onlyVault.epoch, 3);
+      final states = [(await a.state())!, (await b.state())!];
+      final loser = states.singleWhere((s) => s.epoch == 3);
+      // The winner's epoch-2 slot stays readable to the loser.
+      expect(loser.keysByEpoch.keys.toSet(), {2, 3});
     });
 
     test('regenerateRecoveryKey retires the old key', () async {
@@ -984,6 +1076,29 @@ void main() {
       await rig.advance(const Duration(seconds: 20));
       expect(calls(), 4);
       expect(a.service.status.value, isA<BackupIdle>());
+    });
+
+    _fake('a poll that succeeds keeps the retry of a failed upload',
+        (rig) async {
+      final (a, _) = await rig.enabled('Living Room TV');
+      final slot = await a.slotId();
+      final base = rig.relay.slotWrites[slot]!;
+      var failPuts = true;
+      rig.relay.onRequest = (r) {
+        if (failPuts && r.method == 'PUT') {
+          throw http.ClientException('offline');
+        }
+      };
+      await a.watch('tmdb:movie:13');
+      a.service.markDirty();
+      await a.service.flush();
+      expect(a.service.status.value, _errorOf(BackupRelayError.network));
+
+      failPuts = false;
+      // A peer-sync event polls before the retry is due.
+      await a.service.poll();
+      await rig.advance(const Duration(minutes: 1, seconds: 1));
+      expect(rig.relay.slotWrites[slot], base + 1);
     });
 
     _fake('Unavailable stops retrying until the next start', (rig) async {

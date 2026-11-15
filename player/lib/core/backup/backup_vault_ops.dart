@@ -242,14 +242,20 @@ class BackupVaultOps {
   /// recovery member. On a `conflict` the manifest is read again and the
   /// rotation retried once. Returns null when [removeSlotId] is no longer a
   /// member and nothing else was asked.
+  ///
+  /// [onManifest] sees every manifest a rotation is built on, the retry's
+  /// included, before anything is sealed: the caller keeps that epoch's key,
+  /// or slots still at it become unreadable once the new key replaces it.
   Future<Rotation?> rotate({
     required String vaultId,
     required SimpleKeyPair signer,
     String? removeSlotId,
     RecoveryMember? newRecovery,
+    Future<void> Function(BackupManifest manifest)? onManifest,
   }) async {
     for (var attempt = 0;; attempt++) {
       final manifest = (await _relay.manifest(vaultId, signer))!;
+      await onManifest?.call(manifest);
       final removed = removeSlotId == null
           ? null
           : manifest.members

@@ -147,6 +147,10 @@ class BackupSyncService {
 
   BackupVaultState? _state;
   BackupIdentity? _identity;
+
+  /// The vault a [commitRestore] that then failed already joined, so running
+  /// it again does not ask the relay to add this device twice.
+  ({String vaultId, Rotation joined})? _restoreJoin;
   bool _halted = false;
   bool _disposed = false;
   bool _dirty = false;
@@ -184,7 +188,7 @@ class BackupSyncService {
         try {
           _state = await _store.load();
           if (_state == null) return _set(const BackupOff());
-          _identity = await BackupIdentity.loadOrCreate(_auth);
+          await _identityOnce();
         } catch (e) {
           debugPrint(
               '[Backup] Could not load the backup state: ${e.runtimeType}');
@@ -308,6 +312,11 @@ class BackupSyncService {
   /// applies its records in restore mode, and uploads this device's slot.
   /// Throws [BackupAlreadyOnException], touching nothing, when this device
   /// is already in a vault.
+  ///
+  /// The records are applied before the vault state is saved, so a restore
+  /// that fails part way leaves backup off and can simply run again: the
+  /// relay membership it made is remembered for this preview's vault, and
+  /// after a restart a fresh preview's manifest lists it.
   Future<ApplyResult> commitRestore(RestorePreview preview) =>
       _userOp(() async {
         if (_state != null) throw const BackupAlreadyOnException();
@@ -316,15 +325,19 @@ class BackupSyncService {
             backupB64((await identity.signer.extractPublicKey()).bytes);
         final member = preview.manifest.members
             .any((m) => !m.recovery && backupB64(m.signer) == signer);
+        final earlier = _restoreJoin;
         final joined = member
             ? (epoch: preview.epoch, vaultKey: preview.vaultKey)
-            : await _ops.addSelfWithRecovery(
-                vaultId: preview.vaultId,
-                recovery: preview.recovery,
-                identity: identity,
-                epoch: preview.epoch,
-                vaultKey: preview.vaultKey,
-              );
+            : earlier != null && earlier.vaultId == preview.vaultId
+                ? earlier.joined
+                : await _ops.addSelfWithRecovery(
+                    vaultId: preview.vaultId,
+                    recovery: preview.recovery,
+                    identity: identity,
+                    epoch: preview.epoch,
+                    vaultKey: preview.vaultKey,
+                  );
+        _restoreJoin = (vaultId: preview.vaultId, joined: joined);
         final own = preview.manifest.slots
             .where((s) => s.slotId == identity.slotId)
             .firstOrNull;
@@ -335,13 +348,6 @@ class BackupSyncService {
           recoveryKeyText: preview.recovery.key.display,
           ownSeq: own?.seq ?? 0,
         );
-        try {
-          await _save(state);
-        } catch (_) {
-          _state = null;
-          _set(const BackupError(BackupRelayError.server, null));
-          rethrow;
-        }
         await _meta.clearMergedSeqs();
         final result = await _apply(preview.payloads, BackupApplyMode.restore);
         for (final e in preview.slotSeqs.entries) {
@@ -350,6 +356,14 @@ class BackupSyncService {
         for (final e in preview.payloads.entries) {
           await _rememberName(e.key, e.value.deviceName);
         }
+        try {
+          await _save(state);
+        } catch (_) {
+          _state = null;
+          _set(const BackupError(BackupRelayError.server, null));
+          rethrow;
+        }
+        _restoreJoin = null;
         _refreshOffers();
         await _publishMembers(preview.manifest, identity.slotId);
         await _join(state, identity);
@@ -484,7 +498,7 @@ class BackupSyncService {
   /// fails the pairing.
   Future<({String signer, String box})?> pairKeys() async {
     try {
-      final identity = _identity ??= await BackupIdentity.loadOrCreate(_auth);
+      final identity = await _identityOnce();
       return (
         signer: backupB64((await identity.signer.extractPublicKey()).bytes),
         box: backupB64((await identity.box.extractPublicKey()).bytes),
@@ -501,7 +515,8 @@ class BackupSyncService {
   /// id. Null when backup is off, the add failed, or [deadline] (wall
   /// clock) passed before the relay write: the host has stopped waiting by
   /// then, and a late write would leave a member that never adopts the
-  /// vault. Pairing goes on without it.
+  /// vault. A write that finishes after [deadline] is undone the same way
+  /// (see [_dropLateMember]). Pairing goes on without it.
   ///
   /// A signer already in the vault is not recorded against [nodeId]: the
   /// joiner proved nothing about owning it, and a revocation must not
@@ -535,16 +550,29 @@ class BackupSyncService {
                 memberBox: boxPub,
               );
             } on BackupRelayException catch (e) {
-              if (e.kind != BackupRelayError.conflict || attempt > 0) {
-                rethrow;
+              if (e.kind == BackupRelayError.conflict && attempt == 0) {
+                continue;
               }
-              continue;
+              if (late()) await _dropLateMember(signerPub);
+              rethrow;
+            } catch (_) {
+              if (late()) await _dropLateMember(signerPub);
+              rethrow;
             }
             if (nodeId != null) {
               await _meta.setNodeToSlot(
                   nodeId, VaultCrypto.slotIdFor(signerPub));
-              markDirty();
             }
+            // Checked after the last await: the host's timer fires no
+            // earlier than [deadline], so a vault id returned now reaches
+            // it. Past that, the host replied without one and the joiner
+            // will never adopt the vault: undo the membership.
+            if (late()) {
+              if (nodeId != null) await _meta.removeNode(nodeId);
+              await _dropLateMember(signerPub);
+              return null;
+            }
+            if (nodeId != null) markDirty();
             return vaultId;
           }
         } catch (e) {
@@ -552,6 +580,20 @@ class BackupSyncService {
           return null;
         }
       });
+
+  /// Takes out a member [addMemberForPair] added, or may have added, after
+  /// the host stopped waiting. The rotation keeps the recovery key: unlike a
+  /// device removed later, the joiner never held it (pairing does not share
+  /// it, and a device that restored with it is already listed, so never
+  /// added here). Best effort: on failure the joiner stays a member that
+  /// never uploads, which Backup & sync can remove.
+  Future<void> _dropLateMember(List<int> signerPub) async {
+    try {
+      await _rotate(removeSlotId: VaultCrypto.slotIdFor(signerPub));
+    } catch (e) {
+      debugPrint('[Backup] Late pairing member not removed: ${e.runtimeType}');
+    }
+  }
 
   /// The joiner side of pairing: takes up [vaultId], which the host just
   /// added this device to, and raises [joinedNotice]. Uploading this
@@ -980,8 +1022,20 @@ class BackupSyncService {
   Future<ApplyResult> _apply(
       Map<String, BackupPayload> payloads, BackupApplyMode mode) async {
     for (final MapEntry(key: slotId, value: p) in payloads.entries) {
+      // The newest version wins, whatever order the slots (or polls) come
+      // in: an accepted offer gets the credentials the merge chose.
       for (final r in p.records.whereType<AccountBackupRecord>()) {
-        if (!r.deleted) _accountRecords[r.accountId] = r;
+        if (r.deleted) continue;
+        final held = _accountRecords[r.accountId];
+        if (held == null ||
+            identical(
+                lwwMerge([
+                  [held],
+                  [r]
+                ]).single,
+                r)) {
+          _accountRecords[r.accountId] = r;
+        }
       }
       // Each slot's group record, not only the winning one, but only for
       // the nodes it says are its own: a member's word about another
@@ -1084,18 +1138,18 @@ class BackupSyncService {
     return next;
   }
 
-  /// Rotates after taking up the current epoch (so slots still at it stay
-  /// readable), and saves the new key as soon as the relay accepted it.
+  /// Rotates after taking up the epoch of every manifest the rotation reads
+  /// (so slots still at it stay readable, even when a conflict moves it on),
+  /// and saves the new key as soon as the relay accepted it.
   Future<Rotation?> _rotate(
       {String? removeSlotId, RecoveryMember? newRecovery}) async {
-    var (state, identity) = _require();
-    final m = (await _relay.manifest(state.vaultId, identity.signer))!;
-    state = await _adoptEpoch(m);
+    final (state, identity) = _require();
     final rotation = await _ops.rotate(
       vaultId: state.vaultId,
       signer: identity.signer,
       removeSlotId: removeSlotId,
       newRecovery: newRecovery,
+      onManifest: (m) => _adoptEpoch(m),
     );
     if (rotation == null) return null;
     await _save(_state!.copyWith(
@@ -1122,9 +1176,23 @@ class BackupSyncService {
     return (state, identity);
   }
 
+  /// The identity, loaded or created once. [pairKeys] runs outside the
+  /// queue, so two first uses can overlap: they share one load, or each
+  /// would read "absent" and create its own, and membership made with the
+  /// one that lost the write could never authenticate again.
+  Future<BackupIdentity> _identityOnce() {
+    final known = _identity;
+    if (known != null) return Future.value(known);
+    return _identityLoad ??= BackupIdentity.loadOrCreate(_auth)
+        .then((identity) => _identity = identity)
+        .whenComplete(() => _identityLoad = null);
+  }
+
+  Future<BackupIdentity>? _identityLoad;
+
   Future<BackupIdentity> _loadIdentity() async {
     try {
-      return _identity ??= await BackupIdentity.loadOrCreate(_auth);
+      return await _identityOnce();
     } on StateError {
       _set(const BackupError(BackupRelayError.server, null));
       rethrow;
@@ -1256,9 +1324,13 @@ class BackupSyncService {
     if (!_active) return;
     try {
       await op();
-      _failures = 0;
-      _retryTimer?.cancel();
-      _retryTimer = null;
+      // A poll can succeed while an upload still waits for its retry: the
+      // debounce has already fired, so the retry is what sends it.
+      if (!_dirty) {
+        _failures = 0;
+        _retryTimer?.cancel();
+        _retryTimer = null;
+      }
       if (_status.value is BackupError) _idle();
     } on BackupRelayException catch (e) {
       await _failed(e.kind, e);

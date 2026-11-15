@@ -437,6 +437,32 @@ void main() {
       expect(host.store.member('node-b')!.revoked, isFalse);
     });
 
+    test('an add that lands after the host replied is taken out again',
+        () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      net.backupRelay.hangWhen =
+          (r) => r.method == 'POST' && r.url.path.endsWith('/members');
+
+      final offer = await host.peers.startPairingOffer();
+      await joiner.peers.pairWithCode(offer.code);
+      expect(joiner.peers.isPaired, isTrue);
+      expect(joiner.backup.enabled, isFalse);
+
+      // The relay applies the add only now, after the reply went out.
+      net.backupRelay.hangWhen = null;
+      net.backupRelay.releaseHung();
+      await host.backup.settled();
+
+      final vault = net.backupRelay.onlyVault;
+      expect(vault.members, hasLength(2),
+          reason: 'no member the joiner does not know it is');
+      expect(vault.epoch, 2);
+      expect(host.meta.nodeToSlot().containsKey('node-b'), isFalse);
+      expect((await host.state())!.keysByEpoch.keys, contains(2));
+    });
+
     test('does not hold up a revocation', () async {
       final host = await net.node('Living Room TV', 'node-a');
       final joiner = await net.node('Night Harbor Laptop', 'node-b');
