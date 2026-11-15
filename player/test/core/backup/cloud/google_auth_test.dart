@@ -664,6 +664,98 @@ void main() {
     expect(await auth.accessToken(), 'at-fresh');
   });
 
+  test('paused first storage write never overwrites newer sign-in or cache',
+      () async {
+    final pausing = _PausingAuthStorage()..pauseFirstWrite = Completer<void>();
+    final auth = GoogleTokenAuth(
+      storage: pausing,
+      client: MockClient((_) async => fail('no request')),
+      clientId: 'cid',
+      clientSecret: 'csecret',
+      clientKind: 'tv',
+    );
+
+    var firstCancelled = false;
+    final first = auth.completeSignIn(
+      {
+        ..._grant(
+          access: 'at-stale',
+          refresh: 'rt-stale',
+          email: 'stale@example.test',
+        ),
+        'scope': googleDriveAppDataScope,
+      },
+      isCancelled: () => firstCancelled,
+    );
+    await pausing.firstWriteStarted.future;
+
+    // Cancel the first attempt while its AuthStorage.write is in flight, then
+    // start a newer sign-in.
+    firstCancelled = true;
+    final second = auth.completeSignIn({
+      ..._grant(
+        access: 'at-fresh',
+        refresh: 'rt-fresh',
+        email: 'fresh@example.test',
+      ),
+      'scope': googleDriveAppDataScope,
+    });
+    await Future<void>.delayed(Duration.zero);
+    // Serialised storage access holds the newer write until the in-flight write
+    // finishes rather than racing out of order.
+    expect(pausing.writeCalls, 1);
+
+    pausing.pauseFirstWrite!.complete();
+    await expectLater(
+      first,
+      throwsA(isA<BackupRelayException>()
+          .having((e) => e.code, 'code', 'cancelled')),
+    );
+    expect(await second, 'fresh@example.test');
+    expect(await auth.currentEmail(), 'fresh@example.test');
+    final saved = jsonDecode(pausing.contents[googleDriveStorageKey]!)
+        as Map<String, dynamic>;
+    expect(saved['refreshToken'], 'rt-fresh');
+    expect(await auth.accessToken(), 'at-fresh');
+  });
+
+  test('standalone cancel while storage write is paused rolls back storage',
+      () async {
+    final pausing = _PausingAuthStorage()..pauseFirstWrite = Completer<void>();
+    final auth = GoogleTokenAuth(
+      storage: pausing,
+      client: MockClient((_) async => fail('no request')),
+      clientId: 'cid',
+      clientSecret: 'csecret',
+      clientKind: 'tv',
+    );
+
+    var cancelled = false;
+    final pending = auth.completeSignIn(
+      {
+        ..._grant(
+          access: 'at-stale',
+          refresh: 'rt-stale',
+          email: 'stale@example.test',
+        ),
+        'scope': googleDriveAppDataScope,
+      },
+      isCancelled: () => cancelled,
+    );
+    await pausing.firstWriteStarted.future;
+
+    cancelled = true;
+    pausing.pauseFirstWrite!.complete();
+
+    await expectLater(
+      pending,
+      throwsA(isA<BackupRelayException>()
+          .having((e) => e.code, 'code', 'cancelled')),
+    );
+    expect(pausing.containsKey(googleDriveStorageKey), isFalse);
+    expect(await auth.currentEmail(), isNull);
+  });
+
   test('GoogleSignInAuth is constructible without touching the plugin', () {
     final auth = GoogleSignInAuth(
       storage: storage,
@@ -853,4 +945,21 @@ class _FakeSignInBackend implements GoogleSignInBackend {
 
   @override
   Future<void> disconnect() async => calls.add('disconnect');
+}
+
+class _PausingAuthStorage extends MockAuthStorage {
+  int writeCalls = 0;
+  Completer<void>? pauseFirstWrite;
+  final Completer<void> firstWriteStarted = Completer<void>();
+
+  @override
+  Future<void> write(String key, String value) async {
+    writeCalls++;
+    final gate = pauseFirstWrite;
+    if (writeCalls == 1 && gate != null) {
+      if (!firstWriteStarted.isCompleted) firstWriteStarted.complete();
+      await gate.future;
+    }
+    await super.write(key, value);
+  }
 }

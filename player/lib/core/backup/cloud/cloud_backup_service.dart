@@ -318,16 +318,16 @@ class CloudBackupService {
     _attach();
     try {
       await _engine.uploadOnce(force: true);
+      if (clearSharedOnUpload) {
+        await _meta.clearSlotNames();
+        await _meta.clearOffers();
+        _engine.refreshOffers();
+      }
     } catch (_) {
       await _engine.detach();
       _accountLabel.value = null;
       _engine.setStatus(const BackupOff());
       rethrow;
-    }
-    if (clearSharedOnUpload) {
-      await _meta.clearSlotNames();
-      await _meta.clearOffers();
-      _engine.refreshOffers();
     }
     await _engine.attempt(() => _engine.pollOnce(full: true));
   }

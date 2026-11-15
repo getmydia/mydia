@@ -169,6 +169,15 @@ class GoogleTokenAuth implements GoogleAuth {
   String? _accessToken;
   DateTime? _accessExpiry;
   Future<String>? _refreshing;
+  Future<void> _storageOps = Future<void>.value();
+  int _signInGeneration = 0;
+
+  Future<T> _serialiseStorage<T>(Future<T> Function() op) {
+    final next = _storageOps.then((_) => op());
+    _storageOps =
+        next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return next;
+  }
 
   @override
   Future<String?> currentEmail() async => (await _readGrant())?['email'];
@@ -187,6 +196,7 @@ class GoogleTokenAuth implements GoogleAuth {
   }
 
   Future<String> _refresh() async {
+    final refreshGeneration = _signInGeneration;
     final grant = await _readGrant();
     final refreshToken = grant?['refreshToken'];
     if (refreshToken == null || grant?['clientKind'] != clientKind) {
@@ -200,15 +210,26 @@ class GoogleTokenAuth implements GoogleAuth {
     });
     if (res.status != 200) {
       if (res.error == 'invalid_grant') {
-        // Revoked, expired, or the password changed: the grant is dead.
-        _clearCache();
-        await _storage.delete(googleDriveStorageKey);
+        // Revoked, expired, or the password changed: the grant is dead
+        // unless a newer sign-in already superseded this refresh attempt.
+        await _serialiseStorage(() async {
+          if (_signInGeneration != refreshGeneration) return;
+          _clearCache();
+          await _storage.delete(googleDriveStorageKey);
+        });
         throw const BackupRelayException(
           BackupRelayError.signedOut,
           code: 'invalid_grant',
         );
       }
       throw oauthError(res);
+    }
+    if (_signInGeneration != refreshGeneration) {
+      final token = res.json['access_token'];
+      if (token is! String) {
+        throw const FormatException('token response has no access_token');
+      }
+      return token;
     }
     return _cacheAccess(res.json);
   }
@@ -222,15 +243,22 @@ class GoogleTokenAuth implements GoogleAuth {
   /// ([googleScopeMissingCode]) and nothing is stored. A grant without a
   /// `scope` field is taken as the requested scopes (RFC 6749, 5.1).
   ///
-  /// When [isCancelled] returns true (including after awaiting userinfo),
-  /// throws `BackupRelayException(signedOut, code: 'cancelled')` before
-  /// overwriting stored credentials or caching the access token.
+  /// Coordinated against cancellation ([isCancelled]) and newer [completeSignIn]
+  /// or [signOut] attempts across both network lookups and serialized
+  /// [AuthStorage] writes so a late write or completion never overwrites a
+  /// newer session's grant or cached access token.
   Future<String> completeSignIn(
     Map<String, Object?> grant, {
     bool Function()? isCancelled,
   }) async {
-    void checkCancelled() {
-      if (isCancelled != null && isCancelled()) {
+    final generation = ++_signInGeneration;
+
+    bool cancelled() =>
+        _signInGeneration != generation ||
+        (isCancelled != null && isCancelled());
+
+    void checkActive() {
+      if (cancelled()) {
         throw const BackupRelayException(
           BackupRelayError.signedOut,
           code: 'cancelled',
@@ -238,49 +266,78 @@ class GoogleTokenAuth implements GoogleAuth {
       }
     }
 
-    checkCancelled();
+    checkActive();
     final scope = grant['scope'];
     if (scope is String && !_grantsDriveAppData(scope)) throw _scopeMissing;
-    final stored = await _readGrant();
-    checkCancelled();
-    // Never carry a token or email over from the other client's grant.
-    final existing = stored?['clientKind'] == clientKind ? stored : null;
-    final refreshToken =
-        grant['refresh_token'] as String? ?? existing?['refreshToken'];
-    if (refreshToken == null) {
-      throw const BackupRelayException(
-        BackupRelayError.signedOut,
-        code: 'no_refresh_token',
-      );
-    }
-    var email = _emailFromIdToken(grant['id_token']) ?? existing?['email'];
+
+    final (previousRaw, refreshToken, initialEmail) =
+        await _serialiseStorage(() async {
+      checkActive();
+      final (raw, stored) = await _readGrantRaw();
+      checkActive();
+      // Never carry a token or email over from the other client's grant.
+      final existing = stored?['clientKind'] == clientKind ? stored : null;
+      final rt = grant['refresh_token'] as String? ?? existing?['refreshToken'];
+      if (rt == null) {
+        throw const BackupRelayException(
+          BackupRelayError.signedOut,
+          code: 'no_refresh_token',
+        );
+      }
+      final em = _emailFromIdToken(grant['id_token']) ?? existing?['email'];
+      return (raw, rt, em);
+    });
+
+    var email = initialEmail;
     if (email == null) {
       final accessToken = grant['access_token'];
       if (accessToken is String && accessToken.isNotEmpty) {
         email = await _fetchUserInfoEmail(_client, accessToken);
       }
     }
-    checkCancelled();
+    checkActive();
     if (email == null) {
       throw const FormatException('token response names no account');
     }
-    await _storage.write(
-      googleDriveStorageKey,
-      jsonEncode({
-        'email': email,
-        'refreshToken': refreshToken,
-        'clientKind': clientKind,
-      }),
-    );
-    _cacheAccess(grant);
-    return email;
+    final resolvedEmail = email;
+
+    await _serialiseStorage(() async {
+      checkActive();
+      await _storage.write(
+        googleDriveStorageKey,
+        jsonEncode({
+          'email': resolvedEmail,
+          'refreshToken': refreshToken,
+          'clientKind': clientKind,
+        }),
+      );
+      if (cancelled()) {
+        // Restore the pre-write storage only if no newer sign-in/sign-out has
+        // superseded this generation; otherwise leave ownership to the queued
+        // successor and never poison the access-token cache.
+        if (_signInGeneration == generation) {
+          if (previousRaw == null) {
+            await _storage.delete(googleDriveStorageKey);
+          } else {
+            await _storage.write(googleDriveStorageKey, previousRaw);
+          }
+        }
+        checkActive();
+      }
+      _cacheAccess(grant);
+    });
+    return resolvedEmail;
   }
 
   @override
   Future<void> signOut() async {
-    final refreshToken = (await _readGrant())?['refreshToken'];
-    _clearCache();
-    await _storage.delete(googleDriveStorageKey);
+    _signInGeneration++;
+    final refreshToken = await _serialiseStorage(() async {
+      final token = (await _readGrant())?['refreshToken'];
+      _clearCache();
+      await _storage.delete(googleDriveStorageKey);
+      return token;
+    });
     if (refreshToken == null) return;
     try {
       await postForm(googleRevokeEndpoint, {'token': refreshToken});
@@ -345,18 +402,23 @@ class GoogleTokenAuth implements GoogleAuth {
     _accessExpiry = null;
   }
 
-  Future<Map<String, String>?> _readGrant() async {
+  Future<Map<String, String>?> _readGrant() async => (await _readGrantRaw()).$2;
+
+  Future<(String? raw, Map<String, String>? grant)> _readGrantRaw() async {
     final raw = await _storage.read(googleDriveStorageKey);
-    if (raw == null) return null;
+    if (raw == null) return (null, null);
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, Object?>) return null;
-      return {
-        for (final e in decoded.entries)
-          if (e.value is String) e.key: e.value as String,
-      };
+      if (decoded is! Map<String, Object?>) return (raw, null);
+      return (
+        raw,
+        {
+          for (final e in decoded.entries)
+            if (e.value is String) e.key: e.value as String,
+        },
+      );
     } on FormatException {
-      return null;
+      return (raw, null);
     }
   }
 }

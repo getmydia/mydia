@@ -458,4 +458,49 @@ void main() {
     expect(s.accountLabel.value, isNull);
     expect(drive.bytes, isEmpty);
   });
+
+  test('enable_cleanup_failure_detaches_and_stays_off', () async {
+    final failingStorage = _FailingDeleteMetaStorage();
+    final meta = BackupMetaStore(failingStorage);
+    await meta.setSlotName('other-slot', 'Laptop');
+    failingStorage.failNameDelete = true;
+
+    final a = device('Living Room TV');
+    final engine = SlotSyncEngine(
+      meta: meta,
+      snapshot: a.snapshot,
+      deviceName: () async => a.name,
+      platform: 'linux',
+      clock: () => DateTime.fromMillisecondsSinceEpoch(_t0),
+      filterOwn: CloudBackupService.filterOwn,
+    );
+    final service = CloudBackupService(
+      engine: engine,
+      backend: InMemoryCloudBackend(drive, kind: CloudStoreKind.gdrive),
+      identity: await BackupIdentity.loadOrCreate(a.auth),
+      meta: meta,
+      deviceName: () async => a.name,
+      platform: 'linux',
+      clock: () => DateTime.fromMillisecondsSinceEpoch(_t0),
+    );
+    addTearDown(service.dispose);
+
+    await expectLater(service.enable(), throwsException);
+
+    expect(service.enabled, isFalse);
+    expect(service.status.value, isA<BackupOff>());
+    expect(service.accountLabel.value, isNull);
+  });
+}
+
+class _FailingDeleteMetaStorage extends InMemoryBackupMetaStorage {
+  bool failNameDelete = false;
+
+  @override
+  Future<void> delete(String key) async {
+    if (failNameDelete && key.startsWith('name:')) {
+      throw Exception('meta delete failed');
+    }
+    await super.delete(key);
+  }
 }
