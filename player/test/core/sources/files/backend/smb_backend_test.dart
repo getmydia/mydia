@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/backend/smb_backend.dart';
@@ -77,6 +78,21 @@ void main() {
           targets: [_target],
           credentials: credentials,
         );
+
+    test('unreadable credentials are logged without the stored token',
+        () async {
+      final logged = <String>[];
+      final original = debugPrint;
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) logged.add(message);
+      };
+      addTearDown(() => debugPrint = original);
+
+      final b = lazy(() async => '{"user":"viewer","password":"hunter-two"');
+      await expectLater(b.probe(), throwsA(isA<BackendUnauthorized>()));
+      expect(logged.join('\n'), contains('Unreadable SMB credentials'));
+      expect(logged.join('\n'), isNot(contains('hunter-two')));
+    });
 
     test('missing_or_unreadable_credentials_are_refused', () async {
       String? stored;

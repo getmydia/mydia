@@ -123,7 +123,9 @@ class LazySmbBackend implements FileSystemBackend {
     try {
       c = SmbCredentials.fromJson(stored);
     } on FormatException catch (e) {
-      debugPrint('[FilesSource] Unreadable SMB credentials: $e');
+      // Only the message: the exception's source is the stored token,
+      // which holds the password.
+      debugPrint('[FilesSource] Unreadable SMB credentials: ${e.message}');
       throw const BackendUnauthorized('unreadable credentials');
     }
 

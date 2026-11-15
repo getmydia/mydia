@@ -141,7 +141,8 @@ String? filesDedupeKey(SourceAccountRecord record) {
         connections.where((c) => !isIpLiteral(c.uri.host)).firstOrNull;
     return normalizeSmbUrl((named ?? connections.first).uri);
   }
-  if (isS3AccountId(id)) return normalizeS3Url(connections.first.uri);
+  // A damaged S3 record has no key rather than failing the whole manifest.
+  if (isS3AccountId(id)) return tryNormalizeS3Url(connections.first.uri);
   return normalizeWebDavUrl(connections.first.uri);
 }
 

@@ -804,18 +804,22 @@ and dedupe on `normalizeS3Url`.
 
 `S3Backend` signs every request with SigV4 and follows no redirect.
 `playable()` returns a presigned GET URL, valid for 12 hours
-(`kS3PresignExpiry`), with no headers, so the player, a cast receiver and a
-paired player's grant all read the object straight from the bucket. Nothing
-caches it: every open of a file asks the backend again, so a URL that
-expired while a file sat paused is re-minted on reopen. `LazyS3Backend`
-builds the backend from the stored credentials on first use and reads them
-again after a refusal, as `LazyWebDavBackend` does.
+(`kS3PresignExpiry`), with no headers, so the player and a paired player's
+grant read the object straight from the bucket. A cast receiver does not:
+`FilesCastBridge` proxies the URL over the LAN, as it does any
+`PlayableFile`. Nothing caches it: every open of a file asks the backend
+again, so a URL that expired while a file sat paused is re-minted on reopen.
+`LazyS3Backend` is a `LazyFilesBackend`: it builds the backend from the
+stored credentials on first use and reads them again after a refusal.
 
 A presigned URL is a bearer credential for that object. It is never logged
 and never put in an error: failures name the host, port and bucket only
 (`s3_errors.dart`), transport errors drop the exception text (which can quote
-the URL), and the peer host logs only the failure's type when it cannot mint
-a grant.
+the URL), the cast bridge logs a failed proxy's exception type and the URL
+cut at its query (`redactS3Url`), and the peer host logs only the failure's
+type when it cannot mint a grant. As a backstop, `redactLogMessage` strips
+`X-Amz-Signature`, `X-Amz-Credential` and `X-Amz-Security-Token` values from
+any log line.
 
 ## Tests
 

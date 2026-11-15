@@ -540,6 +540,13 @@ void main() {
     expect(filesDedupeKey(s3), normalizeS3Url(connection));
   });
 
+  test('a damaged S3 record has no dedupe key rather than throwing', () {
+    final damaged = _filesRecord('3' * 17, 'bkt', connections: [
+      ServerConnection(uri: Uri.parse('https://not-an-s3-uri.example/bkt')),
+    ]);
+    expect(filesDedupeKey(damaged), isNull);
+  });
+
   test('pages_stay_under_budget_and_cover_every_record', () async {
     final roots = <LibraryRoot>[];
     final files = <IndexedFile>[];

@@ -66,13 +66,18 @@ bool isSmbAccountId(String id) => _smbAccountId.hasMatch(id);
 /// no leading `/` and a trailing one unless empty, the query sorted. Keys
 /// keep their case. Throws [ArgumentError] when [connection] is not one.
 String normalizeS3Url(Uri connection) {
-  final location = S3Location.fromConnectionUri(connection);
-  if (location == null) {
+  final normalized = tryNormalizeS3Url(connection);
+  if (normalized == null) {
     throw ArgumentError.value(
         connection.scheme, 'connection', 'Not an S3 connection URI');
   }
-  return location.toConnectionUri().toString();
+  return normalized;
 }
+
+/// [normalizeS3Url], or null when [connection] is not an S3 connection URI:
+/// for reading stored records, where one damaged entry must not fail the rest.
+String? tryNormalizeS3Url(Uri connection) =>
+    S3Location.fromConnectionUri(connection)?.toConnectionUri().toString();
 
 /// `3` + the first 16 hex characters of SHA-256 over [normalizeS3Url].
 String s3AccountId(Uri connection) =>
