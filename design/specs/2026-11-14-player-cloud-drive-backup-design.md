@@ -58,7 +58,7 @@ relay-only features. It is split:
 | `cloud/cloud_slot_transport.dart` | `SlotTransport` over a `CloudBackend`. Plaintext gzip JSON |
 | `cloud/google_drive_backend.dart` | Drive v3 REST against `appDataFolder` |
 | `cloud/google_auth.dart` | Sign-in per platform and token refresh |
-| `cloud/cloudkit_backend.dart` | Dart side of the `mydia_cloudkit` plugin |
+| `cloud/cloudkit_backend.dart` | Dart side of the `mydia/cloudkit` channel handled by `CloudKitPlugin.swift` |
 | `backup_controller.dart` (`BackupController`) | Holds the active store (`relay`, `icloud`, `gdrive`) in `AuthStorage` `backup/store`, starts the matching service, and is the only thing the UI talks to |
 
 ```dart
@@ -81,8 +81,9 @@ per slot, its id, version, device name and size.
 
 The slot id on every store is #1414's per-install id from `BackupIdentity`,
 so switching stores keeps a device's identity. A cloud slot's body is the
-#1414 record list wrapped in a header: `schema` (#1414's `BackupPayload.version`), `slotId`, `deviceName`,
-`platform`, `writtenAt`, and an optional `movedTo` (see Switching).
+#1414 record list wrapped in a header: `schema` (#1414's
+`BackupPayload.version`), `slotId`, `deviceName`, `platform`, `writtenAt`, and
+an optional `movedTo` (see Switching).
 
 ## Google Drive
 
@@ -102,10 +103,10 @@ so switching stores keeps a device's identity. A cloud slot's body is the
   scopes, and it is unconfirmed that `drive.appdata` is on it. The probe
   script at `player/tool/gdrive_device_probe.dart` posts the scope to the
   device-code endpoint and must be run with the TV client id before release.
-  If the scope is refused,
-  Android TV signs in by handing off from a paired phone: the phone sends its
-  Drive refresh token and its (public) client id over the encrypted p2p
-  channel, and the TV refreshes with them. Revoking either device's access
+  If the scope is refused, Android TV signs in by handing off from a paired
+  phone: the phone sends its Drive refresh token and its (public) client id
+  over the encrypted p2p channel, and the TV refreshes with them. Revoking
+  either device's access
   then revokes both, which the TV's status row says.
 - **Layout**: one file per device, `slot-<slotId>.json.gz`, with
   `appProperties` `slotId` and `deviceName`. `list` is
@@ -203,7 +204,7 @@ On top of #1414's backoff:
 
 - **Refactor safety**: #1414's suites (`backup_sync_service_test`,
   `fake_backup_relay`, the device rig, the screen tests) run unchanged in
-  intent against `RelayBackupService` over `SlotSyncEngine` and
+  intent against `BackupSyncService` over `SlotSyncEngine` and
   `RelaySlotTransport`.
 - **Transport contract**: one shared suite over `SlotTransport` run against
   an in-memory fake, `GoogleDriveBackend` on a `MockClient` fake Drive that
