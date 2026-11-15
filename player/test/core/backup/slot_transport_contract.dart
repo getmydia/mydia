@@ -32,27 +32,33 @@ SlotInfo _own(SlotListing l, SlotTransport t) =>
     l.slots.singleWhere((s) => s.slotId == t.ownSlotId);
 
 /// Shared behavior every [SlotTransport] backend must satisfy. [make] returns
-/// two transports with different `ownSlotId`s over one shared store.
+/// two transports with different `ownSlotId`s over one shared store. Tests
+/// named in [skip] are reported as skipped, for a backend that cannot do what
+/// they check (the relay has no standalone slot delete).
 void runSlotTransportContract(
   String name,
-  Future<(SlotTransport a, SlotTransport b)> Function() make,
-) {
+  Future<(SlotTransport a, SlotTransport b)> Function() make, {
+  Set<String> skip = const {},
+}) {
   group('SlotTransport contract: $name', () {
     late SlotTransport a;
     late SlotTransport b;
+
+    void contractTest(String id, Future<void> Function() body) =>
+        test(id, body, skip: skip.contains(id) ? '$name: unsupported' : false);
 
     setUp(() async {
       (a, b) = await make();
       expect(a.ownSlotId, isNot(b.ownSlotId));
     });
 
-    test('own_write_is_listed_with_device_name', () async {
+    contractTest('own_write_is_listed_with_device_name', () async {
       await a.writeOwn(_payload('Living Room'));
       final listing = (await a.list())!;
       expect(_own(listing, a).deviceName, 'Living Room');
     });
 
-    test('version_changes_on_rewrite', () async {
+    contractTest('version_changes_on_rewrite', () async {
       await a.writeOwn(_payload('Living Room', stamp: 1));
       final v1 = _own((await a.list())!, a).version;
       await a.writeOwn(_payload('Living Room', stamp: 2));
@@ -60,14 +66,14 @@ void runSlotTransportContract(
       expect(v2, isNot(v1));
     });
 
-    test('list_with_current_cursor_returns_null', () async {
+    contractTest('list_with_current_cursor_returns_null', () async {
       await a.writeOwn(_payload('Living Room'));
       final listing = (await a.list())!;
       expect(listing.cursor, isNotNull);
       expect(await a.list(cursor: listing.cursor), isNull);
     });
 
-    test('other_device_write_makes_list_non_null', () async {
+    contractTest('other_device_write_makes_list_non_null', () async {
       await a.writeOwn(_payload('Living Room'));
       final listing = (await a.list())!;
       await b.writeOwn(_payload('Bedroom'));
@@ -77,7 +83,7 @@ void runSlotTransportContract(
           containsAll([a.ownSlotId, b.ownSlotId]));
     });
 
-    test('read_roundtrips_payload', () async {
+    contractTest('read_roundtrips_payload', () async {
       final payload = _payload('Living Room');
       await a.writeOwn(payload);
       final info = _own((await b.list())!, a);
@@ -87,7 +93,7 @@ void runSlotTransportContract(
       expect(read.records, payload.records);
     });
 
-    test('delete_removes_from_listing', () async {
+    contractTest('delete_removes_from_listing', () async {
       await a.writeOwn(_payload('Living Room'));
       await b.writeOwn(_payload('Bedroom'));
       await b.delete(a.ownSlotId);
@@ -95,7 +101,7 @@ void runSlotTransportContract(
       expect(listing.slots.map((s) => s.slotId), [b.ownSlotId]);
     });
 
-    test('oversize_write_throws_tooLarge', () async {
+    contractTest('oversize_write_throws_tooLarge', () async {
       final rng = Random.secure();
       final noise = base64.encode(
           List<int>.generate(4 * 1024 * 1024 + 4096, (_) => rng.nextInt(256)));
