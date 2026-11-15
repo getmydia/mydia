@@ -118,7 +118,9 @@ defmodule Mydia.Downloads.Client do
           category: String.t(),
           tags: [String.t()],
           save_path: String.t(),
-          paused: boolean()
+          paused: boolean(),
+          only_files: [non_neg_integer()] | nil,
+          initial_peers: [String.t()] | nil
         ]
 
   @type remove_torrent_opts :: [
@@ -337,6 +339,25 @@ defmodule Mydia.Downloads.Client do
   @callback set_share_limits(config(), client_id :: String.t(), share_limits()) ::
               :ok | {:error, Error.t()}
 
+  @typedoc """
+  A torrent's file listing obtained without adding it: files with their index
+  (the id `only_files` takes), relative path and length, plus peers seen while
+  fetching metadata.
+  """
+  @type torrent_listing :: %{
+          files: [%{index: non_neg_integer(), path: String.t(), length: non_neg_integer()}],
+          peers: [String.t()]
+        }
+
+  @doc """
+  Lists a torrent's files without adding it, so the caller can pick wanted
+  files and then add with the `:only_files` and `:initial_peers` options.
+
+  Optional. The facade reports `{:error, :unsupported}` for adapters without it.
+  """
+  @callback list_torrent_files(config(), torrent_input()) ::
+              {:ok, torrent_listing()} | {:error, Error.t()}
+
   @doc """
   Lists a torrent's files with their selection state and progress.
 
@@ -357,6 +378,7 @@ defmodule Mydia.Downloads.Client do
 
   @optional_callbacks list_files: 2,
                       set_share_limits: 3,
+                      list_torrent_files: 2,
                       torrent_files: 2,
                       set_file_selection: 3
 
@@ -471,6 +493,21 @@ defmodule Mydia.Downloads.Client do
   def set_share_limits(adapter, config, client_id, limits) when is_atom(adapter) do
     if Code.ensure_loaded?(adapter) and function_exported?(adapter, :set_share_limits, 3) do
       adapter.set_share_limits(config, client_id, limits)
+    else
+      {:error, :unsupported}
+    end
+  end
+
+  @doc """
+  Lists a torrent's files without adding it, or returns
+  `{:error, :unsupported}` for adapters without the optional
+  `c:list_torrent_files/2` callback.
+  """
+  def list_torrent_files(nil, _config, _input), do: no_adapter_error()
+
+  def list_torrent_files(adapter, config, input) when is_atom(adapter) do
+    if Code.ensure_loaded?(adapter) and function_exported?(adapter, :list_torrent_files, 2) do
+      adapter.list_torrent_files(config, input)
     else
       {:error, :unsupported}
     end

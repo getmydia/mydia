@@ -5,16 +5,19 @@ defmodule Mydia.Config.Env.BuiltInTorrentEnv do
 
   Takes a one-argument getenv function so tests can inject values. Blank values
   count as unset; a value that does not parse, a port outside 1..65535, a rate
-  limit outside `BuiltInTorrent.min_rate_limit_kib/0`..`max_rate_limit_kib/0`
-  or a negative seeding value leaves its key out
-  (`BuiltIn.Config` still warns about it from the raw environment).
+  limit outside `BuiltInTorrent.min_rate_limit_kib/0`..`max_rate_limit_kib/0`,
+  a negative seeding value or a negative reserve leaves its key out.
+  `BuiltIn.Config` warns about such a value from the raw environment for
+  `MYDIA_TORRENT_ENABLED`, both ports, both rate limits and
+  `MYDIA_TORRENT_MIN_FREE_SPACE_GB`; a bad `MYDIA_VPN_VPN_PORT_FORWARDING` is
+  dropped silently.
   """
 
   alias Mydia.Config.Loader
   alias Mydia.Config.Schema.BuiltInTorrent
 
   @integer_fields [:listen_port, :api_port]
-  @non_negative_fields [:seed_time]
+  @non_negative_fields [:seed_time, :min_free_space_gb]
   @rate_limit_fields [:download_limit_kib, :upload_limit_kib]
   @min_rate_limit_kib BuiltInTorrent.min_rate_limit_kib()
   @max_rate_limit_kib BuiltInTorrent.max_rate_limit_kib()

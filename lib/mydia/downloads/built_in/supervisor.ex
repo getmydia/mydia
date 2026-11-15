@@ -1,7 +1,7 @@
 defmodule Mydia.Downloads.BuiltIn.Supervisor do
   @moduledoc """
-  One running instance of the built-in torrent client: `Status`, `Engine` and,
-  with the VPN on, the `Vpn` gate.
+  One running instance of the built-in torrent client: `Status`, `Engine`,
+  with the VPN on the `Vpn` gate, and last the `SpaceGuard`.
 
   `Mydia.Downloads.BuiltIn.Manager` decides what runs and starts this tree
   under a `DynamicSupervisor`, replacing the whole tree whenever the effective
@@ -18,7 +18,7 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
 
   use Supervisor
 
-  alias Mydia.Downloads.BuiltIn.{Config, Engine, Status, Vpn}
+  alias Mydia.Downloads.BuiltIn.{Config, Engine, SpaceGuard, Status, Vpn}
 
   # The engine's terminate waits up to 10s for rqbit to exit.
   @engine_shutdown_ms 15_000
@@ -45,10 +45,16 @@ defmodule Mydia.Downloads.BuiltIn.Supervisor do
         shutdown: @engine_shutdown_ms
       )
 
+    # Engine and Vpn write the default-named Status too.
     base = [{Status, warnings: config.warnings}, engine]
 
-    if config.vpn?,
-      do: base ++ [{Vpn, config: config, expected_hash: Keyword.get(opts, :expected_hash)}],
-      else: base
+    vpn =
+      if config.vpn?,
+        do: [{Vpn, config: config, expected_hash: Keyword.get(opts, :expected_hash)}],
+        else: []
+
+    # Last, so under rest_for_one a guard crash restarts only the guard and
+    # never the VPN gate.
+    base ++ vpn ++ [{SpaceGuard, config: config, status: Status}]
   end
 end

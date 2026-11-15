@@ -166,6 +166,12 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert %BuiltInTorrent{vpn_provider: "protonvpn"} = config.vpn_section
     end
 
+    test "min_free_space_bytes is decimal gigabytes, 5 GB by default" do
+      assert load([], []).min_free_space_bytes == 5_000_000_000
+      assert load([min_free_space_gb: 12], []).min_free_space_bytes == 12_000_000_000
+      assert load([min_free_space_gb: 0], []).min_free_space_bytes == 0
+    end
+
     test "vpn? follows vpn_enabled, not the provider" do
       refute load([vpn_provider: "pia"], []).vpn?
       assert load([vpn_enabled: true], []).vpn?
@@ -204,6 +210,18 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => "6881"})
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " "})
       assert %Config{warnings: []} = load([], [], env: %{"MYDIA_TORRENT_PORT" => " 51413 "})
+    end
+
+    test "a bad disk reserve in the environment warns" do
+      for bad <- ["lots", "-1", "2.5"] do
+        config = load([], [], env: %{"MYDIA_TORRENT_MIN_FREE_SPACE_GB" => bad})
+        assert {:invalid_min_free_space, bad} in config.warnings
+      end
+
+      for good <- ["0", "12", " 7 ", " "] do
+        config = load([], [], env: %{"MYDIA_TORRENT_MIN_FREE_SPACE_GB" => good})
+        assert config.warnings == [], inspect(good)
+      end
     end
 
     test "rate limits convert from KiB/s to bytes per second, nil meaning unlimited" do
@@ -284,6 +302,15 @@ defmodule Mydia.Downloads.BuiltIn.ConfigTest do
 
       refute Config.restart_key(load([vpn_enabled: true, vpn_provider: "pia"], [])) ==
                Config.restart_key(vpn_on)
+    end
+
+    test "the free space reserve never restarts the engine, VPN on or off" do
+      for vpn <- [[], [vpn_enabled: true, vpn_provider: "pia"]] do
+        a = load(vpn, [])
+        b = load([min_free_space_gb: 20] ++ vpn, [])
+        refute a.min_free_space_bytes == b.min_free_space_bytes
+        assert Config.restart_key(a) == Config.restart_key(b)
+      end
     end
 
     test "with the VPN off, VPN fields do not count" do

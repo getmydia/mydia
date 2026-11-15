@@ -176,6 +176,23 @@ defmodule Mydia.Downloads.BuiltIn.ManagerTest do
       assert BuiltIn.runtime() == runtime
     end
 
+    test "a new disk reserve reaches the runtime entry without a restart", ctx do
+      manager = start_manager(ctx)
+      [pid] = instance_pids(ctx)
+      runtime = BuiltIn.runtime()
+
+      set(ctx, min_free_space_gb: 12)
+      reload(manager)
+
+      assert [^pid] = instance_pids(ctx)
+      new_runtime = BuiltIn.runtime()
+      assert new_runtime.config.min_free_space_bytes == 12_000_000_000
+      refute new_runtime.config.min_free_space_bytes == runtime.config.min_free_space_bytes
+      assert new_runtime.api_port == runtime.api_port
+      assert new_runtime.credentials == runtime.credentials
+      assert %Config{min_free_space_bytes: 12_000_000_000} = Manager.await_applied(manager)
+    end
+
     test "a seeding-only reload refreshes the runtime without restarting the engine", ctx do
       manager = start_manager(ctx)
       [pid] = instance_pids(ctx)

@@ -96,12 +96,37 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInComponents do
     """
   end
 
+  attr :id, :string, required: true
+  attr :class, :string, default: nil
+  attr :disk, :any, required: true, doc: "Status disk part: :ok or {:low, %{free:, reserve:}}"
+
+  @doc """
+  Warns that the built-in client is paused for lack of disk space. Renders
+  nothing while the disk is fine. Shared with the downloads page.
+  """
+  def low_disk_alert(assigns) do
+    ~H"""
+    <div
+      :if={match?({:low, _}, @disk)}
+      id={@id}
+      role="alert"
+      class={["alert alert-warning alert-soft", @class]}
+    >
+      <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
+      <span class="text-sm">{low_disk_message(@disk)}</span>
+    </div>
+    """
+  end
+
+  defp low_disk_message({:low, info}), do: Status.describe({:low_disk, info})
+
   attr :status, Status, default: nil
   attr :vpn?, :boolean, required: true
   attr :display, Mydia.TimeDisplay, required: true
 
   defp running_state(assigns) do
     ~H"""
+    <.low_disk_alert :if={@status} id="built-in-low-disk" disk={@status.disk} />
     <div
       :if={is_nil(@status)}
       id="built-in-status-unavailable"

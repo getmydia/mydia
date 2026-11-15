@@ -167,6 +167,7 @@ blank value counts as unset.
 | `MYDIA_TORRENT_STATE_PATH` | `/config/rqbit` | Where the built-in client keeps its torrent state. Must be writable by the Mydia user. |
 | `MYDIA_TORRENT_PORT` | `51413` | Peer listening port. With the VPN, forward this port at your provider or let it forward one (see below). |
 | `MYDIA_TORRENT_API_PORT` | `3030` | Port of the built-in client's HTTP API on `127.0.0.1`. Change it when something else on the host uses 3030. |
+| `MYDIA_TORRENT_MIN_FREE_SPACE_GB` | `5` | Free space, in GB, the built-in client keeps on the download volume. Grabs that would leave less are refused and downloads pause below it. `0` turns this off. |
 | `MYDIA_TORRENT_SEED_RATIO` | unset | Seed each torrent until it reaches this share ratio (0 or more). Combined with the seed time, whichever comes first counts. A tracker's own minimum has to be met as well. |
 | `MYDIA_TORRENT_SEED_TIME` | unset | Seed each torrent for at least this many minutes. |
 | `MYDIA_TORRENT_SEED_GOAL_ACTION` | `pause` | What happens at the target: `pause` or `remove` (remove from the client once imported). Switching to `remove` also removes, with their files, imported torrents already in the client that are past the target, including ones resumed by hand. |

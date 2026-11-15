@@ -71,14 +71,14 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
     opts = Keyword.put(opts, :download_type, download_type)
 
     with :ok <- Duplicates.check_for_duplicate_download(search_result, opts),
-         {:ok, client_config, client_id, detected_type} <-
+         {:ok, client_config, client_id, detected_type, selection} <-
            ClientSelection.select_and_add_to_client(search_result, opts),
          {:ok, download} <-
            ClientSelection.create_download_record_with_retry(
              search_result,
              client_config,
              client_id,
-             opts
+             Keyword.put(opts, :wanted_files, selection)
            ) do
       # Use detected type as fallback if protocol wasn't set
       final_type = download_type || detected_type

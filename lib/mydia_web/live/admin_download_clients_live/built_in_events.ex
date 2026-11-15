@@ -23,7 +23,14 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInEvents do
   @secret_fields BuiltInTorrent.secret_fields()
   @secret_keys Enum.map(@secret_fields, &Atom.to_string/1)
   @sections %{"torrent" => :torrent, "vpn" => :vpn}
-  @torrent_fields [:enabled, :download_path, :listen_port, :state_path, :api_port]
+  @torrent_fields [
+    :enabled,
+    :download_path,
+    :min_free_space_gb,
+    :listen_port,
+    :state_path,
+    :api_port
+  ]
   # Values a segmented control sends as a click rather than a form change.
   @choice_keys ["enabled", "vpn_type"]
 

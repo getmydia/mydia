@@ -50,17 +50,10 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   require Logger
   alias Mydia.Downloads
-  alias Mydia.Downloads.AutoRejectCap
-  alias Mydia.Downloads.Blacklists
-  alias Mydia.Downloads.Download
-  alias Mydia.Downloads.Client
-  alias Mydia.Downloads.ClientAdoption
-  alias Mydia.Downloads.ClientRemoval
+  alias Mydia.Downloads.{AutoRejectCap, Blacklists, Download, EarlyImport}
+  alias Mydia.Downloads.{Client, ClientAdoption, ClientRemoval}
   alias Mydia.Downloads.Client.FailureCategory
-  alias Mydia.Downloads.ImportCandidates
-  alias Mydia.Downloads.Queue
-  alias Mydia.Downloads.StallDetector
-  alias Mydia.Downloads.ExternalTorrents
+  alias Mydia.Downloads.{ExternalTorrents, ImportCandidates, Queue, StallDetector}
   alias Mydia.Downloads.UntrackedMatcher
   alias Mydia.Events
   alias Mydia.Settings
@@ -222,6 +215,9 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
     {stalled_count, stall_update_failures} =
       check_progress(active_for_stall_check, grace_map, now)
+
+    # Import finished files of multi-file downloads that are still running.
+    EarlyImport.run(active_for_stall_check)
 
     # Find and match untracked torrents (manually added to clients)
     untracked_downloads = UntrackedMatcher.find_and_match_untracked()

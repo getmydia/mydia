@@ -794,7 +794,7 @@ defmodule Mydia.Downloads.QueueTest do
         download_protocol: :torrent
       }
 
-      assert {:ok, _client_config, _client_id, :torrent} =
+      assert {:ok, _client_config, _client_id, :torrent, _selection} =
                Queue.select_and_add_to_client(search_result, [])
 
       assert [written] = File.ls!(watch)
@@ -881,14 +881,14 @@ defmodule Mydia.Downloads.QueueTest do
           info_hash: ctx.hash
         )
 
-      assert {:ok, _config, _client_id, :torrent} =
+      assert {:ok, _config, _client_id, :torrent, _selection} =
                Queue.select_and_add_to_client(ctx.search_result, [])
 
       assert [_written] = File.ls!(ctx.watch)
     end
 
     test "an unbanned torrent goes through with enforce_blacklist", ctx do
-      assert {:ok, _config, _client_id, :torrent} =
+      assert {:ok, _config, _client_id, :torrent, _selection} =
                Queue.select_and_add_to_client(ctx.search_result, enforce_blacklist: true)
     end
   end

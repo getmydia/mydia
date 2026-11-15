@@ -56,4 +56,14 @@ defmodule Mydia.ApplicationObanConfigTest do
     # tracker that does not exist yet is silently dropped.
     assert tracker_index < oban_index
   end
+
+  # Two partial imports of one download must never copy at the same time: the
+  # second one's atomic write would remove the first's temp file.
+  test "config.exs ships a single-slot early_import queue" do
+    # config/test.exs replaces the queues, so read what config.exs ships.
+    queues =
+      "config/config.exs" |> Config.Reader.read!(env: :prod) |> get_in([:mydia, Oban, :queues])
+
+    assert queues[:early_import] == 1
+  end
 end

@@ -6,7 +6,10 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Repo
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.BuiltIn
+  alias Mydia.Downloads.BuiltIn.DiskSpace
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.WantedFiles
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Priority
@@ -20,6 +23,9 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Downloads.Queue.Duplicates
   alias Mydia.Downloads.TorrentFetch
   require Logger
+
+  # The disk reserve is set in decimal gigabytes (`min_free_space_gb`).
+  @gb 1_000_000_000
 
   # Returns an Oban changeset, or nil when there is nothing sensible to search
   # for. `Media` exposes only the raising `get_media_item!/1`, so this reads the
@@ -118,9 +124,14 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     end
   end
 
-  # Selects appropriate client and adds the download, with smart fallback if type is detected
+  # Selects appropriate client and adds the download, with smart fallback if type is detected.
+  # For a torrent whose adapter can list files, only the wanted files are added
+  # (see Mydia.Downloads.WantedFiles); the selection, or nil, is returned last
+  # so callers can record it on the download.
   @doc false
   # Public so Mydia.Downloads.Grabber can reuse the fetch/select/add pipeline.
+  @spec select_and_add_to_client(SearchResult.t(), keyword()) ::
+          {:ok, map(), String.t(), atom() | nil, WantedFiles.t() | nil} | {:error, term()}
   def select_and_add_to_client(search_result, opts) do
     download_type = Keyword.get(opts, :download_type)
 
@@ -165,24 +176,130 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
             other -> other
           end
 
-        # Add to the selected client
-        case add_torrent_to_client_with_input(
-               adapter,
-               client_config,
-               torrent_input,
-               opts_with_type
-             ) do
-          {:ok, client_id} ->
-            # Best effort; the removal guard applies whatever the client says.
-            terms = TrackerRules.for_result(search_result)
-            SeedingLimits.push(adapter, config_to_map(client_config), client_id, terms)
-            {:ok, client_config, client_id, final_download_type}
+        {selection, peers, listed} =
+          select_files(
+            adapter,
+            config_to_map(client_config),
+            torrent_input,
+            final_download_type,
+            search_result,
+            opts_with_type
+          )
 
-          {:error, _} = error ->
-            error
+        add_opts =
+          opts_with_type
+          |> Keyword.put(:only_files, add_only_files(selection, listed))
+          |> Keyword.put(:initial_peers, peers)
+
+        with :ok <- check_space(client_config, selection, search_result, opts_with_type),
+             {:ok, client_id} <-
+               add_torrent_to_client_with_input(adapter, client_config, torrent_input, add_opts) do
+          # Best effort; the removal guard applies whatever the client says.
+          terms = TrackerRules.for_result(search_result)
+          SeedingLimits.push(adapter, config_to_map(client_config), client_id, terms)
+          {:ok, client_config, client_id, final_download_type, selection}
         end
       end
     end
+  end
+
+  # Lists a torrent's files and decides which ones to download. Returns
+  # `{selection | nil, peers, listed_files}`; peers and files are only returned
+  # by a successful listing. Any failure means "add every file": the selection
+  # is an optimisation, never a reason to refuse a grab.
+  defp select_files(adapter, config, torrent_input, download_type, search_result, opts) do
+    if torrent_input?(torrent_input, download_type) do
+      case Client.list_torrent_files(adapter, config, torrent_input) do
+        {:ok, %{files: files, peers: peers}} ->
+          {safe_select(search_result, files, opts), peers, files}
+
+        {:error, :unsupported} ->
+          {nil, nil, []}
+
+        {:error, reason} ->
+          Logger.warning("Could not list torrent files; adding every file",
+            title: search_result.title,
+            reason: inspect(reason)
+          )
+
+          {nil, nil, []}
+      end
+    else
+      {nil, nil, []}
+    end
+  end
+
+  # A selection that keeps every file leaves `only_files` nil, but the add
+  # still names every listed file: rqbit keeps an older, narrower selection on
+  # a torrent it already manages unless the add asks for something explicit.
+  # Without a listing (or a selection) nothing is sent, as before.
+  defp add_only_files(%WantedFiles{only_files: nil}, [_ | _] = listed),
+    do: listed |> Enum.map(& &1.index) |> Enum.sort()
+
+  defp add_only_files(%WantedFiles{only_files: only_files}, _listed), do: only_files
+
+  # Listing worked but the selection raised: the fallback promises every file,
+  # so name them all rather than let a narrower managed selection stand.
+  defp add_only_files(nil, [_ | _] = listed), do: listed |> Enum.map(& &1.index) |> Enum.sort()
+  defp add_only_files(nil, _listed), do: nil
+
+  defp torrent_input?({:magnet, _}, download_type), do: download_type in [nil, :torrent]
+  defp torrent_input?(_input, download_type), do: download_type == :torrent
+
+  defp safe_select(search_result, files, opts) do
+    search_result
+    |> WantedFiles.context_for(opts)
+    |> WantedFiles.select(files)
+  rescue
+    error ->
+      Logger.warning("File selection failed; adding every file",
+        title: search_result.title,
+        error: Exception.message(error)
+      )
+
+      nil
+  end
+
+  # Disk guard: refuses a grab the built-in client's download volume cannot
+  # hold, keeping `min_free_space_bytes` free. Anything unmeasurable passes.
+  defp check_space(client_config, selection, search_result, opts) do
+    with true <- BuiltIn.managed?(config_to_map(client_config)),
+         %{config: %{download_path: path, min_free_space_bytes: reserve}} when reserve > 0 <-
+           BuiltIn.runtime(),
+         needed when is_integer(needed) <- space_needed(selection, search_result) do
+      free_fun = Keyword.get(opts, :free_bytes, &DiskSpace.free_bytes/1)
+
+      case free_fun.(path) do
+        {:ok, free} when needed + reserve > free ->
+          {:error, {:client_error, insufficient_space_error(needed, free, reserve)}}
+
+        {:ok, _free} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Could not measure free space; skipping the disk guard",
+            path: path,
+            reason: inspect(reason)
+          )
+
+          :ok
+      end
+    else
+      _ -> :ok
+    end
+  end
+
+  defp space_needed(%WantedFiles{selected_bytes: bytes}, _search_result), do: bytes
+
+  defp space_needed(nil, %SearchResult{size: size}) when is_integer(size) and size > 0, do: size
+  defp space_needed(_selection, _search_result), do: nil
+
+  defp insufficient_space_error(needed, free, reserve) do
+    message =
+      "Not enough space on the download volume: needs #{DiskSpace.format_gb(needed)}, " <>
+        "#{DiskSpace.format_gb(free)} free, #{div(reserve, @gb)} GB kept free"
+
+    Client.Error.insufficient_space(message, %{needed: needed, free: free, reserve: reserve})
   end
 
   # Version of add_torrent_to_client that accepts pre-downloaded input
@@ -198,6 +315,8 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       |> TorrentFetch.maybe_add_opt(:category, category)
       |> TorrentFetch.maybe_add_opt(:title, title)
       |> TorrentFetch.maybe_add_opt(:priority, priority)
+      |> TorrentFetch.maybe_add_opt(:only_files, Keyword.get(opts, :only_files))
+      |> TorrentFetch.maybe_add_opt(:initial_peers, Keyword.get(opts, :initial_peers))
 
     case Client.add_torrent(adapter, client_map_config, torrent_input, torrent_opts) do
       {:ok, client_id} ->
@@ -395,7 +514,10 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   end
 
   defp create_download_record(search_result, client_config, client_id, opts) do
-    metadata = build_download_metadata(search_result)
+    metadata =
+      search_result
+      |> build_download_metadata()
+      |> Map.merge(WantedFiles.to_metadata(Keyword.get(opts, :wanted_files)))
 
     attrs = %{
       indexer: search_result.indexer,

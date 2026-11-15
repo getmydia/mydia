@@ -70,6 +70,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, gettext("Downloads"))
+     |> MydiaWeb.DownloadsLive.BuiltInDisk.mount()
      |> assign(:active_tab, :downloads)
      |> assign(:view, :active)
      |> assign(:sort_by, @default_sort)
@@ -81,9 +82,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:reload_pending, false)
      |> assign(:has_more, true)
      # Clear-completed modal state
-     |> assign(:show_clear_modal, false)
-     |> assign(:delete_files, false)
-     |> assign(:clearable_count, 0)
+     |> assign(show_clear_modal: false, delete_files: false, clearable_count: 0)
      # Issues tab state
      |> assign(:issue_counts, IssueList.counts([]))
      |> assign(:selectable_issues?, false)

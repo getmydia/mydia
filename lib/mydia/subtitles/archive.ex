@@ -20,6 +20,10 @@ defmodule Mydia.Subtitles.Archive do
 
   @subtitle_extensions ~w(.srt .ass .ssa .vtt .sub)
 
+  @doc "Lowercase, dot-prefixed extensions this module treats as subtitle files."
+  @spec subtitle_extensions() :: [String.t()]
+  def subtitle_extensions, do: @subtitle_extensions
+
   @zip_magic <<0x50, 0x4B, 0x03, 0x04>>
 
   @doc """
