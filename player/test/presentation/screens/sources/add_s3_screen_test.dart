@@ -252,9 +252,10 @@ void main() {
         const BackendUnreachable('x', 301, kS3CodeWrongRegion),
         _l10n.filesS3ErrorRegionUnknown
       ),
-      'tls': (
+      // A public host is refused over http://, so it gets no such advice.
+      'tls on a public host': (
         const BackendUnreachable('x', null, kS3CodeTls),
-        _l10n.filesS3ErrorTls(host)
+        _l10n.filesS3ErrorTlsPublic(host)
       ),
       'bad keys': (
         const BackendUnauthorized('x', kS3CodeBadKeys),
@@ -288,6 +289,14 @@ void main() {
         expect((await h.store.load()).accounts, isEmpty);
       });
     }
+
+    testWidgets('tls on a LAN host suggests http://', (tester) async {
+      final h = await _pump(tester);
+      h.backend.probeFailure = const BackendUnreachable('x', null, kS3CodeTls);
+      await _connectOther(tester, endpoint: 'https://192.168.1.20:9000');
+      expect(find.text(_l10n.filesS3ErrorTls('192.168.1.20:9000')),
+          findsOneWidget);
+    });
   });
 
   testWidgets('save stores the account and chosen roots', (tester) async {

@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
 import '../../../core/sources/files/files_account.dart'
-    show isSmbAccountId, kFilesLocalAccountId;
+    show isS3AccountId, isSmbAccountId, kFilesLocalAccountId;
 import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/files_providers.dart'
     show filesIndexProvider;
@@ -340,6 +340,8 @@ class AccountControls extends ConsumerWidget {
                 (_, true) => context.l10n.navSourceSignInAgain,
                 (SourceKind.plex, _) => context.l10n.sourcesReauthPlex,
                 (SourceKind.jellyfin, _) => context.l10n.sourcesReauthJellyfin,
+                (SourceKind.files, _) when isS3AccountId(account.id) =>
+                  context.l10n.filesManageEditBucket,
                 (SourceKind.files, _) => context.l10n.filesManageEditShare,
                 (SourceKind.stash || SourceKind.mydia, _) =>
                   context.l10n.sourcesReauthKey,

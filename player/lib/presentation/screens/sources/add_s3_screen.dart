@@ -228,7 +228,10 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
             ? (l10n) => l10n.filesS3ErrorRegionUnknown
             : (l10n) => l10n.filesS3ErrorRegion(region);
       case kS3CodeTls:
-        return (l10n) => l10n.filesS3ErrorTls(host);
+        // The http:// advice only helps where the form accepts http://.
+        return isPrivateHost(location.endpoint.host)
+            ? (l10n) => l10n.filesS3ErrorTls(host)
+            : (l10n) => l10n.filesS3ErrorTlsPublic(host);
       case kS3CodeBadKeys:
         return (l10n) => l10n.filesS3ErrorBadKeys;
       case kS3CodeCannotList:
