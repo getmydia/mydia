@@ -64,6 +64,14 @@ class CloudStoreHint {
   String toString() => 'CloudStoreHint(${kind.name}, $account)';
 }
 
+/// The store [BackupController.switchTo] leaves: stop its background sync,
+/// undo that, and leave it with a moved stub.
+typedef _OldStore = ({
+  Future<void> Function() pause,
+  void Function() resume,
+  Future<void> Function() leave,
+});
+
 /// Builds the [CloudBackupService] of a cloud store kind.
 typedef CloudServiceBuilder = Future<CloudBackupService> Function(
     BackupStoreKind kind);
@@ -412,31 +420,50 @@ class BackupController {
       throw ArgumentError.notNull('relayKey');
     }
     final old = switch (from) {
-      null || BackupStoreKind.relay => null,
-      final kind => cloud(kind),
+      null => null,
+      BackupStoreKind.relay => (
+          pause: _relay.pauseSync,
+          resume: _relay.resumeSync,
+          leave: () => _relay.switchAway(to.name, deleteOld: deleteOld),
+        ),
+      final kind => _storeOps(cloud(kind), to, deleteOld),
     };
     _switching++;
     try {
-      if (target != null) {
-        await target.enable();
-      } else if (_relay.dormant) {
-        await _relay.resumeDormant();
-        if (!_relay.enabled) {
-          throw StateError('the dormant relay vault could not be resumed');
+      // The old store stops syncing in the background (it stays joined)
+      // while the new one comes up, so two stores never poll at once; it
+      // syncs again if the new one does not come up.
+      await old?.pause();
+      try {
+        if (target != null) {
+          await target.enable();
+        } else if (_relay.dormant) {
+          await _relay.resumeDormant();
+          if (!_relay.enabled) {
+            throw StateError('the dormant relay vault could not be resumed');
+          }
+        } else {
+          await _relay.confirmEnable(relayKey!);
         }
-      } else {
-        await _relay.confirmEnable(relayKey!);
+      } catch (_) {
+        old?.resume();
+        rethrow;
       }
       await _setActive(to);
-      if (from == BackupStoreKind.relay) {
-        await _relay.switchAway(to.name, deleteOld: deleteOld);
-      } else {
-        await old?.switchAway(to.name, deleteOld: deleteOld);
-      }
+      await old?.leave();
     } finally {
       _switching--;
     }
   }
+
+  /// What [switchTo] does to the cloud store [s] it leaves for [to].
+  static _OldStore _storeOps(
+          CloudBackupService s, BackupStoreKind to, bool deleteOld) =>
+      (
+        pause: s.pauseSync,
+        resume: s.resumeSync,
+        leave: () => s.switchAway(to.name, deleteOld: deleteOld),
+      );
 
   /// Dismisses [storeHint], here and across restarts.
   void acknowledgeHint() {

@@ -491,6 +491,10 @@ void main() {
     expect(a.relay.enabled, isTrue);
     expect(a.relay.dormant, isFalse);
     expect(net.stores[BackupStoreKind.gdrive]!.bytes, isEmpty);
+    // Paused while Drive was tried, the relay syncs again.
+    final requests = net.relay.requests.length;
+    await c.poll();
+    expect(net.relay.requests.length, greaterThan(requests));
   });
 
   test('switch_to_signed_out_cloud_leaves_the_other_cloud_untouched', () async {
@@ -533,7 +537,7 @@ void main() {
     expect(a.controller.cloud(BackupStoreKind.gdrive).enabled, isFalse);
     // Leaving Drive after joining iCloud keeps what iCloud merged.
     expect(a.meta.slotNames()[bSlot], 'Night Harbor Laptop');
-    expect(a.meta.mergedVersion(bSlot), isNotNull);
+    expect(a.meta.mergedVersion(bSlot, store: 'icloud'), isNotNull);
     await b.controller.poll();
     await _settled(b.controller);
     expect(net.stores[BackupStoreKind.gdrive]!.bytes.keys,
@@ -623,5 +627,91 @@ void main() {
     expect(joiner.peers().isPaired, isFalse);
     expect(host.peers().isPaired, isFalse);
     expect(joiner.controller.storeHint.value, isNull);
+  });
+
+  test('stores_do_not_share_merged_versions', () async {
+    final meta = BackupMetaStore(InMemoryBackupMetaStorage());
+    await meta.setMergedVersion('slot-x', '3', store: 'gdrive');
+    expect(meta.mergedVersion('slot-x'), isNull, reason: 'not the relay');
+    expect(meta.mergedVersion('slot-x', store: 'icloud'), isNull);
+    await meta.setMergedVersion('slot-x', '5');
+    await meta.setMergedVersion('slot-x', '7', store: 'icloud');
+    expect(meta.mergedVersion('slot-x'), '5');
+    expect(meta.mergedVersion('slot-x', store: 'gdrive'), '3');
+
+    await meta.clearMergedSeqs(store: 'gdrive');
+    expect(meta.mergedVersion('slot-x', store: 'gdrive'), isNull);
+    expect(meta.mergedVersion('slot-x'), '5');
+    expect(meta.mergedVersion('slot-x', store: 'icloud'), '7');
+    await meta.clearMergedSeqs();
+    expect(meta.mergedVersion('slot-x'), isNull);
+    expect(meta.mergedVersion('slot-x', store: 'icloud'), '7');
+
+    // Two devices on Drive: what one merges is recorded as Drive's only.
+    final a = net.device('Living Room TV');
+    final b = net.device('Night Harbor Laptop');
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+    await b.controller.ready;
+    await b.controller.enableCloud(BackupStoreKind.gdrive);
+    await a.controller.poll();
+    final bSlot = await b.slotId();
+    expect(a.meta.mergedVersion(bSlot, store: 'gdrive'), isNotNull);
+    expect(a.meta.mergedVersion(bSlot), isNull);
+  });
+
+  test('cloud_to_relay_new_vault_merges_slot_with_colliding_version', () async {
+    final a = net.device('Living Room TV');
+    final b = net.device('Night Harbor Laptop');
+    // After B's controller created B's identity.
+    await b.controller.ready;
+    final bSlot = await b.slotId();
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+
+    final key = await a.relay.prepareEnable();
+    await a.controller
+        .switchTo(BackupStoreKind.relay, deleteOld: false, relayKey: key);
+    final vaultId = (await a.vault())!.vaultId;
+    // Drive merged B's slot at version "3" (a Drive poll that ran late, or a
+    // record kept from it).
+    await a.meta.setMergedVersion(bSlot, '3', store: 'gdrive');
+
+    // B joins the new vault and uploads until its slot is at seq 3.
+    await b.relay.start();
+    await b.relay.commitRestore(await b.relay.previewRestore(key.display));
+    for (var i = 0; net.relay.vault(vaultId).slots[bSlot]!.seq < 3; i++) {
+      await b.watch('tmdb:movie:${100 + i}');
+      b.relay.markDirty();
+      await b.relay.flush();
+    }
+    expect(net.relay.vault(vaultId).slots[bSlot]!.seq, 3);
+    await b.watch('tmdb:movie:0');
+    expect(a.sync.watchRecord('tmdb:movie:101'), isNull);
+
+    await a.controller.poll();
+
+    expect(a.sync.watchRecord('tmdb:movie:101')?.watched, isTrue,
+        reason: 'B slot at seq 3 is merged despite Drive version "3"');
+    expect(a.meta.mergedVersion(bSlot), '3');
+  });
+
+  test('paused_store_does_not_sync_until_resumed', () async {
+    final a = net.device('Living Room TV');
+    await a.enableRelayDirectly();
+    await a.relay.settled();
+
+    await a.relay.pauseSync();
+    final requests = net.relay.requests.length;
+    await a.relay.poll();
+    await a.watch('tmdb:movie:5');
+    a.relay.markDirty();
+    await a.relay.flush();
+    expect(net.relay.requests.length, requests);
+
+    a.relay.resumeSync();
+    await a.relay.poll();
+    expect(net.relay.requests.length, greaterThan(requests));
+    expect(a.relay.enabled, isTrue);
   });
 }

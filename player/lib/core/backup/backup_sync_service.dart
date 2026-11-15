@@ -467,14 +467,18 @@ class BackupSyncService {
   bool get dormant => _meta.relayDormant;
 
   /// Syncs the [dormant] vault again, as when the viewer switches back to
-  /// the relay: its next upload replaces the moved stub. The merged
-  /// versions kept meanwhile are another store's, so every slot is merged
-  /// again.
+  /// the relay: its next upload replaces the moved stub.
   Future<void> resumeDormant() async {
     await _meta.setRelayDormant(false);
-    await _meta.clearMergedSeqs();
     await start();
   }
+
+  /// Stops background syncing, staying in the vault, while another store
+  /// comes up (see `SlotSyncEngine.pause`).
+  Future<void> pauseSync() => _engine.pause();
+
+  /// Undoes [pauseSync].
+  void resumeSync() => _engine.unpause();
 
   /// Takes this device out of [vaultId] on the relay: a rotation that
   /// removes it, or deleting the vault when no other device is in it. A

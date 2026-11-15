@@ -104,6 +104,9 @@ class SlotSyncEngine {
   ValueListenable<List<SlotInfo>> get slots => _slots;
 
   SlotTransport? _transport;
+
+  /// Whose merged versions the attached transport uses (null: the relay).
+  String? _mergedStore;
   StreamSubscription<void>? _changes;
   String? Function()? _readCursor;
   Future<void> Function(String?)? _writeCursor;
@@ -113,6 +116,10 @@ class SlotSyncEngine {
   /// Set by [halt] (the store is unavailable): nothing runs until a start
   /// or a user action lifts it.
   bool halted = false;
+
+  /// Set by [pause] while another store comes up: attached, but nothing
+  /// runs in the background until [unpause] or [detach].
+  bool _paused = false;
   bool _disposed = false;
   bool _dirty = false;
 
@@ -146,7 +153,7 @@ class SlotSyncEngine {
   /// When this device's slot was last uploaded, null before the first.
   int? get lastSuccessMs => _lastSuccessMs;
 
-  bool get _active => _transport != null && !halted && !_disposed;
+  bool get _active => _transport != null && !halted && !_paused && !_disposed;
 
   int get _nowMs => _clock().millisecondsSinceEpoch;
 
@@ -156,14 +163,20 @@ class SlotSyncEngine {
   /// each of its [SlotTransport.changes]. Does not poll at once. The list
   /// cursor is read and written through [readCursor] and [writeCursor]
   /// when given (the relay keeps it in its vault state), else in memory.
+  /// [mergedStore] names the store whose merged versions this transport
+  /// reads and writes in the meta store (null is the relay's): no store
+  /// sees another's.
   void attach(
     SlotTransport transport, {
     int? lastSuccessMs,
     String? Function()? readCursor,
     Future<void> Function(String?)? writeCursor,
+    String? mergedStore,
   }) {
     unawaited(_changes?.cancel());
     _transport = transport;
+    _mergedStore = mergedStore;
+    _paused = false;
     _readCursor = readCursor;
     _writeCursor = writeCursor;
     _cursor = null;
@@ -183,6 +196,8 @@ class SlotSyncEngine {
     final changes = _changes;
     _changes = null;
     _transport = null;
+    _mergedStore = null;
+    _paused = false;
     _readCursor = null;
     _writeCursor = null;
     _cursor = null;
@@ -200,6 +215,26 @@ class SlotSyncEngine {
       _slots.value = const [];
     }
     await changes?.cancel();
+  }
+
+  /// Stops background syncing without leaving the store, once the
+  /// operation running now has finished: no timer, poll, upload or retry
+  /// runs until [unpause] or [detach]. Operations the owner runs itself
+  /// (a moved stub) still reach the store.
+  Future<void> pause() => serialise(() async {
+        if (_transport == null) return;
+        _paused = true;
+        _cancelTimers();
+      });
+
+  /// Undoes [pause]: polling again, and a change still waiting to go up
+  /// is debounced again.
+  void unpause() {
+    if (!_paused) return;
+    _paused = false;
+    if (halted) return;
+    ensurePolling();
+    if (_dirty) markDirty();
   }
 
   void dispose() {
@@ -308,6 +343,9 @@ class SlotSyncEngine {
   /// slot is stale.
   Future<void> pollOnce({bool full = false, bool conditional = true}) async {
     final transport = _require();
+    // Taken now: a detach while this awaits must not move the versions
+    // into another store's record.
+    final store = _mergedStore;
     final listing = await transport.list(
         cursor: full || !conditional ? null : _currentCursor);
     if (listing == null) return idle();
@@ -326,7 +364,9 @@ class SlotSyncEngine {
         moved[s.slotId] = known.$2;
         continue;
       }
-      if (!full && s.version == _meta.mergedVersion(s.slotId)) continue;
+      if (!full && s.version == _meta.mergedVersion(s.slotId, store: store)) {
+        continue;
+      }
       if (_failedSlots[s.slotId] == s.version) {
         unreadable.add(s.slotId);
         continue;
@@ -360,7 +400,7 @@ class SlotSyncEngine {
     await apply(payloads, BackupApplyMode.live);
     for (final s in listing.slots) {
       if (payloads.containsKey(s.slotId)) {
-        await _meta.setMergedVersion(s.slotId, s.version);
+        await _meta.setMergedVersion(s.slotId, s.version, store: store);
       }
     }
     refreshOffers();

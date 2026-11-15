@@ -127,6 +127,13 @@ class CloudBackupService {
 
   // Triggers
 
+  /// Stops background syncing, staying in the store, while another store
+  /// comes up (see `SlotSyncEngine.pause`).
+  Future<void> pauseSync() => _engine.pause();
+
+  /// Undoes [pauseSync].
+  void resumeSync() => _engine.unpause();
+
   void markDirty() => _engine.markDirty();
   Future<void> flush() => _engine.flush();
   Future<void> poll() => _engine.poll();
@@ -230,9 +237,9 @@ class CloudBackupService {
   /// stays either way: without it a device still signed in would never see
   /// the move, and would write its own slot again. The caller enables the
   /// new store first, so a store that is not usable leaves this one as it
-  /// was: the merged versions, device names and offers kept in the meta
-  /// store are by then the new store's, and only this store's own cursor
-  /// and upload time are forgotten.
+  /// was: the device names and offers kept in the meta store are by then
+  /// the new store's, and only this store's own merged versions, cursor and
+  /// upload time are forgotten.
   Future<void> switchAway(String to, {required bool deleteOld}) =>
       _userOp(() async {
         if (!enabled) throw StateError('backup is off');
@@ -296,6 +303,7 @@ class CloudBackupService {
         lastSuccessMs: _meta.cloudLastSuccessMs(kind.name),
         readCursor: () => _meta.cloudCursor(kind.name),
         writeCursor: (c) => _meta.setCloudCursor(kind.name, c),
+        mergedStore: kind.name,
       );
 
   Future<void> _deleteAll({bool keepOwn = false}) async {
@@ -306,28 +314,25 @@ class CloudBackupService {
     }
   }
 
-  /// Stops syncing. [forgetShared] false keeps the meta store's merged
-  /// versions, device names and offers, which another store now owns.
+  /// Stops syncing. [forgetShared] false keeps the device names and offers
+  /// in the meta store, which the store moved to now fills.
   Future<void> _leave({bool forgetShared = true}) async {
     await _engine.detach();
-    if (forgetShared) {
-      await _forgetStore();
-    } else {
-      await _meta.setCloudCursor(kind.name, null);
-      await _meta.setCloudLastSuccessMs(kind.name, null);
-    }
+    await _forgetStore(shared: forgetShared);
     _accountLabel.value = null;
     _engine.setStatus(const BackupOff());
   }
 
-  /// Forgets what was known of a store (merged versions, device names,
-  /// offers, the cursor), when joining or leaving one.
-  Future<void> _forgetStore() async {
-    await _meta.clearMergedSeqs();
-    await _meta.clearSlotNames();
-    await _meta.clearOffers();
+  /// Forgets what was known of this store (its merged versions, cursor and
+  /// upload time), when joining or leaving it, and with [shared] also the
+  /// device names and offers that every store fills.
+  Future<void> _forgetStore({bool shared = true}) async {
+    await _meta.clearMergedSeqs(store: kind.name);
     await _meta.setCloudCursor(kind.name, null);
     await _meta.setCloudLastSuccessMs(kind.name, null);
+    if (!shared) return;
+    await _meta.clearSlotNames();
+    await _meta.clearOffers();
     _engine.refreshOffers();
   }
 

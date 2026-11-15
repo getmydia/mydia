@@ -54,8 +54,11 @@ the spec.
   uses, until the viewer dismisses it or backs up there.
 - Hive box `backup_meta` (`BackupMetaStore`): record stamps, pending account
   offers and dismissals, accounts added from the backup whose folder roots
-  have not landed yet, the version of each slot already merged (`ver:`,
-  falling back to the `seq:` an older install wrote), each slot's
+  have not landed yet, the version of each slot already merged, kept per
+  store because a slot id is the same device everywhere and two stores'
+  versions can be the same string (the relay's under `ver:`, falling back
+  to the `seq:` an older install wrote; a cloud store's under
+  `merged:<icloud|gdrive>:`), each slot's
   device name, the p2p node to slot map and each slot's node claims, revoked
   devices still to be removed from the vault, and whether the
   joined-by-pairing notice is still to be seen. Not backed up.
