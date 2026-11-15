@@ -10,6 +10,7 @@ import '../../../../domain/sources/source_error.dart';
 import '../../../p2p/local_proxy_service.dart';
 import '../../../p2p/media_proxy.dart';
 import '../backend/file_system_backend.dart';
+import '../backend/s3_errors.dart';
 import 'subtitle_vtt.dart';
 
 /// A sidecar subtitle track registered on a [FilesCastBridge] session.
@@ -276,7 +277,12 @@ class FilesCastBridge {
       response.statusCode = HttpStatus.notFound;
       await response.close();
     } catch (e) {
-      debugPrint('[FilesCastBridge] Request error: $e');
+      // Never `$e`: an `http.ClientException` quotes the upstream URL, and an
+      // S3 file's URL is presigned. The type and the query-less URL suffice.
+      final target =
+          segments.length == 3 ? _redactedUrl(session.media.url) : 'a subtitle';
+      debugPrint('[FilesCastBridge] Request error: ${e.runtimeType} '
+          'serving $target');
       try {
         response.statusCode = HttpStatus.badGateway;
       } catch (_) {}
@@ -364,34 +370,48 @@ class FilesCastBridge {
     String fallbackMime,
   ) async {
     final response = request.response;
-    final upstreamReq = http.Request(request.method, upstreamUri);
-    upstreamReq.headers.addAll(authHeaders);
     final range = request.headers.value(HttpHeaders.rangeHeader);
+    // A presigned URL (an S3 file) is signed for GET, and SigV4 signs the
+    // method: a HEAD with it is refused. Its HEAD is answered from a GET
+    // instead, of the asked range or of one byte, whose body is dropped.
+    final headFromGet = request.method == 'HEAD' && _isPresigned(upstreamUri);
+    final upstreamReq =
+        http.Request(headFromGet ? 'GET' : request.method, upstreamUri);
+    upstreamReq.headers.addAll(authHeaders);
     if (range != null) {
       upstreamReq.headers[HttpHeaders.rangeHeader] = range;
+    } else if (headFromGet) {
+      upstreamReq.headers[HttpHeaders.rangeHeader] = 'bytes=0-0';
     }
 
     final upstreamResp = await _client.send(upstreamReq);
-    response.statusCode = upstreamResp.statusCode;
-    response.headers.set(
-      HttpHeaders.acceptRangesHeader,
-      upstreamResp.headers['accept-ranges'] ?? 'bytes',
-    );
-    response.headers.set(
-      HttpHeaders.contentTypeHeader,
-      upstreamResp.headers['content-type'] ?? fallbackMime,
-    );
-    final contentRange = upstreamResp.headers['content-range'];
-    if (contentRange != null) {
-      response.headers.set(HttpHeaders.contentRangeHeader, contentRange);
+    if (headFromGet) {
+      // Never drained: a GET of the asked range can be the whole video.
+      try {
+        await upstreamResp.stream.listen(null).cancel();
+      } catch (_) {}
     }
+    final probed = headFromGet && range == null;
+    final total = probed ? _probedLength(upstreamResp) : null;
+    if (total != null) {
+      // The one byte asked for stood in for a plain HEAD: answer as the
+      // whole object would.
+      response.statusCode = HttpStatus.ok;
+      _copyMediaHeaders(response, upstreamResp, fallbackMime,
+          contentRange: false);
+      response.headers.contentLength = total;
+      await response.close();
+      return;
+    }
+    response.statusCode = upstreamResp.statusCode;
+    _copyMediaHeaders(response, upstreamResp, fallbackMime);
     final contentLength = upstreamResp.contentLength;
     if (contentLength != null && contentLength >= 0) {
       response.headers.contentLength = contentLength;
     }
 
     if (request.method == 'HEAD') {
-      await upstreamResp.stream.drain<void>();
+      if (!headFromGet) await upstreamResp.stream.drain<void>();
       await response.close();
       return;
     }
@@ -445,6 +465,53 @@ class FilesCastBridge {
     );
     if (resp.statusCode != HttpStatus.ok) return null;
     return utf8.decode(resp.bodyBytes, allowMalformed: true);
+  }
+
+  /// Whether [uri] carries a SigV4 query signature, which is bound to the
+  /// method it was presigned for.
+  static bool _isPresigned(Uri uri) => uri.queryParametersAll.keys
+      .any((k) => k.toLowerCase() == 'x-amz-signature');
+
+  /// The object's length from the answer to a `bytes=0-0` GET: the total
+  /// of a 206's or a 416's `Content-Range`, or a 200's length. Null when
+  /// the answer is a failure or does not say, and is passed on as is.
+  static int? _probedLength(http.StreamedResponse r) {
+    final range = r.headers['content-range'];
+    if (r.statusCode == HttpStatus.partialContent ||
+        r.statusCode == HttpStatus.requestedRangeNotSatisfiable) {
+      final m = range == null ? null : RegExp(r'/(\d+)$').firstMatch(range);
+      return m == null ? null : int.tryParse(m.group(1)!);
+    }
+    if (r.statusCode == HttpStatus.ok) {
+      final length = r.contentLength;
+      return length != null && length >= 0 ? length : null;
+    }
+    return null;
+  }
+
+  static void _copyMediaHeaders(
+    HttpResponse response,
+    http.StreamedResponse upstreamResp,
+    String fallbackMime, {
+    bool contentRange = true,
+  }) {
+    response.headers.set(
+      HttpHeaders.acceptRangesHeader,
+      upstreamResp.headers['accept-ranges'] ?? 'bytes',
+    );
+    response.headers.set(
+      HttpHeaders.contentTypeHeader,
+      upstreamResp.headers['content-type'] ?? fallbackMime,
+    );
+    final range = upstreamResp.headers['content-range'];
+    if (contentRange && range != null) {
+      response.headers.set(HttpHeaders.contentRangeHeader, range);
+    }
+  }
+
+  static String _redactedUrl(String url) {
+    final uri = Uri.tryParse(url);
+    return uri == null ? 'an unparseable URL' : redactS3Url(uri);
   }
 
   static File? _asLocalFile(String url) {

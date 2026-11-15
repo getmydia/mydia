@@ -32,11 +32,12 @@ import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_folder_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/sources/add_s3_screen.dart';
 import '../../presentation/screens/backup/restore_backup_screen.dart';
 import '../../presentation/screens/sources/add_smb_screen.dart';
 import '../../presentation/screens/sources/add_webdav_screen.dart';
 import '../sources/files/files_account.dart'
-    show isSmbAccountId, kFilesLocalAccountId;
+    show isS3AccountId, isSmbAccountId, kFilesLocalAccountId;
 import '../../presentation/screens/connections/account_detail_page.dart';
 import '../../presentation/screens/connections/connections_hub.dart';
 import '../../presentation/screens/sources/mydia_instance_screen.dart';
@@ -204,15 +205,17 @@ String? addMydiaRouteRedirect({
     (instanceHostedWeb ?? isInstanceHostedWeb) && hasMydia ? '/' : null;
 
 /// Where signing files account [accountId] in again goes: Add folder for
-/// this device's folders, the SMB or WebDAV form, address filled in, for a
-/// share.
+/// this device's folders, the SMB, S3 or WebDAV form, address filled in, for
+/// a share or bucket.
 String filesReauthLocation(String? accountId) =>
     accountId == null || accountId == kFilesLocalAccountId
         ? '/sources/add/folder'
         : Uri(
             path: isSmbAccountId(accountId)
                 ? '/sources/add/smb'
-                : '/sources/add/webdav',
+                : isS3AccountId(accountId)
+                    ? '/sources/add/s3'
+                    : '/sources/add/webdav',
             queryParameters: {'account': accountId},
           ).toString();
 
@@ -399,6 +402,14 @@ GoRouter appRouter(Ref ref) {
         name: 'add_source_smb',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => AddSmbScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      GoRoute(
+        path: '/sources/add/s3',
+        name: 'add_source_s3',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => AddS3Screen(
           reauthAccountId: state.uri.queryParameters['account'],
         ),
       ),

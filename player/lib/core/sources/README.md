@@ -521,7 +521,8 @@ through `mediaSourceProvider` like any other server, and every item opens
 server `w<sha16 of the normalized URL>`, `connections[0]` the share's URL,
 `WebDavCredentials` JSON as the account token), or on an SMB share (account
 and server `s<16 hex>`, the SHA-256 of `smb://<host>[:port]/<share>`, one
-share per account, `SmbCredentials` JSON as the account token). There is no
+share per account, `SmbCredentials` JSON as the account token), or in an
+S3-compatible bucket (account and server `3<16 hex>`, see [S3](#s3)). There is no
 server: every listing is read from the account's `FileLibraryIndex` (Hive box
 `files_index`, opened at startup with the progress box so the source builds
 synchronously; `filesIndexProvider` holds one index per account, which
@@ -784,6 +785,43 @@ eval "$(player/rust/mydia_smb/tests/samba/run-samba.sh)"
 cargo test --manifest-path player/rust/mydia_smb/Cargo.toml --features test-introspection
 player/rust/mydia_smb/tests/samba/run-samba.sh stop
 ```
+
+### S3
+
+An S3-compatible bucket, narrowed to a key prefix, is one account. Its one
+connection is `s3+<http|https>://<host>[:port]/<bucket>/<prefix>?region=<r>&style=<path|vhost>`
+(`S3Location.toConnectionUri` in `files/backend/s3_backend.dart`), and the
+account and server id is `3` + the first 16 hex characters of the SHA-256 of
+`normalizeS3Url`: scheme and host lowercased, `:443` dropped from `s3+https`
+and `:80` from `s3+http`, the prefix with no leading `/` and a trailing one
+unless empty, the query sorted. Nothing else in the prefix is rewritten:
+keys are case sensitive and may hold `//` or a literal `%`, so `Media/`
+and `media/`, `a//b/` and `a/b/`, `a%20b/` and `a b/` are two accounts each.
+The connection is built from path segments so that a `%` survives it. The access key id and secret are `S3Credentials`
+JSON in the account token, never in the connection, and
+`S3Credentials.toString` prints the key id only. A new account is named
+`<bucket>` or `<bucket>/<prefix>`; adding the same location again reuses it,
+replaces the credentials and clears `needsReauth`. Peers see the kind `s3`
+and dedupe on `normalizeS3Url`.
+
+`S3Backend` signs every request with SigV4 and follows no redirect.
+`playable()` returns a presigned GET URL, valid for 12 hours
+(`kS3PresignExpiry`), with no headers, so the player and a paired player's
+grant read the object straight from the bucket. A cast receiver does not:
+`FilesCastBridge` proxies the URL over the LAN, as it does any
+`PlayableFile`. Nothing caches it: every open of a file asks the backend
+again, so a URL that expired while a file sat paused is re-minted on reopen.
+`LazyS3Backend` is a `LazyFilesBackend`: it builds the backend from the
+stored credentials on first use and reads them again after a refusal.
+
+A presigned URL is a bearer credential for that object. It is never logged
+and never put in an error: failures name the host, port and bucket only
+(`s3_errors.dart`), transport errors drop the exception text (which can quote
+the URL), the cast bridge logs a failed proxy's exception type and the URL
+cut at its query (`redactS3Url`), and the peer host logs only the failure's
+type when it cannot mint a grant. As a backstop, `redactLogMessage` strips
+`X-Amz-Signature`, `X-Amz-Credential` and `X-Amz-Security-Token` values from
+any log line.
 
 ## Tests
 

@@ -19,6 +19,7 @@ import '../store/source_records.dart';
 import '../store/source_secrets.dart';
 import 'backend/file_system_backend.dart';
 import 'backend/local_path_backend.dart';
+import 'backend/s3_backend.dart';
 import 'backend/webdav_backend.dart';
 import 'files_account.dart';
 import 'files_media_source.dart';
@@ -68,6 +69,21 @@ final webDavConnectorProvider = Provider<WebDavConnector>(
       WebDavBackend(base: base, user: user, password: password, client: client),
 );
 
+/// Builds an S3 backend from what the viewer typed, before anything is
+/// saved. A given [http.Client] is the caller's to close; without one the
+/// backend makes its own. Tests override it with a fake.
+typedef S3Connector = FileSystemBackend Function(
+    S3Location location, S3Credentials credentials, http.Client? client);
+
+final s3ConnectorProvider = Provider<S3Connector>(
+  (_) => (location, credentials, client) => S3Backend(
+        location: location,
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+        client: client,
+      ),
+);
+
 final filesAccountsProvider =
     Provider<FilesAccounts>((ref) => FilesAccounts(ref));
 
@@ -111,9 +127,14 @@ class FilesAccounts {
   Future<void> _bumpPeerFiles(String accountId) =>
       _ref.read(peerFilesHostProvider).bumpRevision(accountId);
 
+  /// Adds [path] as a root. With [exact] the path is stored as given (an
+  /// empty one is `/`); otherwise trailing separators are dropped, for
+  /// backends where `/a/` and `/a` are one folder.
   Future<void> _addRoot(SourceId id, String accountId,
-      {required String path, required FilesLibraryKind kind}) async {
-    final p = trimRootPath(path);
+      {required String path,
+      required FilesLibraryKind kind,
+      bool exact = false}) async {
+    final p = exact ? (path.isEmpty ? '/' : path) : trimRootPath(path);
     await _ref.read(filesIndexProvider(accountId)).putRoot(LibraryRoot(
           id: filesRootId(p),
           path: p,
@@ -212,6 +233,81 @@ class FilesAccounts {
           addedAtMs: DateTime.now().millisecondsSinceEpoch,
         );
     return _save(record);
+  }
+
+  /// Saves an S3 bucket at [location]'s prefix. The credentials are written
+  /// before the record, which holds neither key. A location already saved
+  /// reuses its account: the credentials are replaced and `needsReauth`
+  /// clears.
+  ///
+  /// [location] may be as typed (a prefix `media` or `/media/`): it is
+  /// canonicalized first, so the id, connection and name agree with what
+  /// [normalizeS3Url] makes of the stored connection.
+  ///
+  /// [signInAgain] only replaces the keys of a stored bucket: one removed
+  /// while the sign-in was in flight throws [StateError] and its keys are
+  /// not left behind, as [addSmbAccount] does.
+  Future<SourceId> addS3Account({
+    required S3Location location,
+    required S3Credentials credentials,
+    bool signInAgain = false,
+  }) async {
+    // Built by toConnectionUri, so it always parses.
+    final loc = S3Location.fromConnectionUri(location.toConnectionUri())!;
+    final connection = loc.toConnectionUri();
+    final id = s3AccountId(connection);
+    final prefix = loc.prefix;
+    final name = prefix.isEmpty
+        ? loc.bucket
+        : '${loc.bucket}/${prefix.substring(0, prefix.length - 1)}';
+    final existing = await _stored(id);
+    if (signInAgain && existing == null) {
+      throw StateError('S3 account $id was removed');
+    }
+    final account = existing?.account.copyWith(needsReauth: false) ??
+        ProviderAccount(
+          id: id,
+          kind: SourceKind.files,
+          displayName: name,
+          storageNamespace: SourceSecrets.newStorageNamespace(id),
+          activeProfileId: kOwnerProfileId,
+        );
+    await _ref
+        .read(sourceSecretsProvider)
+        .writeAccountToken(account, credentials.toJson());
+    // No locks of its own: `putAccount` keeps the stored ones, and those
+    // read above may be stale by now (a lock changed while the keys were
+    // written), and would win over the current ones.
+    final record =
+        existing?.copyWith(account: account, serverLocks: const {}) ??
+            SourceAccountRecord(
+              account: account,
+              profiles: [_owner(id)],
+              servers: [
+                SourceServer(
+                  id: id,
+                  accountId: id,
+                  profileId: kOwnerProfileId,
+                  name: name,
+                  connections: [
+                    ServerConnection(
+                      uri: connection,
+                      local: isPrivateHost(loc.endpoint.host),
+                    ),
+                  ],
+                ),
+              ],
+              addedAtMs: DateTime.now().millisecondsSinceEpoch,
+            );
+    if (!signInAgain) return _save(record);
+    try {
+      return await _save(record, replaceOnly: true);
+    } on StateError {
+      // Removed after the check above: its keys were deleted with it, and
+      // the ones just written must go too.
+      await _ref.read(sourceSecretsProvider).deleteAccountToken(account);
+      rethrow;
+    }
   }
 
   /// Saves an SMB share. The credentials are written before the record. A
@@ -429,13 +525,26 @@ class FilesAccounts {
           {required String path, required FilesLibraryKind kind}) =>
       addWebDavRoot(id, path: path, kind: kind);
 
+  /// Adds [path], a path under the bucket's prefix, as a root of [id]. The
+  /// path is kept exactly: `/a/` is the folder whose key is `<prefix>a//`,
+  /// another folder than `/a` (`<prefix>a/`), so no slash is trimmed.
+  Future<void> addS3Root(SourceId id,
+          {required String path, required FilesLibraryKind kind}) =>
+      _addRemoteRoot(id, path: path, kind: kind, exact: true);
+
   /// Adds [path], a server path on the share, as a root of [id].
   Future<void> addWebDavRoot(SourceId id,
-      {required String path, required FilesLibraryKind kind}) async {
+          {required String path, required FilesLibraryKind kind}) =>
+      _addRemoteRoot(id, path: path, kind: kind);
+
+  Future<void> _addRemoteRoot(SourceId id,
+      {required String path,
+      required FilesLibraryKind kind,
+      bool exact = false}) async {
     final source =
         _ref.read(sourcesProvider).where((s) => s.id == id).firstOrNull;
     if (source == null) throw StateError('No files source $id');
-    await _addRoot(id, source.account.id, path: path, kind: kind);
+    await _addRoot(id, source.account.id, path: path, kind: kind, exact: exact);
   }
 
   /// Drops [rootId] and its files from [id]'s index.

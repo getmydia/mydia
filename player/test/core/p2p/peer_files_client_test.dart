@@ -393,6 +393,27 @@ void main() {
     ]);
   });
 
+  test('skips_peer_s3_matching_local_s3', () async {
+    final connection =
+        Uri.parse('s3+https://s3.example.test/bkt/media/?region=r&style=path');
+    final bucket = _filesRecord(s3AccountId(connection), 'bkt/media',
+        connections: [ServerConnection(uri: connection)]);
+    local = [...?local, bucket];
+    desk()
+      ..drop(_smbId)
+      ..lend('31111111111111111', 'Bucket', 1, ['Fern Clock.mkv'],
+          kind: 's3', dedupeKey: filesDedupeKey(bucket));
+
+    await client.start();
+
+    expect(shown(), isNot(contains('Desk · Bucket')));
+    expect(transport.pageCalls.where((c) => c.contains('1111')), isEmpty);
+
+    local = [_filesRecord(kFilesLocalAccountId, 'This device')];
+    await client.refresh();
+    expect(shown(), contains('Desk · Bucket'));
+  });
+
   test('never_skips_flocal', () async {
     final nas = _filesRecord(_smbId, 'My NAS', connections: [
       ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),

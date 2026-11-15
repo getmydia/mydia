@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/cast/files_cast_bridge.dart';
@@ -150,6 +152,113 @@ void main() {
     expect(resp.bodyBytes, [5, 6, 7, 8, 9]);
   });
 
+  group('HEAD on a presigned URL', () {
+    // S3 signs the method: a URL presigned for GET refuses HEAD. The
+    // upstream here answers as S3 does.
+    late HttpServer upstream;
+    late List<(String, String?)> seen;
+    const total = 4096;
+
+    setUp(() async {
+      seen = [];
+      upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      upstream.listen((req) async {
+        final range = req.headers.value(HttpHeaders.rangeHeader);
+        seen.add((req.method, range));
+        final res = req.response;
+        if (req.uri.path.endsWith('/denied.mkv') || req.method != 'GET') {
+          res.statusCode = HttpStatus.forbidden;
+          await res.close();
+          return;
+        }
+        final empty = req.uri.path.endsWith('/empty.mkv');
+        final size = empty ? 0 : total;
+        res.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+        res.headers.contentType = ContentType('video', 'x-matroska');
+        final m = range == null
+            ? null
+            : RegExp(r'^bytes=(\d+)-(\d*)$').firstMatch(range);
+        if (m == null) {
+          res.headers.contentLength = size;
+          res.add(List<int>.filled(size, 7));
+          await res.close();
+          return;
+        }
+        final start = int.parse(m.group(1)!);
+        if (start >= size) {
+          res.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+          res.headers.set(HttpHeaders.contentRangeHeader, 'bytes */$size');
+          await res.close();
+          return;
+        }
+        final end = m.group(2)!.isEmpty ? size - 1 : int.parse(m.group(2)!);
+        res.statusCode = HttpStatus.partialContent;
+        res.headers
+            .set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$size');
+        res.headers.contentLength = end - start + 1;
+        res.add(List<int>.filled(end - start + 1, 7));
+        await res.close();
+      });
+    });
+
+    tearDown(() => upstream.close(force: true));
+
+    Future<FilesCastSession> open(String name, {bool signed = true}) =>
+        bridge.openSession(
+          media: PlayableFile(
+              url: 'http://127.0.0.1:${upstream.port}/b/$name'
+                  '${signed ? '?X-Amz-Algorithm=AWS4-HMAC-SHA256'
+                      '&X-Amz-Signature=cafe' : ''}'),
+          mime: 'video/x-matroska',
+          subtitles: const {},
+        );
+
+    test('answers with the length from a one-byte GET', () async {
+      final session = await open('film.mkv');
+      final resp = await http.head(Uri.parse(session.mediaUrl));
+      expect(resp.statusCode, HttpStatus.ok);
+      expect(resp.headers['content-length'], '$total');
+      expect(resp.headers['accept-ranges'], 'bytes');
+      expect(resp.headers['content-range'], isNull);
+      expect(resp.headers['content-type'], 'video/x-matroska');
+      expect(seen, [('GET', 'bytes=0-0')]);
+    });
+
+    test('a HEAD with a Range answers that range', () async {
+      final session = await open('film.mkv');
+      final resp = await http.head(Uri.parse(session.mediaUrl),
+          headers: const {'Range': 'bytes=100-'});
+      expect(resp.statusCode, HttpStatus.partialContent);
+      expect(resp.headers['content-range'], 'bytes 100-${total - 1}/$total');
+      expect(resp.headers['content-length'], '${total - 100}');
+      expect(seen, [('GET', 'bytes=100-')]);
+    });
+
+    test('an empty object is a 200 of length 0', () async {
+      final session = await open('empty.mkv');
+      final resp = await http.head(Uri.parse(session.mediaUrl));
+      expect(resp.statusCode, HttpStatus.ok);
+      expect(resp.headers['content-length'], '0');
+      expect(resp.headers['content-range'], isNull);
+    });
+
+    test('a refusal is passed on', () async {
+      final session = await open('denied.mkv');
+      final resp = await http.head(Uri.parse(session.mediaUrl));
+      expect(resp.statusCode, HttpStatus.forbidden);
+      expect(seen.single.$1, 'GET');
+    });
+
+    test('an unsigned URL (WebDAV, a peer) still sends HEAD upstream',
+        () async {
+      final session = await open('film.mkv', signed: false);
+      final resp = await http.head(Uri.parse(session.mediaUrl));
+      // This upstream refuses HEAD, so the HEAD reached it as one.
+      expect(resp.statusCode, HttpStatus.forbidden);
+      expect(seen, [('HEAD', null)]);
+    });
+  });
+
   test('serves SRT sidecars converted to WebVTT with CORS headers', () async {
     final srtFile = File('${tempDir.path}/copper_valley.en.srt');
     await srtFile.writeAsString(
@@ -258,6 +367,40 @@ void main() {
     final text = utf8.decode(subResp.bodyBytes);
     expect(text, startsWith('WEBVTT\n\n'));
     expect(text, contains('Harbor dusk'));
+  });
+
+  test('an upstream failure never logs the presigned URL', () async {
+    const signed = 'https://b.s3.example/films/harbor.mkv'
+        '?X-Amz-Credential=AKIDEXAMPLE&X-Amz-Signature=deadbeefcafe';
+    final failing = FilesCastBridge(
+      lanAddressResolver: () async => '127.0.0.1',
+      client: MockClient(
+        (req) async => throw http.ClientException('Connection reset', req.url),
+      ),
+    );
+    addTearDown(failing.dispose);
+
+    final logged = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) logged.add(message);
+    };
+    addTearDown(() => debugPrint = original);
+
+    final session = await failing.openSession(
+      media: const PlayableFile(url: signed),
+      mime: 'video/x-matroska',
+      subtitles: const {},
+    );
+    final resp = await http.get(Uri.parse(session.mediaUrl));
+
+    expect(resp.statusCode, HttpStatus.badGateway);
+    final errors = logged.where((l) => l.contains('Request error')).toList();
+    expect(errors, hasLength(1));
+    expect(errors.single, contains('ClientException'));
+    expect(errors.single, contains('https://b.s3.example/films/harbor.mkv'));
+    expect(errors.single, isNot(contains('X-Amz')));
+    expect(errors.single, isNot(contains('deadbeefcafe')));
   });
 
   test(

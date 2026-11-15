@@ -1,6 +1,6 @@
 /// Browse the folders of a connected files backend, one level at a time:
 /// an up button that stops at the root, a row for the open folder, and its
-/// subfolders. Shared by Add WebDAV and Add SMB.
+/// subfolders. Shared by Add WebDAV, Add SMB and Add S3.
 ///
 /// It fills the screen below the app bar: the caller's [RemoteFolderPicker.header]
 /// scrolls away, the location bar (the way up, the open folder and its own
@@ -41,6 +41,7 @@ class RemoteFolderPicker extends StatefulWidget {
     this.problem,
     this.keyPrefix = 'folder-picker',
     this.onExit,
+    this.exactPaths = false,
   });
 
   final FileSystemBackend backend;
@@ -82,12 +83,18 @@ class RemoteFolderPicker extends StatefulWidget {
   /// the picker, such as SMB's share list. Null lets back leave the route.
   final VoidCallback? onExit;
 
+  /// Paths are used exactly as the backend lists them, trailing `/` and
+  /// all: on S3 `/a/` (the key prefix `<prefix>a//`) is another folder
+  /// than `/a`. Otherwise trailing separators are dropped, where `/a/` and
+  /// `/a` are one folder.
+  final bool exactPaths;
+
   @override
   State<RemoteFolderPicker> createState() => _RemoteFolderPickerState();
 }
 
 class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
-  late String _dir = trimRootPath(widget.root);
+  late String _dir = _canon(widget.root);
   List<FileEntry> _folders = const [];
   Object? _failure;
 
@@ -108,7 +115,11 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   bool _listed = false;
 
   bool get _busy => _opening || widget.busy;
-  String get _root => trimRootPath(widget.root);
+  String get _root => _canon(widget.root);
+
+  /// [path] as this picker compares and shows it.
+  String _canon(String path) =>
+      widget.exactPaths ? (path.isEmpty ? '/' : path) : trimRootPath(path);
   bool get _atRoot => _dir == _root;
 
   @override
@@ -126,7 +137,7 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   /// Whether [path] is [RemoteFolderPicker.root] or below it. A path with a
   /// `.` or `..` segment never is: `/dav/../elsewhere` only looks inside.
   bool _withinRoot(String path) {
-    final p = trimRootPath(path);
+    final p = _canon(path);
     if (p.split('/').any((s) => s == '.' || s == '..')) return false;
     final root = _root;
     if (root == '/') return p.startsWith('/');
@@ -158,7 +169,7 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
       final folders = _sortedFolders(await widget.backend.list(dir));
       if (!current()) return;
       setState(() {
-        _dir = trimRootPath(dir);
+        _dir = _canon(dir);
         _folders = folders;
         _listed = true;
       });
@@ -176,9 +187,11 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   }
 
   String _parent(String dir) {
-    final trimmed = trimRootPath(dir);
-    final i = trimmed.lastIndexOf('/');
-    return i <= 0 ? '/' : trimmed.substring(0, i);
+    // With exact paths the last segment of `/a/` is the empty one, so its
+    // parent is `/a`.
+    final p = _canon(dir);
+    final i = p.lastIndexOf('/');
+    return i <= 0 ? '/' : p.substring(0, i);
   }
 
   /// While a folder is still listing, back abandons it: a slow server never

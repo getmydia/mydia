@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/router/app_router.dart' show filesReauthLocation;
+import 'package:player/core/sources/files/backend/s3_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_accounts.dart';
 import 'package:player/core/sources/files/files_providers.dart';
@@ -17,6 +18,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/presentation/screens/connections/account_detail_page.dart';
 
 import '../../../core/sources/files/fake_backend.dart';
@@ -27,6 +29,7 @@ import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
 
 int _boxes = 0;
+final _l10n = AppLocalizationsEn();
 
 class _FixedScan extends FilesScanController {
   _FixedScan(super.sourceId, this.fixed);
@@ -152,6 +155,41 @@ void main() {
         findsOneWidget);
     expect(find.byKey(const Key('manage-change-address-$kFilesLocalAccountId')),
         findsNothing);
+  });
+
+  testWidgets('an S3 bucket offers a bucket label', (tester) async {
+    final location = S3Location(
+      endpoint: Uri.parse('https://s3.example.test'),
+      bucket: 'reels',
+      prefix: '',
+      region: 'us-east-1',
+      style: S3Style.path,
+    );
+    final id = s3AccountId(location.toConnectionUri());
+    await _pump(tester, accountId: id);
+    await ProviderScope.containerOf(
+            tester.element(find.byType(AccountDetailBody)))
+        .read(filesAccountsProvider)
+        .addS3Account(
+            location: location,
+            credentials:
+                const S3Credentials(accessKeyId: 'AK', secretAccessKey: 'sk'));
+    await tester.pumpAndSettle();
+    expect(
+        find.descendant(
+            of: find.byKey(Key('manage-reauth-$id')),
+            matching: find.text(_l10n.filesManageEditBucket)),
+        findsOneWidget);
+  });
+
+  testWidgets('a webdav share keeps its share label', (tester) async {
+    final davUrl = Uri.parse('https://dav.example.test/media');
+    await _pumpShare(tester, davUrl);
+    expect(
+        find.descendant(
+            of: find.byKey(Key('manage-reauth-${webDavAccountId(davUrl)}')),
+            matching: find.text(_l10n.filesManageEditShare)),
+        findsOneWidget);
   });
 
   testWidgets('lists the folders and removes one', (tester) async {

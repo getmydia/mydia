@@ -41,15 +41,33 @@ void main() {
     expect(reads, 2);
   });
 
-  test('close_closes_the_client_it_made', () async {
-    final backend = LazyWebDavBackend(
+  test('close_closes_the_client_it_made_and_not_a_given_one', () {
+    Future<String?> creds() async =>
+        const WebDavCredentials(user: 'u', password: 'p').toJson();
+    final made = _TrackedClient();
+    LazyWebDavBackend(
       base: Uri.parse('https://nas.example.test/media'),
-      credentials: () async =>
-          const WebDavCredentials(user: 'u', password: 'p').toJson(),
+      credentials: creds,
+      newClient: () => made,
+    ).close();
+    expect(made.closed, isTrue);
+
+    final given = _TrackedClient();
+    LazyWebDavBackend(
+      base: Uri.parse('https://nas.example.test/media'),
+      credentials: creds,
+      client: given,
+    ).close();
+    expect(given.closed, isFalse);
+  });
+
+  test('unreadable_credentials_are_refused', () async {
+    final backend = LazyWebDavBackend(
+      base: Uri.parse('https://nas.example.test'),
+      credentials: () async => 'not json',
+      client: _TrackedClient(),
     );
-    backend.close();
-    // A closed client refuses before any socket is opened.
-    await expectLater(backend.probe(), throwsA(isA<BackendUnreachable>()));
+    await expectLater(backend.probe(), throwsA(isA<BackendUnauthorized>()));
   });
 
   test('missing_credentials_are_refused_and_not_cached', () async {
@@ -64,4 +82,17 @@ void main() {
     stored = const WebDavCredentials(user: 'u', password: 'p').toJson();
     await backend.probe();
   });
+}
+
+/// Records [close]; answers nothing a test reaches.
+class _TrackedClient extends MockClient {
+  _TrackedClient() : super((_) async => http.Response('', 500));
+
+  bool closed = false;
+
+  @override
+  void close() {
+    closed = true;
+    super.close();
+  }
 }

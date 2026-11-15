@@ -46,9 +46,11 @@ final _userinfo = RegExp(
   r'''([a-zA-Z][a-zA-Z0-9+.\-]{0,31}://)[^\s/?#@:"']{1,128}:[^\s/?#@"']{0,128}@''',
 );
 
-// The value of a credential-bearing query parameter.
+// The value of a credential-bearing query parameter. The `x-amz-*` names are
+// a presigned S3 URL's signature, access key and session token: an
+// `http.ClientException` from a cast or download quotes the whole URL.
 final _credentialParam = RegExp(
-  r'''([?&](?:token|access_token|refresh_token|api_key|apikey|key|password|auth)=)[^&#\s"']*''',
+  r'''([?&](?:token|access_token|refresh_token|api_key|apikey|key|password|auth|x-amz-signature|x-amz-credential|x-amz-security-token)=)[^&#\s"']*''',
   caseSensitive: false,
 );
 
