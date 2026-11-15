@@ -28,7 +28,6 @@ config :mydia, Mydia.Storage.S3,
 
 # FlareSolverr retries a crashed tab once; tests must not wait out the pause.
 config :mydia, :flaresolverr_retry_delay_ms, 0
-
 # Bypass reuses ports, so a cached qBittorrent cookie could outlive its test
 # and skip a later test's login. Tests that cover reuse opt back in per config.
 config :mydia, Mydia.Downloads.Client.QBittorrent.SessionCache, enabled: false
@@ -49,7 +48,9 @@ case database_adapter do
 
   Ecto.Adapters.SQLite3 ->
     config :mydia, Mydia.Repo,
-      database: Path.expand("../mydia_test.db", __DIR__),
+      # Partition-suffixed so scripts/test-partitioned.sh can run partitions
+      # side by side; SQLite allows one writer per file.
+      database: Path.expand("../mydia_test#{System.get_env("MIX_TEST_PARTITION")}.db", __DIR__),
       pool_size: 5,
       pool: Ecto.Adapters.SQL.Sandbox,
       pool_timeout: 60_000
@@ -65,6 +66,13 @@ config :mydia, MydiaWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 0],
   secret_key_base: "CuiGpJ9j+jd1Xb0aq51rBSKLxBYwqr3tvwvMyS2aXBUAlHRtSCT3/GX8fxFcV6UE",
   server: true
+
+# scripts/test-partitioned.sh gives each concurrent partition its own failures
+# manifest, then merges them into the default one, so `mix test --failed`
+# still sees every partition's failures.
+if manifest = System.get_env("MYDIA_TEST_FAILURES_MANIFEST") do
+  config :ex_unit, failures_manifest_path: manifest
+end
 
 # Print only warnings and errors during test
 config :logger, level: :warning

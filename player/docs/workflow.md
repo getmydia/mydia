@@ -72,10 +72,19 @@ Its pass count should match the per-file run's; `--concurrency 1` is needed
 there too, because very_good runs opted-out files in
 the same `flutter test` call.
 
-There is no `./dev player test` and no `./dev player analyze`. Both were invented
-while writing a plan on 2026-08-12 and shipped into an agent prompt file, breaking
-the first player task. `./dev player` takes only setup, build, icons, shell,
-restart, e2e, logs, android and macos; everything else goes through
+For the whole suite, `./dev player test` is faster than either:
+`scripts/player-test-sharded.sh` deals the files round-robin into one
+very_good-style bundle per shard (half the cores, up to 8) and runs the bundles
+side by side, about 95s against very_good's 310s on a 16-thread machine. Its
+total should match the very_good count. Bundles share one isolate per shard, so
+a leak can still surface here, but neighbours differ from CI's single bundle,
+and a CI-only failure is still a leak.
+
+There is no `./dev player analyze`. It, and a `./dev player test` that did not
+exist yet, were invented while writing a plan on 2026-08-12 and shipped into an
+agent prompt file, breaking the first player task. `./dev player` takes only
+setup, build, test, icons, shell, restart, e2e, logs, android and macos;
+everything else goes through
 `./dev flutter <args>`, which runs in the player directory. The Dart package is
 named `player`, so test imports are `package:player/...`, never
 `package:mydia_player/...`.

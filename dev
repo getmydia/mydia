@@ -149,6 +149,7 @@ ${YELLOW}User Management:${NC}
 ${YELLOW}Player (Flutter):${NC}
   flutter <args>       Run any flutter command (in player/)
   player setup         Install deps and run code generation
+  player test [args]   Run the whole player suite as parallel bundles
   player build         Build + deploy web assets to priv/static/player
   player icons [--check]
                        Regenerate web icons from assets/*.svg (--check verifies
@@ -267,8 +268,7 @@ run_step "Format"       "mix format --check-formatted"
 run_step "Credo"        "mix credo --strict"
 run_step "Gettext"      "mix gettext.extract --check-up-to-date"
 run_step "Ratchet"      "mix mydia.ratchet"
-run_step "Database"     "mix ecto.create --quiet && mix ecto.migrate --quiet"
-run_step "Tests"        "mix test --warnings-as-errors --color"
+run_step "Tests"        "./scripts/test-partitioned.sh --warnings-as-errors --color"
 
 echo ""
 if [ ${#FAILED_OUTPUTS[@]} -gt 0 ]; then
@@ -458,7 +458,12 @@ case "$COMMAND" in
     test)
         echo -e "${GREEN}Running tests...${NC}"
         test_exit_code=0
-        in_shell mix test --color "$@" || test_exit_code=$?
+        if [ $# -eq 0 ]; then
+            # Whole suite: run partitions side by side (scripts/test-partitioned.sh).
+            in_shell ./scripts/test-partitioned.sh --color "$@" || test_exit_code=$?
+        else
+            in_shell mix test --color "$@" || test_exit_code=$?
+        fi
         [ $test_exit_code -ne 0 ] && print_test_rerun_hints
         exit $test_exit_code
         ;;
@@ -546,6 +551,12 @@ case "$COMMAND" in
                     exec player/tool/gen-web-icons.sh "$@"
                 fi
                 in_shell_sh "player/tool/gen-web-icons.sh"
+                ;;
+            test)
+                # Whole suite as parallel very_good-style bundles. For single
+                # files use ./dev flutter test --concurrency=1 <paths>.
+                echo -e "${GREEN}Running player tests...${NC}"
+                in_shell ./scripts/player-test-sharded.sh "${@:2}"
                 ;;
             setup)
                 echo -e "${GREEN}Setting up player project (pub get + build_runner)...${NC}"
@@ -1017,7 +1028,7 @@ case "$COMMAND" in
                 ;;
             *)
                 echo -e "${RED}Error: Unknown player command: $1${NC}"
-                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos|flatpak|glass-diff>"
+                echo "Usage: ./dev player <logs|build|setup|test|shell|restart|e2e|e2e-build|android|macos|flatpak|glass-diff>"
                 exit 1
                 ;;
         esac

@@ -315,6 +315,12 @@ perfectly implemented and can revert someone else's merged fix. Verify a finishe
 diff against `origin/master`, not against your own plan, and treat a file the plan
 never mentioned appearing in `--stat` as the tell.
 
+A new worktree's first devenv shell copies the main checkout's `deps/`, compiled
+dependencies and `native/*/target` (`scripts/seed-worktree-build.sh`, reflinked
+on btrfs), so it compiles only the mydia app and what differs: about 2 minutes
+instead of 8. Keep the main checkout's `_build` warm and new worktrees stay
+cheap.
+
 `origin/master` also moves during long runs, and a sibling worktree may be
 building the same feature right now. Check `ls .claude/worktrees/` for an
 in-flight worktree matching your topic before writing a spec.

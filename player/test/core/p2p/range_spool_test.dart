@@ -85,7 +85,9 @@ void main() {
 
     await waitUntil(() => upstream.pulledBytes == total);
     await waitUntil(() => spool.file.lengthSync() == total);
-    expect(spool.spooledBytes, total);
+    // The counter moves after the write's future completes, which can trail
+    // the file reaching its length when the machine is busy.
+    await waitUntil(() => spool.spooledBytes == total);
   });
 
   test('serves the upstream bytes in order', () async {

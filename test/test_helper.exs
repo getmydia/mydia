@@ -64,6 +64,12 @@ ExUnit.start(
 
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 
+# Keep every Req client's retries but drop the backoff between them. Req's
+# default (1s, 2s, 4s, or a Retry-After) made each test that stubs a 5xx or an
+# unreachable server sit for ~7s; there were dozens. A client that sets its own
+# :retry_delay still overrides this.
+Req.default_options(retry_delay: fn _attempt -> 0 end)
+
 # Refuse outbound HTTP. Nothing else stops a test reaching the production
 # metadata relay: Mydia.Metadata.default_relay_config/0 falls back to
 # relay.mydia.dev in test, and the cache warming that protects detail-page
@@ -89,7 +95,8 @@ relay_tags_included = Enum.filter(relay_tags, &(&1 in included_tags))
 
 if relay_tags_included == [] do
   Mydia.RelayGuard.Escapes.setup()
-  Req.default_options(adapter: Mydia.RelayGuard)
+  # Keyword.put, not a fresh list: the retry_delay default set above must survive.
+  Req.default_options(Keyword.put(Req.default_options(), :adapter, Mydia.RelayGuard))
 
   ExUnit.after_suite(fn _results ->
     case Mydia.RelayGuard.Escapes.all() do
@@ -147,7 +154,10 @@ chromedriver_available =
   end
 
 if chromedriver_available do
-  {:ok, _} = Application.ensure_all_started(:wallaby)
+  # Started by MydiaWeb.FeatureCase on first use, not here: :wallaby boots a
+  # chromedriver, and a default run excludes :feature, so every other run
+  # (and every partition of scripts/test-partitioned.sh) would pay for one.
+  :ok
 else
   IO.puts("""
   \n⚠️  chromedriver not found - Wallaby feature tests will be skipped.

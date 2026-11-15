@@ -396,7 +396,7 @@ jobs:
 
   # The SQLite suite runs with max_cases: 1 (test/test_helper.exs), so one
   # runner took 642s for it (549s of that sync, 2026-10-15). Each shard is its
-  # own runner with its own mydia_test.db, so SQLite still sees one writer.
+  # own runner with its own mydia_testN.db, so SQLite still sees one writer.
   # --partitions sorts the test files and deals them out round-robin, not by
   # duration, so adding a file can shift later files to another shard; if one
   # shard runs much longer than the others, raise the count rather than

@@ -5,6 +5,10 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
 
   @fake Path.expand("../../../support/fixtures/fake_rqbit.sh", __DIR__)
 
+  # Reaching {:crashed, _, 5} takes six spawns of the fake rqbit script. At 2s
+  # that failed on a loaded CI runner and under parallel local partitions.
+  @crash_timeout 5_000
+
   setup %{tmp_dir: tmp_dir} = ctx do
     status = :"status_#{System.unique_integer([:positive])}"
     topic = "built_in_status:test:#{System.unique_integer([:positive])}"
@@ -311,14 +315,14 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     start_engine(ctx, autostart: true, mode: "exit")
 
     assert_receive {:built_in_status, %Status{engine: {:crashed, {:engine_exit, 3}, 5}}},
-                   2_000
+                   @crash_timeout
   end
 
   @tag :tmp_dir
   @tag :capture_log
   test "restart/1 clears a crash", ctx do
     name = start_engine(ctx, autostart: true, mode: "exit")
-    assert_receive {:built_in_status, %Status{engine: {:crashed, _, 5}}}, 2_000
+    assert_receive {:built_in_status, %Status{engine: {:crashed, _, 5}}}, @crash_timeout
     drain()
     :ok = Engine.restart(name)
     assert_receive {:built_in_status, %Status{engine: :running}}, 1_000
@@ -372,7 +376,7 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
   @tag :capture_log
   test "restart/1 after a stop does not spawn, even when the engine had crashed", ctx do
     name = start_engine(ctx, autostart: true, mode: "exit")
-    assert_receive {:built_in_status, %Status{engine: {:crashed, _, 5}}}, 2_000
+    assert_receive {:built_in_status, %Status{engine: {:crashed, _, 5}}}, @crash_timeout
     :ok = Engine.stop_engine(name, :vpn_down)
     File.rm!(ctx.args_file)
     drain()
