@@ -53,6 +53,17 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is needed to scan QR codes for pairing with your Mydia server.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+			</array>
+		</dict>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocalNetworkUsageDescription</key>

@@ -239,3 +239,31 @@ The AppImage updates itself from the `linux-appimage` slot of
 checks the ELF and AppImage type 2 magic, and renames over it, so the file keeps
 its name and desktop entries from AppImageLauncher or Gear Lever keep working.
 A tarball install reads the `linux` slot and never sees an AppImage.
+
+## Google Drive backup needs client ids at build time
+
+Google Drive appears as a backup store only on platforms whose OAuth client id
+was passed with `--dart-define`; an empty define hides it there. No client id
+or secret is committed.
+
+| Platform | Defines |
+| --- | --- |
+| Android phones | `MYDIA_GDRIVE_CLIENT_ID_ANDROID` |
+| iOS | `MYDIA_GDRIVE_CLIENT_ID_IOS` |
+| macOS, Linux, Windows | `MYDIA_GDRIVE_CLIENT_ID_DESKTOP`, `MYDIA_GDRIVE_CLIENT_SECRET_DESKTOP` |
+| Android TV | `MYDIA_GDRIVE_CLIENT_ID_TV`, `MYDIA_GDRIVE_CLIENT_SECRET_TV` |
+
+The desktop and TV secrets belong to Google "installed app" clients and are
+not confidential, but they still stay out of git.
+
+Android needs nothing beyond the define: Google identifies the app by its
+package name and signing certificate SHA-1, registered on the Android client.
+No `serverClientId` is set, because Drive access is authorized on the device.
+
+iOS also needs the reversed client id as a URL scheme, which a define cannot
+reach. `ios/Runner/Info.plist` reads it from the `GOOGLE_REVERSED_CLIENT_ID`
+build setting, empty by default in `ios/Flutter/{Debug,Release}.xcconfig`.
+Set it in the git-ignored `ios/Flutter/GoogleClient.xcconfig`, which both
+include when present:
+
+    GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.<the id's first part>

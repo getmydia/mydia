@@ -85,6 +85,9 @@ dependencies:
   stack_trace: ^1.12.1
   mobile_scanner: ^7.0.1
   url_launcher: ^6.3.0
+  # Google Drive backup sign-in on Android phones and iOS
+  # (core/backup/cloud/google_auth.dart). Desktop and TV use plain OAuth.
+  google_sign_in: ^7.2.0
   flutter_rust_bridge: ^2.13.0
   mydia_player_p2p:
     path: rust_builder

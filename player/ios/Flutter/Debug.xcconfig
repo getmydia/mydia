@@ -1,2 +1,6 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
+
+// Google Drive backup sign-in URL scheme; see docs/packaging.md.
+GOOGLE_REVERSED_CLIENT_ID=
+#include? "GoogleClient.xcconfig"
