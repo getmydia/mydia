@@ -22,6 +22,9 @@ class MockAuthStorage implements AuthStorage {
   /// Keys whose write throws, simulating a keychain that refuses one call.
   final Set<String> failWriteKeys = <String>{};
 
+  /// Keys whose read throws, simulating a keychain that refuses one call.
+  final Set<String> failReadKeys = <String>{};
+
   /// Every key currently held, for asserting that nothing was written.
   Iterable<String> get keys => _storage.keys;
 
@@ -30,6 +33,9 @@ class MockAuthStorage implements AuthStorage {
 
   @override
   Future<String?> read(String key) async {
+    if (failReadKeys.contains(key)) {
+      throw Exception('keyring refused read of $key');
+    }
     return _storage[key];
   }
 

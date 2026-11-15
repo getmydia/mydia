@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/backup/backup_controller.dart';
 import 'package:player/core/backup/backup_identity.dart';
 import 'package:player/core/backup/backup_meta_store.dart';
+import 'package:player/core/backup/backup_relay_client.dart';
 import 'package:player/core/backup/backup_snapshot.dart';
 import 'package:player/core/backup/backup_sync_service.dart';
 import 'package:player/core/backup/backup_vault_state.dart';
@@ -91,6 +92,12 @@ class _Device {
   late BackupSyncService relay;
   late BackupController controller;
   Set<BackupStoreKind> offered = _allStores;
+
+  /// The cloud backends of the current controller, by store kind.
+  final backends = <BackupStoreKind, InMemoryCloudBackend>{};
+
+  /// Replaces the controller's host-side store hook when set.
+  CloudStoreForPairHook? cloudStoreForPair;
   final _old = <BackupController>[];
   PeerSyncService? _peers;
   FakePeerSyncTransport? _transport;
@@ -110,7 +117,7 @@ class _Device {
       authStorage: auth,
       resolveOffered: () async => offered,
       buildCloud: (kind) => buildCloudBackupService(
-        backend: InMemoryCloudBackend(net.stores[kind]!,
+        backend: backends[kind] = InMemoryCloudBackend(net.stores[kind]!,
             kind: kind.cloudKind!, accountLabel: '$name@example.com'),
         authStorage: auth,
         meta: meta,
@@ -157,7 +164,7 @@ class _Device {
       onJoinerBackupKeys: hooks.onJoinerBackupKeys,
       onJoinedVault: hooks.onJoinedVault,
       onPeerRevoked: hooks.onPeerRevoked,
-      cloudStoreForPair: hooks.cloudStoreForPair,
+      cloudStoreForPair: cloudStoreForPair ?? hooks.cloudStoreForPair,
       onCloudStoreHint: hooks.onCloudStoreHint,
     );
   }
@@ -457,5 +464,164 @@ void main() {
             .map((m) => m.slotId),
         isNot(contains(await joiner.slotId())));
     expect(joiner.controller.active.value, BackupStoreKind.gdrive);
+  });
+
+  test('switch_to_signed_out_cloud_leaves_relay_untouched', () async {
+    final a = net.device('Living Room TV');
+    await a.enableRelayDirectly();
+    final vaultId = (await a.vault())!.vaultId;
+    final c = a.restart();
+    await c.start();
+    await _settled(c);
+    a.backends[BackupStoreKind.gdrive]!.signedIn = false;
+    final slot = await a.slotId();
+    final relayWrites = net.relay.slotWrites[slot];
+
+    await expectLater(
+        c.switchTo(BackupStoreKind.gdrive, deleteOld: true),
+        throwsA(isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.signedOut)));
+
+    expect(c.active.value, BackupStoreKind.relay);
+    expect(await a.auth.read(BackupController.storeKey), 'relay');
+    expect(net.relay.vaults.keys, contains(vaultId),
+        reason: 'the old backup is not deleted');
+    expect(net.relay.slotWrites[slot], relayWrites, reason: 'no stub');
+    expect((await a.vault())?.vaultId, vaultId);
+    expect(a.relay.enabled, isTrue);
+    expect(a.relay.dormant, isFalse);
+    expect(net.stores[BackupStoreKind.gdrive]!.bytes, isEmpty);
+  });
+
+  test('switch_to_signed_out_cloud_leaves_the_other_cloud_untouched', () async {
+    final a = net.device('Living Room TV');
+    final b = net.device('Night Harbor Laptop');
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+    await b.controller.ready;
+    await b.controller.enableCloud(BackupStoreKind.gdrive);
+    final drive = net.stores[BackupStoreKind.gdrive]!;
+    final slot = await a.slotId();
+    final driveWrites = drive.writes[slot];
+    a.backends[BackupStoreKind.icloud]!.signedIn = false;
+
+    await expectLater(
+        a.controller.switchTo(BackupStoreKind.icloud, deleteOld: true),
+        throwsA(isA<BackupRelayException>()));
+
+    expect(a.controller.active.value, BackupStoreKind.gdrive);
+    expect(await a.auth.read(BackupController.storeKey), 'gdrive');
+    expect(drive.writes[slot], driveWrites, reason: 'no stub');
+    expect(drive.bytes.keys, containsAll([slot, await b.slotId()]),
+        reason: 'the old backup is not deleted');
+    expect(a.controller.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+    expect(net.stores[BackupStoreKind.icloud]!.bytes, isEmpty);
+  });
+
+  test('switch_cloud_to_cloud_keeps_the_new_store_state', () async {
+    final a = net.device('Living Room TV');
+    final b = net.device('Night Harbor Laptop');
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+    await b.controller.ready;
+    await b.controller.enableCloud(BackupStoreKind.icloud);
+    final bSlot = await b.slotId();
+
+    await a.controller.switchTo(BackupStoreKind.icloud, deleteOld: false);
+
+    expect(a.controller.active.value, BackupStoreKind.icloud);
+    expect(a.controller.cloud(BackupStoreKind.gdrive).enabled, isFalse);
+    // Leaving Drive after joining iCloud keeps what iCloud merged.
+    expect(a.meta.slotNames()[bSlot], 'Night Harbor Laptop');
+    expect(a.meta.mergedVersion(bSlot), isNotNull);
+    await b.controller.poll();
+    await _settled(b.controller);
+    expect(net.stores[BackupStoreKind.gdrive]!.bytes.keys,
+        contains(await a.slotId()),
+        reason: 'the moved stub stays in Drive');
+  });
+
+  test('old_store_failure_after_switch_keeps_new_store_active', () async {
+    final a = net.device('Living Room TV');
+    await a.enableRelayDirectly();
+    final c = a.restart();
+    await c.start();
+    await _settled(c);
+    net.relay.available = false;
+
+    await expectLater(c.switchTo(BackupStoreKind.gdrive, deleteOld: false),
+        throwsA(isA<BackupRelayException>()));
+
+    expect(c.active.value, BackupStoreKind.gdrive);
+    expect(await a.auth.read(BackupController.storeKey), 'gdrive');
+    expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+  });
+
+  test('init_failure_with_relay_vault_still_forwards_triggers', () async {
+    final a = net.device('Living Room TV');
+    await a.enableRelayDirectly();
+    a.auth.failReadKeys.add(BackupController.storeKey);
+    final c = a.restart();
+    await expectLater(c.ready, throwsA(anything));
+
+    await c.start();
+    await a.relay.settled();
+
+    expect(c.active.value, BackupStoreKind.relay);
+    expect(a.relay.enabled, isTrue);
+    final slot = await a.slotId();
+    final writes = net.relay.slotWrites[slot] ?? 0;
+    await a.watch('tmdb:movie:3');
+    c.markDirty();
+    await c.flush();
+    expect(net.relay.slotWrites[slot], writes + 1);
+  });
+
+  test('a cloud store that cannot be built leaves the others offered',
+      () async {
+    final a = net.device('Living Room TV');
+    a.controller.dispose();
+    final c = a.controller = BackupController(
+      relay: a.relay,
+      authStorage: a.auth,
+      resolveOffered: () async => _allStores,
+      buildCloud: (kind) async {
+        if (kind == BackupStoreKind.icloud) throw StateError('no plugin');
+        return buildCloudBackupService(
+          backend:
+              InMemoryCloudBackend(net.stores[kind]!, kind: kind.cloudKind!),
+          authStorage: a.auth,
+          meta: a.meta,
+          snapshot: a.snapshot,
+          deviceName: () async => a.name,
+          platform: 'linux',
+        );
+      },
+    );
+    addTearDown(c.dispose);
+    await c.ready;
+    expect(c.offered.value, {BackupStoreKind.relay, BackupStoreKind.gdrive});
+    await c.enableCloud(BackupStoreKind.gdrive);
+    expect(c.active.value, BackupStoreKind.gdrive);
+  });
+
+  test('a host that leaves its group while naming its store rejects pairing',
+      () async {
+    final host = net.device('Living Room TV', 'node-a');
+    final joiner = net.device('Night Harbor Laptop', 'node-b');
+    host.cloudStoreForPair = () async {
+      await host.peers().leaveGroup();
+      return (store: 'gdrive', account: null);
+    };
+    await host.peers().start();
+    await joiner.peers().start();
+
+    final offer = await host.peers().startPairingOffer();
+    await expectLater(
+        joiner.peers().pairWithCode(offer.code), throwsA(anything));
+
+    expect(joiner.peers().isPaired, isFalse);
+    expect(host.peers().isPaired, isFalse);
+    expect(joiner.controller.storeHint.value, isNull);
   });
 }

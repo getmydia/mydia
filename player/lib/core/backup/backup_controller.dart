@@ -216,17 +216,45 @@ class BackupController {
   // Lifecycle
 
   Future<void> _init() async {
-    final offered = await _resolveOffered();
+    Set<BackupStoreKind> offered;
+    try {
+      offered = await _resolveOffered();
+    } catch (e) {
+      debugPrint('[Backup] Offered stores not resolved: ${e.runtimeType}');
+      offered = _offered.value;
+    }
     if (_disposed) return;
-    _offered.value = Set.unmodifiable(offered);
+    // One store that cannot be built (a broken backend, an unreadable
+    // identity) is left out; the others still work.
     for (final kind in offered) {
       if (kind == BackupStoreKind.relay) continue;
-      final service = await _buildCloud(kind);
+      final CloudBackupService service;
+      try {
+        service = await _buildCloud(kind);
+      } catch (e) {
+        debugPrint('[Backup] ${kind.name} not available: ${e.runtimeType}');
+        continue;
+      }
       if (_disposed) {
         service.dispose();
         return;
       }
       _cloud[kind] = service;
+    }
+    _offered.value = Set.unmodifiable({
+      for (final kind in offered)
+        if (kind == BackupStoreKind.relay || _cloud.containsKey(kind)) kind,
+    });
+
+    void follow(BackupStoreKind kind, ValueListenable<BackupStatus> status) {
+      void listener() => _follow(kind, status.value);
+      status.addListener(listener);
+      _unlisten.add(() => status.removeListener(listener));
+    }
+
+    follow(BackupStoreKind.relay, _relay.status);
+    for (final MapEntry(:key, :value) in _cloud.entries) {
+      follow(key, value.status);
     }
 
     final raw = await _auth.read(storeKey);
@@ -251,31 +279,28 @@ class BackupController {
         _hint.value = null;
       }
     }
-
-    void follow(BackupStoreKind kind, ValueListenable<BackupStatus> status) {
-      void listener() => _follow(kind, status.value);
-      status.addListener(listener);
-      _unlisten.add(() => status.removeListener(listener));
-    }
-
-    follow(BackupStoreKind.relay, _relay.status);
-    for (final MapEntry(:key, :value) in _cloud.entries) {
-      follow(key, value.status);
-    }
     _initialized = true;
   }
 
   /// Starts the active store, as on app start. Never throws: a failure
-  /// lands in that store's status. A controller that could not read its
-  /// state starts the relay, as before cloud stores existed (a dormant
-  /// vault stays dormant).
+  /// lands in that store's status.
+  ///
+  /// A controller that could not read which store is active falls back to
+  /// the relay, as before cloud stores existed: the relay becomes active
+  /// (so the triggers reach it) unless its vault is dormant, and stays so
+  /// only if it comes up in a vault.
   Future<void> start() async {
     try {
       await ready;
     } catch (e) {
       debugPrint('[Backup] Store not read, starting the relay: '
           '${e.runtimeType}');
+      if (_disposed) return;
+      final relayActive = !_relay.dormant;
+      if (relayActive) _active.value = BackupStoreKind.relay;
+      _initialized = true;
       await _relay.start();
+      if (relayActive && !_relay.enabled && !_disposed) _active.value = null;
       return;
     }
     if (_disposed) return;
@@ -363,13 +388,20 @@ class BackupController {
   }
 
   /// Moves the backup from the active store to [to], or turns it on there
-  /// when off. The old store gets a moved stub naming [to] (or is deleted
-  /// for every device when [deleteOld]), then [to] is enabled.
+  /// when off.
   ///
-  /// A cloud [to] must be signed in already. The relay resumes its dormant
-  /// vault when there is one, else creates a vault with [relayKey], which
-  /// the caller made with `relay.prepareEnable()` and showed: without one
-  /// this throws [ArgumentError] before leaving anything.
+  /// [to] comes up first: a cloud [to] must be signed in already, and an
+  /// account that is not usable throws (`BackupRelayException`) with the old
+  /// store untouched and still active. Only then does the old store get a
+  /// moved stub naming [to] (and lose every other device's backup when
+  /// [deleteOld]). A failure leaving the old store is rethrown with [to]
+  /// already active: the backup lives there, and the old store just never
+  /// learned of the move.
+  ///
+  /// The relay resumes its dormant vault when there is one, else creates a
+  /// vault with [relayKey], which the caller made with
+  /// `relay.prepareEnable()` and showed: without one this throws
+  /// [ArgumentError] before touching anything.
   Future<void> switchTo(BackupStoreKind to,
       {required bool deleteOld, RecoveryKey? relayKey}) async {
     await ready;
@@ -379,31 +411,28 @@ class BackupController {
     if (to == BackupStoreKind.relay && !_relay.dormant && relayKey == null) {
       throw ArgumentError.notNull('relayKey');
     }
+    final old = switch (from) {
+      null || BackupStoreKind.relay => null,
+      final kind => cloud(kind),
+    };
     _switching++;
     try {
-      switch (from) {
-        case null:
-          break;
-        case BackupStoreKind.relay:
-          await _relay.switchAway(to.name, deleteOld: deleteOld);
-        case final kind:
-          await cloud(kind).switchAway(to.name, deleteOld: deleteOld);
-      }
-      // Off until the new store is on: a failure below leaves it off, not
-      // pointing at a store that was left.
-      await _setActive(null);
       if (target != null) {
         await target.enable();
-      } else {
-        if (_relay.dormant) await _relay.resumeDormant();
+      } else if (_relay.dormant) {
+        await _relay.resumeDormant();
         if (!_relay.enabled) {
-          if (relayKey == null) {
-            throw StateError('the dormant relay vault could not be resumed');
-          }
-          await _relay.confirmEnable(relayKey);
+          throw StateError('the dormant relay vault could not be resumed');
         }
+      } else {
+        await _relay.confirmEnable(relayKey!);
       }
       await _setActive(to);
+      if (from == BackupStoreKind.relay) {
+        await _relay.switchAway(to.name, deleteOld: deleteOld);
+      } else {
+        await old?.switchAway(to.name, deleteOld: deleteOld);
+      }
     } finally {
       _switching--;
     }

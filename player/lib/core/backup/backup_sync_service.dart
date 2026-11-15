@@ -467,9 +467,12 @@ class BackupSyncService {
   bool get dormant => _meta.relayDormant;
 
   /// Syncs the [dormant] vault again, as when the viewer switches back to
-  /// the relay: its next upload replaces the moved stub.
+  /// the relay: its next upload replaces the moved stub. The merged
+  /// versions kept meanwhile are another store's, so every slot is merged
+  /// again.
   Future<void> resumeDormant() async {
     await _meta.setRelayDormant(false);
+    await _meta.clearMergedSeqs();
     await start();
   }
 

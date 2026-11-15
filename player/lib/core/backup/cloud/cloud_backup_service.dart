@@ -229,7 +229,10 @@ class CloudBackupService {
   /// every other slot when [deleteOld], and stops syncing here. The stub
   /// stays either way: without it a device still signed in would never see
   /// the move, and would write its own slot again. The caller enables the
-  /// new store.
+  /// new store first, so a store that is not usable leaves this one as it
+  /// was: the merged versions, device names and offers kept in the meta
+  /// store are by then the new store's, and only this store's own cursor
+  /// and upload time are forgotten.
   Future<void> switchAway(String to, {required bool deleteOld}) =>
       _userOp(() async {
         if (!enabled) throw StateError('backup is off');
@@ -241,7 +244,7 @@ class CloudBackupService {
           movedTo: to,
         ));
         if (deleteOld) await _deleteAll(keepOwn: true);
-        await _leave();
+        await _leave(forgetShared: false);
       });
 
   /// Stops syncing and forgets the account's credentials on this device.
@@ -303,9 +306,16 @@ class CloudBackupService {
     }
   }
 
-  Future<void> _leave() async {
+  /// Stops syncing. [forgetShared] false keeps the meta store's merged
+  /// versions, device names and offers, which another store now owns.
+  Future<void> _leave({bool forgetShared = true}) async {
     await _engine.detach();
-    await _forgetStore();
+    if (forgetShared) {
+      await _forgetStore();
+    } else {
+      await _meta.setCloudCursor(kind.name, null);
+      await _meta.setCloudLastSuccessMs(kind.name, null);
+    }
     _accountLabel.value = null;
     _engine.setStatus(const BackupOff());
   }

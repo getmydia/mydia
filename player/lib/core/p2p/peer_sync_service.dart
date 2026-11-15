@@ -591,6 +591,16 @@ class PeerSyncService {
     }
   }
 
+  /// Turns a pairing down because this device left its group while a
+  /// backup hook ran.
+  Future<void> _rejectLeftGroup(String requestId) =>
+      _transport.respondToPeerSync(
+        requestId,
+        const FlutterPeerSyncResponse.pairRejected(
+          reason: 'This device left its group',
+        ),
+      );
+
   Future<void> _handlePairRequest(
     FlutterInboundPeerSyncRequest request,
     FlutterPeerSyncRequest_Pair req,
@@ -656,11 +666,17 @@ class PeerSyncService {
     // A host backing up to a cloud store names it instead: the joiner
     // signs in to join, and is added to no vault.
     ({String store, String? account})? cloudStore;
-    try {
-      cloudStore = await _cloudStoreForPair?.call().timeout(_backupHookTimeout);
-    } catch (e) {
-      debugPrint('[PeerSyncService] No backup store for the joiner: '
-          '${e.runtimeType}');
+    final storeHook = _cloudStoreForPair;
+    if (storeHook != null) {
+      final generation = _generation;
+      try {
+        cloudStore = await storeHook().timeout(_backupHookTimeout);
+      } catch (e) {
+        debugPrint('[PeerSyncService] No backup store for the joiner: '
+            '${e.runtimeType}');
+      }
+      // This device left the group while the hook ran: no pairing to finish.
+      if (_stale(generation)) return _rejectLeftGroup(request.requestId);
     }
 
     // Otherwise the joiner joins this device's backup vault, when there is
@@ -683,15 +699,7 @@ class PeerSyncService {
             '${e.runtimeType}');
       }
       // This device left the group while the add ran: no pairing to finish.
-      if (_stale(generation)) {
-        await _transport.respondToPeerSync(
-          request.requestId,
-          const FlutterPeerSyncResponse.pairRejected(
-            reason: 'This device left its group',
-          ),
-        );
-        return;
-      }
+      if (_stale(generation)) return _rejectLeftGroup(request.requestId);
     }
 
     final rosterWire = _store.members().values.map((m) => m.toWire()).toList();
