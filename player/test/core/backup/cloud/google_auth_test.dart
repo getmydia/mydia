@@ -14,6 +14,7 @@ import 'package:player/core/backup/cloud/google_auth.dart';
 import 'package:player/core/backup/cloud/google_oauth_flows.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/real_http.dart';
 
 const _tokenUrl = 'https://oauth2.googleapis.com/token';
 const _deviceUrl = 'https://oauth2.googleapis.com/device/code';
@@ -50,6 +51,8 @@ String _b64NoPad(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
 void main() {
+  useRealHttp();
+
   late MockAuthStorage storage;
 
   setUp(() => storage = MockAuthStorage());
