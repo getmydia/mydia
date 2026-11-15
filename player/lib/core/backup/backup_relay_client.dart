@@ -25,8 +25,8 @@ enum BackupRelayError {
   unavailable,
   notFound,
 
-  /// 403 `not_member` (or a 403 with no code): this signer is not in the
-  /// vault, so this device was removed.
+  /// 403 `not_member`: this signer is not in the vault, so this device was
+  /// removed. A 403 with no code is [server], never this.
   notMember,
 
   /// 403 `not_owner`: a slot write this signer may not make. Not a removal.
@@ -481,9 +481,12 @@ class BackupRelayClient {
         return e(BackupRelayError.unauthorized);
       case 403:
         // Only not_member means this device is out of the vault; reading
-        // any other 403 that way would drop the vault state.
+        // any other 403 that way would drop the vault state. A 403 with no
+        // code is not the relay speaking (a WAF or bot-check page in front
+        // of it), so it is retried like a server error.
         return switch (code) {
-          null || 'not_member' => e(BackupRelayError.notMember),
+          null => e(BackupRelayError.server),
+          'not_member' => e(BackupRelayError.notMember),
           'not_owner' => e(BackupRelayError.notOwner),
           _ => e(BackupRelayError.invalid),
         };

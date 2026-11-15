@@ -225,9 +225,15 @@ void main() {
   group('status mapping', () {
     final cases = <String, (http.Response, BackupRelayError)>{
       '403': (_err(403, 'not_member'), BackupRelayError.notMember),
+      // A WAF or bot-check page in front of the relay, not a removal:
+      // retried with backoff.
       '403 without a code': (
         http.Response('{}', 403),
-        BackupRelayError.notMember,
+        BackupRelayError.server,
+      ),
+      '403 html': (
+        http.Response('<html>Just a moment...</html>', 403),
+        BackupRelayError.server,
       ),
       // Not this device's removal: a write to a slot it does not own.
       '403 not_owner': (_err(403, 'not_owner'), BackupRelayError.notOwner),

@@ -128,7 +128,8 @@ and all of them when this device leaves or switches vaults.
 | A slot fails to open | Skipped, the rest merge; "Couldn't read Living Room TV's backup" |
 | 409 on rotation, or an unknown epoch | Refetch the manifest and envelope, retry once |
 | 412 on upload | Refetch the manifest, upload again at the current seq |
-| 403 `not_member` (or a 403 with no code), vault gone | `BackupRemoved`: `backup/vault` is cleared, local data kept |
+| 403 `not_member`, vault gone | `BackupRemoved`: `backup/vault` is cleared, local data kept |
+| 403 with no JSON `error` code (a WAF or bot-check page) | `BackupRelayError.server`: backoff and retry, never a removal |
 | 403 `not_owner` | `BackupRelayError.notOwner`: a status error and a retry, never a removal |
 | Restore while backup is on | `BackupAlreadyOnException`; the restore screen says to turn backup off first |
 | Lookup 404 on restore | "No backup matches this key" |

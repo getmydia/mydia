@@ -428,6 +428,17 @@ void main() {
       expect(a.service.enabled, isTrue);
     });
 
+    test('a 403 without a code (a WAF page) is retried, not a removal',
+        () async {
+      final (a, _) = await rig.enabled('Living Room TV');
+      rig.relay.override =
+          (_) => http.Response('<html>Checking your browser</html>', 403);
+      await a.service.poll();
+      expect(a.service.status.value, _errorOf(BackupRelayError.server));
+      expect(await a.state(), isNotNull);
+      expect(a.service.enabled, isTrue);
+    });
+
     test('a corrupted slot of one device is skipped and the rest merge',
         () async {
       final (a, key) = await rig.enabled('Living Room TV');
