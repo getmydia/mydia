@@ -450,8 +450,20 @@ void main() {
     final ownVault = (await joiner.state())!.vaultId;
     await net.pair(host, joiner);
 
+    // An offer from the old vault's members means nothing in the new one.
+    await joiner.meta.putPending(const PendingAccountOffer(
+      accountId: 'p1',
+      kind: 'plex',
+      displayName: 'Night Harbor Plex',
+      fromDevice: 'Old Laptop',
+      updatedAt: 1,
+    ));
+    await joiner.meta.dismiss('p2', 1);
+
     await joiner.backup.resolveVaultChoice(keepOffered: true);
 
+    expect(joiner.meta.pendingAccounts(), isEmpty);
+    expect(joiner.meta.isDismissed('p2', 1), isFalse);
     expect(joiner.backup.pendingVaultChoice.value, isNull);
     final state = (await joiner.state())!;
     expect(state.vaultId, hostVault);

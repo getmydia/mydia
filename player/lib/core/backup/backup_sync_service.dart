@@ -51,7 +51,11 @@ class BackupSyncService {
         _platform = platform,
         _clock = clock ?? DateTime.now,
         _localNodeId = localNodeId,
-        _delay = delay ?? Future<void>.delayed;
+        _delay = delay ?? Future<void>.delayed {
+    // Filled here, not lazily: a lazy notifier could first be created by
+    // dispose().
+    _offers.value = meta.pendingAccounts();
+  }
 
   static const debounce = Duration(minutes: 2);
   static const pollInterval = Duration(minutes: 15);
@@ -119,8 +123,7 @@ class BackupSyncService {
   Map<String, String> get slotDeviceNames => _meta.slotNames();
 
   final _members = ValueNotifier<List<BackupMemberInfo>>(const []);
-  late final _offers =
-      ValueNotifier<List<PendingAccountOffer>>(_meta.pendingAccounts());
+  final _offers = ValueNotifier<List<PendingAccountOffer>>(const []);
 
   /// Every device in the vault, this one first, as of the last manifest
   /// read. Empty while off.
@@ -660,6 +663,8 @@ class BackupSyncService {
     await _meta.clearMergedSeqs();
     await _meta.clearSlotClaims();
     await _meta.clearSlotNames();
+    await _meta.clearOffers();
+    _refreshOffers();
     try {
       await _save(state);
     } catch (_) {
@@ -1044,6 +1049,8 @@ class BackupSyncService {
     await _meta.clearMergedSeqs();
     await _meta.clearSlotClaims();
     await _meta.clearSlotNames();
+    await _meta.clearOffers();
+    _refreshOffers();
     await _meta.setJoinedNoticePending(false);
     if (!_disposed) _unreadable.value = const {};
     _set(next);

@@ -200,6 +200,17 @@ class BackupMetaStore {
     await removePending(accountId);
   }
 
+  /// Forgets every pending offer and dismissal, when this device leaves a
+  /// vault: the offers came from that vault's members, and a later vault
+  /// starts with nothing dismissed.
+  Future<void> clearOffers() async {
+    for (final k in _storage.keys.toList()) {
+      if (k.startsWith(_pendingPrefix) || k.startsWith(_dismissedPrefix)) {
+        await _storage.delete(k);
+      }
+    }
+  }
+
   bool isDismissed(String accountId, int updatedAt) {
     final raw = _storage.get('$_dismissedPrefix$accountId');
     final at = raw == null ? null : int.tryParse(raw);

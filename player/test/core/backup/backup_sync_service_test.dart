@@ -711,6 +711,39 @@ void main() {
       expect(b.service.pendingOffers.value, isEmpty);
     });
 
+    test('leaving the vault forgets its offers and dismissals', () async {
+      final (a, key) = await rig.enabled('Living Room TV');
+      final b = await rig.joined('Laptop', key);
+      await a.sources.putAccount(_plex());
+      await a.sources.putAccount(_plex('p2', 'Other'));
+      a.service.markDirty();
+      await a.service.flush();
+      await b.service.poll();
+      final dismissed = b.meta.pendingAccount('p2')!;
+      await b.service.dismissPendingAccount('p2');
+      expect(b.service.pendingOffers.value.map((o) => o.accountId), ['p1']);
+
+      await b.service.disable();
+
+      expect(b.service.pendingOffers.value, isEmpty);
+      expect(b.meta.pendingAccounts(), isEmpty);
+      expect(b.meta.isDismissed('p2', dismissed.updatedAt), isFalse);
+    });
+
+    test('a new service starts with the stored offers', () async {
+      final d = rig.device('Living Room TV');
+      await d.meta.putPending(const PendingAccountOffer(
+        accountId: 'p1',
+        kind: 'plex',
+        displayName: 'Night Harbor Plex',
+        fromDevice: 'Laptop',
+        updatedAt: 1,
+      ));
+      d.service.dispose();
+      d.build();
+      expect(d.service.pendingOffers.value.map((o) => o.accountId), ['p1']);
+    });
+
     test('accepting an offer removes it from pendingOffers', () async {
       final (a, key) = await rig.enabled('Living Room TV');
       final b = await rig.joined('Laptop', key);

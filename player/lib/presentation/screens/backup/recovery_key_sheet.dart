@@ -2,6 +2,7 @@
 /// turning backup on, typed back one group before the vault is created.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -93,10 +94,27 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
     if (_enabling) _newKey();
   }
 
+  /// Key texts this sheet put on the clipboard.
+  final _copied = <String>{};
+
   @override
   void dispose() {
     _confirm.dispose();
+    if (_copied.isNotEmpty) unawaited(_clearClipboard(_copied));
     super.dispose();
+  }
+
+  /// Empties the clipboard if it still holds a key this sheet copied, so
+  /// the key does not linger there for other apps.
+  static Future<void> _clearClipboard(Set<String> copied) async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (copied.contains(data?.text)) {
+        await Clipboard.setData(const ClipboardData(text: ''));
+      }
+    } catch (e) {
+      debugPrint('[Backup] Clipboard not cleared: ${e.runtimeType}');
+    }
   }
 
   Future<void> _newKey() async {
@@ -149,7 +167,9 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
   Future<void> _copy() async {
     final toaster = Toaster.of(context);
     final copied = context.l10n.backupKeyCopied;
-    await Clipboard.setData(ClipboardData(text: _display ?? ''));
+    final text = _display ?? '';
+    _copied.add(text);
+    await Clipboard.setData(ClipboardData(text: text));
     toaster.show(copied, kind: ToastKind.success);
   }
 

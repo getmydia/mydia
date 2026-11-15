@@ -275,8 +275,11 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
         alignment: WrapAlignment.end,
         spacing: 8,
         children: [
+          // Focus starts on Back: a stray OK press on a TV remote must not
+          // restore.
           TextButton(
             key: const Key('restore-back-button'),
+            autofocus: true,
             onPressed: _busy
                 ? null
                 : () => setState(() {
@@ -287,7 +290,6 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
           ),
           FilledButton(
             key: const Key('restore-confirm-button'),
-            autofocus: true,
             onPressed: _busy ? null : () => _restore(preview),
             child: _busy
                 ? const SizedBox.square(

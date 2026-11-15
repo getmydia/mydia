@@ -64,6 +64,7 @@ Future<_Harness> _pump(
   SourceId? direct,
   bool settle = true,
   bool isWeb = false,
+  FakeBackupSyncService? backup,
 }) async {
   final nav = RecordingNav();
   final store = InMemoryPeerSyncStore();
@@ -82,7 +83,8 @@ Future<_Harness> _pump(
       peerSyncStoreProvider.overrideWithValue(store),
       peerGroupRosterProvider.overrideWithValue(roster),
       isWebProvider.overrideWithValue(isWeb),
-      backupSyncServiceProvider.overrideWithValue(FakeBackupSyncService()),
+      backupSyncServiceProvider
+          .overrideWithValue(backup ?? FakeBackupSyncService()),
     ],
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -119,6 +121,38 @@ void main() {
         greaterThan(tester
             .getTopLeft(find.byKey(const Key('connections-devices-section')))
             .dy));
+  });
+
+  testWidgets('a join into the group backup toasts once, with a way there',
+      (tester) async {
+    _phone(tester);
+    final backup = FakeBackupSyncService()
+      ..isEnabled = true
+      ..statusNotifier.value = const BackupIdle(null);
+    await _pump(tester, _populated(), backup: backup);
+    final section = find.byKey(const Key('connections-backup-section'));
+    // Below the fold on a phone.
+    expect(tester.getTopLeft(section).dy, greaterThan(600));
+
+    await tester.ensureVisible(find.byKey(const Key('connections-enter-code')));
+    await tester.tap(find.byKey(const Key('connections-enter-code')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('pair-code-input')), 'ABC123');
+    // Pairing adopts the group's vault before it returns.
+    backup.joinedNoticeNotifier.value = true;
+    await tester.tap(find.byKey(const Key('pair-submit-code-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('This device is now backed up with your group'),
+        findsWidgets);
+    expect(backup.calls, contains('acknowledgeJoinedNotice'),
+        reason: 'shown once: the toast marks it seen');
+    expect(find.byKey(const Key('backup-joined-notice')), findsNothing);
+
+    await tester.tap(find.text('View'));
+    await tester.pumpAndSettle();
+    final top = tester.getTopLeft(section).dy;
+    expect(top, lessThan(600), reason: 'Backup & sync scrolled into view');
   });
 
   testWidgets('Backup & sync is absent on web', (tester) async {

@@ -2809,6 +2809,10 @@
   "@backupJoinedNotice": {
     "description": "One-time notice after pairing added this device to the group's cloud backup."
   },
+  "backupJoinedNoticeOpen": "View",
+  "@backupJoinedNoticeOpen": {
+    "description": "Action on the 'now backed up with your group' toast that shows the Backup & sync section."
+  },
   "backupJoinedNoticeDismiss": "Got it",
   "@backupJoinedNoticeDismiss": {
     "description": "Button that hides the one-time 'now backed up with your group' notice."
@@ -2940,7 +2944,7 @@
   "@backupKeySheetBody": {
     "description": "Explanation on the recovery key sheet."
   },
-  "backupKeyCopied": "Recovery key copied",
+  "backupKeyCopied": "Recovery key copied. Keep it somewhere safe, like a password manager.",
   "@backupKeyCopied": {
     "description": "Toast after copying the recovery key."
   },

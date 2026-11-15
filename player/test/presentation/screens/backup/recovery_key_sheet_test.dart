@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/backup/backup_relay_client.dart';
 import 'package:player/core/backup/recovery_key.dart';
@@ -106,6 +107,88 @@ void main() {
     expect(_confirm(tester).onPressed, isNull,
         reason: 'the new key has to be typed back again');
     expect(results, isEmpty);
+  });
+
+  testWidgets('a copied key is cleared from the clipboard on close',
+      (tester) async {
+    String? clipboard;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboard = (call.arguments as Map)['text'] as String?;
+      } else if (call.method == 'Clipboard.getData') {
+        return {'text': clipboard};
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final key = _key(3);
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: toastLayerBuilder,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            key: const Key('open'),
+            onPressed: () => showRecoveryKeySheet(context, key.display),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('open')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('recovery-key-copy')));
+    await tester.pump();
+    expect(clipboard, key.display);
+    expect(
+        find.text('Recovery key copied. Keep it somewhere safe, like a '
+            'password manager.'),
+        findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('recovery-key-done')));
+    await tester.pumpAndSettle();
+    expect(find.byType(RecoveryKeySheet), findsNothing);
+    // The clear goes through the platform channel's own async hops.
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump();
+    expect(clipboard, '');
+  });
+
+  testWidgets('a clipboard the viewer changed since is left alone',
+      (tester) async {
+    String? clipboard;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        clipboard = (call.arguments as Map)['text'] as String?;
+      } else if (call.method == 'Clipboard.getData') {
+        return {'text': clipboard};
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    final key = _key(4);
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: toastLayerBuilder,
+      home: Scaffold(body: RecoveryKeySheet.show(keyText: key.display)),
+    ));
+    await tester.tap(find.byKey(const Key('recovery-key-copy')));
+    await tester.pump();
+    clipboard = 'something else';
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    expect(clipboard, 'something else');
   });
 
   testWidgets('show mode only displays the key', (tester) async {

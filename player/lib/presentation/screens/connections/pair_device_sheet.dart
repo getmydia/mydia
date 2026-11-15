@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/backup/backup_providers.dart'
+    show backupSyncServiceProvider;
 import '../../../core/p2p/peer_sync_records.dart';
 import '../../../core/p2p/peer_sync_service.dart';
+import '../../../core/sources/sources_providers.dart' show isWebProvider;
 import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/glass/glass_sheet.dart';
@@ -28,24 +31,26 @@ const double _compactWidth = 600;
 
 /// Opens the pair device sheet: a bottom sheet on compact widths, otherwise a
 /// dialog around the same content.
+///
+/// [onOpenBackup] is the action of the one-time "now backed up with your
+/// group" notice a join can raise: it shows Backup & sync.
 Future<void> showPairDeviceSheet(
   BuildContext context, {
   required PairSheetMode mode,
+  VoidCallback? onOpenBackup,
 }) {
+  final sheet = PairDeviceSheet(mode: mode, onOpenBackup: onOpenBackup);
   if (MediaQuery.sizeOf(context).width < _compactWidth) {
     return showGlassSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => PairDeviceSheet(mode: mode),
+      builder: (_) => sheet,
     );
   }
   return showDialog<void>(
     context: context,
     builder: (_) => GlassDialog(
-      content: SizedBox(
-        width: 420,
-        child: PairDeviceSheet(mode: mode),
-      ),
+      content: SizedBox(width: 420, child: sheet),
     ),
   );
 }
@@ -84,9 +89,10 @@ class PairingQrCode extends StatelessWidget {
 }
 
 class PairDeviceSheet extends ConsumerStatefulWidget {
-  const PairDeviceSheet({super.key, required this.mode});
+  const PairDeviceSheet({super.key, required this.mode, this.onOpenBackup});
 
   final PairSheetMode mode;
+  final VoidCallback? onOpenBackup;
 
   @override
   ConsumerState<PairDeviceSheet> createState() => _PairDeviceSheetState();
@@ -153,6 +159,7 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
   /// of the group it just joined.
   void _announceJoined() {
     if (!mounted) return;
+    if (_announceBackupJoined()) return;
     final newest = ref
         .read(peerGroupRosterProvider)
         .activeMembers()
@@ -161,6 +168,32 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
             (latest, m) =>
                 latest == null || m.updatedAt > latest.updatedAt ? m : latest);
     _announcePaired(newest?.deviceName);
+  }
+
+  /// When the join also put this device in the group's cloud backup, says
+  /// so (one toast replaces the other, and this one implies the pairing),
+  /// with an action to Backup & sync, and marks the notice seen. The banner
+  /// in Backup & sync covers a toast that never showed.
+  bool _announceBackupJoined() {
+    if (ref.read(isWebProvider)) return false;
+    final backup = ref.read(backupSyncServiceProvider);
+    if (!backup.showJoinedNotice || _announced) return false;
+    _announced = true;
+    final l10n = context.l10n;
+    final open = widget.onOpenBackup;
+    showToast(
+      context,
+      l10n.backupJoinedNotice,
+      kind: ToastKind.success,
+      action: open == null
+          ? null
+          : ToastAction(label: l10n.backupJoinedNoticeOpen, onPressed: open),
+    );
+    backup.acknowledgeJoinedNotice();
+    if (ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.of(context).maybePop();
+    }
+    return true;
   }
 
   String _formatCode(String raw) {

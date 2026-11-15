@@ -52,6 +52,7 @@ class ConnectionsHubBody extends ConsumerStatefulWidget {
 
 class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
   final _devicesKey = GlobalKey();
+  final _backupKey = GlobalKey();
 
   /// A devices scroll asked for while the servers were still loading: their
   /// cards arrive later and push the devices back down, so it runs again
@@ -80,9 +81,15 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
     _scrollToDevicesAfterFrame();
   }
 
-  void _scrollToDevicesAfterFrame() {
+  void _scrollToDevicesAfterFrame() => _scrollToAfterFrame(_devicesKey);
+
+  /// Shows Backup & sync: the action of the "now backed up with your group"
+  /// notice a pairing can raise.
+  void _scrollToBackup() => _scrollToAfterFrame(_backupKey);
+
+  void _scrollToAfterFrame(GlobalKey key) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final target = _devicesKey.currentContext;
+      final target = key.currentContext;
       if (!mounted || target == null) return;
       Scrollable.ensureVisible(
         target,
@@ -179,10 +186,12 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
                   ],
                   HubPairCta(
                     key: const Key('connections-pair-cta'),
-                    onShowCode: () =>
-                        showPairDeviceSheet(context, mode: PairSheetMode.show),
-                    onEnterCode: () =>
-                        showPairDeviceSheet(context, mode: PairSheetMode.enter),
+                    onShowCode: () => showPairDeviceSheet(context,
+                        mode: PairSheetMode.show,
+                        onOpenBackup: _scrollToBackup),
+                    onEnterCode: () => showPairDeviceSheet(context,
+                        mode: PairSheetMode.enter,
+                        onOpenBackup: _scrollToBackup),
                   ),
                 ],
               ),
@@ -193,7 +202,11 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
               // The web player has no cloud backup.
               if (!ref.watch(isWebProvider)) ...[
                 const SizedBox(height: _sectionGap),
-                const BackupSection(key: Key('connections-backup-section')),
+                KeyedSubtree(
+                  key: _backupKey,
+                  child: const BackupSection(
+                      key: Key('connections-backup-section')),
+                ),
               ],
             ],
           ),

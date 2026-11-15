@@ -47,9 +47,23 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     if (_service.pendingVaultChoice.value == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _service.pendingVaultChoice.value != null) {
-        showVaultChoiceDialog(context, _service);
+        _openVaultChoice();
       }
     });
+  }
+
+  /// Set while the vault choice dialog is up, so a second change of the
+  /// choice (or the row's button) does not stack another.
+  bool _vaultChoiceOpen = false;
+
+  Future<void> _openVaultChoice() async {
+    if (_vaultChoiceOpen) return;
+    _vaultChoiceOpen = true;
+    try {
+      await showVaultChoiceDialog(context, _service);
+    } finally {
+      _vaultChoiceOpen = false;
+    }
   }
 
   Future<bool> _confirm({
@@ -200,7 +214,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                       text: l10n.backupVaultChoicePending,
                       action: TextButton(
                         key: const Key('backup-vault-choice-open'),
-                        onPressed: () => showVaultChoiceDialog(context, s),
+                        onPressed: _openVaultChoice,
                         child: Text(l10n.backupVaultChoiceOpen),
                       ),
                     ),
