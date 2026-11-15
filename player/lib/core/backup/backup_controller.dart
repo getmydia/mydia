@@ -404,7 +404,8 @@ class BackupController {
   /// moved stub naming [to] (and lose every other device's backup when
   /// [deleteOld]). A failure leaving the old store is rethrown with [to]
   /// already active: the backup lives there, and the old store just never
-  /// learned of the move.
+  /// learned of the move. It still stops syncing (a relay vault goes
+  /// dormant), so switching back to it works as after a clean leave.
   ///
   /// The relay resumes its dormant vault when there is one, else creates a
   /// vault with [relayKey], which the caller made with

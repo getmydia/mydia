@@ -561,6 +561,107 @@ void main() {
     expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
   });
 
+  test('failed_stub_write_detaches_old_relay_and_marks_dormant', () async {
+    final a = net.device('Living Room TV');
+    await a.enableRelayDirectly();
+    final vaultId = (await a.vault())!.vaultId;
+    final c = a.restart();
+    await c.start();
+    await _settled(c);
+    net.relay.available = false;
+
+    await expectLater(c.switchTo(BackupStoreKind.gdrive, deleteOld: false),
+        throwsA(isA<BackupRelayException>()));
+    net.relay.available = true;
+
+    expect(c.active.value, BackupStoreKind.gdrive);
+    // The old vault stops syncing and is dormant on disk, as a successful
+    // leave leaves it (only the stub is missing).
+    expect(a.relay.enabled, isFalse);
+    expect(a.relay.dormant, isTrue);
+    expect(a.relay.status.value, isA<BackupOff>());
+    expect((await a.vault())?.vaultId, vaultId);
+    // A host-side pairing no longer adds joiners to it.
+    final joiner = await BackupIdentity.loadOrCreate(MockAuthStorage());
+    expect(
+        await a.relay.addMemberForPair(
+            await joiner.signerPublicB64(), await joiner.boxPublicB64()),
+        isNull);
+    final before = net.relay.requests.length;
+    await a.watch('tmdb:movie:7');
+    a.relay.markDirty();
+    await a.relay.flush();
+    await a.relay.poll();
+    expect(net.relay.requests.length, before, reason: 'no relay sync');
+
+    // A restart does not wake it.
+    final again = a.restart();
+    await again.start();
+    await _settled(again);
+    expect(a.relay.enabled, isFalse);
+    expect(net.relay.requests.length, before);
+
+    // Switching back resumes the same vault, no new recovery key needed.
+    await again.switchTo(BackupStoreKind.relay, deleteOld: false);
+    expect(again.active.value, BackupStoreKind.relay);
+    expect(a.relay.enabled, isTrue);
+    expect(a.relay.dormant, isFalse);
+    expect((await a.vault())!.vaultId, vaultId);
+  });
+
+  test('failed_stub_write_detaches_old_cloud_and_switch_back_works', () async {
+    final a = net.device('Living Room TV');
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+    await _settled(a.controller);
+    final drive = a.controller.cloud(BackupStoreKind.gdrive);
+    a.backends[BackupStoreKind.gdrive]!
+        .failNext(const BackupRelayException(BackupRelayError.server));
+
+    await expectLater(
+        a.controller.switchTo(BackupStoreKind.icloud, deleteOld: false),
+        throwsA(isA<BackupRelayException>()));
+
+    expect(a.controller.active.value, BackupStoreKind.icloud);
+    expect(drive.enabled, isFalse);
+    expect(drive.status.value, isA<BackupOff>());
+    final slot = await a.slotId();
+    final writes = net.stores[BackupStoreKind.gdrive]!.writes[slot];
+    await a.watch('tmdb:movie:8');
+    drive.markDirty();
+    await drive.poll();
+    expect(net.stores[BackupStoreKind.gdrive]!.writes[slot], writes,
+        reason: 'the old store does not sync');
+
+    await a.controller.switchTo(BackupStoreKind.gdrive, deleteOld: false);
+    expect(a.controller.active.value, BackupStoreKind.gdrive);
+    expect(drive.enabled, isTrue);
+    expect(a.controller.cloud(BackupStoreKind.icloud).enabled, isFalse);
+  });
+
+  test('reconnect_after_pause_resumes_sync', () async {
+    final a = net.device('Living Room TV');
+    await a.controller.ready;
+    await a.controller.enableCloud(BackupStoreKind.gdrive);
+    final drive = a.controller.cloud(BackupStoreKind.gdrive);
+    await drive.settled();
+    final slot = await a.slotId();
+    final store = net.stores[BackupStoreKind.gdrive]!;
+
+    await drive.pauseSync();
+    final writes = store.writes[slot];
+    await a.watch('tmdb:movie:9');
+    drive.markDirty();
+    await drive.flush();
+    expect(store.writes[slot], writes, reason: 'paused');
+
+    await drive.reconnect();
+    await a.watch('tmdb:movie:10');
+    drive.markDirty();
+    await drive.flush();
+    expect(store.writes[slot], greaterThan(writes ?? 0));
+  });
+
   test('init_failure_with_relay_vault_still_forwards_triggers', () async {
     final a = net.device('Living Room TV');
     await a.enableRelayDirectly();

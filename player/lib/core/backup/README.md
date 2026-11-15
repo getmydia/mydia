@@ -102,7 +102,10 @@ as a stub carrying `movedTo`, offers to delete the old backup (deleting keeps
 this device's stub so other devices still see where it went), then starts the
 new store and uploads. A device reading another's stub shows "{device} moved
 backup to Google Drive" with a Switch button. The new store comes up before
-the old one is left, so a failed sign-in leaves the old store active.
+the old one is left, so a failed sign-in leaves the old store active. If
+writing the stub fails after that, the new store stays active and the old one
+is still left (a relay vault goes dormant), so it never syncs in the
+background and switching back to it works; only the stub is missing.
 
 Removing a device deletes its slot. That is cleanup, not revocation: a device
 still signed in writes its slot again on its next upload.

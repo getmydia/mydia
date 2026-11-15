@@ -243,8 +243,13 @@ class CloudBackupService {
   /// was: the device names and offers kept in the meta store are by then
   /// the new store's, and only this store's own merged versions, cursor and
   /// upload time are forgotten.
-  Future<void> switchAway(String to, {required bool deleteOld}) =>
-      _userOp(() async {
+  ///
+  /// When the stub (or a delete) fails, this store is still left before the
+  /// error is rethrown: the backup already lives in [to], so this one must
+  /// not keep syncing, and switching back must find it off.
+  Future<void> switchAway(String to, {required bool deleteOld}) async {
+    try {
+      await _userOp(() async {
         if (!enabled) throw StateError('backup is off');
         await _transport.writeOwn(BackupPayload(
           deviceName: await _deviceName(),
@@ -256,6 +261,14 @@ class CloudBackupService {
         if (deleteOld) await _deleteAll(keepOwn: true);
         await _leave(forgetShared: false);
       });
+    } catch (e) {
+      debugPrint('[Backup] Leaving ${kind.name} failed: ${e.runtimeType}');
+      await _engine.serialise(() async {
+        if (enabled) await _leave(forgetShared: false);
+      });
+      rethrow;
+    }
+  }
 
   /// Stops syncing and forgets the account's credentials on this device.
   /// The slots stay in the store.

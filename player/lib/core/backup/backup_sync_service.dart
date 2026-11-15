@@ -486,8 +486,15 @@ class BackupSyncService {
   /// disk, [dormant], and this device stays a member, so the stub stays
   /// readable to the others. [deleteOld] deletes the vault for every member
   /// instead, as [deleteBackup] does. The caller enables the new store.
-  Future<void> switchAway(String to, {required bool deleteOld}) =>
-      _userOp(() async {
+  ///
+  /// When the stub (or the delete) fails, the vault still goes [dormant]
+  /// and this device stops syncing with it before the error is rethrown:
+  /// the backup already lives in the new store, so the vault must not keep
+  /// syncing, take pairing joiners, or answer "already on" when the viewer
+  /// switches back (which resumes it as any dormant vault).
+  Future<void> switchAway(String to, {required bool deleteOld}) async {
+    try {
+      await _userOp(() async {
         final (state, identity) = _require();
         if (deleteOld) {
           await _ignoreGone(
@@ -501,15 +508,33 @@ class BackupSyncService {
           records: const [],
           movedTo: to,
         ));
-        await _meta.setRelayDormant(true);
-        await _detach();
-        _stored = null;
-        _setMismatch(false);
-        _publishUnsavedKey();
-        _setMembers(const []);
-        _setChoice(null);
-        _set(const BackupOff());
+        await _goDormant();
       });
+    } catch (e) {
+      debugPrint('[Backup] Leaving the relay failed: ${e.runtimeType}');
+      await _engine.serialise(() async {
+        if (_state != null || _transport != null) await _goDormant();
+      });
+      rethrow;
+    }
+  }
+
+  /// Keeps the vault state on disk, [dormant], and stops syncing with it.
+  Future<void> _goDormant() async {
+    try {
+      await _meta.setRelayDormant(true);
+    } catch (e) {
+      debugPrint('[Backup] Could not mark the vault dormant: ${e.runtimeType}');
+    }
+    await _detach();
+    _engine.halted = false;
+    _stored = null;
+    _setMismatch(false);
+    _publishUnsavedKey();
+    _setMembers(const []);
+    _setChoice(null);
+    _set(const BackupOff());
+  }
 
   /// Whether the vault on disk is dormant (see [switchAway]).
   bool get dormant => _meta.relayDormant;

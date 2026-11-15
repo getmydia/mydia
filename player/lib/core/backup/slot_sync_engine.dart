@@ -618,12 +618,16 @@ class SlotSyncEngine {
 
   /// Lifts a [halt] or a signed-out or unreachable halt after the user fixed
   /// the cause (Reconnect): idle again, polling restarted. Does not poll.
+  /// A user action outranks a [pause]: it is lifted too, so an engine left
+  /// paused never stays silent after Reconnect.
   void resume() {
     if (_transport == null) return;
     halted = false;
+    _paused = false;
     _failures = 0;
-    _set(BackupIdle(_lastSuccessMs));
+    idle();
     ensurePolling();
+    if (_dirty) markDirty();
   }
 
   /// Idle, unless an oversize upload is still being reported.
@@ -635,9 +639,12 @@ class SlotSyncEngine {
   void setStatus(BackupStatus s) => _set(s);
 
   /// Restarts the periodic poll when attached and it is not running (after
-  /// a user action lifted [halt]).
+  /// a user action lifted [halt]). A paused engine stays quiet until
+  /// [unpause] or [resume].
   void ensurePolling() {
-    if (_transport != null && _pollTimer == null) _startPolling();
+    if (_transport != null && !_paused && _pollTimer == null) {
+      _startPolling();
+    }
   }
 
   SlotTransport _require() {
