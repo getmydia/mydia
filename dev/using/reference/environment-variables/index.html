@@ -4476,6 +4476,11 @@ blank value counts as unset.</p>
 <td>Port of the built-in client's HTTP API on <code>127.0.0.1</code>. Change it when something else on the host uses 3030.</td>
 </tr>
 <tr>
+<td><code>MYDIA_TORRENT_MIN_FREE_SPACE_GB</code></td>
+<td><code>5</code></td>
+<td>Free space, in GB, the built-in client keeps on the download volume. Grabs that would leave less are refused and downloads pause below it. <code>0</code> turns this off.</td>
+</tr>
+<tr>
 <td><code>MYDIA_TORRENT_SEED_RATIO</code></td>
 <td>unset</td>
 <td>Seed each torrent until it reaches this share ratio (0 or more). Combined with the seed time, whichever comes first counts. A tracker's own minimum has to be met as well.</td>
