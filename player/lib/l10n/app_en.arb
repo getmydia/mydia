@@ -2751,5 +2751,326 @@
   "connectionsLeaveGroup": "Leave sync group",
   "@connectionsLeaveGroup": {
     "description": "Footer link on the Servers & devices screen that stops syncing watch progress with the paired devices, after a confirmation."
+  },
+  "backupSectionTitle": "Backup & sync",
+  "@backupSectionTitle": {
+    "description": "Header of the end-to-end encrypted cloud backup section on the Servers & devices screen."
+  },
+  "backupSectionHint": "Encrypted on this device. Only your devices and your recovery key can read it.",
+  "@backupSectionHint": {
+    "description": "Hint under the Backup & sync header explaining who can read the cloud backup."
+  },
+  "backupSwitchLabel": "Back up to the cloud",
+  "@backupSwitchLabel": {
+    "description": "Label of the switch that turns the encrypted cloud backup on or off for this device."
+  },
+  "backupUnavailable": "Cloud backup isn't available yet",
+  "@backupUnavailable": {
+    "description": "Shown in place of the backup switch when the backup service does not support backups yet."
+  },
+  "backupStatusLastBackedUp": "Last backed up {ago}",
+  "@backupStatusLastBackedUp": {
+    "description": "Backup status line. ago is a relative time such as '3 minutes ago'.",
+    "placeholders": {
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "backupStatusNever": "Not backed up yet",
+  "@backupStatusNever": {
+    "description": "Backup status line, or a device's line in the backup device list, before its first upload."
+  },
+  "backupStatusUploading": "Backing up…",
+  "@backupStatusUploading": {
+    "description": "Backup status line while this device's backup is uploading."
+  },
+  "backupErrorNetwork": "Can't reach the backup service. It will try again.",
+  "@backupErrorNetwork": {
+    "description": "Backup status line when the backup service could not be reached."
+  },
+  "backupErrorRateLimited": "Too many backups in the last hour. It will try again later.",
+  "@backupErrorRateLimited": {
+    "description": "Backup status line when the backup service refused uploads for a while."
+  },
+  "backupErrorTooLarge": "This device's backup is over the 4 MB limit.",
+  "@backupErrorTooLarge": {
+    "description": "Backup status line when this device's backup is larger than the service accepts."
+  },
+  "backupErrorGeneric": "The last backup didn't go through. It will try again.",
+  "@backupErrorGeneric": {
+    "description": "Backup status line after any other backup failure."
+  },
+  "backupRemoved": "This device was removed from the backup. Its data is still here.",
+  "@backupRemoved": {
+    "description": "Shown when another device removed this one from the cloud backup or deleted the backup."
+  },
+  "backupJoinedNotice": "This device is now backed up with your group",
+  "@backupJoinedNotice": {
+    "description": "One-time notice after pairing added this device to the group's cloud backup."
+  },
+  "backupJoinedNoticeDismiss": "Got it",
+  "@backupJoinedNoticeDismiss": {
+    "description": "Button that hides the one-time 'now backed up with your group' notice."
+  },
+  "backupUnreadable": "Couldn't read {device}'s backup",
+  "@backupUnreadable": {
+    "description": "Shown when another device's part of the backup could not be opened. device is that device's name.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupUnknownDevice": "Another device",
+  "@backupUnknownDevice": {
+    "description": "Stands for a device in the backup whose name is not known yet."
+  },
+  "backupThisDevice": "This device",
+  "@backupThisDevice": {
+    "description": "Marks this device in the list of devices in the backup."
+  },
+  "backupMemberLastUpload": "Backed up {ago}",
+  "@backupMemberLastUpload": {
+    "description": "A device's line in the backup device list. ago is a relative time such as '3 minutes ago'.",
+    "placeholders": {
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRemoveMemberTitle": "Remove {device} from the backup?",
+  "@backupRemoveMemberTitle": {
+    "description": "Title of the confirmation before removing another device from the cloud backup.",
+    "placeholders": {
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRemoveMemberBody": "It stops backing up and can no longer read the backup. What it already has stays on it.",
+  "@backupRemoveMemberBody": {
+    "description": "Body of the confirmation before removing another device from the cloud backup."
+  },
+  "backupShowRecoveryKey": "Show recovery key",
+  "@backupShowRecoveryKey": {
+    "description": "Button that shows the backup recovery key again."
+  },
+  "backupRegenerateKey": "Generate a new recovery key",
+  "@backupRegenerateKey": {
+    "description": "Button that replaces the backup recovery key."
+  },
+  "backupRegenerateConfirmTitle": "Generate a new recovery key?",
+  "@backupRegenerateConfirmTitle": {
+    "description": "Title of the confirmation before replacing the backup recovery key."
+  },
+  "backupRegenerateConfirmBody": "The old key stops working at once. Save the new one before you close it.",
+  "@backupRegenerateConfirmBody": {
+    "description": "Body of the confirmation before replacing the backup recovery key."
+  },
+  "backupNoKeyOnDevice": "This device joined by pairing, so it doesn't hold the recovery key. If you lost it, generate a new one here.",
+  "@backupNoKeyOnDevice": {
+    "description": "Shown instead of 'Show recovery key' on a device that joined the backup by pairing."
+  },
+  "backupKeyMismatch": "The recovery key on this device no longer works. It was replaced on another device.",
+  "@backupKeyMismatch": {
+    "description": "Warning that the recovery key this device keeps is no longer the backup's key."
+  },
+  "backupDelete": "Delete cloud backup",
+  "@backupDelete": {
+    "description": "Button that deletes the cloud backup for every device."
+  },
+  "backupDeleteConfirmTitle": "Delete the cloud backup?",
+  "@backupDeleteConfirmTitle": {
+    "description": "Title of the confirmation before deleting the cloud backup."
+  },
+  "backupDeleteConfirmBody": "Every device stops backing up and the backup is deleted from the server. The data on your devices stays.",
+  "@backupDeleteConfirmBody": {
+    "description": "Body of the confirmation before deleting the cloud backup."
+  },
+  "backupTurnOffTitle": "Turn off backup on this device?",
+  "@backupTurnOffTitle": {
+    "description": "Title of the confirmation before turning the cloud backup off on this device."
+  },
+  "backupTurnOffBody": "This device leaves the backup. Your other devices keep it, and the data on this device stays.",
+  "@backupTurnOffBody": {
+    "description": "Body of the confirmation before turning the cloud backup off on this device."
+  },
+  "backupTurnOff": "Turn off",
+  "@backupTurnOff": {
+    "description": "Confirm button that turns the cloud backup off on this device."
+  },
+  "backupIdleNotice": "A backup that goes 180 days without a change is deleted.",
+  "@backupIdleNotice": {
+    "description": "Note in the Backup & sync section about the backup service's retention."
+  },
+  "backupActionFailed": "Couldn't update the backup. Try again.",
+  "@backupActionFailed": {
+    "description": "Toast when a backup action (remove a device, new key, delete, turn off) failed."
+  },
+  "backupVaultChoiceTitle": "Which backup should this device keep?",
+  "@backupVaultChoiceTitle": {
+    "description": "Title of the dialog shown when a device that already had its own backup joins a group with another one."
+  },
+  "backupVaultChoiceBody": "This device had its own backup when it joined your group. Its data stays on it either way.",
+  "@backupVaultChoiceBody": {
+    "description": "Body of the dialog that asks which of two backups this device keeps."
+  },
+  "backupVaultChoiceKeepCurrent": "Keep this device's backup",
+  "@backupVaultChoiceKeepCurrent": {
+    "description": "Choice that keeps the backup this device already had."
+  },
+  "backupVaultChoiceSwitch": "Switch to the group's backup",
+  "@backupVaultChoiceSwitch": {
+    "description": "Choice that moves this device into its group's backup."
+  },
+  "backupVaultChoicePending": "This device is in two backups",
+  "@backupVaultChoicePending": {
+    "description": "Row in Backup & sync while the viewer has not chosen which backup to keep."
+  },
+  "backupVaultChoiceOpen": "Choose",
+  "@backupVaultChoiceOpen": {
+    "description": "Button that opens the dialog asking which backup to keep."
+  },
+  "backupKeySheetTitle": "Your recovery key",
+  "@backupKeySheetTitle": {
+    "description": "Title of the sheet that shows the backup recovery key."
+  },
+  "backupKeySheetBody": "Anyone with this key can read your backup. Keep it somewhere safe, away from this device. You need it to restore on a new install.",
+  "@backupKeySheetBody": {
+    "description": "Explanation on the recovery key sheet."
+  },
+  "backupKeyCopied": "Recovery key copied",
+  "@backupKeyCopied": {
+    "description": "Toast after copying the recovery key."
+  },
+  "backupKeySave": "Save as file",
+  "@backupKeySave": {
+    "description": "Button that saves the recovery key to a text file, for printing or storing."
+  },
+  "backupKeyFileName": "mydia-recovery-key.txt",
+  "@backupKeyFileName": {
+    "description": "Suggested file name when saving the recovery key."
+  },
+  "backupKeyConfirmPrompt": "Type group {number} to show you saved it",
+  "@backupKeyConfirmPrompt": {
+    "description": "Asks the viewer to type back one group of the recovery key. number counts the groups from 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "backupKeyConfirmLabel": "Group {number}",
+  "@backupKeyConfirmLabel": {
+    "description": "Label of the field where one group of the recovery key is typed back.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "backupKeyConfirmButton": "Turn on backup",
+  "@backupKeyConfirmButton": {
+    "description": "Button that turns the backup on once a group of the recovery key was typed back."
+  },
+  "backupEnableFailedNewKey": "Backup didn't turn on. This is a new key: save it before you try again.",
+  "@backupEnableFailedNewKey": {
+    "description": "Shown on the recovery key sheet after turning backup on failed and a new key was made."
+  },
+  "backupRestoreTitle": "Restore from backup",
+  "@backupRestoreTitle": {
+    "description": "Title of the restore screen, and of the entries on the add-server screens that open it."
+  },
+  "backupRestoreSubtitle": "Bring back your servers and watch history with your recovery key",
+  "@backupRestoreSubtitle": {
+    "description": "Subtitle of the 'Restore from backup' entry on the add-server screen."
+  },
+  "backupRestoreIntro": "Enter the recovery key you saved when you turned on backup.",
+  "@backupRestoreIntro": {
+    "description": "Explanation at the top of the restore screen."
+  },
+  "backupRestoreKeyLabel": "Recovery key",
+  "@backupRestoreKeyLabel": {
+    "description": "Label of the field where the recovery key is entered."
+  },
+  "backupRestoreScan": "Scan QR code",
+  "@backupRestoreScan": {
+    "description": "Button that scans the recovery key's QR code with the camera."
+  },
+  "backupRestoreFind": "Find backup",
+  "@backupRestoreFind": {
+    "description": "Button that looks up the backup for the entered recovery key."
+  },
+  "backupRestoreMalformed": "That isn't a recovery key. It has 52 letters and digits in groups of four.",
+  "@backupRestoreMalformed": {
+    "description": "Error under the recovery key field when the text is not a recovery key."
+  },
+  "backupRestoreNotFound": "No backup matches this key",
+  "@backupRestoreNotFound": {
+    "description": "Error when no backup exists for the entered recovery key."
+  },
+  "backupRestoreSummary": "{sources, plural, one{{sources} source} other{{sources} sources}}, {records, plural, one{{records} watch record} other{{records} watch records}}, from {devices, plural, one{{devices} device} other{{devices} devices}}",
+  "@backupRestoreSummary": {
+    "description": "What a restore would bring back, shown before confirming.",
+    "placeholders": {
+      "sources": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "records": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "devices": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "backupRestoreUnreadableCount": "{count, plural, one{One device's backup couldn't be read and is skipped.} other{{count} devices' backups couldn't be read and are skipped.}}",
+  "@backupRestoreUnreadableCount": {
+    "description": "Shown in the restore summary when some devices' parts of the backup could not be opened.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreMergeNote": "It is merged with what is already on this device, and this device joins the backup and your sync group.",
+  "@backupRestoreMergeNote": {
+    "description": "Explains what confirming a restore does."
+  },
+  "backupRestoreConfirm": "Restore",
+  "@backupRestoreConfirm": {
+    "description": "Button that confirms a restore from backup."
+  },
+  "backupRestoreDone": "Backup restored",
+  "@backupRestoreDone": {
+    "description": "Toast after a restore from backup finished."
+  },
+  "backupRestoreFailed": "Couldn't restore the backup. Try again.",
+  "@backupRestoreFailed": {
+    "description": "Error when finding or restoring a backup failed for another reason."
+  },
+  "backupRestoreAlreadyOn": "This device is already in a backup. Turn backup off in Servers & devices to restore another one.",
+  "@backupRestoreAlreadyOn": {
+    "description": "Shown on the restore screen when this device already has backup on."
+  },
+  "backupPendingSources": "{count, plural, one{{count} source added on {device}} other{{count} sources added on {device}}}",
+  "@backupPendingSources": {
+    "description": "Row offering servers another device backed up. device is that device's name.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "device": {
+        "type": "String"
+      }
+    }
+  },
+  "backupPendingAdd": "Add",
+  "@backupPendingAdd": {
+    "description": "Button that adds the servers another device backed up."
   }
 }

@@ -9,6 +9,7 @@ import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/files/experimental_badge.dart';
+import '../backup/restore_backup_screen.dart' show restoreBackupLocation;
 import 'add_folder_screen.dart' show localFoldersSupported;
 
 class AddSourceScreen extends ConsumerWidget {
@@ -97,6 +98,16 @@ class AddSourceScreen extends ConsumerWidget {
                 }),
                 onTap: () => context.push('/sources/add/mydia'),
               ),
+              if (!isWeb) ...[
+                const Divider(height: 24),
+                ListTile(
+                  key: const Key('add-source-restore'),
+                  leading: const Icon(Icons.settings_backup_restore_rounded),
+                  title: Text(context.l10n.backupRestoreTitle),
+                  subtitle: Text(context.l10n.backupRestoreSubtitle),
+                  onTap: () => context.push(restoreBackupLocation),
+                ),
+              ],
             ],
           ),
         ),

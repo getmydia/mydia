@@ -57,7 +57,7 @@ enum _PairingFailure { offer, pairing }
 /// Whether `mobile_scanner` can scan on this platform: Android, iOS and
 /// macOS. The web build cannot open the scanner and the Windows and Linux
 /// ones have no camera plugin for it.
-bool get _scanSupported =>
+bool get qrScanSupported =>
     !kIsWeb &&
     const {
       TargetPlatform.android,
@@ -216,7 +216,7 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
   }
 
   Future<void> _handleScanQr() async {
-    if (!_scanSupported) return;
+    if (!qrScanSupported) return;
     var detected = false;
     await showGlassSheet<void>(
       context: context,
@@ -420,7 +420,7 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
           ),
         ],
       ),
-      if (_scanSupported) ...[
+      if (qrScanSupported) ...[
         const SizedBox(height: 8),
         OutlinedButton.icon(
           key: const Key('pair-scan-qr-button'),
