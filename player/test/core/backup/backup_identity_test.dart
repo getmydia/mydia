@@ -88,6 +88,26 @@ void main() {
     setUp(NativeAuthStorage.resetForTest);
     tearDown(NativeAuthStorage.resetForTest);
 
+    test('two_storage_instances_over_one_keychain_create_one_identity',
+        () async {
+      // Production builds a new NativeAuthStorage per getAuthStorage() call,
+      // so the relay service and a cloud service load through different
+      // instances over the same keychain.
+      final backend = _FlakyReadBackend();
+      final results = await Future.wait([
+        BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
+        BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
+      ]);
+      expect(results[1].slotId, results[0].slotId);
+      expect(backend.identityWrites, 1);
+    });
+
+    test('default native instances share one backing keychain', () {
+      expect(
+          identical(NativeAuthStorage().backing, NativeAuthStorage().backing),
+          isTrue);
+    });
+
     test('a failed read throws and does not replace the stored identity',
         () async {
       final backend = _FlakyReadBackend();
@@ -115,6 +135,7 @@ void main() {
 class _FlakyReadBackend implements SecretBackend {
   final data = <String, String>{};
   bool failReads = false;
+  int identityWrites = 0;
 
   @override
   Future<String?> read(String key) async {
@@ -123,7 +144,10 @@ class _FlakyReadBackend implements SecretBackend {
   }
 
   @override
-  Future<void> write(String key, String value) async => data[key] = value;
+  Future<void> write(String key, String value) async {
+    if (key == BackupIdentity.storageKey) identityWrites++;
+    data[key] = value;
+  }
 
   @override
   Future<void> delete(String key) async => data.remove(key);
