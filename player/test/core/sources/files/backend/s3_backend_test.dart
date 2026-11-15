@@ -504,6 +504,49 @@ void main() {
           's3+https://[fe80::1]:9000/bkt/?region=r&style=path');
     });
 
+    test('a prefix round-trips exactly: literal %XX and interior //', () {
+      for (final prefix in [
+        'a%20b/',
+        'My%20Movies/',
+        '100%/',
+        'media//Shows/',
+        'a//b//c/',
+        'a b+c&d/',
+      ]) {
+        final l = S3Location(
+          endpoint: Uri.parse('https://h'),
+          bucket: 'bkt',
+          prefix: prefix,
+          region: 'r',
+          style: S3Style.path,
+        );
+        final back = S3Location.fromConnectionUri(l.toConnectionUri())!;
+        expect(back.bucket, 'bkt', reason: prefix);
+        expect(back.prefix, prefix, reason: prefix);
+        // Parsing the stored string gives the same location.
+        final stored = S3Location.fromConnectionUri(
+            Uri.parse(l.toConnectionUri().toString()))!;
+        expect(stored.prefix, prefix, reason: prefix);
+      }
+    });
+
+    test('leading and trailing slashes of a prefix are the only rewrite', () {
+      String prefixOf(String typed) => S3Location.fromConnectionUri(S3Location(
+            endpoint: Uri.parse('https://h'),
+            bucket: 'bkt',
+            prefix: typed,
+            region: 'r',
+            style: S3Style.path,
+          ).toConnectionUri())!
+              .prefix;
+      expect(prefixOf('/media/'), 'media/');
+      expect(prefixOf('//media'), 'media/');
+      expect(prefixOf('media//'), 'media/');
+      expect(prefixOf('/a//b/'), 'a//b/');
+      expect(prefixOf('/'), '');
+      expect(prefixOf(''), '');
+    });
+
     test('an empty prefix stays empty', () {
       final l = S3Location.fromConnectionUri(
           Uri.parse('s3+https://h/bkt?region=r&style=path'))!;

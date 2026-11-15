@@ -42,11 +42,14 @@ class S3Location {
   final S3Style style;
 
   /// `s3+<scheme>://<host>[:port]/<bucket>/<prefix>?region=<r>&style=<s>`.
+  ///
+  /// Built from path segments, so a literal `%` in a key is sent as `%25`
+  /// and a prefix such as `a%20b/` reads back as itself, not as `a b/`.
   Uri toConnectionUri() => Uri(
         scheme: 's3+${endpoint.scheme}',
         host: endpoint.host,
         port: endpoint.hasPort ? endpoint.port : null,
-        path: '/$bucket/$prefix',
+        pathSegments: [...bucket.split('/'), ...prefix.split('/')],
         queryParameters: {'region': region, 'style': style.name},
       );
 
@@ -66,9 +69,16 @@ class S3Location {
         .firstOrNull;
     if (style == null) return null;
 
-    final segments = u.pathSegments.where((s) => s.isNotEmpty).toList();
+    // The first non-empty segment is the bucket. The rest is the prefix, in
+    // which only leading and trailing slashes are rewritten: keys are case
+    // sensitive and may hold `//`, so `a//b/` is not `a/b/`.
+    final segments = u.pathSegments.skipWhile((s) => s.isEmpty).toList();
     if (segments.isEmpty) return null;
-    final rest = segments.skip(1).join('/');
+    final rest = segments
+        .skip(1)
+        .skipWhile((s) => s.isEmpty)
+        .join('/')
+        .replaceFirst(RegExp(r'/+$'), '');
     return S3Location(
       endpoint: Uri(
         scheme: scheme,

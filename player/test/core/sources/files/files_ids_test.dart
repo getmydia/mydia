@@ -76,6 +76,32 @@ void main() {
       expect(a, 's3+https://h.example.com/bkt/media/?region=r&style=path');
     });
 
+    test('interior_slashes_and_escapes_in_a_prefix_are_kept', () {
+      // Only leading and trailing slashes are rewritten: `a//b/` and
+      // `a%20b/` are other keys than `a/b/` and `a b/`.
+      expect(norm('s3+https://h.example.com/bkt/a//b/?region=r&style=path'),
+          's3+https://h.example.com/bkt/a//b/?region=r&style=path');
+      expect(norm('s3+https://h.example.com/bkt/a//b/?region=r&style=path'),
+          isNot(norm('s3+https://h.example.com/bkt/a/b/?region=r&style=path')));
+      expect(
+          norm('s3+https://h.example.com/bkt/a%2520b/?region=r&style=path'),
+          isNot(
+              norm('s3+https://h.example.com/bkt/a%20b/?region=r&style=path')));
+    });
+
+    test('ids_of_canonical_connections_are_unchanged', () {
+      // Pinned: changing how a connection is built must not move an
+      // account to a new id.
+      expect(
+          s3AccountId(Uri.parse(
+              's3+https://h.example.com/bkt/media/?region=r&style=path')),
+          '3cdf2ebf66c8be1d6');
+      expect(
+          normalizeS3Url(Uri.parse(
+              's3+http://minio.lan:9000/bkt/My%20Films/TV/?style=vhost&region=r')),
+          's3+http://minio.lan:9000/bkt/My%20Films/TV/?region=r&style=vhost');
+    });
+
     test('keys_are_case_sensitive', () {
       expect(
           norm('s3+https://h.example.com/bkt/Media/?region=r&style=path'),

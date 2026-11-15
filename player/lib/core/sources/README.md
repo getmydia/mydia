@@ -794,8 +794,10 @@ connection is `s3+<http|https>://<host>[:port]/<bucket>/<prefix>?region=<r>&styl
 account and server id is `3` + the first 16 hex characters of the SHA-256 of
 `normalizeS3Url`: scheme and host lowercased, `:443` dropped from `s3+https`
 and `:80` from `s3+http`, the prefix with no leading `/` and a trailing one
-unless empty, the query sorted. Keys are case sensitive, so `Media/` and
-`media/` are two accounts. The access key id and secret are `S3Credentials`
+unless empty, the query sorted. Nothing else in the prefix is rewritten:
+keys are case sensitive and may hold `//` or a literal `%`, so `Media/`
+and `media/`, `a//b/` and `a/b/`, `a%20b/` and `a b/` are two accounts each.
+The connection is built from path segments so that a `%` survives it. The access key id and secret are `S3Credentials`
 JSON in the account token, never in the connection, and
 `S3Credentials.toString` prints the key id only. A new account is named
 `<bucket>` or `<bucket>/<prefix>`; adding the same location again reuses it,
