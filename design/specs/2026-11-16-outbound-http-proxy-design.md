@@ -46,7 +46,7 @@ yaml -> db -> env overlay.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `url` | string, optional | `http://[user:pass@]host:port` or `https://[user:pass@]host:port` |
-| `bypass` | list of strings | extra hosts that always go direct (curl `NO_PROXY` syntax) |
+| `bypass` | string, comma-separated | extra hosts that always go direct (curl `NO_PROXY` syntax); a string because DB-overlay rows hold one string |
 
 Mydia-specific env vars: `MYDIA_PROXY_URL`, `MYDIA_PROXY_BYPASS` (comma-separated).
 
@@ -139,8 +139,10 @@ this and why.
 Proxy failures become readable errors instead of `:closed` or "No answer from the
 tracker":
 
-- connection refused, timeout or DNS failure on the proxy itself ->
-  "proxy <host>:<port> unreachable: <reason>";
+- a transport failure on a proxied request (refused, timeout, closed) ->
+  "connection through proxy <host>:<port> failed: <reason>". Mint reports a
+  refused proxy as a plain transport error, indistinguishable from a failure after
+  the tunnel opened, so the message does not claim which hop failed;
 - a `407` on CONNECT -> "proxy <host>:<port> requires authentication";
 - any other non-2xx on CONNECT -> "proxy <host>:<port> refused the tunnel (<status>)".
 
