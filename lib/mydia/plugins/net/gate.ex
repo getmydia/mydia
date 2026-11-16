@@ -39,7 +39,10 @@ defmodule Mydia.Plugins.Net.Gate do
   **Under an outbound proxy** nothing above changes. `Mydia.Net.ProxyAdapter`
   routes on `connect_options[:hostname]`, so a proxied gate request becomes
   `CONNECT <validated-ip>:<port>` to the proxy, and Mint's tunnel still uses
-  `:hostname` for SNI and certificate verification. The proxy never resolves the
+  `:hostname` for SNI and certificate verification. A plain-http request becomes
+  `GET http://<validated-ip>:<port>/...` (the adapter drops `:hostname` for that
+  hop, so Mint does not write the name into the request line), with the gate's
+  `host` header still naming the site. The proxy never resolves the
   name, so the validate-then-connect rebinding window stays closed. An approved
   endpoint pinned to a private or loopback address goes direct instead, since
   the proxy cannot reach the operator's LAN (or treats loopback as its own).
@@ -380,7 +383,7 @@ defmodule Mydia.Plugins.Net.Gate do
       # authoritative timeout.
       task =
         Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn ->
-          do_request(req_opts, uri.host)
+          do_request(req_opts, uri.host, ip)
         end)
 
       case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
@@ -391,7 +394,7 @@ defmodule Mydia.Plugins.Net.Gate do
     end
   end
 
-  defp do_request(req_opts, host) do
+  defp do_request(req_opts, host, ip) do
     case Req.request(req_opts) do
       {:ok, %Req.Response{body: {:too_large, cap}}} ->
         {:error, Error.new(:too_large, "response exceeded #{cap} bytes")}
@@ -401,7 +404,7 @@ defmodule Mydia.Plugins.Net.Gate do
 
       {:error, %{__struct__: s} = err}
       when s in [Req.TransportError, Req.HTTPError, Mint.TransportError, Mint.HTTPError] ->
-        {:error, classify_transport_error(err, host)}
+        {:error, classify_transport_error(err, host, ip)}
 
       {:error, reason} ->
         {:error, Error.new(:network_error, "request failed: #{inspect(reason)}")}
@@ -493,11 +496,17 @@ defmodule Mydia.Plugins.Net.Gate do
   defp normalize_method(other),
     do: {:error, Error.new(:invalid_request, "invalid HTTP method: #{inspect(other)}")}
 
-  defp classify_transport_error(%{reason: :timeout}, _host),
+  defp classify_transport_error(%{reason: :timeout}, _host, _ip),
     do: Error.new(:timeout, "connection or receive timed out")
 
-  defp classify_transport_error(err, host) do
-    case Mydia.Net.Proxy.describe_error(err, host) do
+  # An approved endpoint pinned to a private or loopback IP went direct
+  # (Mydia.Net.ProxyAdapter), so only a public pinned IP can have failed at
+  # the proxy. Routing on the hostname alone would blame the proxy for a
+  # direct failure.
+  defp classify_transport_error(err, host, ip) do
+    proxy_message = if public_ip?(ip), do: Mydia.Net.Proxy.describe_error(err, host)
+
+    case proxy_message do
       nil -> Error.new(:network_error, "transport error: #{inspect(err)}")
       msg -> Error.new(:network_error, msg)
     end

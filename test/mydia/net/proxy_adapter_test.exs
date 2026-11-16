@@ -68,6 +68,53 @@ defmodule Mydia.Net.ProxyAdapterTest do
     assert [_ | _] = ConnectProxy.requests(callers.log)
   end
 
+  describe "redirects" do
+    # The first hop goes to a proxied name and 302s to a loopback address,
+    # which routes direct. Req builds the second hop from the same request, so
+    # the adapter must not leave the proxy it injected on it.
+    defp redirect_to_loopback(bypass, target) do
+      Bypass.expect_once(bypass, "GET", "/x", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://127.0.0.1:#{target.port}/y")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(target, "GET", "/y", &Plug.Conn.resp(&1, 200, "landed"))
+    end
+
+    test "re-routes the redirected request instead of reusing the injected proxy",
+         %{bypass: bypass} do
+      {:ok, proxy} = ConnectProxy.start(respond: :forward)
+      use_proxy(proxy.port)
+      target = Bypass.open()
+      redirect_to_loopback(bypass, target)
+
+      assert {:ok, %Req.Response{status: 200, body: "landed"}} =
+               Req.get("http://tracker.example.test:#{bypass.port}/x", retry: false)
+
+      assert ConnectProxy.requests(proxy.log) == [
+               "GET http://tracker.example.test:#{bypass.port}/x HTTP/1.1"
+             ]
+    end
+
+    test "keeps a caller-set proxy on every hop", %{bypass: bypass} do
+      {:ok, configured} = ConnectProxy.start(respond: :forward)
+      {:ok, callers} = ConnectProxy.start(respond: :forward)
+      use_proxy(configured.port)
+      target = Bypass.open()
+      redirect_to_loopback(bypass, target)
+
+      assert {:ok, %Req.Response{status: 200, body: "landed"}} =
+               Req.get("http://tracker.example.test:#{bypass.port}/x",
+                 retry: false,
+                 connect_options: [proxy: {:http, "127.0.0.1", callers.port, []}]
+               )
+
+      assert ConnectProxy.requests(configured.log) == []
+      assert length(ConnectProxy.requests(callers.log)) == 2
+    end
+  end
+
   test "a 407 surfaces as a proxy authentication error" do
     {:ok, proxy} = ConnectProxy.start(respond: {:status, 407})
     use_proxy(proxy.port)
@@ -130,6 +177,20 @@ defmodule Mydia.Net.ProxyAdapterTest do
 
       assert connect_options(pinned("203.0.113.10", "x.bypassed.test"), config) ==
                [hostname: "x.bypassed.test"]
+    end
+
+    test "a proxied pinned request drops :hostname for http and keeps it for https" do
+      {:ok, config} = Proxy.effective(%ProxyConfig{url: "http://proxy.test:3128"}, @no_env)
+
+      plain = connect_options(pinned("203.0.113.10", "a.example.test"), config)
+      refute Keyword.has_key?(plain, :hostname)
+
+      tls =
+        Req.new(url: "https://203.0.113.10/", connect_options: [hostname: "a.example.test"])
+        |> connect_options(config)
+
+      assert tls[:hostname] == "a.example.test"
+      assert tls[:proxy] == {:http, "proxy.test", 3128, []}
     end
   end
 end
