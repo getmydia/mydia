@@ -2,8 +2,8 @@ defmodule Mydia.Net.Proxy.Bypass do
   @moduledoc """
   Parsing and matching of proxy bypass entries, using curl `NO_PROXY` semantics.
 
-  Supported entries: `*`, `example.com` / `.example.com` (the domain and all its
-  subdomains), an IP literal, and a CIDR such as `10.0.0.0/8` or `fd00::/8`.
+  Supported entries: `*`, `example.com` / `.example.com` / `*.example.com` (the
+  domain and all its subdomains), an IP literal, and a CIDR such as `10.0.0.0/8` or `fd00::/8`.
   Matching is case-insensitive and ignores a trailing dot and any port. Nothing
   here performs DNS lookups.
   """
@@ -55,10 +55,13 @@ defmodule Mydia.Net.Proxy.Bypass do
     end
   end
 
+  # `*.example.com` is common in NO_PROXY lists even though curl documents only
+  # the leading dot; both mean the domain and its subdomains.
   defp parse_domain(entry) do
     domain =
       entry
       |> strip_port()
+      |> String.replace_prefix("*.", "")
       |> String.trim_leading(".")
       |> String.trim_trailing(".")
 

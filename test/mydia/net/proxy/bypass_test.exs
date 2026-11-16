@@ -24,6 +24,14 @@ defmodule Mydia.Net.Proxy.BypassTest do
       assert Bypass.parse("example.com:8080") == [{:domain, "example.com"}]
     end
 
+    test "a leading *. is a domain entry, matching the domain and its subdomains" do
+      entries = Bypass.parse("*.example.com")
+      assert entries == [{:domain, "example.com"}]
+      assert Bypass.match?("api.example.com", entries)
+      assert Bypass.match?("example.com", entries)
+      refute Bypass.match?("notexample.com", entries)
+    end
+
     test "drops malformed CIDRs" do
       assert Bypass.parse("10.0.0.0/99,10.0.0.0/x,junk/8") == []
     end

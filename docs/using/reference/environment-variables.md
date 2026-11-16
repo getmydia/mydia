@@ -599,6 +599,8 @@ Send Mydia's outbound internet requests (indexers, metadata, torrent file fetche
 
 When `MYDIA_PROXY_URL` is not set, Mydia falls back to the standard variables, using the first one that is set: `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, `http_proxy`. The bypass list falls back to `NO_PROXY`, then `no_proxy`. A proxy saved under **Admin > System > Settings** wins over the standard variables, and the `MYDIA_` variables win over both.
 
+An unusable `MYDIA_PROXY_URL` is rejected with an error at startup. An unusable `HTTPS_PROXY` or `HTTP_PROXY` (a SOCKS URL, say) is ignored with a logged warning, requests go direct, and the settings page shows why.
+
 !!! warning "Upgrading"
     If your container already sets `HTTPS_PROXY` or `HTTP_PROXY`, Mydia starts using it after you upgrade. Add the hosts that should stay direct to `NO_PROXY` or `MYDIA_PROXY_BYPASS` first.
 

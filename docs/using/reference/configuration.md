@@ -61,7 +61,7 @@ proxy:
   bypass: nas.local,.example.com,192.168.50.0/24
 ```
 
-`url` may carry credentials (`http://user:pass@proxy.lan:3128`); they are masked wherever Mydia shows the setting. The port defaults to 80 for `http://` and 443 for `https://`. SOCKS proxies are not supported. A URL that cannot be used is rejected with an error naming the setting, and Mydia never silently falls back to a direct connection.
+`url` may carry credentials (`http://user:pass@proxy.lan:3128`); they are masked wherever Mydia shows the setting. The port defaults to 80 for `http://` and 443 for `https://`. SOCKS proxies are not supported. A Mydia proxy setting that cannot be used, such as a SOCKS URL or a port outside 1 to 65535, is rejected with an error naming the setting. An unusable `HTTPS_PROXY` or `HTTP_PROXY` is ignored instead: Mydia logs a warning, connects directly, and shows the problem in the **Proxy** section of the settings page.
 
 The same settings are available as `MYDIA_PROXY_URL` and `MYDIA_PROXY_BYPASS` (see [Environment Variables](environment-variables.md#outbound-proxy)) and under **Admin > System > Settings**, in the **Proxy** section. That section shows the current value and where it came from, and its **Test proxy** button checks that the metadata relay is reachable through the proxy. When no Mydia setting is present, the standard `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` variables are used.
 
@@ -80,7 +80,7 @@ Everything else goes through the proxy. A name that contains a dot, such as `nas
 | Entry | Matches |
 |-------|---------|
 | `tracker.example.com` | that host and its subdomains |
-| `.example.com` | `example.com` and its subdomains |
+| `.example.com` or `*.example.com` | `example.com` and its subdomains |
 | `192.168.50.7` | that address |
 | `192.168.50.0/24` | every address in the range |
 | `*` | everything, which turns the proxy off |
@@ -91,7 +91,7 @@ Everything else goes through the proxy. A name that contains a dot, such as `nas
 - Remote access (P2P).
 - Requests that FlareSolverr makes itself. Mydia reaches FlareSolverr directly, and what it fetches is configured in FlareSolverr.
 
-WASM (Prowlarr-based) indexers still need DNS to work inside the Mydia container. Mydia resolves and checks the address itself before connecting, then asks the proxy to open a tunnel to that address.
+WASM (Prowlarr-based) indexers still need DNS to work inside the Mydia container. Mydia resolves and checks the address itself before connecting, then asks the proxy to open a tunnel to that address. A plugin endpoint you approved that resolves to a private or loopback address, such as a media server on your LAN, connects directly.
 
 ## Plugin instances
 

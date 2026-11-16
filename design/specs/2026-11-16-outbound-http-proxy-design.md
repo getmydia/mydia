@@ -59,7 +59,13 @@ The fallback is resolved by the config loader, not read ad hoc at request time.
 
 **Validation.** A `url` whose scheme is not `http` or `https`, or that lacks a host
 or port, fails config validation with a named error. It never silently degrades to
-a direct connection. Credentials in the URL become a
+a direct connection. The schema and the router share one parser
+(`Mydia.Net.Proxy.parse_url/1`), which checks the port on the raw authority
+because `URI.parse/1` turns a bad port into nil or the scheme default. An unusable
+standard variable (`HTTPS_PROXY` etc.) is not Mydia's setting, so it cannot fail
+validation: it is ignored with a logged warning, requests go direct, and
+`Mydia.Net.Proxy.config_error/0` carries the reason to the Settings page.
+Credentials in the URL become a
 `proxy-authorization: Basic ...` header and are masked wherever the config is
 displayed or logged.
 
@@ -73,10 +79,14 @@ request goes **direct** when any of these hold:
 2. The host is `localhost`, or a single-label name with no dot (Docker service
    names such as `jellyfin`, `qbittorrent`, `prowlarr`).
 3. The host is an IP literal that `Mydia.Plugins.Net.Gate.public_ip?/1` rejects
-   (loopback, RFC1918, link-local, CGNAT, ULA, multicast, reserved).
+   (loopback, RFC1918, link-local, CGNAT, ULA, multicast, reserved). This is
+   checked on `request.url.host` too, even when `:hostname` is set: the Gate pins
+   an approved plugin endpoint (which may be on the LAN) to its private IP, and a
+   proxy cannot reach it.
 4. The host matches a `bypass` entry, with curl `NO_PROXY` semantics:
    - `*` matches everything;
-   - `example.com` and `.example.com` match the domain and all its subdomains;
+   - `example.com`, `.example.com` and `*.example.com` match the domain and all
+     its subdomains;
    - an IP literal matches that address;
    - a CIDR (`10.0.0.0/8`, `fd00::/8`) matches addresses in range when the host is
      an IP literal;
@@ -128,7 +138,8 @@ Because the adapter routes on that hostname, a proxied Gate request becomes
 SNI and certificate verification (`deps/mint/lib/mint/tunnel_proxy.ex`,
 `Mint.Core.Util.hostname/2`), so TLS still validates against the real name. The
 proxy never resolves the name, so the validate-then-connect DNS-rebinding window
-stays closed.
+stays closed. An approved endpoint pinned to a private or loopback IP goes direct
+(routing rule 3).
 
 Consequence: WASM engines and plugins still need DNS resolution inside the
 container even when a proxy is configured. The moduledoc gains a paragraph stating
