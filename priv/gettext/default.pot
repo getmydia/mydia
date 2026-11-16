@@ -202,7 +202,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:298
 #: lib/mydia_web/live/admin_requests_live/components.ex:343
 #: lib/mydia_web/live/admin_requests_live/components.ex:413
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:150
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:152
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:163
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:243
 #: lib/mydia_web/live/admin_trash_live/components.ex:383
@@ -1229,7 +1229,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:169
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:201
 #: lib/mydia_web/live/admin_indexers_live/library_config_components.ex:122
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:152
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:154
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:166
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:349
 #: lib/mydia_web/live/discover_live/regional_components.ex:222
@@ -4684,7 +4684,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:189
 #: lib/mydia_web/live/admin_path_mappings_live/components.ex:63
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:91
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:66
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:68
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:64
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:94
 #: lib/mydia_web/live/media_live/index.html.heex:955
@@ -14149,7 +14149,7 @@ msgstr ""
 msgid "Crash Reports"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:270
+#: lib/mydia_web/live/admin_settings_live/index.ex:273
 #, elixir-autogen, elixir-format
 msgid "Crash report queue cleared"
 msgstr ""
@@ -15093,7 +15093,7 @@ msgstr ""
 msgid "Failed to reject request: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:356
+#: lib/mydia_web/live/admin_settings_live/index.ex:362
 #, elixir-autogen, elixir-format
 msgid "Failed to remove %{key}"
 msgstr ""
@@ -15708,7 +15708,7 @@ msgid "Invalid or expired authentication token"
 msgstr ""
 
 #: lib/mydia_web/live/admin_settings_live/index.ex:165
-#: lib/mydia_web/live/admin_settings_live/index.ex:391
+#: lib/mydia_web/live/admin_settings_live/index.ex:397
 #, elixir-autogen, elixir-format
 msgid "Invalid setting value"
 msgstr ""
@@ -17682,8 +17682,8 @@ msgstr ""
 msgid "Remove this source? Plugins installed from it keep running but stop receiving updates."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:345
-#: lib/mydia_web/live/admin_settings_live/index.ex:361
+#: lib/mydia_web/live/admin_settings_live/index.ex:351
+#: lib/mydia_web/live/admin_settings_live/index.ex:367
 #, elixir-autogen, elixir-format
 msgid "Removed %{key}"
 msgstr ""
@@ -18274,14 +18274,14 @@ msgstr ""
 msgid "Setting any limit also hides titles with no rating. %{count} of your library items currently have none."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:323
+#: lib/mydia_web/live/admin_settings_live/index.ex:329
 #, elixir-autogen, elixir-format
 msgid "Setting saved, but the runtime config could not be reloaded because the merged configuration is invalid. The change will take effect once the configuration is valid. Check the logs for the validation error."
 msgstr ""
 
 #: lib/mydia_web/live/admin_settings_live/index.ex:143
 #: lib/mydia_web/live/admin_settings_live/index.ex:176
-#: lib/mydia_web/live/admin_settings_live/index.ex:422
+#: lib/mydia_web/live/admin_settings_live/index.ex:428
 #, elixir-autogen, elixir-format
 msgid "Setting updated successfully"
 msgstr ""
@@ -20037,7 +20037,7 @@ msgid "reacts to %{events}"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:190
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:173
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:175
 #, elixir-autogen, elixir-format
 msgid "read-only (set via environment)"
 msgstr ""
@@ -22295,98 +22295,98 @@ msgstr ""
 msgid "When several download clients are enabled, grabs go to the one with the lowest number, and the built-in client wins a tie. External clients default to 1, so set this to 1 to make the built-in client the default."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:141
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:143
 #, elixir-autogen, elixir-format
 msgid "Bypass"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:43
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:45
 #, elixir-autogen, elixir-format
 msgid "Bypass: %{hosts}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:145
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:147
 #, elixir-autogen, elixir-format
 msgid "Comma-separated hosts, domains, IP addresses or CIDR ranges."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:121
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:123
 #, elixir-autogen, elixir-format
 msgid "HTTP or HTTPS proxy for outgoing requests"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:19
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:21
 #, elixir-autogen, elixir-format
 msgid "HTTP proxy"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:59
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:61
 #, elixir-autogen, elixir-format
 msgid "No proxy is configured"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:27
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:29
 #, elixir-autogen, elixir-format
 msgid "Not configured: requests go direct"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:14
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:120
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:16
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:122
 #, elixir-autogen, elixir-format
 msgid "Outbound proxy"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:133
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:135
 #, elixir-autogen, elixir-format
 msgid "Proxy URL"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:73
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:75
 #, elixir-autogen, elixir-format
 msgid "Proxy settings are unavailable."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:226
+#: lib/mydia_web/live/admin_settings_live/index.ex:229
 #, elixir-autogen, elixir-format
 msgid "Proxy settings saved"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:104
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:106
 #, elixir-autogen, elixir-format
 msgid "Proxy test failed: %{message}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:57
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:59
 #, elixir-autogen, elixir-format
 msgid "Test proxy"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:83
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:85
 #, elixir-autogen, elixir-format
 msgid "Testing the proxy..."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:92
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:94
 #, elixir-autogen, elixir-format
 msgid "The metadata relay answered HTTP %{status} through the proxy in %{ms} ms"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:137
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:139
 #, elixir-autogen, elixir-format
 msgid "The password shows as ****. Leave it that way to keep the saved one."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:45
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:47
 #, elixir-autogen, elixir-format
 msgid "none (local and private addresses always go direct)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:296
+#: lib/mydia_web/live/admin_settings_live/index.ex:302
 #, elixir-autogen, elixir-format
 msgid "the test stopped unexpectedly"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:126
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:128
 #, elixir-autogen, elixir-format
 msgid "Mydia sends its outgoing HTTP requests through this proxy. Local and private addresses always go direct. Leave the URL empty to fall back to HTTPS_PROXY or HTTP_PROXY when set."
 msgstr ""
@@ -22396,7 +22396,7 @@ msgstr ""
 msgid "enter the password for the new user"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:35
+#: lib/mydia_web/live/admin_settings_live/proxy_components.ex:37
 #, elixir-autogen, elixir-format
 msgid "%{var} is set but unusable: %{reason}. Requests go direct."
 msgstr ""

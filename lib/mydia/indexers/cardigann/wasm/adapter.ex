@@ -344,10 +344,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
     attempt = fn base_url ->
       remaining = max(deadline - System.monotonic_time(:millisecond), 1)
-      # Only the answering mirror's requests decide whether the login was reached.
-      with %{hit: hit} <- opts[:login_watch], do: :atomics.put(hit, 1, 0)
-      # Likewise only its proxy failure may word the error.
-      with note when is_pid(note) <- opts[:proxy_note], do: Agent.update(note, fn _ -> nil end)
+      reset_attempt_state(opts)
 
       call =
         {:search, definition.definition, put_base_url(settings, base_url), guest_query, session}
@@ -370,6 +367,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       end
 
     surface_failure(result, opts[:proxy_note])
+  end
+
+  # Only the answering mirror's requests decide whether the login was reached,
+  # and only its proxy failure may word the error.
+  defp reset_attempt_state(opts) do
+    with %{hit: hit} <- opts[:login_watch], do: :atomics.put(hit, 1, 0)
+    with note when is_pid(note) <- opts[:proxy_note], do: Agent.update(note, fn _ -> nil end)
+    :ok
   end
 
   defp promote_winner(winner, first, parsed, definition) do
