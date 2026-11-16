@@ -232,7 +232,7 @@ defmodule Mydia.MixProject do
       {:ymlr, "~> 5.1"},
       {:sweet_xml, "~> 0.7"},
       {:floki, "~> 0.36"},
-      {:codepagex, "== 0.1.13"},
+      {:codepagex, "== 0.3.0"},
       {:nimble_parsec, "~> 1.4"},
       {:eqrcode, "~> 0.2.1"},
       {:earmark, "~> 1.4"},
@@ -323,10 +323,8 @@ defmodule Mydia.MixProject do
 
   # Dependencies built from locally patched source, as {app, version, patch}.
   # A version bump stops at the pin rather than silently dropping the fix:
-  # whoever bumps rebases the patch or retires it. patches/exqlite/ explains
-  # its patch, and how to tell whether upstream still needs it.
+  # whoever bumps rebases the patch or retires it.
   @dep_patches [
-    {:exqlite, "0.41.0", "patches/exqlite/statement-destructor-never-blocks.patch"},
     {:wasmex, "0.15.1", "patches/wasmex/component-precompile-and-deserialize.patch"}
   ]
 

@@ -31,7 +31,7 @@ defmodule Mydia.Repo.Migrations.HelpersTest do
       sql!("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'media_files'")
 
     assert definition =~
-             "CONSTRAINT media_files_has_parent CHECK (media_item_id IS NOT NULL OR episode_id IS NOT NULL)"
+             ~r/CONSTRAINT "?media_files_has_parent"? CHECK \(media_item_id IS NOT NULL OR episode_id IS NOT NULL\)/
 
     assert_raise Exqlite.Error, fn ->
       sql!("INSERT INTO media_files (id) VALUES ('parentless')")
