@@ -425,6 +425,11 @@ defmodule Mydia.Collections.SectionsTest do
                smart_rules: ~s({"conditions":[]})
              })
 
+      refute Collections.exclusive_eligible?(%Collection{
+               type: "smart",
+               smart_rules: ~s({"conditions":[123]})
+             })
+
       refute Collections.exclusive_eligible?(%Collection{type: "smart", smart_rules: "{bad json"})
 
       refute Collections.exclusive_eligible?(%Collection{

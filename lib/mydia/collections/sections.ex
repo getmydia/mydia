@@ -42,8 +42,16 @@ defmodule Mydia.Collections.Sections do
 
   defp section_item_count(scope, %Collection{type: "smart", smart_rules: rules}) do
     case SmartRules.query(rules || "{}") do
-      {:ok, query} -> Stats.count_media_items(scope, base_query: query)
-      {:error, _} -> 0
+      {:ok, query} ->
+        try do
+          Stats.count_media_items(scope, base_query: query)
+        rescue
+          Ecto.Query.CastError -> 0
+          Ecto.QueryError -> 0
+        end
+
+      {:error, _} ->
+        0
     end
   end
 
@@ -165,7 +173,10 @@ defmodule Mydia.Collections.Sections do
        when is_binary(rules) do
     case Jason.decode(rules) do
       {:ok, %{"conditions" => [_ | _] = conditions} = decoded} ->
-        if Enum.all?(conditions, &SmartRules.supported_operator?(&1["field"], &1["operator"])) do
+        if Enum.all?(
+             conditions,
+             &(is_map(&1) and SmartRules.supported_operator?(&1["field"], &1["operator"]))
+           ) do
           case SmartRules.query(decoded) do
             {:ok, query} -> [query]
             {:error, _} -> []
