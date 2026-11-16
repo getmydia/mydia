@@ -140,11 +140,16 @@ defmodule Mydia.Net.Proxy do
     credentials =
       case userinfo do
         nil -> ""
-        info -> elem(split_userinfo(info), 0) <> ":****@"
+        info -> masked_userinfo(split_userinfo(info))
       end
 
     "#{scheme}://#{credentials}#{host}:#{port}"
   end
+
+  # A user with no password shows bare, so the mask never stands for a
+  # password that does not exist.
+  defp masked_userinfo({user, ""}), do: user <> "@"
+  defp masked_userinfo({user, _password}), do: user <> ":****@"
 
   # -- cached config ---------------------------------------------------------
 

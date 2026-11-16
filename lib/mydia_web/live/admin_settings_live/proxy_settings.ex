@@ -18,6 +18,8 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
   `:database` even while the fallback variables are set.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias Mydia.Config.Schema.Proxy, as: ProxyConfig
   alias Mydia.Net.Proxy
   alias Mydia.Settings
@@ -63,8 +65,11 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
   defp source(env_var, key, db, getenv, from) do
     cond do
       Settings.env_var_set?(env_var, getenv) -> :env
-      Settings.config_source(nil, key, db) == :database -> :database
+      # Checked before the database: an empty row (the modal's "clear to fall
+      # back") still exists, but the value really comes from the standard
+      # variable. A row with a value makes `from` :config, so it reads DB.
       from == :standard_env -> :standard_env
+      Settings.config_source(nil, key, db) == :database -> :database
       true -> :default
     end
   end
@@ -100,18 +105,42 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
           {:ok, [String.t()]} | {:error, Ecto.Changeset.t()} | {:error, String.t(), term()}
   def save(params, user_id, getenv \\ &System.get_env/1) do
     settings = current(getenv)
+    changeset = changeset(params)
 
-    with {:ok, data} <- Ecto.Changeset.apply_action(changeset(params), :insert) do
-      [
-        {@url_key, settings.url_source, settings.url, data.url},
-        {@bypass_key, settings.bypass_source, settings.bypass, data.bypass}
-      ]
-      |> Enum.reject(fn {_key, source, shown, submitted} ->
-        source == :env or (shown || "") == (submitted || "")
-      end)
-      |> Enum.map(fn {key, _source, _shown, value} -> {key, unmask(key, value, getenv)} end)
-      |> write(user_id)
+    with {:ok, data} <- Ecto.Changeset.apply_action(changeset, :insert),
+         changes =
+           Enum.reject(
+             [
+               {@url_key, settings.url_source, settings.url, data.url},
+               {@bypass_key, settings.bypass_source, settings.bypass, data.bypass}
+             ],
+             fn {_key, source, shown, submitted} ->
+               source == :env or (shown || "") == (submitted || "")
+             end
+           ),
+         {:ok, changes} <- unmask_all(changes, changeset, getenv) do
+      write(changes, user_id)
     end
+  end
+
+  defp unmask_all(changes, changeset, getenv) do
+    Enum.reduce_while(changes, {:ok, []}, fn {key, _source, _shown, value}, {:ok, acc} ->
+      case unmask(key, value, getenv) do
+        {:ok, value} ->
+          {:cont, {:ok, acc ++ [{key, value}]}}
+
+        :unrestorable ->
+          error =
+            changeset
+            |> Ecto.Changeset.add_error(
+              :url,
+              gettext("enter the password for the new user")
+            )
+            |> Map.put(:action, :insert)
+
+          {:halt, {:error, error}}
+      end
+    end)
   end
 
   defp write(changes, user_id) do
@@ -134,20 +163,44 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
 
   # The modal shows `user:****@`, so an edit that keeps that placeholder means
   # "keep the stored password", taken from the raw URL behind the current
-  # proxy. A different user name, or no stored URL, keeps the text as typed.
+  # proxy. When it cannot be restored (a different user name, a stored URL with
+  # no password, or none at all) the mask would otherwise be saved as the
+  # literal password, so the edit is refused instead. A URL without the mask
+  # (a bare `user@` included) is kept as typed.
   defp unmask(@url_key, url, getenv) when is_binary(url) do
-    with %URI{userinfo: userinfo} = uri when is_binary(userinfo) <- URI.parse(url),
-         [user, @mask] <- String.split(userinfo, ":", parts: 2),
-         %URI{userinfo: raw_userinfo} when is_binary(raw_userinfo) <-
-           URI.parse(raw_url(getenv) || ""),
-         [^user, _password] <- String.split(raw_userinfo, ":", parts: 2) do
-      URI.to_string(%{uri | userinfo: raw_userinfo})
-    else
-      _ -> url
+    uri = URI.parse(url)
+
+    case masked_user(uri) do
+      nil ->
+        {:ok, url}
+
+      user ->
+        case stored_password(user, getenv) do
+          nil -> :unrestorable
+          password -> {:ok, URI.to_string(%{uri | userinfo: user <> ":" <> password})}
+        end
     end
   end
 
-  defp unmask(_key, value, _getenv), do: value
+  defp unmask(_key, value, _getenv), do: {:ok, value}
+
+  defp masked_user(%URI{userinfo: userinfo}) when is_binary(userinfo) do
+    case String.split(userinfo, ":", parts: 2) do
+      [user, @mask] -> user
+      _ -> nil
+    end
+  end
+
+  defp masked_user(_uri), do: nil
+
+  defp stored_password(user, getenv) do
+    with %URI{userinfo: raw} when is_binary(raw) <- URI.parse(raw_url(getenv) || ""),
+         [^user, password] when password != "" <- String.split(raw, ":", parts: 2) do
+      password
+    else
+      _ -> nil
+    end
+  end
 
   defp raw_url(getenv) do
     case Proxy.current() do

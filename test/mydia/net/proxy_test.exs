@@ -99,6 +99,11 @@ defmodule Mydia.Net.ProxyTest do
       assert c.display_url == "http://h:1"
     end
 
+    test "a user without a password is shown bare, with no mask" do
+      assert build("http://u@h:1").display_url == "http://u@h:1"
+      assert build("http://u:@h:1").display_url == "http://u@h:1"
+    end
+
     test "unsupported scheme in a standard variable is an error naming the variable" do
       assert {:error, "unsupported proxy URL in HTTP_PROXY: socks5 is not supported"} =
                Proxy.effective(%ProxyConfig{}, getenv(%{"HTTP_PROXY" => "socks5://x:1"}))

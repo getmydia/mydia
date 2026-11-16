@@ -22390,3 +22390,8 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Mydia sends its outgoing HTTP requests through this proxy. Local and private addresses always go direct. Leave the URL empty to fall back to HTTPS_PROXY or HTTP_PROXY when set."
 msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/proxy_settings.ex:137
+#, elixir-autogen, elixir-format
+msgid "enter the password for the new user"
+msgstr ""

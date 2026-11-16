@@ -154,6 +154,77 @@ defmodule MydiaWeb.AdminSettingsLive.ProxyTest do
     end
   end
 
+  describe "fallback and masked-password edits" do
+    defp store_url(url) do
+      {:ok, _} =
+        Settings.upsert_config_setting(%{key: "proxy.url", value: url, category: :proxy})
+
+      {:ok, _} = Mydia.Config.Loader.reload()
+    end
+
+    defp edit_and_submit(view, url) do
+      view |> element("#proxy-edit") |> render_click()
+      view |> form("#proxy-form", proxy: %{url: url}) |> render_submit()
+    end
+
+    test "a cleared URL that falls back to HTTP_PROXY reads HTTP_PROXY env, not DB", %{
+      conn: conn
+    } do
+      use_standard_fallback("http://fallback.test:3128")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+      edit_and_submit(view, "")
+
+      assert Settings.get_config_setting_by_key("proxy.url").value in ["", nil]
+
+      # The reload above resolved against the real environment; put the
+      # injected fallback back, as it would be when HTTP_PROXY is set.
+      use_standard_fallback("http://fallback.test:3128")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert text(view, "#proxy-source") =~ "HTTP_PROXY env"
+      refute text(view, "#proxy-source") =~ "DB"
+    end
+
+    test "a new user name with the masked password is refused", %{conn: conn} do
+      store_url("http://u:secret@old.test:1")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+      edit_and_submit(view, "http://v:****@old.test:1")
+
+      assert text(view, "#proxy-form") =~ "enter the password for the new user"
+      assert Settings.get_config_setting_by_key("proxy.url").value == "http://u:secret@old.test:1"
+      refute render(view) =~ "secret"
+    end
+
+    test "save/3 refuses a mask it cannot restore" do
+      store_url("http://u:secret@old.test:1")
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               ProxySettings.save(%{"url" => "http://v:****@old.test:1"}, nil, getenv(%{}))
+
+      assert {"enter the password for the new user", _} = changeset.errors[:url]
+    end
+
+    test "a password-less URL round-trips through the modal", %{conn: conn} do
+      store_url("http://u@old.test:1")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert text(view, "#proxy-url-value") =~ "http://u@old.test:1"
+      refute render(view) =~ "****"
+
+      edit_and_submit(view, "http://u@new.test:2")
+      assert Settings.get_config_setting_by_key("proxy.url").value == "http://u@new.test:2"
+    end
+
+    test "a mask over a password-less stored URL is refused, not saved as the password" do
+      store_url("http://u@old.test:1")
+
+      assert {:error, %Ecto.Changeset{}} =
+               ProxySettings.save(%{"url" => "http://u:****@new.test:2"}, nil, getenv(%{}))
+
+      assert Settings.get_config_setting_by_key("proxy.url").value == "http://u@old.test:1"
+    end
+  end
+
   describe "Test proxy" do
     test "is disabled when no proxy is configured", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/settings")
