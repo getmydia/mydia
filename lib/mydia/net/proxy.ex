@@ -101,13 +101,21 @@ defmodule Mydia.Net.Proxy do
            url_from: source
          }}
 
-      %URI{scheme: scheme} when is_binary(scheme) and scheme not in ["http", "https"] ->
-        {:error, "unsupported proxy URL in #{label}: #{scheme} is not supported"}
+      %URI{scheme: scheme}
+      when is_binary(scheme) and scheme not in ["http", "https"] ->
+        if String.contains?(url, "://") do
+          {:error, "unsupported proxy URL in #{label}: #{scheme} is not supported"}
+        else
+          invalid_url(label)
+        end
 
       _ ->
-        {:error, "invalid proxy URL in #{label}: expected http://host:port or https://host:port"}
+        invalid_url(label)
     end
   end
+
+  defp invalid_url(label),
+    do: {:error, "invalid proxy URL in #{label}: expected http://host:port or https://host:port"}
 
   defp auth_headers(nil), do: []
 

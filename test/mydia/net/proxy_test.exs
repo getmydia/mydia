@@ -117,6 +117,19 @@ defmodule Mydia.Net.ProxyTest do
                Proxy.effective(%ProxyConfig{}, getenv(%{"HTTP_PROXY" => "http://u:secret@:1"}))
 
       refute msg =~ "secret"
+
+      assert {:error, msg} =
+               Proxy.effective(%ProxyConfig{}, getenv(%{"HTTP_PROXY" => "u:secret@x:1"}))
+
+      refute msg =~ "secret"
+      refute msg =~ "u:"
+      refute msg =~ "not supported"
+    end
+
+    test "a schemeless URL gets the generic message" do
+      assert {:error,
+              "invalid proxy URL in HTTP_PROXY: expected http://host:port or https://host:port"} =
+               Proxy.effective(%ProxyConfig{}, getenv(%{"HTTP_PROXY" => "host:3128"}))
     end
   end
 
