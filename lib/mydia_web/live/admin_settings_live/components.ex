@@ -4,12 +4,15 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
 
   alias MydiaWeb.AdminSettingsLive.Labels
   alias MydiaWeb.AdminSettingsLive.LanguageComponents
+  alias MydiaWeb.AdminSettingsLive.ProxyComponents
 
   attr :config_settings_with_sources, :map, required: true
   attr :crash_report_stats, :map, required: true
   attr :invalid_config_settings, :list, default: []
   attr :hwaccel, Mydia.Streaming.HardwareAccel.Capabilities, required: true
   attr :language_settings, :map, required: true
+  attr :proxy_settings, MydiaWeb.AdminSettingsLive.ProxySettings, required: true
+  attr :proxy_test_result, :any, default: nil
   attr :player_enabled?, :boolean, required: true
 
   def general_settings_tab(assigns) do
@@ -51,6 +54,8 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
       settings={@language_settings}
       player_enabled?={@player_enabled?}
     />
+
+    <ProxyComponents.proxy_section settings={@proxy_settings} test_result={@proxy_test_result} />
 
     <%!-- Settings Categories --%>
     <%= for {category, settings} <- @config_settings_with_sources do %>

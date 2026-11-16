@@ -250,4 +250,73 @@ defmodule Mydia.Net.ProxyTest do
                "connection through proxy prizrak:7890 failed: econnrefused"
     end
   end
+
+  describe "test_connection/1" do
+    alias Mydia.Test.ConnectProxy
+
+    defp use_proxy(port, userinfo \\ "") do
+      config = build("http://#{userinfo}127.0.0.1:#{port}")
+      Proxy.put_config(config)
+      config
+    end
+
+    test "without a proxy it says so" do
+      Proxy.put_config(nil)
+
+      assert Proxy.test_connection("http://tracker.example.test/health") ==
+               {:error, "No proxy is configured"}
+    end
+
+    test "reports the status and latency through the proxy" do
+      bypass = Bypass.open()
+      Bypass.expect_once(bypass, "GET", "/health", &Plug.Conn.resp(&1, 200, "ok"))
+      {:ok, proxy} = ConnectProxy.start(respond: :forward)
+      use_proxy(proxy.port)
+
+      assert {:ok, %{status: 200, ms: ms}} =
+               Proxy.test_connection("http://tracker.example.test:#{bypass.port}/health")
+
+      assert is_integer(ms) and ms >= 0
+      assert [_ | _] = ConnectProxy.requests(proxy.log)
+    end
+
+    test "forces the proxy even for a host routing would send direct" do
+      bypass = Bypass.open()
+      Bypass.expect_once(bypass, "GET", "/health", &Plug.Conn.resp(&1, 200, "ok"))
+      {:ok, proxy} = ConnectProxy.start(respond: :forward)
+      use_proxy(proxy.port)
+
+      assert {:ok, %{status: 200}} =
+               Proxy.test_connection("http://localhost:#{bypass.port}/health")
+
+      assert [_ | _] = ConnectProxy.requests(proxy.log)
+    end
+
+    test "a 407 tunnel answer is described without credentials" do
+      {:ok, proxy} = ConnectProxy.start(respond: {:status, 407})
+      use_proxy(proxy.port, "user:hunter2@")
+
+      assert {:error, message} = Proxy.test_connection("https://tracker.example.test/health")
+      assert message == "proxy 127.0.0.1:#{proxy.port} requires authentication"
+      refute message =~ "hunter2"
+    end
+
+    test "a 407 answer to a plain-http request is described the same way" do
+      {:ok, proxy} = ConnectProxy.start(respond: {:status, 407})
+      use_proxy(proxy.port)
+
+      assert Proxy.test_connection("http://tracker.example.test/health") ==
+               {:error, "proxy 127.0.0.1:#{proxy.port} requires authentication"}
+    end
+
+    test "a refused proxy port is described" do
+      {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false])
+      {:ok, port} = :inet.port(socket)
+      :gen_tcp.close(socket)
+      use_proxy(port)
+
+      assert Proxy.test_connection("http://tracker.example.test/health") ==
+               {:error, "connection through proxy 127.0.0.1:#{port} failed: econnrefused"}
+    end
+  end
 end

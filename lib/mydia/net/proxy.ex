@@ -209,6 +209,48 @@ defmodule Mydia.Net.Proxy do
     end
   end
 
+  # -- connection test -------------------------------------------------------
+
+  @doc """
+  Sends one GET to `url` through the configured proxy, for the Settings page's
+  Test proxy button.
+
+  The proxy is forced: bypass rules and automatic direct routing are skipped,
+  so the test always exercises the proxy hop. Returns the status and latency,
+  or an error message that names the proxy endpoint but never its
+  credentials.
+  """
+  @spec test_connection(String.t()) ::
+          {:ok, %{status: integer(), ms: non_neg_integer()}} | {:error, String.t()}
+  def test_connection(url) when is_binary(url) do
+    case current() do
+      nil -> {:error, "No proxy is configured"}
+      config -> forced_get(url, config)
+    end
+  end
+
+  defp forced_get(url, config) do
+    connect = [proxy: config.proxy]
+
+    connect =
+      if config.headers == [], do: connect, else: connect ++ [proxy_headers: config.headers]
+
+    started = System.monotonic_time(:millisecond)
+
+    case Req.get(url, connect_options: connect, retry: false, receive_timeout: 10_000) do
+      # A plain-http request through a proxy gets the proxy's own answer as an
+      # ordinary response rather than a tunnel error.
+      {:ok, %Req.Response{status: 407}} ->
+        {:error, "proxy #{config.endpoint} requires authentication"}
+
+      {:ok, %Req.Response{status: status}} ->
+        {:ok, %{status: status, ms: System.monotonic_time(:millisecond) - started}}
+
+      {:error, exception} ->
+        {:error, describe(exception, config.endpoint) || Exception.message(exception)}
+    end
+  end
+
   # -- error descriptions ----------------------------------------------------
 
   @doc """

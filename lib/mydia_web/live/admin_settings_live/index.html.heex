@@ -6,7 +6,13 @@
       invalid_config_settings={@invalid_config_settings}
       hwaccel={@hwaccel}
       language_settings={@language_settings}
+      proxy_settings={@proxy_settings}
+      proxy_test_result={@proxy_test_result}
       player_enabled?={@player_enabled?}
     />
   </.admin_page>
+
+  <%= if @show_proxy_modal do %>
+    <ProxyComponents.proxy_modal form={@proxy_form} settings={@proxy_settings} />
+  <% end %>
 </Layouts.app>
