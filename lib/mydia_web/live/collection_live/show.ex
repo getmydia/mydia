@@ -771,54 +771,59 @@ defmodule MydiaWeb.CollectionLive.Show do
     user = socket.assigns.current_user
     item_ids = socket.assigns.collection_item_ids
 
-    if can_edit?(collection, user) do
-      if MapSet.member?(item_ids, item_id) do
-        # Remove item
-        case Collections.remove_item(collection, item_id) do
-          {:ok, _} ->
-            {:noreply,
-             socket
-             |> stream_delete(:items, %{id: item_id})
-             |> update(:item_count, &(&1 - 1))
-             |> assign(:collection_item_ids, MapSet.delete(item_ids, item_id))
-             |> put_flash(:info, gettext("Item removed from collection"))}
+    cond do
+      not can_edit?(collection, user) ->
+        {:noreply,
+         put_flash(socket, :error, gettext("You don't have permission to edit this collection"))}
 
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, gettext("Failed to remove item"))}
-        end
-      else
-        # Add item
-        case Collections.add_item(collection, item_id) do
-          {:ok, _} ->
-            # Fetch the media item to add to stream
-            media_item = Media.get_media_item!(socket.assigns.current_scope, item_id)
+      MapSet.member?(item_ids, item_id) ->
+        remove_item_from_collection(socket, collection, item_id, item_ids)
 
-            stream_item = %{
-              id: media_item.id,
-              title: media_item.title,
-              year: media_item.year,
-              type: media_item.type,
-              poster_url: build_poster_url(media_item)
-            }
+      true ->
+        add_item_to_collection(socket, collection, item_id, item_ids)
+    end
+  end
 
-            {:noreply,
-             socket
-             |> stream_insert(:items, stream_item, at: -1)
-             |> update(:item_count, &(&1 + 1))
-             |> assign(:collection_item_ids, MapSet.put(item_ids, item_id))
-             |> put_flash(:info, gettext("Item added to collection"))}
+  defp remove_item_from_collection(socket, collection, item_id, item_ids) do
+    case Collections.remove_item(collection, item_id) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> stream_delete(:items, %{id: item_id})
+         |> update(:item_count, &(&1 - 1))
+         |> assign(:collection_item_ids, MapSet.delete(item_ids, item_id))
+         |> put_flash(:info, gettext("Item removed from collection"))}
 
-          {:error, :smart_collection} ->
-            {:noreply,
-             put_flash(socket, :error, gettext("Cannot add items to smart collections"))}
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to remove item"))}
+    end
+  end
 
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, gettext("Failed to add item"))}
-        end
-      end
-    else
-      {:noreply,
-       put_flash(socket, :error, gettext("You don't have permission to edit this collection"))}
+  defp add_item_to_collection(socket, collection, item_id, item_ids) do
+    case Collections.add_item(collection, item_id) do
+      {:ok, _} ->
+        media_item = Media.get_media_item!(socket.assigns.current_scope, item_id)
+
+        stream_item = %{
+          id: media_item.id,
+          title: media_item.title,
+          year: media_item.year,
+          type: media_item.type,
+          poster_url: build_poster_url(media_item)
+        }
+
+        {:noreply,
+         socket
+         |> stream_insert(:items, stream_item, at: -1)
+         |> update(:item_count, &(&1 + 1))
+         |> assign(:collection_item_ids, MapSet.put(item_ids, item_id))
+         |> put_flash(:info, gettext("Item added to collection"))}
+
+      {:error, :smart_collection} ->
+        {:noreply, put_flash(socket, :error, gettext("Cannot add items to smart collections"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to add item"))}
     end
   end
 
