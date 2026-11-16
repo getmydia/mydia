@@ -540,7 +540,7 @@ msgstr ""
 #: lib/mydia_web/live/activity_live/index.ex:473
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:146
 #: lib/mydia_web/live/media_live/index.html.heex:455
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:279
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:280
 #: lib/mydia_web/live/media_live/show/modals.ex:719
 #: lib/mydia_web/live/search_live/index.html.heex:492
 #, elixir-autogen, elixir-format
@@ -3139,7 +3139,7 @@ msgid "Below quality"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:19
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:427
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:428
 #, elixir-autogen, elixir-format
 msgid "Best Score"
 msgstr ""
@@ -3571,12 +3571,12 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:364
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:365
 #, elixir-autogen, elixir-format
 msgid "Close after grabbing"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:362
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:363
 #, elixir-autogen, elixir-format
 msgid "Close this dialog as soon as a release is grabbed"
 msgstr ""
@@ -9179,7 +9179,7 @@ msgid "Sort downloads"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:130
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:316
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:317
 #: lib/mydia_web/live/search_live/index.html.heex:259
 #: lib/mydia_web/live/search_live/index.html.heex:527
 #, elixir-autogen, elixir-format
@@ -15609,7 +15609,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:52
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:76
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:69
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:298
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:299
 #, elixir-autogen, elixir-format
 msgid "Indexer"
 msgstr ""
@@ -17764,7 +17764,7 @@ msgid "Res:"
 msgstr ""
 
 #: lib/mydia_web/live/admin_import_lists_live/items_components.ex:165
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:260
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:261
 #, elixir-autogen, elixir-format
 msgid "Reset"
 msgstr ""
@@ -21100,24 +21100,24 @@ msgstr ""
 msgid "The move could not be prepared. Try again."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:330
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:331
 #, elixir-autogen, elixir-format
 msgid "Codec"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:109
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:248
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:252
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:249
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:253
 #, elixir-autogen, elixir-format
 msgid "Filters"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:345
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:346
 #, elixir-autogen, elixir-format
 msgid "Minimum seeders: %{count}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:379
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:380
 #, elixir-autogen, elixir-format
 msgid "Show %{count} result"
 msgid_plural "Show %{count} results"
@@ -21149,7 +21149,7 @@ msgstr ""
 msgid "Remove filter: %{filter}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:456
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:457
 #, elixir-autogen, elixir-format
 msgid "≥ %{count} seed"
 msgid_plural "≥ %{count} seeds"
@@ -21558,7 +21558,7 @@ msgstr ""
 msgid "When Mydia grabs a release from a tracker with seeding rules, qBittorrent receives the minimum ratio and seed time, and Transmission the minimum ratio. rTorrent and rqbit receive nothing. On every torrent client, Remove After Import waits until the tracker's rules are met."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:467
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:468
 #, elixir-autogen, elixir-format
 msgid "%{indexers} +%{count} more"
 msgid_plural "%{indexers} +%{count} more"
@@ -21576,13 +21576,13 @@ msgctxt "library progress"
 msgid "Downloading"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:243
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:267
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:244
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:268
 #, elixir-autogen, elixir-format
 msgid "Close filters"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:188
+#: lib/mydia_web/live/media_live/show/manual_search_filters.ex:189
 #, elixir-autogen, elixir-format
 msgid "Show filters"
 msgstr ""

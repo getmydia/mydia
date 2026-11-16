@@ -236,19 +236,13 @@ RUN --mount=type=cache,target=/root/.hex,sharing=locked \
 # advertise but don't properly support
 COPY patches/ueberauth_oidcc_request.ex ./deps/ueberauth_oidcc/lib/ueberauth_oidcc/request.ex
 
-# Patch Exqlite so dropping a prepared statement never blocks a BEAM scheduler
-# while its connection busy-waits. Unpatched, SQLite lock contention can freeze
-# the whole VM for the full busy_timeout; the patch header has the details.
+# Patch Wasmex to add precompile-to-file and deserialize-file, which the opt-in
+# Cardigann engine uses to keep one compiled copy of its 75 MB guest on disk
+# instead of a GB of compiler heap (native/cardigann_guest/BENCH.md, "Memory
+# spike"). The patch lives in the Rust half of the NIF, so Wasmex is built from
+# source below instead of downloading its precompiled NIF.
 # `mix deps.patch` is the step every `mix deps.get` runs in dev and CI. It
-# skipped in the deps.get layer above, which has no patches/ yet. It stops the
-# build on any Exqlite version but the one the patch targets.
-COPY patches/exqlite ./patches/exqlite
-# Wasmex gets the same treatment: a patch that adds precompile-to-file and
-# deserialize-file, which the opt-in Cardigann engine uses to keep one compiled
-# copy of its 75 MB guest on disk instead of a GB of compiler heap
-# (native/cardigann_guest/BENCH.md, "Memory spike"). The patch lives in the Rust
-# half of the NIF, so Wasmex is built from source below instead of downloading
-# its precompiled NIF.
+# skipped in the deps.get layer above, which has no patches/ yet.
 COPY patches/wasmex ./patches/wasmex
 RUN mix deps.patch
 
@@ -267,12 +261,6 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 # precompiled download (which has neither function) instead of the patched source.
 RUN elixir -pa "_build/prod/lib/*/ebin" \
       -e 'true = is_boolean(Wasmex.Engine.malloc_trim()); IO.puts("wasmex NIF is patched")'
-
-# Prove the Exqlite patch took effect. This fails if the NIF came from Exqlite's
-# precompiled download instead of the patched source, or if it still stalls.
-# A single normal scheduler makes the stall it looks for deterministic.
-RUN elixir --erl "+S 1:1" -pa _build/prod/lib/exqlite/ebin \
-      -r patches/exqlite/destructor_probe.exs -e 'ExqliteDestructorProbe.assert_patched!()'
 
 # ── builder: the application on top of deps (cwasm below also reuses deps) ───
 FROM deps AS builder
