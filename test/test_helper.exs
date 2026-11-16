@@ -68,7 +68,15 @@ Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 # default (1s, 2s, 4s, or a Retry-After) made each test that stubs a 5xx or an
 # unreachable server sit for ~7s; there were dozens. A client that sets its own
 # :retry_delay still overrides this.
-Req.default_options(retry_delay: fn _attempt -> 0 end)
+#
+# Keyword.put, not a fresh list: the app installed Mydia.Net.ProxyAdapter as the
+# default adapter at boot, and a fresh list would drop it.
+Req.default_options(Keyword.put(Req.default_options(), :retry_delay, fn _attempt -> 0 end))
+
+# Boot read HTTPS_PROXY/HTTP_PROXY/NO_PROXY from the developer's shell. Clear the
+# cached outbound proxy so the suite never routes through a real one; tests that
+# need a proxy set it with Mydia.Net.Proxy.put_config/1 and restore it.
+Mydia.Net.Proxy.put_config(nil)
 
 # Refuse outbound HTTP. Nothing else stops a test reaching the production
 # metadata relay: Mydia.Metadata.default_relay_config/0 falls back to

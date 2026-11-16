@@ -98,6 +98,7 @@ defmodule Mydia.Config.Loader do
     case load(opts) do
       {:ok, config} ->
         Application.put_env(:mydia, :runtime_config, config)
+        Mydia.Net.Proxy.refresh(config)
         Mydia.Config.Broadcast.reloaded(Keyword.get(opts, :pubsub, Mydia.PubSub), config)
         {:ok, config}
 

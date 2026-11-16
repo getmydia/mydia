@@ -36,6 +36,14 @@ defmodule Mydia.Plugins.Net.Gate do
   for an approved endpoint, as do `0.0.0.0/8`, `::`, multicast and reserved
   (>= 240.0.0.0) addresses. Nothing a guest sends can add one.
 
+  **Under an outbound proxy** nothing above changes. `Mydia.Net.ProxyAdapter`
+  routes on `connect_options[:hostname]`, so a proxied gate request becomes
+  `CONNECT <validated-ip>:<port>` to the proxy, and Mint's tunnel still uses
+  `:hostname` for SNI and certificate verification. The proxy never resolves the
+  name, so the validate-then-connect rebinding window stays closed. The cost is
+  that the gate still resolves DNS itself: plugins need working DNS inside the
+  container even when every connection goes through a proxy.
+
   Every call emits a `plugin` audit event (slug, URL, status, byte size) so
   egress is queryable and surfaceable in the admin UI (U9).
 

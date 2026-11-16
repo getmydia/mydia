@@ -10,6 +10,8 @@ defmodule Mydia.Net.Proxy do
   appear in error messages.
   """
 
+  require Logger
+
   alias Mydia.Config.Schema.Proxy, as: ProxyConfig
   alias Mydia.Net.Proxy.Bypass
   alias Mydia.Plugins.Net.Gate
@@ -153,6 +155,25 @@ defmodule Mydia.Net.Proxy do
   @doc "The cached effective config, or nil when unset."
   @spec current() :: t() | nil
   def current, do: :persistent_term.get(@config_key, nil)
+
+  @doc """
+  Recomputes the effective proxy from a runtime config and caches it.
+
+  Called wherever the runtime config is cached (application boot and
+  `Mydia.Config.Loader.reload/1`). An invalid proxy URL logs a warning and
+  caches `nil`, so requests go direct rather than failing.
+  """
+  @spec refresh(Mydia.Config.Schema.t(), (String.t() -> String.t() | nil)) :: :ok
+  def refresh(%Mydia.Config.Schema{} = config, getenv \\ &System.get_env/1) do
+    case effective(config.proxy, getenv) do
+      {:ok, proxy} ->
+        put_config(proxy)
+
+      {:error, message} ->
+        Logger.warning("Ignoring outbound proxy: #{message}")
+        put_config(nil)
+    end
+  end
 
   # -- routing ---------------------------------------------------------------
 
