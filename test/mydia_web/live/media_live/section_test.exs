@@ -233,10 +233,14 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       refute has_element?(view, "#excluded-notice")
     end
 
-    test "the sidebar shows the pinned section", %{conn: conn, section: section} do
+    test "the sidebar shows the pinned section and its item count", %{
+      conn: conn,
+      section: section
+    } do
       {:ok, view, _html} = live(conn, ~p"/tv")
 
       assert has_element?(view, "#nav-section-#{section.id}", "Anime")
+      assert has_element?(view, "#nav-section-count-#{section.id}", "1")
     end
 
     test "the sidebar offers an add-section entry", %{conn: conn} do
@@ -299,26 +303,63 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert has_element?(view, "#section-heading", "Animation")
     end
 
-    test "the exclusive toggle is absent when the rules are not category-only", %{
-      conn: conn,
-      user: user
-    } do
-      {:ok, complex} =
+    test "the exclusive toggle is offered for non-category smart sections and hides matching items from Movies and TV",
+         %{
+           conn: conn,
+           user: user
+         } do
+      doc =
+        categorized_media_item_fixture(
+          %{title: "Free Solo", type: "movie", metadata: %{"genres" => ["Documentary"]}},
+          :movie
+        )
+
+      action =
+        categorized_media_item_fixture(
+          %{title: "Mad Max", type: "movie", metadata: %{"genres" => ["Action"]}},
+          :movie
+        )
+
+      {:ok, docs} =
         Collections.create_collection(user, %{
-          name: "Recent",
+          name: "Documentaries",
           type: "smart",
           visibility: "private",
           smart_rules:
             Jason.encode!(%{
-              "conditions" => [%{"field" => "year", "operator" => "gte", "value" => 2020}]
+              "conditions" => [
+                %{
+                  "field" => "metadata.genres",
+                  "operator" => "contains",
+                  "value" => "Documentary"
+                }
+              ]
             }),
-          pinned_position: 1
+          pinned_position: 1,
+          exclusive: false
         })
 
-      {:ok, view, _html} = live(conn, ~p"/sections/#{complex.id}")
-      view |> element("#open-section-settings") |> render_click()
+      {:ok, view, _html} = live(conn, ~p"/sections/#{docs.id}")
+      assert has_element?(view, "#nav-section-count-#{docs.id}", "1")
+      assert has_element?(view, "#nav-movie-count", "2")
 
-      refute has_element?(view, "#section-exclusive-toggle")
+      view |> element("#open-section-settings") |> render_click()
+      assert has_element?(view, "#section-exclusive-toggle")
+
+      view
+      |> form("#section-settings-form", section: %{name: "Documentaries", exclusive: "true"})
+      |> render_submit()
+
+      assert has_element?(view, "#nav-movie-count", "1")
+      assert has_element?(view, "#nav-section-count-#{docs.id}", "1")
+
+      {:ok, movies_view, movies_html} = live(conn, ~p"/movies")
+      assert has_element?(movies_view, "#nav-movie-count", "1")
+      assert movies_html =~ action.title
+      refute movies_html =~ doc.title
+
+      {:ok, _section_view, section_html} = live(conn, ~p"/sections/#{docs.id}")
+      assert section_html =~ doc.title
     end
   end
 

@@ -234,6 +234,8 @@ defmodule MydiaWeb.Layouts do
                 icon={section.sidebar_icon || "hero-squares-2x2"}
                 label={section.name}
                 current_path={@current_path}
+                count={section.item_count}
+                count_id={"nav-section-count-#{section.id}"}
               />
               <.nav_item
                 path="/collections"

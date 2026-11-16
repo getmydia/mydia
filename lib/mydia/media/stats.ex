@@ -28,12 +28,13 @@ defmodule Mydia.Media.Stats do
 
   ## Options
     - `:exclude_categories` - Drop these categories from the count
+    - `:exclude_queries` - Drop media items matching any of these Ecto queries
   """
   @spec count_movies(Scope.t(), keyword()) :: non_neg_integer()
   def count_movies(%Scope{} = scope, opts \\ []) do
     count_media_items(
       scope,
-      Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "movie")
+      Keyword.merge(Keyword.take(opts, [:exclude_categories, :exclude_queries]), type: "movie")
     )
   end
 
@@ -42,12 +43,13 @@ defmodule Mydia.Media.Stats do
 
   ## Options
     - `:exclude_categories` - Drop these categories from the count
+    - `:exclude_queries` - Drop media items matching any of these Ecto queries
   """
   @spec count_tv_shows(Scope.t(), keyword()) :: non_neg_integer()
   def count_tv_shows(%Scope{} = scope, opts \\ []) do
     count_media_items(
       scope,
-      Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "tv_show")
+      Keyword.merge(Keyword.take(opts, [:exclude_categories, :exclude_queries]), type: "tv_show")
     )
   end
 

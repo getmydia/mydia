@@ -32,6 +32,7 @@ defmodule Mydia.Media.Items do
     - `:monitored` - Filter by monitored status (true/false)
     - `:category` - Filter by category (atom or string, e.g., :anime_movie or "anime_movie")
     - `:exclude_categories` - Drop these categories from the result (list of atoms or strings)
+    - `:exclude_queries` - Drop media items matching any of these Ecto queries from the result
     - `:category_in` - Keep only these categories in the result (list of atoms or strings)
     - `:base_query` - Ecto query to start from instead of the full MediaItem table
     - `:library_path_type` - Filter by library path type (:movies, :series, etc.)

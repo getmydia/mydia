@@ -522,19 +522,19 @@ Pins are owner scoped. `Collections.list_pinned_sections/1` filters on
 shows up in anyone else's sidebar. A section can therefore never become a
 fixed section for the whole instance, only a per-user shortcut.
 
-A section marked `exclusive` claims its categories away from `/movies` and
-`/tv`, but only for its owner. Only a single `category in [...]` condition
-qualifies (`Collections.exclusive_eligible?/1`), because a richer rule set
-cannot be cleanly subtracted from those pages. The claimed list is derived
-from the rules on every read by `Collections.claimed_categories/1`, never
-stored, and returns `[]` for anything it cannot parse: malformed JSON, or
-rules that are not exactly one `category in [...]` condition.
+A section marked `exclusive` claims its matching items away from `/movies` and
+`/tv`, but only for its owner. Any smart collection with valid conditions
+qualifies (`Collections.exclusive_eligible?/1`). The claimed categories and
+exclusion queries are derived from the rules on every read by
+`Collections.claimed_categories/1` and `Collections.excluded_queries/1`, never
+stored, and fail open (`[]`) for anything they cannot parse: malformed JSON, or
+empty conditions.
 
 The exclusion is applied only on the built-in Movies and TV pages, never on a
-section's own page. `MediaLive.Index.build_query_opts/1` passes
-`:exclude_categories` only when `assigns[:section]` is `nil`. A section's own
-query already filters to `category in [...]`, so subtracting the same
-categories again there would empty the section out.
+section's own page. `MediaLive.Index.Window.listing_opts/2` passes
+`:exclude_categories` and `:exclude_queries` only when `assigns[:section]` is
+`nil`. A section's own query already filters to its rules, so subtracting the
+same items again there would empty the section out.
 
 ## Mobile layout sweep
 

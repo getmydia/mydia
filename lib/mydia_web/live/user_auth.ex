@@ -127,30 +127,9 @@ defmodule MydiaWeb.Live.UserAuth do
     # short to be worth showing, and answers from memory.
     executing_jobs = Mydia.Jobs.StatusTracker.visible_jobs()
 
-    sections =
-      case Map.fetch(socket.assigns, :current_user) do
-        {:ok, %{} = user} -> Mydia.Collections.list_pinned_sections(user)
-        _ -> []
-      end
-
-    excluded_categories = Mydia.Collections.claimed_categories(sections)
-
     socket =
       socket
-      |> assign(
-        :movie_count,
-        Mydia.Media.count_movies(socket.assigns.current_scope,
-          exclude_categories: excluded_categories
-        )
-      )
-      |> assign(
-        :tv_show_count,
-        Mydia.Media.count_tv_shows(socket.assigns.current_scope,
-          exclude_categories: excluded_categories
-        )
-      )
-      |> assign(:excluded_categories, excluded_categories)
-      |> assign(:sections, sections)
+      |> refresh_section_navigation()
       |> assign(:downloads_count, Mydia.Downloads.count_active_downloads())
       |> assign(:import_candidate_group_count, Mydia.ImportCandidates.count_pending())
       |> assign(:pending_requests_count, pending_requests_count)
@@ -179,6 +158,43 @@ defmodule MydiaWeb.Live.UserAuth do
       end
 
     {:cont, socket}
+  end
+
+  @doc """
+  Recomputes sidebar sections, their item counts, and the Movies/TV exclusion
+  assigns and counts. Called at mount and after pinned section mutations.
+  """
+  def refresh_section_navigation(socket) do
+    scope = socket.assigns.current_scope
+
+    sections =
+      case Map.fetch(socket.assigns, :current_user) do
+        {:ok, %{} = user} -> Mydia.Collections.list_pinned_sections(user, scope)
+        _ -> []
+      end
+
+    excluded_categories = Mydia.Collections.claimed_categories(sections)
+    excluded_queries = Mydia.Collections.excluded_queries(sections)
+
+    socket =
+      socket
+      |> assign(:excluded_categories, excluded_categories)
+      |> assign(:excluded_queries, excluded_queries)
+      |> assign(:sections, sections)
+
+    opts = exclude_opts(socket)
+
+    socket
+    |> assign(:movie_count, Mydia.Media.count_movies(scope, opts))
+    |> assign(:tv_show_count, Mydia.Media.count_tv_shows(scope, opts))
+  end
+
+  @doc "Filter options excluding items claimed by the user's exclusive sections."
+  def exclude_opts(socket) do
+    [
+      exclude_categories: socket.assigns[:excluded_categories] || [],
+      exclude_queries: socket.assigns[:excluded_queries] || []
+    ]
   end
 
   # Track current path for active navigation highlighting

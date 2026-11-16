@@ -1,10 +1,13 @@
 defmodule Mydia.Collections.SectionsTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Collections
   alias Mydia.Collections.Collection
+  alias Mydia.Media
 
   import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
 
   describe "sidebar section fields" do
     test "changeset accepts a pinned position, an allowlisted icon and exclusive" do
@@ -120,6 +123,20 @@ defmodule Mydia.Collections.SectionsTest do
       {:ok, _} = Collections.update_collection(owner, collection, %{visibility: "shared"})
 
       assert Collections.list_pinned_sections(other) == []
+    end
+
+    test "list_pinned_sections/2 populates virtual item_count for the given scope" do
+      user = user_fixture()
+      scope = Scope.for_user(user)
+
+      categorized_media_item_fixture(%{title: "Akira", type: "movie"}, :anime_movie)
+      categorized_media_item_fixture(%{title: "Dune", type: "movie"}, :movie)
+
+      {:ok, anime} = pinned(user, "Anime", 0, ["anime_movie"])
+
+      assert [loaded] = Collections.list_pinned_sections(user, scope)
+      assert loaded.id == anime.id
+      assert loaded.item_count == 1
     end
   end
 
@@ -252,6 +269,91 @@ defmodule Mydia.Collections.SectionsTest do
     end
   end
 
+  describe "excluded_queries/1" do
+    test "excludes items matching an exclusive non-category smart section" do
+      user = user_fixture()
+      scope = Scope.for_user(user)
+
+      doc =
+        categorized_media_item_fixture(
+          %{title: "Planet Earth", type: "tv_show", metadata: %{"genres" => ["Documentary"]}},
+          :tv_show
+        )
+
+      drama =
+        categorized_media_item_fixture(
+          %{title: "Breaking Bad", type: "tv_show", metadata: %{"genres" => ["Drama"]}},
+          :tv_show
+        )
+
+      {:ok, _section} =
+        Collections.create_collection(user, %{
+          name: "Documentaries",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{
+                  "field" => "metadata.genres",
+                  "operator" => "contains",
+                  "value" => "Documentary"
+                }
+              ]
+            }),
+          pinned_position: 0,
+          exclusive: true
+        })
+
+      queries = Collections.excluded_queries(user)
+      assert length(queries) == 1
+
+      remaining_ids =
+        Media.list_media_items(scope, type: "tv_show", exclude_queries: queries)
+        |> Enum.map(& &1.id)
+
+      assert drama.id in remaining_ids
+      refute doc.id in remaining_ids
+      assert Media.count_tv_shows(scope, exclude_queries: queries) == 1
+    end
+
+    test "returns nothing when the section is not exclusive" do
+      user = user_fixture()
+
+      {:ok, _} =
+        Collections.create_collection(user, %{
+          name: "Documentaries",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{
+                  "field" => "metadata.genres",
+                  "operator" => "contains",
+                  "value" => "Documentary"
+                }
+              ]
+            }),
+          pinned_position: 0,
+          exclusive: false
+        })
+
+      assert Collections.excluded_queries(user) == []
+    end
+
+    test "returns nothing and does not raise when the rules are unparseable" do
+      user = user_fixture()
+      {:ok, collection} = pinned(user, "Anime", 0, ["anime_movie"], exclusive: true)
+
+      collection
+      |> Ecto.Changeset.change(%{smart_rules: "{not json"})
+      |> Mydia.Repo.update!()
+
+      assert Collections.excluded_queries(user) == []
+    end
+  end
+
   describe "exclusive_eligible?/1" do
     test "true for a single category-in condition" do
       user = user_fixture()
@@ -260,11 +362,43 @@ defmodule Mydia.Collections.SectionsTest do
       assert Collections.exclusive_eligible?(collection)
     end
 
+    test "true for any valid non-empty smart collection such as a genre rule" do
+      user = user_fixture()
+
+      {:ok, docs} =
+        Collections.create_collection(user, %{
+          name: "Documentaries",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{
+                  "field" => "metadata.genres",
+                  "operator" => "contains",
+                  "value" => "Documentary"
+                }
+              ]
+            })
+        })
+
+      assert Collections.exclusive_eligible?(docs)
+    end
+
     test "false for a manual collection" do
       user = user_fixture()
       {:ok, collection} = Collections.create_collection(user, plain_attrs("Manual"))
 
       refute Collections.exclusive_eligible?(collection)
+    end
+
+    test "false when smart_rules has empty conditions or invalid JSON" do
+      refute Collections.exclusive_eligible?(%Collection{
+               type: "smart",
+               smart_rules: ~s({"conditions":[]})
+             })
+
+      refute Collections.exclusive_eligible?(%Collection{type: "smart", smart_rules: "{bad json"})
     end
   end
 

@@ -589,7 +589,7 @@ defmodule MydiaWeb.MediaLive.Index do
            |> assign(:section, updated)
            |> assign(:page_title, updated.name)
            |> assign(:show_section_settings, false)
-           |> assign(:excluded_categories, Collections.claimed_categories(user))
+           |> MydiaWeb.Live.UserAuth.refresh_section_navigation()
            |> put_flash(:info, gettext("Section updated"))}
 
         {:error, _changeset} ->

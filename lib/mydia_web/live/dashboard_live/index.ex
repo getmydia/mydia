@@ -130,9 +130,9 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   defp load_widget(socket, :library_stats) do
     scope = socket.assigns.current_scope
-    excluded_categories = socket.assigns[:excluded_categories] || []
-    movie_count = Media.count_movies(scope, exclude_categories: excluded_categories)
-    tv_show_count = Media.count_tv_shows(scope, exclude_categories: excluded_categories)
+    opts = MydiaWeb.Live.UserAuth.exclude_opts(socket)
+    movie_count = Media.count_movies(scope, opts)
+    tv_show_count = Media.count_tv_shows(scope, opts)
     active_downloads_count = Downloads.count_active_downloads()
     total_storage = Library.total_storage_bytes() |> format_bytes()
 
