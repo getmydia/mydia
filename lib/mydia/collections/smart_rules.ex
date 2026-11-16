@@ -350,6 +350,24 @@ defmodule Mydia.Collections.SmartRules do
   end
 
   @doc """
+  Returns true when `condition` has a supported field/operator pair and, for
+  date comparisons, a parseable value that will not fall back to `true`.
+  """
+  def supported_condition?(%{"field" => "inserted_at", "operator" => op, "value" => value})
+      when op in ["gt", "gte", "lt", "lte"] do
+    match?({:ok, _, _}, DateTime.from_iso8601(to_string_if_binary(value)))
+  end
+
+  def supported_condition?(%{"field" => field, "operator" => operator}) do
+    supported_operator?(field, operator)
+  end
+
+  def supported_condition?(_), do: false
+
+  defp to_string_if_binary(val) when is_binary(val), do: val
+  defp to_string_if_binary(_), do: ""
+
+  @doc """
   Returns true when `field` and `operator` have a matching query builder clause.
   """
   def supported_operator?("year", "in"), do: true

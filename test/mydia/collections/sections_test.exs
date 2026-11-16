@@ -441,6 +441,30 @@ defmodule Mydia.Collections.SectionsTest do
                    ]
                  })
              })
+
+      refute Collections.exclusive_eligible?(%Collection{
+               type: "smart",
+               smart_rules:
+                 Jason.encode!(%{
+                   "conditions" => [
+                     %{"field" => "inserted_at", "operator" => "gte", "value" => 42}
+                   ]
+                 })
+             })
+
+      assert Collections.exclusive_eligible?(%Collection{
+               type: "smart",
+               smart_rules:
+                 Jason.encode!(%{
+                   "conditions" => [
+                     %{
+                       "field" => "inserted_at",
+                       "operator" => "gte",
+                       "value" => "2026-01-01T00:00:00Z"
+                     }
+                   ]
+                 })
+             })
     end
   end
 

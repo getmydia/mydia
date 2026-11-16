@@ -173,10 +173,7 @@ defmodule Mydia.Collections.Sections do
        when is_binary(rules) do
     case Jason.decode(rules) do
       {:ok, %{"conditions" => [_ | _] = conditions} = decoded} ->
-        if Enum.all?(
-             conditions,
-             &(is_map(&1) and SmartRules.supported_operator?(&1["field"], &1["operator"]))
-           ) do
+        if Enum.all?(conditions, &SmartRules.supported_condition?/1) do
           case SmartRules.query(decoded) do
             {:ok, query} -> [query]
             {:error, _} -> []

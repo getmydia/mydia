@@ -419,7 +419,7 @@ msgstr ""
 #: lib/mydia_web/components/media_request_components.ex:137
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:263
 #: lib/mydia_web/live/calendar_live/index.html.heex:197
-#: lib/mydia_web/live/collection_live/components.ex:575
+#: lib/mydia_web/live/collection_live/components.ex:576
 #: lib/mydia_web/live/collection_live/rule_labels.ex:26
 #: lib/mydia_web/live/components/library_search_form.ex:72
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:118
@@ -2458,7 +2458,7 @@ msgstr ""
 msgid "A later scan will find the file again and re-import it"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:69
+#: lib/mydia_web/live/media_live/index/library_actions.ex:70
 #, elixir-autogen, elixir-format
 msgid "A library scan is already queued"
 msgstr ""
@@ -2525,7 +2525,7 @@ msgid "Activity Feed"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/components.ex:95
-#: lib/mydia_web/live/collection_live/components.ex:589
+#: lib/mydia_web/live/collection_live/components.ex:590
 #: lib/mydia_web/live/collection_live/preset_components.ex:104
 #, elixir-autogen, elixir-format
 msgid "Add"
@@ -2629,7 +2629,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:108
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:249
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:93
-#: lib/mydia_web/live/collection_live/components.ex:584
+#: lib/mydia_web/live/collection_live/components.ex:585
 #: lib/mydia_web/live/collection_live/preset_components.ex:94
 #: lib/mydia_web/live/media_live/show/modals.ex:767
 #, elixir-autogen, elixir-format
@@ -4520,7 +4520,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/cardigann_engine_components.ex:54
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:38
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:175
-#: lib/mydia_web/live/collection_live/components.ex:601
+#: lib/mydia_web/live/collection_live/components.ex:602
 #: lib/mydia_web/live/collection_live/index.ex:306
 #: lib/mydia_web/live/dashboard_live/edit_home_components.ex:115
 #: lib/mydia_web/live/media_live/index.html.heex:1032
@@ -5115,7 +5115,7 @@ msgstr ""
 msgid "Failed to revoke device"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:80
+#: lib/mydia_web/live/media_live/index/library_actions.ex:81
 #, elixir-autogen, elixir-format
 msgid "Failed to start library scan"
 msgstr ""
@@ -5152,7 +5152,7 @@ msgid "Failed to update monitoring"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/index/library_actions.ex:21
-#: lib/mydia_web/live/media_live/index/library_actions.ex:57
+#: lib/mydia_web/live/media_live/index/library_actions.ex:58
 #, elixir-autogen, elixir-format
 msgid "Failed to update monitoring status"
 msgstr ""
@@ -5940,7 +5940,7 @@ msgstr ""
 msgid "Library scan failed: %{error}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:77
+#: lib/mydia_web/live/media_live/index/library_actions.ex:78
 #, elixir-autogen, elixir-format
 msgid "Library scan started..."
 msgstr ""
@@ -6263,7 +6263,7 @@ msgstr ""
 msgid "Monitored Status"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:52
+#: lib/mydia_web/live/media_live/index/library_actions.ex:53
 #: lib/mydia_web/live/media_live/show/episode_events.ex:39
 #, elixir-autogen, elixir-format
 msgid "Monitoring disabled"
@@ -6276,7 +6276,7 @@ msgid_plural "Monitoring disabled for %{count} episodes in Season %{season}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:51
+#: lib/mydia_web/live/media_live/index/library_actions.ex:52
 #: lib/mydia_web/live/media_live/show/episode_events.ex:38
 #, elixir-autogen, elixir-format
 msgid "Monitoring enabled"
@@ -9461,7 +9461,7 @@ msgid "TV Series"
 msgstr ""
 
 #: lib/mydia_web/components/media_request_components.ex:138
-#: lib/mydia_web/live/collection_live/components.ex:575
+#: lib/mydia_web/live/collection_live/components.ex:576
 #: lib/mydia_web/live/collection_live/rule_labels.ex:27
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:117
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:142
