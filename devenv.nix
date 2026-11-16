@@ -156,13 +156,15 @@ in
     sqlite
 
     # S3 server for storage tests and local S3 libraries (MinIO is archived).
-    # Supply pkg-config, aws-lc, and zstd for nixpkgs' cargoUseSystemLibs hook.
+    # Supply pkg-config, aws-lc, and zstd for nixpkgs' cargoUseSystemLibs hook,
+    # and disable fat LTO so CI runners don't OOM compiling rustfs-ecstore.
     (rustfs.overrideAttrs (old: {
       nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkg-config ];
       buildInputs = (old.buildInputs or [ ]) ++ [
         aws-lc
         zstd
       ];
+      CARGO_PROFILE_RELEASE_LTO = "false";
     }))
 
     # Built-in torrent engine, started by Mydia in the native dev loop. The
