@@ -155,8 +155,20 @@ in
     # Database CLI (SQLite is the default adapter)
     sqlite
 
-    # S3 server for storage tests and local S3 libraries (MinIO is archived)
-    rustfs
+    # S3 server for storage tests and local S3 libraries (MinIO is archived).
+    # Supply pkg-config, aws-lc, and zstd for nixpkgs' cargoUseSystemLibs hook,
+    # and disable fat LTO so CI runners don't OOM compiling rustfs-ecstore.
+    (rustfs.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkg-config ];
+      buildInputs = (old.buildInputs or [ ]) ++ [
+        aws-lc
+        zstd
+      ];
+      env = (old.env or { }) // {
+        CARGO_PROFILE_RELEASE_LTO = "false";
+        CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "16";
+      };
+    }))
 
     # Built-in torrent engine, started by Mydia in the native dev loop. The
     # VPN is Docker-only.
