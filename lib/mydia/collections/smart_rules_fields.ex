@@ -127,6 +127,33 @@ defmodule Mydia.Collections.SmartRulesFields do
   end
 
   @doc """
+  Returns true when `condition` has a supported field/operator pair and, for
+  date comparisons, a parseable value that will not fall back to `true`.
+  """
+  def supported_condition?(%{"field" => "inserted_at", "operator" => op, "value" => value})
+      when op in ["gt", "gte", "lt", "lte"] do
+    is_binary(value) and match?({:ok, _, _}, DateTime.from_iso8601(value))
+  end
+
+  def supported_condition?(%{"field" => field, "operator" => operator}) do
+    supported_operator?(field, operator)
+  end
+
+  def supported_condition?(_), do: false
+
+  @doc """
+  Returns true when `field` and `operator` have a matching query builder clause.
+  """
+  def supported_operator?("year", "in"), do: true
+  def supported_operator?("year", "not_in"), do: true
+
+  def supported_operator?(field, operator) do
+    field
+    |> get_operators()
+    |> Enum.any?(&(to_string(&1) == operator))
+  end
+
+  @doc """
   Returns operators for a field.
   """
   def get_operators(field_name) do

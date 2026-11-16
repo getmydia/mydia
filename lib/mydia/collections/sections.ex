@@ -9,7 +9,7 @@ defmodule Mydia.Collections.Sections do
 
   alias Mydia.Accounts.{Scope, User}
   alias Mydia.Collections
-  alias Mydia.Collections.{Collection, SmartRules}
+  alias Mydia.Collections.{Collection, SmartRules, SmartRulesFields}
   alias Mydia.Media.{MediaCategory, Stats}
   alias Mydia.Repo
 
@@ -171,19 +171,12 @@ defmodule Mydia.Collections.Sections do
 
   defp section_exclusion_query(%Collection{type: "smart", smart_rules: rules})
        when is_binary(rules) do
-    case Jason.decode(rules) do
-      {:ok, %{"conditions" => [_ | _] = conditions} = decoded} ->
-        if Enum.all?(conditions, &SmartRules.supported_condition?/1) do
-          case SmartRules.query(decoded) do
-            {:ok, query} -> [query]
-            {:error, _} -> []
-          end
-        else
-          []
-        end
-
-      _ ->
-        []
+    with {:ok, %{"conditions" => [_ | _] = conditions} = decoded} <- Jason.decode(rules),
+         true <- Enum.all?(conditions, &SmartRulesFields.supported_condition?/1),
+         {:ok, query} <- SmartRules.query(decoded) do
+      [query]
+    else
+      _ -> []
     end
   end
 

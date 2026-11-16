@@ -48,7 +48,6 @@ defmodule Mydia.Collections.SmartRules do
   import Ecto.Query, warn: false
   import Mydia.QueryHelpers
   alias Mydia.Accounts.Scope
-  alias Mydia.Collections.SmartRulesFields
   alias Mydia.Media.MediaItem
   alias Mydia.Media.Restrictions
   alias Mydia.Repo
@@ -347,36 +346,6 @@ defmodule Mydia.Collections.SmartRules do
 
   defp validate_condition(_, idx) do
     ["conditions[#{idx}]: must be an object"]
-  end
-
-  @doc """
-  Returns true when `condition` has a supported field/operator pair and, for
-  date comparisons, a parseable value that will not fall back to `true`.
-  """
-  def supported_condition?(%{"field" => "inserted_at", "operator" => op, "value" => value})
-      when op in ["gt", "gte", "lt", "lte"] do
-    match?({:ok, _, _}, DateTime.from_iso8601(to_string_if_binary(value)))
-  end
-
-  def supported_condition?(%{"field" => field, "operator" => operator}) do
-    supported_operator?(field, operator)
-  end
-
-  def supported_condition?(_), do: false
-
-  defp to_string_if_binary(val) when is_binary(val), do: val
-  defp to_string_if_binary(_), do: ""
-
-  @doc """
-  Returns true when `field` and `operator` have a matching query builder clause.
-  """
-  def supported_operator?("year", "in"), do: true
-  def supported_operator?("year", "not_in"), do: true
-
-  def supported_operator?(field, operator) do
-    field
-    |> SmartRulesFields.get_operators()
-    |> Enum.any?(&(to_string(&1) == operator))
   end
 
   # Validates that the value type is compatible with the field
