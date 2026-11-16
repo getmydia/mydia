@@ -164,7 +164,10 @@ in
         aws-lc
         zstd
       ];
-      CARGO_PROFILE_RELEASE_LTO = "false";
+      env = (old.env or { }) // {
+        CARGO_PROFILE_RELEASE_LTO = "false";
+        CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "16";
+      };
     }))
 
     # Built-in torrent engine, started by Mydia in the native dev loop. The
