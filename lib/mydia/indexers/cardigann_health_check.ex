@@ -667,9 +667,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     do: {:error, "Request timeout"}
 
   defp classify_homepage({:error, reason}, url) do
-    proxy_msg =
-      if is_exception(reason),
-        do: Mydia.Net.Proxy.describe_error(reason, URI.parse(url).host)
+    proxy_msg = Mydia.Net.Proxy.describe_error(reason, URI.parse(url).host)
 
     case {proxy_msg, reason} do
       {msg, _} when is_binary(msg) -> {:error, msg}
