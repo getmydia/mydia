@@ -61,6 +61,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.RequestHeaders
+  alias Mydia.Indexers.Cardigann.RequestError
   alias Mydia.Indexers.Cardigann.SearchPaths
   alias Mydia.Indexers.Cardigann.SearchRequest
   alias Mydia.Indexers.Cardigann.SessionCookies
@@ -477,26 +478,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         {:error, Error.connection_failed("Request timeout")}
 
       {:error, reason} ->
-        {:error, request_error(reason, url)}
-    end
-  end
-
-  # A failure that happened on the way through the configured proxy is named
-  # after it; every other failure keeps its existing message.
-  defp request_error(reason, url) do
-    proxy_msg =
-      if is_exception(reason),
-        do: Mydia.Net.Proxy.describe_error(reason, URI.parse(url).host)
-
-    case {proxy_msg, reason} do
-      {msg, _} when is_binary(msg) ->
-        Error.connection_failed(msg)
-
-      {nil, %Req.TransportError{reason: reason}} ->
-        Error.connection_failed("Connection failed: #{inspect(reason)}")
-
-      {nil, reason} ->
-        Error.search_failed("Request failed: #{inspect(reason)}")
+        {:error, RequestError.from_reason(reason, url)}
     end
   end
 
@@ -573,7 +555,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         {:error, Error.connection_failed("Request timeout")}
 
       {:error, reason} ->
-        {:error, request_error(reason, url)}
+        {:error, RequestError.from_reason(reason, url)}
     end
   end
 

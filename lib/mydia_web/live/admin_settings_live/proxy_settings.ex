@@ -146,18 +146,22 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
   defp write(changes, user_id) do
     fn ->
       Enum.reduce(changes, [], fn {key, value}, written ->
-        attrs = %{key: key, value: value || "", category: :proxy, updated_by_id: user_id}
-
-        case Settings.upsert_config_setting(attrs) do
-          {:ok, _setting} -> [key | written]
-          {:error, reason} -> Mydia.Repo.rollback({key, reason})
-        end
+        [upsert_setting!(key, value, user_id) | written]
       end)
     end
     |> Mydia.Repo.transaction()
     |> case do
       {:ok, written} -> {:ok, Enum.reverse(written)}
       {:error, {key, reason}} -> {:error, key, reason}
+    end
+  end
+
+  defp upsert_setting!(key, value, user_id) do
+    attrs = %{key: key, value: value || "", category: :proxy, updated_by_id: user_id}
+
+    case Settings.upsert_config_setting(attrs) do
+      {:ok, _setting} -> key
+      {:error, reason} -> Mydia.Repo.rollback({key, reason})
     end
   end
 
