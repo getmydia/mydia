@@ -476,11 +476,27 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, %Req.TransportError{reason: :timeout}} ->
         {:error, Error.connection_failed("Request timeout")}
 
-      {:error, %Req.TransportError{reason: reason}} ->
-        {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
-
       {:error, reason} ->
-        {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
+        {:error, request_error(reason, url)}
+    end
+  end
+
+  # A failure that happened on the way through the configured proxy is named
+  # after it; every other failure keeps its existing message.
+  defp request_error(reason, url) do
+    proxy_msg =
+      if is_exception(reason),
+        do: Mydia.Net.Proxy.describe_error(reason, URI.parse(url).host)
+
+    case {proxy_msg, reason} do
+      {msg, _} when is_binary(msg) ->
+        Error.connection_failed(msg)
+
+      {nil, %Req.TransportError{reason: reason}} ->
+        Error.connection_failed("Connection failed: #{inspect(reason)}")
+
+      {nil, reason} ->
+        Error.search_failed("Request failed: #{inspect(reason)}")
     end
   end
 
@@ -556,11 +572,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, %Req.TransportError{reason: :timeout}} ->
         {:error, Error.connection_failed("Request timeout")}
 
-      {:error, %Req.TransportError{reason: reason}} ->
-        {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
-
       {:error, reason} ->
-        {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
+        {:error, request_error(reason, url)}
     end
   end
 

@@ -52,4 +52,17 @@ defmodule Mydia.Plugins.Net.GateProxyTest do
 
     assert ConnectProxy.requests(proxy.log) == []
   end
+
+  test "a proxy that wants credentials is named in the network error" do
+    {:ok, proxy} = ConnectProxy.start(respond: {:status, 407})
+    use_proxy(proxy.port)
+
+    assert {:error, %Error{type: :network_error, message: message}} =
+             Gate.request("https://tracker.example.test/",
+               allowed_hosts: ["tracker.example.test"],
+               resolver: fn _ -> {:ok, [{203, 0, 113, 10}]} end
+             )
+
+    assert message == "proxy 127.0.0.1:#{proxy.port} requires authentication"
+  end
 end

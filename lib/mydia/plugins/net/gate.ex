@@ -375,7 +375,10 @@ defmodule Mydia.Plugins.Net.Gate do
       # abort would otherwise propagate `:shutdown` and kill the guest. async_nolink
       # turns that into a deliverable message, and the outer deadline is the single
       # authoritative timeout.
-      task = Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn -> do_request(req_opts) end)
+      task =
+        Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn ->
+          do_request(req_opts, uri.host)
+        end)
 
       case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
         {:ok, result} -> result
@@ -385,7 +388,7 @@ defmodule Mydia.Plugins.Net.Gate do
     end
   end
 
-  defp do_request(req_opts) do
+  defp do_request(req_opts, host) do
     case Req.request(req_opts) do
       {:ok, %Req.Response{body: {:too_large, cap}}} ->
         {:error, Error.new(:too_large, "response exceeded #{cap} bytes")}
@@ -395,7 +398,7 @@ defmodule Mydia.Plugins.Net.Gate do
 
       {:error, %{__struct__: s} = err}
       when s in [Req.TransportError, Req.HTTPError, Mint.TransportError, Mint.HTTPError] ->
-        {:error, classify_transport_error(err)}
+        {:error, classify_transport_error(err, host)}
 
       {:error, reason} ->
         {:error, Error.new(:network_error, "request failed: #{inspect(reason)}")}
@@ -487,11 +490,15 @@ defmodule Mydia.Plugins.Net.Gate do
   defp normalize_method(other),
     do: {:error, Error.new(:invalid_request, "invalid HTTP method: #{inspect(other)}")}
 
-  defp classify_transport_error(%{reason: :timeout}),
+  defp classify_transport_error(%{reason: :timeout}, _host),
     do: Error.new(:timeout, "connection or receive timed out")
 
-  defp classify_transport_error(err),
-    do: Error.new(:network_error, "transport error: #{inspect(err)}")
+  defp classify_transport_error(err, host) do
+    case Mydia.Net.Proxy.describe_error(err, host) do
+      nil -> Error.new(:network_error, "transport error: #{inspect(err)}")
+      msg -> Error.new(:network_error, msg)
+    end
+  end
 
   # ── Audit ─────────────────────────────────────────────────────────────────
 

@@ -668,6 +668,38 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
     end
   end
 
+  describe "proxy failures" do
+    setup do
+      previous = Mydia.Net.Proxy.current()
+      on_exit(fn -> Mydia.Net.Proxy.put_config(previous) end)
+      :ok
+    end
+
+    test "a proxy that wants credentials is named instead of 'No answer'", %{bypass: b} do
+      {:ok, proxy} = Mydia.Test.ConnectProxy.start(respond: {:status, 407})
+
+      {:ok, proxy_config} =
+        Mydia.Net.Proxy.effective(
+          %Mydia.Config.Schema.Proxy{url: "http://127.0.0.1:#{proxy.port}"},
+          fn _ -> nil end
+        )
+
+      Mydia.Net.Proxy.put_config(proxy_config)
+
+      yaml =
+        "lantern-public.yml"
+        |> fixture()
+        |> String.replace("  - https://lantern.invalid/", "  - https://203.0.113.10/")
+
+      definition = insert_definition("lantern-public.yml", b, %{definition: yaml})
+
+      assert {:error, %Error{type: :connection_failed, message: message}} =
+               Adapter.search(config(definition), "harbor")
+
+      assert message == "proxy 127.0.0.1:#{proxy.port} requires authentication"
+    end
+  end
+
   describe "gate options" do
     test "only the localhost relaxation is taken from app env" do
       Application.put_env(:mydia, :cardigann_wasm_gate_opts,
