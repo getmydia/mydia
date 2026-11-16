@@ -264,6 +264,7 @@ defmodule Mydia.Config.Loader do
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
+      proxy: Mydia.Config.Env.ProxyEnv.load(),
       built_in_torrent: Mydia.Config.Env.BuiltInTorrentEnv.load(),
       cardigann: Mydia.Config.Env.CardigannEnv.load(),
       remote_access: load_remote_access_env(),

@@ -60,6 +60,7 @@ defmodule Mydia.Config.Schema do
           oban: __MODULE__.Oban.t() | nil,
           plugins: __MODULE__.Plugins.t() | nil,
           flaresolverr: __MODULE__.FlareSolverr.t() | nil,
+          proxy: __MODULE__.Proxy.t() | nil,
           built_in_torrent: __MODULE__.BuiltInTorrent.t() | nil,
           cardigann: __MODULE__.Cardigann.t() | nil,
           remote_access: __MODULE__.RemoteAccess.t() | nil,
@@ -318,6 +319,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :flaresolverr, Mydia.Config.Schema.FlareSolverr, on_replace: :update
+    embeds_one :proxy, Mydia.Config.Schema.Proxy, on_replace: :update
     embeds_one :built_in_torrent, Mydia.Config.Schema.BuiltInTorrent, on_replace: :update
     embeds_one :cardigann, Mydia.Config.Schema.Cardigann, on_replace: :update
     embeds_one :ui, Mydia.Config.Schema.Ui, on_replace: :update
@@ -490,6 +492,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:oban, with: &oban_changeset/2)
     |> cast_embed(:plugins, with: &plugins_changeset/2)
     |> cast_embed(:flaresolverr)
+    |> cast_embed(:proxy)
     |> cast_embed(:built_in_torrent)
     |> cast_embed(:cardigann)
     |> cast_embed(:remote_access, with: &remote_access_changeset/2)
@@ -1051,6 +1054,7 @@ defmodule Mydia.Config.Schema do
       oban: %__MODULE__.Oban{},
       plugins: %__MODULE__.Plugins{},
       flaresolverr: %__MODULE__.FlareSolverr{},
+      proxy: %__MODULE__.Proxy{},
       built_in_torrent: %__MODULE__.BuiltInTorrent{},
       cardigann: %__MODULE__.Cardigann{},
       remote_access: %__MODULE__.RemoteAccess{}
