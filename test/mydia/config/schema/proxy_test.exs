@@ -17,6 +17,19 @@ defmodule Mydia.Config.Schema.ProxyTest do
     end
   end
 
+  test "rejects a port URI.parse/1 would silently replace, without echoing credentials" do
+    for url <- [
+          "http://proxy:99999",
+          "http://proxy:abc",
+          "http://proxy:0",
+          "http://user:p#ss@proxy:3128"
+        ] do
+      cs = Proxy.changeset(%Proxy{}, %{url: url})
+      refute cs.valid?, url
+      assert {"must have a port from 1 to 65535", _} = cs.errors[:url]
+    end
+  end
+
   test "nil and empty url are valid (no proxy)" do
     assert %{valid?: true} = Proxy.changeset(%Proxy{}, %{url: nil})
     assert %{valid?: true} = Proxy.changeset(%Proxy{}, %{url: ""})

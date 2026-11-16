@@ -7,7 +7,7 @@ defmodule Mydia.Config.Env.ProxyEnv do
   alias Mydia.Config.Loader
 
   @spec load((String.t() -> String.t() | nil)) :: map()
-  def load(getenv \\ &System.get_env/1) do
+  def load(getenv \\ Mydia.Net.Proxy.getenv()) do
     %{}
     |> Loader.put_if_present(:url, getenv.("MYDIA_PROXY_URL"))
     |> Loader.put_if_present(:bypass, getenv.("MYDIA_PROXY_BYPASS"))

@@ -36,7 +36,8 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
             bypass: nil,
             url_source: :default,
             bypass_source: :default,
-            configured?: false
+            configured?: false,
+            config_error: nil
 
   @type source :: :env | :database | :default | :standard_env
   @type t :: %__MODULE__{
@@ -44,23 +45,31 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
           bypass: String.t() | nil,
           url_source: source(),
           bypass_source: source(),
-          configured?: boolean()
+          configured?: boolean(),
+          config_error: {String.t(), String.t()} | nil
         }
 
   @doc "The effective proxy, masked, and where each value came from."
   @spec current((String.t() -> String.t() | nil)) :: t()
-  def current(getenv \\ &System.get_env/1) do
+  def current(getenv \\ Proxy.getenv()) do
     proxy = Proxy.current()
+    config_error = Proxy.config_error()
     db = Settings.applied_config_settings_by_key()
 
     %__MODULE__{
       url: proxy && proxy.display_url,
       bypass: bypass_string(proxy, getenv),
-      url_source: source(@url_env, @url_key, db, getenv, proxy && proxy.url_from),
+      url_source: source(@url_env, @url_key, db, getenv, url_from(proxy, config_error)),
       bypass_source: source(@bypass_env, @bypass_key, db, getenv, proxy && proxy.bypass_from),
-      configured?: not is_nil(proxy)
+      configured?: not is_nil(proxy),
+      config_error: config_error
     }
   end
+
+  # An ignored standard variable still names where the URL came from.
+  defp url_from(%Proxy{url_from: from}, _config_error), do: from
+  defp url_from(nil, {var, _reason}) when var in @standard_url_vars, do: :standard_env
+  defp url_from(nil, _config_error), do: nil
 
   defp source(env_var, key, db, getenv, from) do
     cond do
@@ -103,7 +112,7 @@ defmodule MydiaWeb.AdminSettingsLive.ProxySettings do
   """
   @spec save(map(), binary() | nil, (String.t() -> String.t() | nil)) ::
           {:ok, [String.t()]} | {:error, Ecto.Changeset.t()} | {:error, String.t(), term()}
-  def save(params, user_id, getenv \\ &System.get_env/1) do
+  def save(params, user_id, getenv \\ Proxy.getenv()) do
     settings = current(getenv)
     changeset = changeset(params)
 

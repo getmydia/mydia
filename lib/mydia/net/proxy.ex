@@ -39,6 +39,8 @@ defmodule Mydia.Net.Proxy do
   @url_vars ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
   @bypass_vars ["NO_PROXY", "no_proxy"]
   @config_key {__MODULE__, :config}
+  @error_key {__MODULE__, :config_error}
+  @test_timeout 5_000
 
   # -- effective config ------------------------------------------------------
 
@@ -50,6 +52,15 @@ defmodule Mydia.Net.Proxy do
   @spec effective(ProxyConfig.t() | nil, (String.t() -> String.t() | nil)) ::
           {:ok, t() | nil} | {:error, String.t()}
   def effective(proxy_config, getenv) when is_function(getenv, 1) do
+    case resolve(proxy_config, getenv) do
+      {:error, label, reason} -> {:error, error_message(label, reason)}
+      ok -> ok
+    end
+  end
+
+  # effective/2 with the failure kept apart: the variable (or "proxy.url")
+  # and the reason, so refresh/2 can report both.
+  defp resolve(proxy_config, getenv) do
     {config_url, config_bypass} = layered(proxy_config)
 
     case pick_url(config_url, getenv) do
@@ -90,10 +101,8 @@ defmodule Mydia.Net.Proxy do
   defp present(_), do: nil
 
   defp build(url, source, label) do
-    case URI.parse(url) do
-      %URI{scheme: scheme, host: host, port: port} = uri
-      when scheme in ["http", "https"] and is_binary(host) and host != "" and
-             is_integer(port) ->
+    case parse_url(url) do
+      {:ok, %URI{scheme: scheme, host: host, port: port} = uri} ->
         {:ok,
          %__MODULE__{
            proxy: {String.to_existing_atom(scheme), host, port, []},
@@ -103,21 +112,79 @@ defmodule Mydia.Net.Proxy do
            url_from: source
          }}
 
-      %URI{scheme: scheme}
-      when is_binary(scheme) and scheme not in ["http", "https"] ->
-        if String.contains?(url, "://") do
-          {:error, "unsupported proxy URL in #{label}: #{scheme} is not supported"}
-        else
-          invalid_url(label)
-        end
-
-      _ ->
-        invalid_url(label)
+      {:error, reason} ->
+        {:error, label, reason}
     end
   end
 
-  defp invalid_url(label),
-    do: {:error, "invalid proxy URL in #{label}: expected http://host:port or https://host:port"}
+  @typedoc "Why `parse_url/1` refused a URL. Never carries the URL itself."
+  @type parse_error :: :invalid | :invalid_port | {:unsupported_scheme, String.t()}
+
+  @doc """
+  Parses and validates a proxy URL. The one parser behind both the config
+  schema's validation and routing, so the two never disagree.
+
+  Returns the parsed `URI` with a scheme of `http` or `https`, a non-empty host
+  and an integer port. The port is checked on the raw authority, because
+  `URI.parse/1` turns an out-of-range port into nil, a non-numeric one into the
+  scheme's default, and a `#` in a password into a fragment (moving the host).
+  """
+  @spec parse_url(String.t()) :: {:ok, URI.t()} | {:error, parse_error()}
+  def parse_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} = uri
+      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
+        if valid_port?(uri), do: {:ok, uri}, else: {:error, :invalid_port}
+
+      %URI{scheme: scheme}
+      when is_binary(scheme) and scheme not in ["http", "https"] ->
+        # Without "://" the "scheme" is really a host or a user name.
+        if String.contains?(url, "://"),
+          do: {:error, {:unsupported_scheme, scheme}},
+          else: {:error, :invalid}
+
+      _ ->
+        {:error, :invalid}
+    end
+  end
+
+  defp valid_port?(%URI{authority: authority, port: port}) when is_integer(port) do
+    case raw_port(authority) do
+      :none -> true
+      digits -> digits =~ ~r/\A[0-9]{1,5}\z/ and String.to_integer(digits) in 1..65_535
+    end
+  end
+
+  defp valid_port?(_uri), do: false
+
+  # The port substring of the authority, or :none when it names no port.
+  defp raw_port(authority) do
+    host_port = authority |> String.split("@") |> List.last()
+
+    case host_port do
+      "[" <> rest ->
+        case String.split(rest, "]", parts: 2) do
+          [_ip, ":" <> port] -> port
+          _ -> :none
+        end
+
+      _ ->
+        case String.split(host_port, ":", parts: 2) do
+          [_host, port] -> port
+          [_host] -> :none
+        end
+    end
+  end
+
+  defp error_reason(:invalid), do: "expected http://host:port or https://host:port"
+  defp error_reason(:invalid_port), do: "the port must be a number from 1 to 65535"
+  defp error_reason({:unsupported_scheme, scheme}), do: "#{scheme} is not supported"
+
+  defp error_message(label, {:unsupported_scheme, _} = reason),
+    do: "unsupported proxy URL in #{label}: #{error_reason(reason)}"
+
+  defp error_message(label, reason),
+    do: "invalid proxy URL in #{label}: #{error_reason(reason)}"
 
   defp auth_headers(nil), do: []
 
@@ -153,30 +220,64 @@ defmodule Mydia.Net.Proxy do
 
   # -- cached config ---------------------------------------------------------
 
-  @doc "Stores the effective config (or nil) for request-time routing."
+  @doc """
+  Stores the effective config (or nil) for request-time routing, and clears
+  any error a previous `refresh/2` recorded.
+  """
   @spec put_config(t() | nil) :: :ok
-  def put_config(config), do: :persistent_term.put(@config_key, config)
+  def put_config(config) do
+    :persistent_term.put(@config_key, config)
+    put_error(nil)
+  end
 
   @doc "The cached effective config, or nil when unset."
   @spec current() :: t() | nil
   def current, do: :persistent_term.get(@config_key, nil)
 
   @doc """
+  Why the last `refresh/2` ignored a proxy setting, as `{source, reason}`
+  (`{"HTTPS_PROXY", "socks5 is not supported"}`), or nil. The reason never
+  contains the URL, so it carries no credentials.
+  """
+  @spec config_error() :: {String.t(), String.t()} | nil
+  def config_error, do: :persistent_term.get(@error_key, nil)
+
+  defp put_error(error) do
+    # persistent_term writes are expensive (a global GC pass), so skip a
+    # write that changes nothing.
+    if :persistent_term.get(@error_key, nil) != error,
+      do: :persistent_term.put(@error_key, error)
+
+    :ok
+  end
+
+  @doc """
+  The environment lookup proxy configuration reads, `System.get_env/1` unless
+  the `:proxy_getenv` application env names another 1-arity function. The test
+  environment sets one that hides the developer's proxy variables.
+  """
+  @spec getenv() :: (String.t() -> String.t() | nil)
+  def getenv, do: Application.get_env(:mydia, :proxy_getenv, &System.get_env/1)
+
+  @doc """
   Recomputes the effective proxy from a runtime config and caches it.
 
   Called wherever the runtime config is cached (application boot and
-  `Mydia.Config.Loader.reload/1`). An invalid proxy URL logs a warning and
-  caches `nil`, so requests go direct rather than failing.
+  `Mydia.Config.Loader.reload/1`). The layered `proxy.url` is validated by the
+  config schema, so an unusable URL here comes from `HTTPS_PROXY` /
+  `HTTP_PROXY`: it logs a warning, caches `nil` so requests go direct, and is
+  kept for `config_error/0`, which the Settings page shows.
   """
   @spec refresh(Mydia.Config.Schema.t(), (String.t() -> String.t() | nil)) :: :ok
-  def refresh(%Mydia.Config.Schema{} = config, getenv \\ &System.get_env/1) do
-    case effective(config.proxy, getenv) do
+  def refresh(%Mydia.Config.Schema{} = config, getenv \\ getenv()) do
+    case resolve(config.proxy, getenv) do
       {:ok, proxy} ->
         put_config(proxy)
 
-      {:error, message} ->
-        Logger.warning("Ignoring outbound proxy: #{message}")
+      {:error, label, reason} ->
+        Logger.warning("Ignoring outbound proxy: #{error_message(label, reason)}")
         put_config(nil)
+        put_error({label, error_reason(reason)})
     end
   end
 
@@ -235,7 +336,17 @@ defmodule Mydia.Net.Proxy do
   end
 
   defp forced_get(url, config) do
-    connect = [proxy: config.proxy]
+    # Bound every hop so a proxy that accepts and never answers cannot hang the
+    # Settings page's test. `timeout` covers the target connection; the proxy
+    # hop takes its own options from the tuple: the TCP connect to the proxy
+    # and Mint's CONNECT handshake (`tunnel_timeout`, 30s by default).
+    {scheme, host, port, _opts} = config.proxy
+
+    proxy =
+      {scheme, host, port,
+       [transport_opts: [timeout: @test_timeout], tunnel_timeout: @test_timeout]}
+
+    connect = [proxy: proxy, timeout: @test_timeout]
 
     connect =
       if config.headers == [], do: connect, else: connect ++ [proxy_headers: config.headers]
@@ -275,6 +386,9 @@ defmodule Mydia.Net.Proxy do
 
   defp describe(%{reason: {:proxy, {:unexpected_status, status}}}, endpoint),
     do: "proxy #{endpoint} refused the tunnel (HTTP #{status})"
+
+  defp describe(%{reason: {:proxy, :tunnel_timeout}}, endpoint),
+    do: "proxy #{endpoint} did not answer"
 
   defp describe(%Req.TransportError{reason: reason}, endpoint) when is_atom(reason),
     do: "connection through proxy #{endpoint} failed: #{reason}"

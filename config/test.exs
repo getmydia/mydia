@@ -26,6 +26,12 @@ config :mydia, Mydia.Storage.S3,
   copy_threshold: 10 * 1024 * 1024,
   copy_part_size: 5 * 1024 * 1024
 
+# Proxy code reads the environment through this lookup, which hides the
+# developer's HTTPS_PROXY / MYDIA_PROXY_URL etc., so a config reload in a test
+# never routes the suite through a real proxy. Tests that need proxy variables
+# inject their own getenv.
+config :mydia, :proxy_getenv, &Mydia.Test.ProxyEnv.getenv/1
+
 # FlareSolverr retries a crashed tab once; tests must not wait out the pause.
 config :mydia, :flaresolverr_retry_delay_ms, 0
 # Bypass reuses ports, so a cached qBittorrent cookie could outlive its test

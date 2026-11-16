@@ -23,8 +23,19 @@ defmodule MydiaWeb.AdminSettingsLive.ProxyComponents do
             </:title>
             <:descriptor>
               <span :if={settings.url} id="proxy-url-value" class="font-mono">{settings.url}</span>
-              <span :if={!settings.url} id="proxy-url-value">
+              <span :if={!settings.url && !settings.config_error} id="proxy-url-value">
                 {gettext("Not configured: requests go direct")}
+              </span>
+              <span
+                :if={!settings.url && settings.config_error}
+                id="proxy-url-value"
+                class="text-warning"
+              >
+                <.icon name="hero-exclamation-triangle" class="w-4 h-4 align-text-bottom" />
+                {gettext("%{var} is set but unusable: %{reason}. Requests go direct.",
+                  var: elem(settings.config_error, 0),
+                  reason: elem(settings.config_error, 1)
+                )}
               </span>
             </:descriptor>
             <:details>

@@ -71,6 +71,25 @@ defmodule MydiaWeb.AdminSettingsLive.ProxyTest do
 
       assert text(view, "#proxy-source") =~ "HTTP_PROXY env"
     end
+
+    test "says when a standard variable is set but unusable", %{conn: conn} do
+      ExUnit.CaptureLog.capture_log(fn ->
+        Proxy.refresh(
+          %Mydia.Config.Schema{proxy: %ProxyConfig{}},
+          getenv(%{"HTTPS_PROXY" => "socks5://u:secret@p:1080"})
+        )
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#proxy-url-value.text-warning")
+
+      assert text(view, "#proxy-url-value") =~
+               "HTTPS_PROXY is set but unusable: socks5 is not supported. Requests go direct."
+
+      assert text(view, "#proxy-source") =~ "HTTP_PROXY env"
+      refute render(view) =~ "secret"
+    end
   end
 
   describe "editing" do

@@ -73,8 +73,9 @@ Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 # default adapter at boot, and a fresh list would drop it.
 Req.default_options(Keyword.put(Req.default_options(), :retry_delay, fn _attempt -> 0 end))
 
-# Boot read HTTPS_PROXY/HTTP_PROXY/NO_PROXY from the developer's shell. Clear the
-# cached outbound proxy so the suite never routes through a real one; tests that
+# config/test.exs hides the developer's proxy variables from proxy code
+# (Mydia.Test.ProxyEnv), so neither boot nor a later config reload routes the
+# suite through a real proxy. Clearing the cache is a second guard; tests that
 # need a proxy set it with Mydia.Net.Proxy.put_config/1 and restore it.
 Mydia.Net.Proxy.put_config(nil)
 

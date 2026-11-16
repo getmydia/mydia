@@ -136,6 +136,106 @@ defmodule Mydia.Net.ProxyTest do
               "invalid proxy URL in HTTP_PROXY: expected http://host:port or https://host:port"} =
                Proxy.effective(%ProxyConfig{}, getenv(%{"HTTP_PROXY" => "host:3128"}))
     end
+
+    # URI.parse/1 turns these into port nil, the default port, or the wrong host.
+    test "a bad port is an error, never a silent default" do
+      for url <- [
+            "http://proxy:99999",
+            "http://proxy:abc",
+            "http://proxy:0",
+            "http://proxy:",
+            "http://user:p#ss@proxy:3128"
+          ] do
+        assert {:error, msg} = Proxy.effective(%ProxyConfig{}, getenv(%{"HTTP_PROXY" => url})),
+               url
+
+        assert msg ==
+                 "invalid proxy URL in HTTP_PROXY: the port must be a number from 1 to 65535"
+      end
+    end
+  end
+
+  describe "parse_url/1" do
+    test "accepts http and https, with or without port and credentials" do
+      assert {:ok, %URI{scheme: "http", host: "p", port: 3128}} = Proxy.parse_url("http://p:3128")
+      assert {:ok, %URI{scheme: "https", host: "p", port: 443}} = Proxy.parse_url("https://p")
+
+      assert {:ok, %URI{host: "::1", port: 8080}} = Proxy.parse_url("http://[::1]:8080")
+      assert {:ok, %URI{host: "::1", port: 80}} = Proxy.parse_url("http://[::1]")
+
+      assert {:ok, %URI{host: "h", port: 1, userinfo: "u:p%40ss"}} =
+               Proxy.parse_url("http://u:p%40ss@h:1")
+    end
+
+    test "classifies what is wrong" do
+      assert Proxy.parse_url("socks5://p:1080") == {:error, {:unsupported_scheme, "socks5"}}
+      assert Proxy.parse_url("host:3128") == {:error, :invalid}
+      assert Proxy.parse_url("http://") == {:error, :invalid}
+      assert Proxy.parse_url("http://proxy:99999") == {:error, :invalid_port}
+      assert Proxy.parse_url("http://[::1]:x") == {:error, :invalid_port}
+    end
+  end
+
+  describe "refresh/2" do
+    import ExUnit.CaptureLog
+
+    defp schema(proxy), do: %Mydia.Config.Schema{proxy: proxy}
+
+    test "an unusable standard variable goes direct, is logged, and is reported" do
+      log =
+        capture_log(fn ->
+          assert :ok =
+                   Proxy.refresh(
+                     schema(%ProxyConfig{}),
+                     getenv(%{"HTTPS_PROXY" => "socks5://u:secret@p:1080"})
+                   )
+        end)
+
+      assert log =~ "Ignoring outbound proxy"
+      refute log =~ "secret"
+      assert Proxy.current() == nil
+      assert Proxy.config_error() == {"HTTPS_PROXY", "socks5 is not supported"}
+
+      assert :ok = Proxy.refresh(schema(%ProxyConfig{}), getenv(%{"HTTPS_PROXY" => "http://p:1"}))
+      assert Proxy.current().endpoint == "p:1"
+      assert Proxy.config_error() == nil
+    end
+
+    test "put_config/1 clears a stored error" do
+      capture_log(fn ->
+        Proxy.refresh(schema(nil), getenv(%{"HTTP_PROXY" => "http://p:99999"}))
+      end)
+
+      assert {"HTTP_PROXY", "the port must be a number from 1 to 65535"} = Proxy.config_error()
+      Proxy.put_config(nil)
+      assert Proxy.config_error() == nil
+    end
+
+    test "the default getenv comes from the :proxy_getenv application env" do
+      previous = Application.fetch_env(:mydia, :proxy_getenv)
+
+      on_exit(fn ->
+        case previous do
+          {:ok, fun} -> Application.put_env(:mydia, :proxy_getenv, fun)
+          :error -> Application.delete_env(:mydia, :proxy_getenv)
+        end
+      end)
+
+      Application.put_env(:mydia, :proxy_getenv, getenv(%{"HTTPS_PROXY" => "http://injected:1"}))
+      assert :ok = Proxy.refresh(schema(%ProxyConfig{}))
+      assert Proxy.current().endpoint == "injected:1"
+    end
+
+    test "the test environment hides the developer's proxy variables" do
+      getenv = Proxy.getenv()
+
+      for var <- ~w(HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy
+                    MYDIA_PROXY_URL MYDIA_PROXY_BYPASS) do
+        assert getenv.(var) == nil
+      end
+
+      assert getenv.("PATH") == System.get_env("PATH")
+    end
   end
 
   describe "route/2" do
@@ -312,6 +412,20 @@ defmodule Mydia.Net.ProxyTest do
 
       assert Proxy.test_connection("http://tracker.example.test/health") ==
                {:error, "proxy 127.0.0.1:#{proxy.port} requires authentication"}
+    end
+
+    # The listener never accepts, so the kernel completes the TCP handshake and
+    # the CONNECT request sits unanswered. Mint's own tunnel timeout is 30s.
+    test "an unresponsive proxy fails within the test's timeout" do
+      {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false])
+      on_exit(fn -> :gen_tcp.close(socket) end)
+      {:ok, port} = :inet.port(socket)
+      use_proxy(port)
+
+      task = Task.async(fn -> Proxy.test_connection("https://tracker.example.test/health") end)
+
+      assert {:ok, {:error, message}} = Task.yield(task, 8_000) || Task.shutdown(task)
+      assert message == "proxy 127.0.0.1:#{port} did not answer"
     end
 
     test "a refused proxy port is described" do
