@@ -588,6 +588,20 @@ Download audio and playback audio are separate settings. The first decides which
 
 Every variable in this section can also be set from **Admin > System > Settings**, under **Language**. An environment variable overrides the database value and locks the field there. Playback audio and the default-track option appear only when the player is enabled.
 
+## Outbound Proxy
+
+Send Mydia's outbound internet requests (indexers, metadata, torrent file fetches, update checks) through an HTTP or HTTPS proxy. See [Outbound proxy](configuration.md#outbound-proxy) for what is and is not proxied.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MYDIA_PROXY_URL` | Proxy address, such as `http://proxy.lan:3128` or `http://user:pass@proxy.lan:3128`. Only `http://` and `https://` proxies are supported, not SOCKS. | - |
+| `MYDIA_PROXY_BYPASS` | Comma-separated hosts that always connect directly, such as `nas.local,.example.com,192.168.50.0/24` | - |
+
+When `MYDIA_PROXY_URL` is not set, Mydia falls back to the standard variables, using the first one that is set: `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, `http_proxy`. The bypass list falls back to `NO_PROXY`, then `no_proxy`. A proxy saved under **Admin > System > Settings** wins over the standard variables, and the `MYDIA_` variables win over both.
+
+!!! warning "Upgrading"
+    If your container already sets `HTTPS_PROXY` or `HTTP_PROXY`, Mydia starts using it after you upgrade. Add the hosts that should stay direct to `NO_PROXY` or `MYDIA_PROXY_BYPASS` first.
+
 ## FlareSolverr
 
 FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.
