@@ -597,7 +597,7 @@ Send Mydia's outbound internet requests (indexers, metadata, torrent file fetche
 | `MYDIA_PROXY_URL` | Proxy address, such as `http://proxy.lan:3128` or `http://user:pass@proxy.lan:3128`. Only `http://` and `https://` proxies are supported, not SOCKS. | - |
 | `MYDIA_PROXY_BYPASS` | Comma-separated hosts that always connect directly, such as `nas.local,.example.com,192.168.50.0/24` | - |
 
-When `MYDIA_PROXY_URL` is not set, Mydia falls back to the standard variables, using the first one that is set: `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, `http_proxy`. The bypass list falls back to `NO_PROXY`, then `no_proxy`. A proxy saved under **Admin > System > Settings** wins over the standard variables, and the `MYDIA_` variables win over both.
+The standard variables are used only when no proxy URL is set anywhere in Mydia: not in the YAML config, not under **Admin > System > Settings**, and not in `MYDIA_PROXY_URL`. Mydia then uses the first one that is set: `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, `http_proxy`. The bypass list falls back to `NO_PROXY`, then `no_proxy`. Among Mydia's own settings, the `MYDIA_` variables win over **Admin > System > Settings**, which wins over the YAML config.
 
 An unusable `MYDIA_PROXY_URL` is rejected with an error at startup. An unusable `HTTPS_PROXY` or `HTTP_PROXY` (a SOCKS URL, say) is ignored with a logged warning, requests go direct, and the settings page shows why.
 

@@ -89,9 +89,11 @@ Everything else goes through the proxy. A name that contains a dot, such as `nas
 
 - The built-in torrent client. It has its own network settings.
 - Remote access (P2P).
-- Requests that FlareSolverr makes itself. Mydia reaches FlareSolverr directly, and what it fetches is configured in FlareSolverr.
+- Requests that FlareSolverr makes itself. What it fetches is configured in FlareSolverr.
 
-WASM (Prowlarr-based) indexers still need DNS to work inside the Mydia container. Mydia resolves and checks the address itself before connecting, then asks the proxy to open a tunnel to that address. A plugin endpoint you approved that resolves to a private or loopback address, such as a media server on your LAN, connects directly.
+Mydia's own requests to FlareSolverr follow the rules above. A Docker service name such as `flaresolverr` or a private address connects directly, but a name with a dot, such as `flaresolverr.lan`, goes through the proxy. Add that host to `bypass`.
+
+WASM (Prowlarr-based) indexers still need DNS to work inside the Mydia container. Mydia resolves and checks the address itself before connecting, then asks the proxy to open a tunnel to that address. A plain `http://` site is requested from the proxy by that address rather than by name, so a site that needs its name to answer can fail behind a proxy; use its `https://` address where it has one. A plugin endpoint you approved that resolves to a private or loopback address, such as a media server on your LAN, connects directly.
 
 ## Plugin instances
 
