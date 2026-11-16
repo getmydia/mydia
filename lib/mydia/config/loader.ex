@@ -264,7 +264,7 @@ defmodule Mydia.Config.Loader do
       streaming: load_streaming_env(),
       logging: load_logging_env(),
       oban: load_oban_env(),
-      flaresolverr: load_flaresolverr_env(),
+      flaresolverr: Mydia.Config.Env.FlareSolverrEnv.load(),
       proxy: Mydia.Config.Env.ProxyEnv.load(),
       built_in_torrent: Mydia.Config.Env.BuiltInTorrentEnv.load(),
       cardigann: Mydia.Config.Env.CardigannEnv.load(),
@@ -406,16 +406,6 @@ defmodule Mydia.Config.Loader do
     %{}
     |> put_if_present(:poll_interval, System.get_env("OBAN_POLL_INTERVAL"), &parse_integer/1)
     |> put_if_present(:max_age_days, System.get_env("OBAN_MAX_AGE_DAYS"), &parse_integer/1)
-  end
-
-  defp load_flaresolverr_env do
-    load_env_table(
-      enabled: {"FLARESOLVERR_ENABLED", &parse_boolean/1},
-      url: {"FLARESOLVERR_URL", &{:ok, &1}},
-      timeout: {"FLARESOLVERR_TIMEOUT", &parse_integer/1},
-      max_timeout: {"FLARESOLVERR_MAX_TIMEOUT", &parse_integer/1},
-      max_concurrent_requests: {"FLARESOLVERR_MAX_CONCURRENT_REQUESTS", &parse_integer/1}
-    )
   end
 
   # One `key: {env var, parser}` row per setting, for sections that are a plain

@@ -268,17 +268,8 @@ defmodule Mydia.Config.Schema do
       field :hwaccel_device, :string
     end
 
-    embeds_one :logging, Logging, on_replace: :update, primary_key: false do
-      @type t :: %__MODULE__{}
-      field :level, :string, default: "info"
-      field :format, :string, default: "[$level] $message\n"
-    end
-
-    embeds_one :oban, Oban, on_replace: :update, primary_key: false do
-      @type t :: %__MODULE__{}
-      field :poll_interval, :integer, default: 1000
-      field :max_age_days, :integer, default: 7
-    end
+    embeds_one :logging, Mydia.Config.Schema.Logging, on_replace: :update
+    embeds_one :oban, Mydia.Config.Schema.Oban, on_replace: :update
 
     embeds_one :plugins, Plugins, on_replace: :update, primary_key: false do
       @type t :: %__MODULE__{}
@@ -488,8 +479,8 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:downloads, with: &downloads_changeset/2)
     |> cast_embed(:upgrades, with: &upgrades_changeset/2)
     |> cast_embed(:streaming, with: &streaming_changeset/2)
-    |> cast_embed(:logging, with: &logging_changeset/2)
-    |> cast_embed(:oban, with: &oban_changeset/2)
+    |> cast_embed(:logging)
+    |> cast_embed(:oban)
     |> cast_embed(:plugins, with: &plugins_changeset/2)
     |> cast_embed(:flaresolverr)
     |> cast_embed(:proxy)
@@ -698,20 +689,6 @@ defmodule Mydia.Config.Schema do
       _ ->
         add_error(changeset, :subtitle_language, "must be a list of language codes")
     end
-  end
-
-  defp logging_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [:level, :format])
-    |> validate_required([:level])
-    |> validate_inclusion(:level, ["debug", "info", "warning", "error"])
-  end
-
-  defp oban_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [:poll_interval, :max_age_days])
-    |> validate_number(:poll_interval, greater_than: 0)
-    |> validate_number(:max_age_days, greater_than: 0)
   end
 
   defp plugins_changeset(schema, attrs) do
