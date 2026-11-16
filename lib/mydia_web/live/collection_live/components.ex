@@ -545,6 +545,7 @@ defmodule MydiaWeb.CollectionLive.Components do
                   type="button"
                   phx-click="toggle_item_in_collection"
                   phx-value-id={item.id}
+                  aria-pressed={in_collection?}
                   class={[
                     "w-full flex items-center gap-3 p-2 text-left transition-colors",
                     "hover:bg-base-200 focus:outline-none focus:bg-base-200",

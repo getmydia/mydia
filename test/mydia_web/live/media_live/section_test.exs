@@ -361,6 +361,47 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       {:ok, _section_view, section_html} = live(conn, ~p"/sections/#{docs.id}")
       assert section_html =~ doc.title
     end
+
+    test "unmonitoring an item on the section page refreshes section and Movies sidebar counts",
+         %{
+           conn: conn,
+           user: user
+         } do
+      movie =
+        categorized_media_item_fixture(
+          %{title: "Watched Movie", type: "movie", monitored: true},
+          :movie
+        )
+
+      {:ok, monitored_section} =
+        Collections.create_collection(user, %{
+          name: "Monitored",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "match_type" => "all",
+              "conditions" => [
+                %{"field" => "type", "operator" => "eq", "value" => "movie"},
+                %{"field" => "monitored", "operator" => "eq", "value" => true}
+              ]
+            }),
+          pinned_position: 1,
+          exclusive: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/sections/#{monitored_section.id}")
+      assert has_element?(view, "#nav-section-count-#{monitored_section.id}", "1")
+      assert has_element?(view, "#nav-movie-count", "0")
+
+      view |> element("#toggle-selection-mode") |> render_click()
+      view |> element("#select-all") |> render_click()
+      view |> element("#batch-unmonitor") |> render_click()
+
+      assert has_element?(view, "#nav-section-count-#{monitored_section.id}", "0")
+      assert has_element?(view, "#nav-movie-count", "1")
+      refute Mydia.Media.get_media_item!(Mydia.Accounts.Scope.unrestricted(), movie.id).monitored
+    end
   end
 
   describe "section settings ownership" do

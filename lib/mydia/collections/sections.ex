@@ -10,7 +10,7 @@ defmodule Mydia.Collections.Sections do
   alias Mydia.Accounts.{Scope, User}
   alias Mydia.Collections
   alias Mydia.Collections.{Collection, SmartRules}
-  alias Mydia.Media.MediaCategory
+  alias Mydia.Media.{MediaCategory, Stats}
   alias Mydia.Repo
 
   @doc """
@@ -37,7 +37,18 @@ defmodule Mydia.Collections.Sections do
   def list_pinned_sections(%User{} = user, %Scope{} = scope) do
     user
     |> list_pinned_sections()
-    |> Enum.map(&%{&1 | item_count: Collections.item_count(scope, &1)})
+    |> Enum.map(&%{&1 | item_count: section_item_count(scope, &1)})
+  end
+
+  defp section_item_count(scope, %Collection{type: "smart", smart_rules: rules}) do
+    case SmartRules.query(rules || "{}") do
+      {:ok, query} -> Stats.count_media_items(scope, base_query: query)
+      {:error, _} -> 0
+    end
+  end
+
+  defp section_item_count(scope, %Collection{} = collection) do
+    Collections.item_count(scope, collection)
   end
 
   @doc """
@@ -153,10 +164,14 @@ defmodule Mydia.Collections.Sections do
   defp section_exclusion_query(%Collection{type: "smart", smart_rules: rules})
        when is_binary(rules) do
     case Jason.decode(rules) do
-      {:ok, %{"conditions" => [_ | _]} = decoded} ->
-        case SmartRules.query(decoded) do
-          {:ok, query} -> [query]
-          {:error, _} -> []
+      {:ok, %{"conditions" => [_ | _] = conditions} = decoded} ->
+        if Enum.all?(conditions, &SmartRules.supported_operator?(&1["field"], &1["operator"])) do
+          case SmartRules.query(decoded) do
+            {:ok, query} -> [query]
+            {:error, _} -> []
+          end
+        else
+          []
         end
 
       _ ->

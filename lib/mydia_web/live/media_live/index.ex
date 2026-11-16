@@ -762,7 +762,7 @@ defmodule MydiaWeb.MediaLive.Index do
          |> put_flash(:info, batch_monitored_message(count, monitored))
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
-         |> load_media_items()}
+         |> LibraryActions.reload_with_navigation(&load_media_items/1)}
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to update items"))}
@@ -784,7 +784,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> put_flash(:info, ReclassifyFlash.message(summary))
      |> assign(:selection_mode, false)
      |> assign(:selected_ids, MapSet.new())
-     |> load_media_items()}
+     |> LibraryActions.reload_with_navigation(&load_media_items/1)}
   end
 
   defp batch_delete_selected(socket) do
@@ -804,7 +804,7 @@ defmodule MydiaWeb.MediaLive.Index do
          |> assign(:selected_ids, MapSet.new())
          |> assign(:show_delete_modal, false)
          |> assign(:delete_files, false)
-         |> load_media_items()}
+         |> LibraryActions.reload_with_navigation(&load_media_items/1)}
 
       {:error, _reason} ->
         {:noreply,
@@ -839,7 +839,7 @@ defmodule MydiaWeb.MediaLive.Index do
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
          |> assign(:show_batch_edit_modal, false)
-         |> load_media_items()}
+         |> LibraryActions.reload_with_navigation(&load_media_items/1)}
 
       {:error, _reason} ->
         {:noreply,

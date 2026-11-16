@@ -138,6 +138,33 @@ defmodule Mydia.Collections.SectionsTest do
       assert loaded.id == anime.id
       assert loaded.item_count == 1
     end
+
+    test "list_pinned_sections/2 ignores smart_rules limit so badge matches section page" do
+      user = user_fixture()
+      scope = Scope.for_user(user)
+
+      for n <- 1..3 do
+        categorized_media_item_fixture(%{title: "Anime #{n}", type: "movie"}, :anime_movie)
+      end
+
+      {:ok, _section} =
+        Collections.create_collection(user, %{
+          name: "Limited Anime",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{"field" => "category", "operator" => "in", "value" => ["anime_movie"]}
+              ],
+              "limit" => 1
+            }),
+          pinned_position: 0
+        })
+
+      assert [loaded] = Collections.list_pinned_sections(user, scope)
+      assert loaded.item_count == 3
+    end
   end
 
   describe "claimed_categories/1" do
@@ -399,6 +426,16 @@ defmodule Mydia.Collections.SectionsTest do
              })
 
       refute Collections.exclusive_eligible?(%Collection{type: "smart", smart_rules: "{bad json"})
+
+      refute Collections.exclusive_eligible?(%Collection{
+               type: "smart",
+               smart_rules:
+                 Jason.encode!(%{
+                   "conditions" => [
+                     %{"field" => "category", "operator" => "gt", "value" => "movie"}
+                   ]
+                 })
+             })
     end
   end
 

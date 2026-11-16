@@ -48,6 +48,7 @@ defmodule Mydia.Collections.SmartRules do
   import Ecto.Query, warn: false
   import Mydia.QueryHelpers
   alias Mydia.Accounts.Scope
+  alias Mydia.Collections.SmartRulesFields
   alias Mydia.Media.MediaItem
   alias Mydia.Media.Restrictions
   alias Mydia.Repo
@@ -348,6 +349,18 @@ defmodule Mydia.Collections.SmartRules do
     ["conditions[#{idx}]: must be an object"]
   end
 
+  @doc """
+  Returns true when `field` and `operator` have a matching query builder clause.
+  """
+  def supported_operator?("year", "in"), do: true
+  def supported_operator?("year", "not_in"), do: true
+
+  def supported_operator?(field, operator) do
+    field
+    |> SmartRulesFields.get_operators()
+    |> Enum.any?(&(to_string(&1) == operator))
+  end
+
   # Validates that the value type is compatible with the field
   defp validate_field_value_type(field, value, _operator, _prefix, errors)
        when is_nil(field) or is_nil(value) do
@@ -547,6 +560,9 @@ defmodule Mydia.Collections.SmartRules do
     do: dynamic([m], m.year >= ^min and m.year <= ^max)
 
   defp build_dynamic("year", "in", values), do: dynamic([m], m.year in ^values)
+
+  defp build_dynamic("year", "not_in", values),
+    do: dynamic([m], is_nil(m.year) or m.year not in ^values)
 
   defp build_dynamic("title", "eq", value), do: dynamic([m], m.title == ^value)
 
