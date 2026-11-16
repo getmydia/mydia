@@ -3,6 +3,7 @@ defmodule Mydia.Net.ProxyTest do
 
   alias Mydia.Config.Schema.Proxy, as: ProxyConfig
   alias Mydia.Net.Proxy
+  alias Mydia.Net.Proxy.TestResult
 
   @bypass "example.org,.corp.test,203.0.113.7,198.51.100.0/24,fd00::/8"
 
@@ -378,7 +379,7 @@ defmodule Mydia.Net.ProxyTest do
       {:ok, proxy} = ConnectProxy.start(respond: :forward)
       use_proxy(proxy.port)
 
-      assert {:ok, %{status: 200, ms: ms}} =
+      assert {:ok, %TestResult{status: 200, ms: ms}} =
                Proxy.test_connection("http://tracker.example.test:#{bypass.port}/health")
 
       assert is_integer(ms) and ms >= 0

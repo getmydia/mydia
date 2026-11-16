@@ -6,6 +6,8 @@ defmodule MydiaWeb.AdminSettingsLive.ProxyComponents do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Net.Proxy.TestResult
+
   attr :settings, MydiaWeb.AdminSettingsLive.ProxySettings, required: true
   attr :test_result, :any, default: nil, doc: "nil, :running or a test_connection/1 result"
 
@@ -84,7 +86,7 @@ defmodule MydiaWeb.AdminSettingsLive.ProxyComponents do
     """
   end
 
-  defp test_result(%{result: {:ok, %{status: status, ms: ms}}} = assigns) do
+  defp test_result(%{result: {:ok, %TestResult{status: status, ms: ms}}} = assigns) do
     assigns = assign(assigns, status: status, ms: ms)
 
     ~H"""

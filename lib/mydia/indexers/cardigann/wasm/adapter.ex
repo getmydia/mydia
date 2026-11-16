@@ -346,6 +346,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       remaining = max(deadline - System.monotonic_time(:millisecond), 1)
       # Only the answering mirror's requests decide whether the login was reached.
       with %{hit: hit} <- opts[:login_watch], do: :atomics.put(hit, 1, 0)
+      # Likewise only its proxy failure may word the error.
+      with note when is_pid(note) <- opts[:proxy_note], do: Agent.update(note, fn _ -> nil end)
 
       call =
         {:search, definition.definition, put_base_url(settings, base_url), guest_query, session}

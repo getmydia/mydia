@@ -219,8 +219,11 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         {:noreply, assign(socket, :show_proxy_modal, false)}
 
       {:ok, _written} ->
+        # A test still running was started against the previous proxy; its
+        # answer would describe a proxy that is no longer configured.
         {:noreply,
          socket
+         |> cancel_async(:proxy_test)
          |> assign(:show_proxy_modal, false)
          |> assign(:proxy_test_result, nil)
          |> after_config_write(gettext("Proxy settings saved"))}
@@ -290,6 +293,9 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   def handle_async(:proxy_test, {:ok, result}, socket) do
     {:noreply, assign(socket, :proxy_test_result, result)}
   end
+
+  # Cancelled by a save: the result was already cleared.
+  def handle_async(:proxy_test, {:exit, {:shutdown, :cancel}}, socket), do: {:noreply, socket}
 
   def handle_async(:proxy_test, {:exit, _reason}, socket) do
     {:noreply,

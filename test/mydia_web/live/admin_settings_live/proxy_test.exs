@@ -269,6 +269,58 @@ defmodule MydiaWeb.AdminSettingsLive.ProxyTest do
       assert text(view, "#proxy-test-result") =~ "200"
     end
 
+    # A relay that accepts one request, tells the test, and answers 200 only
+    # once released. Raw TCP rather than Bypass: cancelling the test closes the
+    # connection mid-request, which Bypass would report as a handler crash.
+    defp held_relay do
+      test_pid = self()
+      {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, ip: {127, 0, 0, 1}])
+      {:ok, port} = :inet.port(listen)
+
+      start_supervised!(
+        {Task,
+         fn ->
+           {:ok, socket} = :gen_tcp.accept(listen)
+           {:ok, _request} = :gen_tcp.recv(socket, 0, 5_000)
+           send(test_pid, {:relay_waiting, self()})
+
+           receive do
+             :release ->
+               :gen_tcp.send(socket, "HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+           end
+         end},
+        id: make_ref()
+      )
+
+      port
+    end
+
+    # The relay holds the test's answer until the proxy has been re-saved. A
+    # test still running for the old proxy must not report afterwards.
+    test "saving the proxy drops a test still running for the old one", %{conn: conn} do
+      relay_port = held_relay()
+      {:ok, proxy} = ConnectProxy.start(respond: :forward)
+      use_proxy("http://127.0.0.1:#{proxy.port}")
+
+      Application.put_env(
+        :mydia,
+        :metadata_relay_url,
+        "http://tracker.example.test:#{relay_port}"
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+      view |> element("#proxy-test") |> render_click()
+      assert_receive {:relay_waiting, relay}, 2_000
+
+      view |> element("#proxy-edit") |> render_click()
+      view |> form("#proxy-form", proxy: %{url: "http://p:3128"}) |> render_submit()
+
+      send(relay, :release)
+      render_async(view, 1_000)
+
+      refute has_element?(view, "#proxy-test-result")
+    end
+
     test "reports a proxy that wants credentials", %{conn: conn} do
       {:ok, proxy} = ConnectProxy.start(respond: {:status, 407})
       use_proxy("http://127.0.0.1:#{proxy.port}")

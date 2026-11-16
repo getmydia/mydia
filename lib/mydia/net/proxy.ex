@@ -14,6 +14,7 @@ defmodule Mydia.Net.Proxy do
 
   alias Mydia.Config.Schema.Proxy, as: ProxyConfig
   alias Mydia.Net.Proxy.Bypass
+  alias Mydia.Net.Proxy.TestResult
   alias Mydia.Plugins.Net.Gate
 
   @enforce_keys [:proxy, :endpoint, :display_url, :url_from]
@@ -327,7 +328,7 @@ defmodule Mydia.Net.Proxy do
   credentials.
   """
   @spec test_connection(String.t()) ::
-          {:ok, %{status: integer(), ms: non_neg_integer()}} | {:error, String.t()}
+          {:ok, TestResult.t()} | {:error, String.t()}
   def test_connection(url) when is_binary(url) do
     case current() do
       nil -> {:error, "No proxy is configured"}
@@ -360,7 +361,7 @@ defmodule Mydia.Net.Proxy do
         {:error, "proxy #{config.endpoint} requires authentication"}
 
       {:ok, %Req.Response{status: status}} ->
-        {:ok, %{status: status, ms: System.monotonic_time(:millisecond) - started}}
+        {:ok, %TestResult{status: status, ms: System.monotonic_time(:millisecond) - started}}
 
       {:error, exception} ->
         {:error, describe(exception, config.endpoint) || Exception.message(exception)}
