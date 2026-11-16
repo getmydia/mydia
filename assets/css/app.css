@@ -363,7 +363,7 @@
    where the dialog's bottom button (Show results) would otherwise collide with
    the dock, and for the tab order. */
 #main-drawer:checked ~ .drawer-content #mobile-dock,
-body:has(#manual-search-modal) #mobile-dock {
+body:has(#manual-search-modal, .modal[open], .modal.modal-open) #mobile-dock {
   visibility: hidden;
   opacity: 0;
   pointer-events: none;

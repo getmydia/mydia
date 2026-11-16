@@ -190,7 +190,7 @@ defmodule MydiaWeb.CollectionLive.Index do
               />
 
               <%!-- Name & Visibility Row --%>
-              <div class={["grid gap-3", @current_user.role == "admin" && "grid-cols-2"]}>
+              <div class={["grid gap-3", @current_user.role == "admin" && "sm:grid-cols-2"]}>
                 <div class="form-control">
                   <label class="label py-1">
                     <span class="label-text text-sm font-medium">{gettext("Name")}</span>

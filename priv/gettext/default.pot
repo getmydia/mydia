@@ -21,23 +21,23 @@ msgstr ""
 msgid "Actions"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:382
-#: lib/mydia_web/components/layouts.ex:395
+#: lib/mydia_web/components/layouts.ex:384
+#: lib/mydia_web/components/layouts.ex:397
 #, elixir-autogen, elixir-format
 msgid "Attempting to reconnect"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:390
+#: lib/mydia_web/components/layouts.ex:392
 #, elixir-autogen, elixir-format
 msgid "Something went wrong!"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:377
+#: lib/mydia_web/components/layouts.ex:379
 #, elixir-autogen, elixir-format
 msgid "We can't find the internet"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:555
+#: lib/mydia_web/components/core_components.ex:554
 #: lib/mydia_web/components/flash_components.ex:67
 #: lib/mydia_web/live/components/trending_detail_modal.ex:372
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:258
@@ -82,17 +82,17 @@ msgstr ""
 msgid "Used when a user picks Automatic and their browser asks for no language Mydia has."
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:764
+#: lib/mydia_web/components/core_components.ex:762
 #, elixir-autogen, elixir-format
 msgid "%{category} (Auto-detected)"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:761
+#: lib/mydia_web/components/core_components.ex:759
 #, elixir-autogen, elixir-format
 msgid "%{category} (Manual override)"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:652
+#: lib/mydia_web/components/core_components.ex:650
 #, elixir-autogen, elixir-format
 msgid "%{duration} left"
 msgstr ""
@@ -113,12 +113,12 @@ msgstr ""
 msgid "Account menu"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:261
+#: lib/mydia_web/components/layouts.ex:263
 #, elixir-autogen, elixir-format
 msgid "Acquisition"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:298
+#: lib/mydia_web/components/layouts.ex:300
 #: lib/mydia_web/live/activity_live/index.ex:103
 #: lib/mydia_web/live/admin_plugins_live/logs_modal_components.ex:33
 #: lib/mydia_web/live/plugin_page_live/activity.ex:17
@@ -134,7 +134,7 @@ msgstr ""
 msgid "Add section"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:304
+#: lib/mydia_web/components/layouts.ex:306
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:371
 #: lib/mydia_web/live/admin_users_live/components.ex:220
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:13
@@ -142,8 +142,8 @@ msgstr ""
 msgid "Admin"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:753
-#: lib/mydia_web/components/core_components.ex:756
+#: lib/mydia_web/components/core_components.ex:751
+#: lib/mydia_web/components/core_components.ex:754
 #: lib/mydia_web/live/section_live/new.ex:40
 #, elixir-autogen, elixir-format
 msgid "Anime"
@@ -164,7 +164,7 @@ msgstr ""
 msgid "Avatar"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:247
+#: lib/mydia_web/components/layouts.ex:249
 #: lib/mydia_web/live/calendar_live/index.ex:27
 #, elixir-autogen, elixir-format
 msgid "Calendar"
@@ -212,8 +212,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:272
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:347
 #: lib/mydia_web/live/collection_live/index.ex:262
-#: lib/mydia_web/live/collection_live/show.ex:434
-#: lib/mydia_web/live/collection_live/show.ex:462
+#: lib/mydia_web/live/collection_live/show.ex:442
+#: lib/mydia_web/live/collection_live/show.ex:470
 #: lib/mydia_web/live/components/disambiguation_modal_component.ex:106
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:142
 #: lib/mydia_web/live/devices_live/components.ex:174
@@ -233,7 +233,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/index.html.heex:1107
 #: lib/mydia_web/live/media_live/index.html.heex:1137
 #: lib/mydia_web/live/media_live/index.html.heex:1255
-#: lib/mydia_web/live/media_live/index/section_components.ex:57
+#: lib/mydia_web/live/media_live/index/section_components.ex:66
 #: lib/mydia_web/live/media_live/show/download_audio_components.ex:98
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:147
 #: lib/mydia_web/live/media_live/show/modals.ex:113
@@ -261,8 +261,8 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:754
-#: lib/mydia_web/components/core_components.ex:757
+#: lib/mydia_web/components/core_components.ex:752
+#: lib/mydia_web/components/core_components.ex:755
 #, elixir-autogen, elixir-format
 msgid "Cartoon"
 msgstr ""
@@ -272,7 +272,7 @@ msgstr ""
 msgid "Close sidebar"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:241
+#: lib/mydia_web/components/layouts.ex:243
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:100
 #: lib/mydia_web/live/collection_live/index.ex:60
 #: lib/mydia_web/live/collection_live/index.ex:72
@@ -281,19 +281,19 @@ msgstr ""
 msgid "Collections"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:616
+#: lib/mydia_web/components/core_components.ex:614
 #: lib/mydia_web/live/plugin_setup_live/modal.ex:334
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:294
 #, elixir-autogen, elixir-format
 msgid "Continue"
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:248
+#: lib/mydia_web/live/user_auth.ex:264
 #, elixir-autogen, elixir-format
 msgid "Could not send feedback. Please try again later."
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:494
+#: lib/mydia_web/components/layouts.ex:496
 #: lib/mydia_web/live/profile_live/index.html.heex:233
 #, elixir-autogen, elixir-format
 msgid "Dark theme"
@@ -308,7 +308,7 @@ msgid "Devices"
 msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:188
-#: lib/mydia_web/components/layouts.ex:545
+#: lib/mydia_web/components/layouts.ex:547
 #: lib/mydia_web/live/discover_live/index.ex:50
 #: lib/mydia_web/live/discover_live/index.html.heex:5
 #, elixir-autogen, elixir-format
@@ -327,8 +327,8 @@ msgstr ""
 msgid "Dismiss"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:271
-#: lib/mydia_web/components/layouts.ex:567
+#: lib/mydia_web/components/layouts.ex:273
+#: lib/mydia_web/components/layouts.ex:569
 #: lib/mydia_web/controllers/page_html/home.html.heex:34
 #: lib/mydia_web/live/activity_live/index.ex:180
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:99
@@ -345,30 +345,30 @@ msgstr ""
 msgid "Error loading video"
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:454
+#: lib/mydia_web/live/user_auth.ex:470
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again later."
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:241
+#: lib/mydia_web/live/user_auth.ex:257
 #, elixir-autogen, elixir-format
 msgid "Feedback service is temporarily unavailable. Please try again later."
 msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:180
-#: lib/mydia_web/components/layouts.ex:538
+#: lib/mydia_web/components/layouts.ex:540
 #: lib/mydia_web/live/dashboard_live/index.ex:315
 #, elixir-autogen, elixir-format
 msgid "Home"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:279
+#: lib/mydia_web/components/layouts.ex:281
 #: lib/mydia_web/live/import_media_live/index.html.heex:5
 #, elixir-autogen, elixir-format
 msgid "Import"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:292
+#: lib/mydia_web/components/layouts.ex:294
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:26
 #: lib/mydia_web/live/admin_import_lists_live/index.html.heex:4
 #, elixir-autogen, elixir-format
@@ -399,7 +399,7 @@ msgstr ""
 msgid "Library"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:484
+#: lib/mydia_web/components/layouts.ex:486
 #: lib/mydia_web/live/profile_live/index.html.heex:225
 #, elixir-autogen, elixir-format
 msgid "Light theme"
@@ -415,12 +415,12 @@ msgstr ""
 msgid "Log out"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:752
+#: lib/mydia_web/components/core_components.ex:750
 #: lib/mydia_web/components/media_request_components.ex:137
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:263
 #: lib/mydia_web/live/calendar_live/index.html.heex:197
+#: lib/mydia_web/live/collection_live/components.ex:576
 #: lib/mydia_web/live/collection_live/rule_labels.ex:26
-#: lib/mydia_web/live/collection_live/show.ex:565
 #: lib/mydia_web/live/components/library_search_form.ex:72
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:118
 #: lib/mydia_web/live/downloads_live/components.ex:215
@@ -437,7 +437,7 @@ msgid "Movie"
 msgstr ""
 
 #: lib/mydia_web/components/layouts.ex:217
-#: lib/mydia_web/components/layouts.ex:560
+#: lib/mydia_web/components/layouts.ex:562
 #: lib/mydia_web/components/person_components.ex:179
 #: lib/mydia_web/controllers/page_html/home.html.heex:12
 #: lib/mydia_web/live/admin_dashboard_live/plays_chart_components.ex:124
@@ -548,13 +548,13 @@ msgid "Quality"
 msgstr ""
 
 #: lib/mydia_web/admin_nav.ex:77
-#: lib/mydia_web/components/layouts.ex:553
+#: lib/mydia_web/components/layouts.ex:555
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:98
 #, elixir-autogen, elixir-format
 msgid "Requests"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:265
+#: lib/mydia_web/components/layouts.ex:267
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:70
 #, elixir-autogen, elixir-format
 msgid "Search"
@@ -605,13 +605,13 @@ msgstr ""
 msgid "Speed"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:474
+#: lib/mydia_web/components/layouts.ex:476
 #, elixir-autogen, elixir-format
 msgid "System theme"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:755
-#: lib/mydia_web/components/layouts.ex:562
+#: lib/mydia_web/components/core_components.ex:753
+#: lib/mydia_web/components/layouts.ex:564
 #: lib/mydia_web/live/components/library_search_form.ex:72
 #: lib/mydia_web/live/downloads_live/components.ex:205
 #: lib/mydia_web/live/downloads_live/components.ex:257
@@ -635,7 +635,7 @@ msgstr ""
 msgid "TV Shows"
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:226
+#: lib/mydia_web/live/user_auth.ex:242
 #, elixir-autogen, elixir-format
 msgid "Thanks, feedback sent."
 msgstr ""
@@ -659,7 +659,7 @@ msgstr ""
 msgid "Try Again"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:758
+#: lib/mydia_web/components/core_components.ex:756
 #: lib/mydia_web/components/media_request_components.ex:128
 #: lib/mydia_web/components/plugin_instance_components.ex:257
 #: lib/mydia_web/live/activity_live/index.ex:292
@@ -706,7 +706,7 @@ msgstr ""
 msgid "Use default (%{name})"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:623
+#: lib/mydia_web/components/core_components.ex:621
 #: lib/mydia_web/components/grid_density_components.ex:73
 #: lib/mydia_web/live/media_live/index.html.heex:788
 #, elixir-autogen, elixir-format
@@ -1053,9 +1053,9 @@ msgstr ""
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:117
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:188
 #: lib/mydia_web/live/collection_live/index.ex:196
-#: lib/mydia_web/live/collection_live/show.ex:369
+#: lib/mydia_web/live/collection_live/show.ex:377
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:159
-#: lib/mydia_web/live/media_live/index/section_components.ex:22
+#: lib/mydia_web/live/media_live/index/section_components.ex:31
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:312
 #, elixir-autogen, elixir-format
 msgid "Name"
@@ -1231,7 +1231,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:166
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:349
 #: lib/mydia_web/live/discover_live/regional_components.ex:222
-#: lib/mydia_web/live/media_live/index/section_components.ex:59
+#: lib/mydia_web/live/media_live/index/section_components.ex:68
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:320
 #, elixir-autogen, elixir-format
 msgid "Save"
@@ -1242,7 +1242,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:275
 #: lib/mydia_web/live/admin_media_servers_live/media_server_modal_components.ex:206
 #: lib/mydia_web/live/admin_path_mappings_live/components.ex:168
-#: lib/mydia_web/live/collection_live/show.ex:437
+#: lib/mydia_web/live/collection_live/show.ex:445
 #: lib/mydia_web/live/profile_live/index.html.heex:183
 #, elixir-autogen, elixir-format
 msgid "Save Changes"
@@ -1711,21 +1711,21 @@ msgid_plural "%{count} recovery codes left"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/layouts.ex:605
+#: lib/mydia_web/components/layouts.ex:607
 #, elixir-autogen, elixir-format
 msgid "and %{count} earlier release"
 msgid_plural "and %{count} earlier releases"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/user_auth.ex:457
+#: lib/mydia_web/live/user_auth.ex:473
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again in %{count} second."
 msgid_plural "Feedback is rate limited. Try again in %{count} seconds."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/user_auth.ex:465
+#: lib/mydia_web/live/user_auth.ex:481
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again in about %{count} minute."
 msgid_plural "Feedback is rate limited. Try again in about %{count} minutes."
@@ -2458,7 +2458,7 @@ msgstr ""
 msgid "A later scan will find the file again and re-import it"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:69
+#: lib/mydia_web/live/media_live/index/library_actions.ex:70
 #, elixir-autogen, elixir-format
 msgid "A library scan is already queued"
 msgstr ""
@@ -2525,8 +2525,8 @@ msgid "Activity Feed"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/components.ex:95
+#: lib/mydia_web/live/collection_live/components.ex:590
 #: lib/mydia_web/live/collection_live/preset_components.ex:104
-#: lib/mydia_web/live/collection_live/show.ex:580
 #, elixir-autogen, elixir-format
 msgid "Add"
 msgstr ""
@@ -2537,12 +2537,12 @@ msgid "Add Condition"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/show.ex:181
-#: lib/mydia_web/live/collection_live/show.ex:303
+#: lib/mydia_web/live/collection_live/show.ex:311
 #, elixir-autogen, elixir-format
 msgid "Add Items"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:477
+#: lib/mydia_web/live/collection_live/components.ex:494
 #, elixir-autogen, elixir-format
 msgid "Add Items to Collection"
 msgstr ""
@@ -2629,8 +2629,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:108
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:249
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:93
+#: lib/mydia_web/live/collection_live/components.ex:585
 #: lib/mydia_web/live/collection_live/preset_components.ex:94
-#: lib/mydia_web/live/collection_live/show.ex:575
 #: lib/mydia_web/live/media_live/show/modals.ex:767
 #, elixir-autogen, elixir-format
 msgid "Added"
@@ -2962,7 +2962,7 @@ msgstr ""
 msgid "Are you sure you want to cancel this download?"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:452
+#: lib/mydia_web/live/collection_live/show.ex:460
 #, elixir-autogen, elixir-format
 msgid "Are you sure you want to delete %{name}? This action cannot be undone."
 msgstr ""
@@ -3246,7 +3246,7 @@ msgstr[1] ""
 msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{days} days."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:916
+#: lib/mydia_web/live/collection_live/show.ex:823
 #: lib/mydia_web/live/media_live/index.ex:535
 #: lib/mydia_web/live/media_live/show/collection_events.ex:65
 #, elixir-autogen, elixir-format
@@ -3258,7 +3258,7 @@ msgstr ""
 msgid "Cannot refresh: Missing provider ID (TMDB/TVDB)"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:650
+#: lib/mydia_web/live/collection_live/show.ex:539
 #: lib/mydia_web/live/media_live/show/collection_events.ex:91
 #, elixir-autogen, elixir-format
 msgid "Cannot remove items from smart collections"
@@ -3601,7 +3601,7 @@ msgstr ""
 msgid "Collection created successfully"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:781
+#: lib/mydia_web/live/collection_live/show.ex:677
 #, elixir-autogen, elixir-format
 msgid "Collection deleted"
 msgstr ""
@@ -3620,7 +3620,7 @@ msgstr ""
 msgid "Collection poster"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:752
+#: lib/mydia_web/live/collection_live/show.ex:641
 #, elixir-autogen, elixir-format
 msgid "Collection updated"
 msgstr ""
@@ -4291,13 +4291,13 @@ msgstr ""
 msgid "Delete %{title}?"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:233
-#: lib/mydia_web/live/collection_live/show.ex:465
+#: lib/mydia_web/live/collection_live/show.ex:241
+#: lib/mydia_web/live/collection_live/show.ex:473
 #, elixir-autogen, elixir-format
 msgid "Delete Collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:449
+#: lib/mydia_web/live/collection_live/show.ex:457
 #, elixir-autogen, elixir-format
 msgid "Delete Collection?"
 msgstr ""
@@ -4418,7 +4418,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_custom_formats_live/components.ex:136
 #: lib/mydia_web/live/admin_quality_profiles_live/profile_form_tabs.ex:31
 #: lib/mydia_web/live/collection_live/index.ex:231
-#: lib/mydia_web/live/collection_live/show.ex:403
+#: lib/mydia_web/live/collection_live/show.ex:411
 #, elixir-autogen, elixir-format
 msgid "Description"
 msgstr ""
@@ -4520,8 +4520,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/cardigann_engine_components.ex:54
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:38
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:175
+#: lib/mydia_web/live/collection_live/components.ex:602
 #: lib/mydia_web/live/collection_live/index.ex:306
-#: lib/mydia_web/live/collection_live/show.ex:592
 #: lib/mydia_web/live/dashboard_live/edit_home_components.ex:115
 #: lib/mydia_web/live/media_live/index.html.heex:1032
 #, elixir-autogen, elixir-format
@@ -4691,8 +4691,8 @@ msgstr ""
 
 #: lib/mydia_web/components/collection_components.ex:160
 #: lib/mydia_web/components/collection_components.ex:354
-#: lib/mydia_web/live/collection_live/show.ex:228
-#: lib/mydia_web/live/collection_live/show.ex:343
+#: lib/mydia_web/live/collection_live/show.ex:236
+#: lib/mydia_web/live/collection_live/show.ex:351
 #, elixir-autogen, elixir-format
 msgid "Edit Collection"
 msgstr ""
@@ -4704,7 +4704,7 @@ msgid "Edit Home"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/show.ex:191
-#: lib/mydia_web/live/collection_live/show.ex:312
+#: lib/mydia_web/live/collection_live/show.ex:320
 #, elixir-autogen, elixir-format
 msgid "Edit Rules"
 msgstr ""
@@ -4914,7 +4914,7 @@ msgstr ""
 msgid "Failed"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:919
+#: lib/mydia_web/live/collection_live/show.ex:826
 #, elixir-autogen, elixir-format
 msgid "Failed to add item"
 msgstr ""
@@ -5074,7 +5074,7 @@ msgstr ""
 msgid "Failed to remove from collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:890
+#: lib/mydia_web/live/collection_live/show.ex:798
 #, elixir-autogen, elixir-format
 msgid "Failed to remove item"
 msgstr ""
@@ -5115,7 +5115,7 @@ msgstr ""
 msgid "Failed to revoke device"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:80
+#: lib/mydia_web/live/media_live/index/library_actions.ex:81
 #, elixir-autogen, elixir-format
 msgid "Failed to start library scan"
 msgstr ""
@@ -5125,7 +5125,7 @@ msgstr ""
 msgid "Failed to start pre-transcode: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:1002
+#: lib/mydia_web/live/collection_live/show.ex:904
 #, elixir-autogen, elixir-format
 msgid "Failed to update collection"
 msgstr ""
@@ -5152,7 +5152,7 @@ msgid "Failed to update monitoring"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/index/library_actions.ex:21
-#: lib/mydia_web/live/media_live/index/library_actions.ex:57
+#: lib/mydia_web/live/media_live/index/library_actions.ex:58
 #, elixir-autogen, elixir-format
 msgid "Failed to update monitoring status"
 msgstr ""
@@ -5564,7 +5564,7 @@ msgstr ""
 msgid "Horror titles from across your library."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/section_components.ex:27
+#: lib/mydia_web/live/media_live/index/section_components.ex:36
 #, elixir-autogen, elixir-format
 msgid "Icon"
 msgstr ""
@@ -5775,12 +5775,12 @@ msgstr ""
 msgid "Issues"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:912
+#: lib/mydia_web/live/collection_live/show.ex:820
 #, elixir-autogen, elixir-format
 msgid "Item added to collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:646
+#: lib/mydia_web/live/collection_live/show.ex:535
 #, elixir-autogen, elixir-format
 msgid "Item not found in collection"
 msgstr ""
@@ -5790,8 +5790,8 @@ msgstr ""
 msgid "Item not in collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:643
-#: lib/mydia_web/live/collection_live/show.ex:887
+#: lib/mydia_web/live/collection_live/show.ex:532
+#: lib/mydia_web/live/collection_live/show.ex:795
 #, elixir-autogen, elixir-format
 msgid "Item removed from collection"
 msgstr ""
@@ -5835,7 +5835,7 @@ msgstr ""
 msgid "Keep aired order"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/section_components.ex:42
+#: lib/mydia_web/live/media_live/index/section_components.ex:51
 #, elixir-autogen, elixir-format
 msgid "Keep these out of Movies and TV"
 msgstr ""
@@ -5940,7 +5940,7 @@ msgstr ""
 msgid "Library scan failed: %{error}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:77
+#: lib/mydia_web/live/media_live/index/library_actions.ex:78
 #, elixir-autogen, elixir-format
 msgid "Library scan started..."
 msgstr ""
@@ -6006,8 +6006,8 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:714
 #: lib/mydia_web/components/collection_components.ex:773
 #: lib/mydia_web/components/collection_components.ex:774
-#: lib/mydia_web/live/collection_live/show.ex:1102
-#: lib/mydia_web/live/collection_live/show.ex:1103
+#: lib/mydia_web/live/collection_live/show.ex:1004
+#: lib/mydia_web/live/collection_live/show.ex:1005
 #: lib/mydia_web/live/media_live/show/components.ex:150
 #, elixir-autogen, elixir-format
 msgid "Manual"
@@ -6263,7 +6263,7 @@ msgstr ""
 msgid "Monitored Status"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:52
+#: lib/mydia_web/live/media_live/index/library_actions.ex:53
 #: lib/mydia_web/live/media_live/show/episode_events.ex:39
 #, elixir-autogen, elixir-format
 msgid "Monitoring disabled"
@@ -6276,7 +6276,7 @@ msgid_plural "Monitoring disabled for %{count} episodes in Season %{season}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/index/library_actions.ex:51
+#: lib/mydia_web/live/media_live/index/library_actions.ex:52
 #: lib/mydia_web/live/media_live/show/episode_events.ex:38
 #, elixir-autogen, elixir-format
 msgid "Monitoring enabled"
@@ -6648,12 +6648,12 @@ msgstr ""
 msgid "No issues"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:292
+#: lib/mydia_web/live/collection_live/show.ex:300
 #, elixir-autogen, elixir-format
 msgid "No items match your smart rules. Try adjusting the conditions."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:288
+#: lib/mydia_web/live/collection_live/show.ex:296
 #, elixir-autogen, elixir-format
 msgid "No items yet"
 msgstr ""
@@ -6721,7 +6721,7 @@ msgid "No paused indexers to retest"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/index.ex:420
-#: lib/mydia_web/live/collection_live/show.ex:623
+#: lib/mydia_web/live/collection_live/show.ex:512
 #, elixir-autogen, elixir-format
 msgid "No playable items in this collection"
 msgstr ""
@@ -6781,7 +6781,7 @@ msgstr ""
 msgid "No results for \"%{query}\"."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:524
+#: lib/mydia_web/live/collection_live/components.ex:537
 #: lib/mydia_web/live/discover_live/index.html.heex:346
 #, elixir-autogen, elixir-format
 msgid "No results found"
@@ -7050,7 +7050,7 @@ msgstr ""
 msgid "Only movie, TV and mixed libraries can be imported."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:1083
+#: lib/mydia_web/live/collection_live/show.ex:985
 #, elixir-autogen, elixir-format
 msgid "Only smart collections can be pinned to the sidebar"
 msgstr ""
@@ -7104,7 +7104,7 @@ msgid "Opens in your default video app, or paste it into VLC, mpv or Infuse. Any
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/index.ex:232
-#: lib/mydia_web/live/collection_live/show.ex:404
+#: lib/mydia_web/live/collection_live/show.ex:412
 #, elixir-autogen, elixir-format
 msgid "Optional"
 msgstr ""
@@ -7297,7 +7297,7 @@ msgstr ""
 msgid "Pin to sidebar"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:801
+#: lib/mydia_web/live/collection_live/show.ex:697
 #, elixir-autogen, elixir-format
 msgid "Pinned to sidebar"
 msgstr ""
@@ -7443,7 +7443,7 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:721
 #: lib/mydia_web/live/admin_indexers_live/tracker_terms_components.ex:254
 #: lib/mydia_web/live/collection_live/index.ex:218
-#: lib/mydia_web/live/collection_live/show.ex:390
+#: lib/mydia_web/live/collection_live/show.ex:398
 #, elixir-autogen, elixir-format
 msgid "Private"
 msgstr ""
@@ -7980,7 +7980,7 @@ msgstr ""
 msgid "Remove from Library"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:257
+#: lib/mydia_web/live/collection_live/show.ex:265
 #, elixir-autogen, elixir-format
 msgid "Remove from collection"
 msgstr ""
@@ -8001,7 +8001,7 @@ msgstr ""
 msgid "Remove from library, leave the file on disk"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/index/section_components.ex:54
+#: lib/mydia_web/live/media_live/index/section_components.ex:63
 #, elixir-autogen, elixir-format
 msgid "Remove from sidebar"
 msgstr ""
@@ -8043,7 +8043,7 @@ msgstr ""
 msgid "Removed from client"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:818
+#: lib/mydia_web/live/collection_live/show.ex:715
 #, elixir-autogen, elixir-format
 msgid "Removed from sidebar"
 msgstr ""
@@ -8615,7 +8615,7 @@ msgstr ""
 msgid "Search media..."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:492
+#: lib/mydia_web/live/collection_live/components.ex:508
 #, elixir-autogen, elixir-format
 msgid "Search movies or TV shows..."
 msgstr ""
@@ -8635,7 +8635,7 @@ msgstr ""
 msgid "Search timed out - no response from search job"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:517
+#: lib/mydia_web/live/collection_live/components.ex:531
 #, elixir-autogen, elixir-format
 msgid "Search your library"
 msgstr ""
@@ -8741,7 +8741,7 @@ msgid "Section removed from the sidebar"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/index.html.heex:68
-#: lib/mydia_web/live/media_live/index/section_components.ex:19
+#: lib/mydia_web/live/media_live/index/section_components.ex:23
 #, elixir-autogen, elixir-format
 msgid "Section settings"
 msgstr ""
@@ -8975,7 +8975,7 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:327
 #: lib/mydia_web/components/collection_components.ex:724
 #: lib/mydia_web/live/collection_live/index.ex:221
-#: lib/mydia_web/live/collection_live/show.ex:393
+#: lib/mydia_web/live/collection_live/show.ex:401
 #, elixir-autogen, elixir-format
 msgid "Shared"
 msgstr ""
@@ -9117,13 +9117,13 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:424
 #: lib/mydia_web/components/collection_components.ex:715
 #: lib/mydia_web/components/collection_components.ex:772
-#: lib/mydia_web/live/collection_live/show.ex:1101
+#: lib/mydia_web/live/collection_live/show.ex:1003
 #, elixir-autogen, elixir-format
 msgid "Smart"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/index.ex:246
-#: lib/mydia_web/live/collection_live/show.ex:418
+#: lib/mydia_web/live/collection_live/show.ex:426
 #, elixir-autogen, elixir-format
 msgid "Smart Rules"
 msgstr ""
@@ -9211,7 +9211,7 @@ msgstr ""
 msgid "Start Watching"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:294
+#: lib/mydia_web/live/collection_live/show.ex:302
 #, elixir-autogen, elixir-format
 msgid "Start building your collection by adding movies and TV shows."
 msgstr ""
@@ -9421,17 +9421,17 @@ msgstr ""
 msgid "System Health"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:789
+#: lib/mydia_web/live/collection_live/show.ex:685
 #, elixir-autogen, elixir-format
 msgid "System collections cannot be deleted"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:764
+#: lib/mydia_web/live/collection_live/show.ex:660
 #, elixir-autogen, elixir-format
 msgid "System collections cannot be edited"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:1089
+#: lib/mydia_web/live/collection_live/show.ex:991
 #, elixir-autogen, elixir-format
 msgid "System collections cannot be pinned to the sidebar"
 msgstr ""
@@ -9461,8 +9461,8 @@ msgid "TV Series"
 msgstr ""
 
 #: lib/mydia_web/components/media_request_components.ex:138
+#: lib/mydia_web/live/collection_live/components.ex:576
 #: lib/mydia_web/live/collection_live/rule_labels.ex:27
-#: lib/mydia_web/live/collection_live/show.ex:565
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:117
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:142
 #: lib/mydia_web/live/media_live/show.html.heex:274
@@ -9698,7 +9698,7 @@ msgstr ""
 msgid "The last removal attempt is still finishing. Try again shortly."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:457
+#: lib/mydia_web/live/collection_live/show.ex:465
 #, elixir-autogen, elixir-format
 msgid "The media items in this collection will not be deleted."
 msgstr ""
@@ -10085,7 +10085,7 @@ msgstr ""
 msgid "Try a different search or clear the filters."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:525
+#: lib/mydia_web/live/collection_live/components.ex:538
 #, elixir-autogen, elixir-format
 msgid "Try a different search term"
 msgstr ""
@@ -10125,7 +10125,7 @@ msgstr ""
 msgid "Turn it on"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:518
+#: lib/mydia_web/live/collection_live/components.ex:532
 #, elixir-autogen, elixir-format
 msgid "Type at least 2 characters to search"
 msgstr ""
@@ -10371,7 +10371,7 @@ msgstr ""
 
 #: lib/mydia_web/components/collection_components.ex:87
 #: lib/mydia_web/live/collection_live/index.ex:211
-#: lib/mydia_web/live/collection_live/show.ex:383
+#: lib/mydia_web/live/collection_live/show.ex:391
 #, elixir-autogen, elixir-format
 msgid "Visibility"
 msgstr ""
@@ -10422,7 +10422,7 @@ msgid "What's in cinemas and on your streaming services"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/index.ex:239
-#: lib/mydia_web/live/collection_live/show.ex:411
+#: lib/mydia_web/live/collection_live/show.ex:419
 #, elixir-autogen, elixir-format
 msgid "What's this collection about?"
 msgstr ""
@@ -10489,19 +10489,19 @@ msgstr ""
 msgid "You don't have permission to create shared collections"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:786
+#: lib/mydia_web/live/collection_live/show.ex:682
 #, elixir-autogen, elixir-format
 msgid "You don't have permission to delete this collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:654
-#: lib/mydia_web/live/collection_live/show.ex:760
-#: lib/mydia_web/live/collection_live/show.ex:924
+#: lib/mydia_web/live/collection_live/show.ex:543
+#: lib/mydia_web/live/collection_live/show.ex:656
+#: lib/mydia_web/live/collection_live/show.ex:777
 #, elixir-autogen, elixir-format
 msgid "You don't have permission to edit this collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:1086
+#: lib/mydia_web/live/collection_live/show.ex:988
 #, elixir-autogen, elixir-format
 msgid "You don't have permission to pin this collection"
 msgstr ""
@@ -11681,28 +11681,28 @@ msgctxt "release"
 msgid "Release"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:689
+#: lib/mydia_web/components/core_components.ex:687
 #: lib/mydia_web/live/components/trending_detail_modal.ex:508
 #, elixir-autogen, elixir-format
 msgctxt "runtime"
 msgid "%{hours}h"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:686
+#: lib/mydia_web/components/core_components.ex:684
 #: lib/mydia_web/live/components/trending_detail_modal.ex:505
 #, elixir-autogen, elixir-format
 msgctxt "runtime"
 msgid "%{hours}h %{mins}m"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:692
+#: lib/mydia_web/components/core_components.ex:690
 #: lib/mydia_web/live/components/trending_detail_modal.ex:511
 #, elixir-autogen, elixir-format
 msgctxt "runtime"
 msgid "%{mins}m"
 msgstr ""
 
-#: lib/mydia_web/components/core_components.ex:695
+#: lib/mydia_web/components/core_components.ex:693
 #, elixir-autogen, elixir-format
 msgctxt "runtime"
 msgid "%{secs}s"
@@ -14111,7 +14111,7 @@ msgstr ""
 msgid "Could not save permissions."
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:409
+#: lib/mydia_web/live/user_auth.ex:425
 #, elixir-autogen, elixir-format
 msgid "Could not save your theme"
 msgstr ""

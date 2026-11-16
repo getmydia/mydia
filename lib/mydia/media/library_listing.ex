@@ -50,7 +50,14 @@ defmodule Mydia.Media.LibraryListing do
   # in memory, and :search in particular must stay out: Media's own :search
   # filter matches titles only, while the listing also matches original title,
   # year and overview.
-  @filter_keys [:base_query, :exclude_categories, :type, :monitored, :library_path_id]
+  @filter_keys [
+    :base_query,
+    :exclude_categories,
+    :exclude_queries,
+    :type,
+    :monitored,
+    :library_path_id
+  ]
 
   # Sort sentinels. Air dates are Dates, so these stay Dates: sorting a mix of
   # Date and NaiveDateTime raises.

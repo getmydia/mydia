@@ -548,6 +548,9 @@ defmodule Mydia.Collections.SmartRules do
 
   defp build_dynamic("year", "in", values), do: dynamic([m], m.year in ^values)
 
+  defp build_dynamic("year", "not_in", values),
+    do: dynamic([m], is_nil(m.year) or m.year not in ^values)
+
   defp build_dynamic("title", "eq", value), do: dynamic([m], m.title == ^value)
 
   defp build_dynamic("title", "contains", value) do

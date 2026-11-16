@@ -515,6 +515,7 @@ defmodule MydiaWeb.CoreComponents do
   attr :id, :string, required: true
   attr :show, :boolean, default: false
   attr :on_cancel, :any, default: nil
+  attr :box_class, :string, default: nil
 
   slot :title
   slot :inner_block, required: true
@@ -522,21 +523,22 @@ defmodule MydiaWeb.CoreComponents do
 
   def modal(assigns) do
     ~H"""
-    <dialog id={@id} class="modal" open={@show}>
-      <div class="modal-box">
-        <h3 :if={@title != []} class="font-bold text-lg mb-4">
+    <dialog
+      id={@id}
+      class="modal pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] px-3 sm:px-4"
+      open={@show}
+    >
+      <div class={[
+        "modal-box relative w-full flex flex-col overflow-hidden p-4 sm:p-6 max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] sm:max-h-[calc(100dvh-3rem)]",
+        @box_class
+      ]}>
+        <h3 :if={@title != []} class="font-bold text-lg mb-3 pr-10 shrink-0">
           {render_slot(@title)}
         </h3>
-
-        <div class="py-4">
-          {render_slot(@inner_block)}
-        </div>
-
-        <div :if={@actions != []} class="modal-action">
+        <div class="py-2 flex-1 min-h-0 overflow-y-auto px-1 -mx-1">{render_slot(@inner_block)}</div>
+        <div :if={@actions != []} class="modal-action mt-4 pt-3 border-t border-base-300 shrink-0">
           {render_slot(@actions)}
         </div>
-
-        <%!-- Close button in top right --%>
         <form method="dialog">
           <button
             :if={@on_cancel}
@@ -548,12 +550,8 @@ defmodule MydiaWeb.CoreComponents do
           </button>
         </form>
       </div>
-
-      <%!-- Backdrop --%>
       <form method="dialog" class="modal-backdrop">
-        <button :if={@on_cancel} type="button" phx-click={@on_cancel}>
-          {gettext("close")}
-        </button>
+        <button :if={@on_cancel} type="button" phx-click={@on_cancel}>{gettext("close")}</button>
       </form>
     </dialog>
     """

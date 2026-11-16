@@ -69,8 +69,26 @@ defmodule MydiaWeb.MobileLayoutManifest do
       "/downloads" => page("/downloads", [{"issues", [{:visit_query, "tab=issues"}]}]),
       "/calendar" => page("/calendar"),
       "/activity" => page("/activity"),
-      "/collections" => page("/collections"),
-      "/collections/:id" => %{path: &"/collections/#{&1.collection}", states: []},
+      "/collections" =>
+        page("/collections", [
+          {"preset-gallery",
+           [{:click, "#browse-presets-button"}, {:wait, "#preset-gallery-modal[open]"}]},
+          {"new-modal",
+           [
+             {:click, "button[phx-click='open_new_modal']"},
+             {:wait, "#new-collection-modal[open]"}
+           ]}
+        ]),
+      "/collections/:id" => %{
+        path: &"/collections/#{&1.section}",
+        states: [
+          {"edit-modal",
+           [
+             {:click, "button[phx-click='open_edit_modal']"},
+             {:wait, "#edit-collection-modal[open]"}
+           ]}
+        ]
+      },
       "/requests" => page("/requests"),
       "/profile" => page("/profile"),
       "/changelog" => page("/changelog"),

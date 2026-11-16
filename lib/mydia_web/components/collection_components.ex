@@ -380,9 +380,9 @@ defmodule MydiaWeb.CollectionComponents do
       <label class="label">
         <span class="label-text font-medium">{gettext("Collection Type")}</span>
       </label>
-      <div class="flex gap-2">
+      <div class="flex flex-col sm:flex-row gap-2">
         <label class={[
-          "flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
+          "flex-1 flex items-center gap-3 p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all",
           @selected == "manual" && "border-primary bg-primary/10",
           @selected != "manual" && "border-base-300 hover:border-primary/50",
           @disabled && "opacity-50 cursor-not-allowed"
@@ -406,7 +406,7 @@ defmodule MydiaWeb.CollectionComponents do
         </label>
 
         <label class={[
-          "flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
+          "flex-1 flex items-center gap-3 p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all",
           @selected == "smart" && "border-secondary bg-secondary/10",
           @selected != "smart" && "border-base-300 hover:border-secondary/50",
           @disabled && "opacity-50 cursor-not-allowed"

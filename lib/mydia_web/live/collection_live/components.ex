@@ -68,16 +68,16 @@ defmodule MydiaWeb.CollectionLive.Components do
     <div class="space-y-4">
       <%!-- Conditions Card --%>
       <div class="card bg-base-200/50 border border-base-300">
-        <div class="card-body p-4">
+        <div class="card-body p-3 sm:p-4">
           <%!-- Header with match type and add button --%>
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary/20">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div class="hidden sm:flex items-center justify-center w-8 h-8 rounded-lg bg-secondary/20 shrink-0">
                 <.icon name="hero-funnel" class="w-4 h-4 text-secondary" />
               </div>
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{gettext("Match")}</span>
-                <select name="match_type" class="select select-sm select-bordered bg-base-100">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="text-sm font-medium shrink-0">{gettext("Match")}</span>
+                <select name="match_type" class="select select-sm select-bordered bg-base-100 min-w-0">
                   <option value="all" selected={@match_type == "all"}>
                     {gettext("all conditions")}
                   </option>
@@ -90,7 +90,7 @@ defmodule MydiaWeb.CollectionLive.Components do
             <button
               type="button"
               phx-click="add_condition"
-              class="btn btn-sm btn-secondary btn-outline gap-1"
+              class="btn btn-sm btn-secondary btn-outline gap-1 shrink-0"
             >
               <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add")}
             </button>
@@ -99,7 +99,7 @@ defmodule MydiaWeb.CollectionLive.Components do
           <%!-- Conditions List --%>
           <div class="space-y-2">
             <%= for {condition, index} <- Enum.with_index(@conditions) do %>
-              <div class="flex items-center gap-2 p-3 bg-base-100 rounded-lg border border-base-300 shadow-sm">
+              <div class="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] sm:flex items-center gap-2 p-3 bg-base-100 rounded-lg border border-base-300 shadow-sm">
                 <%!-- Condition number badge --%>
                 <div class="badge badge-sm badge-ghost font-mono w-6 h-6 flex-shrink-0">
                   {index + 1}
@@ -108,7 +108,7 @@ defmodule MydiaWeb.CollectionLive.Components do
                 <%!-- Field selector --%>
                 <select
                   name={"conditions[#{index}][field]"}
-                  class="select select-sm select-bordered flex-1 min-w-0 bg-base-100"
+                  class="select select-sm select-bordered w-full sm:flex-1 min-w-0 bg-base-100"
                 >
                   <option value="">{gettext("Select field...")}</option>
                   <optgroup label={gettext("Basic")}>
@@ -177,7 +177,7 @@ defmodule MydiaWeb.CollectionLive.Components do
                   phx-click="remove_condition"
                   phx-value-index={index}
                   class={[
-                    "btn btn-ghost btn-sm btn-square text-base-content/50 hover:text-error hover:bg-error/10",
+                    "btn btn-ghost btn-sm btn-square max-sm:col-start-3 max-sm:row-start-1 text-base-content/50 hover:text-error hover:bg-error/10",
                     length(@conditions) <= 1 && "btn-disabled opacity-30"
                   ]}
                   title={gettext("Remove condition")}
@@ -193,7 +193,7 @@ defmodule MydiaWeb.CollectionLive.Components do
 
       <%!-- Sort & Limit Card --%>
       <div class="card bg-base-200/50 border border-base-300">
-        <div class="card-body p-4">
+        <div class="card-body p-3 sm:p-4">
           <div class="flex items-center gap-3 mb-3">
             <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/20">
               <.icon name="hero-arrows-up-down" class="w-4 h-4 text-primary" />
@@ -297,7 +297,7 @@ defmodule MydiaWeb.CollectionLive.Components do
     ~H"""
     <select
       name={"conditions[#{@index}][operator]"}
-      class="select select-sm select-bordered w-32 bg-base-100"
+      class="select select-sm select-bordered max-sm:col-span-3 w-full sm:w-32 bg-base-100"
     >
       <%= for op <- @operators do %>
         <option value={op} selected={@operator == to_string(op)}>
@@ -347,7 +347,7 @@ defmodule MydiaWeb.CollectionLive.Components do
       name={if @multi, do: "conditions[#{@index}][value][]", else: "conditions[#{@index}][value]"}
       multiple={@multi}
       size={@multi && 4}
-      class="select select-sm select-bordered flex-1 min-w-0 bg-base-100"
+      class="select select-sm select-bordered max-sm:col-span-3 w-full sm:flex-1 min-w-0 bg-base-100"
     >
       <option :if={not @multi} value="">{gettext("Select...")}</option>
       <option :for={{val, label} <- @options} value={val} selected={to_string(val) in @selected}>
@@ -369,7 +369,7 @@ defmodule MydiaWeb.CollectionLive.Components do
     ~H"""
     <select
       name={"conditions[#{@index}][value]"}
-      class="select select-sm select-bordered flex-1 min-w-0 bg-base-100"
+      class="select select-sm select-bordered max-sm:col-span-3 w-full sm:flex-1 min-w-0 bg-base-100"
     >
       <option value="">{gettext("Select...")}</option>
       <%= for {val, label} <- @options do %>
@@ -395,7 +395,7 @@ defmodule MydiaWeb.CollectionLive.Components do
       type="text"
       name={"conditions[#{@index}][value]"}
       value={@value}
-      class="input input-sm input-bordered flex-1 min-w-0 bg-base-100"
+      class="input input-sm input-bordered max-sm:col-span-3 w-full sm:flex-1 min-w-0 bg-base-100"
       placeholder={@placeholder}
     />
     """
@@ -419,7 +419,7 @@ defmodule MydiaWeb.CollectionLive.Components do
       min={@min}
       max={@max}
       step={@step}
-      class="input input-sm input-bordered flex-1 min-w-0 bg-base-100"
+      class="input input-sm input-bordered max-sm:col-span-3 w-full sm:flex-1 min-w-0 bg-base-100"
     />
     """
   end
@@ -433,7 +433,7 @@ defmodule MydiaWeb.CollectionLive.Components do
       type="date"
       name={"conditions[#{@index}][value]"}
       value={@formatted_value}
-      class="input input-sm input-bordered flex-1 min-w-0 bg-base-100"
+      class="input input-sm input-bordered max-sm:col-span-3 w-full sm:flex-1 min-w-0 bg-base-100"
     />
     """
   end
@@ -445,7 +445,7 @@ defmodule MydiaWeb.CollectionLive.Components do
       type="text"
       name={"conditions[#{@index}][value]"}
       value={@value}
-      class="input input-sm input-bordered flex-1 min-w-0 bg-base-100"
+      class="input input-sm input-bordered max-sm:col-span-3 w-full sm:flex-1 min-w-0 bg-base-100"
       placeholder={value_placeholder(@operator)}
     />
     """
@@ -474,4 +474,135 @@ defmodule MydiaWeb.CollectionLive.Components do
   end
 
   defp format_date_value(_), do: ""
+
+  @doc """
+  Modal for searching and toggling items in a manual collection.
+  """
+  attr :show, :boolean, required: true
+  attr :search, :string, required: true
+  attr :results, :list, required: true
+  attr :collection_item_ids, :any, required: true
+
+  def add_items_modal(assigns) do
+    ~H"""
+    <.modal
+      :if={@show}
+      id="add-items-modal"
+      show={@show}
+      on_cancel={JS.push("close_add_items_modal")}
+    >
+      <:title>{gettext("Add Items to Collection")}</:title>
+
+      <.form
+        for={%{}}
+        phx-change="search_add_items"
+        id="add-items-search-form"
+        class="w-full mb-6"
+      >
+        <label class="input input-lg input-bordered w-full flex items-center gap-3 bg-base-200/50 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary">
+          <.icon name="hero-magnifying-glass" class="w-5 h-5 text-base-content/50 flex-shrink-0" />
+          <input
+            type="text"
+            name="search"
+            value={@search}
+            placeholder={gettext("Search movies or TV shows...")}
+            phx-debounce="300"
+            class="grow bg-transparent border-none focus:outline-none text-lg min-w-0"
+            autofocus
+          />
+          <%= if @search != "" do %>
+            <button
+              type="button"
+              phx-click="search_add_items"
+              phx-value-search=""
+              class="btn btn-ghost btn-sm btn-circle flex-shrink-0"
+            >
+              <.icon name="hero-x-mark" class="w-5 h-5" />
+            </button>
+          <% end %>
+        </label>
+      </.form>
+
+      <div class="min-h-[200px] -mx-2">
+        <%= cond do %>
+          <% String.length(@search) < 2 -> %>
+            <div class="flex flex-col items-center justify-center py-16 text-base-content/50">
+              <.icon name="hero-magnifying-glass" class="w-16 h-16 mb-4 opacity-30" />
+              <p class="font-medium">{gettext("Search your library")}</p>
+              <p class="text-sm">{gettext("Type at least 2 characters to search")}</p>
+            </div>
+          <% @results == [] -> %>
+            <div class="flex flex-col items-center justify-center py-16 text-base-content/50">
+              <.icon name="hero-face-frown" class="w-16 h-16 mb-4 opacity-30" />
+              <p class="font-medium">{gettext("No results found")}</p>
+              <p class="text-sm">{gettext("Try a different search term")}</p>
+            </div>
+          <% true -> %>
+            <div class="divide-y divide-base-200">
+              <%= for item <- @results do %>
+                <% in_collection? = MapSet.member?(@collection_item_ids, item.id) %>
+                <button
+                  type="button"
+                  phx-click="toggle_item_in_collection"
+                  phx-value-id={item.id}
+                  aria-pressed={in_collection?}
+                  class={[
+                    "w-full flex items-center gap-3 p-2 text-left transition-colors",
+                    "hover:bg-base-200 focus:outline-none focus:bg-base-200",
+                    in_collection? && "bg-success/10"
+                  ]}
+                >
+                  <div class="w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-base-300">
+                    <img
+                      :if={item.poster_url}
+                      src={item.poster_url}
+                      alt=""
+                      class="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                    <div
+                      :if={!item.poster_url}
+                      class="w-full h-full flex items-center justify-center"
+                    >
+                      <.icon name="hero-film" class="w-6 h-6 text-base-content/20" />
+                    </div>
+                  </div>
+
+                  <div class="flex-1 min-w-0">
+                    <h4 class="font-medium truncate">{item.title}</h4>
+                    <div class="flex items-center gap-2 text-sm text-base-content/60">
+                      <span>{item.year}</span>
+                      <span class="badge badge-xs">
+                        {if item.type == "movie", do: gettext("Movie"), else: gettext("TV Show")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="flex-shrink-0">
+                    <%= if in_collection? do %>
+                      <div class="btn btn-sm btn-success btn-outline gap-1">
+                        <.icon name="hero-check" class="w-4 h-4" />
+                        <span class="hidden sm:inline">{gettext("Added")}</span>
+                      </div>
+                    <% else %>
+                      <div class="btn btn-sm btn-ghost gap-1">
+                        <.icon name="hero-plus" class="w-4 h-4" />
+                        <span class="hidden sm:inline">{gettext("Add")}</span>
+                      </div>
+                    <% end %>
+                  </div>
+                </button>
+              <% end %>
+            </div>
+        <% end %>
+      </div>
+
+      <:actions>
+        <button type="button" class="btn" phx-click="close_add_items_modal">
+          {gettext("Done")}
+        </button>
+      </:actions>
+    </.modal>
+    """
+  end
 end

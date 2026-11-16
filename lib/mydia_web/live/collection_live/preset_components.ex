@@ -106,7 +106,7 @@ defmodule MydiaWeb.CollectionLive.PresetComponents do
           <% end %>
         </div>
 
-        <div :if={@duplicate and not @added} class="text-[11px] text-base-content/50">
+        <div :if={@duplicate and not @added} class="text-xs text-base-content/50">
           {gettext("You already have a collection with this name.")}
         </div>
       </div>

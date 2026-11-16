@@ -33,6 +33,15 @@ defmodule Mydia.Media.Queries do
         # stay on the page it is already on, so keep NULLs explicitly.
         where(query, [m], is_nil(m.category) or m.category not in ^names)
 
+      {:exclude_queries, []}, query ->
+        query
+
+      {:exclude_queries, queries}, query when is_list(queries) ->
+        Enum.reduce(queries, query, fn excluded_query, acc ->
+          excluded_ids = from(m in excluded_query, select: m.id)
+          where(acc, [m], m.id not in subquery(excluded_ids))
+        end)
+
       {:library_path_type, library_type}, query ->
         filter_by_library_path_type(query, library_type)
 

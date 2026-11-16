@@ -155,6 +155,10 @@ defmodule MydiaWeb.MediaLive.Index.Window do
       :exclude_categories,
       if(is_nil(assigns[:section]), do: assigns[:excluded_categories], else: [])
     )
+    |> maybe_add_filter(
+      :exclude_queries,
+      if(is_nil(assigns[:section]), do: assigns[:excluded_queries], else: [])
+    )
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
     |> maybe_add_filter(:library_path_id, assigns[:filter_library])

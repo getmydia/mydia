@@ -42,6 +42,7 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
             nil -> socket
             row -> stream_insert(socket, :media_items, row)
           end
+          |> MydiaWeb.Live.UserAuth.refresh_section_navigation()
 
         {:noreply,
          put_flash(
@@ -79,5 +80,12 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, gettext("Failed to start library scan"))}
     end
+  end
+
+  @doc "Refreshes sidebar section counts/exclusions and reloads the listing after a write."
+  def reload_with_navigation(socket, load_fn) do
+    socket
+    |> MydiaWeb.Live.UserAuth.refresh_section_navigation()
+    |> load_fn.()
   end
 end

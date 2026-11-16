@@ -17,7 +17,7 @@ defmodule MydiaWeb.CollectionLive.Show do
   alias MydiaWeb.CollectionLive.{RuleLabels, SmartRulesParams}
 
   import MydiaWeb.CollectionLive.Components,
-    only: [smart_rules_editor: 1, load_value_options: 1, value_string: 1]
+    only: [add_items_modal: 1, smart_rules_editor: 1, load_value_options: 1, value_string: 1]
 
   @items_per_page 50
   @default_condition %{"field" => "", "operator" => "eq", "value" => ""}
@@ -215,13 +215,21 @@ defmodule MydiaWeb.CollectionLive.Show do
             <% end %>
             <%!-- Settings dropdown for non-system collections --%>
             <%= if not @collection.is_system and can_edit?(@collection, @current_user) do %>
-              <div class="dropdown dropdown-end shrink-0">
-                <label tabindex="0" class="btn btn-ghost btn-sm gap-1">
+              <div
+                id="collection-actions-dropdown"
+                class="dropdown dropdown-end z-20 shrink-0 ml-auto"
+              >
+                <label
+                  id="collection-actions-trigger"
+                  tabindex="0"
+                  role="button"
+                  class="btn btn-ghost btn-sm gap-1"
+                >
                   <.icon name="hero-ellipsis-vertical" class="w-5 h-5" />
                 </label>
                 <ul
                   tabindex="0"
-                  class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+                  class="dropdown-content menu p-2 shadow-lg bg-base-100 border border-base-300 rounded-box w-52"
                 >
                   <li>
                     <button type="button" phx-click="open_edit_modal">
@@ -363,7 +371,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           >
             <div class="space-y-3">
               <%!-- Name & Visibility Row --%>
-              <div class={["grid gap-3", @current_user.role == "admin" && "grid-cols-2"]}>
+              <div class={["grid gap-3", @current_user.role == "admin" && "sm:grid-cols-2"]}>
                 <div class="form-control">
                   <label class="label py-1">
                     <span class="label-text text-sm font-medium">{gettext("Name")}</span>
@@ -468,131 +476,12 @@ defmodule MydiaWeb.CollectionLive.Show do
         </.modal>
 
         <%!-- Add Items Modal (Manual collections only) --%>
-        <.modal
-          :if={@show_add_items_modal}
-          id="add-items-modal"
+        <.add_items_modal
           show={@show_add_items_modal}
-          on_cancel={JS.push("close_add_items_modal")}
-        >
-          <:title>{gettext("Add Items to Collection")}</:title>
-
-          <%!-- Search input with icon --%>
-          <.form
-            for={%{}}
-            phx-change="search_add_items"
-            id="add-items-search-form"
-            class="w-full mb-6"
-          >
-            <label class="input input-lg input-bordered w-full flex items-center gap-3 bg-base-200/50 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary">
-              <.icon name="hero-magnifying-glass" class="w-5 h-5 text-base-content/50 flex-shrink-0" />
-              <input
-                type="text"
-                name="search"
-                value={@add_items_search}
-                placeholder={gettext("Search movies or TV shows...")}
-                phx-debounce="300"
-                class="grow bg-transparent border-none focus:outline-none text-lg min-w-0"
-                autofocus
-              />
-              <%= if @add_items_search != "" do %>
-                <button
-                  type="button"
-                  phx-click="search_add_items"
-                  phx-value-search=""
-                  class="btn btn-ghost btn-sm btn-circle flex-shrink-0"
-                >
-                  <.icon name="hero-x-mark" class="w-5 h-5" />
-                </button>
-              <% end %>
-            </label>
-          </.form>
-
-          <%!-- Search results --%>
-          <div class="min-h-[280px] max-h-[400px] overflow-y-auto -mx-2">
-            <%= cond do %>
-              <% String.length(@add_items_search) < 2 -> %>
-                <%!-- Initial state --%>
-                <div class="flex flex-col items-center justify-center py-16 text-base-content/50">
-                  <.icon name="hero-magnifying-glass" class="w-16 h-16 mb-4 opacity-30" />
-                  <p class="font-medium">{gettext("Search your library")}</p>
-                  <p class="text-sm">{gettext("Type at least 2 characters to search")}</p>
-                </div>
-              <% @add_items_results == [] -> %>
-                <%!-- No results --%>
-                <div class="flex flex-col items-center justify-center py-16 text-base-content/50">
-                  <.icon name="hero-face-frown" class="w-16 h-16 mb-4 opacity-30" />
-                  <p class="font-medium">{gettext("No results found")}</p>
-                  <p class="text-sm">{gettext("Try a different search term")}</p>
-                </div>
-              <% true -> %>
-                <%!-- Results list --%>
-                <div class="divide-y divide-base-200">
-                  <%= for item <- @add_items_results do %>
-                    <% in_collection? = MapSet.member?(@collection_item_ids, item.id) %>
-                    <button
-                      type="button"
-                      phx-click="toggle_item_in_collection"
-                      phx-value-id={item.id}
-                      class={[
-                        "w-full flex items-center gap-3 p-2 text-left transition-colors",
-                        "hover:bg-base-200 focus:outline-none focus:bg-base-200",
-                        in_collection? && "bg-success/10"
-                      ]}
-                    >
-                      <%!-- Poster thumbnail --%>
-                      <div class="w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-base-300">
-                        <img
-                          :if={item.poster_url}
-                          src={item.poster_url}
-                          alt=""
-                          class="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                        <div
-                          :if={!item.poster_url}
-                          class="w-full h-full flex items-center justify-center"
-                        >
-                          <.icon name="hero-film" class="w-6 h-6 text-base-content/20" />
-                        </div>
-                      </div>
-
-                      <%!-- Title and metadata --%>
-                      <div class="flex-1 min-w-0">
-                        <h4 class="font-medium truncate">{item.title}</h4>
-                        <div class="flex items-center gap-2 text-sm text-base-content/60">
-                          <span>{item.year}</span>
-                          <span class="badge badge-xs">
-                            {if item.type == "movie", do: gettext("Movie"), else: gettext("TV Show")}
-                          </span>
-                        </div>
-                      </div>
-
-                      <%!-- Action indicator --%>
-                      <div class="flex-shrink-0">
-                        <%= if in_collection? do %>
-                          <div class="btn btn-sm btn-success btn-outline gap-1">
-                            <.icon name="hero-check" class="w-4 h-4" />
-                            <span class="hidden sm:inline">{gettext("Added")}</span>
-                          </div>
-                        <% else %>
-                          <div class="btn btn-sm btn-ghost gap-1">
-                            <.icon name="hero-plus" class="w-4 h-4" />
-                            <span class="hidden sm:inline">{gettext("Add")}</span>
-                          </div>
-                        <% end %>
-                      </div>
-                    </button>
-                  <% end %>
-                </div>
-            <% end %>
-          </div>
-
-          <:actions>
-            <button type="button" class="btn" phx-click="close_add_items_modal">
-              {gettext("Done")}
-            </button>
-          </:actions>
-        </.modal>
+          search={@add_items_search}
+          results={@add_items_results}
+          collection_item_ids={@collection_item_ids}
+        />
       </div>
     </Layouts.app>
     """
@@ -744,13 +633,20 @@ defmodule MydiaWeb.CollectionLive.Show do
 
         case Collections.update_collection(user, collection, attrs) do
           {:ok, updated_collection} ->
-            {:noreply,
-             socket
-             |> assign(:collection, updated_collection)
-             |> assign(:page_title, updated_collection.name)
-             |> assign(:show_edit_modal, false)
-             |> put_flash(:info, gettext("Collection updated"))
-             |> load_items(reset: true)}
+            socket =
+              socket
+              |> assign(:collection, updated_collection)
+              |> assign(:page_title, updated_collection.name)
+              |> assign(:show_edit_modal, false)
+              |> put_flash(:info, gettext("Collection updated"))
+              |> load_items(reset: true)
+
+            socket =
+              if updated_collection.pinned_position,
+                do: MydiaWeb.Live.UserAuth.refresh_section_navigation(socket),
+                else: socket
+
+            {:noreply, socket}
 
           {:error, :unauthorized} ->
             {:noreply,
@@ -815,6 +711,7 @@ defmodule MydiaWeb.CollectionLive.Show do
         {:noreply,
          socket
          |> assign(:collection, updated)
+         |> MydiaWeb.Live.UserAuth.refresh_section_navigation()
          |> put_flash(:info, gettext("Removed from sidebar"))}
 
       {:error, reason} ->
@@ -874,54 +771,59 @@ defmodule MydiaWeb.CollectionLive.Show do
     user = socket.assigns.current_user
     item_ids = socket.assigns.collection_item_ids
 
-    if can_edit?(collection, user) do
-      if MapSet.member?(item_ids, item_id) do
-        # Remove item
-        case Collections.remove_item(collection, item_id) do
-          {:ok, _} ->
-            {:noreply,
-             socket
-             |> stream_delete(:items, %{id: item_id})
-             |> update(:item_count, &(&1 - 1))
-             |> assign(:collection_item_ids, MapSet.delete(item_ids, item_id))
-             |> put_flash(:info, gettext("Item removed from collection"))}
+    cond do
+      not can_edit?(collection, user) ->
+        {:noreply,
+         put_flash(socket, :error, gettext("You don't have permission to edit this collection"))}
 
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, gettext("Failed to remove item"))}
-        end
-      else
-        # Add item
-        case Collections.add_item(collection, item_id) do
-          {:ok, _} ->
-            # Fetch the media item to add to stream
-            media_item = Media.get_media_item!(socket.assigns.current_scope, item_id)
+      MapSet.member?(item_ids, item_id) ->
+        remove_item_from_collection(socket, collection, item_id, item_ids)
 
-            stream_item = %{
-              id: media_item.id,
-              title: media_item.title,
-              year: media_item.year,
-              type: media_item.type,
-              poster_url: build_poster_url(media_item)
-            }
+      true ->
+        add_item_to_collection(socket, collection, item_id, item_ids)
+    end
+  end
 
-            {:noreply,
-             socket
-             |> stream_insert(:items, stream_item, at: -1)
-             |> update(:item_count, &(&1 + 1))
-             |> assign(:collection_item_ids, MapSet.put(item_ids, item_id))
-             |> put_flash(:info, gettext("Item added to collection"))}
+  defp remove_item_from_collection(socket, collection, item_id, item_ids) do
+    case Collections.remove_item(collection, item_id) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> stream_delete(:items, %{id: item_id})
+         |> update(:item_count, &(&1 - 1))
+         |> assign(:collection_item_ids, MapSet.delete(item_ids, item_id))
+         |> put_flash(:info, gettext("Item removed from collection"))}
 
-          {:error, :smart_collection} ->
-            {:noreply,
-             put_flash(socket, :error, gettext("Cannot add items to smart collections"))}
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to remove item"))}
+    end
+  end
 
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, gettext("Failed to add item"))}
-        end
-      end
-    else
-      {:noreply,
-       put_flash(socket, :error, gettext("You don't have permission to edit this collection"))}
+  defp add_item_to_collection(socket, collection, item_id, item_ids) do
+    case Collections.add_item(collection, item_id) do
+      {:ok, _} ->
+        media_item = Media.get_media_item!(socket.assigns.current_scope, item_id)
+
+        stream_item = %{
+          id: media_item.id,
+          title: media_item.title,
+          year: media_item.year,
+          type: media_item.type,
+          poster_url: build_poster_url(media_item)
+        }
+
+        {:noreply,
+         socket
+         |> stream_insert(:items, stream_item, at: -1)
+         |> update(:item_count, &(&1 + 1))
+         |> assign(:collection_item_ids, MapSet.put(item_ids, item_id))
+         |> put_flash(:info, gettext("Item added to collection"))}
+
+      {:error, :smart_collection} ->
+        {:noreply, put_flash(socket, :error, gettext("Cannot add items to smart collections"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, gettext("Failed to add item"))}
     end
   end
 

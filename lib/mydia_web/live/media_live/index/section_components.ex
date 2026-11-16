@@ -14,11 +14,20 @@ defmodule MydiaWeb.MediaLive.Index.SectionComponents do
 
   def section_settings_modal(assigns) do
     ~H"""
-    <div :if={@open} class="modal modal-open" id="section-settings-modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">{gettext("Section settings")}</h3>
+    <div
+      :if={@open}
+      class="modal modal-open pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] px-3 sm:px-4"
+      id="section-settings-modal"
+    >
+      <div class="modal-box w-full max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] sm:max-h-[calc(100dvh-3rem)] flex flex-col overflow-hidden p-4 sm:p-6">
+        <h3 class="font-bold text-lg mb-4 shrink-0">{gettext("Section settings")}</h3>
 
-        <.form for={@form} id="section-settings-form" phx-submit="save_section">
+        <.form
+          for={@form}
+          id="section-settings-form"
+          phx-submit="save_section"
+          class="flex-1 min-h-0 overflow-y-auto px-1 -mx-1"
+        >
           <.input field={@form[:name]} type="text" label={gettext("Name")} />
 
           <.input
@@ -38,13 +47,13 @@ defmodule MydiaWeb.MediaLive.Index.SectionComponents do
                 checked={@form[:exclusive].value in [true, "true"]}
                 class="toggle toggle-primary"
               />
-              <span class="label-text">
+              <span class="label-text whitespace-normal">
                 {gettext("Keep these out of Movies and TV")}
               </span>
             </label>
           </div>
 
-          <div class="modal-action">
+          <div class="modal-action mt-4 pt-3 border-t border-base-300 sticky bottom-0 bg-base-100">
             <button
               id="unpin-section"
               type="button"
