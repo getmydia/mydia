@@ -3246,7 +3246,7 @@ msgstr[1] ""
 msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{days} days."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:813
+#: lib/mydia_web/live/collection_live/show.ex:823
 #: lib/mydia_web/live/media_live/index.ex:535
 #: lib/mydia_web/live/media_live/show/collection_events.ex:65
 #, elixir-autogen, elixir-format
@@ -4914,7 +4914,7 @@ msgstr ""
 msgid "Failed"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:816
+#: lib/mydia_web/live/collection_live/show.ex:826
 #, elixir-autogen, elixir-format
 msgid "Failed to add item"
 msgstr ""
@@ -5074,7 +5074,7 @@ msgstr ""
 msgid "Failed to remove from collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:787
+#: lib/mydia_web/live/collection_live/show.ex:798
 #, elixir-autogen, elixir-format
 msgid "Failed to remove item"
 msgstr ""
@@ -5125,7 +5125,7 @@ msgstr ""
 msgid "Failed to start pre-transcode: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:899
+#: lib/mydia_web/live/collection_live/show.ex:904
 #, elixir-autogen, elixir-format
 msgid "Failed to update collection"
 msgstr ""
@@ -5775,7 +5775,7 @@ msgstr ""
 msgid "Issues"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:809
+#: lib/mydia_web/live/collection_live/show.ex:820
 #, elixir-autogen, elixir-format
 msgid "Item added to collection"
 msgstr ""
@@ -5791,7 +5791,7 @@ msgid "Item not in collection"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/show.ex:532
-#: lib/mydia_web/live/collection_live/show.ex:784
+#: lib/mydia_web/live/collection_live/show.ex:795
 #, elixir-autogen, elixir-format
 msgid "Item removed from collection"
 msgstr ""
@@ -6006,8 +6006,8 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:714
 #: lib/mydia_web/components/collection_components.ex:773
 #: lib/mydia_web/components/collection_components.ex:774
-#: lib/mydia_web/live/collection_live/show.ex:999
-#: lib/mydia_web/live/collection_live/show.ex:1000
+#: lib/mydia_web/live/collection_live/show.ex:1004
+#: lib/mydia_web/live/collection_live/show.ex:1005
 #: lib/mydia_web/live/media_live/show/components.ex:150
 #, elixir-autogen, elixir-format
 msgid "Manual"
@@ -7050,7 +7050,7 @@ msgstr ""
 msgid "Only movie, TV and mixed libraries can be imported."
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:980
+#: lib/mydia_web/live/collection_live/show.ex:985
 #, elixir-autogen, elixir-format
 msgid "Only smart collections can be pinned to the sidebar"
 msgstr ""
@@ -9117,7 +9117,7 @@ msgstr ""
 #: lib/mydia_web/components/collection_components.ex:424
 #: lib/mydia_web/components/collection_components.ex:715
 #: lib/mydia_web/components/collection_components.ex:772
-#: lib/mydia_web/live/collection_live/show.ex:998
+#: lib/mydia_web/live/collection_live/show.ex:1003
 #, elixir-autogen, elixir-format
 msgid "Smart"
 msgstr ""
@@ -9431,7 +9431,7 @@ msgstr ""
 msgid "System collections cannot be edited"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:986
+#: lib/mydia_web/live/collection_live/show.ex:991
 #, elixir-autogen, elixir-format
 msgid "System collections cannot be pinned to the sidebar"
 msgstr ""
@@ -10496,12 +10496,12 @@ msgstr ""
 
 #: lib/mydia_web/live/collection_live/show.ex:543
 #: lib/mydia_web/live/collection_live/show.ex:656
-#: lib/mydia_web/live/collection_live/show.ex:821
+#: lib/mydia_web/live/collection_live/show.ex:777
 #, elixir-autogen, elixir-format
 msgid "You don't have permission to edit this collection"
 msgstr ""
 
-#: lib/mydia_web/live/collection_live/show.ex:983
+#: lib/mydia_web/live/collection_live/show.ex:988
 #, elixir-autogen, elixir-format
 msgid "You don't have permission to pin this collection"
 msgstr ""
