@@ -53,6 +53,29 @@ defmodule Mydia.Plugins.Net.GateProxyTest do
     assert ConnectProxy.requests(proxy.log) == []
   end
 
+  # An approved endpoint may resolve to a private or loopback address. The gate
+  # pins the URL to that IP and passes the real name in :hostname; a name with
+  # a dot would otherwise be proxied, and the proxy cannot reach the LAN (or
+  # its own loopback). The pinned private IP keeps the request direct.
+  test "an approved endpoint pinned to a private address goes direct" do
+    {:ok, proxy} = ConnectProxy.start(respond: {:status, 403})
+    use_proxy(proxy.port)
+
+    bypass = Bypass.open()
+    Bypass.expect_once(bypass, "GET", "/identity", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+
+    assert {:ok, %{status: 200}} =
+             Gate.request("http://plex.home.example:#{bypass.port}/identity",
+               allowed_hosts: [],
+               approved_endpoints: [
+                 %{"scheme" => "http", "host" => "plex.home.example", "port" => bypass.port}
+               ],
+               resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end
+             )
+
+    assert ConnectProxy.requests(proxy.log) == []
+  end
+
   test "a proxy that wants credentials is named in the network error" do
     {:ok, proxy} = ConnectProxy.start(respond: {:status, 407})
     use_proxy(proxy.port)

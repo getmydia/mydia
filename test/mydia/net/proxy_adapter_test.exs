@@ -5,6 +5,7 @@ defmodule Mydia.Net.ProxyAdapterTest do
 
   alias Mydia.Config.Schema.Proxy, as: ProxyConfig
   alias Mydia.Net.Proxy
+  alias Mydia.Net.ProxyAdapter
   alias Mydia.Test.ConnectProxy
 
   @no_env &__MODULE__.no_env/1
@@ -94,5 +95,41 @@ defmodule Mydia.Net.ProxyAdapterTest do
 
     assert {:ok, %Req.Response{status: 200}} = Req.get(url, retry: false)
     assert [_] = ConnectProxy.requests(proxy.log)
+  end
+
+  describe "apply_proxy/2 with a pinned IP and :hostname" do
+    defp pinned(ip, hostname) do
+      Req.new(url: "http://#{ip}:32400/", connect_options: [hostname: hostname])
+    end
+
+    defp connect_options(request, config) do
+      request
+      |> ProxyAdapter.apply_proxy(config)
+      |> Map.fetch!(:options)
+      |> Map.get(:connect_options)
+    end
+
+    test "a private or loopback pinned IP goes direct even for a dotted name" do
+      {:ok, config} = Proxy.effective(%ProxyConfig{url: "http://proxy.test:3128"}, @no_env)
+
+      for ip <- ["192.168.1.5", "127.0.0.1", "10.0.0.5", "[fd00::5]"] do
+        request = pinned(ip, "plex.home.example")
+        assert connect_options(request, config) == [hostname: "plex.home.example"]
+      end
+    end
+
+    test "a public pinned IP is proxied, and bypass still matches the hostname" do
+      {:ok, config} =
+        Proxy.effective(
+          %ProxyConfig{url: "http://proxy.test:3128", bypass: ".bypassed.test"},
+          @no_env
+        )
+
+      proxied = connect_options(pinned("203.0.113.10", "a.example.test"), config)
+      assert proxied[:proxy] == {:http, "proxy.test", 3128, []}
+
+      assert connect_options(pinned("203.0.113.10", "x.bypassed.test"), config) ==
+               [hostname: "x.bypassed.test"]
+    end
   end
 end

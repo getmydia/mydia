@@ -12,17 +12,22 @@ defmodule Mydia.Net.ProxyAdapter do
     1. leaves `connect_options` alone when they already carry `:proxy`, or when
        the caller named its own Finch pool with `:finch` (Req refuses
        `:finch` together with `:connect_options`);
-    2. otherwise routes on the effective host, `connect_options[:hostname]` when
+    2. goes direct when the URL host is a private or loopback IP literal, even
+       with `:hostname` set: the SSRF gate pins approved plugin endpoints (which
+       may live on the LAN) to their resolved IP, and a proxy cannot reach those;
+    3. otherwise routes on the effective host, `connect_options[:hostname]` when
        set (the SSRF gate pins the URL to a validated IP and passes the real name
        there), else the URL host, and merges `proxy:` and `proxy_headers:` into
        `connect_options` when `Mydia.Net.Proxy.route/2` says to proxy;
-    3. delegates to `Req.Finch.run/1`, which keeps proxied connections in their
+    4. delegates to `Req.Finch.run/1`, which keeps proxied connections in their
        own Finch pool.
 
   Requests that set their own `adapter:` or `plug:` (`Req.Test`) never reach it.
   """
 
   alias Mydia.Net.Proxy
+  alias Mydia.Net.Proxy.Bypass
+  alias Mydia.Plugins.Net.Gate
 
   @doc "Req adapter callback."
   @spec run(Req.Request.t()) :: {Req.Request.t(), Req.Response.t() | Exception.t()}
@@ -46,6 +51,9 @@ defmodule Mydia.Net.ProxyAdapter do
       Map.get(options, :finch) ->
         request
 
+      pinned_private?(request.url.host) ->
+        request
+
       true ->
         host = Keyword.get(connect_options, :hostname) || request.url.host
 
@@ -62,4 +70,16 @@ defmodule Mydia.Net.ProxyAdapter do
         end
     end
   end
+
+  # The URL host is what Mint connects to. When it is a private or loopback IP
+  # literal (an approved plugin endpoint pinned by the gate, with the real name
+  # in :hostname), the proxy cannot reach it, so the request goes direct.
+  defp pinned_private?(host) when is_binary(host) do
+    case Bypass.host_ip(Bypass.normalize_host(host)) do
+      nil -> false
+      ip -> not Gate.public_ip?(ip)
+    end
+  end
+
+  defp pinned_private?(_host), do: false
 end

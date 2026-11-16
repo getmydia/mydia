@@ -40,7 +40,10 @@ defmodule Mydia.Plugins.Net.Gate do
   routes on `connect_options[:hostname]`, so a proxied gate request becomes
   `CONNECT <validated-ip>:<port>` to the proxy, and Mint's tunnel still uses
   `:hostname` for SNI and certificate verification. The proxy never resolves the
-  name, so the validate-then-connect rebinding window stays closed. The cost is
+  name, so the validate-then-connect rebinding window stays closed. An approved
+  endpoint pinned to a private or loopback address goes direct instead, since
+  the proxy cannot reach the operator's LAN (or treats loopback as its own).
+  The cost is
   that the gate still resolves DNS itself: plugins need working DNS inside the
   container even when every connection goes through a proxy.
 
