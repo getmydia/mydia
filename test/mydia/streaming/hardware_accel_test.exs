@@ -98,6 +98,26 @@ defmodule Mydia.Streaming.HardwareAccelTest do
     end
   end
 
+  describe "tonemap probe exits and throws" do
+    alias Mydia.Streaming.Tonemap
+
+    setup do
+      on_exit(fn -> :persistent_term.erase({Tonemap, :current}) end)
+    end
+
+    for {label, body} <- [exit: quote(do: exit(:boom)), throw: quote(do: throw(:boom))] do
+      test "a probe that does #{label} stores none and keeps the server alive" do
+        Tonemap.put_current(%Tonemap{zscale: true})
+
+        name = start_with(@vaapi, tonemap_probe: fn _ -> unquote(body) end)
+
+        assert HardwareAccel.capabilities(name).backend == :vaapi
+        assert Process.alive?(GenServer.whereis(name))
+        assert Tonemap.current() == Tonemap.none()
+      end
+    end
+  end
+
   describe "surviving the process exiting mid-call" do
     # GenServer.whereis/1 resolves a pid before the call is made, but the
     # process can die in the gap -- realistically the probe crashing and the

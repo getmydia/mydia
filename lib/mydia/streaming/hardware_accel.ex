@@ -160,6 +160,10 @@ defmodule Mydia.Streaming.HardwareAccel do
         error ->
           Logger.warning("Tonemap probe crashed: #{Exception.message(error)}")
           Tonemap.none()
+      catch
+        kind, reason ->
+          Logger.warning("Tonemap probe failed (#{kind}): #{inspect(reason)}")
+          Tonemap.none()
       end
 
     Tonemap.put_current(tonemap)
