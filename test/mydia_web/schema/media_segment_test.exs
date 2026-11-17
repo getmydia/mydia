@@ -150,6 +150,26 @@ defmodule MydiaWeb.Schema.MediaSegmentTest do
              }
     end
 
+    test "returns commercial segments from an edl sidecar", %{user: user} do
+      media_item = MediaFixtures.media_item_fixture(%{type: "movie"})
+      media_file = MediaFixtures.media_file_fixture(%{media_item_id: media_item.id})
+
+      insert_segment(media_file, %{
+        type: "commercial",
+        source: "edl",
+        confidence: 1.0,
+        start_ms: 600_000,
+        end_ms: 720_000
+      })
+
+      assert {:ok, %{data: data}} =
+               run_query(@movie_segments_query, %{"id" => media_item.id}, user)
+
+      assert [%{"segments" => [segment]}] = data["movie"]["files"]
+
+      assert segment == %{"type" => "COMMERCIAL", "startMs" => 600_000, "endMs" => 720_000}
+    end
+
     test "omits segments below the confidence floor", %{user: user} do
       media_item = MediaFixtures.media_item_fixture(%{type: "movie"})
       media_file = MediaFixtures.media_file_fixture(%{media_item_id: media_item.id})

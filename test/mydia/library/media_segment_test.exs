@@ -68,6 +68,50 @@ defmodule Mydia.Library.MediaSegmentTest do
     assert %{media_file_id: _} = errors_on(changeset)
   end
 
+  describe "commercial segments" do
+    defp commercial_attrs(media_file, start_ms, end_ms) do
+      %{
+        media_file_id: media_file.id,
+        type: "commercial",
+        start_ms: start_ms,
+        end_ms: end_ms,
+        source: "edl",
+        confidence: 1.0
+      }
+    end
+
+    test "accepts a commercial segment from an edl source" do
+      media_file = media_file_fixture()
+
+      assert MediaSegment.changeset(%MediaSegment{}, commercial_attrs(media_file, 0, 30_000)).valid?
+    end
+
+    test "allows several commercial segments on one file" do
+      media_file = media_file_fixture()
+
+      for {s, e} <- [{0, 30_000}, {600_000, 720_000}] do
+        assert {:ok, _} =
+                 %MediaSegment{}
+                 |> MediaSegment.changeset(commercial_attrs(media_file, s, e))
+                 |> Repo.insert()
+      end
+    end
+
+    test "still allows only one intro per file" do
+      media_file = media_file_fixture()
+      attrs = valid_attrs(media_file)
+
+      assert {:ok, _} = %MediaSegment{} |> MediaSegment.changeset(attrs) |> Repo.insert()
+
+      assert {:error, changeset} =
+               %MediaSegment{}
+               |> MediaSegment.changeset(%{attrs | start_ms: 100_000, end_ms: 120_000})
+               |> Repo.insert()
+
+      assert %{media_file_id: _} = errors_on(changeset)
+    end
+  end
+
   test "deletes segments when the media file is deleted" do
     media_file = media_file_fixture()
 

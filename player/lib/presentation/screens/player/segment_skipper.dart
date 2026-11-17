@@ -24,10 +24,30 @@ class SegmentSkipper {
   /// [resetIfMediaChanged].
   String? _mediaKey;
 
-  /// Whether detected segments are skipped without asking. Off unless the
+  /// Whether intros and credits are skipped without asking. Off unless the
   /// viewer opted in; loaded once when the screen initializes and deliberately
   /// not watched, since flipping it mid-episode is not a case worth a rebuild.
-  bool autoSkip = false;
+  bool autoSkipIntroCredits = false;
+
+  /// Whether commercial breaks are skipped without asking. On unless the
+  /// viewer opted out, loaded the same way as [autoSkipIntroCredits].
+  bool autoSkipCommercials = true;
+
+  /// Whether the stored auto-skip choices have been applied. Nothing is
+  /// skipped automatically before then: [autoSkipCommercials] starts on, and
+  /// a position tick that beat the storage read would otherwise skip a break
+  /// the viewer opted out of. Set once per screen, not reset per media.
+  bool _preferencesLoaded = false;
+
+  /// Marks the stored choices as applied (or as unreadable, in which case the
+  /// defaults stand). Call it when the read completes, success or not.
+  void preferencesLoaded() => _preferencesLoaded = true;
+
+  bool _autoSkips(MediaSegment segment) => switch (segment.type) {
+        SegmentType.commercial => autoSkipCommercials,
+        SegmentType.intro || SegmentType.credits => autoSkipIntroCredits,
+        SegmentType.unknown => false,
+      };
 
   List<MediaSegment> get segments => _segments;
 
@@ -58,9 +78,9 @@ class SegmentSkipper {
   /// once-per-session tracker and the segment lookup are one rule, and a
   /// second copy of it is the thing that would drift.
   void maybeAutoSkip(Duration position, Future<void> Function(Duration) seek) {
-    if (!autoSkip || _segments.isEmpty) return;
+    if (!_preferencesLoaded || _segments.isEmpty) return;
 
-    final target = _tracker.takeAutoSkip(_segments, position);
+    final target = _tracker.takeAutoSkip(_segments.where(_autoSkips), position);
     if (target == null) return;
 
     debugPrint('[PlayerScreen] Auto-skipping to ${target.end}');
@@ -68,10 +88,16 @@ class SegmentSkipper {
   }
 
   /// The segment covering [position], or null when playback is between them.
+  ///
+  /// When segments overlap (a commercial break inside a long intro), the one
+  /// that started latest wins: it is the innermost, so its button shows for
+  /// its span and the outer segment's button returns once it ends.
   MediaSegment? segmentAt(Duration position) {
+    MediaSegment? found;
     for (final segment in _segments) {
-      if (segment.containsPosition(position)) return segment;
+      if (!segment.containsPosition(position)) continue;
+      if (found == null || segment.startMs > found.startMs) found = segment;
     }
-    return null;
+    return found;
   }
 }

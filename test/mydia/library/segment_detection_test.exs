@@ -434,6 +434,26 @@ defmodule Mydia.Library.SegmentDetectionTest do
       assert reloaded.segment_analysis_attempts == 0
       assert reloaded.segments == []
     end
+
+    test "keeps edl segments" do
+      {media_item, files} = season_fixture(1)
+      [{first, _}] = files
+
+      insert_segment(first, type: "intro", source: "chapters")
+
+      commercial =
+        insert_segment(first,
+          type: "commercial",
+          source: "edl",
+          start_ms: 600_000,
+          end_ms: 720_000
+        )
+
+      assert :ok = SegmentDetection.reset_season(media_item.id, 1)
+
+      reloaded = Repo.preload(Repo.get!(MediaFile, first.id), :segments)
+      assert Enum.map(reloaded.segments, & &1.id) == [commercial.id]
+    end
   end
 
   describe "season_status/2" do
@@ -450,6 +470,26 @@ defmodule Mydia.Library.SegmentDetectionTest do
       assert status.sources == ["chapters"]
       assert status.files == 2
       assert status.segments["intro"] == %{start_ms: 20_000, end_ms: 50_000, files: 2}
+    end
+
+    test "ignores edl commercial segments" do
+      {media_item, [{first, _}, _]} = season_fixture(2)
+
+      insert_segment(first,
+        type: "commercial",
+        source: "edl",
+        start_ms: 600_000,
+        end_ms: 720_000
+      )
+
+      status = SegmentDetection.season_status(media_item.id, 1)
+      statuses = SegmentDetection.season_statuses(media_item.id)
+
+      for summary <- [status, statuses[1]] do
+        assert summary.state == :pending
+        assert summary.segments == %{}
+        assert summary.sources == []
+      end
     end
 
     test "takes the median offset across every file carrying the type" do

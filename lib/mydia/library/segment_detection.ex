@@ -67,6 +67,12 @@ defmodule Mydia.Library.SegmentDetection do
 
   @segment_types ~w(intro credits)
 
+  # The sources this module writes. `media_segments` also holds commercial
+  # breaks read from `.edl` sidecars (`Mydia.Library.EdlSidecars`); those are
+  # not detection results, so a reset never deletes them and the season
+  # summaries never count them.
+  @detected_sources ~w(chapters fingerprint)
+
   @doc """
   How many times a file may fail detection before it is marked `failed`.
 
@@ -190,12 +196,18 @@ defmodule Mydia.Library.SegmentDetection do
   Clears a season's segments and returns its files to `pending`.
 
   Cached fingerprints are kept, so a re-analysis does not re-decode audio.
+  Commercial breaks from `.edl` sidecars are kept too: they are not detection
+  results, and only the sidecar's removal takes them away.
   """
   @spec reset_season(binary(), integer()) :: :ok
   def reset_season(media_item_id, season_number) do
     file_ids = media_item_id |> season_files(season_number) |> Enum.map(& &1.id)
 
-    Repo.delete_all(from(s in MediaSegment, where: s.media_file_id in ^file_ids))
+    Repo.delete_all(
+      from(s in MediaSegment,
+        where: s.media_file_id in ^file_ids and s.source in @detected_sources
+      )
+    )
 
     Repo.update_all(
       from(mf in MediaFile, where: mf.id in ^file_ids),
@@ -256,9 +268,11 @@ defmodule Mydia.Library.SegmentDetection do
   def season_status(media_item_id, season_number) do
     media_item_id
     |> season_files(season_number)
-    |> Repo.preload(:segments)
+    |> Repo.preload(segments: detected_segments())
     |> summarise()
   end
+
+  defp detected_segments, do: from(s in MediaSegment, where: s.source in @detected_sources)
 
   # Every file with segments contributes. Sampling one file instead made both
   # the offsets and the provenance depend on whichever file and segment came
@@ -336,7 +350,7 @@ defmodule Mydia.Library.SegmentDetection do
     {season_numbers, files} = Enum.unzip(rows)
 
     season_numbers
-    |> Enum.zip(Repo.preload(files, :segments))
+    |> Enum.zip(Repo.preload(files, segments: detected_segments()))
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 

@@ -342,17 +342,17 @@ defmodule Mydia.Jobs.LibraryScanner do
   @spec reconcile_sidecars?({:ok, ScanSummary.t()} | {:error, term()}) :: boolean()
   def reconcile_sidecars?(summary), do: match?({:ok, _}, summary)
 
-  # Sidecar adoption runs after media files are upserted, because it needs
-  # their rows to attach to. A failure here never fails the scan: the video
-  # files are indexed either way, and a missing subtitle row is recoverable
-  # by rescanning. The return value is not used by the caller; this always
-  # reports :ok so a call site never has to distinguish "reconciled" from
-  # "skipped after logging".
+  # Sidecar adoption (subtitles, then EDL commercial breaks) runs after media
+  # files are upserted, because it needs their rows to attach to. A failure
+  # never fails the scan: the videos are indexed either way, and a missing row
+  # is recoverable by rescanning. Always :ok, so a call site never has to
+  # distinguish "reconciled" from "skipped after logging".
   @spec reconcile_sidecars(Settings.LibraryPath.t()) :: :ok
   defp reconcile_sidecars(library_path) do
     media_files =
       Library.list_media_files(library_path_id: library_path.id, preload: [:library_path])
 
+    Library.EdlSidecars.reconcile_library(library_path, media_files)
     tally = Sidecars.reconcile_all(media_files)
 
     if tally.adopted > 0 or tally.reaped > 0 do

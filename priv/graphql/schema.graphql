@@ -1707,6 +1707,9 @@ enum SegmentType {
 
   "Closing credits"
   CREDITS
+
+  "Commercial break, from an EDL sidecar"
+  COMMERCIAL
 }
 
 "Whether a calendar entry is an episode or a movie"

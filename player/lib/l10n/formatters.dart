@@ -597,6 +597,7 @@ extension AppFormatters on AppLocalizations {
   String segmentSkipLabel(SegmentType type) => switch (type) {
         SegmentType.intro => segmentSkipIntro,
         SegmentType.credits => segmentSkipCredits,
+        SegmentType.commercial => segmentSkipCommercial,
         SegmentType.unknown => segmentSkip,
       };
 

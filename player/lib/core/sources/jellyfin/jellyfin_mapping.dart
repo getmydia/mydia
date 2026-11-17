@@ -286,6 +286,7 @@ List<MediaSegment> jellyfinSegments(Map<String, dynamic> body) => [
             type: switch (s['Type']) {
               'Intro' => SegmentType.intro,
               'Outro' => SegmentType.credits,
+              'Commercial' => SegmentType.commercial,
               _ => SegmentType.unknown,
             },
             startMs: ((s['StartTicks'] as num?)?.toInt() ?? 0) ~/ 10000,
