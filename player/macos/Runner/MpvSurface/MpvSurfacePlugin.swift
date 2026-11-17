@@ -39,6 +39,9 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
   /// Host views by platform view id, held weakly: Flutter owns them.
   private let views = NSMapTable<NSNumber, MpvHostView>.strongToWeakObjects()
 
+  /// Host views kept alive until their detach completes. Main thread only.
+  private var pendingDetach: [UUID: [MpvHostView]] = [:]
+
   private var methodChannel: FlutterMethodChannel?
   private var displayChannel: FlutterEventChannel?
   private var displaySink: FlutterEventSink?
@@ -122,6 +125,15 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       }
       // Read on main, before the hop: the view belongs to AppKit.
       let wid = String(Int(bitPattern: Unmanaged.passUnretained(view).toOpaque()))
+      // The newest view is the sole owner of the handle. Flutter can build
+      // the replacement AppKitView (route change, fullscreen rebuild) before
+      // it disposes the old one, and the old one leaving its window must not
+      // detach the output that now lives in the new one.
+      //
+      // Reattaching this view to a different handle simply overwrites
+      // `attachedHandle`: the previous handle's output is the caller's to
+      // detach first, and leaving the window only detaches the latest.
+      forgetAttachment(handleValue)
       view.attachedHandle = handleValue
       attach(handle, wid: wid, options: options) { result(nil) }
 
@@ -136,8 +148,8 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       awaitVideoOutput(handle) { started in result(["started": started]) }
 
     case "detach":
-      forgetAttachment(handleValue)
-      detach(handle) { result(nil) }
+      let hosts = forgetAttachment(handleValue)
+      detach(handle, keepingAlive: hosts) { result(nil) }
 
     default:
       result(FlutterMethodNotImplemented)
@@ -197,6 +209,22 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
     }
   }
 
+  /// Detaches while holding `hosts` strongly until the detach completes.
+  ///
+  /// `wid` is an unretained pointer and `views` is weak, so without this
+  /// Flutter could free a host view while mpv's output teardown, which runs
+  /// on main and removes mpv's subview from the `wid` view, is still queued.
+  private func detach(
+    _ handle: OpaquePointer, keepingAlive hosts: [MpvHostView], reply: @escaping () -> Void
+  ) {
+    let token = UUID()
+    if !hosts.isEmpty { pendingDetach[token] = hosts }
+    detach(handle) {
+      self.pendingDetach[token] = nil
+      reply()
+    }
+  }
+
   private func onQueue(reply: @escaping () -> Void, _ work: @escaping () -> Void) {
     queue.async {
       work()
@@ -231,10 +259,10 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
 
   func create(withViewIdentifier viewId: Int64, arguments args: Any?) -> NSView {
     let view = MpvHostView(frame: .zero)
-    view.onLeaveWindow = { [weak self] handleValue in
+    view.onLeaveWindow = { [weak self, weak view] handleValue in
       guard let self, let handle = OpaquePointer(bitPattern: handleValue) else { return }
-      self.forgetAttachment(handleValue)
-      self.detach(handle) {}
+      let hosts = self.forgetAttachment(handleValue) + [view].compactMap { $0 }
+      self.detach(handle, keepingAlive: hosts) {}
     }
     views.setObject(view, forKey: NSNumber(value: viewId))
     return view
@@ -244,12 +272,17 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
     FlutterStandardMessageCodec.sharedInstance()
   }
 
-  /// A detach is on its way for `handleValue`: no view may start another.
-  private func forgetAttachment(_ handleValue: Int) {
+  /// Clears `handleValue` from every view that holds it, so no view starts
+  /// a detach for it later, and returns those views.
+  @discardableResult
+  private func forgetAttachment(_ handleValue: Int) -> [MpvHostView] {
+    var cleared: [MpvHostView] = []
     for case let view as MpvHostView in views.objectEnumerator()?.allObjects ?? []
     where view.attachedHandle == handleValue {
       view.attachedHandle = nil
+      cleared.append(view)
     }
+    return cleared
   }
 
   // MARK: Display reporting

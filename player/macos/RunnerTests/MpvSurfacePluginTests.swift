@@ -300,6 +300,77 @@ final class MpvSurfacePluginTests: XCTestCase {
     XCTAssertEqual(api.writePairs.filter { $0 == "vid=no" }.count, 1)
   }
 
+  func testStaleViewLeavingWindowDoesNotDetachNewerAttachment() {
+    let api = FakeMpvApi()
+    let plugin = makePlugin(api: api)
+    let old = makeView(plugin, id: 7)
+    let new = makeView(plugin, id: 8)
+    call(plugin, "attach", attachArgs(viewId: 7))
+    call(plugin, "attach", attachArgs(viewId: 8))
+
+    old.viewWillMove(toWindow: nil)
+    let drained = expectation(description: "drain")
+    plugin.queueForTesting.async { DispatchQueue.main.async { drained.fulfill() } }
+    wait(for: [drained], timeout: 5)
+
+    XCTAssertFalse(api.writePairs.contains("vid=no"))
+    XCTAssertNil(old.attachedHandle)
+    XCTAssertEqual(new.attachedHandle, handle)
+  }
+
+  /// Sends a detach whose `current-vo` poll is held at its first sleep, drops
+  /// the test's own reference to the host view, and checks the plugin keeps
+  /// it alive until the detach completes.
+  private func assertViewRetainedUntilDetachCompletes(
+    viaLeaveWindow: Bool, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    let api = FakeMpvApi(currentVo: ["gpu-next", ""])
+    let gate = DispatchSemaphore(value: 0)
+    let clock = VirtualClock()
+    let polling = expectation(description: "detach is polling")
+    var slept = false
+    let plugin = makePlugin(api: api, clock: clock) { d in
+      if !slept {
+        slept = true
+        polling.fulfill()
+        gate.wait()
+      }
+      clock.sleep(d)
+    }
+
+    weak var weakView: MpvHostView?
+    autoreleasepool {
+      var view: MpvHostView? = makeView(plugin)
+      weakView = view
+      call(plugin, "attach", attachArgs())
+      if viaLeaveWindow {
+        view?.viewWillMove(toWindow: nil)
+      } else {
+        plugin.handle(FlutterMethodCall(methodName: "detach", arguments: ["handle": handle])) {
+          _ in
+        }
+      }
+      view = nil
+    }
+    wait(for: [polling], timeout: 5)
+    XCTAssertNotNil(weakView, "host view freed while its detach was pending", file: file, line: line)
+
+    gate.signal()
+    let drained = expectation(description: "drain")
+    plugin.queueForTesting.async { DispatchQueue.main.async { drained.fulfill() } }
+    wait(for: [drained], timeout: 5)
+    XCTAssertEqual(api.writePairs.last, "vid=no", file: file, line: line)
+    XCTAssertNil(weakView, "host view still retained after its detach", file: file, line: line)
+  }
+
+  func testHostViewRetainedUntilExplicitDetachCompletes() {
+    assertViewRetainedUntilDetachCompletes(viaLeaveWindow: false)
+  }
+
+  func testHostViewRetainedUntilLeaveWindowDetachCompletes() {
+    assertViewRetainedUntilDetachCompletes(viaLeaveWindow: true)
+  }
+
   func testHostViewIsLayerBackedAndBlack() {
     let view = makeView(makePlugin(api: FakeMpvApi()))
     XCTAssertTrue(view.wantsLayer)
