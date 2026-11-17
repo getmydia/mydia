@@ -41,6 +41,12 @@ defmodule Mydia.Library.EdlTest do
                [{10_000, 40_000}, {50_000, 60_000}]
     end
 
+    test "drops ranges past the integer column's limit" do
+      # 2,147,484 seconds is just over 2^31 - 1 milliseconds, which would
+      # overflow the PostgreSQL `integer` column and abort the insert.
+      assert Edl.parse("0 2147484 0\n5 10 0") == [{5_000, 10_000}]
+    end
+
     test "drops negative times" do
       assert Edl.parse("-5 10 0") == []
     end

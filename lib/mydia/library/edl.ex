@@ -22,6 +22,11 @@ defmodule Mydia.Library.Edl do
 
   @kept_actions ~w(0 3)
 
+  # `media_segments.start_ms`/`end_ms` are `integer` columns: int4 on
+  # PostgreSQL. A larger value (about 24.8 days) would make the insert raise,
+  # so such a line is treated like any other unusable one.
+  @max_ms 2_147_483_647
+
   @doc """
   Returns the file's commercial breaks as `{start_ms, end_ms}` tuples, sorted
   by start, with overlapping or touching ranges merged.
@@ -46,7 +51,7 @@ defmodule Mydia.Library.Edl do
   defp range(start, stop) do
     with {:ok, start_ms} <- to_ms(start),
          {:ok, end_ms} <- to_ms(stop),
-         true <- end_ms > start_ms do
+         true <- end_ms > start_ms and end_ms <= @max_ms do
       [{start_ms, end_ms}]
     else
       _ -> []
