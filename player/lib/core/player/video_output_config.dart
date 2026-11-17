@@ -56,9 +56,11 @@ VideoControllerConfiguration videoControllerConfigurationFor(
 /// - `tone-mapping=bt.2390`: the ITU curve, stable across scenes.
 /// - `hdr-compute-peak=auto`: measure the actual peak so dim HDR is not
 ///   crushed.
-/// - `target-trc=srgb`: tonemap to an SDR transfer curve.
+///
+/// `target-trc` is deliberately left to mpv: its automatic target already
+/// outputs SDR on the texture path, and forcing `srgb` would also convert every
+/// SDR (bt.1886) source to the sRGB curve and lift its shadows.
 const Map<String, String> sdrTonemapMpvOptions = {
   'tone-mapping': 'bt.2390',
   'hdr-compute-peak': 'auto',
-  'target-trc': 'srgb',
 };

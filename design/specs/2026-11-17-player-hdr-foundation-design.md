@@ -169,8 +169,10 @@ the stats row derives who tonemapped from the playback mode it already has.
 
 Set explicitly on the SDR texture path, next to
 `videoControllerConfigurationFor` in `video_output_config.dart`:
-`tone-mapping=bt.2390`, `hdr-compute-peak=auto`, `target-trc=srgb`. Today
-these are whatever media_kit's libmpv defaults to.
+`tone-mapping=bt.2390` and `hdr-compute-peak=auto`. Today these are whatever
+media_kit's libmpv defaults to. `target-trc` stays unset: mpv's automatic
+target already outputs SDR on the texture path, and forcing `srgb` would
+convert every bt.1886 SDR source to the sRGB curve and lift its shadows.
 
 ### Android verification gate
 
