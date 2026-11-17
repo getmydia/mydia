@@ -1,0 +1,131 @@
+## This is a PO Template file.
+##
+## `msgid`s here are often extracted from source code.
+## Add new translations manually only if they're dynamic
+## translations that can't be statically extracted.
+##
+## Run `mix gettext.extract` to bring this file up to
+## date. Leave `msgstr`s empty as changing them here has no
+## effect: edit them in PO (`.po`) files instead.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: cnr\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Last-Translator: Tony <t00n1x@users.noreply.hosted.weblate.org>\n"
+"Language-Team: Montenegrin <https://hosted.weblate.org/projects/mydia/errors/"
+"cnr/>\n"
+"Plural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;\n"
+"PO-Revision-Date: 2026-11-17 19:09+0000\n"
+"X-Generator: Weblate 2026.12.dev0\n"
+
+## From Ecto.Changeset.cast/4
+msgid "can't be blank"
+msgstr "Ne smije biti prazno"
+
+## From Ecto.Changeset.unique_constraint/3
+msgid "has already been taken"
+msgstr "Već je zauzeto"
+
+## From Ecto.Changeset.put_change/3
+msgid "is invalid"
+msgstr "Nevažeć"
+
+## From Ecto.Changeset.validate_acceptance/3
+msgid "must be accepted"
+msgstr "Mora biti prihvaćeno"
+
+## From Ecto.Changeset.validate_format/3
+msgid "has invalid format"
+msgstr "ima nevažeći format"
+
+## From Ecto.Changeset.validate_subset/3
+msgid "has an invalid entry"
+msgstr "ima nevažeći unos"
+
+## From Ecto.Changeset.validate_exclusion/3
+msgid "is reserved"
+msgstr "je rezervisano"
+
+## From Ecto.Changeset.validate_confirmation/3
+msgid "does not match confirmation"
+msgstr "Ne podudara se sa potvrdom"
+
+## From Ecto.Changeset.no_assoc_constraint/3
+msgid "is still associated with this entry"
+msgstr "je još uvijek povezano sa ovim unosom"
+
+msgid "are still associated with this entry"
+msgstr "su još uvijek povezano sa ovim unosom"
+
+## From Ecto.Changeset.validate_length/3
+msgid "should have %{count} item(s)"
+msgid_plural "should have %{count} item(s)"
+msgstr[0] "treba da ima %{count} stavku"
+msgstr[1] "treba da ima %{count} stavke"
+msgstr[2] "treba da ima %{count} stavki"
+
+msgid "should be %{count} character(s)"
+msgid_plural "should be %{count} character(s)"
+msgstr[0] "treba da ima %{count} znak"
+msgstr[1] "treba da ima %{count} znaka"
+msgstr[2] "treba da ima %{count} znakova"
+
+msgid "should be %{count} byte(s)"
+msgid_plural "should be %{count} byte(s)"
+msgstr[0] "treba da bude %{count} bajt"
+msgstr[1] "treba da bude %{count} bajta"
+msgstr[2] "treba da bude %{count} bajtova"
+
+msgid "should have at least %{count} item(s)"
+msgid_plural "should have at least %{count} item(s)"
+msgstr[0] "treba da ima najmanje %{count} stavku"
+msgstr[1] "treba da ima najmanje %{count} stavke"
+msgstr[2] "treba da ima najmanje %{count} stavki"
+
+msgid "should be at least %{count} character(s)"
+msgid_plural "should be at least %{count} character(s)"
+msgstr[0] "treba da ima najmanje %{count} znak"
+msgstr[1] "treba da ima najmanje %{count} znaka"
+msgstr[2] "treba da ima najmanje %{count} znakova"
+
+msgid "should be at least %{count} byte(s)"
+msgid_plural "should be at least %{count} byte(s)"
+msgstr[0] "treba da ima najmanje %{count} bajt"
+msgstr[1] "treba da ima najmanje %{count} bajta"
+msgstr[2] "treba da ima najmanje %{count} bajtova"
+
+msgid "should have at most %{count} item(s)"
+msgid_plural "should have at most %{count} item(s)"
+msgstr[0] "treba da ima najviše %{count} stavku"
+msgstr[1] "treba da ima najviše %{count} stavke"
+msgstr[2] "treba da ima najviše %{count} stavki"
+
+msgid "should be at most %{count} character(s)"
+msgid_plural "should be at most %{count} character(s)"
+msgstr[0] "treba da ima najviše %{count} znak"
+msgstr[1] "treba da ima najviše %{count} znaka"
+msgstr[2] "treba da ima najviše %{count} znakova"
+
+msgid "should be at most %{count} byte(s)"
+msgid_plural "should be at most %{count} byte(s)"
+msgstr[0] "treba da ima najviše %{count} bajt"
+msgstr[1] "treba da ima najviše %{count} bajta"
+msgstr[2] "treba da ima najviše %{count} bajtova"
+
+## From Ecto.Changeset.validate_number/3
+msgid "must be less than %{number}"
+msgstr "mora biti manje od %{number}"
+
+msgid "must be greater than %{number}"
+msgstr "mora biti veće od %{number}"
+
+msgid "must be less than or equal to %{number}"
+msgstr "mora biti manje ili jednako %{number}"
+
+msgid "must be greater than or equal to %{number}"
+msgstr "mora biti veće ili jednako %{number}"
+
+msgid "must be equal to %{number}"
+msgstr "mora biti jednako %{number}"
