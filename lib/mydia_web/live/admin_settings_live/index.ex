@@ -4,6 +4,8 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   alias Mydia.Settings
   alias MydiaWeb.AdminSettingsLive.Components
   alias MydiaWeb.AdminSettingsLive.LanguageSettings
+  alias MydiaWeb.AdminSettingsLive.ProxyComponents
+  alias MydiaWeb.AdminSettingsLive.ProxySettings
 
   alias Mydia.Logger, as: MydiaLogger
   alias MydiaWeb.OperationErrors
@@ -13,6 +15,9 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, gettext("Configuration - Settings"))
+     |> assign(:show_proxy_modal, false)
+     |> assign(:proxy_form, nil)
+     |> assign(:proxy_test_result, nil)
      |> load_data()}
   end
 
@@ -187,6 +192,77 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     end
   end
 
+  ## Outbound proxy (row + edit modal + test)
+
+  @impl true
+  def handle_event("edit_proxy", _params, socket) do
+    settings = ProxySettings.current()
+    form = settings |> ProxySettings.form_params() |> ProxySettings.changeset()
+
+    {:noreply,
+     socket
+     |> assign(:proxy_settings, settings)
+     |> assign(:proxy_form, to_form(form, as: :proxy))
+     |> assign(:show_proxy_modal, true)}
+  end
+
+  @impl true
+  def handle_event("validate_proxy", %{"proxy" => params}, socket) do
+    changeset = params |> ProxySettings.changeset() |> Map.put(:action, :validate)
+    {:noreply, assign(socket, :proxy_form, to_form(changeset, as: :proxy))}
+  end
+
+  @impl true
+  def handle_event("save_proxy", params, socket) do
+    case ProxySettings.save(Map.get(params, "proxy", %{}), socket.assigns.current_user.id) do
+      {:ok, []} ->
+        {:noreply, assign(socket, :show_proxy_modal, false)}
+
+      {:ok, _written} ->
+        # A test still running was started against the previous proxy; its
+        # answer would describe a proxy that is no longer configured.
+        {:noreply,
+         socket
+         |> cancel_async(:proxy_test)
+         |> assign(:show_proxy_modal, false)
+         |> assign(:proxy_test_result, nil)
+         |> after_config_write(gettext("Proxy settings saved"))}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :proxy_form, to_form(changeset, as: :proxy))}
+
+      {:error, key, reason} ->
+        MydiaLogger.log_error(:liveview, "Failed to save proxy settings",
+          error: reason,
+          operation: :update_setting,
+          setting_key: key,
+          user_id: socket.assigns.current_user.id
+        )
+
+        {:noreply,
+         put_flash(socket, :error, OperationErrors.user_error_message(:update_setting, reason))}
+    end
+  end
+
+  @impl true
+  def handle_event("close_proxy_modal", _params, socket) do
+    {:noreply, assign(socket, :show_proxy_modal, false)}
+  end
+
+  @impl true
+  def handle_event("test_proxy", _params, socket) do
+    if socket.assigns.proxy_settings.configured? do
+      target = ProxySettings.test_target()
+
+      {:noreply,
+       socket
+       |> assign(:proxy_test_result, :running)
+       |> start_async(:proxy_test, fn -> Mydia.Net.Proxy.test_connection(target) end)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_event("clear_crash_queue", _params, socket) do
     Mydia.CrashReporter.clear_queue()
@@ -211,6 +287,19 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       %{setting: setting} ->
         delete_invalid_config_setting(socket, setting)
     end
+  end
+
+  @impl true
+  def handle_async(:proxy_test, {:ok, result}, socket) do
+    {:noreply, assign(socket, :proxy_test_result, result)}
+  end
+
+  # Cancelled by a save: the result was already cleared.
+  def handle_async(:proxy_test, {:exit, {:shutdown, :cancel}}, socket), do: {:noreply, socket}
+
+  def handle_async(:proxy_test, {:exit, _reason}, socket) do
+    {:noreply,
+     assign(socket, :proxy_test_result, {:error, gettext("the test stopped unexpectedly")})}
   end
 
   ## Private Helpers
@@ -363,6 +452,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     |> assign(:invalid_config_settings, Settings.invalid_config_settings())
     |> assign(:hwaccel, Mydia.Streaming.HardwareAccel.capabilities())
     |> assign(:language_settings, LanguageSettings.current())
+    |> assign(:proxy_settings, ProxySettings.current())
     |> assign(:player_enabled?, Mydia.Player.enabled?())
   end
 

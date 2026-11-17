@@ -56,6 +56,12 @@ defmodule Mydia.Application do
     # Store validated config in Application environment for fast access
     Application.put_env(:mydia, :runtime_config, config)
 
+    # Outbound proxy: cache the effective config, then route every Req call
+    # through the proxy-aware adapter. Installed unconditionally; with no proxy
+    # it is a pass-through. Keyword.put keeps any other default options.
+    Mydia.Net.Proxy.refresh(config)
+    Req.default_options(Keyword.put(Req.default_options(), :adapter, Mydia.Net.ProxyAdapter))
+
     # One line saying what ENABLE_PLAYER left out, before anything starts.
     Mydia.Player.log_boot_state()
 

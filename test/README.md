@@ -283,6 +283,11 @@ TLDs (`.invalid`, `.test`, `.example`), and RFC 5737 documentation ranges
 (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24). Everything else is recorded in
 `Mydia.RelayGuard.Escapes` and refused. `example.com`, `.net` and `.org` are
 deliberately not allowed; they are reserved names that resolve to real servers.
+What gets through is handed to `Mydia.Net.ProxyAdapter`, the adapter the app
+installs at boot, so the suite exercises outbound proxy routing. The cached proxy
+config is cleared in `test_helper.exs` so a developer's `HTTPS_PROXY` never
+applies; proxy tests set it with `Mydia.Net.Proxy.put_config/1`, are
+`async: false`, and use `Mydia.Test.ConnectProxy` as the proxy.
 
 A test that reaches the network now fails the whole run rather than flaking. An
 end-of-suite report names each escaped URL, an app-only stacktrace, and the

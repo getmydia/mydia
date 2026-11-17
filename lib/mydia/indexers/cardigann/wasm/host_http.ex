@@ -249,9 +249,23 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
         {:ok, %{status: status, headers: headers, body: body}}
 
       {:error, %GateError{} = error} ->
+        note_proxy_failure(ctx, error)
         {:error, map_error(error)}
     end
   end
+
+  # The guest only sees a failed request. The adapter turns an empty, failed
+  # search into an error, and when the cause was the proxy it needs the
+  # gate's wording, which the guest never carries back.
+  defp note_proxy_failure(%{proxy_note: note}, %GateError{message: message})
+       when is_pid(note) and is_binary(message) do
+    if String.starts_with?(message, ["proxy ", "connection through proxy "]),
+      do: Agent.update(note, fn _ -> message end)
+
+    :ok
+  end
+
+  defp note_proxy_failure(_ctx, _error), do: :ok
 
   defp put_body(opts, nil), do: opts
   defp put_body(opts, body), do: Keyword.put(opts, :body, body)

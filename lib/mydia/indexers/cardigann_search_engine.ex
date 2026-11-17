@@ -61,6 +61,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.RequestHeaders
+  alias Mydia.Indexers.Cardigann.RequestError
   alias Mydia.Indexers.Cardigann.SearchPaths
   alias Mydia.Indexers.Cardigann.SearchRequest
   alias Mydia.Indexers.Cardigann.SessionCookies
@@ -476,11 +477,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, %Req.TransportError{reason: :timeout}} ->
         {:error, Error.connection_failed("Request timeout")}
 
-      {:error, %Req.TransportError{reason: reason}} ->
-        {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
-
       {:error, reason} ->
-        {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
+        {:error, RequestError.from_reason(reason, url)}
     end
   end
 
@@ -556,11 +554,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, %Req.TransportError{reason: :timeout}} ->
         {:error, Error.connection_failed("Request timeout")}
 
-      {:error, %Req.TransportError{reason: reason}} ->
-        {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
-
       {:error, reason} ->
-        {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
+        {:error, RequestError.from_reason(reason, url)}
     end
   end
 

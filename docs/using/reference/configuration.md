@@ -50,6 +50,51 @@ adapter is fixed at build time and cannot change at runtime at all; see
 For why the layers exist and what the database layer buys you, see
 [Why Configuration Is Layered](../explanation/configuration-model.md).
 
+## Outbound proxy
+
+If your server can only reach the internet through an HTTP or HTTPS proxy, configure it once and Mydia sends its outbound internet requests through it: indexer searches (both Cardigann engines), metadata, torrent file fetches and update checks.
+
+```yaml
+# /config/config.yml
+proxy:
+  url: http://proxy.lan:3128
+  bypass: nas.local,.example.com,192.168.50.0/24
+```
+
+`url` may carry credentials (`http://user:pass@proxy.lan:3128`); they are masked wherever Mydia shows the setting. The port defaults to 80 for `http://` and 443 for `https://`. SOCKS proxies are not supported. A Mydia proxy setting that cannot be used, such as a SOCKS URL or a port outside 1 to 65535, is rejected with an error naming the setting. An unusable `HTTPS_PROXY` or `HTTP_PROXY` is ignored instead: Mydia logs a warning, connects directly, and shows the problem in the **Proxy** section of the settings page.
+
+The same settings are available as `MYDIA_PROXY_URL` and `MYDIA_PROXY_BYPASS` (see [Environment Variables](environment-variables.md#outbound-proxy)) and under **Admin > System > Settings**, in the **Proxy** section. That section shows the current value and where it came from, and its **Test proxy** button checks that the metadata relay is reachable through the proxy. When no Mydia setting is present, the standard `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` variables are used.
+
+### Which requests use the proxy
+
+These always connect directly:
+
+- `localhost` and single-word names with no dot, such as the Docker service name `qbittorrent`
+- private, loopback, link-local, carrier-grade NAT and unique-local IP addresses
+- anything matching `bypass`
+
+Everything else goes through the proxy. A name that contains a dot, such as `nas.local`, goes through the proxy unless you list it in `bypass`.
+
+`bypass` is a comma-separated list. Each entry is one of:
+
+| Entry | Matches |
+|-------|---------|
+| `tracker.example.com` | that host and its subdomains |
+| `.example.com` or `*.example.com` | `example.com` and its subdomains |
+| `192.168.50.7` | that address |
+| `192.168.50.0/24` | every address in the range |
+| `*` | everything, which turns the proxy off |
+
+### What is not proxied
+
+- The built-in torrent client. It has its own network settings.
+- Remote access (P2P).
+- Requests that FlareSolverr makes itself. What it fetches is configured in FlareSolverr.
+
+Mydia's own requests to FlareSolverr follow the rules above. A Docker service name such as `flaresolverr` or a private address connects directly, but a name with a dot, such as `flaresolverr.lan`, goes through the proxy. Add that host to `bypass`.
+
+WASM (Prowlarr-based) indexers still need DNS to work inside the Mydia container. Mydia resolves and checks the address itself before connecting, then asks the proxy to open a tunnel to that address. A plain `http://` site is requested from the proxy by that address rather than by name, so a site that needs its name to answer can fail behind a proxy; use its `https://` address where it has one. A plugin endpoint you approved that resolves to a private or loopback address, such as a media server on your LAN, connects directly.
+
 ## Plugin instances
 
 For installing, approving and updating plugins, see
