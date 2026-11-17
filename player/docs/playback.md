@@ -330,13 +330,28 @@ only to a client that shares a token with it and tonemaps to SDR otherwise.
 | Platform | Claims |
 | --- | --- |
 | Desktop, iOS | `hdr10+`, `hdr10`, `hlg` |
-| Android | none, until an on-device check confirms the panel path |
+| Android | `hdr10+`, `hdr10`, `hlg`, the same as the native mpv path (not yet checked on a device) |
 | Web | `hdr10+` and `hdr10` when the display is HDR capable and the browser reports PQ; `hlg` likewise for HLG |
 
 Native clients drop `dolby_vision` until mpv's `gpu-next` output is in use: with
 `gpu` it reaches only the HDR10 base layer of profile 8 and renders profile 5
 with wrong colors. Every playback Player applies `sdrTonemapMpvOptions`, and the
 stats overlay has an HDR row showing the format and who tonemapped it.
+
+Android's claim assumes the zero-copy `hwdec=mediacodec` path renders HDR10
+and HLG the way desktop mpv does; nobody has confirmed that on a device yet.
+To check one:
+
+1. Generate a 1080p HDR10 clip and a 1080p HLG clip with the ffmpeg arguments
+   `Mydia.HdrFixture.hdr10_args(1080)` and `Mydia.HdrFixture.hlg_args(1080)`
+   return (`test/support/hdr_fixture.ex`), followed by `-y <out>.mkv`, and add
+   both to a library.
+2. Play each on the Android device, and on a desktop player as the reference.
+3. Screenshot the device mid-playback with
+   `adb exec-out screencap -p > android.png` and the desktop the usual way.
+4. Compare. Washed out (grey, low contrast) or clipped (flat white highlights)
+   on the device means the panel path is wrong: set `androidHdrFormats` to
+   `[]` so the server tonemaps to SDR for Android.
 
 ## Testing
 

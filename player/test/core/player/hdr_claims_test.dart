@@ -14,8 +14,8 @@ void main() {
     });
   });
 
-  test('androidHdrFormats is empty until verified on a device', () {
-    expect(androidHdrFormats, isEmpty);
+  test('androidHdrFormats claims what the native mpv path claims', () {
+    expect(androidHdrFormats, nativeHdrFormats);
   });
 
   group('webHdrFormats', () {
