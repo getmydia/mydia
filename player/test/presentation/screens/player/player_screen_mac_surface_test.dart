@@ -25,6 +25,8 @@ import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/screens/player/player_screen_views.dart'
+    show PlayerStatsPanel;
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_surface/player_video_surface.dart';
@@ -71,8 +73,11 @@ class _FakeSurface implements MpvSurface {
     _log.add('detach $handle');
   }
 
+  // ignore: close_sinks
+  final displays = StreamController<DisplayInfo>.broadcast();
+
   @override
-  Stream<DisplayInfo> get display => const Stream.empty();
+  Stream<DisplayInfo> get display => displays.stream;
 }
 
 /// A media_kit player with no decoder. [handleValue] null keeps the handle
@@ -301,6 +306,38 @@ void main() {
       _log,
       containsAllInOrder(['detach 20', 'dispose 20', 'attach 21', 'open 21']),
     );
+
+    await _unmount(tester);
+  });
+
+  testWidgets('the stats context carries the surface display headroom',
+      (tester) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    await rig.container.read(statsOverlayEnabledProvider.future);
+    await rig.container.read(statsOverlayEnabledProvider.notifier).set(true);
+    final fake = _FakePlayer(handleValue: 41);
+    final surface = _FakeSurface();
+    addTearDown(surface.displays.close);
+
+    await _mount(tester, rig,
+        createPlayer: () => Player(platformPlayer: fake), surface: surface);
+    await pumpUntil(tester, _playing);
+    await tester.pump(const Duration(seconds: 1));
+
+    final panel = find.byType(PlayerStatsPanel);
+    expect(panel, findsOneWidget);
+    expect(surface.displays.hasListener, isTrue);
+    PlayerStatsPanel widget() => tester.widget<PlayerStatsPanel>(panel);
+    expect(widget().statsContext().outputHeadroom, 1.0);
+
+    surface.displays.add(const DisplayInfo(
+      edrHeadroom: 4.0,
+      potentialHeadroom: 8.0,
+      screenName: 'Test',
+    ));
+    await tester.pump();
+    expect(widget().statsContext().outputHeadroom, 4.0);
 
     await _unmount(tester);
   });

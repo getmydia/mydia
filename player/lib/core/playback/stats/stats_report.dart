@@ -62,6 +62,7 @@ StatsHdr? statsHdrFor(StatsSample sample, StatsContext context) {
   if (hdr == null || headroom == null || hdr.by != HdrTonemapper.player) {
     return hdr;
   }
+  final rpuApplied = sample.colormatrix == 'dolbyvision';
   final transfer = switch (sample.targetGamma?.toLowerCase()) {
     'pq' => 'PQ',
     'hlg' => 'HLG',
@@ -73,13 +74,13 @@ StatsHdr? statsHdrFor(StatsSample sample, StatsContext context) {
       by: HdrTonemapper.edr,
       transfer: transfer,
       headroom: headroom,
+      rpuApplied: rpuApplied,
     );
   }
   return StatsHdr(
-    format: sample.colormatrix == 'dolbyvision'
-        ? '${hdr.format}, RPU applied'
-        : hdr.format,
+    format: hdr.format,
     by: HdrTonemapper.playerLibplacebo,
+    rpuApplied: rpuApplied,
   );
 }
 

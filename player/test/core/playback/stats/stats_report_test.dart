@@ -477,6 +477,21 @@ void main() {
       );
     });
 
+    test('EDR Dolby Vision keeps the RPU note, in the panel and the copy', () {
+      final c = surface(format: 'Dolby Vision 8');
+      final s = sampleWith(gamma: 'pq', colormatrix: 'dolbyvision');
+      expect(
+        row(s, c),
+        'Dolby Vision 8, RPU applied, HDR output, PQ, headroom 13.8x',
+      );
+      expect(
+        statsClipboardText(s, c, appVersion: '1.0.0'),
+        contains(
+          'HDR: Dolby Vision 8, RPU applied, HDR output, PQ, headroom 13.8x',
+        ),
+      );
+    });
+
     test('a server transcode keeps the server wording', () {
       expect(
         row(

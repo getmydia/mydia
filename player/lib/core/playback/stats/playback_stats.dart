@@ -187,6 +187,7 @@ class StatsHdr {
     required this.by,
     this.transfer,
     this.headroom,
+    this.rpuApplied = false,
   });
 
   /// The server's display string (`HDR10`, `Dolby Vision 8`), English.
@@ -200,16 +201,20 @@ class StatsHdr {
   /// The screen's EDR headroom. Only set when [by] is [HdrTonemapper.edr].
   final double? headroom;
 
+  /// mpv reports the `dolbyvision` color matrix: the RPU is in use.
+  final bool rpuApplied;
+
   @override
   bool operator ==(Object other) =>
       other is StatsHdr &&
       other.format == format &&
       other.by == by &&
       other.transfer == transfer &&
-      other.headroom == headroom;
+      other.headroom == headroom &&
+      other.rpuApplied == rpuApplied;
 
   @override
-  int get hashCode => Object.hash(format, by, transfer, headroom);
+  int get hashCode => Object.hash(format, by, transfer, headroom, rpuApplied);
 }
 
 /// What the screen knows without measuring.

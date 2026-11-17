@@ -526,19 +526,31 @@ extension AppFormatters on AppLocalizations {
         PlaybackMode.localFile => statsModeLocalFile,
       };
 
+  /// The HDR row's value: the source format, `, RPU applied` when the
+  /// Dolby Vision RPU is in use, then how it is rendered. Without the RPU
+  /// note the EDR output reads on its own.
+  String statsHdrText(StatsHdr hdr) {
+    final source = hdr.rpuApplied ? statsHdrRpuApplied(hdr.format) : hdr.format;
+    return switch (hdr.by) {
+      HdrTonemapper.player => statsHdrByPlayer(source),
+      HdrTonemapper.server => statsHdrByServer(source),
+      HdrTonemapper.playerLibplacebo => statsHdrByPlayerLibplacebo(source),
+      HdrTonemapper.edr => () {
+          final output = statsHdrOutput(
+            hdr.transfer ?? '',
+            NumberFormat('0.0', localeName).format(hdr.headroom ?? 1),
+          );
+          return hdr.rpuApplied
+              ? statsHdrSourceThenOutput(source, output)
+              : output;
+        }(),
+    };
+  }
+
   String statsValue(StatsValue value) => switch (value) {
         StatsText(:final text) => text,
         StatsWhyValue(:final why) => statsWhyText(why),
-        StatsHdrValue(:final hdr) => switch (hdr.by) {
-            HdrTonemapper.player => statsHdrByPlayer(hdr.format),
-            HdrTonemapper.server => statsHdrByServer(hdr.format),
-            HdrTonemapper.playerLibplacebo =>
-              statsHdrByPlayerLibplacebo(hdr.format),
-            HdrTonemapper.edr => statsHdrOutput(
-                hdr.transfer ?? '',
-                NumberFormat('0.0', localeName).format(hdr.headroom ?? 1),
-              ),
-          },
+        StatsHdrValue(:final hdr) => statsHdrText(hdr),
         StatsQualityValue(:final quality) => statsQualityText(quality),
         StatsModeValue(:final mode) => statsModeName(mode),
         StatsDecoderValue(:final label, :final hardware) => switch (hardware) {
