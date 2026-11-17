@@ -602,11 +602,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   @doc """
   Whether the video stream will be re-encoded rather than copied.
 
-  Delegates to `StreamPlan.encodes_video?/4` so this and `build_ffmpeg_args/3`
-  cannot answer differently. Both read the server's tonemap capability from
-  `Mydia.Streaming.Tonemap.current/0`, so an HDR source the server can tonemap
-  encodes here too. `HlsSession` calls it to decide whether to lease a
-  hardware slot and whether `grid_aligned` may be set.
+  Delegates to `StreamPlan.encodes_video?/4` (tonemap from `Tonemap.current/0`) so
+  this and `build_ffmpeg_args/3` cannot answer differently. `HlsSession` calls it
+  to decide whether to lease a hardware slot and whether `grid_aligned` may be set.
   """
   @spec reencodes_video?(Mydia.Library.MediaFile.t() | nil, integer() | nil, integer() | nil) ::
           boolean()
