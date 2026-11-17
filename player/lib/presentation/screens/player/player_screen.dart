@@ -1452,6 +1452,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       settings.getAutoSkipCommercials,
       (enabled) => _segmentSkipper.autoSkipCommercials = enabled,
     );
+    // Only now may anything be skipped automatically, whether the reads
+    // succeeded or fell back to the defaults.
+    _segmentSkipper.preferencesLoaded();
   }
 
   Future<void> _readAutoSkip(

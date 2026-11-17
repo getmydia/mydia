@@ -22,7 +22,9 @@ void main() {
     Future<void> seek(Duration to) async => seeks.add(to);
 
     setUp(() {
-      skipper = SegmentSkipper()..autoSkipIntroCredits = true;
+      skipper = SegmentSkipper()
+        ..autoSkipIntroCredits = true
+        ..preferencesLoaded();
       seeks = [];
       skipper.resetIfMediaChanged('episode:1:a');
       skipper.setSegments(const [_intro]);
@@ -61,6 +63,37 @@ void main() {
       expect(skipper.segmentAt(const Duration(seconds: 30)), _intro);
       expect(skipper.segmentAt(const Duration(minutes: 2)), isNull);
     });
+
+    test('segmentAt offers a break nested inside an intro', () {
+      const nested = MediaSegment(
+        type: SegmentType.commercial,
+        startMs: 10000,
+        endMs: 50000,
+      );
+      skipper.setSegments(const [_intro, nested]);
+
+      expect(skipper.segmentAt(const Duration(seconds: 5)), _intro);
+      expect(skipper.segmentAt(const Duration(seconds: 20)), nested);
+      expect(skipper.segmentAt(const Duration(seconds: 55)), _intro);
+    });
+  });
+
+  group('SegmentSkipper before preferences load', () {
+    test('never auto-skips until the stored choices are applied', () {
+      final seeks = <Duration>[];
+      Future<void> seek(Duration to) async => seeks.add(to);
+
+      final skipper = SegmentSkipper()
+        ..resetIfMediaChanged('episode:1:a')
+        ..setSegments(const [_breakA]);
+
+      skipper.maybeAutoSkip(const Duration(seconds: 601), seek);
+      expect(seeks, isEmpty);
+
+      skipper.preferencesLoaded();
+      skipper.maybeAutoSkip(const Duration(seconds: 602), seek);
+      expect(seeks, [const Duration(seconds: 720)]);
+    });
   });
 
   group('SegmentSkipper per-type auto-skip', () {
@@ -70,7 +103,7 @@ void main() {
     Future<void> seek(Duration to) async => seeks.add(to);
 
     setUp(() {
-      skipper = SegmentSkipper();
+      skipper = SegmentSkipper()..preferencesLoaded();
       seeks = [];
       skipper.resetIfMediaChanged('episode:1:a');
       skipper.setSegments(const [_intro, _breakA, _breakB]);
