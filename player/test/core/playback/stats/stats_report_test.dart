@@ -441,14 +441,14 @@ void main() {
     test('PQ output with headroom reads as HDR output', () {
       expect(
         row(sampleWith(gamma: 'pq'), surface()),
-        'HDR output, PQ, headroom 13.8x',
+        'HDR10, HDR output, PQ, headroom 13.8x',
       );
     });
 
     test('HLG output with headroom', () {
       expect(
         row(sampleWith(gamma: 'hlg'), surface(headroom: 1.5)),
-        'HDR output, HLG, headroom 1.5x',
+        'HDR10, HDR output, HLG, headroom 1.5x',
       );
     });
 
@@ -521,7 +521,7 @@ void main() {
       expect(
         statsClipboardText(sampleWith(gamma: 'pq'), surface(),
             appVersion: '1.0.0'),
-        contains('HDR: HDR output, PQ, headroom 13.8x'),
+        contains('HDR: HDR10, HDR output, PQ, headroom 13.8x'),
       );
       expect(
         statsClipboardText(sampleWith(gamma: 'srgb'), surface(),

@@ -527,8 +527,7 @@ extension AppFormatters on AppLocalizations {
       };
 
   /// The HDR row's value: the source format, `, RPU applied` when the
-  /// Dolby Vision RPU is in use, then how it is rendered. Without the RPU
-  /// note the EDR output reads on its own.
+  /// Dolby Vision RPU is in use, then how it is rendered.
   String statsHdrText(StatsHdr hdr) {
     final source = hdr.rpuApplied ? statsHdrRpuApplied(hdr.format) : hdr.format;
     return switch (hdr.by) {
@@ -540,9 +539,7 @@ extension AppFormatters on AppLocalizations {
             hdr.transfer ?? '',
             NumberFormat('0.0', localeName).format(hdr.headroom ?? 1),
           );
-          return hdr.rpuApplied
-              ? statsHdrSourceThenOutput(source, output)
-              : output;
+          return statsHdrSourceThenOutput(source, output);
         }(),
     };
   }

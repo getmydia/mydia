@@ -453,7 +453,7 @@ void main() {
         headroom: 13.8,
       ));
       expect((await l10n('en')).statsValue(value),
-          'HDR output, PQ, headroom 13.8x');
+          'HDR10, HDR output, PQ, headroom 13.8x');
       expect((await l10n('es')).statsValue(value), contains('13,8'));
     });
 
