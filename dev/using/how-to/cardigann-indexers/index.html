@@ -1151,6 +1151,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#connection-failed-behind-a-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection Failed Behind a Proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#authentication-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3872,6 +3883,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#connection-failed-behind-a-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection Failed Behind a Proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#authentication-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4286,6 +4308,8 @@ next candidate and remembers the new one. No configuration is involved.</p>
 <li>Verify credentials if required</li>
 <li>Check application logs for errors</li>
 </ol>
+<h3 id="connection-failed-behind-a-proxy">Connection Failed Behind a Proxy</h3>
+<p>If your container reaches the internet only through an HTTP proxy, set <code>MYDIA_PROXY_URL</code> (or <code>HTTPS_PROXY</code>) and Mydia sends both Cardigann engines through it. Without it, searches fail with errors such as <code>Connection failed: :closed</code>. See <a href="../../reference/configuration/#outbound-proxy">Outbound proxy</a>.</p>
 <h3 id="authentication-errors">Authentication Errors</h3>
 <ol>
 <li>Verify credentials are correct</li>

@@ -1928,6 +1928,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#outbound-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound Proxy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#flaresolverr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3997,6 +4008,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#outbound-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound Proxy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#flaresolverr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5181,6 +5203,35 @@ before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &
 </table>
 <p>Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays. Subtitles split the same way: <code>DOWNLOAD_SUBTITLE_LANGUAGE</code> decides what gets fetched, <code>SUBTITLE_PLAYBACK_LANGUAGE</code> which track switches on. <code>SUBTITLE_LANGUAGE</code> keeps working and still means acquisition: its meaning never changed, only where the setting lives.</p>
 <p>Every variable in this section can also be set from <strong>Admin &gt; System &gt; Settings</strong>, under <strong>Language</strong>. An environment variable overrides the database value and locks the field there. Playback audio and the default-track option appear only when the player is enabled.</p>
+<h2 id="outbound-proxy">Outbound Proxy</h2>
+<p>Send Mydia's outbound internet requests (indexers, metadata, torrent file fetches, update checks) through an HTTP or HTTPS proxy. See <a href="../configuration/#outbound-proxy">Outbound proxy</a> for what is and is not proxied.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MYDIA_PROXY_URL</code></td>
+<td>Proxy address, such as <code>http://proxy.lan:3128</code> or <code>http://user:pass@proxy.lan:3128</code>. Only <code>http://</code> and <code>https://</code> proxies are supported, not SOCKS.</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>MYDIA_PROXY_BYPASS</code></td>
+<td>Comma-separated hosts that always connect directly, such as <code>nas.local,.example.com,192.168.50.0/24</code></td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<p>The standard proxy URL variables are used only when no proxy URL is set anywhere in Mydia: not in the YAML config, not under <strong>Admin &gt; System &gt; Settings</strong>, and not in <code>MYDIA_PROXY_URL</code>. Mydia then uses the first one that is set: <code>HTTPS_PROXY</code>, <code>https_proxy</code>, <code>HTTP_PROXY</code>, <code>http_proxy</code>. The bypass list is resolved separately: when no bypass list is set in Mydia, it falls back to <code>NO_PROXY</code>, then <code>no_proxy</code>, whichever proxy URL is in use. Among Mydia's own settings, the <code>MYDIA_</code> variables win over <strong>Admin &gt; System &gt; Settings</strong>, which wins over the YAML config.</p>
+<p>An unusable <code>MYDIA_PROXY_URL</code> is rejected with an error at startup. An unusable <code>HTTPS_PROXY</code> or <code>HTTP_PROXY</code> (a SOCKS URL, say) is ignored with a logged warning, requests go direct, and the settings page shows why.</p>
+<div class="admonition warning">
+<p class="admonition-title">Upgrading</p>
+<p>If your container already sets <code>HTTPS_PROXY</code> or <code>HTTP_PROXY</code>, Mydia starts using it after you upgrade. Add the hosts that should stay direct to <code>NO_PROXY</code> or <code>MYDIA_PROXY_BYPASS</code> first.</p>
+</div>
 <h2 id="flaresolverr">FlareSolverr</h2>
 <p>FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.</p>
 <table>

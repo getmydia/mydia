@@ -1707,6 +1707,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#outbound-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound proxy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Outbound proxy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#which-requests-use-the-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which requests use the proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-is-not-proxied" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is not proxied
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#plugin-instances" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3466,6 +3505,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#outbound-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound proxy
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Outbound proxy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#which-requests-use-the-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which requests use the proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-is-not-proxied" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is not proxied
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#plugin-instances" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3530,19 +3608,75 @@ adapter is fixed at build time and cannot change at runtime at all; see
 <a href="../../how-to/postgresql/">PostgreSQL Support</a>.</p>
 <p>For why the layers exist and what the database layer buys you, see
 <a href="../../explanation/configuration-model/">Why Configuration Is Layered</a>.</p>
+<h2 id="outbound-proxy">Outbound proxy</h2>
+<p>If your server can only reach the internet through an HTTP or HTTPS proxy, configure it once and Mydia sends its outbound internet requests through it: indexer searches (both Cardigann engines), metadata, torrent file fetches and update checks.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># /config/config.yml</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">proxy</span><span class="p">:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://proxy.lan:3128</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">bypass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nas.local,.example.com,192.168.50.0/24</span>
+</code></pre></div>
+<p><code>url</code> may carry credentials (<code>http://user:pass@proxy.lan:3128</code>); they are masked wherever Mydia shows the setting. The port defaults to 80 for <code>http://</code> and 443 for <code>https://</code>. SOCKS proxies are not supported. A Mydia proxy setting that cannot be used, such as a SOCKS URL or a port outside 1 to 65535, is rejected with an error naming the setting. An unusable <code>HTTPS_PROXY</code> or <code>HTTP_PROXY</code> is ignored instead: Mydia logs a warning, connects directly, and shows the problem in the <strong>Proxy</strong> section of the settings page.</p>
+<p>The same settings are available as <code>MYDIA_PROXY_URL</code> and <code>MYDIA_PROXY_BYPASS</code> (see <a href="../environment-variables/#outbound-proxy">Environment Variables</a>) and under <strong>Admin &gt; System &gt; Settings</strong>, in the <strong>Proxy</strong> section. That section shows the current value and where it came from, and its <strong>Test proxy</strong> button checks that the metadata relay is reachable through the proxy. When no Mydia setting is present, the standard <code>HTTPS_PROXY</code>, <code>HTTP_PROXY</code> and <code>NO_PROXY</code> variables are used.</p>
+<h3 id="which-requests-use-the-proxy">Which requests use the proxy</h3>
+<p>These always connect directly:</p>
+<ul>
+<li><code>localhost</code> and single-word names with no dot, such as the Docker service name <code>qbittorrent</code></li>
+<li>private, loopback, link-local, carrier-grade NAT and unique-local IP addresses</li>
+<li>anything matching <code>bypass</code></li>
+</ul>
+<p>Everything else goes through the proxy. A name that contains a dot, such as <code>nas.local</code>, goes through the proxy unless you list it in <code>bypass</code>.</p>
+<p><code>bypass</code> is a comma-separated list. Each entry is one of:</p>
+<table>
+<thead>
+<tr>
+<th>Entry</th>
+<th>Matches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tracker.example.com</code></td>
+<td>that host and its subdomains</td>
+</tr>
+<tr>
+<td><code>.example.com</code> or <code>*.example.com</code></td>
+<td><code>example.com</code> and its subdomains</td>
+</tr>
+<tr>
+<td><code>192.168.50.7</code></td>
+<td>that address</td>
+</tr>
+<tr>
+<td><code>192.168.50.0/24</code></td>
+<td>every address in the range</td>
+</tr>
+<tr>
+<td><code>*</code></td>
+<td>everything, which turns the proxy off</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-is-not-proxied">What is not proxied</h3>
+<ul>
+<li>The built-in torrent client. It has its own network settings.</li>
+<li>Remote access (P2P).</li>
+<li>Requests that FlareSolverr makes itself. What it fetches is configured in FlareSolverr.</li>
+</ul>
+<p>Mydia's own requests to FlareSolverr follow the rules above. A Docker service name such as <code>flaresolverr</code> or a private address connects directly, but a name with a dot, such as <code>flaresolverr.lan</code>, goes through the proxy. Add that host to <code>bypass</code>.</p>
+<p>WASM (Prowlarr-based) indexers still need DNS to work inside the Mydia container. Mydia resolves and checks the address itself before connecting, then asks the proxy to open a tunnel to that address. A plain <code>http://</code> site is requested from the proxy by that address rather than by name, so a site that needs its name to answer can fail behind a proxy; use its <code>https://</code> address where it has one. A plugin endpoint you approved that resolves to a private or loopback address, such as a media server on your LAN, connects directly.</p>
 <h2 id="plugin-instances">Plugin instances</h2>
 <p>For installing, approving and updating plugins, see
 <a href="../../how-to/plugins/">Install and manage plugins</a>. Plugin instances can be
 declared in YAML. Keys under <code>settings</code> are the
 plugin's own settings. <code>name</code> identifies the instance across restarts.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">plugin_instances</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">plugin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plex</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Living room</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nt">settings</span><span class="p">:</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://192.168.1.20:32400</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">your-plex-token</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">      </span><span class="nt">sync_watched</span><span class="p">:</span><span class="w"> </span><span class="s">"on"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">plugin_instances</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">plugin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plex</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Living room</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nt">settings</span><span class="p">:</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://192.168.1.20:32400</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">      </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">your-plex-token</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">      </span><span class="nt">sync_watched</span><span class="p">:</span><span class="w"> </span><span class="s">"on"</span>
 </code></pre></div>
 <p>Declared instances overlay the ones created in the UI and are shown read-only.
 If one disappears from the config it becomes a disabled instance you manage in
@@ -3551,28 +3685,28 @@ the UI, so its linked accounts are kept. <code>media_servers:</code> entries wit
 <p>The same instances can be declared with <code>PLUGIN_&lt;SLUG&gt;_&lt;N&gt;_&lt;KEY&gt;</code> environment
 variables; see <a href="../environment-variables/#media-servers">Media Servers</a>.</p>
 <p>Settings for installed plugins can be declared under <code>plugin_settings</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">plugin_settings</span><span class="p">:</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">slug</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">assistant-openai</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">settings</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://ollama.lan:11434/v1</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">      </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llama3.1</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">plugin_settings</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">slug</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">assistant-openai</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">settings</span><span class="p">:</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://ollama.lan:11434/v1</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">      </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">llama3.1</span>
 </code></pre></div>
 <p>Environment variables override these; see
 <a href="../environment-variables/#plugins">Plugins</a>. <code>plugin_installs:</code> is no longer
 read.</p>
 <p>Signed plugin sources can be declared under <code>plugin_sources</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">plugin_sources</span><span class="p">:</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/index.json</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">public_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RW...</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">plugin_sources</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/index.json</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">public_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RW...</span>
 </code></pre></div>
 <p><code>PLUGINS_SOURCE_&lt;N&gt;_URL</code> and <code>PLUGINS_SOURCE_&lt;N&gt;_PUBLIC_KEY</code> environment
 variables add to these sources, they do not replace them. See
 <a href="../environment-variables/#plugin-sources">Plugin sources</a>.</p>
 <p>Three plugin limits live in the <code>plugins:</code> block:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">plugins</span><span class="p">:</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">setup_timeout_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30000</span><span class="w">       </span><span class="c1"># time allowed for one setup wizard step</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">store_max_keys</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000000</span><span class="w">       </span><span class="c1"># stored entries per instance</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">store_max_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">268435456</span><span class="w">    </span><span class="c1"># stored bytes per instance (256 MiB)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">plugins</span><span class="p">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">setup_timeout_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30000</span><span class="w">       </span><span class="c1"># time allowed for one setup wizard step</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">store_max_keys</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000000</span><span class="w">       </span><span class="c1"># stored entries per instance</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">store_max_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">268435456</span><span class="w">    </span><span class="c1"># stored bytes per instance (256 MiB)</span>
 </code></pre></div>
 <p><code>plugins.index_url</code> can point at a staging official index, but then
 <code>plugins.index_public_key</code> is required. <code>plugins.extra_source_urls</code> is no longer
