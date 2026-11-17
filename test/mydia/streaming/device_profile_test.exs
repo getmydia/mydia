@@ -82,6 +82,13 @@ defmodule Mydia.Streaming.DeviceProfileTest do
       assert profile.hdr_formats == ["hdr10"]
     end
 
+    test "maps the hdr10plus spelling to hdr10+ after downcasing" do
+      assert {:ok, profile} =
+               DeviceProfile.from_map(%{"hdrFormats" => ["HDR10Plus", "hlg"]})
+
+      assert profile.hdr_formats == ["hdr10+", "hlg"]
+    end
+
     test "downcases every entry so matching never has to" do
       assert {:ok, profile} = DeviceProfile.from_map(%{"containers" => ["MKV"]})
       assert profile.containers == ["mkv"]

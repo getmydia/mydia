@@ -33,11 +33,13 @@ defmodule Mydia.Streaming.DeviceProfile do
   attacker-controlled and its contents read exactly like atom names, which is
   precisely the shape that invites an unsafe `String.to_atom/1`.
 
-  ## HDR is parsed but not enforced
+  ## HDR tokens
 
-  `hdr_formats` is accepted, capped, and downcased like the other lists, so the
-  wire format is stable, but `Mydia.Streaming.Compatibility` does not consult
-  it yet. See the comment above `codecs_playable?/3` there for why.
+  `hdr_formats` is accepted, capped and downcased like the other lists, and the
+  legacy spelling "hdr10plus" is mapped to "hdr10+", the vocabulary of
+  `Mydia.Library.Hdr.profile_format_strings/0`. `Mydia.Streaming.Compatibility`
+  does not consult the list yet; later work builds enforcement on
+  `Mydia.Library.Hdr.from_media_file/1`.
   """
 
   use Ecto.Schema
@@ -125,6 +127,7 @@ defmodule Mydia.Streaming.DeviceProfile do
       |> downcase_list(:video_codecs)
       |> downcase_list(:audio_codecs)
       |> downcase_list(:hdr_formats)
+      |> normalize_hdr_tokens()
 
     with {:ok, profile} <- apply_action(changeset, :insert),
          {:ok, codec_profiles} <- parse_codec_profiles(Map.get(map, "codecProfiles", [])) do
@@ -280,6 +283,26 @@ defmodule Mydia.Streaming.DeviceProfile do
           true ->
             changeset
         end
+    end
+  end
+
+  # Players older than this change sent "hdr10plus" for HDR10+, while the
+  # server's vocabulary (Hdr.profile_format_strings/0) spells it "hdr10+".
+  # Map the old spelling here so enforcement sees one token.
+  defp normalize_hdr_tokens(changeset) do
+    case get_change(changeset, :hdr_formats) do
+      nil ->
+        changeset
+
+      entries ->
+        put_change(
+          changeset,
+          :hdr_formats,
+          Enum.map(entries, fn
+            "hdr10plus" -> "hdr10+"
+            entry -> entry
+          end)
+        )
     end
   end
 

@@ -179,11 +179,7 @@ defmodule Mydia.Streaming.Candidates do
     # both this REST candidates payload and the GraphQL streamingMetadata
     # object (see MydiaWeb.Schema.Resolvers.StreamingResolver.streaming_candidates/3),
     # so fixing it here fixes both wire paths at once.
-    hdr = %Hdr{
-      base: media_file.hdr_format,
-      dv_profile: media_file.dolby_vision_profile,
-      bl_compat_id: media_file.dolby_vision_bl_compat_id
-    }
+    hdr = Hdr.from_media_file(media_file)
 
     %{
       duration: metadata.duration,

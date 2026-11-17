@@ -224,4 +224,20 @@ defmodule Mydia.Library.HdrTest do
       assert Hdr.from_release_token(123) == :unknown
     end
   end
+
+  describe "from_media_file/1" do
+    test "reads the three HDR columns off a media file" do
+      file = %Mydia.Library.MediaFile{
+        hdr_format: :hdr10,
+        dolby_vision_profile: 8,
+        dolby_vision_bl_compat_id: 1
+      }
+
+      assert Hdr.from_media_file(file) == %Hdr{base: :hdr10, dv_profile: 8, bl_compat_id: 1}
+    end
+
+    test "nil gives an SDR struct" do
+      assert Hdr.from_media_file(nil) == %Hdr{}
+    end
+  end
 end
