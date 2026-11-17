@@ -36,7 +36,6 @@ defmodule Mydia.Jobs.LibraryScanner do
   require Logger
   alias Mydia.{Library, Settings, Metadata}
   alias Mydia.ImportCandidates
-  alias Mydia.Library.EdlSidecars
   alias Mydia.Subtitles.Sidecars
 
   # Upper bound of the insert-time jitter applied to automatic scans.
@@ -262,7 +261,6 @@ defmodule Mydia.Jobs.LibraryScanner do
 
       if reconcile_sidecars?(summary) do
         reconcile_sidecars(library_path)
-        reconcile_edl_sidecars(library_path)
       end
 
       summary
@@ -344,17 +342,17 @@ defmodule Mydia.Jobs.LibraryScanner do
   @spec reconcile_sidecars?({:ok, ScanSummary.t()} | {:error, term()}) :: boolean()
   def reconcile_sidecars?(summary), do: match?({:ok, _}, summary)
 
-  # Sidecar adoption runs after media files are upserted, because it needs
-  # their rows to attach to. A failure here never fails the scan: the video
-  # files are indexed either way, and a missing subtitle row is recoverable
-  # by rescanning. The return value is not used by the caller; this always
-  # reports :ok so a call site never has to distinguish "reconciled" from
-  # "skipped after logging".
+  # Sidecar adoption (subtitles, then EDL commercial breaks) runs after media
+  # files are upserted, because it needs their rows to attach to. A failure
+  # never fails the scan: the videos are indexed either way, and a missing row
+  # is recoverable by rescanning. Always :ok, so a call site never has to
+  # distinguish "reconciled" from "skipped after logging".
   @spec reconcile_sidecars(Settings.LibraryPath.t()) :: :ok
   defp reconcile_sidecars(library_path) do
     media_files =
       Library.list_media_files(library_path_id: library_path.id, preload: [:library_path])
 
+    Library.EdlSidecars.reconcile_library(library_path, media_files)
     tally = Sidecars.reconcile_all(media_files)
 
     if tally.adopted > 0 or tally.reaped > 0 do
@@ -370,35 +368,6 @@ defmodule Mydia.Jobs.LibraryScanner do
   rescue
     error ->
       Logger.warning("Sidecar reconciliation failed",
-        library_path_id: library_path.id,
-        error: Exception.format(:error, error, __STACKTRACE__)
-      )
-
-      :ok
-  end
-
-  # Commercial breaks from `.edl` sidecars, with the same contract as subtitle
-  # sidecars above: runs after media files are upserted, never fails the scan.
-  @spec reconcile_edl_sidecars(Settings.LibraryPath.t()) :: :ok
-  defp reconcile_edl_sidecars(library_path) do
-    media_files =
-      Library.list_media_files(library_path_id: library_path.id, preload: [:library_path])
-
-    tally = EdlSidecars.reconcile_all(media_files)
-
-    if tally.adopted > 0 or tally.updated > 0 or tally.reaped > 0 do
-      Logger.info("EDL sidecars reconciled",
-        library_path_id: library_path.id,
-        adopted: tally.adopted,
-        updated: tally.updated,
-        reaped: tally.reaped
-      )
-    end
-
-    :ok
-  rescue
-    error ->
-      Logger.warning("EDL sidecar reconciliation failed",
         library_path_id: library_path.id,
         error: Exception.format(:error, error, __STACKTRACE__)
       )

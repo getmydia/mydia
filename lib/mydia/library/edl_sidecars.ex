@@ -41,6 +41,36 @@ defmodule Mydia.Library.EdlSidecars do
   @empty_tally %{adopted: 0, updated: 0, reaped: 0, errors: []}
 
   @doc """
+  Reconciles a library path's media files (with `:library_path` preloaded).
+  Called by `Mydia.Jobs.LibraryScanner` after media files are upserted. It
+  logs and never raises, so a failure here never fails the scan or stops
+  subtitle sidecars from being reconciled.
+  """
+  @spec reconcile_library(Mydia.Settings.LibraryPath.t(), [MediaFile.t()]) :: :ok
+  def reconcile_library(library_path, media_files) do
+    tally = reconcile_all(media_files)
+
+    if tally.adopted > 0 or tally.updated > 0 or tally.reaped > 0 do
+      Logger.info("EDL sidecars reconciled",
+        library_path_id: library_path.id,
+        adopted: tally.adopted,
+        updated: tally.updated,
+        reaped: tally.reaped
+      )
+    end
+
+    :ok
+  rescue
+    error ->
+      Logger.warning("EDL sidecar reconciliation failed",
+        library_path_id: library_path.id,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      :ok
+  end
+
+  @doc """
   Reconciles every file's EDL segments against the sidecars on disk, listing
   each directory once.
 
