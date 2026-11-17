@@ -87,6 +87,7 @@ defmodule MydiaWeb.Schema.EnumTypes do
   enum :segment_type do
     value(:intro, description: "Opening theme")
     value(:credits, description: "Closing credits")
+    value(:commercial, description: "Commercial break, from an EDL sidecar")
   end
 
   @desc "Whether a calendar entry is an episode or a movie"

@@ -150,6 +150,7 @@ pub enum StreamingCandidateStrategy {
 pub enum SegmentType {
     Intro,
     Credits,
+    Commercial,
 }
 
 /// What kind of elementary stream a `MediaStream` describes.
