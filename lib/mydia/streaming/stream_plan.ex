@@ -151,7 +151,7 @@ defmodule Mydia.Streaming.StreamPlan do
         to_width: to_width,
         to_height: to_height,
         tier: accel && accel.tier,
-        tonemap: if(accel, do: accel.tonemap, else: :none)
+        tonemap: accel_tonemap(accel)
       },
       audio: audio,
       container: :hls_ts,
@@ -200,6 +200,9 @@ defmodule Mydia.Streaming.StreamPlan do
   # selection stands. That is the pre-existing behaviour for an unanalysed
   # file, and the codec the strategy was chosen from is the one it will pick,
   # so a blanket copy is correct there.
+  defp accel_tonemap(nil), do: :none
+  defp accel_tonemap(%AccelArgs{tonemap: tonemap}), do: tonemap
+
   defp remux_audio_compatible?(nil, _opts), do: true
 
   defp remux_audio_compatible?(%StreamInfo{codec: codec}, opts) do
