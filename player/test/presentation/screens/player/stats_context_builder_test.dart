@@ -563,4 +563,75 @@ void main() {
 
     expect(context.hardwareDecode, isFalse);
   });
+
+  group('hdr', () {
+    StatsContext build({
+      required PlaybackPlan? plan,
+      bool downloaded = false,
+      ({String format, int? dvProfile})? sourceHdr,
+    }) =>
+        buildStatsContext(
+          plan: plan,
+          isDownloadedSource: downloaded,
+          selectedQuality: QualityRung.original,
+          effectiveQuality: null,
+          duration: const Duration(minutes: 90),
+          lastFallback: null,
+          knownFailures: const {},
+          sourceHeight: 2160,
+          sourceCodec: 'hevc',
+          sourceBitrateKbps: 14200,
+          sourceContainer: 'mkv',
+          videoTrack: null,
+          audioTrack: null,
+          linkLabel: null,
+          linkHealthy: true,
+          sourceHdr: sourceHdr,
+        );
+
+    test('HDR10 on direct play is tonemapped by the player', () {
+      final context = build(
+        plan: const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+        sourceHdr: (format: 'HDR10', dvProfile: null),
+      );
+      expect(
+        context.hdr,
+        const StatsHdr(format: 'HDR10', by: HdrTonemapper.player),
+      );
+    });
+
+    test('Dolby Vision profile 8 on a transcode is tonemapped by the server',
+        () {
+      final context = build(
+        plan: const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: _r1080,
+          adaptive: true,
+          reason: PlanReason.shapeKnownToFail,
+        ),
+        sourceHdr: (format: 'Dolby Vision', dvProfile: 8),
+      );
+      expect(
+        context.hdr,
+        const StatsHdr(format: 'Dolby Vision 8', by: HdrTonemapper.server),
+      );
+    });
+
+    test('a downloaded file is played, so the player tonemaps it', () {
+      final context = build(
+        plan: null,
+        downloaded: true,
+        sourceHdr: (format: 'HLG', dvProfile: null),
+      );
+      expect(context.mode, PlaybackMode.localFile);
+      expect(context.hdr?.by, HdrTonemapper.player);
+    });
+
+    test('an SDR source has no hdr', () {
+      final context = build(
+        plan: const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+      );
+      expect(context.hdr, isNull);
+    });
+  });
 }

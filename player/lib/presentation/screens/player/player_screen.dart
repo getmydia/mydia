@@ -2016,6 +2016,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         choice: QualityChoice.fromRung(_selectedQuality),
         sourceHeight: offer?.height,
         fileBitrateKbps: kbpsFromBitsPerSecond(offer?.bitrateBps),
+        sourceHdrFormat: offer?.hdrFormat,
+        sourceDolbyVisionProfile: offer?.dolbyVisionProfile,
         recentStall: linkPath == null
             ? null
             : memory?.recentStall(serverKey, linkPath, now: DateTime.now()),
@@ -6088,6 +6090,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       knownFailures: _planInputs?.knownFailures ?? const {},
       sourceHeight: _planInputs?.sourceHeight,
       sourceCodec: sourceCodecOf(_planInputs),
+      sourceHdr: sourceHdrOf(_planInputs),
       sourceBitrateKbps: _planInputs?.fileBitrateKbps,
       sourceContainer: sourceContainerOf(_planInputs),
       videoTrack: player?.state.track.video,
