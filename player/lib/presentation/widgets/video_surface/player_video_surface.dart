@@ -225,40 +225,21 @@ class _PlayerVideoSurfaceState extends State<PlayerVideoSurface> {
   }
 }
 
-/// Which output one playback uses, and whether a failure recorded for this
-/// app version is why it is the texture.
-typedef MacVideoOutputChoice = ({VideoOutputPath path, bool failedEarlier});
-
 /// Decides the output for a playback that is about to start.
 ///
-/// Anything but native macOS answers [VideoOutputPath.texture] without
-/// reading a setting. Read from storage rather than through the hatch's
-/// provider, which is auto-dispose and has no listener here.
-Future<MacVideoOutputChoice> resolveMacVideoOutput(WidgetRef ref) async {
+/// Reads from storage rather than through the hatch's provider, which is
+/// auto-dispose and has no listener here. The decision itself is
+/// [resolveVideoOutputChoice], shared with the device profile.
+Future<MacVideoOutputChoice> resolveMacVideoOutput(WidgetRef ref) {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS) {
-    return (path: VideoOutputPath.texture, failedEarlier: false);
+    return Future.value((path: VideoOutputPath.texture, failedEarlier: false));
   }
   final settings = ref.read(coreSettingsServiceProvider);
   final appVersion = ref.read(updateProvider).currentVersion;
-  var legacy = false;
-  String? failedVersion;
-  try {
-    legacy = await settings.getLegacyMacVideoOutput();
-    failedVersion = await settings.getMacSurfaceFailedVersion();
-  } catch (e) {
-    debugPrint('[MpvSurface] Could not read output settings: $e');
-  }
-  final path = chooseVideoOutputPath(
-    platform: defaultTargetPlatform,
-    isWeb: kIsWeb,
-    legacyHatch: legacy,
-    failedVersion: failedVersion,
+  return resolveVideoOutputChoice(
+    readLegacyHatch: settings.getLegacyMacVideoOutput,
+    readFailedVersion: settings.getMacSurfaceFailedVersion,
     appVersion: appVersion,
-  );
-  return (
-    path: path,
-    failedEarlier:
-        !legacy && failedVersion != null && failedVersion == appVersion,
   );
 }
 

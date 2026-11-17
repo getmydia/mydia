@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'codec_profile.dart';
+import 'mac_video_output.dart';
 import 'device_profile_web.dart'
     if (dart.library.io) 'device_profile_native.dart' as platform;
 
@@ -93,7 +94,13 @@ class DeviceProfile {
 /// on any failure or surprising answer; web reports a fixed browser-decode
 /// profile since there is nothing to probe. See `device_profile_native.dart`
 /// and `device_profile_web.dart`.
-Future<DeviceProfile> detectDeviceProfile() => platform.detectDeviceProfile();
+///
+/// [resolveMacOutputPath] decides the macOS output path, which the HDR claim
+/// follows; it is ignored on every other platform.
+Future<DeviceProfile> detectDeviceProfile({
+  Future<VideoOutputPath> Function()? resolveMacOutputPath,
+}) =>
+    platform.detectDeviceProfile(resolveMacOutputPath: resolveMacOutputPath);
 
 /// A mutable, session-lived slot for the profile [detectDeviceProfile]
 /// eventually resolves to.

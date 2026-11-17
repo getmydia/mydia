@@ -12,6 +12,8 @@ import 'android_codec_capabilities.dart';
 import 'device_profile.dart';
 import 'hdr_claims.dart';
 import 'ios_codec_capabilities.dart';
+import 'mac_hdr_claims.dart';
+import 'mac_video_output.dart';
 
 /// What libmpv is built with on every desktop and mobile target Mydia ships.
 ///
@@ -96,8 +98,21 @@ const DeviceProfile _staticNativeProfile = DeviceProfile(
 /// on Android, where hardware decoding is the path that actually runs. Desktop
 /// keeps the unconstrained claim: mpv software-decodes 10-bit HEVC there
 /// perfectly well.
-Future<DeviceProfile> detectDeviceProfile() async {
-  final profile = await _probeMpvProfile();
+Future<DeviceProfile> detectDeviceProfile({
+  Future<VideoOutputPath> Function()? resolveMacOutputPath,
+}) async {
+  var profile = await _probeMpvProfile();
+
+  // macOS claims HDR from the output that will render it, not the desktop
+  // set: see [macHdrFormats].
+  if (Platform.isMacOS) {
+    profile = profile.copyWith(
+      hdrFormats: await nativeProfileHdrFormats(
+        isMacOS: true,
+        resolvePath: resolveMacOutputPath,
+      ),
+    );
+  }
 
   // iOS: same idea as the MediaCodec pass below, but all it can say is which of
   // HEVC, VP9 and AV1 have a hardware decoder, so it removes codecs rather

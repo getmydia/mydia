@@ -9,10 +9,13 @@ import 'package:web/web.dart' as web;
 
 import 'device_profile.dart';
 import 'hdr_claims.dart';
+import 'mac_video_output.dart';
 
 const _hevcMain10 = 'video/mp4; codecs="hvc1.2.4.L153.B0"';
 
-Future<DeviceProfile> detectDeviceProfile() async {
+Future<DeviceProfile> detectDeviceProfile({
+  Future<VideoOutputPath> Function()? resolveMacOutputPath,
+}) async {
   final highDynamicRange = _displayIsHdr();
   final pq = highDynamicRange && await _decodesTransfer('pq');
   final hlg = highDynamicRange && await _decodesTransfer('hlg');

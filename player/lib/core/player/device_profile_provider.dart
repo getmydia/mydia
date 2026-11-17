@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart'
     show debugPrint, debugPrintStack, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../cache/fetch_log.dart';
+import '../settings/settings_providers.dart';
+import '../update/update_provider.dart';
 import 'device_profile.dart';
+import 'mac_video_output.dart';
 
 /// This device's decode-capability profile, probed once per app session and
 /// held in memory for as long as the app runs.
@@ -52,7 +55,19 @@ final deviceProfileHolderProvider = Provider<DeviceProfileHolder>((ref) {
   // Notifier's `state =`. applyDetectedProfile preserves that contract: its
   // own fetch-log clear is awaited inside this same continuation, never by
   // the provider body above.
-  unawaited(detectDeviceProfile()
+  // macOS claims HDR from its output path, decided the way the player screen
+  // decides it. Read lazily, only on macOS, and never through `watch`.
+  Future<VideoOutputPath> resolveMacOutputPath() async {
+    final settings = ref.read(coreSettingsServiceProvider);
+    final choice = await resolveVideoOutputChoice(
+      readLegacyHatch: settings.getLegacyMacVideoOutput,
+      readFailedVersion: settings.getMacSurfaceFailedVersion,
+      appVersion: ref.read(updateProvider).currentVersion,
+    );
+    return choice.path;
+  }
+
+  unawaited(detectDeviceProfile(resolveMacOutputPath: resolveMacOutputPath)
       .then((profile) => applyDetectedProfile(holder, profile, fetchLog)));
   return holder;
 });
