@@ -24,6 +24,8 @@
   "settingsDefaultQualitySubtitle": "Se usa cuando un título no tiene una preferencia guardada",
   "settingsAutoSkipTitle": "Saltar intros y créditos",
   "settingsAutoSkipSubtitle": "Si está desactivado, se muestra un botón para saltar",
+  "settingsAutoSkipCommercialsTitle": "Saltar anuncios",
+  "settingsAutoSkipCommercialsSubtitle": "Si está desactivado, se muestra un botón para saltar",
   "settingsStatsOverlayTitle": "Estadísticas para expertos",
   "settingsStatsOverlaySubtitle": "Datos de reproducción en directo sobre el video",
   "settingsPreferencesLoadFailedTitle": "No se pudieron cargar las preferencias",

@@ -96,6 +96,14 @@
   "@settingsAutoSkipSubtitle": {
     "description": "Subtitle of the skip intros switch: when it is off, the player shows a button to skip instead."
   },
+  "settingsAutoSkipCommercialsTitle": "Skip commercials",
+  "@settingsAutoSkipCommercialsTitle": {
+    "description": "Switch that skips commercial breaks marked in a recording automatically during playback."
+  },
+  "settingsAutoSkipCommercialsSubtitle": "Off shows a skip button instead",
+  "@settingsAutoSkipCommercialsSubtitle": {
+    "description": "Subtitle of the skip commercials switch: when it is off, the player shows a button to skip instead."
+  },
   "settingsStatsOverlayTitle": "Stats for nerds",
   "@settingsStatsOverlayTitle": {
     "description": "Switch that shows a technical statistics overlay on the video. Playful name; translate the idea, not the words."

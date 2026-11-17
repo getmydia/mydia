@@ -24,6 +24,8 @@
   "settingsDefaultQualitySubtitle": "Usada quando um título não tem preferência salva",
   "settingsAutoSkipTitle": "Pular aberturas e créditos",
   "settingsAutoSkipSubtitle": "Desativado, mostra um botão para pular",
+  "settingsAutoSkipCommercialsTitle": "Pular comerciais",
+  "settingsAutoSkipCommercialsSubtitle": "Desativado, mostra um botão para pular",
   "settingsStatsOverlayTitle": "Estatísticas para nerds",
   "settingsStatsOverlaySubtitle": "Dados de reprodução ao vivo sobre o vídeo",
   "settingsPreferencesLoadFailedTitle": "Não foi possível carregar as preferências",

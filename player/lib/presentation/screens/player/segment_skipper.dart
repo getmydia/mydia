@@ -24,10 +24,20 @@ class SegmentSkipper {
   /// [resetIfMediaChanged].
   String? _mediaKey;
 
-  /// Whether detected segments are skipped without asking. Off unless the
+  /// Whether intros and credits are skipped without asking. Off unless the
   /// viewer opted in; loaded once when the screen initializes and deliberately
   /// not watched, since flipping it mid-episode is not a case worth a rebuild.
-  bool autoSkip = false;
+  bool autoSkipIntroCredits = false;
+
+  /// Whether commercial breaks are skipped without asking. On unless the
+  /// viewer opted out, loaded the same way as [autoSkipIntroCredits].
+  bool autoSkipCommercials = true;
+
+  bool _autoSkips(MediaSegment segment) => switch (segment.type) {
+        SegmentType.commercial => autoSkipCommercials,
+        SegmentType.intro || SegmentType.credits => autoSkipIntroCredits,
+        SegmentType.unknown => false,
+      };
 
   List<MediaSegment> get segments => _segments;
 
@@ -58,9 +68,9 @@ class SegmentSkipper {
   /// once-per-session tracker and the segment lookup are one rule, and a
   /// second copy of it is the thing that would drift.
   void maybeAutoSkip(Duration position, Future<void> Function(Duration) seek) {
-    if (!autoSkip || _segments.isEmpty) return;
+    if (_segments.isEmpty) return;
 
-    final target = _tracker.takeAutoSkip(_segments, position);
+    final target = _tracker.takeAutoSkip(_segments.where(_autoSkips), position);
     if (target == null) return;
 
     debugPrint('[PlayerScreen] Auto-skipping to ${target.end}');

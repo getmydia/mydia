@@ -86,6 +86,18 @@ class PlaybackSettingsSection extends ConsumerWidget {
                   .read(settingsControllerProvider.notifier)
                   .setAutoSkipSegments(value),
         ),
+        SettingsRow.toggle(
+          key: const Key('auto-skip-commercials-switch'),
+          icon: Icons.fast_forward,
+          title: l10n.settingsAutoSkipCommercialsTitle,
+          subtitle: l10n.settingsAutoSkipCommercialsSubtitle,
+          value: current?.autoSkipCommercials ?? true,
+          onChanged: current == null
+              ? null
+              : (value) => ref
+                  .read(settingsControllerProvider.notifier)
+                  .setAutoSkipCommercials(value),
+        ),
         const SubtitleSizeSettingsRow(),
         Consumer(
           builder: (context, ref, _) {

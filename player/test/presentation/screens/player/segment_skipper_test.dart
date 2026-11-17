@@ -3,6 +3,16 @@ import 'package:player/domain/models/media_segment.dart';
 import 'package:player/presentation/screens/player/segment_skipper.dart';
 
 const _intro = MediaSegment(type: SegmentType.intro, startMs: 0, endMs: 60000);
+const _breakA = MediaSegment(
+  type: SegmentType.commercial,
+  startMs: 600000,
+  endMs: 720000,
+);
+const _breakB = MediaSegment(
+  type: SegmentType.commercial,
+  startMs: 1200000,
+  endMs: 1260000,
+);
 
 void main() {
   group('SegmentSkipper', () {
@@ -12,7 +22,7 @@ void main() {
     Future<void> seek(Duration to) async => seeks.add(to);
 
     setUp(() {
-      skipper = SegmentSkipper()..autoSkip = true;
+      skipper = SegmentSkipper()..autoSkipIntroCredits = true;
       seeks = [];
       skipper.resetIfMediaChanged('episode:1:a');
       skipper.setSegments(const [_intro]);
@@ -24,8 +34,8 @@ void main() {
       expect(seeks, [const Duration(minutes: 1)]);
     });
 
-    test('does nothing with auto-skip off', () {
-      skipper.autoSkip = false;
+    test('does nothing with intro auto-skip off', () {
+      skipper.autoSkipIntroCredits = false;
       skipper.maybeAutoSkip(const Duration(seconds: 5), seek);
       expect(seeks, isEmpty);
     });
@@ -50,6 +60,52 @@ void main() {
     test('segmentAt finds the covering segment', () {
       expect(skipper.segmentAt(const Duration(seconds: 30)), _intro);
       expect(skipper.segmentAt(const Duration(minutes: 2)), isNull);
+    });
+  });
+
+  group('SegmentSkipper per-type auto-skip', () {
+    late SegmentSkipper skipper;
+    late List<Duration> seeks;
+
+    Future<void> seek(Duration to) async => seeks.add(to);
+
+    setUp(() {
+      skipper = SegmentSkipper();
+      seeks = [];
+      skipper.resetIfMediaChanged('episode:1:a');
+      skipper.setSegments(const [_intro, _breakA, _breakB]);
+    });
+
+    test('by default commercials auto-skip and intros do not', () {
+      skipper.maybeAutoSkip(const Duration(seconds: 5), seek);
+      expect(seeks, isEmpty);
+
+      skipper.maybeAutoSkip(const Duration(seconds: 601), seek);
+      expect(seeks, [const Duration(seconds: 720)]);
+    });
+
+    test('flipped settings skip intros and leave commercials', () {
+      skipper
+        ..autoSkipIntroCredits = true
+        ..autoSkipCommercials = false;
+
+      skipper.maybeAutoSkip(const Duration(seconds: 5), seek);
+      skipper.maybeAutoSkip(const Duration(seconds: 601), seek);
+
+      expect(seeks, [const Duration(minutes: 1)]);
+    });
+
+    test('seeking back into a spent break plays it', () {
+      skipper.maybeAutoSkip(const Duration(seconds: 601), seek);
+      skipper.maybeAutoSkip(const Duration(seconds: 650), seek);
+      expect(seeks, [const Duration(seconds: 720)]);
+    });
+
+    test('each break skips once on its own', () {
+      skipper.maybeAutoSkip(const Duration(seconds: 601), seek);
+      skipper.maybeAutoSkip(const Duration(seconds: 1201), seek);
+      expect(
+          seeks, [const Duration(seconds: 720), const Duration(seconds: 1260)]);
     });
   });
 }

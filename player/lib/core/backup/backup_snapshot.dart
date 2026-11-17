@@ -28,6 +28,7 @@ import 'backup_records.dart';
 const kBackupSettingKeys = [
   'default_quality',
   'auto_skip_segments',
+  'auto_skip_commercials',
   'subtitle_size',
   'theme_preset',
   'interface_locale',
