@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -236,6 +237,36 @@ void main() {
       expect(written, hasLength(1));
       for (final (label, value) in report.rows) {
         expect(written.single, contains('$label: $value'));
+      }
+    });
+  });
+
+  // The override must be cleared inside the test body: the binding checks
+  // foundation variables before any tearDown runs.
+  group('legacy video output switch', () {
+    testWidgets('is present on macOS', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        await _pump(tester, status: const P2pStatus.initial());
+
+        expect(
+            find.byKey(const Key('legacy-mac-video-output')), findsOneWidget);
+        expect(
+            find.byKey(const Key('mac-video-output-status')), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('is absent on other platforms', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        await _pump(tester, status: const P2pStatus.initial());
+
+        expect(find.byKey(const Key('legacy-mac-video-output')), findsNothing);
+        expect(find.byKey(const Key('mac-video-output-status')), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
       }
     });
   });

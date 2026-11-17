@@ -25,6 +25,8 @@ class SettingsService {
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
   static const _librarySortKeyPrefix = 'library_sort_';
   static const _statsOverlayEnabledKey = 'stats_overlay_enabled';
+  static const _legacyMacVideoOutputKey = 'legacy_mac_video_output';
+  static const _macSurfaceFailedVersionKey = 'mac_surface_failed_version';
   static const _subtitleSizeKey = 'subtitle_size';
   static const _updateTrackKey = 'update_track';
   static const _themePresetKey = 'theme_preset';
@@ -94,6 +96,27 @@ class SettingsService {
   /// Set whether the playback stats panel is drawn over the video.
   Future<void> setStatsOverlayEnabled(bool enabled) async {
     await _write(_statsOverlayEnabledKey, enabled.toString());
+  }
+
+  /// Whether macOS plays through media_kit's texture instead of the mpv
+  /// gpu-next surface. Off by default; the escape hatch for a display or
+  /// driver the surface does not suit.
+  Future<bool> getLegacyMacVideoOutput() async {
+    final value = await _storage.read(_legacyMacVideoOutputKey);
+    return value == 'true';
+  }
+
+  Future<void> setLegacyMacVideoOutput(bool enabled) async {
+    await _write(_legacyMacVideoOutputKey, enabled.toString());
+  }
+
+  /// The app version on which the mpv surface failed to start, or null.
+  /// A failure only counts against the version that recorded it.
+  Future<String?> getMacSurfaceFailedVersion() =>
+      _storage.read(_macSurfaceFailedVersionKey);
+
+  Future<void> setMacSurfaceFailedVersion(String version) async {
+    await _write(_macSurfaceFailedVersionKey, version);
   }
 
   /// How large text subtitles are drawn on this device.

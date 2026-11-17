@@ -384,6 +384,24 @@
   "@settingsDiagnosticsNothingPlayed": {
     "description": "Subtitle of the fullscreen row before anything has played since the app started."
   },
+  "settingsDiagnosticsLegacyVideoOutput": "Use the legacy video output",
+  "@settingsDiagnosticsLegacyVideoOutput": {
+    "description": "Switch in Diagnostics, macOS only. Turns off the HDR-capable video output and plays through the older texture output instead."
+  },
+  "settingsDiagnosticsLegacyVideoOutputHint": "Turn on if video looks wrong or does not start",
+  "@settingsDiagnosticsLegacyVideoOutputHint": {
+    "description": "Subtitle of the legacy video output switch."
+  },
+  "settingsDiagnosticsVideoOutput": "Video output: {output}",
+  "@settingsDiagnosticsVideoOutput": {
+    "description": "Diagnostics line naming the video output macOS is using. The output is a technical name and is not translated.",
+    "placeholders": {"output": {"type": "String"}}
+  },
+  "settingsDiagnosticsVideoOutputFallback": "Video output: {output} (fallback recorded)",
+  "@settingsDiagnosticsVideoOutputFallback": {
+    "description": "Video output line when the HDR-capable output failed to start on this version and the texture output is used instead. The output is a technical name.",
+    "placeholders": {"output": {"type": "String"}}
+  },
   "settingsDiagnosticsShareSection": "Share with developers",
   "@settingsDiagnosticsShareSection": {
     "description": "Diagnostics section heading for what this device sends to the Mydia developers."

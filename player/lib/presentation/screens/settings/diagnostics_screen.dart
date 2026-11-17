@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,9 @@ import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/fullscreen/fullscreen_report.dart';
 import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
+import '../../../core/player/mac_video_output.dart';
+import '../../../core/settings/legacy_mac_video_output_setting.dart';
+import '../../../core/settings/settings_providers.dart';
 import '../../../core/sources/mydia/source_link.dart';
 import '../../../core/sources/sources_providers.dart'
     show activeSourceIdProvider;
@@ -161,7 +165,8 @@ class DiagnosticsBody extends ConsumerWidget {
         const SizedBox(height: 18),
         ValueListenableBuilder<FullscreenReport?>(
           valueListenable: fullscreenReport,
-          builder: (context, report, _) => _PlaybackSection(report: report),
+          builder: (context, report, _) =>
+              _PlaybackSection(report: report, appVersion: version),
         ),
         const SizedBox(height: 24),
         FilledButton.icon(
@@ -209,18 +214,21 @@ class DiagnosticsBody extends ConsumerWidget {
 ///
 /// Read-only like everything else on this screen. It exists to be looked at
 /// once, on a device whose console is unreachable, and copied.
-class _PlaybackSection extends StatelessWidget {
-  const _PlaybackSection({required this.report});
+class _PlaybackSection extends ConsumerWidget {
+  const _PlaybackSection({required this.report, required this.appVersion});
 
   final FullscreenReport? report;
+  final String appVersion;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final report = this.report;
     final l10n = context.l10n;
+    final onMac = defaultTargetPlatform == TargetPlatform.macOS && !kIsWeb;
     return SettingsSection(
       label: l10n.settingsPlayback,
       children: [
+        if (onMac) ..._macVideoOutputRows(context, ref),
         if (report == null)
           SettingsRow.action(
             icon: Icons.fullscreen,
@@ -248,6 +256,45 @@ class _PlaybackSection extends StatelessWidget {
     );
   }
 }
+
+extension on _PlaybackSection {
+  /// The legacy-output switch and the line saying which output is active.
+  List<Widget> _macVideoOutputRows(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final legacy = ref.watch(legacyMacVideoOutputProvider).value ?? false;
+    final failedVersion = ref.watch(_macSurfaceFailedVersionProvider).value;
+    final path = chooseVideoOutputPath(
+      platform: defaultTargetPlatform,
+      isWeb: kIsWeb,
+      legacyHatch: legacy,
+      failedVersion: failedVersion,
+      appVersion: appVersion,
+    );
+    final output = path == VideoOutputPath.surface ? 'gpu-next' : 'texture';
+    return [
+      SettingsRow.toggle(
+        key: const Key('legacy-mac-video-output'),
+        icon: Icons.movie_filter_outlined,
+        title: l10n.settingsDiagnosticsLegacyVideoOutput,
+        subtitle: l10n.settingsDiagnosticsLegacyVideoOutputHint,
+        value: legacy,
+        onChanged: (v) =>
+            ref.read(legacyMacVideoOutputProvider.notifier).set(v),
+      ),
+      SettingsRow.action(
+        key: const Key('mac-video-output-status'),
+        icon: Icons.tv_outlined,
+        title: failedVersion == appVersion
+            ? l10n.settingsDiagnosticsVideoOutputFallback(output)
+            : l10n.settingsDiagnosticsVideoOutput(output),
+      ),
+    ];
+  }
+}
+
+final _macSurfaceFailedVersionProvider = FutureProvider<String?>(
+  (ref) => ref.read(coreSettingsServiceProvider).getMacSurfaceFailedVersion(),
+);
 
 class _Dot extends StatelessWidget {
   const _Dot({required this.color});
