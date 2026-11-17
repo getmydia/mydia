@@ -117,6 +117,8 @@ class PlaybackStatsCollector {
         droppedFrames: delta,
         droppedFramesTotal: _lastTotal,
         throughputKbps: throughput,
+        targetGamma: stats?.targetGamma,
+        colormatrix: stats?.colormatrix,
         history: List.unmodifiable(_history),
       );
     } finally {

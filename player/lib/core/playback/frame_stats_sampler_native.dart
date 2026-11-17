@@ -36,9 +36,23 @@ class NativeFrameStatsSampler implements FrameStatsSampler {
       return FrameStats(
         droppedFrames: vo + decoder,
         throughputKbps: speed == null ? null : (speed * 8 / 1000).round(),
+        targetGamma: await _optional('video-target-params/gamma'),
+        colormatrix: await _optional('video-params/colormatrix'),
       );
     } catch (e) {
       debugPrint('[FrameStats] mpv property read failed: $e');
+      return null;
+    }
+  }
+
+  /// A property that is allowed to be unset (no video yet, or a video
+  /// output that reports no target). Its failure never invalidates the
+  /// counters above.
+  Future<String?> _optional(String name) async {
+    try {
+      final value = (await _platform.getProperty(name)).trim();
+      return value.isEmpty ? null : value;
+    } catch (_) {
       return null;
     }
   }

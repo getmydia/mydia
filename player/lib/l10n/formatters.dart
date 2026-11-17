@@ -532,6 +532,12 @@ extension AppFormatters on AppLocalizations {
         StatsHdrValue(:final hdr) => switch (hdr.by) {
             HdrTonemapper.player => statsHdrByPlayer(hdr.format),
             HdrTonemapper.server => statsHdrByServer(hdr.format),
+            HdrTonemapper.playerLibplacebo =>
+              statsHdrByPlayerLibplacebo(hdr.format),
+            HdrTonemapper.edr => statsHdrOutput(
+                hdr.transfer ?? '',
+                NumberFormat('0.0', localeName).format(hdr.headroom ?? 1),
+              ),
           },
         StatsQualityValue(:final quality) => statsQualityText(quality),
         StatsModeValue(:final mode) => statsModeName(mode),

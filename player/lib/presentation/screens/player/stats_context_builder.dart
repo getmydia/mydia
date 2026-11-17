@@ -48,6 +48,7 @@ StatsContext buildStatsContext({
   StallRecord? recentStall,
   DateTime? now,
   bool videoOutputFellBack = false,
+  double? outputHeadroom,
 }) {
   final mode = _mode(plan, isDownloadedSource);
   // A fallback only explains the *active* plan when the active plan is
@@ -106,6 +107,7 @@ StatsContext buildStatsContext({
                 ? HdrTonemapper.server
                 : HdrTonemapper.player,
           ),
+    outputHeadroom: outputHeadroom,
     decoderLabel: videoTrack?.decoder,
     hardwareDecode: _hardwareDecode(videoTrack?.decoder),
     audioLabel: _audioLabel(audioTrack),

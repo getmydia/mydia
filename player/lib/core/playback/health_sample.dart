@@ -46,9 +46,20 @@ class HealthSample {
 
 /// Cumulative counters read from the engine.
 class FrameStats {
-  const FrameStats({required this.droppedFrames, this.throughputKbps});
+  const FrameStats({
+    required this.droppedFrames,
+    this.throughputKbps,
+    this.targetGamma,
+    this.colormatrix,
+  });
 
   /// Total frames dropped since the source opened.
   final int droppedFrames;
   final int? throughputKbps;
+
+  /// mpv's `video-target-params/gamma`, for the stats panel. Null when unset.
+  final String? targetGamma;
+
+  /// mpv's `video-params/colormatrix`, for the stats panel. Null when unset.
+  final String? colormatrix;
 }

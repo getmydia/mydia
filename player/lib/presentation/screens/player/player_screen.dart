@@ -384,6 +384,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Whether the texture path is in use because the surface failed on this
   /// app version, which the stats panel's Why row reports.
   bool _videoOutputFellBack = false;
+
+  /// The surface screen's EDR headroom for the stats HDR row, kept only
+  /// while the stats collector runs. Null until the plugin reports one.
+  double? _edrHeadroom;
+  StreamSubscription<DisplayInfo>? _displaySubscription;
   ProgressReporter? _progressService;
 
   /// Play-to-first-frame marks for this screen's current load. Replaced on
@@ -2753,9 +2758,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
     _statsCollector = collector;
     collector.start();
+    // The headroom is read from the plugin's own stream, so the panel's
+    // cadence is the collector's and no timer is added.
+    _displaySubscription = _surfaceBinding?.surface.display.listen(
+      (info) => _edrHeadroom = info.edrHeadroom,
+      onError: (Object e) => debugPrint('[PlayerScreen] display stream: $e'),
+    );
   }
 
   void _stopStatsCollector() {
+    unawaited(_displaySubscription?.cancel());
+    _displaySubscription = null;
+    _edrHeadroom = null;
     unawaited(_statsCollector?.dispose());
     _statsCollector = null;
   }
@@ -6234,6 +6248,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
       videoOutputFellBack: _videoOutputFellBack,
+      outputHeadroom: _surfaceBinding == null ? null : (_edrHeadroom ?? 1),
     );
   }
 
