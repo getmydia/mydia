@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/player/mac_video_output.dart';
 import 'package:player/core/player/video_output_config.dart';
 
 void main() {
@@ -65,6 +66,17 @@ void main() {
       'tone-mapping': 'bt.2390',
       'hdr-compute-peak': 'auto',
       'target-trc': 'srgb',
+    });
+  });
+
+  group('sdrTonemapMpvOptionsFor', () {
+    test('the texture applies the pinned options', () {
+      expect(sdrTonemapMpvOptionsFor(VideoOutputPath.texture),
+          sdrTonemapMpvOptions);
+    });
+
+    test('the macOS surface leaves tone mapping to libplacebo', () {
+      expect(sdrTonemapMpvOptionsFor(VideoOutputPath.surface), isEmpty);
     });
   });
 }

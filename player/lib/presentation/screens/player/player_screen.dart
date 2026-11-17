@@ -3122,7 +3122,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // explicit for the transcode-free path where the server sent HDR to a
     // client that claimed it, and the display still needs mapping. No-op on
     // web. Deliberately not applied to the media probe's player.
-    unawaited(applySdrTonemap(player));
+    unawaited(applySdrTonemap(player, path: outputPath));
 
     // Before `open`, deliberately: mpv chooses its audio track while loading
     // the file, so a preference applied afterwards does not reselect and the
