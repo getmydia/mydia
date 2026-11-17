@@ -14,8 +14,9 @@ defmodule Mydia.Streaming.DeviceProfileTest do
       assert "aac" in profile.audio_codecs
     end
 
-    test "allows no HDR format, so an HDR file is never direct play by default" do
-      assert DeviceProfile.browser_default().hdr_formats == []
+    test "claims every HDR token, so a client that declares nothing keeps today's behavior" do
+      assert DeviceProfile.browser_default().hdr_formats ==
+               Mydia.Library.Hdr.profile_format_strings()
     end
   end
 

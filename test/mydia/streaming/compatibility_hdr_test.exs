@@ -86,6 +86,20 @@ defmodule Mydia.Streaming.CompatibilityHdrTest do
     end
   end
 
+  test "the browser default profile never transcodes HDR it was not asked about" do
+    for {codec, container} <- [{"vp9", "webm"}, {"h264", "mp4"}] do
+      attrs = %{codec: codec}
+      sdr = file(attrs, container)
+      hdr = file(Map.put(attrs, :hdr_format, :hdr10), container)
+      browser = DeviceProfile.browser_default()
+
+      assert Compatibility.check_compatibility(hdr, browser, tonemap: @both) ==
+               Compatibility.check_compatibility(sdr, browser, tonemap: @both)
+
+      assert Compatibility.check_compatibility(hdr, browser, tonemap: @both) == :direct_play
+    end
+  end
+
   test "conditions_reject?/3 is true for HDR the client cannot show" do
     assert Compatibility.conditions_reject?(file(%{hdr_format: :hdr10}), profile([]),
              tonemap: @zscale

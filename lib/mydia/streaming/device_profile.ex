@@ -38,14 +38,14 @@ defmodule Mydia.Streaming.DeviceProfile do
   `hdr_formats` is accepted, capped and downcased like the other lists, and the
   legacy spelling "hdr10plus" is mapped to "hdr10+", the vocabulary of
   `Mydia.Library.Hdr.profile_format_strings/0`. `Mydia.Streaming.Compatibility`
-  does not consult the list yet; later work builds enforcement on
-  `Mydia.Library.Hdr.from_media_file/1`.
+  rejects HDR the list does not cover when the server can tonemap it.
   """
 
   use Ecto.Schema
 
   import Ecto.Changeset
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.CodecProfile
 
@@ -87,7 +87,9 @@ defmodule Mydia.Streaming.DeviceProfile do
       containers: ["mp4", "webm", "m4v"],
       video_codecs: ["h264", "h.264", "avc", "avc1", "vp9", "vp09", "av1", "av01"],
       audio_codecs: ["aac", "mp3", "opus", "vorbis"],
-      hdr_formats: []
+      # A client that declares nothing keeps today's behavior: HDR is never
+      # transcoded on its behalf, so claim every token.
+      hdr_formats: Hdr.profile_format_strings()
     }
   end
 
