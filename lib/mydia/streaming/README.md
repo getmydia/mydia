@@ -317,7 +317,31 @@ source.
 Web and Chromecast cannot draw a bitmap subtitle. Burning the track into the
 video during the transcode is their path, and nothing here stands in its way.
 
-## HDR tonemapping: what a real ffmpeg accepts, and what it costs
+## HDR: claims, enforcement and tonemapping
+
+Clients declare the HDR formats they render correctly in their device profile,
+using the tokens `dolby_vision`, `hdr10+`, `hdr10` and `hlg` (the legacy
+`hdr10plus` is normalized to `hdr10+`). "Plays with correct color" is the
+meaning of a claim: a client that lists `hdr10` promises a PQ picture that is
+not washed out. A profile that declares nothing falls back to
+`DeviceProfile.browser_default/0`, which claims every token, so such a client
+keeps direct playing HDR as it did before.
+
+`Compatibility.hdr_rejects?/3` rejects direct play of an HDR file only when the
+client lacks every token the file carries and the server can tonemap that
+format. A server that cannot tonemap it keeps direct play, because a washed-out
+picture is better than no stream. Dolby Vision profile 5 has no
+display-compatible base layer, so only libplacebo counts as able to tonemap it.
+
+`Tonemap.Probe` runs once at boot inside `HardwareAccel` and checks ffmpeg for
+`zscale`, `libplacebo` and VAAPI tonemapping. The result is stored with
+`Tonemap.put_current/1` and logged as one line:
+
+    Tonemapping: zscale true, libplacebo false, vaapi false
+
+Search the server log for `Tonemapping:` to see what the server decided.
+
+### What a real ffmpeg accepts, and what it costs
 
 `test/mydia/streaming/ffmpeg_hdr_tonemap_live_test.exs` runs the software
 (zscale) chain `FfmpegHlsTranscoder.build_ffmpeg_args/3` emits against 1080p

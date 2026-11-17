@@ -321,6 +321,23 @@ the player requires server 0.15.0 (`Compatibility.minServerVersion`), and an
 older server gets the non-dismissible server-update-required verdict. A stream
 start against such a server fails instead of degrading.
 
+### HDR claims
+
+The player tells the server which HDR formats it renders correctly
+(`player/lib/core/player/hdr_claims.dart`); the server direct plays an HDR file
+only to a client that shares a token with it and tonemaps to SDR otherwise.
+
+| Platform | Claims |
+| --- | --- |
+| Desktop, iOS | `hdr10+`, `hdr10`, `hlg` |
+| Android | none, until an on-device check confirms the panel path |
+| Web | `hdr10+` and `hdr10` when the display is HDR capable and the browser reports PQ; `hlg` likewise for HLG |
+
+Native clients drop `dolby_vision` until mpv's `gpu-next` output is in use: with
+`gpu` it reaches only the HDR10 base layer of profile 8 and renders profile 5
+with wrong colors. Every playback Player applies `sdrTonemapMpvOptions`, and the
+stats overlay has an HDR row showing the format and who tonemapped it.
+
 ## Testing
 
 `flutter test` cannot construct a native `Player`, so the screen's playback
