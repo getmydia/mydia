@@ -142,9 +142,13 @@ only when the source is HDR and the session is a transcode.
   bt709, folded together with the scale. It is the only filter that reads the
   RPU.
 - **HDR10, HDR10+, HLG and DV with a base, software tier:** `zscale` to linear
-  light, `format=gbrpf32le`, `zscale=p=bt709`, `tonemap=bt.2390:desat=0`,
+  light, `format=gbrpf32le`, `zscale=p=bt709`, `tonemap=tonemap=hable:desat=0`,
   `zscale=t=bt709:m=bt709:r=tv`, `format=yuv420p`, with the existing
-  `height_expression/1` scale folded in.
+  `height_expression/1` scale folded in. ffmpeg's `tonemap` filter has no
+  BT.2390 curve (that lives in libplacebo and `tonemap_opencl`), so `hable`
+  is the curve here.
+- **HLG** never takes the VAAPI path below: `tonemap_vaapi` is built around
+  HDR10 static metadata.
 - **VAAPI full hardware:** `tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709`
   after `scale_vaapi`, when its probe passed (Intel iHD). Otherwise an HDR
   session drops to the software tier. Mesa has no VA tonemap, and a hybrid
@@ -154,8 +158,10 @@ Output is always 8-bit SDR bt709 H.264, as today.
 
 ### Visibility
 
-The session logs the tonemap path it chose. Stream info carries
-`tonemapped: "server"` and the filter name, for stats for nerds.
+The session logs the tonemap path it chose, including the filter. The
+player does not need it on the wire: an HDR source in a transcode session is
+tonemapped by the server, and in direct play or stream copy by the player, so
+the stats row derives who tonemapped from the playback mode it already has.
 
 ## 3. Client tonemapping and visibility
 
@@ -186,8 +192,7 @@ on the Chromecast with Google TV and compares against a desktop rendering.
 A new HDR row shows:
 
 - the source format, from the media file (`HDR10`, `DV 8.1`, `HLG`), and
-- the rendering: `tonemapped by player`, `tonemapped by server (zscale)` or
-  `(libplacebo)` / `(vaapi)`.
+- the rendering: `tonemapped by player` or `tonemapped by server`.
 
 ## Testing
 
