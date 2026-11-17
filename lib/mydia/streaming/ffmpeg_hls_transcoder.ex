@@ -667,6 +667,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     accel = plan.accel || %AccelArgs{tier: :software, input: [], video: []}
 
     Logger.info("Encoding tier: #{accel.tier}")
+    if accel.tonemap != :none, do: Logger.info("Tonemap: #{accel.tonemap}")
 
     # Use index.m3u8 to match HLS controller expectations
     playlist_path = Path.join(output_dir, "index.m3u8")
