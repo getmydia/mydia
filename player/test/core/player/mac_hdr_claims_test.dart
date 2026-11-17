@@ -46,6 +46,16 @@ void main() {
       expect(await nativeProfileHdrFormats(isMacOS: true), nativeHdrFormats);
     });
 
+    test('a throwing resolver falls back to the native list', () async {
+      expect(
+        await nativeProfileHdrFormats(
+          isMacOS: true,
+          resolvePath: () async => throw StateError('boom'),
+        ),
+        nativeHdrFormats,
+      );
+    });
+
     test('other platforms never consult the resolver', () async {
       var called = false;
       final formats = await nativeProfileHdrFormats(

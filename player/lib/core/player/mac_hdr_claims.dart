@@ -7,6 +7,8 @@
 /// texture does not.
 library;
 
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import 'hdr_claims.dart';
 import 'mac_video_output.dart';
 
@@ -34,13 +36,20 @@ List<String> macHdrFormats(
 /// The HDR claim for a native profile: [macHdrFormats] on macOS, resolving
 /// the path with [resolvePath], and [nativeHdrFormats] anywhere else.
 ///
-/// Without a [resolvePath] macOS claims the texture's list, which is what it
+/// A resolver that throws falls back to [nativeHdrFormats]. Without a [resolvePath] macOS claims the texture's list, which is what it
 /// claimed before the surface existed.
 Future<List<String>> nativeProfileHdrFormats({
   required bool isMacOS,
   Future<VideoOutputPath> Function()? resolvePath,
 }) async {
   if (!isMacOS) return nativeHdrFormats;
-  final path = await resolvePath?.call() ?? VideoOutputPath.texture;
-  return macHdrFormats(path);
+  // Never throws: profile detection is fire-and-forget, and a throw here
+  // would leave macOS with no profile at all.
+  try {
+    final path = await resolvePath?.call() ?? VideoOutputPath.texture;
+    return macHdrFormats(path);
+  } catch (e) {
+    debugPrint('[DeviceProfile] Could not resolve the macOS output path: $e');
+    return nativeHdrFormats;
+  }
 }
