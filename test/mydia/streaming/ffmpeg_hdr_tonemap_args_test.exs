@@ -21,9 +21,21 @@ defmodule Mydia.Streaming.FfmpegHdrTonemapArgsTest do
   @hdr10 %Hdr{base: :hdr10}
   @hlg %Hdr{base: :hlg}
   @dv5 %Hdr{base: nil, dv_profile: 5}
+  @dv8_hdr10 %Hdr{base: :hdr10, dv_profile: 8, bl_compat_id: 1}
+  @dv8_hlg %Hdr{base: :hlg, dv_profile: 8, bl_compat_id: 4}
 
-  @zscale_chain "scale=-2:#{@h},zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709," <>
-                  "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+  @zscale_tail "format=gbrpf32le,zscale=p=bt709," <>
+                 "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+
+  # The first zscale names its input from the Hdr base, so an untagged stream
+  # still has a path from its colourspace to linear light.
+  @zscale_chain "scale=-2:#{@h}," <>
+                  "zscale=tin=smpte2084:pin=bt2020:min=bt2020nc:t=linear:npl=100," <>
+                  @zscale_tail
+
+  @zscale_hlg_chain "scale=-2:#{@h}," <>
+                      "zscale=tin=arib-std-b67:pin=bt2020:min=bt2020nc:t=linear:npl=100," <>
+                      @zscale_tail
 
   defp build(caps, hdr, tonemap) do
     Args.build(caps,
@@ -54,8 +66,21 @@ defmodule Mydia.Streaming.FfmpegHdrTonemapArgsTest do
 
   test "HLG with vaapi on full hardware still uses zscale in software" do
     args = build(@vaapi, @hlg, %Tonemap{zscale: true, vaapi: true})
-    assert vf(args) == @zscale_chain
+    assert vf(args) == @zscale_hlg_chain
     assert args.tier == :software
+  end
+
+  test "HDR10+ states a PQ input like HDR10" do
+    args = build(Capabilities.software("t"), %Hdr{base: :hdr10_plus}, %Tonemap{zscale: true})
+    assert vf(args) == @zscale_chain
+  end
+
+  test "Dolby Vision with a compatible base states that base's input" do
+    assert vf(build(Capabilities.software("t"), @dv8_hdr10, %Tonemap{zscale: true})) ==
+             @zscale_chain
+
+    assert vf(build(Capabilities.software("t"), @dv8_hlg, %Tonemap{zscale: true})) ==
+             @zscale_hlg_chain
   end
 
   test "HDR10 on full hardware with vaapi tonemaps on the GPU" do

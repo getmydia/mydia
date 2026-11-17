@@ -69,7 +69,7 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
       input: input_args(tier, caps.device, method),
       video:
         codec_args(tier, opts) ++
-          filter_args(tier, method, height) ++
+          filter_args(tier, method, height, hdr) ++
           rate_control_args(tier, bitrate, Keyword.get(opts, :crf, 23))
     }
   end
@@ -136,16 +136,21 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
     ["-c:v", "h264_vaapi", "-profile:v", "high", "-g", "60", "-bf", "0"]
   end
 
-  defp filter_args(:software, :zscale, height) do
+  # The first zscale states its input (transfer, primaries, matrix) from the
+  # Hdr base rather than trusting the stream's colour tags: an untagged stream
+  # otherwise fails with "no path between colorspaces". Dolby Vision reaches
+  # this clause only with a compatible base, which is what it is decoded as.
+  defp filter_args(:software, :zscale, height, %Hdr{base: base}) do
     [
       "-vf",
       "scale=-2:#{height_expression(height)}," <>
-        "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709," <>
+        "zscale=tin=#{zscale_transfer_in(base)}:pin=bt2020:min=bt2020nc:t=linear:npl=100," <>
+        "format=gbrpf32le,zscale=p=bt709," <>
         "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
     ]
   end
 
-  defp filter_args(:software, :libplacebo, height) do
+  defp filter_args(:software, :libplacebo, height, _hdr) do
     [
       "-vf",
       "libplacebo=w=-2:h=#{height_expression(height)}:colorspace=bt709:" <>
@@ -154,11 +159,11 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
     ]
   end
 
-  defp filter_args(:software, _method, height) do
+  defp filter_args(:software, _method, height, _hdr) do
     ["-vf", "scale=-2:#{height_expression(height)}"]
   end
 
-  defp filter_args(:full_hardware, :vaapi, height) do
+  defp filter_args(:full_hardware, :vaapi, height, _hdr) do
     [
       "-vf",
       "scale_vaapi=w=-2:h=#{height_expression(height)}," <>
@@ -166,13 +171,16 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
     ]
   end
 
-  defp filter_args(:full_hardware, _method, height) do
+  defp filter_args(:full_hardware, _method, height, _hdr) do
     ["-vf", "scale_vaapi=w=-2:h=#{height_expression(height)}:format=nv12"]
   end
 
-  defp filter_args(:hybrid, _method, height) do
+  defp filter_args(:hybrid, _method, height, _hdr) do
     ["-vf", "scale=-2:#{height_expression(height)},format=nv12,hwupload"]
   end
+
+  defp zscale_transfer_in(:hlg), do: "arib-std-b67"
+  defp zscale_transfer_in(base) when base in [:hdr10, :hdr10_plus], do: "smpte2084"
 
   # `min(h, ih)` clamps against the input height so a rung above the source
   # never upscales. The comma is backslash-escaped because ffmpeg reads a bare

@@ -353,6 +353,11 @@ skip, when ffmpeg lacks `zscale` or `libx265`. The plan only tonemaps when the
 `hdr_format` set; an untagged `MediaFile` reads as SDR and silently runs plain
 `scale`.
 
+The chain's first `zscale` names its input from the `Hdr` base (`tin=smpte2084`
+for HDR10 and HDR10+, `tin=arib-std-b67` for HLG, both `pin=bt2020:min=bt2020nc`)
+instead of reading the stream's colour tags, so a stream that arrives untagged
+does not fail with "no path between colorspaces".
+
 Cost of the zscale chain, measured with `ffmpeg -benchmark` on a 20 s HDR10
 clip, scaled to 720p and encoded with libx264 `-preset medium` (the transcoder's
 default), on a 16-thread desktop CPU. Speed factor is clip length over wall
