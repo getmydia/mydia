@@ -381,8 +381,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// here take the texture path whatever storage says.
   bool _surfaceFailed = false;
 
-  /// Whether the texture path is in use because the surface failed on this
-  /// app version, which the stats panel's Why row reports.
+  /// One-shot: the replay of a playback whose surface could not be set up
+  /// (no view, attach refused) takes the texture. Nothing is recorded, so
+  /// the next playback tries the surface again.
+  bool _textureForNextOpen = false;
+
+  /// Whether the texture path is in use because the surface failed, on this
+  /// app version or for this playback, which the stats panel's Why row
+  /// reports.
   bool _videoOutputFellBack = false;
 
   /// The surface screen's EDR headroom for the stats HDR row, kept only
@@ -2940,6 +2946,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// failed in this screen pins it to the texture, ahead of a test's forced
   /// path and of storage, whose write may not have landed.
   Future<VideoOutputPath> _resolveOutputPath() async {
+    if (_textureForNextOpen) {
+      _textureForNextOpen = false;
+      return VideoOutputPath.texture;
+    }
     if (_surfaceFailed) return VideoOutputPath.texture;
     final forced = widget.outputPath;
     if (forced != null) return forced();
@@ -3043,11 +3053,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Rebuilds this playback on the texture path: same source, same
     // position, a fresh `Player`. Nothing has played yet when it runs.
-    Future<Player> fallBackToTexture() async {
+    //
+    // [record] only when gpu-next itself did not start: that failure holds
+    // for this app version. A view that never appeared or a refused attach
+    // costs this playback only, and the next one tries the surface again.
+    Future<Player> fallBackToTexture({required bool record}) async {
       debugPrint('[PlayerScreen] Surface did not start; using the texture');
-      _surfaceFailed = true;
       _videoOutputFellBack = true;
-      unawaited(recordMacSurfaceFailure(ref));
+      if (record) {
+        _surfaceFailed = true;
+        unawaited(recordMacSurfaceFailure(ref));
+      } else {
+        _textureForNextOpen = true;
+      }
       _stopVerification();
       await _disposePlayer();
       if (superseded() || !mounted) return player;
@@ -3066,7 +3084,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
         return player;
       }
-      if (!attached) return fallBackToTexture();
+      if (!attached) return fallBackToTexture(record: false);
     }
     // Hands the backend the media_kit player so the web backend can reach the
     // underlying HTMLVideoElement. A no-op on native.
@@ -3228,7 +3246,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
         return player;
       }
-      if (!started) return fallBackToTexture();
+      if (!started) return fallBackToTexture(record: true);
     }
     _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {
@@ -5526,9 +5544,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // media_kit runs after dispose. `detach` never throws.
     if (player != null) {
       releaseHlsEngine(player);
-      unawaited((surfaceBinding?.detach() ?? Future<void>.value())
-          .then((_) => player.dispose())
-          .whenComplete(() => releaseHlsEngine(player)));
+      final disposed = surfaceBinding == null
+          ? player.dispose()
+          : surfaceBinding.detach().then((_) => player.dispose());
+      unawaited(disposed.whenComplete(() => releaseHlsEngine(player)));
     }
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();

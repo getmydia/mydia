@@ -45,16 +45,21 @@ const _appVersion = '1.7.0';
 final _log = <String>[];
 
 class _FakeSurface implements MpvSurface {
-  _FakeSurface({this.started = true});
+  _FakeSurface({this.started = true, this.attachError});
 
   /// What [awaitVideoOutput] answers.
   bool started;
+
+  /// Thrown by [attach] when set, the way the plugin refuses (`no-view`).
+  final PlatformException? attachError;
 
   final setOptions = <(int, String, String)>[];
 
   @override
   Future<void> attach(int handle, int viewId) async {
     _log.add('attach $handle');
+    final error = attachError;
+    if (error != null) throw error;
   }
 
   @override
@@ -375,6 +380,44 @@ void main() {
           'not start on this Mac'),
       findsOneWidget,
     );
+
+    await _unmount(tester);
+  });
+
+  testWidgets(
+      'a refused attach falls back to texture for this playback and '
+      'records nothing', (tester) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final players = <_FakePlayer>[];
+    Player next() {
+      final p = _FakePlayer(handleValue: players.isEmpty ? 71 : null);
+      players.add(p);
+      return Player(platformPlayer: p);
+    }
+
+    await _mount(
+      tester,
+      rig,
+      createPlayer: next,
+      surface: _FakeSurface(
+        attachError: PlatformException(code: 'no-view'),
+      ),
+    );
+    await tester.runAsync(() =>
+        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await pumpUntil(tester, _playing);
+
+    expect(find.byType(Video), findsOneWidget);
+    expect(find.byType(PlayerVideoSurface), findsNothing);
+    expect(players[0].opened, isFalse,
+        reason: 'the fallback happens before the surface player opens');
+    expect(_log, containsAllInOrder(['attach 71', 'detach 71', 'dispose 71']));
+    expect(_log, isNot(contains('awaitVideoOutput 71')));
+    await tester.runAsync(() async {
+      expect(await rig.settings.getMacSurfaceFailedVersion(), isNull,
+          reason: 'only gpu-next not starting is a version-wide failure');
+    });
 
     await _unmount(tester);
   });
