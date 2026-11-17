@@ -287,6 +287,8 @@ class MydiaPlaybackSession implements PlaybackSession {
           durationSeconds: data.metadata.duration,
           height: data.metadata.height,
           bitrateBps: data.metadata.bitrate,
+          hdrFormat: data.metadata.hdrFormat,
+          dolbyVisionProfile: data.metadata.dolbyVisionProfile,
           preferredAudioLanguages: data.metadata.preferredAudioLanguages,
         ),
         serverRejected: false,

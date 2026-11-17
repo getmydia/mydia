@@ -20,6 +20,8 @@ class PlanInputs {
     required this.choice,
     this.sourceHeight,
     this.fileBitrateKbps,
+    this.sourceHdrFormat,
+    this.sourceDolbyVisionProfile,
     this.recentStall,
     this.knownFailures = const {},
   });
@@ -35,6 +37,14 @@ class PlanInputs {
 
   /// `streamingCandidates.metadata.bitrate` divided by 1000.
   final int? fileBitrateKbps;
+
+  /// The server's display string for the source's HDR format (`HDR10`,
+  /// `Dolby Vision`), null for SDR. Read only by the stats panel, never by
+  /// the planner.
+  final String? sourceHdrFormat;
+
+  /// The Dolby Vision profile (5, 7, 8) when [sourceHdrFormat] is Dolby Vision.
+  final int? sourceDolbyVisionProfile;
 
   /// The stall remembered against this server on the current link path, if
   /// one is younger than `kStallMemoryTtl`. The caller applies the path and

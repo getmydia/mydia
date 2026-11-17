@@ -51,3 +51,18 @@ VideoControllerConfiguration videoControllerConfigurationFor(
   }
   return const VideoControllerConfiguration();
 }
+
+/// mpv options that make the tonemap of an HDR source to an SDR display
+/// explicit rather than whatever mpv's build defaults to. Applied to the
+/// playback player only (never the probe), on every non-web platform, via
+/// `applySdrTonemap` in `hdr_tonemap.dart`.
+///
+/// - `tone-mapping=bt.2390`: the ITU curve, stable across scenes.
+/// - `hdr-compute-peak=auto`: measure the actual peak so dim HDR is not
+///   crushed.
+/// - `target-trc=srgb`: tonemap to an SDR transfer curve.
+const Map<String, String> sdrTonemapMpvOptions = {
+  'tone-mapping': 'bt.2390',
+  'hdr-compute-peak': 'auto',
+  'target-trc': 'srgb',
+};

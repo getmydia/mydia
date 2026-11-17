@@ -362,4 +362,54 @@ void main() {
     expect(text, isNot(contains('Detail:')));
     expect(text, contains('Playing: Direct play - Original'));
   });
+
+  group('hdr row', () {
+    const hdrContext = StatsContext(
+      mode: PlaybackMode.direct,
+      qualityLabel: 'Original',
+      duration: Duration(minutes: 90),
+      videoLabel: '3840x2160 hevc',
+      hdr: StatsHdr(format: 'HDR10', by: HdrTonemapper.player),
+    );
+
+    test('sits after Video, in compact too, worded by who tonemaps', () {
+      for (final density in StatsDensity.values) {
+        final rows = statsRows(_sample, hdrContext, density);
+        final ids = rows.map((r) => r.id).toList();
+        expect(ids.indexOf(StatsRowId.hdr), ids.indexOf(StatsRowId.video) + 1);
+      }
+      final rows = statsRows(_sample, hdrContext, StatsDensity.full);
+      expect(valueFor(rows, 'HDR'), 'HDR10, tonemapped by player');
+    });
+
+    test('the server wording', () {
+      final rows = statsRows(
+        _sample,
+        const StatsContext(
+          mode: PlaybackMode.transcode,
+          qualityLabel: 'Auto',
+          duration: Duration(minutes: 90),
+          hdr: StatsHdr(format: 'HLG', by: HdrTonemapper.server),
+        ),
+        StatsDensity.full,
+      );
+      expect(valueFor(rows, 'HDR'), 'HLG, tonemapped by server');
+    });
+
+    test('no row and no copy line for an SDR source', () {
+      final rows = statsRows(_sample, _context, StatsDensity.full);
+      expect(rows.any((r) => r.id == StatsRowId.hdr), isFalse);
+      expect(
+        statsClipboardText(_sample, _context, appVersion: '1.0.0'),
+        isNot(contains('HDR:')),
+      );
+    });
+
+    test('the copy text carries the line', () {
+      expect(
+        statsClipboardText(_sample, hdrContext, appVersion: '1.0.0'),
+        contains('HDR: HDR10, tonemapped by player'),
+      );
+    });
+  });
 }

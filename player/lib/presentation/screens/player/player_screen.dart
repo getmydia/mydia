@@ -28,6 +28,7 @@ import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
 import '../../../core/player/image_subtitle_sidecar.dart';
 import '../../../core/player/subtitle_delay.dart';
+import '../../../core/player/hdr_tonemap.dart';
 import '../../../core/player/subtitle_render.dart';
 import '../../../core/player/video_output_config.dart';
 import '../../../core/player/mac_video_output.dart';
@@ -2043,6 +2044,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         choice: QualityChoice.fromRung(_selectedQuality),
         sourceHeight: offer?.height,
         fileBitrateKbps: kbpsFromBitsPerSecond(offer?.bitrateBps),
+        sourceHdrFormat: offer?.hdrFormat,
+        sourceDolbyVisionProfile: offer?.dolbyVisionProfile,
         recentStall: linkPath == null
             ? null
             : memory?.recentStall(serverKey, linkPath, now: DateTime.now()),
@@ -3114,6 +3117,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // while opening is drawn too. See `subtitle_render.dart` for why mpv,
     // not media_kit's overlay, has to draw those.
     unawaited(watchSubtitleRendering(player));
+
+    // Once per `Player`, before `open`: makes mpv's HDR to SDR tonemap
+    // explicit for the transcode-free path where the server sent HDR to a
+    // client that claimed it, and the display still needs mapping. No-op on
+    // web. Deliberately not applied to the media probe's player.
+    unawaited(applySdrTonemap(player));
 
     // Before `open`, deliberately: mpv chooses its audio track while loading
     // the file, so a preference applied afterwards does not reselect and the
@@ -6212,6 +6221,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       knownFailures: _planInputs?.knownFailures ?? const {},
       sourceHeight: _planInputs?.sourceHeight,
       sourceCodec: sourceCodecOf(_planInputs),
+      sourceHdr: sourceHdrOf(_planInputs),
       sourceBitrateKbps: _planInputs?.fileBitrateKbps,
       sourceContainer: sourceContainerOf(_planInputs),
       videoTrack: player?.state.track.video,

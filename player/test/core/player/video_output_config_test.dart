@@ -59,4 +59,12 @@ void main() {
       });
     }
   });
+
+  test('sdrTonemapMpvOptions pins the three tonemap properties', () {
+    expect(sdrTonemapMpvOptions, {
+      'tone-mapping': 'bt.2390',
+      'hdr-compute-peak': 'auto',
+      'target-trc': 'srgb',
+    });
+  });
 }

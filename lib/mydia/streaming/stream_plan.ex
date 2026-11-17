@@ -21,6 +21,7 @@ defmodule Mydia.Streaming.StreamPlan do
   definition and only audio may be converted.
   """
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
   alias Mydia.Streaming.Compatibility
@@ -28,6 +29,7 @@ defmodule Mydia.Streaming.StreamPlan do
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HardwareAccel
   alias Mydia.Streaming.HardwareAccel.Args, as: AccelArgs
+  alias Mydia.Streaming.Tonemap
 
   # Kept in step with FfmpegHlsTranscoder's own audio budget. Only used to
   # report the audio target, never to build arguments.
@@ -44,7 +46,8 @@ defmodule Mydia.Streaming.StreamPlan do
       :from_height,
       :to_width,
       :to_height,
-      :tier
+      :tier,
+      tonemap: :none
     ]
 
     @type t :: %__MODULE__{
@@ -55,7 +58,8 @@ defmodule Mydia.Streaming.StreamPlan do
             from_height: integer() | nil,
             to_width: integer() | nil,
             to_height: integer() | nil,
-            tier: AccelArgs.tier() | nil
+            tier: AccelArgs.tier() | nil,
+            tonemap: AccelArgs.tonemap_method()
           }
   end
 
@@ -110,6 +114,8 @@ defmodule Mydia.Streaming.StreamPlan do
 
           AccelArgs.build(capabilities,
             source_codec: media_file && media_file.codec,
+            hdr: Hdr.from_media_file(media_file),
+            tonemap: Keyword.get_lazy(opts, :tonemap, &Tonemap.current/0),
             max_height: max_height,
             video_bitrate_kbps: video_bitrate_kbps(max_bitrate),
             crf: Keyword.get(opts, :crf, 23),
@@ -144,7 +150,8 @@ defmodule Mydia.Streaming.StreamPlan do
         from_height: from_height,
         to_width: to_width,
         to_height: to_height,
-        tier: accel && accel.tier
+        tier: accel && accel.tier,
+        tonemap: accel_tonemap(accel)
       },
       audio: audio,
       container: :hls_ts,
@@ -193,6 +200,9 @@ defmodule Mydia.Streaming.StreamPlan do
   # selection stands. That is the pre-existing behaviour for an unanalysed
   # file, and the codec the strategy was chosen from is the one it will pick,
   # so a blanket copy is correct there.
+  defp accel_tonemap(nil), do: :none
+  defp accel_tonemap(%AccelArgs{tonemap: tonemap}), do: tonemap
+
   defp remux_audio_compatible?(nil, _opts), do: true
 
   defp remux_audio_compatible?(%StreamInfo{codec: codec}, opts) do

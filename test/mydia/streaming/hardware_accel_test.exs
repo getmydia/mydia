@@ -13,7 +13,18 @@ defmodule Mydia.Streaming.HardwareAccelTest do
 
   defp start_with(caps, opts \\ []) do
     name = :"hwaccel_#{System.unique_integer([:positive])}"
-    opts = Keyword.merge([name: name, probe: fn _ -> caps end, cap: 3], opts)
+
+    opts =
+      Keyword.merge(
+        [
+          name: name,
+          probe: fn _ -> caps end,
+          tonemap_probe: fn _ -> Mydia.Streaming.Tonemap.none() end,
+          cap: 3
+        ],
+        opts
+      )
+
     start_supervised!({HardwareAccel, opts})
     name
   end
@@ -50,6 +61,60 @@ defmodule Mydia.Streaming.HardwareAccelTest do
       name = start_with(@vaapi)
 
       assert HardwareAccel.capabilities(name).backend == :vaapi
+    end
+  end
+
+  describe "tonemap probe" do
+    alias Mydia.Streaming.Tonemap
+
+    setup do
+      on_exit(fn -> :persistent_term.erase({Tonemap, :current}) end)
+    end
+
+    test "stores the probe result, passing the device and backend" do
+      parent = self()
+
+      tonemap_probe = fn opts ->
+        send(parent, {:tonemap_opts, opts})
+        %Tonemap{zscale: true, libplacebo: false, vaapi: true}
+      end
+
+      name = start_with(@vaapi, tonemap_probe: tonemap_probe)
+      HardwareAccel.capabilities(name)
+
+      assert_received {:tonemap_opts, opts}
+      assert opts[:device] == "/dev/dri/renderD128"
+      assert opts[:vaapi?] == true
+      assert Tonemap.current() == %Tonemap{zscale: true, libplacebo: false, vaapi: true}
+    end
+
+    test "a raising probe stores none and does not crash the server" do
+      Tonemap.put_current(%Tonemap{zscale: true})
+
+      name = start_with(@vaapi, tonemap_probe: fn _ -> raise "boom" end)
+
+      assert HardwareAccel.capabilities(name).backend == :vaapi
+      assert Tonemap.current() == Tonemap.none()
+    end
+  end
+
+  describe "tonemap probe exits and throws" do
+    alias Mydia.Streaming.Tonemap
+
+    setup do
+      on_exit(fn -> :persistent_term.erase({Tonemap, :current}) end)
+    end
+
+    for {label, body} <- [exit: quote(do: exit(:boom)), throw: quote(do: throw(:boom))] do
+      test "a probe that does #{label} stores none and keeps the server alive" do
+        Tonemap.put_current(%Tonemap{zscale: true})
+
+        name = start_with(@vaapi, tonemap_probe: fn _ -> unquote(body) end)
+
+        assert HardwareAccel.capabilities(name).backend == :vaapi
+        assert Process.alive?(GenServer.whereis(name))
+        assert Tonemap.current() == Tonemap.none()
+      end
     end
   end
 

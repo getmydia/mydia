@@ -316,3 +316,67 @@ source.
 
 Web and Chromecast cannot draw a bitmap subtitle. Burning the track into the
 video during the transcode is their path, and nothing here stands in its way.
+
+## HDR: claims, enforcement and tonemapping
+
+Clients declare the HDR formats they render correctly in their device profile,
+using the tokens `dolby_vision`, `hdr10+`, `hdr10` and `hlg` (the legacy
+`hdr10plus` is normalized to `hdr10+`). "Plays with correct color" is the
+meaning of a claim: a client that lists `hdr10` promises a PQ picture that is
+not washed out. A profile that declares nothing falls back to
+`DeviceProfile.browser_default/0`, which claims every token, so such a client
+keeps direct playing HDR as it did before.
+
+`Compatibility.hdr_rejects?/3` rejects direct play of an HDR file only when the
+client lacks every token the file carries and the server can tonemap that
+format. A server that cannot tonemap it keeps direct play, because a washed-out
+picture is better than no stream. Dolby Vision profile 5 has no
+display-compatible base layer, so only libplacebo counts as able to tonemap it.
+
+`Tonemap.Probe` runs once at boot inside `HardwareAccel` and checks ffmpeg for
+`zscale`, `libplacebo` and VAAPI tonemapping. The result is stored with
+`Tonemap.put_current/1` and logged as one line:
+
+    Tonemapping: zscale true, libplacebo false, vaapi false
+
+Search the server log for `Tonemapping:` to see what the server decided.
+
+### What a real ffmpeg accepts, and what it costs
+
+`test/mydia/streaming/ffmpeg_hdr_tonemap_live_test.exs` runs the software
+(zscale) chain `FfmpegHlsTranscoder.build_ffmpeg_args/3` emits against 1080p
+HDR10 and HLG clips made by `Mydia.HdrFixture` (HEVC 10-bit mkv, `testsrc2`,
+generated per test, never committed). It asserts the first segment comes out
+`yuv420p`, `bt709` (or untagged) and not `bt2020`. It skips, as a real ExUnit
+skip, when ffmpeg lacks `zscale` or `libx265`. The plan only tonemaps when the
+`MediaFile` says the source is HDR, so the test passes a `%MediaFile{}` with
+`hdr_format` set; an untagged `MediaFile` reads as SDR and silently runs plain
+`scale`.
+
+Cost of the zscale chain, measured with `ffmpeg -benchmark` on a 20 s HDR10
+clip, scaled to 720p and encoded with libx264 `-preset medium` (the transcoder's
+default), on a 16-thread desktop CPU. Speed factor is clip length over wall
+time; higher than 1.0 keeps up with playback.
+
+| Source | plain `scale` | zscale tonemap chain | CPU time (scale / zscale) |
+| --- | --- | --- | --- |
+| 1080p HDR10 | 7.6x (2.6 s) | 3.6x (5.6 s) | 27 s / 53 s |
+| 2160p HDR10 | 3.1x (6.4 s) | 2.5x (7.9 s) | 66 s / 86 s |
+
+At 2160p the HEVC decode dominates, so the tonemap adds less in relative terms,
+but the absolute CPU time of one 4K stream is already around four cores for
+real time. Expect a small NAS to fall below 1.0x. These are synthetic
+`testsrc2` frames; real grain-heavy content decodes slower.
+
+### libplacebo
+
+No locally built Mydia image exists, so the check used `alpine:3.24` with
+`apk add ffmpeg`. Its ffmpeg lists `libplacebo`, but with no GPU Vulkan the
+filter cannot run: `-init_hw_device vulkan` fails with
+`VK_ERROR_INCOMPATIBLE_DRIVER`. Adding `mesa-vulkan-swrast` (lavapipe, a CPU
+Vulkan device) makes it work, and the exact string from `Args`
+(`libplacebo=w=-2:h=720:colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv:tonemapping=bt.2390:apply_dolbyvision=1:format=yuv420p`)
+ran against the 1080p HDR10 clip with exit 0 and no warnings, so ffmpeg accepts
+every option in it. This shows the string is valid, not that it is fast or that
+a real GPU driver behaves the same; the probe decides at boot whether
+`libplacebo` is used.

@@ -10,6 +10,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'android_codec_capabilities.dart';
 import 'device_profile.dart';
+import 'hdr_claims.dart';
 import 'ios_codec_capabilities.dart';
 
 /// What libmpv is built with on every desktop and mobile target Mydia ships.
@@ -67,15 +68,7 @@ const DeviceProfile _staticNativeProfile = DeviceProfile(
     'pcm',
     'alac',
   ],
-  // Naming time bomb: separate in-flight work migrates the server's
-  // hdr_format column to Ecto.Enum [:hdr10, :hdr10_plus, :hlg] plus separate
-  // Dolby Vision profile fields, exposing a future
-  // Mydia.Library.Hdr.profile_tokens/1 seam that returns tokens like
-  // ["dolby_vision", "hdr10"]. "hdr10plus" here will NOT match :hdr10_plus
-  // there. Inert today because HDR is parsed but not enforced (see
-  // DeviceProfile's moduledoc on the server); reconcile against
-  // Hdr.profile_tokens/1 when enforcement is activated.
-  hdrFormats: ['hdr10', 'hdr10plus', 'hlg', 'dolby_vision'],
+  hdrFormats: nativeHdrFormats,
 );
 
 /// Asks mpv what it can decode, falling back to [_staticNativeProfile].
@@ -124,9 +117,15 @@ Future<DeviceProfile> detectDeviceProfile() async {
     '${codecProfiles.isEmpty ? 'none (unconstrained)' : codecProfiles.join(', ')}',
   );
 
-  if (codecProfiles.isEmpty) return profile;
+  // Android claims its own HDR set, not the desktop one: see [androidHdrFormats].
+  if (codecProfiles.isEmpty) {
+    return profile.copyWith(hdrFormats: androidHdrFormats);
+  }
 
-  return profile.copyWith(codecProfiles: codecProfiles);
+  return profile.copyWith(
+    codecProfiles: codecProfiles,
+    hdrFormats: androidHdrFormats,
+  );
 }
 
 Future<DeviceProfile> _probeMpvProfile() async {
