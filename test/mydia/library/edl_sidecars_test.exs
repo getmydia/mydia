@@ -125,8 +125,10 @@ defmodule Mydia.Library.EdlSidecarsTest do
     File.write!(path, @edl)
     EdlSidecars.reconcile_all([mf])
 
-    File.chmod!(path, 0o000)
-    on_exit(fn -> File.chmod(path, 0o644) end)
+    # A directory where the sidecar was fails to read for any user, root
+    # included, unlike a `chmod 000` file.
+    File.rm!(path)
+    File.mkdir!(path)
 
     assert %{errors: [_ | _], reaped: 0} = EdlSidecars.reconcile_all([mf])
     assert length(segments(mf)) == 2

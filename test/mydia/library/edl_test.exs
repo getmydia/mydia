@@ -47,6 +47,11 @@ defmodule Mydia.Library.EdlTest do
       assert Edl.parse("0 2147484 0\n5 10 0") == [{5_000, 10_000}]
     end
 
+    test "drops a time so large the arithmetic would overflow" do
+      assert Edl.parse("0 1.0e308 0\n5 10 0") == [{5_000, 10_000}]
+      assert Edl.parse("1.0e308:00:00 1.0e308:00:01 0\n5 10 0") == [{5_000, 10_000}]
+    end
+
     test "drops negative times" do
       assert Edl.parse("-5 10 0") == []
     end

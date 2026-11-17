@@ -27,6 +27,11 @@ defmodule Mydia.Library.Edl do
   # so such a line is treated like any other unusable one.
   @max_ms 2_147_483_647
 
+  # No single timestamp part may exceed this many units, so the arithmetic
+  # below cannot overflow a float (which raises rather than giving infinity).
+  # Anything this large already fails the `@max_ms` check.
+  @max_part @max_ms / 1000
+
   @doc """
   Returns the file's commercial breaks as `{start_ms, end_ms}` tuples, sorted
   by start, with overlapping or touching ranges merged.
@@ -75,7 +80,7 @@ defmodule Mydia.Library.Edl do
   defp parse_parts(parts) do
     Enum.reduce_while(parts, {:ok, []}, fn part, {:ok, acc} ->
       case Float.parse(part) do
-        {n, ""} when n >= 0 -> {:cont, {:ok, acc ++ [n]}}
+        {n, ""} when n >= 0 and n <= @max_part -> {:cont, {:ok, acc ++ [n]}}
         _ -> {:halt, :error}
       end
     end)
