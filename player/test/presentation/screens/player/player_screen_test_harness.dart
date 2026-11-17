@@ -43,6 +43,9 @@ import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
+import 'package:player/core/player/mac_video_output.dart';
+import 'package:player/core/player/mpv_surface_channel.dart';
+import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/window/player_window_sizer.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
@@ -731,6 +734,9 @@ ProviderContainer buildPlayerScreenContainer({
   Completer<void>? castManagerRequested,
   // The SMB loopback listener whose heals the player recovers from.
   SmbNative? smbNative,
+  // The running app's version as `updateProvider` reports it. Null leaves
+  // the real reader in place, which every test not about versions relies on.
+  String? appVersion,
 }) {
   final creds = harnessCredentials(connectionState);
   final base = testMydiaSourceOver(server, creds: creds, accountId: 'macct');
@@ -743,6 +749,11 @@ ProviderContainer buildPlayerScreenContainer({
       : base;
   return ProviderContainer(overrides: [
     if (smbNative != null) smbNativeProvider.overrideWithValue(smbNative),
+    if (appVersion != null) ...[
+      installedVersionReaderProvider.overrideWithValue(() async => appVersion),
+      updateBackendFactoryProvider
+          .overrideWithValue(({required String currentVersion}) async => null),
+    ],
     mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
     for (final entry in extraSources.entries)
       mediaSourceProvider(entry.key).overrideWithValue(entry.value),
@@ -795,6 +806,8 @@ Future<void> pumpPlayerScreen(
   PlaybackSession? session,
   Player Function()? createPlayer,
   PlayerWindowSizer Function()? createWindowSizer,
+  MpvSurface? surface,
+  VideoOutputPath Function()? outputPath,
 }) async {
   session ??= MydiaPlaybackSession(
     source:
@@ -825,6 +838,8 @@ Future<void> pumpPlayerScreen(
         session: session,
         createPlayer: createPlayer,
         createWindowSizer: createWindowSizer,
+        surface: surface,
+        outputPath: outputPath,
       ),
     ),
   ));

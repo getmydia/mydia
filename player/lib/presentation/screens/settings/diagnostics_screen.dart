@@ -292,7 +292,9 @@ extension on _PlaybackSection {
   }
 }
 
-final _macSurfaceFailedVersionProvider = FutureProvider<String?>(
+// Auto-dispose, so opening Diagnostics re-reads a failure the player
+// recorded since the last visit.
+final _macSurfaceFailedVersionProvider = FutureProvider.autoDispose<String?>(
   (ref) => ref.read(coreSettingsServiceProvider).getMacSurfaceFailedVersion(),
 );
 

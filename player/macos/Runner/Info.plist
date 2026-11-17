@@ -28,6 +28,8 @@
 	<string>MainMenu</string>
 	<key>MydiaCloudKitEnabled</key>
 	<string>$(MYDIA_CLOUDKIT)</string>
+	<key>FLTEnableMergedPlatformUIThread</key>
+	<false/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUFeedURL</key>

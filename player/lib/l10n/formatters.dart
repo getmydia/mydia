@@ -692,6 +692,7 @@ extension AppFormatters on AppLocalizations {
             StatsWhyKind.browserReencodes => statsWhyBrowserReencodes,
             StatsWhyKind.switchedEarlier => statsWhySwitchedEarlier,
             StatsWhyKind.recentStall => statsWhyRecentStall,
+            StatsWhyKind.macSurfaceFallback => statsWhyMacSurfaceFallback,
           },
         StatsWhyCapped(:final rung) => statsWhyQualityCapped(qualityName(rung)),
         StatsWhyRemembered(:final codec) => statsWhyRememberedFailure(codec),

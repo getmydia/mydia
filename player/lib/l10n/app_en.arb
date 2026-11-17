@@ -2149,6 +2149,8 @@
   "@statsWhySwitchedEarlier": {"description": "Stats panel Why row: playback switched to transcoding earlier in this viewing session."},
   "statsWhyRecentStall": "Recent stall on this connection",
   "@statsWhyRecentStall": {"description": "Stats panel Why row: playback stalled recently on this connection, so the quality was capped."},
+  "statsWhyMacSurfaceFallback": "Using the standard video output: the HDR renderer could not start on this Mac",
+  "@statsWhyMacSurfaceFallback": {"description": "Stats panel Why row, macOS only: the HDR video renderer failed to start on this app version, so the player fell back to the standard video output until the app is updated."},
   "statsWhyQualityCapped": "Quality capped to {quality}",
   "@statsWhyQualityCapped": {"description": "Stats panel Why row: the viewer chose a fixed quality such as 720p.", "placeholders": {"quality": {"type": "String"}}},
   "statsWhyRememberedFailure": "Remembered decode failure on {codec}",

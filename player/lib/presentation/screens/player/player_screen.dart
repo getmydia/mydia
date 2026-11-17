@@ -30,6 +30,8 @@ import '../../../core/player/image_subtitle_sidecar.dart';
 import '../../../core/player/subtitle_delay.dart';
 import '../../../core/player/subtitle_render.dart';
 import '../../../core/player/video_output_config.dart';
+import '../../../core/player/mac_video_output.dart';
+import '../../../core/player/mpv_surface_channel.dart';
 import '../../../core/player/video_scaling.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
@@ -83,7 +85,9 @@ import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/cast_chrome_icon.dart';
 import '../../widgets/video_controls/chrome_top_bar.dart';
+import '../../widgets/video_controls/chrome_subtitle_lift.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
+import '../../widgets/video_surface/player_video_surface.dart';
 import '../../widgets/video_controls/playback_chrome.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/video_controls/chrome_panel.dart';
@@ -185,6 +189,15 @@ class PlayerScreen extends ConsumerStatefulWidget {
   @visibleForTesting
   final PlayerWindowSizer Function()? createWindowSizer;
 
+  /// The macOS mpv surface. Null uses the plugin's channels; tests pass a
+  /// recording fake.
+  final MpvSurface? surface;
+
+  /// Picks the video output for each playback. Null decides from the
+  /// platform and settings (`resolveMacVideoOutput`); tests force a path.
+  @visibleForTesting
+  final VideoOutputPath Function()? outputPath;
+
   const PlayerScreen({
     super.key,
     required this.mediaId,
@@ -200,6 +213,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.createPlayer,
     required this.session,
     this.createWindowSizer,
+    this.surface,
+    this.outputPath,
   });
 
   @override
@@ -355,6 +370,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     implements RemotePlayerBinding {
   Player? _player;
   VideoController? _videoController;
+
+  /// The macOS surface holding `_player`'s output, when this playback took
+  /// [VideoOutputPath.surface]. Null on the texture path, which has
+  /// `_videoController` instead; never both.
+  MpvSurfaceBinding? _surfaceBinding;
+
+  /// Set once the surface failed to start in this screen: later playbacks
+  /// here take the texture path whatever storage says.
+  bool _surfaceFailed = false;
+
+  /// Whether the texture path is in use because the surface failed on this
+  /// app version, which the stats panel's Why row reports.
+  bool _videoOutputFellBack = false;
   ProgressReporter? _progressService;
 
   /// Play-to-first-frame marks for this screen's current load. Replaced on
@@ -2879,13 +2907,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (identical(_player, player)) {
       _player = null;
       _videoController = null;
+      final binding = _surfaceBinding;
+      _surfaceBinding = null;
       releaseHlsEngine(player);
+      await binding?.detach();
       await player.dispose();
       // Again, for an `open()` still queued on media_kit's lock: see
       // `releaseHlsEngine`.
       releaseHlsEngine(player);
     }
     return true;
+  }
+
+  /// The video output for the playback about to start. A surface that
+  /// failed in this screen pins it to the texture, ahead of a test's forced
+  /// path and of storage, whose write may not have landed.
+  Future<VideoOutputPath> _resolveOutputPath() async {
+    if (_surfaceFailed) return VideoOutputPath.texture;
+    final forced = widget.outputPath;
+    if (forced != null) return forced();
+    // `ref` is unusable once unmounted; the caller's supersede check then
+    // throws before anything is built.
+    if (!mounted) return VideoOutputPath.texture;
+    final choice = await resolveMacVideoOutput(ref);
+    _videoOutputFellBack = choice.failedEarlier;
+    return choice.path;
   }
 
   /// Shared tail of _initializePlayer: create player, open the media, start
@@ -2945,7 +2991,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // run at all.
     await prepareHlsEngine();
 
-    // Superseded during the await above, before a `Player` exists to hand
+    // Once per playback, and kept for its whole life: flipping the escape
+    // hatch mid-playback applies to the next one.
+    final outputPath = await _resolveOutputPath();
+
+    // Superseded during the awaits above, before a `Player` exists to hand
     // back or dispose. `_disposePlayer` already detached whatever the old
     // load held; creating one here would only leak it, exactly the finding
     // this generation check exists to close (see the doc comment above).
@@ -2954,13 +3004,53 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
     _player = player;
-    _videoController = VideoController(
-      player,
-      configuration: videoControllerConfigurationFor(
-        defaultTargetPlatform,
-        isWeb: kIsWeb,
-      ),
-    );
+    MpvSurfaceBinding? surfaceBinding;
+    if (outputPath == VideoOutputPath.surface) {
+      // No `VideoController` on the surface: it would put media_kit's own
+      // `vo=libmpv` output on the player. The binding mounts the view
+      // (behind the loading view) and attaches before `open`.
+      surfaceBinding = MpvSurfaceBinding(
+        player: player,
+        surface: widget.surface ?? const MpvSurfaceChannel(),
+      );
+      if (mounted) setState(() => _surfaceBinding = surfaceBinding);
+    } else {
+      _videoController = VideoController(
+        player,
+        configuration: videoControllerConfigurationFor(
+          defaultTargetPlatform,
+          isWeb: kIsWeb,
+        ),
+      );
+    }
+
+    // Rebuilds this playback on the texture path: same source, same
+    // position, a fresh `Player`. Nothing has played yet when it runs.
+    Future<Player> fallBackToTexture() async {
+      debugPrint('[PlayerScreen] Surface did not start; using the texture');
+      _surfaceFailed = true;
+      _videoOutputFellBack = true;
+      unawaited(recordMacSurfaceFailure(ref));
+      _stopVerification();
+      await _disposePlayer();
+      if (superseded() || !mounted) return player;
+      return _openPlayerAndStart(
+        mediaSource,
+        httpHeaders,
+        plan: plan,
+        verificationPlan: verificationPlan,
+        isSourceSwitch: isSourceSwitch,
+        loadGeneration: loadGeneration,
+      );
+    }
+
+    if (surfaceBinding != null) {
+      final attached = await surfaceBinding.attach();
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
+      if (!attached) return fallBackToTexture();
+    }
     // Hands the backend the media_kit player so the web backend can reach the
     // underlying HTMLVideoElement. A no-op on native.
     //
@@ -3107,6 +3197,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // stream controllers `dispose()` already closed.
     if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
       return player;
+    }
+    // Only now does mpv know whether the source has video at all, which an
+    // audio-only file needs for the start check not to read as a failure.
+    if (surfaceBinding != null) {
+      final started = await surfaceBinding.awaitVideoOutput();
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
+      if (!started) return fallBackToTexture();
     }
     _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {
@@ -5390,15 +5489,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     _player = null;
     _videoController = null;
+    final surfaceBinding = _surfaceBinding;
+    _surfaceBinding = null;
     // Before `dispose()`, or the hls.js media_kit leaks restarts playback on
     // the detached element, and again once it completes, because an `open()`
     // queued on media_kit's lock can attach a new hls.js after the first
     // release: see `releaseHlsEngine`. `dispose()` cannot be awaited here, so
     // the second release rides its future; a failure surfaces exactly as the
     // bare `dispose()` did.
+    //
+    // The surface detaches first: mpv must destroy its output while the
+    // host view still exists, and outside the `mpv_terminate_destroy`
+    // media_kit runs after dispose. `detach` never throws.
     if (player != null) {
       releaseHlsEngine(player);
-      unawaited(player.dispose().whenComplete(() => releaseHlsEngine(player)));
+      unawaited((surfaceBinding?.detach() ?? Future<void>.value())
+          .then((_) => player.dispose())
+          .whenComplete(() => releaseHlsEngine(player)));
     }
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
@@ -5785,6 +5892,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     _player = null;
     _videoController = null;
+    final surfaceBinding = _surfaceBinding;
+    _surfaceBinding = null;
 
     await _positionSubscription?.cancel();
     _positionSubscription = null;
@@ -5814,6 +5923,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _stopStatsCollector();
 
     if (player != null) releaseHlsEngine(player);
+    // Detach before dispose, as `dispose()` does, for the same reason.
+    await surfaceBinding?.detach();
     await player?.dispose();
     if (player != null) releaseHlsEngine(player);
   }
@@ -5862,10 +5973,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Widget _buildBody() {
+    final surfaceBinding = _surfaceBinding;
+    final subtitleSize =
+        ref.watch(subtitleSizeSettingProvider).value ?? SubtitleSize.medium;
+
     if (_isLoading) {
       final step = _loadingStep;
-      return _withCastAffordance(PlayerLoadingView(
+      final loading = _withCastAffordance(PlayerLoadingView(
           message: step == null ? null : context.l10n.loadingStepText(step)));
+      // The surface's view has to exist while loading: attach waits for it,
+      // and attach comes before `open`.
+      if (surfaceBinding == null) return loading;
+      return PlayerVideoSurface(
+        binding: surfaceBinding,
+        scaling: _scaling,
+        subtitleSize: subtitleSize,
+        overlay: loading,
+      );
     }
 
     if (_error != null) {
@@ -5875,7 +5999,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
-    if (_videoController == null) {
+    final videoController = _videoController;
+    if (videoController == null && surfaceBinding == null) {
       return _withCastAffordance(
         const Center(
           child: CircularProgressIndicator(
@@ -5885,74 +6010,80 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
+    final chrome = playbackChromeBuilder(
+      timeline: _timeline,
+      onSeekToReal: seekToReal,
+      title: widget.title,
+      chromeVisibility: _chromeVisibility,
+      playPauseFocusNode: _osdPlayPauseFocus,
+      chromeFocusNode: _chromeFocusNode,
+      // Remote tier only. Elsewhere the bar is pointer-driven and a
+      // cursor controller would only be something else to keep in sync.
+      scrub: InputCapabilities.directionalPrimary ? _scrub : null,
+      scrubberFocusNode: _scrubberFocus,
+      scrubThumbnails: _scrubThumbnails,
+      onBack: () => popOrGoHome(context),
+      // The chrome's own cast pill. Null on a build that cannot cast at
+      // all, which drops the pill rather than drawing an empty one.
+      castAction: _castSupported ? castChromeActionFor(ref) : null,
+      onCastTap: _showCastDevicePicker,
+      onAudioTap: _showAudioSelector,
+      onSubtitleTap: _showSubtitleSelector,
+      // Hidden when Auto and Original could never differ for this file
+      // (a local file, no plan yet, or a lossy source with no adaptive
+      // ladder), matching how audio disables itself at zero tracks
+      // rather than opening a one-item menu.
+      onQualityTap: qualityControlAvailable(
+              localFile: _isDownloadedSource,
+              plan: _plan,
+              sourceHeight: _planInputs?.sourceHeight)
+          ? _showQualitySelector
+          : null,
+      // Null where no fullscreen route exists, which hides the button
+      // rather than leaving a dead one — matching how `onQualityTap`
+      // above hides itself at a single quality rung.
+      onFullscreenTap: _fullscreen.available.value ? _fullscreen.toggle : null,
+      onAlwaysOnTopTap: _toggleAlwaysOnTop,
+      onScalingTap: _toggleScaling,
+      scaling: _scaling,
+      onPreviousEpisode: _upNext.hasPrevious ? _upNext.playPrevious : null,
+      onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
+      onActivity: _upNext.noteInput,
+      isFullscreen: _fullscreen.isFullscreen.value,
+      isAlwaysOnTop: _isAlwaysOnTop,
+      audioTrackCount: _audioTracks.length,
+      selectedAudioLabel: _selectedAudioTrack == null
+          ? null
+          : context.l10n.audioTrackName(_selectedAudioTrack!),
+      selectedSubtitleLabel: _selectedSubtitleTrack == null
+          ? null
+          : context.l10n.subtitleTrackName(_selectedSubtitleTrack!),
+      selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
+          selected: _selectedQuality, effective: _effectiveQuality)),
+    );
+
     // Video widget fills available space with black background
     // Using SizedBox.expand ensures proper sizing on all platforms
-    final subtitleSize =
-        ref.watch(subtitleSizeSettingProvider).value ?? SubtitleSize.medium;
-    Widget videoPlayer = SizedBox.expand(
-      child: LayoutBuilder(
-        builder: (context, constraints) => Video(
-          subtitleViewConfiguration:
-              subtitleViewConfigurationFor(constraints.biggest, subtitleSize),
-          controller: _videoController!,
-          controls: customVideoControlsBuilderWithCallback(
-            timeline: _timeline,
-            onSeekToReal: seekToReal,
-            title: widget.title,
-            chromeVisibility: _chromeVisibility,
-            playPauseFocusNode: _osdPlayPauseFocus,
-            chromeFocusNode: _chromeFocusNode,
-            // Remote tier only. Elsewhere the bar is pointer-driven and a
-            // cursor controller would only be something else to keep in sync.
-            scrub: InputCapabilities.directionalPrimary ? _scrub : null,
-            scrubberFocusNode: _scrubberFocus,
-            scrubThumbnails: _scrubThumbnails,
-            onBack: () => popOrGoHome(context),
-            // The chrome's own cast pill. Null on a build that cannot cast at
-            // all, which drops the pill rather than drawing an empty one.
-            castAction: _castSupported ? castChromeActionFor(ref) : null,
-            onCastTap: _showCastDevicePicker,
-            onAudioTap: _showAudioSelector,
-            onSubtitleTap: _showSubtitleSelector,
-            // Hidden when Auto and Original could never differ for this file
-            // (a local file, no plan yet, or a lossy source with no adaptive
-            // ladder), matching how audio disables itself at zero tracks
-            // rather than opening a one-item menu.
-            onQualityTap: qualityControlAvailable(
-                    localFile: _isDownloadedSource,
-                    plan: _plan,
-                    sourceHeight: _planInputs?.sourceHeight)
-                ? _showQualitySelector
-                : null,
-            // Null where no fullscreen route exists, which hides the button
-            // rather than leaving a dead one — matching how `onQualityTap`
-            // above hides itself at a single quality rung.
-            onFullscreenTap:
-                _fullscreen.available.value ? _fullscreen.toggle : null,
-            onAlwaysOnTopTap: _toggleAlwaysOnTop,
-            onScalingTap: _toggleScaling,
+    Widget videoPlayer = surfaceBinding != null
+        ? PlayerVideoSurface(
+            binding: surfaceBinding,
             scaling: _scaling,
-            onPreviousEpisode:
-                _upNext.hasPrevious ? _upNext.playPrevious : null,
-            onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
-            onActivity: _upNext.noteInput,
-            isFullscreen: _fullscreen.isFullscreen.value,
-            isAlwaysOnTop: _isAlwaysOnTop,
-            audioTrackCount: _audioTracks.length,
-            selectedAudioLabel: _selectedAudioTrack == null
-                ? null
-                : context.l10n.audioTrackName(_selectedAudioTrack!),
-            selectedSubtitleLabel: _selectedSubtitleTrack == null
-                ? null
-                : context.l10n.subtitleTrackName(_selectedSubtitleTrack!),
-            selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
-                selected: _selectedQuality, effective: _effectiveQuality)),
-          ),
-          fill: Colors.black,
-          fit: _scaling.boxFit,
-        ),
-      ),
-    );
+            subtitleSize: subtitleSize,
+            chrome: chrome,
+          )
+        : SizedBox.expand(
+            child: LayoutBuilder(
+              builder: (context, constraints) => Video(
+                subtitleViewConfiguration: subtitleViewConfigurationFor(
+                    constraints.biggest, subtitleSize),
+                controller: videoController!,
+                controls: (state) => chrome(state.widget.controller.player,
+                    VideoStateSubtitleLift(state)),
+                fill: Colors.black,
+                fit: _scaling.boxFit,
+              ),
+            ),
+          );
 
     // Wrap with gesture controls for mobile
     final player = _player;
@@ -6092,6 +6223,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       linkHealthy: status == null || !status.isRelayConnected,
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
+      videoOutputFellBack: _videoOutputFellBack,
     );
   }
 

@@ -38,6 +38,10 @@ const androidZeroCopyHwdec = 'mediacodec';
 /// mpv deliberately leaves `mediacodec` out of `auto-safe` because it converts
 /// to RGB and its handling of unusual colorspaces is unverified. Every other
 /// platform keeps media_kit's own default.
+///
+/// macOS on the surface path (`mac_video_output.dart`) builds no
+/// `VideoController` and does not use this: `surfaceAttachOptions` sets its
+/// output and decoder instead.
 VideoControllerConfiguration videoControllerConfigurationFor(
   TargetPlatform platform, {
   required bool isWeb,

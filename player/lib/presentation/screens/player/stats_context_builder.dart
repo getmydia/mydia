@@ -46,6 +46,7 @@ StatsContext buildStatsContext({
   required bool linkHealthy,
   StallRecord? recentStall,
   DateTime? now,
+  bool videoOutputFellBack = false,
 }) {
   final mode = _mode(plan, isDownloadedSource);
   // A fallback only explains the *active* plan when the active plan is
@@ -58,17 +59,21 @@ StatsContext buildStatsContext({
       lastFallback != null && plan?.reason == PlanReason.fallbackFromFailure
           ? lastFallback
           : null;
-  final why = _why(
-    plan: plan,
-    mode: mode,
-    lastFallback: activeFallback,
-    selectedQuality: selectedQuality,
-    knownFailures: knownFailures,
-    sourceHeight: sourceHeight,
-    sourceCodec: sourceCodec,
-    recentStall: recentStall,
-    now: now,
-  );
+  // A delivery fallback is about this source and wins; otherwise the video
+  // output falling back is the less obvious fact, and the rarer one.
+  final why = activeFallback == null && videoOutputFellBack
+      ? const StatsWhyPlain(StatsWhyKind.macSurfaceFallback)
+      : _why(
+          plan: plan,
+          mode: mode,
+          lastFallback: activeFallback,
+          selectedQuality: selectedQuality,
+          knownFailures: knownFailures,
+          sourceHeight: sourceHeight,
+          sourceCodec: sourceCodec,
+          recentStall: recentStall,
+          now: now,
+        );
 
   return StatsContext(
     mode: mode,

@@ -15,6 +15,29 @@ const _r1080 = QualityRung(label: '1080p', height: 1080, maxBitrateKbps: 8000);
 const _r720 = QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
 
 void main() {
+  test('a macOS surface fallback is the Why of an otherwise plain play', () {
+    final context = buildStatsContext(
+      plan: const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.original,
+      effectiveQuality: null,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 2160,
+      sourceCodec: 'hevc',
+      sourceBitrateKbps: 30000,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+      videoOutputFellBack: true,
+    );
+
+    expect(context.why, const StatsWhyPlain(StatsWhyKind.macSurfaceFallback));
+  });
+
   test('a direct play plan reports direct, with no Why', () {
     final context = buildStatsContext(
       plan: const DirectPlayPlan(reason: PlanReason.directPlayAccepted),

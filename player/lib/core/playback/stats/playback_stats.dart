@@ -75,6 +75,10 @@ enum StatsWhyKind {
   browserReencodes,
   switchedEarlier,
   recentStall,
+
+  /// macOS: the HDR video surface failed to start on this app version, so
+  /// playback uses media_kit's texture.
+  macSurfaceFallback,
 }
 
 /// Why the panel says the current delivery is not the obvious one, as data.

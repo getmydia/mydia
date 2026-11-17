@@ -568,3 +568,16 @@ Every await in the load path checks `_loadGeneration`, so a slow answer for a
 file the viewer already moved past is dropped instead of landing on the new
 one.
 
+
+## macOS keeps Dart off the main thread
+
+`macos/Runner/Info.plist` sets `FLTEnableMergedPlatformUIThread` to false.
+Flutter 3.47 runs Dart on the macOS main thread by default
+(`FlutterEngine.mm`, `mergedPlatformUIThread = YES` unless that key says
+otherwise), and media_kit calls libmpv synchronously from Dart. mpv's mac
+video output, used by the HDR surface (`player_video_surface.dart`), does
+`DispatchQueue.main.sync` while it is created and destroyed, so a media_kit
+call waiting on mpv's core from the main thread while the output waits on the
+main thread deadlocks. With the threads apart, the main thread stays free for
+mpv. Flutter logs a deprecation warning for the key at startup; if a release
+removes it, the surface needs another answer before upgrading.
