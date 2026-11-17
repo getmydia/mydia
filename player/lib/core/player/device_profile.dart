@@ -34,11 +34,15 @@ class DeviceProfile {
     this.codecProfiles = const [],
   });
 
-  DeviceProfile copyWith({List<CodecProfile>? codecProfiles}) => DeviceProfile(
+  DeviceProfile copyWith({
+    List<CodecProfile>? codecProfiles,
+    List<String>? hdrFormats,
+  }) =>
+      DeviceProfile(
         containers: containers,
         videoCodecs: videoCodecs,
         audioCodecs: audioCodecs,
-        hdrFormats: hdrFormats,
+        hdrFormats: hdrFormats ?? this.hdrFormats,
         codecProfiles: codecProfiles ?? this.codecProfiles,
       );
 
