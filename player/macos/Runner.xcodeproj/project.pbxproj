@@ -22,6 +22,7 @@
 
 /* Begin PBXBuildFile section */
 		331C80D8294CF71000263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C80D7294CF71000263BE5 /* RunnerTests.swift */; };
+		D1A0B0000000000000000008 /* MpvSurfacePluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0B0000000000000000007 /* MpvSurfacePluginTests.swift */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
 		D1A0A0000000000000000002 /* AppMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0A0000000000000000001 /* AppMenu.swift */; };
@@ -29,6 +30,9 @@
 		33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F22044A3C60003C045 /* Assets.xcassets */; };
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
+		D1A0B0000000000000000002 /* MpvApi.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0B0000000000000000001 /* MpvApi.swift */; };
+		D1A0B0000000000000000004 /* MpvHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0B0000000000000000003 /* MpvHostView.swift */; };
+		D1A0B0000000000000000006 /* MpvSurfacePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0B0000000000000000005 /* MpvSurfacePlugin.swift */; };
 		DB1D492815371EB6D1A895FC /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD6C4E9DB1D492815371EB6 /* NativeTabBarPlugin.swift */; };
 		90D2346A848FEEC4E0049A26 /* MydiaSidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39D7F9E90D2346A848FEEC4 /* MydiaSidebarViewController.swift */; };
 		163054AA33AA206F975A977C /* MydiaSplitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F22BC9C1163054AA33AA206F /* MydiaSplitViewController.swift */; };
@@ -70,6 +74,7 @@
 /* Begin PBXFileReference section */
 		331C80D5294CF71000263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		331C80D7294CF71000263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
+		D1A0B0000000000000000007 /* MpvSurfacePluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MpvSurfacePluginTests.swift; sourceTree = "<group>"; };
 		333000ED22D3DE5D00554162 /* Warnings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Warnings.xcconfig; sourceTree = "<group>"; };
 		335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneratedPluginRegistrant.swift; sourceTree = "<group>"; };
 		33CC10ED2044A3C60003C045 /* player.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = player.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -80,6 +85,9 @@
 		33CC10F52044A3C60003C045 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		33CC10F72044A3C60003C045 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Runner/Info.plist; sourceTree = "<group>"; };
 		33CC11122044BFA00003C045 /* MainFlutterWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainFlutterWindow.swift; sourceTree = "<group>"; };
+		D1A0B0000000000000000001 /* MpvApi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MpvApi.swift; sourceTree = "<group>"; };
+		D1A0B0000000000000000003 /* MpvHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MpvHostView.swift; sourceTree = "<group>"; };
+		D1A0B0000000000000000005 /* MpvSurfacePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MpvSurfacePlugin.swift; sourceTree = "<group>"; };
 		EDD6C4E9DB1D492815371EB6 /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
 		B39D7F9E90D2346A848FEEC4 /* MydiaSidebarViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MydiaSidebarViewController.swift; sourceTree = "<group>"; };
 		F22BC9C1163054AA33AA206F /* MydiaSplitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MydiaSplitViewController.swift; sourceTree = "<group>"; };
@@ -129,6 +137,7 @@
 			isa = PBXGroup;
 			children = (
 				331C80D7294CF71000263BE5 /* RunnerTests.swift */,
+				D1A0B0000000000000000007 /* MpvSurfacePluginTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -188,6 +197,16 @@
 			path = Flutter;
 			sourceTree = "<group>";
 		};
+		D1A0B0000000000000000009 /* MpvSurface */ = {
+			isa = PBXGroup;
+			children = (
+				D1A0B0000000000000000001 /* MpvApi.swift */,
+				D1A0B0000000000000000003 /* MpvHostView.swift */,
+				D1A0B0000000000000000005 /* MpvSurfacePlugin.swift */,
+			);
+			path = MpvSurface;
+			sourceTree = "<group>";
+		};
 		33FAB671232836740065AC1E /* Runner */ = {
 			isa = PBXGroup;
 			children = (
@@ -196,6 +215,7 @@
 				D1A0A0000000000000000003 /* CloudKitPlugin.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				EDD6C4E9DB1D492815371EB6 /* NativeTabBarPlugin.swift */,
+				D1A0B0000000000000000009 /* MpvSurface */,
 				B39D7F9E90D2346A848FEEC4 /* MydiaSidebarViewController.swift */,
 				F22BC9C1163054AA33AA206F /* MydiaSplitViewController.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
@@ -459,6 +479,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C80D8294CF71000263BE5 /* RunnerTests.swift in Sources */,
+				D1A0B0000000000000000008 /* MpvSurfacePluginTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -468,6 +489,9 @@
 			files = (
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				DB1D492815371EB6D1A895FC /* NativeTabBarPlugin.swift in Sources */,
+				D1A0B0000000000000000002 /* MpvApi.swift in Sources */,
+				D1A0B0000000000000000004 /* MpvHostView.swift in Sources */,
+				D1A0B0000000000000000006 /* MpvSurfacePlugin.swift in Sources */,
 				90D2346A848FEEC4E0049A26 /* MydiaSidebarViewController.swift in Sources */,
 				163054AA33AA206F975A977C /* MydiaSplitViewController.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
@@ -516,7 +540,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mydia.player.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/player.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/player";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mydia Player.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Mydia Player";
 			};
 			name = Debug;
 		};
@@ -531,7 +555,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mydia.player.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/player.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/player";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mydia Player.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Mydia Player";
 			};
 			name = Release;
 		};
@@ -546,7 +570,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.mydia.player.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/player.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/player";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mydia Player.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Mydia Player";
 			};
 			name = Profile;
 		};
