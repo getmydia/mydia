@@ -46,6 +46,7 @@ const _context = StatsContext(
   hardwareDecode: true,
   audioLabel: 'eac3 5.1 - 48 kHz - eng',
   linkLabel: 'direct p2p - 1 peer',
+  hdr: StatsHdr(format: 'HDR10', by: HdrTonemapper.server),
 );
 
 Future<StatsMetrics> pumpPanel(
