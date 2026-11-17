@@ -30,6 +30,17 @@ void main() {
       expect(segment.endMs, 90000);
     });
 
+    test('parses a commercial break', () {
+      final segment = MediaSegment.fromJson(const {
+        'type': 'COMMERCIAL',
+        'startMs': 600000,
+        'endMs': 720000,
+      });
+
+      expect(segment.type, SegmentType.commercial);
+      expect(segment.actionable, isTrue);
+    });
+
     test('falls back to unknown for an unrecognised type', () {
       final segment = MediaSegment.fromJson(const {
         'type': 'RECAP',
@@ -375,6 +386,19 @@ void main() {
       )));
 
       expect(find.text('Skip Credits'), findsOneWidget);
+    });
+
+    testWidgets('shows the ad label for a commercial segment', (tester) async {
+      await tester.pumpWidget(wrap(button(
+        segment: const MediaSegment(
+          type: SegmentType.commercial,
+          startMs: 600000,
+          endMs: 720000,
+        ),
+        position: const Duration(seconds: 650),
+      )));
+
+      expect(find.text('Skip Ad'), findsOneWidget);
     });
 
     testWidgets('renders nothing for an unrecognised segment type',

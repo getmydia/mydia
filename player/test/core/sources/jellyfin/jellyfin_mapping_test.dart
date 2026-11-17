@@ -271,6 +271,11 @@ void main() {
         'Items': [
           {'Type': 'Intro', 'StartTicks': 10000000, 'EndTicks': 610000000},
           {'Type': 'Recap', 'StartTicks': 0, 'EndTicks': 50000000},
+          {
+            'Type': 'Commercial',
+            'StartTicks': 700000000,
+            'EndTicks': 900000000
+          },
           {'Type': 'Outro', 'StartTicks': 17000000000, 'EndTicks': 18000000000},
           {'Type': 'Intro'},
           42,
@@ -278,6 +283,8 @@ void main() {
       });
       expect(segments, const [
         MediaSegment(type: SegmentType.intro, startMs: 1000, endMs: 61000),
+        MediaSegment(
+            type: SegmentType.commercial, startMs: 70000, endMs: 90000),
         MediaSegment(
             type: SegmentType.credits, startMs: 1700000, endMs: 1800000),
       ]);

@@ -1,5 +1,8 @@
 /// A region of a media file the viewer may want to skip.
-enum SegmentType { intro, credits, unknown }
+///
+/// [commercial] is a commercial break: from an `.edl` sidecar on a Mydia
+/// server, or a Plex or Jellyfin commercial marker.
+enum SegmentType { intro, credits, commercial, unknown }
 
 /// A detected skippable segment, as delivered by the server.
 ///
@@ -91,6 +94,9 @@ class MediaSegment {
       case 'CREDITS':
       case 'credits':
         return SegmentType.credits;
+      case 'COMMERCIAL':
+      case 'commercial':
+        return SegmentType.commercial;
       default:
         return SegmentType.unknown;
     }

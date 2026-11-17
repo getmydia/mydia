@@ -549,6 +549,7 @@
   "downloadNotificationChannelDescription": "Muestra el progreso mientras se descargan archivos multimedia.",
   "segmentSkipIntro": "Saltar intro",
   "segmentSkipCredits": "Saltar créditos",
+  "segmentSkipCommercial": "Saltar anuncio",
   "segmentSkip": "Saltar",
   "pushBlockedByPlayer": "Cierra el reproductor para abrir esto.",
   "pushBlockedByForm": "Termina o cierra antes esta pantalla.",

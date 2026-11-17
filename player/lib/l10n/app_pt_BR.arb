@@ -549,6 +549,7 @@
   "downloadNotificationChannelDescription": "Mostra o progresso durante o download de arquivos de mídia.",
   "segmentSkipIntro": "Pular abertura",
   "segmentSkipCredits": "Pular créditos",
+  "segmentSkipCommercial": "Pular anúncio",
   "segmentSkip": "Pular",
   "pushBlockedByPlayer": "Feche o player para abrir isso.",
   "pushBlockedByForm": "Conclua ou feche esta tela primeiro.",

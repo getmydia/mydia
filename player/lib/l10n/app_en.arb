@@ -1436,6 +1436,8 @@
   "@segmentSkipIntro": {"description": "Button over the video that jumps past the intro."},
   "segmentSkipCredits": "Skip Credits",
   "@segmentSkipCredits": {"description": "Button over the video that jumps past the end credits."},
+  "segmentSkipCommercial": "Skip Ad",
+  "@segmentSkipCommercial": {"description": "Button over the video that jumps past a commercial break marked in the recording."},
   "segmentSkip": "Skip",
   "@segmentSkip": {"description": "Button over the video that skips a marked section whose kind this version does not know."},
   "pushBlockedByPlayer": "Close the player to open this.",
