@@ -196,13 +196,14 @@ defmodule Mydia.Streaming.StreamPlan do
     }
   end
 
+  # A copied stream has no encode arguments and so no tonemap.
+  defp accel_tonemap(nil), do: :none
+  defp accel_tonemap(%AccelArgs{tonemap: tonemap}), do: tonemap
+
   # No stream was selected, so no -map is emitted and ffmpeg's implicit
   # selection stands. That is the pre-existing behaviour for an unanalysed
   # file, and the codec the strategy was chosen from is the one it will pick,
   # so a blanket copy is correct there.
-  defp accel_tonemap(nil), do: :none
-  defp accel_tonemap(%AccelArgs{tonemap: tonemap}), do: tonemap
-
   defp remux_audio_compatible?(nil, _opts), do: true
 
   defp remux_audio_compatible?(%StreamInfo{codec: codec}, opts) do

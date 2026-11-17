@@ -425,7 +425,7 @@ defmodule Mydia.Streaming.CompatibilityTest do
       assert Compatibility.check_compatibility(file) == :direct_play
     end
 
-    test "a profile that lists hdr_formats does not yet constrain playback" do
+    test "Dolby Vision 8.1 direct plays to a client that claims hdr10" do
       # DV 8.1 carries an hdr10 base, so an hdr10 client plays it as-is whatever
       # the server can tonemap. Enforcement itself is covered in
       # compatibility_hdr_test.exs.
