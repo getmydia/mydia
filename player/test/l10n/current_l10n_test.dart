@@ -15,6 +15,11 @@ void main() {
     expect(currentAppLocalizations().navHome, 'Início');
   });
 
+  test('an aliased language formats with its alias', () {
+    rememberInterfaceLocale(const Locale('cnr'));
+    expect(currentAppLocalizations().localeName, 'sr_Latn');
+  });
+
   test('follows the device when nothing was chosen', () {
     rememberInterfaceLocale(null);
     // The test binding's device language is English.

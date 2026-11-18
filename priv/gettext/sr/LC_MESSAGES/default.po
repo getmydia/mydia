@@ -1711,6 +1711,7 @@ msgid "%{count} recovery code left"
 msgid_plural "%{count} recovery codes left"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/layouts.ex:607
 #, elixir-autogen, elixir-format
@@ -1718,6 +1719,7 @@ msgid "and %{count} earlier release"
 msgid_plural "and %{count} earlier releases"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/user_auth.ex:473
 #, elixir-autogen, elixir-format
@@ -1725,6 +1727,7 @@ msgid "Feedback is rate limited. Try again in %{count} second."
 msgid_plural "Feedback is rate limited. Try again in %{count} seconds."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/user_auth.ex:481
 #, elixir-autogen, elixir-format
@@ -1732,6 +1735,7 @@ msgid "Feedback is rate limited. Try again in about %{count} minute."
 msgid_plural "Feedback is rate limited. Try again in about %{count} minutes."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.html.heex:208
 #, elixir-autogen, elixir-format
@@ -1744,6 +1748,7 @@ msgid "%{count} available"
 msgid_plural "%{count} available"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/labels.ex:71
 #, elixir-autogen, elixir-format
@@ -1751,6 +1756,7 @@ msgid "%{count} conflicting match"
 msgid_plural "%{count} conflicting matches"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/activity_live/index.ex:356
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:513
@@ -1762,6 +1768,7 @@ msgid "%{count} day ago"
 msgid_plural "%{count} days ago"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/messages.ex:23
 #, elixir-autogen, elixir-format
@@ -1769,6 +1776,7 @@ msgid "%{count} dismissed"
 msgid_plural "%{count} dismissed"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/messages.ex:27
 #, elixir-autogen, elixir-format
@@ -1776,6 +1784,7 @@ msgid "%{count} dismissed, %{skipped} skipped"
 msgid_plural "%{count} dismissed, %{skipped} skipped"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:387
 #, elixir-autogen, elixir-format
@@ -1783,6 +1792,7 @@ msgid "%{count} download"
 msgid_plural "%{count} downloads"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/issue_components.ex:425
 #, elixir-autogen, elixir-format
@@ -1790,6 +1800,7 @@ msgid "%{count} download references '%{client}', which Mydia is no longer tracki
 msgid_plural "%{count} downloads reference '%{client}', which Mydia is no longer tracking"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_settings_live/components.ex:176
 #: lib/mydia_web/live/media_live/show/rescan_results.ex:241
@@ -1798,6 +1809,7 @@ msgid "%{count} error"
 msgid_plural "%{count} errors"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/indexer_components.ex:107
 #, elixir-autogen, elixir-format
@@ -1805,6 +1817,7 @@ msgid "%{count} failed"
 msgid_plural "%{count} failed"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:437
 #: lib/mydia_web/live/import_media_live/components.ex:382
@@ -1815,6 +1828,7 @@ msgid "%{count} file"
 msgid_plural "%{count} files"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:143
 #, elixir-autogen, elixir-format
@@ -1822,6 +1836,7 @@ msgid "%{count} file already matches"
 msgid_plural "All %{count} files already match"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/rescan_results.ex:229
 #, elixir-autogen, elixir-format
@@ -1829,6 +1844,7 @@ msgid "%{count} file could not be read"
 msgid_plural "%{count} files could not be read"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/labels.ex:80
 #, elixir-autogen, elixir-format
@@ -1836,6 +1852,7 @@ msgid "%{count} file couldn't import"
 msgid_plural "%{count} files couldn't import"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/dashboard_live/health_components.ex:200
 #, elixir-autogen, elixir-format
@@ -1843,6 +1860,7 @@ msgid "%{count} file · %{size}"
 msgid_plural "%{count} files · %{size}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/activity_live/index.ex:438
 #, elixir-autogen, elixir-format
@@ -1850,6 +1868,7 @@ msgid "%{count} genre"
 msgid_plural "%{count} genres"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/components.ex:213
 #, elixir-autogen, elixir-format
@@ -1857,6 +1876,7 @@ msgid "%{count} group selected"
 msgid_plural "%{count} groups selected"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/activity_live/index.ex:353
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:510
@@ -1867,6 +1887,7 @@ msgid "%{count} hour ago"
 msgid_plural "%{count} hours ago"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:85
 #, elixir-autogen, elixir-format
@@ -1879,6 +1900,7 @@ msgid "%{count} indexer paused by Prowlarr"
 msgid_plural "%{count} indexers paused by Prowlarr"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/collection_components.ex:170
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:439
@@ -1892,6 +1914,7 @@ msgid "%{count} item"
 msgid_plural "%{count} items"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.ex:479
 #, elixir-autogen, elixir-format
@@ -1899,6 +1922,7 @@ msgid "%{count} item retried"
 msgid_plural "%{count} items retried"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index.html.heex:1164
 #, elixir-autogen, elixir-format
@@ -1906,6 +1930,7 @@ msgid "%{count} item selected"
 msgid_plural "%{count} items selected"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:10
 #, elixir-autogen, elixir-format
@@ -1913,6 +1938,7 @@ msgid "%{count} item set to monitored"
 msgid_plural "%{count} items set to monitored"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:13
 #, elixir-autogen, elixir-format
@@ -1920,6 +1946,7 @@ msgid "%{count} item set to unmonitored"
 msgid_plural "%{count} items set to unmonitored"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index.ex:833
 #, elixir-autogen, elixir-format
@@ -1927,6 +1954,7 @@ msgid "%{count} item updated successfully"
 msgid_plural "%{count} items updated successfully"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/activity_live/index.ex:443
 #: lib/mydia_web/live/activity_live/index.ex:448
@@ -1935,6 +1963,7 @@ msgid "%{count} member"
 msgid_plural "%{count} members"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:507
 #: lib/mydia_web/live/devices_live/components.ex:349
@@ -1943,6 +1972,7 @@ msgid "%{count} min ago"
 msgid_plural "%{count} min ago"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/activity_live/index.ex:350
 #: lib/mydia_web/relative_time.ex:38
@@ -1951,6 +1981,7 @@ msgid "%{count} minute ago"
 msgid_plural "%{count} minutes ago"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/season_components.ex:540
 #, elixir-autogen, elixir-format
@@ -1958,6 +1989,7 @@ msgid "%{count} missing"
 msgid_plural "%{count} missing"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:75
 #, elixir-autogen, elixir-format
@@ -1975,6 +2007,7 @@ msgid "%{count} new episode"
 msgid_plural "%{count} new episodes"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/indexer_components.ex:114
 #, elixir-autogen, elixir-format
@@ -1982,6 +2015,7 @@ msgid "%{count} paused"
 msgid_plural "%{count} paused"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:267
 #, elixir-autogen, elixir-format
@@ -1989,6 +2023,7 @@ msgid "%{count} peer"
 msgid_plural "%{count} peers"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:80
 #, elixir-autogen, elixir-format
@@ -2001,6 +2036,7 @@ msgid "%{count} request awaiting review"
 msgid_plural "%{count} requests awaiting review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/search_live/index.html.heex:242
 #, elixir-autogen, elixir-format
@@ -2008,6 +2044,7 @@ msgid "%{count} result for \"%{query}\""
 msgid_plural "%{count} results for \"%{query}\""
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/indexer_components.ex:91
 #, elixir-autogen, elixir-format
@@ -2015,6 +2052,7 @@ msgid "%{count} result · %{done}/%{total} indexers"
 msgid_plural "%{count} results · %{done}/%{total} indexers"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/indexer_components.ex:205
 #, elixir-autogen, elixir-format
@@ -2022,6 +2060,7 @@ msgid "%{count} result · %{duration}ms"
 msgid_plural "%{count} results · %{duration}ms"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/messages.ex:11
 #, elixir-autogen, elixir-format
@@ -2029,6 +2068,7 @@ msgid "%{count} retried"
 msgid_plural "%{count} retried"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/messages.ex:15
 #, elixir-autogen, elixir-format
@@ -2036,6 +2076,7 @@ msgid "%{count} retried, %{skipped} skipped"
 msgid_plural "%{count} retried, %{skipped} skipped"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/components/trending_detail_modal.ex:518
 #: lib/mydia_web/live/media_live/show/components.ex:358
@@ -2044,6 +2085,7 @@ msgid "%{count} season"
 msgid_plural "%{count} seasons"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/formatters.ex:144
 #, elixir-autogen, elixir-format
@@ -2056,6 +2098,7 @@ msgid "%{count} seeder"
 msgid_plural "%{count} seeders"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/components.ex:244
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:69
@@ -2064,6 +2107,7 @@ msgid "%{count} selected"
 msgid_plural "%{count} selected"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/list_components.ex:34
 #, elixir-autogen, elixir-format
@@ -2071,6 +2115,7 @@ msgid "%{count} stalled"
 msgid_plural "%{count} stalled"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/dashboard_live/health_components.ex:167
 #, elixir-autogen, elixir-format
@@ -2078,6 +2123,7 @@ msgid "%{count} to review"
 msgid_plural "%{count} to review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/components.ex:369
 #, elixir-autogen, elixir-format
@@ -2085,6 +2131,7 @@ msgid "%{count} total"
 msgid_plural "%{count} total"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:165
 #, elixir-autogen, elixir-format
@@ -2097,6 +2144,7 @@ msgid "%{count} upcoming"
 msgid_plural "%{count} upcoming"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/seeding_components.ex:254
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:202
@@ -2485,6 +2533,7 @@ msgid "Accept %{count}"
 msgid_plural "Accept %{count}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/devices_live/components.ex:106
 #, elixir-autogen, elixir-format
@@ -2648,6 +2697,7 @@ msgid "Added %{count} item to %{name}"
 msgid_plural "Added %{count} items to %{name}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index.html.heex:280
 #, elixir-autogen, elixir-format
@@ -2849,6 +2899,7 @@ msgid "Also deletes %{count} file outside these folders."
 msgid_plural "Also deletes %{count} files outside these folders."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.html.heex:763
 #, elixir-autogen, elixir-format
@@ -2923,6 +2974,7 @@ msgid "Applied '%{preset}' monitoring to %{count} episode"
 msgid_plural "Applied '%{preset}' monitoring to %{count} episodes"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index.html.heex:1114
 #, elixir-autogen, elixir-format
@@ -3241,6 +3293,7 @@ msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{
 msgid_plural "Cancelling. This release was stalled, so Mydia won't grab it again for %{count} days."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/download_events.ex:93
 #, elixir-autogen, elixir-format
@@ -3419,6 +3472,7 @@ msgid "Clear %{count} download from '%{client}'? This removes the record from My
 msgid_plural "Clear %{count} downloads from '%{client}'? This removes the records from Mydia only."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/devices_live/components.ex:228
 #, elixir-autogen, elixir-format
@@ -3486,6 +3540,7 @@ msgid "Cleared %{count} download referencing '%{client}'"
 msgid_plural "Cleared %{count} downloads referencing '%{client}'"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/messages.ex:17
 #, elixir-autogen, elixir-format
@@ -3493,6 +3548,7 @@ msgid "Cleared %{count} scan result. Dismissed decisions are preserved."
 msgid_plural "Cleared %{count} scan results. Dismissed decisions are preserved."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.ex:576
 #, elixir-autogen, elixir-format
@@ -3500,6 +3556,7 @@ msgid "Clearing %{count} completed download"
 msgid_plural "Clearing %{count} completed downloads"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.ex:570
 #, elixir-autogen, elixir-format
@@ -3507,6 +3564,7 @@ msgid "Clearing %{count} completed download and deleting its files from disk"
 msgid_plural "Clearing %{count} completed downloads and deleting their files from disk"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show.html.heex:262
 #: lib/mydia_web/live/media_live/show/components.ex:262
@@ -4151,6 +4209,7 @@ msgid "Created %{title} and linked %{linked} of %{count} file. %{remaining} had 
 msgid_plural "Created %{title} and linked %{linked} of %{count} files. %{remaining} had no episode number."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/index.ex:609
 #, elixir-autogen, elixir-format
@@ -4276,6 +4335,7 @@ msgid "Delete %{count} Item?"
 msgid_plural "Delete %{count} Items?"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/components.ex:578
 #, elixir-autogen, elixir-format
@@ -4367,6 +4427,7 @@ msgid "Deletes %{count} file. It sits directly in a library folder, so no folder
 msgid_plural "Deletes %{count} files. They sit directly in a library folder, so no folder is removed."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/library_components.ex:298
 #, elixir-autogen, elixir-format
@@ -4384,6 +4445,7 @@ msgid "Deleting %{count} file in the background."
 msgid_plural "Deleting %{count} files in the background."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/index.ex:473
 #, elixir-autogen, elixir-format
@@ -4496,6 +4558,7 @@ msgid "Dismissed %{count} group."
 msgid_plural "Dismissed %{count} groups."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/section_live/new.ex:42
 #, elixir-autogen, elixir-format
@@ -4722,6 +4785,7 @@ msgid "Editing %{count} item. Only fields you change will be updated."
 msgid_plural "Editing %{count} items. Only fields you change will be updated."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/feedback_components.ex:90
 #, elixir-autogen, elixir-format
@@ -5360,6 +5424,7 @@ msgid "Found %{count} new file"
 msgid_plural "Found %{count} new files"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/components.ex:418
 #, elixir-autogen, elixir-format
@@ -5657,6 +5722,7 @@ msgid "Import queued for %{count} file"
 msgid_plural "Import queued for %{count} files"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.ex:417
 #, elixir-autogen, elixir-format
@@ -6039,6 +6105,7 @@ msgid "Mapping added. Retrying %{count} affected download."
 msgid_plural "Mapping added. Retrying %{count} affected downloads."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/components.ex:651
 #, elixir-autogen, elixir-format
@@ -6277,6 +6344,7 @@ msgid "Monitoring disabled for %{count} episode in Season %{season}"
 msgid_plural "Monitoring disabled for %{count} episodes in Season %{season}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/library_actions.ex:52
 #: lib/mydia_web/live/media_live/show/episode_events.ex:38
@@ -6290,6 +6358,7 @@ msgid "Monitoring enabled for %{count} episode in Season %{season}"
 msgid_plural "Monitoring enabled for %{count} episodes in Season %{season}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_plugins_live/components.ex:55
 #: lib/mydia_web/live/media_live/show/components.ex:631
@@ -6537,6 +6606,7 @@ msgid "No changes - %{count} item has category override"
 msgid_plural "No changes - %{count} items have category override"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/collection_components.ex:744
 #: lib/mydia_web/live/collection_live/index.ex:137
@@ -6939,6 +7009,7 @@ msgid "Nothing queued. %{count} group has nothing to import from."
 msgid_plural "Nothing queued. %{count} groups have nothing to import from."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/messages.ex:13
 #, elixir-autogen, elixir-format
@@ -7200,6 +7271,7 @@ msgid "Partly synced: %{count} error"
 msgid_plural "Partly synced: %{count} errors"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_library_paths_live/library_path_modal_components.ex:69
 #: lib/mydia_web/live/media_live/show/components.ex:297
@@ -7245,6 +7317,7 @@ msgid "Permanently delete %{count} file in %{groups} groups from disk? This cann
 msgid_plural "Permanently delete %{count} files in %{groups} groups from disk? This cannot be undone."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/labels.ex:20
 #, elixir-autogen, elixir-format
@@ -7252,6 +7325,7 @@ msgid "Permanently delete %{count} file in 1 group from disk? This cannot be und
 msgid_plural "Permanently delete %{count} files in 1 group from disk? This cannot be undone."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/components.ex:582
 #, elixir-autogen, elixir-format
@@ -7552,6 +7626,7 @@ msgid "Queued %{count} group for import."
 msgid_plural "Queued %{count} groups for import."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/messages.ex:43
 #, elixir-autogen, elixir-format
@@ -7559,6 +7634,7 @@ msgid "Queued %{count} group for import. %{skipped} skipped, nothing to import f
 msgid_plural "Queued %{count} groups for import. %{skipped} skipped, nothing to import from."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/index.ex:442
 #, elixir-autogen, elixir-format
@@ -7566,6 +7642,7 @@ msgid "Queued %{count} group for re-matching."
 msgid_plural "Queued %{count} groups for re-matching."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:27
 #, elixir-autogen, elixir-format
@@ -7573,6 +7650,7 @@ msgid "Queued %{count} search"
 msgid_plural "Queued %{count} searches"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:39
 #, elixir-autogen, elixir-format
@@ -7580,6 +7658,7 @@ msgid "Queued %{count} search, skipped %{skipped} that do not need one"
 msgid_plural "Queued %{count} searches, skipped %{skipped} that do not need one"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/messages.ex:31
 #, elixir-autogen, elixir-format
@@ -7587,6 +7666,7 @@ msgid "Queued %{count} search, skipped 1 that does not need one"
 msgid_plural "Queued %{count} searches, skipped 1 that does not need one"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/dashboard_live/index.html.heex:113
 #, elixir-autogen, elixir-format
@@ -7734,6 +7814,7 @@ msgid "Re-scanned %{count} file in Season %{number}, %{failed} failed"
 msgid_plural "Re-scanned %{count} files in Season %{number}, %{failed} failed"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/file_events.ex:362
 #, elixir-autogen, elixir-format
@@ -7839,6 +7920,7 @@ msgid "Reclassified %{count} item"
 msgid_plural "Reclassified %{count} items"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index/reclassify_flash.ex:14
 #, elixir-autogen, elixir-format
@@ -7846,6 +7928,7 @@ msgid "Reclassified %{count} item, %{skipped} skipped (category override)"
 msgid_plural "Reclassified %{count} items, %{skipped} skipped (category override)"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/plugin_instance_components.ex:141
 #: lib/mydia_web/components/plugin_instance_components.ex:265
@@ -7883,6 +7966,7 @@ msgid "Refreshed %{count} file, %{failed} failed"
 msgid_plural "Refreshed %{count} files, %{failed} failed"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/components.ex:138
 #, elixir-autogen, elixir-format
@@ -8029,6 +8113,7 @@ msgid "Removed %{count} inactive device."
 msgid_plural "Removed %{count} inactive devices."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/collection_events.ex:87
 #, elixir-autogen, elixir-format
@@ -8061,6 +8146,7 @@ msgid "Removing %{count} download"
 msgid_plural "Removing %{count} downloads"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/search_live/index.html.heex:228
 #, elixir-autogen, elixir-format
@@ -8094,6 +8180,7 @@ msgid "Renamed %{count} file, %{failed} failed"
 msgid_plural "Renamed %{count} files, %{failed} failed"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:106
 #, elixir-autogen, elixir-format
@@ -8194,6 +8281,7 @@ msgid "Restore %{count}"
 msgid_plural "Restore %{count}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/index.ex:432
 #, elixir-autogen, elixir-format
@@ -8201,6 +8289,7 @@ msgid "Restored %{count} group to pending."
 msgid_plural "Restored %{count} groups to pending."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/index.ex:658
 #, elixir-autogen, elixir-format
@@ -8248,6 +8337,7 @@ msgid "Retries %{count} download"
 msgid_plural "Retries %{count} downloads"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/discover_components.ex:510
 #: lib/mydia_web/components/indexer_components.ex:160
@@ -8305,6 +8395,7 @@ msgid "Returned %{count} group to review."
 msgid_plural "Returned %{count} groups to review."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/import_media_live/index.html.heex:32
 #, elixir-autogen, elixir-format
@@ -8513,6 +8604,7 @@ msgid "Search complete: %{count} indexer searched, no results found"
 msgid_plural "Search complete: %{count} indexers searched, no results found"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/messages.ex:19
 #, elixir-autogen, elixir-format
@@ -8867,6 +8959,7 @@ msgid "Select all %{count} matching this filter"
 msgid_plural "Select all %{count} matching this filter"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.ex:942
 #, elixir-autogen, elixir-format
@@ -8998,6 +9091,7 @@ msgid "Show %{count} more device"
 msgid_plural "Show %{count} more devices"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:218
 #, elixir-autogen, elixir-format
@@ -9355,6 +9449,7 @@ msgid "Successfully re-scanned %{count} file in Season %{number}"
 msgid_plural "Successfully re-scanned %{count} files in Season %{number}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/file_events.ex:688
 #, elixir-autogen, elixir-format
@@ -9362,6 +9457,7 @@ msgid "Successfully refreshed %{count} file"
 msgid_plural "Successfully refreshed %{count} files"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/rename_events.ex:70
 #, elixir-autogen, elixir-format
@@ -9369,6 +9465,7 @@ msgid "Successfully renamed %{count} file"
 msgid_plural "Successfully renamed %{count} files"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/dashboard_live/edit_home_components.ex:151
 #, elixir-autogen, elixir-format
@@ -9386,6 +9483,7 @@ msgid "Switched to %{ordering} — %{count} episode remapped."
 msgid_plural "Switched to %{ordering} — %{count} episodes remapped."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/file_events.ex:149
 #, elixir-autogen, elixir-format
@@ -9756,6 +9854,7 @@ msgid "This clears %{count} completed download from the queue and removes it fro
 msgid_plural "This clears %{count} completed downloads from the queue and removes them from the download client."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/index.html.heex:698
 #, elixir-autogen, elixir-format
@@ -9843,6 +9942,7 @@ msgid "This permanently deletes files for %{count} download from disk. This cann
 msgid_plural "This permanently deletes files for %{count} downloads from disk. This cannot be undone."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index.html.heex:42
 #, elixir-autogen, elixir-format
@@ -9880,6 +9980,7 @@ msgid "This will queue searches for %{count} selected item. Searches run two at 
 msgid_plural "This will queue searches for %{count} selected items. Searches run two at a time, so a batch this size can take hours of indexer requests to work through."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/devices_live/components.ex:211
 #, elixir-autogen, elixir-format
@@ -9887,6 +9988,7 @@ msgid "This will remove %{count} inactive device. It will need to be paired agai
 msgid_plural "This will remove %{count} inactive devices. They will need to be paired again to reconnect."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/activity_live/index.html.heex:49
 #, elixir-autogen, elixir-format
@@ -10828,6 +10930,7 @@ msgid "moved %{count} file to trash"
 msgid_plural "moved %{count} files to trash"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/downloads_live/list_components.ex:62
 #, elixir-autogen, elixir-format
@@ -10895,6 +10998,7 @@ msgid "refreshed metadata for %{count} file"
 msgid_plural "refreshed metadata for %{count} files"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/indexer_components.ex:201
 #, elixir-autogen, elixir-format
@@ -10907,6 +11011,7 @@ msgid "sent %{count} file to Import for review"
 msgid_plural "sent %{count} files to Import for review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/library_components.ex:95
 #, elixir-autogen, elixir-format
@@ -11797,6 +11902,7 @@ msgid "%{count} selected"
 msgid_plural "%{count} selected"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/index.html.heex:894
 #, elixir-autogen, elixir-format
@@ -12037,6 +12143,7 @@ msgid "%{count} account"
 msgid_plural "%{count} accounts"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_media_servers_live/account_mapping_components.ex:152
 #, elixir-autogen, elixir-format
@@ -12044,6 +12151,7 @@ msgid "%{count} account found"
 msgid_plural "%{count} accounts found"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_indexers_live/components.ex:198
 #, elixir-autogen, elixir-format
@@ -12051,6 +12159,7 @@ msgid "%{count} consecutive failure"
 msgid_plural "%{count} consecutive failures"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/index.ex:374
 #, elixir-autogen, elixir-format
@@ -12058,6 +12167,7 @@ msgid "%{count} could not be deleted."
 msgid_plural "%{count} could not be deleted."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/index.ex:598
 #, elixir-autogen, elixir-format
@@ -12065,6 +12175,7 @@ msgid "%{count} could not be moved."
 msgid_plural "%{count} could not be moved."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/index.ex:366
 #, elixir-autogen, elixir-format
@@ -12072,6 +12183,7 @@ msgid "%{count} could not be restored."
 msgid_plural "%{count} could not be restored."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:117
 #, elixir-autogen, elixir-format
@@ -12079,6 +12191,7 @@ msgid "%{count} device online"
 msgid_plural "%{count} devices online"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_download_clients_live/components.ex:172
 #, elixir-autogen, elixir-format
@@ -12086,6 +12199,7 @@ msgid "%{count} download is still waiting on this client. Deleting it will not s
 msgid_plural "%{count} downloads are still waiting on this client. Deleting it will not stop them in the client itself, and the ones still in flight move to the Issues tab where you can clear them. If you re-add a client holding these same torrents, Mydia picks them back up automatically."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_dashboard_live/plays_chart_components.ex:99
 #, elixir-autogen, elixir-format
@@ -12093,6 +12207,7 @@ msgid "%{count} episode"
 msgid_plural "%{count} episodes"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/index.ex:236
 #, elixir-autogen, elixir-format
@@ -12100,6 +12215,7 @@ msgid "%{count} file could not be restored."
 msgid_plural "%{count} files could not be restored."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/review_components.ex:310
 #, elixir-autogen, elixir-format
@@ -12107,6 +12223,7 @@ msgid "%{count} file has no duration, so it cannot be compared. Run analysis fir
 msgid_plural "%{count} files have no duration, so they cannot be compared. Run analysis first."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/components.ex:407
 #, elixir-autogen, elixir-format
@@ -12114,6 +12231,7 @@ msgid "%{count} file in the trash directory that nothing will purge"
 msgid_plural "%{count} files in the trash directory that nothing will purge"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_system_live/components.ex:27
 #, elixir-autogen, elixir-format
@@ -12121,6 +12239,7 @@ msgid "%{count} file is stuck mid-upgrade"
 msgid_plural "%{count} files are stuck mid-upgrade"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/misfiled_component.ex:246
 #, elixir-autogen, elixir-format
@@ -12128,6 +12247,7 @@ msgid "%{count} file of %{total} flagged"
 msgid_plural "%{count} files of %{total} flagged"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/components.ex:121
 #, elixir-autogen, elixir-format
@@ -12135,6 +12255,7 @@ msgid "%{count} file tracked, using %{size}."
 msgid_plural "%{count} files tracked, using %{size}."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/components.ex:358
 #, elixir-autogen, elixir-format
@@ -12142,6 +12263,7 @@ msgid "%{count} file, reclaiming %{size}."
 msgid_plural "%{count} files, reclaiming %{size}."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/index.ex:358
 #, elixir-autogen, elixir-format
@@ -12149,6 +12271,7 @@ msgid "%{count} had an occupied library path, so the trashed copy was kept."
 msgid_plural "%{count} had an occupied library path, so the trashed copy was kept."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/labels.ex:28
 #: lib/mydia_web/live/admin_import_lists_live/labels.ex:29
@@ -12159,6 +12282,7 @@ msgid "%{count} hour"
 msgid_plural "%{count} hours"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_indexers_live/components.ex:409
 #, elixir-autogen, elixir-format
@@ -12166,6 +12290,7 @@ msgid "%{count} indexer available"
 msgid_plural "%{count} indexers available"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:523
 #, elixir-autogen, elixir-format
@@ -12173,6 +12298,7 @@ msgid "%{count} item, all in library"
 msgid_plural "%{count} items, all in library"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/relative_time.ex:47
 #, elixir-autogen, elixir-format
@@ -12180,6 +12306,7 @@ msgid "%{count} month ago"
 msgid_plural "%{count} months ago"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:253
 #, elixir-autogen, elixir-format
@@ -12187,6 +12314,7 @@ msgid "%{count} more configured language. Saving here keeps only these two."
 msgid_plural "%{count} more configured languages. Saving here keeps only these two."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_dashboard_live/plays_chart_components.ex:98
 #, elixir-autogen, elixir-format
@@ -12194,6 +12322,7 @@ msgid "%{count} movie"
 msgid_plural "%{count} movies"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_users_live/components.ex:188
 #, elixir-autogen, elixir-format
@@ -12201,6 +12330,7 @@ msgid "%{count} passkey"
 msgid_plural "%{count} passkeys"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:142
 #, elixir-autogen, elixir-format
@@ -12208,6 +12338,7 @@ msgid "%{count} pending"
 msgid_plural "%{count} pending"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:152
 #, elixir-autogen, elixir-format
@@ -12220,6 +12351,7 @@ msgid "%{count} to Review"
 msgid_plural "%{count} to Review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:145
 #, elixir-autogen, elixir-format
@@ -12227,6 +12359,7 @@ msgid "%{count} to trash · %{size}"
 msgid_plural "%{count} to trash · %{size}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/index.ex:604
 #, elixir-autogen, elixir-format
@@ -12234,6 +12367,7 @@ msgid "%{count} was skipped by re-verification."
 msgid_plural "%{count} were skipped by re-verification."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/relative_time.ex:50
 #, elixir-autogen, elixir-format
@@ -12241,6 +12375,7 @@ msgid "%{count} year ago"
 msgid_plural "%{count} years ago"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:145
 #, elixir-autogen, elixir-format
@@ -12263,6 +12398,7 @@ msgid "%{failed} of %{total} source could not be loaded: %{error}"
 msgid_plural "%{failed} of %{total} sources could not be loaded: %{error}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:493
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:527
@@ -12700,6 +12836,7 @@ msgid "Across %{count} item, reclaiming %{size}."
 msgid_plural "Across %{count} items, reclaiming %{size}."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_api_keys_live/components.ex:248
 #: lib/mydia_web/live/admin_indexers_live/cardigann_engine_components.ex:95
@@ -12734,6 +12871,7 @@ msgid "Add %{count} pending item to library"
 msgid_plural "Add %{count} pending items to library"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:260
 #, elixir-autogen, elixir-format
@@ -12869,6 +13007,7 @@ msgid "Added %{count} item to library"
 msgid_plural "Added %{count} items to library"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:457
 #, elixir-autogen, elixir-format
@@ -12876,6 +13015,7 @@ msgid "Added %{count} item to library, %{failed} failed"
 msgid_plural "Added %{count} items to library, %{failed} failed"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:186
 #, elixir-autogen, elixir-format
@@ -12976,6 +13116,7 @@ msgid "Airs in %{count} day"
 msgid_plural "Airs in %{count} days"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/status_labels.ex:122
 #, elixir-autogen, elixir-format
@@ -14367,6 +14508,7 @@ msgid "Deleted %{count} file permanently."
 msgid_plural "Deleted %{count} files permanently."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/index.ex:186
 #, elixir-autogen, elixir-format
@@ -14530,6 +14672,7 @@ msgid "Downloaded (%{count} file • %{quality})"
 msgid_plural "Downloaded (%{count} files • %{quality})"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/status_labels.ex:76
 #, elixir-autogen, elixir-format
@@ -14537,6 +14680,7 @@ msgid "Downloaded (%{count} file)"
 msgid_plural "Downloaded (%{count} files)"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/status_labels.ex:97
 #, elixir-autogen, elixir-format
@@ -14996,6 +15140,7 @@ msgid "Failed to add %{count} item"
 msgid_plural "Failed to add %{count} items"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:556
 #, elixir-autogen, elixir-format
@@ -15280,6 +15425,7 @@ msgid "Files are permanently deleted after %{count} day."
 msgid_plural "Files are permanently deleted after %{count} days."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/misfiled_component.ex:221
 #, elixir-autogen, elixir-format
@@ -15966,6 +16112,7 @@ msgid "Linked %{count} account on %{name}. Watched sync queued."
 msgid_plural "Linked %{count} accounts on %{name}. Watched sync queued."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:333
 #, elixir-autogen, elixir-format
@@ -17285,6 +17432,7 @@ msgid "Preview: %{moved} of %{count} file would be moved to category folders"
 msgid_plural "Preview: %{moved} of %{count} files would be moved to category folders"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:194
 #: lib/mydia_web/live/admin_download_clients_live/download_client_modal_components.ex:265
@@ -17369,6 +17517,7 @@ msgid "Purged %{count} file from the trash."
 msgid_plural "Purged %{count} files from the trash."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:145
 #, elixir-autogen, elixir-format
@@ -17482,6 +17631,7 @@ msgid "Reclassification complete: %{count} item updated"
 msgid_plural "Reclassification complete: %{count} items updated"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_library_paths_live/index.ex:75
 #, elixir-autogen, elixir-format
@@ -17499,6 +17649,7 @@ msgid "Reclassification complete: No changes (%{count} item has override)"
 msgid_plural "Reclassification complete: No changes (%{count} items have override)"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:190
 #, elixir-autogen, elixir-format
@@ -17640,6 +17791,7 @@ msgid "Remove %{name}? This also deletes its settings, approvals and suggestions
 msgid_plural "Remove %{name}? This also deletes its settings, approvals and suggestions, plus %{count} configured servers."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_plugins_live/components.ex:302
 #, elixir-autogen, elixir-format
@@ -17713,6 +17865,7 @@ msgid "Reorganization complete: Moved %{moved} of %{count} file"
 msgid_plural "Reorganization complete: Moved %{moved} of %{count} files"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_library_paths_live/index.ex:45
 #, elixir-autogen, elixir-format
@@ -17819,6 +17972,7 @@ msgid "Restored %{count} file."
 msgid_plural "Restored %{count} files."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/index.ex:158
 #, elixir-autogen, elixir-format
@@ -18138,6 +18292,7 @@ msgid "Select all %{count} matching"
 msgid_plural "Select all %{count} matching"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:161
 #, elixir-autogen, elixir-format
@@ -18155,6 +18310,7 @@ msgid "Send %{count} file to Review"
 msgid_plural "Send %{count} files to Review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/misfiled_component.ex:208
 #, elixir-autogen, elixir-format
@@ -18162,6 +18318,7 @@ msgid "Send %{count} file to Review? They stay on disk and wait in Review until 
 msgid_plural "Send %{count} files to Review? They stay on disk and wait in Review until someone matches them."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:453
 #, elixir-autogen, elixir-format
@@ -18193,6 +18350,7 @@ msgid "Sent %{count} file across %{items} to Review"
 msgid_plural "Sent %{count} files across %{items} to Review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/index.ex:536
 #, elixir-autogen, elixir-format
@@ -18200,6 +18358,7 @@ msgid "Sent %{count} file from %{name} to Review"
 msgid_plural "Sent %{count} files from %{name} to Review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/index.ex:554
 #, elixir-autogen, elixir-format
@@ -18207,6 +18366,7 @@ msgid "Sent %{count} file from Misfiled to Review"
 msgid_plural "Sent %{count} files from Misfiled to Review"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_settings_live/labels.ex:14
 #, elixir-autogen, elixir-format
@@ -18321,6 +18481,7 @@ msgid "Showing %{shown} of %{count} row"
 msgid_plural "Showing %{shown} of %{count} rows"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_plugins_live/components.ex:488
 #, elixir-autogen, elixir-format
@@ -18338,6 +18499,7 @@ msgid "Skipped %{count}, either too recently written to be safe or not removable
 msgid_plural "Skipped %{count}, either too recently written to be safe or not removable."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:351
 #, elixir-autogen, elixir-format
@@ -18486,6 +18648,7 @@ msgid "Suggestions failing for %{count} person"
 msgid_plural "Suggestions failing for %{count} people"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:166
 #, elixir-autogen, elixir-format
@@ -18508,6 +18671,7 @@ msgid "Swept %{count} item, reclaiming %{size}."
 msgid_plural "Swept %{count} items, reclaiming %{size}."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_indexers_live/cardigann_engine_components.ex:101
 #, elixir-autogen, elixir-format
@@ -18587,6 +18751,7 @@ msgid "Sync started for %{count} list"
 msgid_plural "Sync started for %{count} lists"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:333
 #: lib/mydia_web/live/admin_media_servers_live/index.ex:124
@@ -18852,6 +19017,7 @@ msgid "The plugin store has no plugins yet (checked %{count} source)."
 msgid_plural "The plugin store has no plugins yet (checked %{count} sources)."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:22
 #, elixir-autogen, elixir-format
@@ -19125,6 +19291,7 @@ msgid "Trash %{count} file (%{size})"
 msgid_plural "Trash %{count} files (%{size})"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:313
 #, elixir-autogen, elixir-format
@@ -19132,6 +19299,7 @@ msgid "Trash %{count} file?"
 msgid_plural "Trash %{count} files?"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:50
 #, elixir-autogen, elixir-format
@@ -19144,6 +19312,7 @@ msgid "Trashed %{count} file across %{items} (%{size})"
 msgid_plural "Trashed %{count} files across %{items} (%{size})"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/index.ex:562
 #, elixir-autogen, elixir-format
@@ -19151,6 +19320,7 @@ msgid "Trashed %{count} file from %{name} (%{size})"
 msgid_plural "Trashed %{count} files from %{name} (%{size})"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/components.ex:30
 #, elixir-autogen, elixir-format
@@ -19163,6 +19333,7 @@ msgid "Trashed files are held for %{count} day before permanent deletion, and a 
 msgid_plural "Trashed files are held for %{count} days before permanent deletion, and a run can be undone until you leave this page."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:321
 #, elixir-autogen, elixir-format
@@ -19170,6 +19341,7 @@ msgid "Trashed files are held for %{count} day before permanent deletion."
 msgid_plural "Trashed files are held for %{count} days before permanent deletion."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:175
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:341
@@ -19901,6 +20073,7 @@ msgid "in %{count} day"
 msgid_plural "in %{count} days"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/relative_time.ex:59
 #, elixir-autogen, elixir-format
@@ -19908,6 +20081,7 @@ msgid "in %{count} hour"
 msgid_plural "in %{count} hours"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/relative_time.ex:56
 #, elixir-autogen, elixir-format
@@ -19915,6 +20089,7 @@ msgid "in %{count} minute"
 msgid_plural "in %{count} minutes"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/relative_time.ex:65
 #, elixir-autogen, elixir-format
@@ -19922,6 +20097,7 @@ msgid "in %{count} month"
 msgid_plural "in %{count} months"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/relative_time.ex:53
 #, elixir-autogen, elixir-format
@@ -19929,6 +20105,7 @@ msgid "in %{count} second"
 msgid_plural "in %{count} seconds"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/relative_time.ex:68
 #, elixir-autogen, elixir-format
@@ -19936,6 +20113,7 @@ msgid "in %{count} year"
 msgid_plural "in %{count} years"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_storage_backends_live/index.ex:145
 #, elixir-autogen, elixir-format
@@ -20152,6 +20330,7 @@ msgid "v%{version} asks for %{count} thing you haven't approved. It keeps runnin
 msgid_plural "v%{version} asks for %{count} things you haven't approved. It keeps running on the old grant until you re-approve."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_trash_live/components.ex:487
 #, elixir-autogen, elixir-format
@@ -20739,6 +20918,7 @@ msgid "New grabs for this episode are blocked until it finishes or is removed."
 msgid_plural "New grabs for this episode are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:545
 #, elixir-autogen, elixir-format
@@ -20746,6 +20926,7 @@ msgid "New grabs for this movie are blocked until it finishes or is removed."
 msgid_plural "New grabs for this movie are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:537
 #, elixir-autogen, elixir-format
@@ -20753,6 +20934,7 @@ msgid "New grabs for this season are blocked until it finishes or is removed."
 msgid_plural "New grabs for this season are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:514
 #, elixir-autogen, elixir-format
@@ -20760,6 +20942,7 @@ msgid "and %{count} more are already downloading."
 msgid_plural "and %{count} more are already downloading."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:512
 #, elixir-autogen, elixir-format
@@ -20924,6 +21107,7 @@ msgid "%{count} file, %{size}"
 msgid_plural "%{count} files, %{size}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:274
 #, elixir-autogen, elixir-format
@@ -20931,6 +21115,7 @@ msgid "%{count} item could not be moved."
 msgid_plural "%{count} items could not be moved."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:243
 #, elixir-autogen, elixir-format
@@ -20938,6 +21123,7 @@ msgid "%{count} item is already in that library."
 msgid_plural "%{count} items are already in that library."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:226
 #, elixir-autogen, elixir-format
@@ -20945,6 +21131,7 @@ msgid "%{count} item was not moved: %{library} is not a library for this kind of
 msgid_plural "%{count} items were not moved: %{library} is not a library for this kind of media."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:259
 #, elixir-autogen, elixir-format
@@ -20952,6 +21139,7 @@ msgid "%{count} item was not moved: a move is already running."
 msgid_plural "%{count} items were not moved: a move is already running."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:251
 #, elixir-autogen, elixir-format
@@ -20959,6 +21147,7 @@ msgid "%{count} item was not moved: an import is still running."
 msgid_plural "%{count} items were not moved: an import is still running."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:267
 #, elixir-autogen, elixir-format
@@ -20966,6 +21155,7 @@ msgid "%{count} item was not moved: it is outside what your account is allowed t
 msgid_plural "%{count} items were not moved: they are outside what your account is allowed to access."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:235
 #, elixir-autogen, elixir-format
@@ -20973,6 +21163,7 @@ msgid "%{count} item was not moved: that library is disabled."
 msgid_plural "%{count} items were not moved: that library is disabled."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:350
 #, elixir-autogen, elixir-format
@@ -21013,6 +21204,7 @@ msgid "Moving %{count} item to %{library}"
 msgid_plural "Moving %{count} items to %{library}"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:300
 #, elixir-autogen, elixir-format
@@ -21025,6 +21217,7 @@ msgid "%{count} file will be skipped: another file of this item already has its 
 msgid_plural "%{count} files will be skipped: other files of this item already have their places there."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/library_move_component.ex:89
 #, elixir-autogen, elixir-format
@@ -21037,6 +21230,7 @@ msgid "%{count} job running"
 msgid_plural "%{count} jobs running"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_requests_live/components.ex:188
 #, elixir-autogen, elixir-format
@@ -21126,6 +21320,7 @@ msgid "Show %{count} result"
 msgid_plural "Show %{count} results"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:40
 #, elixir-autogen, elixir-format
@@ -21158,6 +21353,7 @@ msgid "≥ %{count} seed"
 msgid_plural "≥ %{count} seeds"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:266
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:393
@@ -21171,6 +21367,7 @@ msgid "%{count} download in progress"
 msgid_plural "%{count} downloads in progress"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/season_components.ex:593
 #, elixir-autogen, elixir-format
@@ -21178,6 +21375,7 @@ msgid "%{count} downloading"
 msgid_plural "%{count} downloading"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/download_components.ex:82
 #, elixir-autogen, elixir-format
@@ -21190,6 +21388,7 @@ msgid "Downloading %{count} episode"
 msgid_plural "Downloading %{count} episodes"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/download_components.ex:59
 #, elixir-autogen, elixir-format
@@ -21567,6 +21766,7 @@ msgid "%{indexers} +%{count} more"
 msgid_plural "%{indexers} +%{count} more"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:436
 #, elixir-autogen, elixir-format
@@ -21596,6 +21796,7 @@ msgid "%{count} credit"
 msgid_plural "%{count} credits"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/person_components.ex:476
 #, elixir-autogen, elixir-format
@@ -21603,6 +21804,7 @@ msgid "%{count} ep"
 msgid_plural "%{count} eps"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/person_components.ex:120
 #, elixir-autogen, elixir-format
@@ -21610,6 +21812,7 @@ msgid "%{count} in your library"
 msgid_plural "%{count} in your library"
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/components/person_components.ex:493
 #, elixir-autogen, elixir-format
@@ -22018,6 +22221,7 @@ msgid "Turning the built-in client off stops %{count} download that is still in 
 msgid_plural "Turning the built-in client off stops %{count} downloads that are still in progress. Save again to turn it off."
 msgstr[0] ""
 msgstr[1] ""
+msgstr[2] ""
 
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:308
 #, elixir-autogen, elixir-format

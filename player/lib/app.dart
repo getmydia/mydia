@@ -606,7 +606,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         scrollBehavior: const AppScrollBehavior(),
         theme: theme,
         locale: locale,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         localeListResolutionCallback: resolveAppLocale,
         home: Scaffold(
@@ -639,7 +639,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       scrollBehavior: const AppScrollBehavior(),
       theme: theme,
       locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       localeListResolutionCallback: resolveAppLocale,
       routerConfig: router,

@@ -1,5 +1,5 @@
 {
-    "@@locale": "en",
+    "@@locale": "cnr",
     "appLoading": "Učitavam...",
     "@appLoading": {
         "description": "Shown under a spinner while saved sources load at startup."
