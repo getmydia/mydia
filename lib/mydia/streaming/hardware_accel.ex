@@ -19,6 +19,7 @@ defmodule Mydia.Streaming.HardwareAccel do
 
   alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.HardwareAccel.Probe
+  alias Mydia.Streaming.Tonemap
 
   # Household scale, not a hardware limit. Deliberately not configurable: a knob
   # added before anyone hits the ceiling is surface without evidence. If leases
@@ -41,7 +42,15 @@ defmodule Mydia.Streaming.HardwareAccel do
 
   defmodule State do
     @moduledoc false
-    defstruct [:capabilities, :cap, :demote_after, :probe, leases: %{}, failures: %{}]
+    defstruct [
+      :capabilities,
+      :cap,
+      :demote_after,
+      :probe,
+      :tonemap_probe,
+      leases: %{},
+      failures: %{}
+    ]
   end
 
   def start_link(opts) do
@@ -117,7 +126,8 @@ defmodule Mydia.Streaming.HardwareAccel do
     state = %State{
       cap: Keyword.get(opts, :cap, @default_cap),
       demote_after: Keyword.get(opts, :demote_after, @default_demote_after),
-      probe: Keyword.get(opts, :probe, &Probe.run/1)
+      probe: Keyword.get(opts, :probe, &Probe.run/1),
+      tonemap_probe: Keyword.get(opts, :tonemap_probe, &Tonemap.Probe.run/1)
     }
 
     {:ok, state, {:continue, :probe}}
@@ -135,8 +145,36 @@ defmodule Mydia.Streaming.HardwareAccel do
     capabilities = state.probe.(opts)
 
     log_result(capabilities)
+    probe_tonemap(state.tonemap_probe, capabilities)
 
     {:noreply, %{state | capabilities: capabilities}}
+  end
+
+  # The tonemap probe is best effort: a crash here must not take the hardware
+  # state down with it, so it degrades to "cannot tonemap".
+  defp probe_tonemap(probe, %Capabilities{} = capabilities) do
+    tonemap =
+      try do
+        probe.(device: capabilities.device, vaapi?: capabilities.backend == :vaapi)
+      rescue
+        error ->
+          Logger.warning("Tonemap probe crashed: #{Exception.message(error)}")
+          Tonemap.none()
+      catch
+        kind, reason ->
+          Logger.warning("Tonemap probe failed (#{kind}): #{inspect(reason)}")
+          Tonemap.none()
+      end
+
+    Tonemap.put_current(tonemap)
+    log_tonemap(tonemap)
+  end
+
+  defp log_tonemap(%Tonemap{} = tonemap) do
+    Logger.info(
+      "Tonemapping: zscale #{tonemap.zscale}, libplacebo #{tonemap.libplacebo}, " <>
+        "vaapi #{tonemap.vaapi}"
+    )
   end
 
   defp log_result(%Capabilities{backend: :none, reason: reason}) do

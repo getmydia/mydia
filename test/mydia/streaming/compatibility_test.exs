@@ -411,15 +411,13 @@ defmodule Mydia.Streaming.CompatibilityTest do
     end
 
     test "an HDR file with browser-compatible codecs still direct plays with no profile" do
-      # Regression guard. Compatibility did not read hdr_format before device
-      # profiles existed, and it must not start now: the transcoder has no
-      # tonemapping, so forcing a transcode here would produce washed-out SDR
-      # from correct HDR. VP9 and AV1 HDR are the real cases; browsers decode
-      # both natively.
+      # Without a tonemap capability on the server, forcing a transcode would
+      # produce washed-out SDR from correct HDR. VP9 and AV1 HDR are the real
+      # cases; browsers decode both natively.
       file = %MediaFile{
         codec: "vp9",
         audio_codec: "opus",
-        hdr_format: "HDR10",
+        hdr_format: :hdr10,
         metadata: %FileMetadata{container: "webm"},
         path: "/path/to/video.webm"
       }
@@ -427,14 +425,15 @@ defmodule Mydia.Streaming.CompatibilityTest do
       assert Compatibility.check_compatibility(file) == :direct_play
     end
 
-    test "a profile that lists hdr_formats does not yet constrain playback" do
-      # hdr_formats is parsed and validated but deliberately unenforced. If this
-      # test starts failing, HDR enforcement was switched on; make sure it went
-      # through Hdr.profile_tokens/1 and not string equality on the column.
+    test "Dolby Vision 8.1 direct plays to a client that claims hdr10" do
+      # DV 8.1 carries an hdr10 base, so an hdr10 client plays it as-is whatever
+      # the server can tonemap. Enforcement itself is covered in
+      # compatibility_hdr_test.exs.
       file = %MediaFile{
         codec: "hevc",
         audio_codec: "aac",
-        hdr_format: "Dolby Vision",
+        hdr_format: :hdr10,
+        dolby_vision_profile: 8,
         metadata: %FileMetadata{container: "mkv"},
         path: "/path/to/video.mkv"
       }

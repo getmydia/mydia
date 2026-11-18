@@ -13,9 +13,11 @@ defmodule Mydia.Streaming.Compatibility do
   - `:needs_transcoding` - Codecs are not browser-compatible, requires full transcoding
   """
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Streaming.DeviceProfile
+  alias Mydia.Streaming.Tonemap
 
   @type streaming_mode :: :direct_play | :needs_remux | :needs_transcoding
 
@@ -52,9 +54,14 @@ defmodule Mydia.Streaming.Compatibility do
   With a real profile `:needs_remux` means what it says. Before profiles it
   meant "the codecs are fine but browsers cannot open this container", which is
   only true for one kind of client.
+
+  HDR a client cannot show is `:needs_transcoding` when the server can tonemap
+  it (see `hdr_rejects?/3`), checked before the remux branch because a remux
+  copies the HDR stream untouched. `opts[:tonemap]` overrides the probed
+  `Tonemap.current/0`, which tests use to stay off `:persistent_term`.
   """
-  @spec check_compatibility(MediaFile.t(), DeviceProfile.t()) :: streaming_mode()
-  def check_compatibility(%MediaFile{} = media_file, %DeviceProfile{} = profile) do
+  @spec check_compatibility(MediaFile.t(), DeviceProfile.t(), keyword()) :: streaming_mode()
+  def check_compatibility(%MediaFile{} = media_file, %DeviceProfile{} = profile, opts \\ []) do
     container = get_container_format(media_file)
     video_codec = media_file.codec
     audio_codec = media_file.audio_codec
@@ -62,6 +69,9 @@ defmodule Mydia.Streaming.Compatibility do
     streams = stream_pair(media_file)
 
     cond do
+      hdr_rejects?(media_file, profile, tonemap_opt(opts)) ->
+        :needs_transcoding
+
       client_can_play?(profile, container, video_codec, audio_codec, streams) ->
         :direct_play
 
@@ -99,11 +109,17 @@ defmodule Mydia.Streaming.Compatibility do
   Callers use this to drop candidates that preserve the offending stream.
   `HLS_COPY` repackages without re-encoding, so offering it to a client whose
   conditions just rejected the codec hands back the same undecodable bytes in a
-  new container. Returns `false` for a client that stated no conditions, so
-  nothing about the pre-conditions candidate lists changes for it.
+  new container.
+
+  Also returns `true` for an HDR file the client cannot show when the server
+  can tonemap it (`hdr_rejects?/3`): copying that stream would hand back the
+  same untonemapped picture. `opts` takes `:tonemap`, defaulting to the
+  server's probed capability. A client that stated no codec conditions is
+  therefore rejected only on HDR grounds; for an SDR file, or a server that
+  cannot tonemap, nothing about its candidate lists changes.
   """
-  @spec conditions_reject?(MediaFile.t(), DeviceProfile.t()) :: boolean()
-  def conditions_reject?(%MediaFile{} = media_file, %DeviceProfile{} = profile) do
+  @spec conditions_reject?(MediaFile.t(), DeviceProfile.t(), keyword()) :: boolean()
+  def conditions_reject?(%MediaFile{} = media_file, %DeviceProfile{} = profile, opts \\ []) do
     {video_stream, audio_stream} = stream_pair(media_file)
 
     not (DeviceProfile.codec_conditions_met?(profile, :video, media_file.codec, video_stream) and
@@ -112,8 +128,28 @@ defmodule Mydia.Streaming.Compatibility do
              :audio,
              media_file.audio_codec,
              audio_stream
-           ))
+           )) or hdr_rejects?(media_file, profile, tonemap_opt(opts))
   end
+
+  @doc """
+  Whether the file's HDR is one the client cannot show and the server can fix.
+
+  True only when the file is HDR, the server can tonemap it, and none of the
+  file's profile tokens (`Hdr.profile_tokens/1`, so HDR10+ and Dolby Vision 8.1
+  also offer "hdr10") appears in the client's `hdr_formats`. Without a tonemap
+  capability this is false: refusing direct play would only swap correct HDR
+  for a washed-out transcode.
+  """
+  @spec hdr_rejects?(MediaFile.t(), DeviceProfile.t(), Tonemap.t()) :: boolean()
+  def hdr_rejects?(%MediaFile{} = media_file, %DeviceProfile{} = profile, %Tonemap{} = tonemap) do
+    hdr = Hdr.from_media_file(media_file)
+
+    not Hdr.sdr?(hdr) and
+      Tonemap.can_tonemap?(tonemap, hdr) and
+      Enum.all?(Hdr.profile_tokens(hdr), &(&1 not in profile.hdr_formats))
+  end
+
+  defp tonemap_opt(opts), do: Keyword.get_lazy(opts, :tonemap, &Tonemap.current/0)
 
   # The client can open this container and decode every stream in it as-is.
   defp client_can_play?(profile, container, video_codec, audio_codec, streams) do
@@ -130,20 +166,8 @@ defmodule Mydia.Streaming.Compatibility do
       codecs_playable?(profile, video_codec, audio_codec, streams)
   end
 
-  # HDR is deliberately NOT checked here yet.
-  #
-  # Two things have to be true before it can be, and neither is today.
-  # FfmpegHlsTranscoder emits no tonemapping filter at all (its only -vf is
-  # `scale=`), so refusing HDR direct play would hand the viewer a washed-out
-  # SDR transcode instead of correct HDR. And `media_file.hdr_format` holds
-  # ffprobe display strings ("Dolby Vision", "HDR10+"), which no clean allowlist
-  # matches. Dolby Vision also cannot be answered by presence alone: profile 8.1
-  # carries an HDR10 base that non-DV clients play correctly, while profile 5
-  # does not.
-  #
-  # Activate this against Mydia.Library.Hdr.profile_tokens/1 when it lands,
-  # matching any-member-of rather than equality. DeviceProfile still parses and
-  # caps `hdr_formats` so the wire format does not have to change then.
+  # HDR is decided in `hdr_rejects?/3`, ahead of this check, so a file that
+  # reaches here is either SDR, listed by the client, or untonemappable here.
   defp codecs_playable?(profile, video_codec, audio_codec, {video_stream, audio_stream}) do
     DeviceProfile.video_codec_allowed?(profile, video_codec) and
       DeviceProfile.codec_conditions_met?(profile, :video, video_codec, video_stream) and

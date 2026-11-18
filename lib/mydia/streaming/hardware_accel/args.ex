@@ -21,32 +21,72 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
 
   require Logger
 
+  alias Mydia.Library.Hdr
   alias Mydia.Streaming.HardwareAccel.Capabilities
+  alias Mydia.Streaming.Tonemap
 
   # Measured against libx264 -crf 23 on a 1080p sample: qp 23 costs 1.29x the
   # bitrate for SSIM 0.9923 against x264's 0.9949. See the rate-control table in
   # the design spec before changing this.
   @vaapi_qp 23
 
-  defstruct tier: :software, input: [], video: []
+  defstruct tier: :software, input: [], video: [], tonemap: :none
 
   @type tier :: :software | :hybrid | :full_hardware
-  @type t :: %__MODULE__{tier: tier(), input: [String.t()], video: [String.t()]}
+  @type tonemap_method :: :none | :zscale | :libplacebo | :vaapi
+  @type t :: %__MODULE__{
+          tier: tier(),
+          input: [String.t()],
+          video: [String.t()],
+          tonemap: tonemap_method()
+        }
 
+  @doc """
+  Builds the encode arguments.
+
+  HDR sources are always tonemapped to SDR bt709 when a method exists, whatever
+  the client asked for: the encode targets 8-bit H.264, and nothing downstream
+  carries HDR metadata. `:hdr` (a `Mydia.Library.Hdr`) and `:tonemap` (a
+  `Mydia.Streaming.Tonemap`) default to SDR and "cannot tonemap".
+
+  The zscale and libplacebo methods run on the CPU or Vulkan, so they force the
+  software tier (software codec args, no VAAPI input). Only `:vaapi` keeps a
+  hardware tier.
+  """
   @spec build(Capabilities.t(), keyword()) :: t()
   def build(%Capabilities{} = caps, opts) do
-    tier = tier(caps, Keyword.get(opts, :source_codec))
+    hdr = Keyword.get(opts, :hdr, %Hdr{})
+    tonemap = Keyword.get(opts, :tonemap, Tonemap.none())
+    hw_tier = tier(caps, Keyword.get(opts, :source_codec))
+    method = tonemap_method(tonemap, hdr, hw_tier)
+    tier = if method in [:zscale, :libplacebo], do: :software, else: hw_tier
     height = Keyword.get(opts, :max_height)
     bitrate = Keyword.get(opts, :video_bitrate_kbps)
 
     %__MODULE__{
       tier: tier,
-      input: input_args(tier, caps.device),
+      tonemap: method,
+      input: input_args(tier, caps.device, method),
       video:
         codec_args(tier, opts) ++
-          filter_args(tier, height) ++
+          filter_args(tier, method, height, hdr) ++
           rate_control_args(tier, bitrate, Keyword.get(opts, :crf, 23))
     }
+  end
+
+  @doc """
+  How an HDR source becomes SDR, given what the server can do and the tier the
+  hardware would otherwise encode on.
+  """
+  @spec tonemap_method(Tonemap.t(), Hdr.t(), tier()) :: tonemap_method()
+  def tonemap_method(%Tonemap{} = tonemap, %Hdr{} = hdr, tier) do
+    cond do
+      Hdr.sdr?(hdr) or not Tonemap.can_tonemap?(tonemap, hdr) -> :none
+      hdr.base == nil -> :libplacebo
+      tier == :full_hardware and hdr.base in [:hdr10, :hdr10_plus] and tonemap.vaapi -> :vaapi
+      tonemap.zscale -> :zscale
+      true -> :libplacebo
+    end
   end
 
   # A device that cannot encode H.264 is useless to this pipeline regardless of
@@ -61,14 +101,15 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
     end
   end
 
-  defp input_args(:software, _device), do: []
+  defp input_args(:software, _device, :libplacebo), do: ["-init_hw_device", "vulkan"]
+  defp input_args(:software, _device, _method), do: []
 
-  defp input_args(:full_hardware, device) do
+  defp input_args(:full_hardware, device, _method) do
     ["-hwaccel", "vaapi", "-hwaccel_device", device, "-hwaccel_output_format", "vaapi"]
   end
 
   # hwupload needs a filter device, which -hwaccel alone does not establish.
-  defp input_args(:hybrid, device) do
+  defp input_args(:hybrid, device, _method) do
     ["-init_hw_device", "vaapi=hw:#{device}", "-filter_hw_device", "hw"]
   end
 
@@ -95,17 +136,51 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
     ["-c:v", "h264_vaapi", "-profile:v", "high", "-g", "60", "-bf", "0"]
   end
 
-  defp filter_args(:software, height) do
+  # The first zscale states its input (transfer, primaries, matrix) from the
+  # Hdr base rather than trusting the stream's colour tags: an untagged stream
+  # otherwise fails with "no path between colorspaces". Dolby Vision reaches
+  # this clause only with a compatible base, which is what it is decoded as.
+  defp filter_args(:software, :zscale, height, %Hdr{base: base}) do
+    [
+      "-vf",
+      "scale=-2:#{height_expression(height)}," <>
+        "zscale=tin=#{zscale_transfer_in(base)}:pin=bt2020:min=bt2020nc:t=linear:npl=100," <>
+        "format=gbrpf32le,zscale=p=bt709," <>
+        "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+    ]
+  end
+
+  defp filter_args(:software, :libplacebo, height, _hdr) do
+    [
+      "-vf",
+      "libplacebo=w=-2:h=#{height_expression(height)}:colorspace=bt709:" <>
+        "color_primaries=bt709:color_trc=bt709:range=tv:tonemapping=bt.2390:" <>
+        "apply_dolbyvision=1:format=yuv420p"
+    ]
+  end
+
+  defp filter_args(:software, _method, height, _hdr) do
     ["-vf", "scale=-2:#{height_expression(height)}"]
   end
 
-  defp filter_args(:full_hardware, height) do
+  defp filter_args(:full_hardware, :vaapi, height, _hdr) do
+    [
+      "-vf",
+      "scale_vaapi=w=-2:h=#{height_expression(height)}," <>
+        "tonemap_vaapi=format=nv12:t=bt709:m=bt709:p=bt709"
+    ]
+  end
+
+  defp filter_args(:full_hardware, _method, height, _hdr) do
     ["-vf", "scale_vaapi=w=-2:h=#{height_expression(height)}:format=nv12"]
   end
 
-  defp filter_args(:hybrid, height) do
+  defp filter_args(:hybrid, _method, height, _hdr) do
     ["-vf", "scale=-2:#{height_expression(height)},format=nv12,hwupload"]
   end
+
+  defp zscale_transfer_in(:hlg), do: "arib-std-b67"
+  defp zscale_transfer_in(base) when base in [:hdr10, :hdr10_plus], do: "smpte2084"
 
   # `min(h, ih)` clamps against the input height so a rung above the source
   # never upscales. The comma is backslash-escaped because ffmpeg reads a bare

@@ -494,6 +494,7 @@ extension AppFormatters on AppLocalizations {
         StatsRowId.why => statsRowWhy,
         StatsRowId.source => statsRowSource,
         StatsRowId.video => statsRowVideo,
+        StatsRowId.hdr => statsRowHdr,
         StatsRowId.decoder => statsRowDecoder,
         StatsRowId.audio => statsRowAudio,
         StatsRowId.frames => statsRowFrames,
@@ -528,6 +529,11 @@ extension AppFormatters on AppLocalizations {
   String statsValue(StatsValue value) => switch (value) {
         StatsText(:final text) => text,
         StatsWhyValue(:final why) => statsWhyText(why),
+        StatsHdrValue(:final hdr) => switch (hdr.by) {
+            HdrTonemapper.player => statsHdrByPlayer(hdr.format),
+            HdrTonemapper.server => statsHdrByServer(hdr.format),
+            null => hdr.format,
+          },
         StatsQualityValue(:final quality) => statsQualityText(quality),
         StatsModeValue(:final mode) => statsModeName(mode),
         StatsDecoderValue(:final label, :final hardware) => switch (hardware) {

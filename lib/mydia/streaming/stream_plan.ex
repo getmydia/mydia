@@ -21,6 +21,7 @@ defmodule Mydia.Streaming.StreamPlan do
   definition and only audio may be converted.
   """
 
+  alias Mydia.Library.Hdr
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
   alias Mydia.Streaming.Compatibility
@@ -28,6 +29,7 @@ defmodule Mydia.Streaming.StreamPlan do
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HardwareAccel
   alias Mydia.Streaming.HardwareAccel.Args, as: AccelArgs
+  alias Mydia.Streaming.Tonemap
 
   # Kept in step with FfmpegHlsTranscoder's own audio budget. Only used to
   # report the audio target, never to build arguments.
@@ -44,7 +46,8 @@ defmodule Mydia.Streaming.StreamPlan do
       :from_height,
       :to_width,
       :to_height,
-      :tier
+      :tier,
+      tonemap: :none
     ]
 
     @type t :: %__MODULE__{
@@ -55,7 +58,8 @@ defmodule Mydia.Streaming.StreamPlan do
             from_height: integer() | nil,
             to_width: integer() | nil,
             to_height: integer() | nil,
-            tier: AccelArgs.tier() | nil
+            tier: AccelArgs.tier() | nil,
+            tonemap: AccelArgs.tonemap_method()
           }
   end
 
@@ -110,6 +114,8 @@ defmodule Mydia.Streaming.StreamPlan do
 
           AccelArgs.build(capabilities,
             source_codec: media_file && media_file.codec,
+            hdr: Hdr.from_media_file(media_file),
+            tonemap: Keyword.get_lazy(opts, :tonemap, &Tonemap.current/0),
             max_height: max_height,
             video_bitrate_kbps: video_bitrate_kbps(max_bitrate),
             crf: Keyword.get(opts, :crf, 23),
@@ -144,7 +150,8 @@ defmodule Mydia.Streaming.StreamPlan do
         from_height: from_height,
         to_width: to_width,
         to_height: to_height,
-        tier: accel && accel.tier
+        tier: accel && accel.tier,
+        tonemap: accel_tonemap(accel)
       },
       audio: audio,
       container: :hls_ts,
@@ -189,6 +196,10 @@ defmodule Mydia.Streaming.StreamPlan do
     }
   end
 
+  # A copied stream has no encode arguments and so no tonemap.
+  defp accel_tonemap(nil), do: :none
+  defp accel_tonemap(%AccelArgs{tonemap: tonemap}), do: tonemap
+
   # No stream was selected, so no -map is emitted and ffmpeg's implicit
   # selection stands. That is the pre-existing behaviour for an unanalysed
   # file, and the codec the strategy was chosen from is the one it will pick,
@@ -217,17 +228,39 @@ defmodule Mydia.Streaming.StreamPlan do
   value. `for_hls/2` applies `effective_max_height/1` before calling in; any
   other caller must do the same, or a configured ceiling will silently stop
   applying to this decision.
+
+  An HDR source the server can tonemap always encodes, so the tonemap filter
+  runs even on an H.264 source with no cap. `opts` takes `:tonemap`, the
+  server's `Mydia.Streaming.Tonemap` capability, defaulting to
+  `Tonemap.current/0`; `for_hls/2` passes its own opts through so the decision
+  and the filter chain read the same capability.
   """
-  @spec encodes_video?(Mydia.Library.MediaFile.t() | nil, integer() | nil, integer() | nil) ::
-          boolean()
-  def encodes_video?(media_file, max_bitrate, max_height) do
+  @spec encodes_video?(
+          Mydia.Library.MediaFile.t() | nil,
+          integer() | nil,
+          integer() | nil,
+          keyword()
+        ) :: boolean()
+  def encodes_video?(media_file, max_bitrate, max_height, opts \\ []) do
     cond do
       not is_nil(max_bitrate) -> true
       transcode_policy() != :copy_when_compatible -> true
       is_nil(media_file) -> true
       downscaling?(media_file, max_height) -> true
+      tonemaps?(media_file, opts) -> true
       true -> not copyable_video_codec?(media_file.codec)
     end
+  end
+
+  # An HDR source the server can tonemap is always encoded, whatever its
+  # codec. `Compatibility` forces a transcode for an HDR file the client
+  # cannot show once the server can tonemap it; copying an H.264 HDR stream
+  # here would ship that same untonemapped picture through HLS instead.
+  defp tonemaps?(media_file, opts) do
+    hdr = Hdr.from_media_file(media_file)
+    tonemap = Keyword.get_lazy(opts, :tonemap, &Tonemap.current/0)
+
+    not Hdr.sdr?(hdr) and Tonemap.can_tonemap?(tonemap, hdr)
   end
 
   @doc """
@@ -270,9 +303,14 @@ defmodule Mydia.Streaming.StreamPlan do
 
   defp hls_video_action(media_file, opts, max_bitrate, max_height) do
     case Keyword.get(opts, :video_codec) do
-      "copy" -> :copy
-      nil -> if encodes_video?(media_file, max_bitrate, max_height), do: :encode, else: :copy
-      _explicit -> :encode
+      "copy" ->
+        :copy
+
+      nil ->
+        if encodes_video?(media_file, max_bitrate, max_height, opts), do: :encode, else: :copy
+
+      _explicit ->
+        :encode
     end
   end
 

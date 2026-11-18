@@ -159,6 +159,27 @@ class StatsQuality {
   final QualityRung? effective;
 }
 
+/// Who maps an HDR source down to the display's range.
+enum HdrTonemapper { player, server }
+
+/// The source's HDR format and who tonemaps it.
+class StatsHdr {
+  const StatsHdr({required this.format, this.by});
+
+  /// The server's display string (`HDR10`, `Dolby Vision 8`), English.
+  final String format;
+
+  /// Null when who tonemaps is not known, so the row shows the format alone.
+  final HdrTonemapper? by;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StatsHdr && other.format == format && other.by == by;
+
+  @override
+  int get hashCode => Object.hash(format, by);
+}
+
 /// What the screen knows without measuring.
 class StatsContext {
   const StatsContext({
@@ -170,6 +191,7 @@ class StatsContext {
     this.whyDetail,
     this.sourceLabel,
     this.videoLabel,
+    this.hdr,
     this.decoderLabel,
     this.hardwareDecode,
     this.audioLabel,
@@ -202,6 +224,10 @@ class StatsContext {
   /// What the decoder is actually handling, for example
   /// `1920x1080 h264 - 23.976 fps`.
   final String? videoLabel;
+
+  /// The source's HDR format and who tonemaps it. Null for an SDR source or
+  /// an unknown format, which drops the row.
+  final StatsHdr? hdr;
 
   /// mpv's `decoder-desc`. Null on web.
   final String? decoderLabel;

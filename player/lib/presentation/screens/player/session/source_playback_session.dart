@@ -150,6 +150,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
           durationSeconds: version.durationSeconds?.toDouble(),
           height: version.height,
           bitrateBps: kbps == null ? null : kbps * 1000,
+          hdrFormat: version.hdrFormat,
         ),
         serverRejected: false,
       );

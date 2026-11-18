@@ -28,6 +28,7 @@ enum StatsRowId {
   why,
   source,
   video,
+  hdr,
   decoder,
   audio,
   frames,
@@ -47,6 +48,12 @@ sealed class StatsValue {
 class StatsText extends StatsValue {
   const StatsText(this.text);
   final String text;
+}
+
+/// The HDR row: a format the panel words with who tonemaps it.
+class StatsHdrValue extends StatsValue {
+  const StatsHdrValue(this.hdr);
+  final StatsHdr hdr;
 }
 
 /// The Why row: a reason the panel words.
@@ -141,6 +148,8 @@ List<StatsRow> statsRows(
       StatsRow(id: StatsRowId.source, value: StatsText(context.sourceLabel!)),
     if (context.videoLabel != null)
       StatsRow(id: StatsRowId.video, value: StatsText(context.videoLabel!)),
+    if (context.hdr != null)
+      StatsRow(id: StatsRowId.hdr, value: StatsHdrValue(context.hdr!)),
     if (!compact && context.decoderLabel != null)
       StatsRow(
         id: StatsRowId.decoder,
@@ -211,6 +220,11 @@ String statsClipboardText(
     if (context.whyDetail != null) 'Detail: ${context.whyDetail}',
     if (context.sourceLabel != null) 'Source: ${context.sourceLabel}',
     if (context.videoLabel != null) 'Video: ${context.videoLabel}',
+    if (context.hdr != null)
+      switch (context.hdr!.by) {
+        null => 'HDR: ${context.hdr!.format}',
+        final by => 'HDR: ${context.hdr!.format}, tonemapped by ${by.name}',
+      },
     if (context.decoderLabel != null) 'Decoder: ${_decoder(context)}',
     if (context.audioLabel != null) 'Audio: ${context.audioLabel}',
     if (sample.droppedFrames != null && sample.droppedFramesTotal != null)

@@ -14,8 +14,9 @@ defmodule Mydia.Streaming.DeviceProfileTest do
       assert "aac" in profile.audio_codecs
     end
 
-    test "allows no HDR format, so an HDR file is never direct play by default" do
-      assert DeviceProfile.browser_default().hdr_formats == []
+    test "claims every HDR token, so a client that declares nothing keeps today's behavior" do
+      assert DeviceProfile.browser_default().hdr_formats ==
+               Mydia.Library.Hdr.profile_format_strings()
     end
   end
 
@@ -80,6 +81,13 @@ defmodule Mydia.Streaming.DeviceProfileTest do
       assert profile.video_codecs == ["h264", "hevc"]
       assert profile.audio_codecs == ["aac", "ac3"]
       assert profile.hdr_formats == ["hdr10"]
+    end
+
+    test "maps the hdr10plus spelling to hdr10+ after downcasing" do
+      assert {:ok, profile} =
+               DeviceProfile.from_map(%{"hdrFormats" => ["HDR10Plus", "hlg"]})
+
+      assert profile.hdr_formats == ["hdr10+", "hlg"]
     end
 
     test "downcases every entry so matching never has to" do

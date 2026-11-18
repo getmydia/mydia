@@ -321,6 +321,38 @@ the player requires server 0.15.0 (`Compatibility.minServerVersion`), and an
 older server gets the non-dismissible server-update-required verdict. A stream
 start against such a server fails instead of degrading.
 
+### HDR claims
+
+The player tells the server which HDR formats it renders correctly
+(`player/lib/core/player/hdr_claims.dart`); the server direct plays an HDR file
+only to a client that shares a token with it and tonemaps to SDR otherwise.
+
+| Platform | Claims |
+| --- | --- |
+| Desktop, iOS | `hdr10+`, `hdr10`, `hlg` |
+| Android | `hdr10+`, `hdr10`, `hlg`, the same as the native mpv path (not yet checked on a device) |
+| Web | `hdr10+` and `hdr10` when the display is HDR capable and the browser reports PQ; `hlg` likewise for HLG |
+
+Native clients drop `dolby_vision` until mpv's `gpu-next` output is in use: with
+`gpu` it reaches only the HDR10 base layer of profile 8 and renders profile 5
+with wrong colors. Every playback Player applies `sdrTonemapMpvOptions`, and the
+stats overlay has an HDR row showing the format and who tonemapped it.
+
+Android's claim assumes the zero-copy `hwdec=mediacodec` path renders HDR10
+and HLG the way desktop mpv does; nobody has confirmed that on a device yet.
+To check one:
+
+1. Generate a 1080p HDR10 clip and a 1080p HLG clip with the ffmpeg arguments
+   `Mydia.HdrFixture.hdr10_args(1080)` and `Mydia.HdrFixture.hlg_args(1080)`
+   return (`test/support/hdr_fixture.ex`), followed by `-y <out>.mkv`, and add
+   both to a library.
+2. Play each on the Android device, and on a desktop player as the reference.
+3. Screenshot the device mid-playback with
+   `adb exec-out screencap -p > android.png` and the desktop the usual way.
+4. Compare. Washed out (grey, low contrast) or clipped (flat white highlights)
+   on the device means the panel path is wrong: set `androidHdrFormats` to
+   `[]` so the server tonemaps to SDR for Android.
+
 ## Testing
 
 `flutter test` cannot construct a native `Player`, so the screen's playback
@@ -366,7 +398,7 @@ can report. The panel sizes to its content and scrolls the row region
 content exceeds the box; the header, the divider, the compact footnote and
 the remote hint stay pinned outside that scroll region.
 
-`tvMinHeight` (589) is set to the tv panel's own measured content height on
+`tvMinHeight` (599) is set to the tv panel's own measured content height on
 purpose, so a television never scrolls its stats: a D-pad cannot scroll an
 unfocusable scroll view, and the remote tier deliberately draws no
 focusable controls at all. It also has to stay above 412, the available
@@ -412,7 +444,7 @@ unconditional.
 
 Known gap, left as is rather than patched: a 1280x720 television leaves
 482px of available height (720 minus the 64px top inset minus the desktop
-tier's 174px corner inset), which is below `tvMinHeight` (589). A common
+tier's 174px corner inset), which is below `tvMinHeight` (599). A common
 Android TV resolution therefore resolves to the `full` density and draws
 11.5px label text meant for a desk, not a couch across the room. Fixing it
 properly means letting the remote tier keep tv typography while showing

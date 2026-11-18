@@ -3,8 +3,15 @@ import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/playback_planner.dart';
 import 'package:player/presentation/screens/player/stats_context_builder.dart';
 
-PlanInputs _inputs(List<CandidateStrategy> candidates) => PlanInputs(
+PlanInputs _inputs(
+  List<CandidateStrategy> candidates, {
+  String? hdrFormat,
+  int? dvProfile,
+}) =>
+    PlanInputs(
       candidates: candidates,
+      sourceHdrFormat: hdrFormat,
+      sourceDolbyVisionProfile: dvProfile,
       isWeb: false,
       typeSupported: (_) => true,
       choice: QualityChoice.original,
@@ -43,5 +50,25 @@ void main() {
     expect(sourceContainerOf(_inputs(const [])), isNull);
     expect(sourceCodecOf(null), isNull);
     expect(sourceContainerOf(null), isNull);
+  });
+
+  group('sourceHdrOf', () {
+    test('reads the format and the Dolby Vision profile', () {
+      final inputs = _inputs(const [], hdrFormat: 'Dolby Vision', dvProfile: 8);
+      expect(sourceHdrOf(inputs), (format: 'Dolby Vision', dvProfile: 8));
+    });
+
+    test('keeps a plain format with no profile', () {
+      expect(
+        sourceHdrOf(_inputs(const [], hdrFormat: 'HDR10+')),
+        (format: 'HDR10+', dvProfile: null),
+      );
+    });
+
+    test('is null for SDR, an empty string and no plan', () {
+      expect(sourceHdrOf(_inputs(const [])), isNull);
+      expect(sourceHdrOf(_inputs(const [], hdrFormat: '')), isNull);
+      expect(sourceHdrOf(null), isNull);
+    });
   });
 }

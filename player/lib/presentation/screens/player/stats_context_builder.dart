@@ -38,6 +38,7 @@ StatsContext buildStatsContext({
   required Set<FailureKey> knownFailures,
   required int? sourceHeight,
   required String? sourceCodec,
+  ({String format, int? dvProfile})? sourceHdr,
   required int? sourceBitrateKbps,
   required String? sourceContainer,
   required VideoTrack? videoTrack,
@@ -87,6 +88,23 @@ StatsContext buildStatsContext({
             sourceContainer,
           ),
     videoLabel: _videoLabel(videoTrack),
+    hdr: sourceHdr == null
+        ? null
+        : StatsHdr(
+            format: sourceHdr.dvProfile == null
+                ? sourceHdr.format
+                : '${sourceHdr.format} ${sourceHdr.dvProfile}',
+            // Only a transcode is tonemapped by the server. Direct play,
+            // stream copy and a downloaded file all reach the player's own
+            // renderer. Dolby Vision profile 5 in a transcode is tonemapped
+            // only through libplacebo, which production images lack, so the
+            // tonemapper is left unstated.
+            by: switch (mode) {
+              PlaybackMode.transcode when sourceHdr.dvProfile == 5 => null,
+              PlaybackMode.transcode => HdrTonemapper.server,
+              _ => HdrTonemapper.player,
+            },
+          ),
     decoderLabel: videoTrack?.decoder,
     hardwareDecode: _hardwareDecode(videoTrack?.decoder),
     audioLabel: _audioLabel(audioTrack),
@@ -301,6 +319,15 @@ String? sourceCodecOf(PlanInputs? inputs) {
     if (candidate.videoCodec != null) return candidate.videoCodec;
   }
   return null;
+}
+
+/// The source's HDR format and Dolby Vision profile, from the offer the
+/// plan was made from. Null for SDR and for a source the server did not
+/// describe.
+({String format, int? dvProfile})? sourceHdrOf(PlanInputs? inputs) {
+  final format = inputs?.sourceHdrFormat;
+  if (format == null || format.isEmpty) return null;
+  return (format: format, dvProfile: inputs!.sourceDolbyVisionProfile);
 }
 
 /// The container implied by the first candidate's MIME type, matching

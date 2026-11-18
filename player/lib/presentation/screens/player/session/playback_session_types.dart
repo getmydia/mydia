@@ -41,6 +41,8 @@ class PlaybackOffer {
     this.durationSeconds,
     this.height,
     this.bitrateBps,
+    this.hdrFormat,
+    this.dolbyVisionProfile,
     this.preferredAudioLanguages,
   });
 
@@ -53,6 +55,10 @@ class PlaybackOffer {
 
   /// Bits per second; see `kbpsFromBitsPerSecond`.
   final int? bitrateBps;
+
+  /// The server's display string for the file's HDR format, null for SDR.
+  final String? hdrFormat;
+  final int? dolbyVisionProfile;
 
   /// Null when the server did not answer the field, which is not a
   /// statement that the viewer has no preference.

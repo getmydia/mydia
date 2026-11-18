@@ -76,7 +76,7 @@ class StatsMetrics {
   /// its rows when the content exceeds the box, because the row set and
   /// the Why row's text length both vary at runtime. An earlier revision
   /// declared rendered heights here and they could not hold.
-  static const double tvMinHeight = 589.0;
+  static const double tvMinHeight = 599.0;
   static const double fullMinHeight = 300.0;
   static const double compactMinHeight = 140.0;
 

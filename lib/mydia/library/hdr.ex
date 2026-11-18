@@ -93,6 +93,23 @@ defmodule Mydia.Library.Hdr do
   def sdr?(%__MODULE__{} = hdr), do: profile_tokens(hdr) == []
 
   @doc """
+  The `%Hdr{}` a stored media file carries, read from its three HDR columns.
+
+  `nil` gives the SDR struct, so callers need no separate clause for a missing
+  file.
+  """
+  @spec from_media_file(struct() | nil) :: t()
+  def from_media_file(nil), do: %__MODULE__{}
+
+  def from_media_file(%{
+        hdr_format: base,
+        dolby_vision_profile: dv_profile,
+        dolby_vision_bl_compat_id: bl_compat_id
+      }) do
+    %__MODULE__{base: base, dv_profile: dv_profile, bl_compat_id: bl_compat_id}
+  end
+
+  @doc """
   Builds an `%Hdr{}` from ffprobe's video stream map and, optionally, frame
   side data from a second probe.
 

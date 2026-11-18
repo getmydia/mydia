@@ -59,4 +59,16 @@ void main() {
       });
     }
   });
+
+  test('sdrTonemapMpvOptions pins the tonemap curve and peak detection', () {
+    expect(sdrTonemapMpvOptions, {
+      'tone-mapping': 'bt.2390',
+      'hdr-compute-peak': 'auto',
+    });
+  });
+
+  test('sdrTonemapMpvOptions leaves target-trc to mpv', () {
+    // Forcing srgb would re-curve every SDR source, not just tonemapped HDR.
+    expect(sdrTonemapMpvOptions, isNot(contains('target-trc')));
+  });
 }

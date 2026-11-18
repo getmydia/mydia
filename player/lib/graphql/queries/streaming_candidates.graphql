@@ -13,6 +13,8 @@ query StreamingCandidates($contentType: String!, $id: ID!) {
       width
       height
       bitrate
+      hdrFormat
+      dolbyVisionProfile
       preferredAudioLanguages
     }
   }
