@@ -115,6 +115,7 @@ void main() {
     controller.setPadding(const EdgeInsets.fromLTRB(16, 0, 16, 80),
         duration: Duration.zero);
     await tester.pumpAndSettle();
+    expect(_padding(tester).bottom, 80);
     controller.resetPadding(duration: Duration.zero);
     await tester.pumpAndSettle();
 

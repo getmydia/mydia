@@ -2883,6 +2883,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         !identical(_playback, playback)) {
       return;
     }
+    // Nor may a bandwidth fallback outlive the viewer picking Original
+    // meanwhile, which asks for the file's own bytes over any transcode, as
+    // the policy's `reactsToBandwidth` does. A decode failure still applies.
+    if (action.reason == FailureReason.bandwidth &&
+        _selectedQuality.isOriginal) {
+      return;
+    }
 
     // The choice stays the viewer's: `fallbackPlan` already honours it as
     // closely as this device allows. The stored default is never written
@@ -3126,17 +3133,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         unawaited(recordMacSurfaceFailure(ref));
       }
       _stopVerification();
-      await _disposePlayer();
-      if (superseded() || !mounted) return player;
       // An error the surface player raised (a downloaded file has no policy
-      // to defer it to) is not the texture player's: back to loading, and
-      // the retry reports its own.
-      if (_error != null) {
+      // to defer it to) is not the texture player's: back to loading before
+      // the teardown awaits, so the error page's Retry cannot start a load
+      // that supersedes this recovery. The retry reports its own errors.
+      if (mounted && !superseded() && _error != null) {
         setState(() {
           _error = null;
           _isLoading = true;
         });
       }
+      await _disposePlayer();
+      if (superseded() || !mounted) return player;
       return _openPlayerAndStart(
         mediaSource,
         httpHeaders,
@@ -6056,14 +6064,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// it is torn down before the reload creates the next one. A load that
   /// started meanwhile, a switch to another file say, wins. Taps while one
   /// retry is under way join it, so a second one cannot skip the teardown.
-  Future<void> _retry() => _retrying ??= _runRetry().whenComplete(() {
-        _retrying = null;
-      });
+  ///
+  /// The slot belongs to the load it retries: a Retry on a later load does
+  /// not join an older one, and only the retry still holding the slot
+  /// clears it.
+  Future<void> _retry() {
+    final gen = _loadGeneration;
+    final current = _retrying;
+    if (current != null && _retryingGen == gen) return current;
+    late final Future<void> retry;
+    retry = _runRetry(gen).whenComplete(() {
+      if (identical(_retrying, retry)) _retrying = null;
+    });
+    _retrying = retry;
+    _retryingGen = gen;
+    return retry;
+  }
 
   Future<void>? _retrying;
+  int? _retryingGen;
 
-  Future<void> _runRetry() async {
-    final gen = _loadGeneration;
+  Future<void> _runRetry(int gen) async {
     _stopVerification();
     await _disposePlayer();
     if (!_isCurrentLoad(gen)) return;

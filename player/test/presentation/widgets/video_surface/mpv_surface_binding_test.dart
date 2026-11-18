@@ -25,9 +25,11 @@ class _Surface implements MpvSurface {
 
   final setOptions = <(int, String, String)>[];
   final detached = <int>[];
+  final attached = <int>[];
 
   @override
   Future<void> attach(int handle, int viewId) async {
+    attached.add(handle);
     await attachGate?.future;
   }
 
@@ -174,6 +176,7 @@ void main() {
     unawaited(binding.attach().then((v) => attached = v));
     await tester.pump(const Duration(seconds: 4));
     expect(attached, isNull);
+    expect(surface.attached, [8], reason: 'the native attach was sent');
 
     await tester.pump(const Duration(seconds: 2));
     expect(attached, isFalse);
