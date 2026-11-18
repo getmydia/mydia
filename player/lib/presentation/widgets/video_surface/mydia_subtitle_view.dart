@@ -15,6 +15,10 @@ class MydiaSubtitleViewController {
   /// view is attached.
   void setPadding(EdgeInsets padding, {required Duration duration}) =>
       _state?._setPadding(padding, duration);
+
+  /// Returns to the configuration's padding, animated over [duration].
+  void resetPadding({required Duration duration}) =>
+      _state?._setPadding(null, duration);
 }
 
 /// Draws text subtitles from a [Player] alone.
@@ -84,7 +88,7 @@ class _MydiaSubtitleViewState extends State<MydiaSubtitleView> {
     super.dispose();
   }
 
-  void _setPadding(EdgeInsets padding, Duration duration) {
+  void _setPadding(EdgeInsets? padding, Duration duration) {
     if (!mounted) return;
     setState(() {
       _duration = duration;

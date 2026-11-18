@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/player/subtitle_position.dart';
 import 'package:player/core/player/video_scaling.dart';
 import 'package:player/presentation/widgets/video_surface/mydia_subtitle_view.dart';
 import 'package:player/presentation/widgets/video_surface/surface_subtitle_lift.dart';
@@ -12,11 +13,20 @@ class _FakePlatformPlayer extends PlatformPlayer {
 class _RecordingController extends MydiaSubtitleViewController {
   EdgeInsets? padding;
   Duration? duration;
+  bool reset = false;
 
   @override
   void setPadding(EdgeInsets padding, {required Duration duration}) {
     this.padding = padding;
     this.duration = duration;
+    reset = false;
+  }
+
+  @override
+  void resetPadding({required Duration duration}) {
+    padding = null;
+    this.duration = duration;
+    reset = true;
   }
 }
 
@@ -71,13 +81,37 @@ void main() {
       player: player,
       subtitles: subtitles,
       box: () => box,
-      scaling: () => VideoScaling.fill,
+      scaling: VideoScaling.fill,
       applyPosition: (_, pos) async => positions.add(pos),
     );
 
     lift.apply(80, duration: Duration.zero);
 
     expect(positions.single, closeTo(100 - 100 * 80 / 600, 0.001));
+  });
+
+  test('back at rest the text returns to the configuration padding', () {
+    final lift = SurfaceSubtitleLift(
+      player: player,
+      subtitles: subtitles,
+      box: () => const Size(1000, 600),
+      applyPosition: (p, pos) async {},
+    );
+
+    lift.apply(80, duration: Duration.zero);
+    expect(subtitles.reset, isFalse);
+    lift.apply(kSubtitleRestPadding, duration: Duration.zero);
+    expect(subtitles.reset, isTrue);
+  });
+
+  test('a change of scaling is a different lift, so sub-pos is resent', () {
+    SurfaceSubtitleLift lift(VideoScaling scaling) => SurfaceSubtitleLift(
+        player: player,
+        subtitles: subtitles,
+        box: () => const Size(1, 1),
+        scaling: scaling);
+    expect(lift(VideoScaling.fit), lift(VideoScaling.fit));
+    expect(lift(VideoScaling.fit), isNot(lift(VideoScaling.fill)));
   });
 
   test('equality follows player and subtitles', () {

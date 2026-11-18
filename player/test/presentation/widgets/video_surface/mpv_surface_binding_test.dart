@@ -57,11 +57,17 @@ class _Player extends PlatformPlayer {
 
   final _handle = Completer<int>();
 
-  @override
-  Future<int> get handle => _handle.future;
+  /// Set once something asked for the handle.
+  bool handleRequested = false;
 
   @override
-  // ignore: must_call_super
+  Future<int> get handle {
+    handleRequested = true;
+    return _handle.future;
+  }
+
+  @override
+  // ignore: must_call_super, the fake has no native player to release.
   Future<void> dispose() async {}
 }
 
@@ -102,6 +108,8 @@ void main() {
     unawaited(binding.attach().then((v) => attached = v));
     await tester.pump();
     expect(attached, isNull, reason: 'the handle has not resolved');
+    expect((binding.player.platform! as _Player).handleRequested, isTrue,
+        reason: 'attach is past the view and waiting on the handle');
 
     await binding.detach();
     await tester.pump();
@@ -154,5 +162,21 @@ void main() {
 
     await tester.pump(const Duration(seconds: 2));
     expect(done, isTrue);
+  });
+
+  testWidgets(
+      'an attach with no native reply gives up, so playback can fall '
+      'back', (tester) async {
+    final surface = _Surface()..attachGate = Completer<void>();
+    final binding = await _mount(tester, surface: surface, handle: 8);
+
+    bool? attached;
+    unawaited(binding.attach().then((v) => attached = v));
+    await tester.pump(const Duration(seconds: 4));
+    expect(attached, isNull);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(attached, isFalse);
+    expect(surface.setOptions, isEmpty);
   });
 }

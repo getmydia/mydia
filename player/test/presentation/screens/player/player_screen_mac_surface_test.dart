@@ -45,6 +45,10 @@ const _appVersion = '1.7.0';
 /// to do, so ordering across them can be asserted.
 final _log = <String>[];
 
+/// Handles whose player has listed its tracks, which the fake plugin needs
+/// before it can answer a start check.
+final _listedTracks = <int>{};
+
 class _FakeSurface implements MpvSurface {
   _FakeSurface({
     this.start = VideoOutputStart.started,
@@ -69,9 +73,14 @@ class _FakeSurface implements MpvSurface {
   @override
   Future<void> attach(int handle, int viewId) async {
     _log.add('attach $handle');
+    await attachGate?.future;
+    _log.add('attached $handle');
     final error = attachError;
     if (error != null) throw error;
   }
+
+  /// Holds every [attach] reply until completed, when set.
+  Completer<void>? attachGate;
 
   /// Holds [awaitVideoOutput]'s answer until completed, when set.
   Completer<void>? startGate;
@@ -80,9 +89,9 @@ class _FakeSurface implements MpvSurface {
   Future<VideoOutputStart> awaitVideoOutput(int handle) async {
     _log.add('awaitVideoOutput $handle');
     // The plugin can tell an audio-only source from a video one only once
-    // mpv has opened it and listed its tracks; a probe before that is a
-    // check that could not run.
-    if (!_log.contains('open $handle')) return VideoOutputStart.timedOut;
+    // mpv has listed the tracks; a probe before that is a check that could
+    // not run.
+    if (!_listedTracks.contains(handle)) return VideoOutputStart.timedOut;
     await startGate?.future;
     return startByHandle[handle] ?? start;
   }
@@ -109,14 +118,20 @@ class _FakeSurface implements MpvSurface {
 /// unresolved, which is what a texture-path player needs under test so
 /// `VideoController` never reaches native code.
 class _FakePlayer extends PlatformPlayer {
-  _FakePlayer({this.handleValue, this.withVideo = true})
-      : super(configuration: const PlayerConfiguration()) {
+  _FakePlayer({
+    this.handleValue,
+    this.withVideo = true,
+    this.tracksOnOpen = true,
+  }) : super(configuration: const PlayerConfiguration()) {
     final value = handleValue;
     if (value != null) _handle.complete(value);
   }
 
   final int? handleValue;
   final bool withVideo;
+
+  /// Whether [open] lists the tracks; otherwise [publishTracks] does.
+  final bool tracksOnOpen;
   final _handle = Completer<int>();
   bool opened = false;
   bool disposed = false;
@@ -136,6 +151,11 @@ class _FakePlayer extends PlatformPlayer {
     durationController.add(state.duration);
     positionController.add(state.position);
     playingController.add(play);
+    if (tracksOnOpen) publishTracks();
+  }
+
+  /// Lists the source's tracks, as mpv does once it has probed the file.
+  void publishTracks() {
     final probed = probedTracks();
     state = state.copyWith(
       tracks: withVideo
@@ -143,6 +163,8 @@ class _FakePlayer extends PlatformPlayer {
           : Tracks(
               video: const [], audio: probed.audio, subtitle: probed.subtitle),
     );
+    final value = handleValue;
+    if (value != null) _listedTracks.add(value);
     tracksController.add(state.tracks);
   }
 
@@ -273,7 +295,58 @@ Future<void> _unmount(WidgetTester tester) async {
 bool _playing() => find.byType(PlaybackChrome).evaluate().isNotEmpty;
 
 void main() {
-  setUp(_log.clear);
+  setUp(() {
+    _log.clear();
+    _listedTracks.clear();
+  });
+
+  testWidgets('the player opens only once attach has replied', (tester) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final fake = _FakePlayer(handleValue: 13);
+    final surface = _FakeSurface()..attachGate = Completer<void>();
+
+    await _mount(tester, rig,
+        createPlayer: () => Player(platformPlayer: fake), surface: surface);
+    await pumpUntil(tester, () => _log.contains('attach 13'));
+    expect(_log, contains('attach 13'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(fake.opened, isFalse, reason: 'attach has not replied yet');
+
+    surface.attachGate!.complete();
+    await pumpUntil(tester, _playing);
+    expect(_log, containsAllInOrder(['attached 13', 'open 13']));
+
+    await _unmount(tester);
+  });
+
+  testWidgets('the start check waits for the track list, not just open',
+      (tester) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final fake =
+        _FakePlayer(handleValue: 14, withVideo: false, tracksOnOpen: false);
+
+    await _mount(tester, rig,
+        createPlayer: () => Player(platformPlayer: fake),
+        surface: _FakeSurface());
+    await pumpUntil(tester, () => fake.opened);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_log, isNot(contains('awaitVideoOutput 14')),
+        reason: 'mpv has not listed the tracks yet');
+
+    fake.publishTracks();
+    await pumpUntil(tester, _playing);
+
+    expect(_log, contains('awaitVideoOutput 14'));
+    expect(find.byType(PlayerVideoSurface), findsOneWidget,
+        reason: 'an audio-only source is no surface failure');
+    await tester.runAsync(() async {
+      expect(await rig.settings.getMacSurfaceFailedVersion(), isNull);
+    });
+
+    await _unmount(tester);
+  });
 
   testWidgets(
       'the surface path builds no VideoController and attaches '

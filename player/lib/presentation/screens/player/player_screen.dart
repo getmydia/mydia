@@ -2875,6 +2875,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
+    // The memory write above awaits: another file may have loaded since,
+    // and [plan] and [position] are this one's. Only the playback that asked
+    // for the fallback may switch.
+    if (!mounted ||
+        !identical(_player, player) ||
+        !identical(_playback, playback)) {
+      return;
+    }
+
     // The choice stays the viewer's: `fallbackPlan` already honours it as
     // closely as this device allows. The stored default is never written
     // here either, since one file failing says nothing about the next.
@@ -3119,6 +3128,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _stopVerification();
       await _disposePlayer();
       if (superseded() || !mounted) return player;
+      // An error the surface player raised (a downloaded file has no policy
+      // to defer it to) is not the texture player's: back to loading, and
+      // the retry reports its own.
+      if (_error != null) {
+        setState(() {
+          _error = null;
+          _isLoading = true;
+        });
+      }
       return _openPlayerAndStart(
         mediaSource,
         httpHeaders,
@@ -6036,8 +6054,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The error page's Retry. A playback error can raise that page while the
   /// failed player is still installed (on the surface, still attached), so
   /// it is torn down before the reload creates the next one. A load that
-  /// started meanwhile, a switch to another file say, wins.
-  Future<void> _retry() async {
+  /// started meanwhile, a switch to another file say, wins. Taps while one
+  /// retry is under way join it, so a second one cannot skip the teardown.
+  Future<void> _retry() => _retrying ??= _runRetry().whenComplete(() {
+        _retrying = null;
+      });
+
+  Future<void>? _retrying;
+
+  Future<void> _runRetry() async {
     final gen = _loadGeneration;
     _stopVerification();
     await _disposePlayer();

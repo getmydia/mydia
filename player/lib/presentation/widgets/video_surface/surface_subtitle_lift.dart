@@ -18,13 +18,10 @@ class SurfaceSubtitleLift implements SubtitleLift {
     required this.player,
     required this.subtitles,
     required this.box,
-    VideoScaling Function()? scaling,
+    this.scaling = VideoScaling.fit,
     Future<void> Function(Player player, double subPos) applyPosition =
         applySubtitlePosition,
-  })  : scaling = scaling ?? _fit,
-        _applyPosition = applyPosition;
-
-  static VideoScaling _fit() => VideoScaling.fit;
+  }) : _applyPosition = applyPosition;
 
   final Player player;
   final MydiaSubtitleViewController subtitles;
@@ -32,33 +29,42 @@ class SurfaceSubtitleLift implements SubtitleLift {
   /// The size of the box subtitles are drawn in, read at apply time.
   final Size Function() box;
 
-  /// The picture's scaling, read at apply time. Fill (`panscan=1`) covers
-  /// the box, so no letterbox bar absorbs part of the lift.
-  final VideoScaling Function() scaling;
+  /// The picture's scaling. Fill (`panscan=1`) covers the box, so no
+  /// letterbox bar absorbs part of the lift.
+  final VideoScaling scaling;
 
   final Future<void> Function(Player player, double subPos) _applyPosition;
 
   // `PlaybackChrome` builds a fresh lift on every rebuild; equality on what
-  // it drives lets `ChromeSubtitleLift` see "the same lift".
+  // it drives lets `ChromeSubtitleLift` see "the same lift". Scaling is part
+  // of it: the same lift in pixels is a different `sub-pos` under fill, so
+  // a change of scaling must reach mpv again.
   @override
   bool operator ==(Object other) =>
       other is SurfaceSubtitleLift &&
       identical(other.player, player) &&
-      identical(other.subtitles, subtitles);
+      identical(other.subtitles, subtitles) &&
+      other.scaling == scaling;
 
   @override
-  int get hashCode =>
-      Object.hash(identityHashCode(player), identityHashCode(subtitles));
+  int get hashCode => Object.hash(
+      identityHashCode(player), identityHashCode(subtitles), scaling);
 
   @override
   void apply(double bottom, {required Duration duration}) {
-    subtitles.setPadding(
-      EdgeInsets.fromLTRB(16, 0, 16, bottom),
-      duration: duration,
-    );
+    // At rest the text goes back to the configuration's own padding, which
+    // can change while no lift is up.
+    if (bottom <= kSubtitleRestPadding) {
+      subtitles.resetPadding(duration: duration);
+    } else {
+      subtitles.setPadding(
+        EdgeInsets.fromLTRB(16, 0, 16, bottom),
+        duration: duration,
+      );
+    }
     // Without the picture's size, `subPosForLift` takes it to fill the box,
     // which is what fill does.
-    final fitted = scaling() == VideoScaling.fit;
+    final fitted = scaling == VideoScaling.fit;
     unawaited(_applyPosition(
       player,
       subPosForLift(

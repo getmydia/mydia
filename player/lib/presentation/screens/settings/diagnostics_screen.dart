@@ -258,7 +258,10 @@ class _PlaybackSection extends ConsumerWidget {
 }
 
 extension on _PlaybackSection {
-  /// The legacy-output switch and the line saying which output is active.
+  /// The legacy-output switch and the line saying which output the next
+  /// playback is set to use. A playback that fell back to the texture only
+  /// for itself (a slow start) records nothing, so this line still names
+  /// gpu-next for it.
   ///
   /// The switch is disabled until its value loads, and the output line waits
   /// for both reads: a guess shown meanwhile, or left up after a failed
@@ -268,8 +271,13 @@ extension on _PlaybackSection {
     final legacyRead = ref.watch(legacyMacVideoOutputProvider);
     final failedRead = ref.watch(_macSurfaceFailedVersionProvider);
     final legacy = legacyRead.hasValue ? legacyRead.requireValue : null;
-    final bothRead = legacy != null && failedRead.hasValue;
     final failedVersion = failedRead.value;
+    // A recorded failure counts only against the running version, which
+    // `updateProvider` publishes after its own read: until then the marker
+    // cannot be compared, and the line would guess.
+    final bothRead = legacy != null &&
+        failedRead.hasValue &&
+        (failedVersion == null || appVersion.isNotEmpty);
     final output = switch (chooseVideoOutputPath(
       platform: defaultTargetPlatform,
       isWeb: kIsWeb,

@@ -37,6 +37,11 @@ const _viewCreationTimeout = Duration(seconds: 5);
 /// player may still be disposed.
 const _detachReplyTimeout = Duration(seconds: 5);
 
+/// How long the attach writes may take. They are a handful of option
+/// writes; no reply by then means the plugin's queue is stuck, and the
+/// playback goes to the texture instead of waiting on it.
+const _attachReplyTimeout = Duration(seconds: 5);
+
 /// The surface's hold on one [Player]: its platform view, its handle while
 /// attached, and the panscan it last sent.
 ///
@@ -86,9 +91,14 @@ class MpvSurfaceBinding {
     // the plugin runs both on one serial queue, in the order they arrive.
     _handle = handle;
     try {
-      await surface.attach(handle, viewId);
+      await surface.attach(handle, viewId).timeout(_attachReplyTimeout);
     } on PlatformException catch (e) {
       debugPrint('[MpvSurface] attach failed: ${e.code} ${e.message}');
+      return false;
+    } on TimeoutException {
+      // The caller's teardown detaches whatever the writes got to.
+      debugPrint('[MpvSurface] attach got no reply within '
+          '${_attachReplyTimeout.inSeconds}s');
       return false;
     }
     // A detach sent while the attach was in flight is already queued behind
@@ -234,7 +244,7 @@ class _PlayerVideoSurfaceState extends State<PlayerVideoSurface> {
                   player: player,
                   subtitles: binding.subtitles,
                   box: () => _box,
-                  scaling: () => widget.scaling,
+                  scaling: widget.scaling,
                 ),
               ),
             ),

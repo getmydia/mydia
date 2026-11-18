@@ -24,21 +24,22 @@ import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/mydia_test_source.dart';
 import '../../../test_utils/toast_harness.dart';
 
-/// Holds both macOS output reads until the test releases them.
+/// Holds each macOS output read until the test releases it.
 class _HeldOutputReads extends SettingsService {
   _HeldOutputReads() : super(storage: MockAuthStorage());
 
-  final release = Completer<void>();
+  final releaseHatch = Completer<void>();
+  final releaseMarker = Completer<void>();
 
   @override
   Future<bool> getLegacyMacVideoOutput() async {
-    await release.future;
+    await releaseHatch.future;
     return false;
   }
 
   @override
   Future<String?> getMacSurfaceFailedVersion() async {
-    await release.future;
+    await releaseMarker.future;
     return null;
   }
 }
@@ -303,11 +304,18 @@ void main() {
             reason: 'the switch cannot be trusted before its value loads');
         expect(find.byKey(const Key('mac-video-output-status')), findsNothing);
 
-        settings.release.complete();
+        settings.releaseHatch.complete();
         await tester.pump();
         await tester.pump();
 
         expect(tester.widget<SettingsRow>(toggle).onChanged, isNotNull);
+        expect(find.byKey(const Key('mac-video-output-status')), findsNothing,
+            reason: 'the failure marker has not been read yet');
+
+        settings.releaseMarker.complete();
+        await tester.pump();
+        await tester.pump();
+
         expect(
             find.byKey(const Key('mac-video-output-status')), findsOneWidget);
       } finally {

@@ -101,4 +101,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(_padding(tester).bottom, 40);
   });
+
+  testWidgets('resetPadding follows the configuration again after a lift',
+      (tester) async {
+    final controller = MydiaSubtitleViewController();
+    Widget view(double bottom) => _host(MydiaSubtitleView(
+          player: player,
+          configuration: SubtitleViewConfiguration(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, bottom)),
+          controller: controller,
+        ));
+    await tester.pumpWidget(view(24));
+    controller.setPadding(const EdgeInsets.fromLTRB(16, 0, 16, 80),
+        duration: Duration.zero);
+    await tester.pumpAndSettle();
+    controller.resetPadding(duration: Duration.zero);
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(view(40));
+    await tester.pumpAndSettle();
+    expect(_padding(tester).bottom, 40);
+  });
 }
