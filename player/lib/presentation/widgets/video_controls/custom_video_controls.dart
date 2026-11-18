@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' show Player;
-import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
@@ -9,10 +8,13 @@ import '../../../core/player/video_scaling.dart';
 import 'chrome_subtitle_lift.dart';
 import 'playback_chrome.dart';
 
-/// Builder for media_kit's `Video(controls: ...)` parameter.
+/// Builds [PlaybackChrome] for a player and the subtitle lift of whichever
+/// video output hosts it.
 ///
-/// All chrome now lives in [PlaybackChrome]; this file is only the adapter
-/// between media_kit's builder signature and that widget.
+/// All chrome lives in [PlaybackChrome]; this is only the adapter between the
+/// player screen's chrome arguments and that widget. The texture path's
+/// `Video(controls: ...)` and the macOS surface both call the builder it
+/// returns.
 ///
 /// [castAction] and [onCastTap] are `required` despite being nullable, which
 /// the other optional chrome parameters are not. Casting was invisible for the
@@ -84,70 +86,4 @@ Widget Function(Player player, SubtitleLift lift) playbackChromeBuilder({
         selectedSubtitleLabel: selectedSubtitleLabel,
         selectedQualityLabel: selectedQualityLabel,
       );
-}
-
-/// [playbackChromeBuilder] for media_kit's `Video(controls: ...)`, which
-/// hands over a `VideoState`.
-Widget Function(VideoState) customVideoControlsBuilderWithCallback({
-  required StreamTimeline timeline,
-  required Future<void> Function(Duration realTarget) onSeekToReal,
-  required Widget? castAction,
-  required VoidCallback? onCastTap,
-  String? title,
-  VoidCallback? onBack,
-  VoidCallback? onAudioTap,
-  VoidCallback? onSubtitleTap,
-  VoidCallback? onQualityTap,
-  VoidCallback? onFullscreenTap,
-  VoidCallback? onAlwaysOnTopTap,
-  VoidCallback? onScalingTap,
-  VideoScaling scaling = VideoScaling.fit,
-  VoidCallback? onPreviousEpisode,
-  VoidCallback? onNextEpisode,
-  VoidCallback? onActivity,
-  bool isFullscreen = false,
-  bool isAlwaysOnTop = false,
-  int audioTrackCount = 0,
-  String? selectedAudioLabel,
-  String? selectedSubtitleLabel,
-  String? selectedQualityLabel,
-  ChromeVisibilityController? chromeVisibility,
-  FocusNode? playPauseFocusNode,
-  FocusNode? chromeFocusNode,
-  ScrubController? scrub,
-  FocusNode? scrubberFocusNode,
-  ScrubThumbnails? scrubThumbnails,
-}) {
-  final build = playbackChromeBuilder(
-    timeline: timeline,
-    onSeekToReal: onSeekToReal,
-    castAction: castAction,
-    onCastTap: onCastTap,
-    title: title,
-    onBack: onBack,
-    onAudioTap: onAudioTap,
-    onSubtitleTap: onSubtitleTap,
-    onQualityTap: onQualityTap,
-    onFullscreenTap: onFullscreenTap,
-    onAlwaysOnTopTap: onAlwaysOnTopTap,
-    onScalingTap: onScalingTap,
-    scaling: scaling,
-    onPreviousEpisode: onPreviousEpisode,
-    onNextEpisode: onNextEpisode,
-    onActivity: onActivity,
-    isFullscreen: isFullscreen,
-    isAlwaysOnTop: isAlwaysOnTop,
-    audioTrackCount: audioTrackCount,
-    selectedAudioLabel: selectedAudioLabel,
-    selectedSubtitleLabel: selectedSubtitleLabel,
-    selectedQualityLabel: selectedQualityLabel,
-    chromeVisibility: chromeVisibility,
-    playPauseFocusNode: playPauseFocusNode,
-    chromeFocusNode: chromeFocusNode,
-    scrub: scrub,
-    scrubberFocusNode: scrubberFocusNode,
-    scrubThumbnails: scrubThumbnails,
-  );
-  return (VideoState state) =>
-      build(state.widget.controller.player, VideoStateSubtitleLift(state));
 }

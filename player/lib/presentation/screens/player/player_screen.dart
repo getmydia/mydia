@@ -6090,7 +6090,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ? _showQualitySelector
           : null,
       // Null where no fullscreen route exists, which hides the button
-      // rather than leaving a dead one — matching how `onQualityTap`
+      // rather than leaving a dead one, matching how `onQualityTap`
       // above hides itself at a single quality rung.
       onFullscreenTap: _fullscreen.available.value ? _fullscreen.toggle : null,
       onAlwaysOnTopTap: _toggleAlwaysOnTop,

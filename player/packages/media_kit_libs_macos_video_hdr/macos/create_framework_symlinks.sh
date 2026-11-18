@@ -1,10 +1,9 @@
 #!/bin/sh
 
-# `create_framework_symlinks.sh` is duplicated across:
-# - `media_kit_libs_ios_audio`
-# - `media_kit_libs_ios_video`
-# - `media_kit_libs_macos_audio`
-# - `media_kit_libs_macos_video`
+# Copied from media_kit's `media_kit_libs_macos_video` (upstream shares this
+# script across its `media_kit_libs_{ios,macos}_{audio,video}` packages) for
+# this package, which ships the video-hdr libmpv build instead. Keep it in
+# step with upstream's copy.
 
 set -e
 set -u

@@ -36,8 +36,9 @@ List<String> macHdrFormats(
 /// The HDR claim for a native profile: [macHdrFormats] on macOS, resolving
 /// the path with [resolvePath], and [nativeHdrFormats] anywhere else.
 ///
-/// A resolver that throws falls back to [nativeHdrFormats]. Without a [resolvePath] macOS claims the texture's list, which is what it
-/// claimed before the surface existed.
+/// A resolver that throws falls back to [nativeHdrFormats]. Without a
+/// [resolvePath] macOS claims the texture's list, which is what it claimed
+/// before the surface existed.
 Future<List<String>> nativeProfileHdrFormats({
   required bool isMacOS,
   Future<VideoOutputPath> Function()? resolvePath,
