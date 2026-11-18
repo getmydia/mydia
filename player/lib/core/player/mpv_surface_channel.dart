@@ -31,6 +31,20 @@ class DisplayInfo {
       );
 }
 
+/// What [MpvSurface.awaitVideoOutput] found.
+enum VideoOutputStart {
+  /// `current-vo` is set, or the source has no video.
+  started,
+
+  /// mpv rejected the video output: it deselected the video track (`vid`
+  /// reads `no`, or no video entry in `track-list` is selected). This is
+  /// what a gpu-next that cannot run on this Mac looks like.
+  failed,
+
+  /// Neither within 2 seconds: the output may only be slow to start.
+  timedOut,
+}
+
 /// Puts an mpv player's video output into a platform view, and takes it out.
 ///
 /// Every call reaches mpv on the plugin's own serial queue, never on the
@@ -41,10 +55,9 @@ abstract interface class MpvSurface {
   /// `vid=auto`. Returns once the writes are done, before the output exists.
   Future<void> attach(int handle, int viewId);
 
-  /// Whether the output started: false when the player has a video track
-  /// and `current-vo` is still empty 2 seconds after `vid=auto`. True at
-  /// once for a source with no video.
-  Future<bool> awaitVideoOutput(int handle);
+  /// How the output came up after `vid=auto`, checked for up to 2 seconds.
+  /// [VideoOutputStart.started] at once for a source with no video.
+  Future<VideoOutputStart> awaitVideoOutput(int handle);
 
   Future<void> setOption(int handle, String name, String value);
 
@@ -74,10 +87,12 @@ class MpvSurfaceChannel implements MpvSurface {
       });
 
   @override
-  Future<bool> awaitVideoOutput(int handle) async {
+  Future<VideoOutputStart> awaitVideoOutput(int handle) async {
     final result = await _methods.invokeMapMethod<String, Object?>(
         'awaitVideoOutput', {'handle': handle});
-    return result?['started'] == true;
+    if (result?['started'] == true) return VideoOutputStart.started;
+    if (result?['failed'] == true) return VideoOutputStart.failed;
+    return VideoOutputStart.timedOut;
   }
 
   @override

@@ -104,7 +104,7 @@ class _RecordingSurface implements MpvSurface {
       _traced('attach $handle', () => _inner.attach(handle, viewId));
 
   @override
-  Future<bool> awaitVideoOutput(int handle) => _traced(
+  Future<VideoOutputStart> awaitVideoOutput(int handle) => _traced(
       'awaitVideoOutput $handle', () => _inner.awaitVideoOutput(handle));
 
   @override

@@ -89,15 +89,18 @@ class MpvSurfaceBinding {
     return true;
   }
 
-  /// Whether mpv's output started. Call once the source's tracks are known.
-  Future<bool> awaitVideoOutput() async {
+  /// How mpv's output came up. Call once the source's tracks are known.
+  ///
+  /// A check that could not run reads as [VideoOutputStart.timedOut]: it says
+  /// nothing about whether gpu-next works on this Mac.
+  Future<VideoOutputStart> awaitVideoOutput() async {
     final handle = _handle;
-    if (handle == null) return false;
+    if (handle == null) return VideoOutputStart.timedOut;
     try {
       return await surface.awaitVideoOutput(handle);
     } on PlatformException catch (e) {
       debugPrint('[MpvSurface] start check failed: ${e.code} ${e.message}');
-      return false;
+      return VideoOutputStart.timedOut;
     }
   }
 

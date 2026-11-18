@@ -616,9 +616,12 @@ path.
   reads everything else at that moment. The list restores mpv's own defaults
   for the quality options media_kit lowers for its texture
   (`hdr-compute-peak=no` among them).
-- `awaitVideoOutput` runs once the source's tracks are known. It polls
-  `current-vo` for up to 2 seconds when the file has a video track, and
-  answers `started: true` at once for audio only.
+- `awaitVideoOutput` runs once the source's tracks are known. When the file
+  has a video track it polls for up to 2 seconds and answers `started` once
+  `current-vo` is set, `failed` once mpv deselects the video track (`vid`
+  reads `no`, or no video entry in `track-list` is selected, which is how
+  mpv gives up on an output that failed to initialize), and neither when
+  time runs out. Audio only answers `started` at once.
 - `detach` sets `vid=no` and waits for `current-vo` to clear, so the output is
   gone while its host view still exists. Both dispose paths call it before
   `player.dispose()`. It gives up after 3 seconds and logs, so closing never
@@ -644,12 +647,16 @@ Settings, Diagnostics has "Use the legacy video output", stored under
 texture path and the stock media_kit behaviour; it is for a viewer whose video
 looks wrong or does not start. The row under it says which output is active.
 
-When `awaitVideoOutput` reports that `gpu-next` did not start, the screen
+When `awaitVideoOutput` reports that mpv rejected `gpu-next`, the screen
 detaches, rebuilds the playback on the texture path, and records the running
 app version under `mac_surface_failed_version`. Later playbacks on that version
 go straight to the texture path, the stats Why row says the HDR renderer
 could not start, and Diagnostics shows "(fallback recorded)". An app update
 changes the version, so the surface gets one more try.
+
+An output that is merely not up after 2 seconds also falls back to the
+texture path, for that playback only. Nothing is recorded, so a slow but
+healthy start never turns HDR off until the next update.
 
 ### The libmpv build
 

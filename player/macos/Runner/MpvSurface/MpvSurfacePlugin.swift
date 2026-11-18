@@ -13,8 +13,10 @@ import FlutterMacOS
 /// - `attach({handle, viewId, options}) -> null`: sets `wid` to the host
 ///   view, each `[name, value]` option in order, then `vid=auto`.
 /// - `setOption({handle, name, value}) -> null`
-/// - `awaitVideoOutput({handle}) -> {started}`: with a video track in
-///   `track-list`, polls `current-vo` for up to 2 s; without one, `true`.
+/// - `awaitVideoOutput({handle}) -> {started, failed}`: with a video track
+///   in `track-list`, polls for up to 2 s until `current-vo` is set
+///   (`started`) or mpv deselects the video track (`failed`); both false
+///   means it timed out. Without a video track, `started` at once.
 /// - `detach({handle}) -> null`: sets `vid=no` and waits up to 3 s for
 ///   `current-vo` to clear, logging if it does not.
 ///
@@ -200,7 +202,7 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       onQueue(reply: { result(nil) }) { self.set(handle, name, value) }
 
     case "awaitVideoOutput":
-      awaitVideoOutput(handle) { started in result(["started": started]) }
+      awaitVideoOutput(handle) { outcome in result(outcome.reply) }
 
     case "detach":
       let hosts = forgetAttachment(handleValue)
@@ -237,18 +239,44 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
     }
   }
 
-  private func awaitVideoOutput(_ handle: OpaquePointer, reply: @escaping (Bool) -> Void) {
+  /// How a start check ended.
+  enum VideoOutputStart {
+    /// `current-vo` is set, or there is no video to output.
+    case started
+    /// mpv deselected the video track, which is how it gives up on a video
+    /// output that failed to initialize.
+    case failed
+    /// Neither within `startTimeout`: possibly just a slow start.
+    case timedOut
+
+    var reply: [String: Bool] { ["started": self == .started, "failed": self == .failed] }
+  }
+
+  private func awaitVideoOutput(
+    _ handle: OpaquePointer, reply: @escaping (VideoOutputStart) -> Void
+  ) {
     queue.async {
-      let started: Bool
-      if self.hasVideoTrack(handle) {
-        started = self.poll(timeout: Self.startTimeout) {
-          !(self.api.getString(handle, "current-vo") ?? "").isEmpty
+      var outcome = VideoOutputStart.started
+      if !self.videoTracks(handle).isEmpty {
+        let settled = self.poll(timeout: Self.startTimeout) {
+          if !(self.api.getString(handle, "current-vo") ?? "").isEmpty {
+            outcome = .started
+            return true
+          }
+          if self.videoDeselected(handle) {
+            outcome = .failed
+            return true
+          }
+          return false
         }
-        if !started { self.log("video output did not start within \(Self.startTimeout)s") }
-      } else {
-        started = true
+        if !settled { outcome = .timedOut }
+        switch outcome {
+        case .started: break
+        case .failed: self.log("mpv deselected the video track: the video output failed")
+        case .timedOut: self.log("video output did not start within \(Self.startTimeout)s")
+        }
       }
-      DispatchQueue.main.async { reply(started) }
+      DispatchQueue.main.async { reply(outcome) }
     }
   }
 
@@ -292,12 +320,22 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
     if code != 0 { log("set \(name)=\(value) failed: \(code)") }
   }
 
-  private func hasVideoTrack(_ handle: OpaquePointer) -> Bool {
+  /// The video entries of `track-list`; empty when it is unreadable.
+  private func videoTracks(_ handle: OpaquePointer) -> [[String: Any]] {
     guard let json = api.getString(handle, "track-list"),
       let data = json.data(using: .utf8),
       let tracks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
-    else { return false }
-    return tracks.contains { $0["type"] as? String == "video" }
+    else { return [] }
+    return tracks.filter { $0["type"] as? String == "video" }
+  }
+
+  /// mpv's signal that the video output failed to initialize: it deselects
+  /// the video track, so `vid` reads `no`, or the track is still listed but
+  /// none is selected.
+  private func videoDeselected(_ handle: OpaquePointer) -> Bool {
+    if api.getString(handle, "vid") == "no" { return true }
+    let video = videoTracks(handle)
+    return !video.isEmpty && !video.contains { $0["selected"] as? Bool == true }
   }
 
   /// Checks `done` every `pollInterval` until it holds or `timeout` passes.

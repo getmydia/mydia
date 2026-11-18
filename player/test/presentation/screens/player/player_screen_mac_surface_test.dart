@@ -45,10 +45,10 @@ const _appVersion = '1.7.0';
 final _log = <String>[];
 
 class _FakeSurface implements MpvSurface {
-  _FakeSurface({this.started = true, this.attachError});
+  _FakeSurface({this.start = VideoOutputStart.started, this.attachError});
 
   /// What [awaitVideoOutput] answers.
-  bool started;
+  VideoOutputStart start;
 
   /// Thrown by [attach] when set, the way the plugin refuses (`no-view`).
   final PlatformException? attachError;
@@ -63,9 +63,9 @@ class _FakeSurface implements MpvSurface {
   }
 
   @override
-  Future<bool> awaitVideoOutput(int handle) async {
+  Future<VideoOutputStart> awaitVideoOutput(int handle) async {
     _log.add('awaitVideoOutput $handle');
-    return started;
+    return start;
   }
 
   @override
@@ -362,7 +362,8 @@ void main() {
     }
 
     await _mount(tester, rig,
-        createPlayer: next, surface: _FakeSurface(started: false));
+        createPlayer: next,
+        surface: _FakeSurface(start: VideoOutputStart.failed));
     await tester.runAsync(() =>
         pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
     await pumpUntil(tester, _playing);
@@ -380,6 +381,36 @@ void main() {
           'not start on this Mac'),
       findsOneWidget,
     );
+
+    await _unmount(tester);
+  });
+
+  testWidgets(
+      'a slow start falls back to texture for this playback and records '
+      'nothing', (tester) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final players = <_FakePlayer>[];
+    Player next() {
+      final p = _FakePlayer(handleValue: players.isEmpty ? 61 : null);
+      players.add(p);
+      return Player(platformPlayer: p);
+    }
+
+    await _mount(tester, rig,
+        createPlayer: next,
+        surface: _FakeSurface(start: VideoOutputStart.timedOut));
+    await tester.runAsync(() =>
+        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await pumpUntil(tester, _playing);
+
+    expect(find.byType(Video), findsOneWidget);
+    expect(find.byType(PlayerVideoSurface), findsNothing);
+    expect(_log, containsAllInOrder(['detach 61', 'dispose 61']));
+    await tester.runAsync(() async {
+      expect(await rig.settings.getMacSurfaceFailedVersion(), isNull,
+          reason: 'an output that is only slow to start is no failure');
+    });
 
     await _unmount(tester);
   });
@@ -429,7 +460,7 @@ void main() {
 
     await _mount(tester, rig,
         createPlayer: () => Player(platformPlayer: fake),
-        surface: _FakeSurface(started: true));
+        surface: _FakeSurface());
     await pumpUntil(tester, _playing);
 
     expect(find.byType(PlayerVideoSurface), findsOneWidget);

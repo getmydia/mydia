@@ -3054,8 +3054,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Rebuilds this playback on the texture path: same source, same
     // position, a fresh `Player`. Nothing has played yet when it runs.
     //
-    // [record] only when gpu-next itself did not start: that failure holds
-    // for this app version. A view that never appeared or a refused attach
+    // [record] only when mpv rejected gpu-next (it deselected the video
+    // track): that failure holds for this app version. A view that never
+    // appeared, a refused attach or an output still not up after 2 seconds
     // costs this playback only, and the next one tries the surface again.
     Future<Player> fallBackToTexture({required bool record}) async {
       debugPrint('[PlayerScreen] Surface did not start; using the texture');
@@ -3242,11 +3243,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Only now does mpv know whether the source has video at all, which an
     // audio-only file needs for the start check not to read as a failure.
     if (surfaceBinding != null) {
-      final started = await surfaceBinding.awaitVideoOutput();
+      final start = await surfaceBinding.awaitVideoOutput();
       if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
         return player;
       }
-      if (!started) return fallBackToTexture(record: true);
+      switch (start) {
+        case VideoOutputStart.started:
+          break;
+        case VideoOutputStart.failed:
+          return fallBackToTexture(record: true);
+        case VideoOutputStart.timedOut:
+          return fallBackToTexture(record: false);
+      }
     }
     _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {

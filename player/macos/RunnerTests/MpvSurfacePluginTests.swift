@@ -16,12 +16,22 @@ final class FakeMpvApi: MpvApi {
   private let lock = NSLock()
   private var _calls: [Call] = []
   private var currentVo: [String?]
-  var trackList: String?
+  private var _trackList: String?
+  private var _vid: String?
+  var trackList: String? {
+    get { lock.withLock { _trackList } }
+    set { lock.withLock { _trackList = newValue } }
+  }
+  /// What `vid` reads; nil reads as unset.
+  var vid: String? {
+    get { lock.withLock { _vid } }
+    set { lock.withLock { _vid = newValue } }
+  }
 
   /// `currentVo` is consumed one entry per `current-vo` read; the last entry
   /// repeats once the list is down to one.
   init(trackList: String? = nil, currentVo: [String?] = [nil]) {
-    self.trackList = trackList
+    self._trackList = trackList
     self.currentVo = currentVo
   }
 
@@ -39,7 +49,8 @@ final class FakeMpvApi: MpvApi {
     lock.withLock {
       _calls.append(Call(op: "get", name: k, value: nil, onMain: Thread.isMainThread))
       switch k {
-      case "track-list": return trackList
+      case "track-list": return _trackList
+      case "vid": return _vid
       case "current-vo":
         return currentVo.count > 1 ? currentVo.removeFirst() : currentVo.first ?? nil
       default: return nil
@@ -58,7 +69,12 @@ final class VirtualClock {
 
 final class MpvSurfacePluginTests: XCTestCase {
   private let handle = 0x1234
-  private let videoTracks = #"[{"id":1,"type":"video"},{"id":1,"type":"audio"}]"#
+  private let videoTracks =
+    #"[{"id":1,"type":"video","selected":true},{"id":1,"type":"audio","selected":true}]"#
+  /// What mpv leaves after it rejects the video output: the track is still
+  /// listed, but deselected.
+  private let videoDeselected =
+    #"[{"id":1,"type":"video","selected":false},{"id":1,"type":"audio","selected":true}]"#
   private let audioOnly = #"[{"id":1,"type":"audio"}]"#
 
   private var logs: [String] = []
@@ -153,6 +169,7 @@ final class MpvSurfacePluginTests: XCTestCase {
     let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
 
     XCTAssertEqual(reply?["started"] as? Bool, true)
+    XCTAssertEqual(reply?["failed"] as? Bool, false)
     XCTAssertEqual(api.currentVoReads, 0)
     XCTAssertEqual(clock.now, 0)
   }
@@ -164,10 +181,11 @@ final class MpvSurfacePluginTests: XCTestCase {
     let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
 
     XCTAssertEqual(reply?["started"] as? Bool, true)
+    XCTAssertEqual(reply?["failed"] as? Bool, false)
     XCTAssertEqual(api.currentVoReads, 3)
   }
 
-  func testAwaitVideoOutputReportsFalseWhenVoNeverAppears() {
+  func testAwaitVideoOutputTimesOutWithoutFailingWhileTrackStaysSelected() {
     let api = FakeMpvApi(trackList: videoTracks, currentVo: [nil])
     let clock = VirtualClock()
     let plugin = makePlugin(api: api, clock: clock)
@@ -175,8 +193,38 @@ final class MpvSurfacePluginTests: XCTestCase {
     let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
 
     XCTAssertEqual(reply?["started"] as? Bool, false)
+    XCTAssertEqual(reply?["failed"] as? Bool, false)
     XCTAssertGreaterThanOrEqual(clock.now, 2.0)
     XCTAssertLessThan(clock.now, 2.1)
+  }
+
+  func testAwaitVideoOutputFailsOnceMpvDeselectsTheVideoTrack() {
+    let api = FakeMpvApi(trackList: videoTracks, currentVo: [nil])
+    let clock = VirtualClock()
+    // The track is selected for the first poll, then mpv rejects the output.
+    let plugin = makePlugin(api: api, clock: clock) { d in
+      clock.sleep(d)
+      api.trackList = self.videoDeselected
+    }
+
+    let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
+
+    XCTAssertEqual(reply?["started"] as? Bool, false)
+    XCTAssertEqual(reply?["failed"] as? Bool, true)
+    XCTAssertLessThan(clock.now, 0.1)
+  }
+
+  func testAwaitVideoOutputFailsWhenVidReadsNo() {
+    let api = FakeMpvApi(trackList: videoTracks, currentVo: [nil])
+    api.vid = "no"
+    let clock = VirtualClock()
+    let plugin = makePlugin(api: api, clock: clock)
+
+    let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
+
+    XCTAssertEqual(reply?["started"] as? Bool, false)
+    XCTAssertEqual(reply?["failed"] as? Bool, true)
+    XCTAssertEqual(clock.now, 0)
   }
 
   // MARK: detach
