@@ -1,8 +1,8 @@
 all: Frameworks/*.xcframework Frameworks/.symlinks
 
 MPV_VARIANT=video-hdr
-MPV_XCFRAMEWORKS_VERSION=v0.7.3-mydia.2
-MPV_XCFRAMEWORKS_SHA256SUM=b0e16c34b8ad2413cd749b190f8464f9fce3795c33630df763eb19b3abaf2b4f
+MPV_XCFRAMEWORKS_VERSION=v0.7.3-mydia.3
+MPV_XCFRAMEWORKS_SHA256SUM=ffe80134c8fafec61d35be24dd2fb2fc78656f23d778768df460ef788eb1b1c5
 
 .cache/xcframeworks/libmpv-xcframeworks-${MPV_XCFRAMEWORKS_VERSION}-macos-universal-${MPV_VARIANT}.tar.gz:
 	mkdir -p .cache/xcframeworks
