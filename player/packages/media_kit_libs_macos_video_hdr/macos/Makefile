@@ -1,4 +1,8 @@
-all: Frameworks/*.xcframework Frameworks/.symlinks
+# Each step ends by touching its own stamp, only once every command before
+# it succeeded. A step that failed halfway (a full disk during tar, a broken
+# link script) leaves no stamp, so the next build clears it and runs again
+# instead of taking the partial output as up to date.
+all: Frameworks/.extracted Frameworks/.linked
 
 MPV_VARIANT=video-hdr
 MPV_XCFRAMEWORKS_VERSION=v0.7.3-mydia.3
@@ -18,20 +22,22 @@ MPV_XCFRAMEWORKS_SHA256SUM=ffe80134c8fafec61d35be24dd2fb2fc78656f23d778768df460e
 	rm -f .cache/xcframeworks/libmpv-xcframeworks-macos-universal-${MPV_VARIANT}.tar.gz
 	ln -s libmpv-xcframeworks-${MPV_XCFRAMEWORKS_VERSION}-macos-universal-${MPV_VARIANT}.tar.gz .cache/xcframeworks/libmpv-xcframeworks-macos-universal-${MPV_VARIANT}.tar.gz
 
-Frameworks/*.xcframework: .cache/xcframeworks/libmpv-xcframeworks-macos-universal-${MPV_VARIANT}.tar.gz
+Frameworks/.extracted: .cache/xcframeworks/libmpv-xcframeworks-macos-universal-${MPV_VARIANT}.tar.gz
+	rm -rf Frameworks
 	mkdir -p Frameworks
-	rm -rf Frameworks/*.xcframework
 	tar -xvf .cache/xcframeworks/libmpv-xcframeworks-macos-universal-${MPV_VARIANT}.tar.gz --strip-components 1 -C Frameworks
-	touch Frameworks/*.xcframework
+	test -d Frameworks/Mpv.xcframework
+	touch Frameworks/.extracted
 
-Frameworks/.symlinks: Frameworks/*.xcframework
-	rm -rf Frameworks/.symlinks
+Frameworks/.linked: Frameworks/.extracted
+	rm -rf Frameworks/.symlinks Frameworks/.linked
 	mkdir -p Frameworks/.symlinks/mpv
 	sed -i '' 's/\r$$//g' create_framework_symlinks.sh # remove CRLF line terminator added by Flutter packaging (https://github.com/media-kit/media-kit/issues/338)
 	sh create_framework_symlinks.sh Frameworks/Mpv.xcframework Frameworks/.symlinks/mpv
+	touch Frameworks/.linked
 
 .PHONY: clean
 clean:
 	rm -rf .cache
 	rm -f ./Headers/mpv/*.h
-	rm -rf ./Frameworks/*.xcframework
+	rm -rf ./Frameworks

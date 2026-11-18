@@ -3,7 +3,8 @@
 # Copied from media_kit's `media_kit_libs_macos_video` (upstream shares this
 # script across its `media_kit_libs_{ios,macos}_{audio,video}` packages) for
 # this package, which ships the video-hdr libmpv build instead. Keep it in
-# step with upstream's copy.
+# step with upstream's copy. The one local change: a missing or empty
+# framework directory fails instead of creating no links and succeeding.
 
 set -e
 set -u
@@ -58,7 +59,19 @@ create_framework_symlinks() {
     SRC_DIR="$1"
     SYMLINKS_DIR="$2"
 
-    find "${SRC_DIR}" -mindepth 1 -maxdepth 1 -type d | while read SRC; do
+    # In a pipeline `find` failing would not stop `set -e`: the loop's
+    # status is the pipeline's. Listing first makes a failure exit here.
+    [ -d "${SRC_DIR}" ] || {
+        echo "create_framework_symlinks: ${SRC_DIR} is not a directory" >&2
+        exit 1
+    }
+    SLICES="$(find "${SRC_DIR}" -mindepth 1 -maxdepth 1 -type d)"
+    [ -n "${SLICES}" ] || {
+        echo "create_framework_symlinks: no slices in ${SRC_DIR}" >&2
+        exit 1
+    }
+
+    echo "${SLICES}" | while read SRC; do
         SLUG="$(basename "${SRC}")"
         NAME="$(echo "${SLUG}" | cut -d '-' -f 1 -f 3)"
 

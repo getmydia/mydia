@@ -3,7 +3,9 @@
 # Run `pod lib lint media_kit_libs_macos_video.podspec` to validate before publishing.
 #
 Pod::Spec.new do |s|
-  system("make")
+  # A failed download, checksum or extraction must stop `pod install` here,
+  # not leave it to vendor frameworks that are not there.
+  system("make") or raise "media_kit_libs_macos_video: make failed preparing the libmpv frameworks"
 
   s.name             = 'media_kit_libs_macos_video'
   s.version          = '1.1.4-hdr'
