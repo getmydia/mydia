@@ -284,6 +284,7 @@ defmodule Mydia.Streaming.HardwareAccelTest do
       start_supervised!({HardwareAccel,
        name: name,
        cap: 3,
+       tonemap_probe: fn _ -> Mydia.Streaming.Tonemap.none() end,
        probe: fn _ ->
          # Longer than the default GenServer.call/3 timeout (5s). Before
          # this fix, lease/2 and report_failure/3 used that default while
@@ -317,6 +318,7 @@ defmodule Mydia.Streaming.HardwareAccelTest do
         {HardwareAccel,
          name: name,
          cap: 3,
+         tonemap_probe: fn _ -> Mydia.Streaming.Tonemap.none() end,
          probe: fn opts ->
            send(test_pid, {:probe_opts, opts})
            Capabilities.software("stub")
