@@ -79,7 +79,7 @@ than this change are in circulation. The player stops sending `hdr10plus`.
 | Client | Claims | Reason |
 | --- | --- | --- |
 | Native (iOS, macOS, Windows, Linux) | `hdr10+`, `hdr10`, `hlg` | mpv `vo=gpu` tonemaps these. No `dolby_vision` until spec 2, because the RPU is ignored. |
-| Android | `hdr10+`, `hdr10`, `hlg`, or nothing | Gated on the verification in section 3. |
+| Android | `hdr10+`, `hdr10`, `hlg` | Same as native until an on-device check shows the zero-copy path renders HDR wrong (section 3); a failed check switches it to nothing. |
 | Web | from the browser | `matchMedia('(dynamic-range: high)')` and `MediaCapabilities.decodingInfo` with an HDR `transferFunction`. A browser that answers no for all formats claims nothing. |
 | Cast receiver | nothing | Unchanged. |
 
@@ -162,6 +162,9 @@ The session logs the tonemap path it chose, including the filter. The
 player does not need it on the wire: an HDR source in a transcode session is
 tonemapped by the server, and in direct play or stream copy by the player, so
 the stats row derives who tonemapped from the playback mode it already has.
+The one exception is Dolby Vision profile 5 in a transcode: the server
+tonemaps it only through libplacebo, which production images lack, so the row
+shows the format alone rather than claim a tonemapper.
 
 ## 3. Client tonemapping and visibility
 
@@ -184,8 +187,13 @@ mpv reads as SDR.
 The first Android task plays the synthetic HDR10 and HLG clips (see Testing)
 on the Chromecast with Google TV and compares against a desktop rendering.
 
-- Correct: Android claims `hdr10+`, `hdr10`, `hlg`.
-- Washed out or clipped: Android claims nothing, and the server tonemaps.
+Until that check runs, Android claims `hdr10+`, `hdr10`, `hlg`, the same as
+native, because claiming nothing before verification turns every Android HDR
+play into a 4K CPU tonemap transcode.
+
+- Correct: the claim stays.
+- Washed out or clipped: Android's claim switches to nothing, and the server
+  tonemaps.
   Falling back to `mediacodec-copy` for HDR is ruled out: it is the stutter
   `video_output_config.dart` exists to avoid.
 
@@ -194,7 +202,8 @@ on the Chromecast with Google TV and compares against a desktop rendering.
 A new HDR row shows:
 
 - the source format, from the media file (`HDR10`, `DV 8.1`, `HLG`), and
-- the rendering: `tonemapped by player` or `tonemapped by server`.
+- the rendering: `tonemapped by player` or `tonemapped by server`, omitted for
+  a Dolby Vision profile 5 transcode, where the tonemapper is unknown.
 
 ## Testing
 
