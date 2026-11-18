@@ -18,7 +18,7 @@
 - Vulkan: MoltenVK linked directly. No Vulkan loader, no ICD manifest, no `VK_ICD_FILENAMES`.
 - Licensing: LGPL as `video-default`. No GPL component.
 - Attach order: `wid`, `vo=gpu-next`, `gpu-api=vulkan`, `gpu-context=macvk`, `target-colorspace-hint=yes`, `hwdec=videotoolbox`, quality options, then `vid=auto` last.
-- Quality options restored on attach, to mpv defaults: `scale=lanczos`, `dscale=hermite`, `dither=auto`, `correct-downscaling=yes`, `linear-downscaling=yes`, `sigmoid-upscaling=yes`, `hdr-compute-peak=auto`.
+- Quality options restored on attach, to mpv defaults: `scale=lanczos`, `dscale=hermite`, `dither=fruit`, `correct-downscaling=yes`, `linear-downscaling=yes`, `sigmoid-upscaling=yes`, `hdr-compute-peak=auto`.
 - No mpv call from the main thread in `MpvSurfacePlugin`. Every write runs on its serial queue `dev.mydia.mpv-surface`.
 - Timeouts: video output start check 2 s after `vid=auto`; detach gives up after 3 s and logs.
 - Fit/fill: `panscan=0.0` for fit, `panscan=1.0` for fill.

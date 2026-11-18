@@ -12,7 +12,7 @@ void main() {
       ('hwdec', 'videotoolbox'),
       ('scale', 'lanczos'),
       ('dscale', 'hermite'),
-      ('dither', 'auto'),
+      ('dither', 'fruit'),
       ('correct-downscaling', 'yes'),
       ('linear-downscaling', 'yes'),
       ('sigmoid-upscaling', 'yes'),
