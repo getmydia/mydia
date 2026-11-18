@@ -21,8 +21,15 @@ outdir=$(cd "$outdir" && pwd)
 
 FRAMES=288 # 12 s at 24 fps
 
-# Re-exec inside nix when the tools are missing.
-if [ -z "${HDRFX_IN_NIX:-}" ] && ! { command -v ffmpeg >/dev/null && command -v dovi_tool >/dev/null; }; then
+# Re-exec inside nix when a tool is missing. Homebrew's ffmpeg can lack zscale
+# or libx265, so check the filters and encoders, not just the binary.
+have_tools() {
+  command -v ffmpeg >/dev/null &&
+    command -v dovi_tool >/dev/null &&
+    ffmpeg -nostdin -hide_banner -filters 2>/dev/null | grep -qw zscale &&
+    ffmpeg -nostdin -hide_banner -encoders 2>/dev/null | grep -qw libx265
+}
+if [ -z "${HDRFX_IN_NIX:-}" ] && ! have_tools; then
   exec env HDRFX_IN_NIX=1 nix shell nixpkgs#dovi-tool nixpkgs#ffmpeg-full \
     --command bash "$0" "$outdir"
 fi
@@ -30,7 +37,8 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-ff() { ffmpeg -hide_banner -loglevel error -y "$@"; }
+# -nostdin: ffmpeg would otherwise swallow the rest of a script piped over ssh.
+ff() { ffmpeg -nostdin -hide_banner -loglevel error -y "$@"; }
 
 # testsrc2 (bt709) converted to a PQ or HLG bt2020 10-bit limited-range picture.
 src() {
