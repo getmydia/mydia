@@ -335,8 +335,12 @@ only to a client that shares a token with it and tonemaps to SDR otherwise.
 
 Native clients drop `dolby_vision` until mpv's `gpu-next` output is in use: with
 `gpu` it reaches only the HDR10 base layer of profile 8 and renders profile 5
-with wrong colors. Every playback Player applies `sdrTonemapMpvOptions`, and the
-stats overlay has an HDR row showing the format and who tonemapped it.
+with wrong colors. Every playback Player on the texture path applies
+`sdrTonemapMpvOptions` (`sdrTonemapMpvOptionsFor` leaves the macOS surface
+alone, where `target-colorspace-hint` decides), and the stats overlay has an
+HDR row showing the format and who tonemapped it. macOS now renders through
+`gpu-next`, but keeps `dolby_vision` off until a profile 5
+file has been checked on real hardware; see "macOS video output" below.
 
 ## Testing
 
@@ -586,7 +590,99 @@ file the viewer already moved past is dropped instead of landing on the new
 one.
 
 
-## macOS keeps Dart off the main thread
+## macOS video output
+
+On macOS every file plays through mpv's `gpu-next` output in a platform view,
+not through media_kit's texture. libplacebo renders over Vulkan (MoltenVK) into
+a Metal layer that macOS composites with EDR, so HDR highlights go brighter
+than UI white on a screen with headroom, and libplacebo tonemaps to SDR on a
+screen without. The design is
+`design/specs/2026-11-17-player-apple-hdr-output-design.md`. Every other
+platform keeps media_kit's `Video` widget and stock libraries.
+
+### The surface path
+
+`PlayerVideoSurface` (`presentation/widgets/video_surface/`) is an
+`AppKitView` for the `mydia/mpv-surface` platform view, with
+`MydiaSubtitleView` (text subtitles) and the chrome stacked over it. The
+native side is `macos/Runner/MpvSurface/`: `MpvHostView` is the layer-backed
+view mpv embeds its own view into, and `MpvSurfacePlugin` talks to libmpv
+through the player's handle. The screen builds no `VideoController` on this
+path.
+
+- `attach` writes `wid` (the host view's pointer), then the options in
+  `surfaceAttachOptions()` (`core/player/surface_attach_options.dart`), then
+  `vid=auto` last, because mpv creates the output when `vid` turns on and
+  reads everything else at that moment. The list restores mpv's own defaults
+  for the quality options media_kit lowers for its texture
+  (`hdr-compute-peak=no` among them).
+- `awaitVideoOutput` runs once the source's tracks are known. It polls
+  `current-vo` for up to 2 seconds when the file has a video track, and
+  answers `started: true` at once for audio only.
+- `detach` sets `vid=no` and waits for `current-vo` to clear, so the output is
+  gone while its host view still exists. Both dispose paths call it before
+  `player.dispose()`. It gives up after 3 seconds and logs, so closing never
+  hangs. A host view leaving its window without a detach (hot restart, an
+  error path) detaches from `viewWillMove(toWindow: nil)`.
+- Fit and fill are mpv's `panscan` (0.0 and 1.0), sent through the plugin.
+- An event channel reports the window's screen and its EDR headroom
+  (`edrHeadroom`, `potentialHeadroom`) for the stats HDR row, which reads
+  `HDR output, PQ, headroom Nx` when mpv's target is PQ or HLG and the
+  headroom is above 1, and adds `RPU applied` when mpv reports the
+  `dolbyvision` color matrix.
+
+`core/player/mac_video_output.dart` decides the path for each playback, and the
+device profile uses the same resolution, so the HDR formats the player claims
+match the output that renders them (`mac_hdr_claims.dart`). The surface claims
+`dolby_vision` only once `macDolbyVisionVerified` is true; it ships false
+until a real Dolby Vision profile 5 file has been checked on an XDR screen.
+
+### The escape hatch and the automatic fallback
+
+Settings, Diagnostics has "Use the legacy video output", stored under
+`legacy_mac_video_output` (bool, default false). On, the next playback uses the
+texture path and the stock media_kit behaviour; it is for a viewer whose video
+looks wrong or does not start. The row under it says which output is active.
+
+When `awaitVideoOutput` reports that `gpu-next` did not start, the screen
+detaches, rebuilds the playback on the texture path, and records the running
+app version under `mac_surface_failed_version`. Later playbacks on that version
+go straight to the texture path, the stats Why row says the HDR renderer
+could not start, and Diagnostics shows "(fallback recorded)". An app update
+changes the version, so the surface gets one more try.
+
+### The libmpv build
+
+Stock libmpv cannot embed `gpu-next` on macOS: its mac output ignores `wid` and
+opens a window of its own. The app therefore ships a `video-hdr` build from
+the fork `getmydia/libmpv-darwin-build` (branch `mydia/video-hdr`), consumed by
+`packages/media_kit_libs_macos_video_hdr` through `dependency_overrides`. It
+adds libplacebo (with shaderc), MoltenVK linked directly (no Vulkan loader),
+and a patch that makes `wid` an `NSView` host. The package README lists the
+Apache-2.0 notices.
+
+To bump it:
+
+1. In the fork, rebase or change the patch, and build the `video-hdr` tarball.
+2. Before tagging, run `smoke/run.sh <tarball>` on a Mac with an EDR display,
+   unlocked and awake. It embeds the build in a window, plays a calibrated
+   clip and must report `current-vo=gpu-next` and a PQ swapchain. The fork's CI
+   runners have no usable Metal device, so this step is manual.
+3. Tag `v<upstream>-mydia.<n>` and publish the release.
+4. In `packages/media_kit_libs_macos_video_hdr/macos/Makefile`, set
+   `MPV_XCFRAMEWORKS_VERSION` and `MPV_XCFRAMEWORKS_SHA256SUM`, delete
+   `macos/.cache` and `macos/Frameworks`, then rebuild and run the
+   integration test below.
+
+### Size
+
+The `video-hdr` frameworks add about 28 MB to the app over media_kit's stock
+`video-default` v0.6.0 build: their macOS slices total 73.5 MB against
+44.8 MB. libplacebo with shaderc is 19.2 MB, MoltenVK 9.4 MB, and mpv grows by
+2.1 MB. A release build of the app measured 224 MB (`du -sh` of
+`Mydia Player.app`, 2026-11-17).
+
+### macOS keeps Dart off the main thread
 
 `macos/Runner/Info.plist` sets `FLTEnableMergedPlatformUIThread` to false.
 Flutter 3.47 runs Dart on the macOS main thread by default
@@ -598,3 +694,35 @@ call waiting on mpv's core from the main thread while the output waits on the
 main thread deadlocks. With the threads apart, the main thread stays free for
 mpv. Flutter logs a deprecation warning for the key at startup; if a release
 removes it, the surface needs another answer before upgrading.
+
+Two more rules follow from the same `DispatchQueue.main.sync`:
+
+- `MpvSurfacePlugin` never calls mpv on the main thread. Every write and read
+  runs on its serial queue `dev.mydia.mpv-surface`, and replies hop back to
+  main. A RunnerTests case asserts it.
+- `mpv_terminate_destroy` must not run on the main thread either. media_kit
+  calls it from Dart a few seconds after `player.dispose()`, which is safe
+  only because Dart is off main, and because `detach` has already destroyed
+  the output by then.
+
+### The integration test
+
+`integration_test/mac_surface_test.dart` drives the real `PlayerScreen`, a
+real `Player`, the plugin and the shipped libmpv against local clips:
+HDR10 through `gpu-next` with a PQ target, SDR, fill, text subtitles,
+fullscreen, closing mid-playback, a source switch, ten open-and-close cycles,
+and the escape hatch. It runs on a Mac only and is not part of CI:
+
+    scripts/generate-hdr-fixtures.sh ~/mydia-hdr/fixtures
+    cd player
+    flutter test integration_test/mac_surface_test.dart -d macos \
+      --dart-define=MYDIA_HDR_FIXTURES=$HOME/mydia-hdr/fixtures
+
+The test also needs `sdr_subs.mkv` (its header has the ffmpeg line). Keep the
+displays awake for the whole run: if every display is asleep when the output
+starts, mpv waits for a display link that never fires. On a Mac without Xcode,
+build the test into an app with
+`flutter build macos --debug --target integration_test/mac_surface_test.dart`
+on one that has it, copy the app over, and run
+`Mydia Player.app/Contents/MacOS/Mydia Player` from a shell: the results print
+to stdout.
