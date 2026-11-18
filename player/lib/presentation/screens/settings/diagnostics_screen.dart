@@ -259,35 +259,46 @@ class _PlaybackSection extends ConsumerWidget {
 
 extension on _PlaybackSection {
   /// The legacy-output switch and the line saying which output is active.
+  ///
+  /// The switch is disabled until its value loads, and the output line waits
+  /// for both reads: a guess shown meanwhile, or left up after a failed
+  /// read, would report an output playback is not using.
   List<Widget> _macVideoOutputRows(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final legacy = ref.watch(legacyMacVideoOutputProvider).value ?? false;
-    final failedVersion = ref.watch(_macSurfaceFailedVersionProvider).value;
-    final path = chooseVideoOutputPath(
+    final legacyRead = ref.watch(legacyMacVideoOutputProvider);
+    final failedRead = ref.watch(_macSurfaceFailedVersionProvider);
+    final legacy = legacyRead.hasValue ? legacyRead.requireValue : null;
+    final bothRead = legacy != null && failedRead.hasValue;
+    final failedVersion = failedRead.value;
+    final output = switch (chooseVideoOutputPath(
       platform: defaultTargetPlatform,
       isWeb: kIsWeb,
-      legacyHatch: legacy,
+      legacyHatch: legacy ?? false,
       failedVersion: failedVersion,
       appVersion: appVersion,
-    );
-    final output = path == VideoOutputPath.surface ? 'gpu-next' : 'texture';
+    )) {
+      VideoOutputPath.surface => 'gpu-next',
+      VideoOutputPath.texture => 'texture',
+    };
     return [
       SettingsRow.toggle(
         key: const Key('legacy-mac-video-output'),
         icon: Icons.movie_filter_outlined,
         title: l10n.settingsDiagnosticsLegacyVideoOutput,
         subtitle: l10n.settingsDiagnosticsLegacyVideoOutputHint,
-        value: legacy,
-        onChanged: (v) =>
-            ref.read(legacyMacVideoOutputProvider.notifier).set(v),
+        value: legacy ?? false,
+        onChanged: legacy == null
+            ? null
+            : (v) => ref.read(legacyMacVideoOutputProvider.notifier).set(v),
       ),
-      SettingsRow.action(
-        key: const Key('mac-video-output-status'),
-        icon: Icons.tv_outlined,
-        title: failedVersion == appVersion
-            ? l10n.settingsDiagnosticsVideoOutputFallback(output)
-            : l10n.settingsDiagnosticsVideoOutput(output),
-      ),
+      if (bothRead)
+        SettingsRow.action(
+          key: const Key('mac-video-output-status'),
+          icon: Icons.tv_outlined,
+          title: failedVersion == appVersion
+              ? l10n.settingsDiagnosticsVideoOutputFallback(output)
+              : l10n.settingsDiagnosticsVideoOutput(output),
+        ),
     ];
   }
 }
