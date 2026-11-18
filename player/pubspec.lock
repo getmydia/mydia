@@ -1005,12 +1005,11 @@ packages:
     source: hosted
     version: "1.2.1"
   media_kit_libs_macos_video:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_libs_macos_video
-      sha256: f26aa1452b665df288e360393758f84b911f70ffb3878032e1aabba23aa1032d
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/media_kit_libs_macos_video_hdr"
+      relative: true
+    source: path
     version: "1.1.4"
   media_kit_libs_video:
     dependency: "direct main"

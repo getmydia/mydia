@@ -114,6 +114,12 @@ void main() async {
         final outfit =
             await rootBundle.loadString('assets/fonts/Outfit-LICENSE.txt');
         yield LicenseEntryWithLineBreaks(<String>['Outfit'], outfit);
+        // Apache-2.0 components inside the macOS video-hdr libmpv build.
+        final apache =
+            await rootBundle.loadString('assets/licenses/apache-2.0.txt');
+        yield LicenseEntryWithLineBreaks(
+            <String>['MoltenVK', 'shaderc', 'SPIRV-Tools', 'SPIRV-Cross'],
+            apache);
       });
 
       await _startApp(crashReporter, logSink);
