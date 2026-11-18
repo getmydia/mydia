@@ -371,6 +371,118 @@ final class MpvSurfacePluginTests: XCTestCase {
     assertViewRetainedUntilDetachCompletes(viaLeaveWindow: true)
   }
 
+  // MARK: display headroom
+
+  /// A timer the test fires by hand.
+  final class FakeTimer {
+    var interval: TimeInterval?
+    var tick: (() -> Void)?
+    var starts = 0
+    var stops = 0
+    var running: Bool { tick != nil }
+
+    func schedule(_ interval: TimeInterval, _ tick: @escaping () -> Void) -> () -> Void {
+      starts += 1
+      self.interval = interval
+      self.tick = tick
+      return { [weak self] in
+        self?.stops += 1
+        self?.tick = nil
+      }
+    }
+
+    func fire() { tick?() }
+  }
+
+  private struct DisplayHarness {
+    let plugin: MpvSurfacePlugin
+    let timer: FakeTimer
+    let info: () -> MpvSurfacePlugin.DisplayInfo
+    let setInfo: (MpvSurfacePlugin.DisplayInfo) -> Void
+    let events: () -> [[String: Any]]
+  }
+
+  private func makeDisplayHarness() -> DisplayHarness {
+    let timer = FakeTimer()
+    var info = MpvSurfacePlugin.DisplayInfo(
+      edrHeadroom: 1.2, potentialHeadroom: 16, screenName: "Built-in Display")
+    var events: [[String: Any]] = []
+    let plugin = MpvSurfacePlugin(
+      api: FakeMpvApi(),
+      queue: DispatchQueue(label: "dev.mydia.mpv-surface.test"),
+      now: { 0 }, sleep: { _ in }, pollInterval: 0.05, log: { _ in },
+      displayInfo: { info },
+      scheduleTimer: timer.schedule)
+    _ = plugin.onListen(withArguments: nil) { event in
+      if let event = event as? [String: Any] { events.append(event) }
+    }
+    return DisplayHarness(
+      plugin: plugin, timer: timer, info: { info }, setInfo: { info = $0 },
+      events: { events })
+  }
+
+  func testListenEmitsCurrentDisplayAndNoTimerRunsWithoutAttachment() {
+    let h = makeDisplayHarness()
+
+    XCTAssertEqual(h.events().count, 1)
+    XCTAssertEqual(h.events().first?["edrHeadroom"] as? Double, 1.2)
+    XCTAssertEqual(h.events().first?["screenName"] as? String, "Built-in Display")
+    XCTAssertFalse(h.timer.running)
+  }
+
+  func testRefreshTimerEmitsOnlyWhenHeadroomOrScreenChanges() {
+    let h = makeDisplayHarness()
+    _ = makeView(h.plugin)
+    call(h.plugin, "attach", attachArgs())
+    XCTAssertTrue(h.timer.running)
+    XCTAssertEqual(h.timer.interval, 1)
+
+    h.timer.fire()
+    XCTAssertEqual(h.events().count, 1, "unchanged headroom emitted")
+
+    var info = h.info()
+    info.edrHeadroom = 1.205
+    h.setInfo(info)
+    h.timer.fire()
+    XCTAssertEqual(h.events().count, 1, "a move within tolerance emitted")
+
+    info.edrHeadroom = 16
+    h.setInfo(info)
+    h.timer.fire()
+    XCTAssertEqual(h.events().count, 2)
+    XCTAssertEqual(h.events().last?["edrHeadroom"] as? Double, 16)
+
+    h.timer.fire()
+    XCTAssertEqual(h.events().count, 2, "the same new value emitted twice")
+
+    info.screenName = "External Display"
+    h.setInfo(info)
+    h.timer.fire()
+    XCTAssertEqual(h.events().count, 3)
+    XCTAssertEqual(h.events().last?["screenName"] as? String, "External Display")
+  }
+
+  func testRefreshTimerStopsAfterLastDetach() {
+    let h = makeDisplayHarness()
+    let first = makeView(h.plugin, id: 7)
+    _ = makeView(h.plugin, id: 8)
+    call(h.plugin, "attach", ["handle": 0x1000, "viewId": 7, "options": []])
+    call(h.plugin, "attach", ["handle": 0x2000, "viewId": 8, "options": []])
+    XCTAssertEqual(h.timer.starts, 1)
+
+    first.viewWillMove(toWindow: nil)
+    XCTAssertTrue(h.timer.running, "stopped while a view was still attached")
+
+    call(h.plugin, "detach", ["handle": 0x2000])
+    XCTAssertFalse(h.timer.running)
+    XCTAssertEqual(h.timer.stops, 1)
+
+    // Reattaching starts it again.
+    call(h.plugin, "attach", ["handle": 0x2000, "viewId": 8, "options": []])
+    XCTAssertTrue(h.timer.running)
+    XCTAssertEqual(h.timer.starts, 2)
+  }
+
   func testHostViewIsLayerBackedAndBlack() {
     let view = makeView(makePlugin(api: FakeMpvApi()))
     XCTAssertTrue(view.wantsLayer)

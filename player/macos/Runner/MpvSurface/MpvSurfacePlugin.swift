@@ -19,7 +19,11 @@ import FlutterMacOS
 ///   `current-vo` to clear, logging if it does not.
 ///
 /// Event channel `mydia/mpv-surface/display`:
-/// `{edrHeadroom, potentialHeadroom, screenName}` for the window's screen.
+/// `{edrHeadroom, potentialHeadroom, screenName}` for the window's screen,
+/// sent on listen, on a screen change, and, while any host view is
+/// attached, whenever a once-a-second re-read finds it changed. macOS moves
+/// the current headroom on its own (it rises once EDR content is on screen
+/// and follows brightness) without posting any notification.
 final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStreamHandler {
   static let channelName = "mydia/mpv-surface"
   static let displayChannelName = "mydia/mpv-surface/display"
@@ -28,6 +32,33 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
   static let startTimeout: TimeInterval = 2
   static let detachTimeout: TimeInterval = 3
   static let defaultPollInterval: TimeInterval = 0.05
+  static let displayRefreshInterval: TimeInterval = 1
+  /// Headroom moves smaller than this are not worth an event.
+  static let headroomTolerance = 0.01
+
+  /// What the display event channel reports.
+  struct DisplayInfo: Equatable {
+    var edrHeadroom: Double
+    var potentialHeadroom: Double
+    var screenName: String
+
+    func differs(from other: DisplayInfo) -> Bool {
+      screenName != other.screenName
+        || abs(edrHeadroom - other.edrHeadroom) > MpvSurfacePlugin.headroomTolerance
+        || abs(potentialHeadroom - other.potentialHeadroom) > MpvSurfacePlugin.headroomTolerance
+    }
+
+    var event: [String: Any] {
+      [
+        "edrHeadroom": edrHeadroom, "potentialHeadroom": potentialHeadroom,
+        "screenName": screenName,
+      ]
+    }
+  }
+
+  /// Starts a repeating main-thread timer and returns the function that
+  /// stops it.
+  typealias ScheduleTimer = (TimeInterval, @escaping () -> Void) -> () -> Void
 
   private let api: MpvApi
   private let queue: DispatchQueue
@@ -48,13 +79,23 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
   private weak var window: NSWindow?
   private var observers: [NSObjectProtocol] = []
 
+  /// Reads the display info; nil falls back to the window's screen.
+  private let displayInfoOverride: (() -> DisplayInfo?)?
+  private let scheduleTimer: ScheduleTimer
+  /// Stops the headroom refresh timer; non-nil while it runs. Main only.
+  private var stopDisplayRefresh: (() -> Void)?
+  /// The last info sent, so the timer only sends changes. Main only.
+  private var lastDisplayInfo: DisplayInfo?
+
   init(
     api: MpvApi = LiveMpvApi.shared,
     queue: DispatchQueue = DispatchQueue(label: MpvSurfacePlugin.queueLabel),
     now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
     sleep: @escaping (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
     pollInterval: TimeInterval = MpvSurfacePlugin.defaultPollInterval,
-    log: @escaping (String) -> Void = { NSLog("MpvSurface: %@", $0) }
+    log: @escaping (String) -> Void = { NSLog("MpvSurface: %@", $0) },
+    displayInfo: (() -> DisplayInfo?)? = nil,
+    scheduleTimer: @escaping ScheduleTimer = MpvSurfacePlugin.mainRunLoopTimer
   ) {
     self.api = api
     self.queue = queue
@@ -62,11 +103,24 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
     self.sleep = sleep
     self.pollInterval = pollInterval
     self.log = log
+    self.displayInfoOverride = displayInfo
+    self.scheduleTimer = scheduleTimer
     super.init()
   }
 
   deinit {
     observers.forEach(NotificationCenter.default.removeObserver)
+    stopDisplayRefresh?()
+  }
+
+  /// A `Timer` on the main run loop in common modes, so it keeps ticking
+  /// while a menu is open or the window is being resized.
+  static func mainRunLoopTimer(_ interval: TimeInterval, _ tick: @escaping () -> Void)
+    -> () -> Void
+  {
+    let timer = Timer(timeInterval: interval, repeats: true) { _ in tick() }
+    RunLoop.main.add(timer, forMode: .common)
+    return { timer.invalidate() }
   }
 
   /// Registers the view factory and both channels. The caller holds the
@@ -135,6 +189,7 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       // detach first, and leaving the window only detaches the latest.
       forgetAttachment(handleValue)
       view.attachedHandle = handleValue
+      updateDisplayRefresh()
       attach(handle, wid: wid, options: options) { result(nil) }
 
     case "setOption":
@@ -282,6 +337,7 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       view.attachedHandle = nil
       cleared.append(view)
     }
+    updateDisplayRefresh()
     return cleared
   }
 
@@ -300,13 +356,42 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       ) { [weak self] _ in self?.reportDisplay() })
   }
 
-  private func reportDisplay() {
-    guard let sink = displaySink, let screen = window?.screen ?? NSScreen.main else { return }
-    sink([
-      "edrHeadroom": Double(screen.maximumExtendedDynamicRangeColorComponentValue),
-      "potentialHeadroom": Double(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),
-      "screenName": screen.localizedName,
-    ])
+  private func currentDisplayInfo() -> DisplayInfo? {
+    if let displayInfoOverride { return displayInfoOverride() }
+    guard let screen = window?.screen ?? NSScreen.main else { return nil }
+    return DisplayInfo(
+      edrHeadroom: Double(screen.maximumExtendedDynamicRangeColorComponentValue),
+      potentialHeadroom: Double(screen.maximumPotentialExtendedDynamicRangeColorComponentValue),
+      screenName: screen.localizedName)
+  }
+
+  /// Sends the current info. `onlyIfChanged` is the timer's path: it stays
+  /// quiet unless the screen or a headroom moved past the tolerance.
+  private func reportDisplay(onlyIfChanged: Bool = false) {
+    guard let sink = displaySink, let info = currentDisplayInfo() else { return }
+    if onlyIfChanged, let last = lastDisplayInfo, !info.differs(from: last) { return }
+    lastDisplayInfo = info
+    sink(info.event)
+  }
+
+  /// Runs the refresh timer while any host view holds an attachment.
+  private func updateDisplayRefresh() {
+    let attached = (views.objectEnumerator()?.allObjects ?? []).contains {
+      ($0 as? MpvHostView)?.attachedHandle != nil
+    }
+    if attached, stopDisplayRefresh == nil {
+      stopDisplayRefresh = scheduleTimer(Self.displayRefreshInterval) { [weak self] in
+        guard let self else { return }
+        // An attached view Flutter freed without it leaving a window
+        // (views is weak) stops the timer here instead of at a detach.
+        self.updateDisplayRefresh()
+        guard self.stopDisplayRefresh != nil else { return }
+        self.reportDisplay(onlyIfChanged: true)
+      }
+    } else if !attached, let stop = stopDisplayRefresh {
+      stop()
+      stopDisplayRefresh = nil
+    }
   }
 
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink)
@@ -319,6 +404,7 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
 
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
     displaySink = nil
+    lastDisplayInfo = nil
     return nil
   }
 }
