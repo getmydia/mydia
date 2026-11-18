@@ -215,9 +215,9 @@ macOS. It is the escape hatch for running every file through the new path.
 
 ### Chrome without VideoState
 
-`customVideoControlsBuilderWithCallback` takes a `Player` and a
-`SubtitleLift` instead of media_kit's `VideoState`, which is all it reads from
-it. On other platforms, `Video`'s `controls:` callback adapts:
+`playbackChromeBuilder` takes a `Player` and a `SubtitleLift` instead of
+media_kit's `VideoState`, which is all the chrome read from it, and serves both
+outputs. On other platforms, `Video`'s `controls:` callback adapts:
 `(state) => build(state.widget.controller.player, VideoStateSubtitleLift(state))`.
 On macOS the surface passes the player and a `SurfaceSubtitleLift`.
 
@@ -295,12 +295,15 @@ Spec 1's HDR row reads, on macOS:
 
 ## 5. Failures
 
-- **gpu-next does not start** (MoltenVK fails, no usable Metal device): the
-  plugin reports it when `current-vo` is still empty 2 seconds after
-  `vid=auto` on a file with a video track. The screen detaches, rebuilds the
-  playback on the texture path, and records the failure for the running app
-  version, so later playbacks go straight to the texture path until an update.
-  The stats Why row says so.
+- **gpu-next does not start** (MoltenVK fails, no usable Metal device): after
+  `vid=auto` on a file with a video track, the plugin polls for up to 2
+  seconds. `current-vo` set means started. mpv deselecting the video track
+  (`vid` reads `no`, or the track is listed with none selected) means the
+  video output was rejected: the screen detaches, rebuilds the playback on the
+  texture path, and records the failure for the running app version, so later
+  playbacks go straight to the texture path until an update. The stats Why row
+  says so. Neither by the deadline is a slow start, not a failure: that
+  playback falls back to the texture path and nothing is recorded.
 - **Hardware decode fails:** mpv falls back to software decode, as today.
 - **Detach does not complete:** logged after 3 seconds, and the screen
   continues closing.
@@ -310,7 +313,8 @@ Spec 1's HDR row reads, on macOS:
 **Dart**
 
 - `PlayerVideoSurface` picks the path from the platform and the escape hatch.
-- The chrome builder adapter for `VideoState`.
+- `playbackChromeBuilder` with a `VideoStateSubtitleLift` and a
+  `SurfaceSubtitleLift`.
 - `MydiaSubtitleView` and `SurfaceSubtitleLift`.
 - The fit and fill to `panscan` mapping.
 - The macOS capability builder, with and without the hatch and the DV flag.
