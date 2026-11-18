@@ -96,10 +96,14 @@ StatsContext buildStatsContext({
                 : '${sourceHdr.format} ${sourceHdr.dvProfile}',
             // Only a transcode is tonemapped by the server. Direct play,
             // stream copy and a downloaded file all reach the player's own
-            // renderer.
-            by: mode == PlaybackMode.transcode
-                ? HdrTonemapper.server
-                : HdrTonemapper.player,
+            // renderer. Dolby Vision profile 5 in a transcode is tonemapped
+            // only through libplacebo, which production images lack, so the
+            // tonemapper is left unstated.
+            by: switch (mode) {
+              PlaybackMode.transcode when sourceHdr.dvProfile == 5 => null,
+              PlaybackMode.transcode => HdrTonemapper.server,
+              _ => HdrTonemapper.player,
+            },
           ),
     decoderLabel: videoTrack?.decoder,
     hardwareDecode: _hardwareDecode(videoTrack?.decoder),

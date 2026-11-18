@@ -396,6 +396,22 @@ void main() {
       expect(valueFor(rows, 'HDR'), 'HLG, tonemapped by server');
     });
 
+    test('an unknown tonemapper shows the format alone, in the row and copy',
+        () {
+      const context = StatsContext(
+        mode: PlaybackMode.transcode,
+        qualityLabel: 'Auto',
+        duration: Duration(minutes: 90),
+        hdr: StatsHdr(format: 'Dolby Vision 5'),
+      );
+      final rows = statsRows(_sample, context, StatsDensity.full);
+      expect(valueFor(rows, 'HDR'), 'Dolby Vision 5');
+      expect(
+        statsClipboardText(_sample, context, appVersion: '1.0.0'),
+        contains('HDR: Dolby Vision 5\n'),
+      );
+    });
+
     test('no row and no copy line for an SDR source', () {
       final rows = statsRows(_sample, _context, StatsDensity.full);
       expect(rows.any((r) => r.id == StatsRowId.hdr), isFalse);

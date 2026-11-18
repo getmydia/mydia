@@ -221,7 +221,10 @@ String statsClipboardText(
     if (context.sourceLabel != null) 'Source: ${context.sourceLabel}',
     if (context.videoLabel != null) 'Video: ${context.videoLabel}',
     if (context.hdr != null)
-      'HDR: ${context.hdr!.format}, tonemapped by ${context.hdr!.by.name}',
+      switch (context.hdr!.by) {
+        null => 'HDR: ${context.hdr!.format}',
+        final by => 'HDR: ${context.hdr!.format}, tonemapped by ${by.name}',
+      },
     if (context.decoderLabel != null) 'Decoder: ${_decoder(context)}',
     if (context.audioLabel != null) 'Audio: ${context.audioLabel}',
     if (sample.droppedFrames != null && sample.droppedFramesTotal != null)

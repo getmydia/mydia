@@ -164,11 +164,13 @@ enum HdrTonemapper { player, server }
 
 /// The source's HDR format and who tonemaps it.
 class StatsHdr {
-  const StatsHdr({required this.format, required this.by});
+  const StatsHdr({required this.format, this.by});
 
   /// The server's display string (`HDR10`, `Dolby Vision 8`), English.
   final String format;
-  final HdrTonemapper by;
+
+  /// Null when who tonemaps is not known, so the row shows the format alone.
+  final HdrTonemapper? by;
 
   @override
   bool operator ==(Object other) =>
