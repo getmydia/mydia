@@ -25,6 +25,7 @@ defmodule Mydia.Locale do
 
   @native_names %{
     "ar" => "العربية",
+    "cnr" => "Crnogorski",
     "cs" => "Čeština",
     "da" => "Dansk",
     "de" => "Deutsch",
@@ -43,6 +44,7 @@ defmodule Mydia.Locale do
     "pt" => "Português",
     "pt_BR" => "Português (Brasil)",
     "ru" => "Русский",
+    "sr" => "Српски",
     "sv" => "Svenska",
     "tr" => "Türkçe",
     "uk" => "Українська",

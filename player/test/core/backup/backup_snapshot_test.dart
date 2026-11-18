@@ -290,6 +290,10 @@ void main() {
   });
 
   group('collect', () {
+    test('the commercial auto-skip choice is backed up', () {
+      expect(kBackupSettingKeys, contains('auto_skip_commercials'));
+    });
+
     test('locks never appear in collected JSON', () async {
       final a = _Device();
       await _addPlex(a, locks: {'srv1': SourceLock.hidden});

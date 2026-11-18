@@ -640,6 +640,35 @@ void main() {
       );
     });
 
+    test('Dolby Vision profile 5 on a transcode names no tonemapper', () {
+      final context = build(
+        plan: const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: _r1080,
+          adaptive: true,
+          reason: PlanReason.shapeKnownToFail,
+        ),
+        sourceHdr: (format: 'Dolby Vision', dvProfile: 5),
+      );
+      expect(context.hdr, const StatsHdr(format: 'Dolby Vision 5'));
+    });
+
+    test('HDR10 on a transcode is tonemapped by the server', () {
+      final context = build(
+        plan: const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: _r1080,
+          adaptive: true,
+          reason: PlanReason.shapeKnownToFail,
+        ),
+        sourceHdr: (format: 'HDR10', dvProfile: null),
+      );
+      expect(
+        context.hdr,
+        const StatsHdr(format: 'HDR10', by: HdrTonemapper.server),
+      );
+    });
+
     test('a downloaded file is played, so the player tonemaps it', () {
       final context = build(
         plan: null,

@@ -241,6 +241,7 @@ List<MediaSegment> plexSegments(Map<String, dynamic> metadata) => [
             type: switch (m['type']) {
               'intro' => SegmentType.intro,
               'credits' => SegmentType.credits,
+              'commercial' => SegmentType.commercial,
               _ => SegmentType.unknown,
             },
             startMs: (m['startTimeOffset'] as num?)?.toInt() ?? 0,

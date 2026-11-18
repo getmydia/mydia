@@ -636,7 +636,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp test_homepage(base_url, user_config) do
     base_url
     |> Req.get(homepage_request_opts(user_config))
-    |> classify_homepage()
+    |> classify_homepage(base_url)
   end
 
   defp homepage_request_opts(user_config) do
@@ -652,7 +652,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     end
   end
 
-  defp classify_homepage({:ok, %Req.Response{status: status, body: body}})
+  defp classify_homepage({:ok, %Req.Response{status: status, body: body}}, _url)
        when status in 200..399 do
     case BlockPage.fingerprint(body) do
       nil -> {:ok, status}
@@ -660,15 +660,21 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     end
   end
 
-  defp classify_homepage({:ok, %Req.Response{status: status}}), do: {:error, "HTTP #{status}"}
+  defp classify_homepage({:ok, %Req.Response{status: status}}, _url),
+    do: {:error, "HTTP #{status}"}
 
-  defp classify_homepage({:error, %Req.TransportError{reason: :timeout}}),
+  defp classify_homepage({:error, %Req.TransportError{reason: :timeout}}, _url),
     do: {:error, "Request timeout"}
 
-  defp classify_homepage({:error, %Req.TransportError{reason: reason}}),
-    do: {:error, "Connection failed: #{inspect(reason)}"}
+  defp classify_homepage({:error, reason}, url) do
+    proxy_msg = Mydia.Net.Proxy.describe_error(reason, URI.parse(url).host)
 
-  defp classify_homepage({:error, reason}), do: {:error, "Request failed: #{inspect(reason)}"}
+    case {proxy_msg, reason} do
+      {msg, _} when is_binary(msg) -> {:error, msg}
+      {nil, %Req.TransportError{reason: r}} -> {:error, "Connection failed: #{inspect(r)}"}
+      {nil, other} -> {:error, "Request failed: #{inspect(other)}"}
+    end
+  end
 
   defp determine_health_status(definition, success, response_time) do
     cond do

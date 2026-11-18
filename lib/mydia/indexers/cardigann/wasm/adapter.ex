@@ -136,10 +136,23 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   @impl true
   def search(config, query, opts \\ []) do
     if CardigannFeatureFlags.enabled?() do
-      run_search(config, query, opts)
+      with_proxy_note(opts, &run_search(config, query, &1))
     else
       Logger.debug("Cardigann search skipped - feature disabled")
       {:ok, []}
+    end
+  end
+
+  # The host side records here why a request failed when the proxy was the
+  # cause (see HostHttp), so a search that came back empty and failed can say so
+  # instead of "No answer from the tracker". One Agent per search, always stopped.
+  defp with_proxy_note(opts, fun) do
+    {:ok, note} = Agent.start_link(fn -> nil end)
+
+    try do
+      fun.(Keyword.put(opts, :proxy_note, note))
+    after
+      Agent.stop(note)
     end
   end
 
@@ -331,8 +344,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
 
     attempt = fn base_url ->
       remaining = max(deadline - System.monotonic_time(:millisecond), 1)
-      # Only the answering mirror's requests decide whether the login was reached.
-      with %{hit: hit} <- opts[:login_watch], do: :atomics.put(hit, 1, 0)
+      reset_attempt_state(opts)
 
       call =
         {:search, definition.definition, put_base_url(settings, base_url), guest_query, session}
@@ -354,7 +366,15 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
           )
       end
 
-    surface_failure(result)
+    surface_failure(result, opts[:proxy_note])
+  end
+
+  # Only the answering mirror's requests decide whether the login was reached,
+  # and only its proxy failure may word the error.
+  defp reset_attempt_state(opts) do
+    with %{hit: hit} <- opts[:login_watch], do: :atomics.put(hit, 1, 0)
+    with note when is_pid(note) <- opts[:proxy_note], do: Agent.update(note, fn _ -> nil end)
+    :ok
   end
 
   defp promote_winner(winner, first, parsed, definition) do
@@ -407,18 +427,24 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   # Where every attempt ended empty and failed, the search is an error shaped like
   # the Elixir engine's HTTP failures, so the UI and the health tracking treat
   # both engines alike. The guest returns the empty page; this is presentation.
-  defp surface_failure({:ok, %{releases: [], request_failed: true} = out}),
-    do: {:error, failure_error(out.failed_status)}
+  defp surface_failure({:ok, %{releases: [], request_failed: true} = out}, note),
+    do: {:error, failure_error(out.failed_status, proxy_note(note))}
 
-  defp surface_failure(result), do: result
+  defp surface_failure(result, _note), do: result
 
-  defp failure_error(nil),
-    do: Error.connection_failed("No answer from the tracker", %{request_failed: true})
+  defp proxy_note(note) when is_pid(note), do: Agent.get(note, & &1)
+  defp proxy_note(_none), do: nil
 
-  defp failure_error(status) when status >= 500,
+  defp failure_error(nil, proxy_message) do
+    Error.connection_failed(proxy_message || "No answer from the tracker", %{
+      request_failed: true
+    })
+  end
+
+  defp failure_error(status, _proxy_message) when status >= 500,
     do: Error.search_failed("Server error: HTTP #{status}", %{tracker_status: status})
 
-  defp failure_error(status),
+  defp failure_error(status, _proxy_message),
     do: Error.search_failed("HTTP #{status}", %{tracker_status: status})
 
   defp parse_links(%CardigannDefinition{definition: yaml}) do
@@ -538,13 +564,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   defp run(call, definition, config, doc, opts) do
     Engine.call(
       call,
-      definition |> ctx(config, doc) |> put_login_watch(opts[:login_watch]),
+      definition
+      |> ctx(config, doc)
+      |> put_login_watch(opts[:login_watch])
+      |> put_proxy_note(opts[:proxy_note]),
       Keyword.get(opts, :timeout, @default_timeout_ms)
     )
   end
 
   defp put_login_watch(ctx, nil), do: ctx
   defp put_login_watch(ctx, watch), do: Map.put(ctx, :login_watch, watch)
+
+  defp put_proxy_note(ctx, nil), do: ctx
+  defp put_proxy_note(ctx, note), do: Map.put(ctx, :proxy_note, note)
 
   defp ctx(definition, config, doc) do
     %{

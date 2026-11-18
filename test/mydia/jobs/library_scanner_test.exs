@@ -141,6 +141,32 @@ defmodule Mydia.Jobs.LibraryScannerTest do
       assert subtitle.origin == "sidecar"
       assert subtitle.language == "en"
     end
+
+    test "a scan adopts an EDL sidecar's commercial breaks" do
+      dir = empty_library_dir()
+      media_item = media_item_fixture(%{type: "movie"})
+      relative_path = "movie.mkv"
+      File.write!(Path.join(dir, relative_path), "not really a video")
+      File.write!(Path.join(dir, "movie.edl"), "612.48\t735.10\t3\n")
+
+      {:ok, library_path} =
+        Settings.create_library_path(%{path: dir, type: "movies", monitored: true})
+
+      {:ok, media_file} =
+        Mydia.Library.create_media_file(%{
+          media_item_id: media_item.id,
+          library_path_id: library_path.id,
+          relative_path: relative_path,
+          size: File.stat!(Path.join(dir, relative_path)).size,
+          verified_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert :ok = perform_job(LibraryScanner, %{"library_path_id" => library_path.id})
+
+      assert [segment] = Repo.preload(media_file, :segments).segments
+      assert {segment.type, segment.source} == {"commercial", "edl"}
+      assert {segment.start_ms, segment.end_ms} == {612_480, 735_100}
+    end
   end
 
   defp empty_library_dir do

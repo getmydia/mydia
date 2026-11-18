@@ -1476,17 +1476,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Read the auto-skip preference once at mount.
+  /// Read the auto-skip preferences once at mount.
   ///
   /// Failure is not propagated: secure storage being unreadable is no reason
-  /// to fail playback, and the safe answer is the default (skip nothing
-  /// automatically, leave the button).
+  /// to fail playback. Each preference is read on its own, so one unreadable
+  /// key leaves the other's value intact and its own at the skipper default
+  /// (intros manual, commercials skipped).
   Future<void> _loadAutoSkipPreference() async {
+    final settings = ref.read(settingsServiceProvider);
+    await _readAutoSkip(
+      settings.getAutoSkipSegments,
+      (enabled) => _segmentSkipper.autoSkipIntroCredits = enabled,
+    );
+    await _readAutoSkip(
+      settings.getAutoSkipCommercials,
+      (enabled) => _segmentSkipper.autoSkipCommercials = enabled,
+    );
+    // Only now may anything be skipped automatically, whether the reads
+    // succeeded or fell back to the defaults.
+    _segmentSkipper.preferencesLoaded();
+  }
+
+  Future<void> _readAutoSkip(
+    Future<bool> Function() read,
+    void Function(bool) apply,
+  ) async {
     try {
-      final enabled =
-          await ref.read(settingsServiceProvider).getAutoSkipSegments();
+      final enabled = await read();
       if (!mounted) return;
-      _segmentSkipper.autoSkip = enabled;
+      apply(enabled);
     } catch (e) {
       debugPrint('[PlayerScreen] Could not read auto-skip preference: $e');
     }

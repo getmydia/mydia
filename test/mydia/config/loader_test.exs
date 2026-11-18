@@ -1356,6 +1356,20 @@ defmodule Mydia.Config.LoaderTest do
     end
   end
 
+  describe "proxy section" do
+    test "a database row overlays config.proxy" do
+      {:ok, _} =
+        Mydia.Settings.upsert_config_setting(%{
+          key: "proxy.url",
+          value: "http://p:1",
+          category: :proxy
+        })
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml", sources: [:database])
+      assert config.proxy.url == "http://p:1"
+    end
+  end
+
   describe "load/1 :sources option" do
     test "the default source list includes the database layer" do
       {:ok, _} =

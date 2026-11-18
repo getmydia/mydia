@@ -314,6 +314,20 @@ defmodule Mydia.Jobs.LibraryMoveTest do
     assert File.exists?(Path.join(b.path, "The Quiet Meridian/Season 02/qm.s02e04.mkv"))
   end
 
+  test "an episode's EDL sidecar lands beside it in its season folder", %{tmp_dir: tmp} do
+    a = library(tmp, "ea", "series")
+    b = library(tmp, "eb", "series")
+    show = media_item_fixture(%{type: "tv_show", title: "The Quiet Meridian"})
+    e1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    put_file(a, "Meridian/qm.s01e01.mkv", %{episode_id: e1.id})
+    edl = write(Path.join(a.path, "Meridian/qm.s01e01.edl"))
+
+    assert :ok = run(show, b)
+
+    assert File.exists?(Path.join(b.path, "The Quiet Meridian/Season 01/qm.s01e01.edl"))
+    refute File.exists?(edl)
+  end
+
   test "cancels when the target was disabled after enqueue", %{a: a, b: b, movie: movie} do
     file = put_file(a, "Glass Harbor (2019)/glass.mkv", %{media_item_id: movie.id})
     movie = Repo.update!(Ecto.Changeset.change(movie, library_path_id: a.id))

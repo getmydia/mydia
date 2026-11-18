@@ -113,6 +113,14 @@ class _FakeSettingsController extends SettingsController {
     skipCalls.add(enabled);
   }
 
+  /// Records what the screen asked us to store for commercial auto-skip.
+  static final commercialCalls = <bool>[];
+
+  @override
+  Future<void> setAutoSkipCommercials(bool enabled) async {
+    commercialCalls.add(enabled);
+  }
+
   @override
   Future<void> setDefaultQuality(String quality) async {
     qualityCalls.add(quality);
@@ -282,6 +290,7 @@ Future<void> _pump(
 void main() {
   setUp(_FakeSettingsController.skipCalls.clear);
   setUp(_FakeSettingsController.qualityCalls.clear);
+  setUp(_FakeSettingsController.commercialCalls.clear);
 
   setUp(() async {
     _remoteControlBoxCounter += 1;
@@ -492,6 +501,22 @@ void main() {
     expect(_FakeSettingsController.qualityCalls, ['auto', 'original']);
   });
 
+  testWidgets('the commercials toggle starts on and reports its change',
+      (tester) async {
+    await _pump(tester);
+
+    final toggle = find.descendant(
+      of: find.byKey(const Key('auto-skip-commercials-switch')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pump();
+
+    expect(_FakeSettingsController.commercialCalls, [false]);
+  });
+
   testWidgets('the skip toggle reports its change to the controller',
       (tester) async {
     await _pump(tester);
@@ -555,6 +580,7 @@ void main() {
     await tester.ensureVisible(
       find.byKey(const Key('remote-control-enabled-switch')),
     );
+    await tester.pumpAndSettle();
     await tester.tap(toggle);
     await tester.pumpAndSettle();
 
@@ -587,6 +613,7 @@ void main() {
     await tester.ensureVisible(
       find.byKey(const Key('remote-control-enabled-switch')),
     );
+    await tester.pumpAndSettle();
     await tester.tap(toggle);
     await tester.pumpAndSettle();
 

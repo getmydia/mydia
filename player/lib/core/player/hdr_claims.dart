@@ -13,11 +13,13 @@ library;
 /// profile 8 and renders profile 5 with wrong colours.
 const List<String> nativeHdrFormats = ['hdr10+', 'hdr10', 'hlg'];
 
-/// Android: unverified pending the on-device check (Task 7), so nothing is
-/// claimed. An empty list is the safe default because the server then
-/// tonemaps HDR to SDR, which looks right everywhere, where a wrong claim
-/// would hand a panel an untonemapped HDR stream it may render washed out.
-const List<String> androidHdrFormats = [];
+/// Android: claims what the native mpv path claims until an on-device check
+/// confirms or refutes that the zero-copy `hwdec=mediacodec` path renders
+/// HDR10 and HLG correctly. If a check shows washed-out (grey, low contrast)
+/// or clipped (flat white) output, set this to `[]` so the server tonemaps
+/// HDR to SDR instead. `player/docs/playback.md` ("HDR claims") has the
+/// procedure.
+const List<String> androidHdrFormats = nativeHdrFormats;
 
 /// Web: the browser can only show HDR when the display is HDR capable
 /// ([highDynamicRange], `(dynamic-range: high)`) and the decoder reports the

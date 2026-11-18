@@ -36,6 +36,20 @@ defmodule Mydia.Plugins.Net.Gate do
   for an approved endpoint, as do `0.0.0.0/8`, `::`, multicast and reserved
   (>= 240.0.0.0) addresses. Nothing a guest sends can add one.
 
+  **Under an outbound proxy** nothing above changes. `Mydia.Net.ProxyAdapter`
+  routes on `connect_options[:hostname]`, so a proxied gate request becomes
+  `CONNECT <validated-ip>:<port>` to the proxy, and Mint's tunnel still uses
+  `:hostname` for SNI and certificate verification. A plain-http request becomes
+  `GET http://<validated-ip>:<port>/...` (the adapter drops `:hostname` for that
+  hop, so Mint does not write the name into the request line), with the gate's
+  `host` header still naming the site. The proxy never resolves the
+  name, so the validate-then-connect rebinding window stays closed. An approved
+  endpoint pinned to a private or loopback address goes direct instead, since
+  the proxy cannot reach the operator's LAN (or treats loopback as its own).
+  The cost is
+  that the gate still resolves DNS itself: plugins need working DNS inside the
+  container even when every connection goes through a proxy.
+
   Every call emits a `plugin` audit event (slug, URL, status, byte size) so
   egress is queryable and surfaceable in the admin UI (U9).
 
@@ -367,7 +381,10 @@ defmodule Mydia.Plugins.Net.Gate do
       # abort would otherwise propagate `:shutdown` and kill the guest. async_nolink
       # turns that into a deliverable message, and the outer deadline is the single
       # authoritative timeout.
-      task = Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn -> do_request(req_opts) end)
+      task =
+        Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn ->
+          do_request(req_opts, uri.host, ip)
+        end)
 
       case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
         {:ok, result} -> result
@@ -377,7 +394,7 @@ defmodule Mydia.Plugins.Net.Gate do
     end
   end
 
-  defp do_request(req_opts) do
+  defp do_request(req_opts, host, ip) do
     case Req.request(req_opts) do
       {:ok, %Req.Response{body: {:too_large, cap}}} ->
         {:error, Error.new(:too_large, "response exceeded #{cap} bytes")}
@@ -387,7 +404,7 @@ defmodule Mydia.Plugins.Net.Gate do
 
       {:error, %{__struct__: s} = err}
       when s in [Req.TransportError, Req.HTTPError, Mint.TransportError, Mint.HTTPError] ->
-        {:error, classify_transport_error(err)}
+        {:error, classify_transport_error(err, host, ip)}
 
       {:error, reason} ->
         {:error, Error.new(:network_error, "request failed: #{inspect(reason)}")}
@@ -479,11 +496,21 @@ defmodule Mydia.Plugins.Net.Gate do
   defp normalize_method(other),
     do: {:error, Error.new(:invalid_request, "invalid HTTP method: #{inspect(other)}")}
 
-  defp classify_transport_error(%{reason: :timeout}),
+  defp classify_transport_error(%{reason: :timeout}, _host, _ip),
     do: Error.new(:timeout, "connection or receive timed out")
 
-  defp classify_transport_error(err),
-    do: Error.new(:network_error, "transport error: #{inspect(err)}")
+  # An approved endpoint pinned to a private or loopback IP went direct
+  # (Mydia.Net.ProxyAdapter), so only a public pinned IP can have failed at
+  # the proxy. Routing on the hostname alone would blame the proxy for a
+  # direct failure.
+  defp classify_transport_error(err, host, ip) do
+    proxy_message = if public_ip?(ip), do: Mydia.Net.Proxy.describe_error(err, host)
+
+    case proxy_message do
+      nil -> Error.new(:network_error, "transport error: #{inspect(err)}")
+      msg -> Error.new(:network_error, msg)
+    end
+  end
 
   # ── Audit ─────────────────────────────────────────────────────────────────
 

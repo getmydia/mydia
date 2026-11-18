@@ -588,6 +588,22 @@ Download audio and playback audio are separate settings. The first decides which
 
 Every variable in this section can also be set from **Admin > System > Settings**, under **Language**. An environment variable overrides the database value and locks the field there. Playback audio and the default-track option appear only when the player is enabled.
 
+## Outbound Proxy
+
+Send Mydia's outbound internet requests (indexers, metadata, torrent file fetches, update checks) through an HTTP or HTTPS proxy. See [Outbound proxy](configuration.md#outbound-proxy) for what is and is not proxied.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MYDIA_PROXY_URL` | Proxy address, such as `http://proxy.lan:3128` or `http://user:pass@proxy.lan:3128`. Only `http://` and `https://` proxies are supported, not SOCKS. | - |
+| `MYDIA_PROXY_BYPASS` | Comma-separated hosts that always connect directly, such as `nas.local,.example.com,192.168.50.0/24` | - |
+
+The standard proxy URL variables are used only when no proxy URL is set anywhere in Mydia: not in the YAML config, not under **Admin > System > Settings**, and not in `MYDIA_PROXY_URL`. Mydia then uses the first one that is set: `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY`, `http_proxy`. The bypass list is resolved separately: when no bypass list is set in Mydia, it falls back to `NO_PROXY`, then `no_proxy`, whichever proxy URL is in use. Among Mydia's own settings, the `MYDIA_` variables win over **Admin > System > Settings**, which wins over the YAML config.
+
+An unusable `MYDIA_PROXY_URL` is rejected with an error at startup. An unusable `HTTPS_PROXY` or `HTTP_PROXY` (a SOCKS URL, say) is ignored with a logged warning, requests go direct, and the settings page shows why.
+
+!!! warning "Upgrading"
+    If your container already sets `HTTPS_PROXY` or `HTTP_PROXY`, Mydia starts using it after you upgrade. Add the hosts that should stay direct to `NO_PROXY` or `MYDIA_PROXY_BYPASS` first.
+
 ## FlareSolverr
 
 FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.

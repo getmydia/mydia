@@ -2,6 +2,7 @@ defmodule Mydia.Streaming.Tonemap.ProbeTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Streaming.Tonemap
+  alias Mydia.Streaming.Tonemap.Filters
   alias Mydia.Streaming.Tonemap.Probe
 
   @listing """
@@ -25,7 +26,7 @@ defmodule Mydia.Streaming.Tonemap.ProbeTest do
 
   describe "parse_filters/1" do
     test "finds all four filters in a real listing" do
-      assert Probe.parse_filters(@listing) == %{
+      assert Probe.parse_filters(@listing) == %Filters{
                zscale: true,
                tonemap: true,
                libplacebo: true,
@@ -34,12 +35,7 @@ defmodule Mydia.Streaming.Tonemap.ProbeTest do
     end
 
     test "reports none for empty output" do
-      assert Probe.parse_filters("") == %{
-               zscale: false,
-               tonemap: false,
-               libplacebo: false,
-               tonemap_vaapi: false
-             }
+      assert Probe.parse_filters("") == %Filters{}
     end
   end
 
@@ -68,6 +64,47 @@ defmodule Mydia.Streaming.Tonemap.ProbeTest do
       assert_all_args_free_of("tonemap_vaapi")
     end
 
+    test "the vaapi test runs on a generated clip that is removed afterwards" do
+      result = Probe.run(vaapi?: true, runner: runner(@listing, {:ok, ""}))
+
+      assert result.vaapi
+      args = ran_args()
+      gen = Enum.find(args, &("libx265" in &1))
+      vaapi = Enum.find(args, &vaapi_vf?/1)
+
+      clip = List.last(gen)
+      assert String.ends_with?(clip, "hdr10.mkv")
+      assert Enum.any?(gen, &String.contains?(&1, "master-display="))
+      assert Enum.at(vaapi, Enum.find_index(vaapi, &(&1 == "-i")) + 1) == clip
+      assert Enum.find_index(args, &(&1 == gen)) < Enum.find_index(args, &(&1 == vaapi))
+      refute File.exists?(Path.dirname(clip))
+    end
+
+    test "a failed clip generation gives vaapi false and never runs the vaapi test" do
+      runner = fn _exe, args, _timeout ->
+        cond do
+          "-filters" in args -> {:ok, @listing}
+          "libx265" in args -> {:error, {:exit, 1, "Unknown encoder 'libx265'"}}
+          true -> {:ok, ""}
+        end
+      end
+
+      result = Probe.run(vaapi?: true, runner: wrap(runner))
+
+      refute result.vaapi
+
+      refute Enum.any?(
+               ran_args(),
+               &Enum.any?(&1, fn a -> String.contains?(a, "tonemap_vaapi") end)
+             )
+    end
+
+    test "vaapi? false runs neither the clip generation nor the vaapi test" do
+      Probe.run(vaapi?: false, runner: runner(@listing, {:ok, ""}))
+
+      refute Enum.any?(ran_args(), &("libx265" in &1))
+    end
+
     test "zscale needs both zscale and tonemap listed" do
       only_zscale = " .S zscale            V->V       Apply resizing.\n"
 
@@ -76,6 +113,25 @@ defmodule Mydia.Streaming.Tonemap.ProbeTest do
 
     test "an unavailable ffmpeg gives none" do
       assert Probe.run(runner: fn _, _, _ -> {:error, :not_found} end) == Tonemap.none()
+    end
+  end
+
+  defp wrap(runner) do
+    parent = self()
+
+    fn exe, args, timeout ->
+      send(parent, {:ran, args})
+      runner.(exe, args, timeout)
+    end
+  end
+
+  defp vaapi_vf?(args), do: Enum.any?(args, &String.contains?(&1, "tonemap_vaapi"))
+
+  defp ran_args(acc \\ []) do
+    receive do
+      {:ran, args} -> ran_args([args | acc])
+    after
+      0 -> Enum.reverse(acc)
     end
   end
 

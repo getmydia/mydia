@@ -7,7 +7,8 @@ defmodule Mydia.RelayGuard do
   `default_options()` before splitting `:adapter` out into the request struct,
   so this reaches every `Req.new/1` call site with no change to `lib/`.
 
-  Loopback traffic goes to the real `Req.Finch` adapter, which is what keeps
+  Loopback traffic goes to the real adapter (`Mydia.Net.ProxyAdapter`, which
+  delegates to `Req.Finch`), which is what keeps
   Bypass working and leaves every `Mydia.MetadataCacheHelpers` warm call
   untouched. Everything else is recorded and refused.
 
@@ -52,7 +53,9 @@ defmodule Mydia.RelayGuard do
   """
   def run(%Req.Request{} = req) do
     if loopback?(req.url.host) or reserved?(req.url.host) do
-      Req.Finch.run(req)
+      # Chain to the app's own adapter (installed at boot and replaced by this
+      # guard in test_helper.exs) so the suite exercises proxy routing.
+      Mydia.Net.ProxyAdapter.run(req)
     else
       Escapes.record(req)
       {req, %BlockedError{url: req.url}}

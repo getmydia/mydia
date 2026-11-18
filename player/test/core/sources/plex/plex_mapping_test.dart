@@ -44,7 +44,7 @@ void main() {
   });
 
   group('plexSegments', () {
-    test('keeps intro and credits, drops the rest', () {
+    test('keeps intro, commercial and credits, drops the rest', () {
       final segments = plexSegments({
         'Marker': [
           {'type': 'intro', 'startTimeOffset': 1000, 'endTimeOffset': 61000},
@@ -66,6 +66,8 @@ void main() {
       });
       expect(segments, const [
         MediaSegment(type: SegmentType.intro, startMs: 1000, endMs: 61000),
+        MediaSegment(
+            type: SegmentType.commercial, startMs: 70000, endMs: 90000),
         MediaSegment(
             type: SegmentType.credits, startMs: 1700000, endMs: 1800000),
       ]);

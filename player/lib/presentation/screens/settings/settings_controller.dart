@@ -45,12 +45,14 @@ class SettingsController extends _$SettingsController {
     }
     final defaultQuality = await settingsService.getDefaultQuality();
     final autoSkipSegments = await settingsService.getAutoSkipSegments();
+    final autoSkipCommercials = await settingsService.getAutoSkipCommercials();
 
     return UserSettings(
       serverUrl: credentials?.serverUrl ?? accountName ?? '',
       username: credentials?.username ?? '',
       defaultQuality: defaultQuality,
       autoSkipSegments: autoSkipSegments,
+      autoSkipCommercials: autoSkipCommercials,
     );
   }
 
@@ -75,6 +77,17 @@ class SettingsController extends _$SettingsController {
     state = await AsyncValue.guard(() async {
       final currentSettings = await future;
       return currentSettings.copyWith(autoSkipSegments: enabled);
+    });
+  }
+
+  /// Set the automatic commercial-break skipping preference.
+  Future<void> setAutoSkipCommercials(bool enabled) async {
+    final settingsService = ref.read(settingsServiceProvider);
+    await settingsService.setAutoSkipCommercials(enabled);
+
+    state = await AsyncValue.guard(() async {
+      final currentSettings = await future;
+      return currentSettings.copyWith(autoSkipCommercials: enabled);
     });
   }
 }

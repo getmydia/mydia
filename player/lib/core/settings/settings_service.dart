@@ -23,6 +23,7 @@ class SettingsService {
 
   static const _defaultQualityKey = 'default_quality';
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
+  static const _autoSkipCommercialsKey = 'auto_skip_commercials';
   static const _librarySortKeyPrefix = 'library_sort_';
   static const _statsOverlayEnabledKey = 'stats_overlay_enabled';
   static const _legacyMacVideoOutputKey = 'legacy_mac_video_output';
@@ -81,6 +82,22 @@ class SettingsService {
   /// Set the automatic intro and credits skipping setting.
   Future<void> setAutoSkipSegments(bool enabled) async {
     await _write(_autoSkipSegmentsKey, enabled.toString());
+  }
+
+  /// Get the automatic commercial-break skipping setting.
+  ///
+  /// Defaults to enabled, unlike intros: commercial breaks come from the
+  /// viewer's own DVR tooling, and skipping ads is the point of having them.
+  /// Each break still skips only once, so seeking back into a misdetected one
+  /// plays it.
+  Future<bool> getAutoSkipCommercials() async {
+    final value = await _storage.read(_autoSkipCommercialsKey);
+    return value != 'false';
+  }
+
+  /// Set the automatic commercial-break skipping setting.
+  Future<void> setAutoSkipCommercials(bool enabled) async {
+    await _write(_autoSkipCommercialsKey, enabled.toString());
   }
 
   /// Whether the playback stats panel is drawn over the video.
@@ -256,6 +273,7 @@ class SettingsService {
     await Future.wait([
       _delete(_defaultQualityKey),
       _delete(_autoSkipSegmentsKey),
+      _delete(_autoSkipCommercialsKey),
       _delete('${_librarySortKeyPrefix}movies'),
       _delete('${_librarySortKeyPrefix}tvShows'),
     ]);

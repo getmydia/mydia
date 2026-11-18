@@ -5,15 +5,17 @@ import 'package:flutter/widgets.dart' show basicLocaleListResolution;
 import 'gen/app_localizations.dart';
 
 /// Languages whose base ARB (`app_<code>.arb`) holds no messages. A stub
-/// exists only because gen_l10n needs a base file next to a regional one
-/// (`app_pt.arb` for `app_pt_BR.arb`), so choosing it would show English.
+/// exists because gen_l10n needs a base file next to a regional one
+/// (`app_pt.arb` for `app_pt_BR.arb`), or because a language was added on
+/// Weblate before anyone translated it (`app_sr.arb`). Choosing one would
+/// show English.
 /// Stubs are hidden from the language picker, never stored or returned as a
 /// host language, and a device locale in that language resolves to the
 /// regional variant the player ships instead (pt, pt_PT -> pt_BR).
 ///
 /// `test/l10n/locale_resolution_test.dart` checks that each listed ARB holds
 /// only `@@locale` and that no other base ARB is empty.
-const Set<String> stubLanguageCodes = {'pt'};
+const Set<String> stubLanguageCodes = {'pt', 'sr'};
 
 /// Whether [locale] is a bare stub language such as `pt`.
 bool isStubLocale(Locale locale, {Set<String> stubs = stubLanguageCodes}) =>

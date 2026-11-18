@@ -1,8 +1,8 @@
 import 'dart:ui' show Locale, PlatformDispatcher;
 
-import 'package:flutter/widgets.dart' show basicLocaleListResolution;
-
 import 'gen/app_localizations.dart';
+import 'locale_aliases.dart';
+import 'locale_resolution.dart';
 
 /// The language the viewer picked in Settings, mirrored here by
 /// `LocaleSetting` so code with no `BuildContext` can word what it must show:
@@ -17,9 +17,9 @@ void rememberInterfaceLocale(Locale? locale) => _chosenLocale = locale;
 /// the tree, this does not.
 AppLocalizations currentAppLocalizations() {
   final locale = _chosenLocale ??
-      basicLocaleListResolution(
+      resolveAppLocale(
         PlatformDispatcher.instance.locales,
         AppLocalizations.supportedLocales,
       );
-  return lookupAppLocalizations(locale);
+  return appLocalizationsFor(locale);
 }

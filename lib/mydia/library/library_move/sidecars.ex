@@ -1,12 +1,14 @@
 defmodule Mydia.Library.LibraryMove.Sidecars do
   @moduledoc """
-  The subtitle and NFO files that sit beside a video and travel with it:
-  `glass.en.srt` and `glass.nfo` next to `glass.mkv`.
+  The subtitle, NFO and EDL files that sit beside a video and travel with it:
+  `glass.en.srt`, `glass.nfo` and `glass.edl` next to `glass.mkv`. An `.edl`
+  left behind would no longer match the video, and the next scan would drop
+  its commercial breaks (`Mydia.Library.EdlSidecars`).
   """
 
   alias Mydia.Library.MediaFile
 
-  @extensions Mydia.Subtitles.Sidecars.extensions() ++ [".nfo"]
+  @extensions Mydia.Subtitles.Sidecars.extensions() ++ [".nfo", ".edl"]
 
   @doc """
   Absolute paths of the sidecars that belong to `media_file` where it sits

@@ -1,10 +1,15 @@
 defmodule Mydia.Library.MediaSegment do
   @moduledoc """
-  A detected region of a media file that a viewer may want to skip.
+  A region of a media file that a viewer may want to skip.
 
-  Exactly one segment per `type` per file. `source` records how the segment was
-  found so the operator can tell a chapter-marker hit (always trustworthy) from
-  a fingerprint consensus (scored by `confidence`).
+  Intro and credits are detected, exactly one per `type` per file. `source`
+  records how they were found so the operator can tell a chapter-marker hit
+  (always trustworthy) from a fingerprint consensus (scored by `confidence`).
+
+  Commercial breaks come from a sidecar `.edl` file (`source: "edl"`, see
+  `Mydia.Library.EdlSidecars`) and a file can have any number of them, so the
+  unique index on `(media_file_id, type)` is partial: it covers intro and
+  credits only.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -12,8 +17,8 @@ defmodule Mydia.Library.MediaSegment do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @types ~w(intro credits)
-  @sources ~w(chapters fingerprint)
+  @types ~w(intro credits commercial)
+  @sources ~w(chapters fingerprint edl)
 
   @type t :: %__MODULE__{
           id: binary(),

@@ -333,6 +333,10 @@ See [Environment Variables](../reference/environment-variables.md#flaresolverr) 
 3. Verify credentials if required
 4. Check application logs for errors
 
+### Connection Failed Behind a Proxy
+
+If your container reaches the internet only through an HTTP proxy, set `MYDIA_PROXY_URL` (or `HTTPS_PROXY`) and Mydia sends both Cardigann engines through it. Without it, searches fail with errors such as `Connection failed: :closed`. See [Outbound proxy](../reference/configuration.md#outbound-proxy).
+
 ### Authentication Errors
 
 1. Verify credentials are correct

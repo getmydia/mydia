@@ -19,6 +19,15 @@ void main() {
       expect(restored.autoSkipSegments, isTrue);
     });
 
+    test('skips commercials by default and round-trips the choice', () {
+      const defaults = UserSettings(serverUrl: '', username: '');
+      expect(defaults.autoSkipCommercials, isTrue);
+      expect(UserSettings.fromJson(const {}).autoSkipCommercials, isTrue);
+
+      final off = defaults.copyWith(autoSkipCommercials: false);
+      expect(UserSettings.fromJson(off.toJson()).autoSkipCommercials, isFalse);
+    });
+
     test('carries no auto-play-next state', () {
       const settings = UserSettings(serverUrl: '', username: '');
 

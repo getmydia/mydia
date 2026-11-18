@@ -4,7 +4,8 @@ defmodule Mydia.Indexers.Cardigann.Bench.NetTimer do
 
   Req 0.7.4 emits no telemetry, so the benchmark installs this module as the Req
   `:adapter` (through `Req.default_options/1`, only for the duration of a run).
-  It runs `Req.Finch` unchanged and adds the elapsed time of each request to an
+  It runs the app's own adapter (`Mydia.Net.ProxyAdapter`, so a run under an
+  outbound proxy measures the proxied path) and adds the elapsed time of each request to an
   atomics counter registered for the calling process. Requests made by processes
   that never registered, directly or through `$callers`, are not timed.
 
@@ -50,7 +51,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.NetTimer do
     started = System.monotonic_time(:microsecond)
 
     try do
-      Req.Finch.run(request)
+      Mydia.Net.ProxyAdapter.run(request)
     after
       record(System.monotonic_time(:microsecond) - started)
     end

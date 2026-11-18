@@ -132,7 +132,8 @@ Future<DeviceProfile> detectDeviceProfile({
     '${codecProfiles.isEmpty ? 'none (unconstrained)' : codecProfiles.join(', ')}',
   );
 
-  // Android claims its own HDR set, not the desktop one: see [androidHdrFormats].
+  // Android's HDR claim is its own constant so an on-device check can drop it
+  // without touching desktop: see [androidHdrFormats].
   if (codecProfiles.isEmpty) {
     return profile.copyWith(hdrFormats: androidHdrFormats);
   }

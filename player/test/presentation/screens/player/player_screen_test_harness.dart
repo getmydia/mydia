@@ -163,6 +163,7 @@ class FakeSettingsService extends Fake implements SettingsService {
     this.readError,
     this.writeError,
     this.autoSkipSegments = false,
+    this.autoSkipCommercials = true,
   });
 
   /// The persisted `default_quality` key. `auto`, the real service's own
@@ -210,6 +211,13 @@ class FakeSettingsService extends Fake implements SettingsService {
 
   @override
   Future<bool> getAutoSkipSegments() async => autoSkipSegments;
+
+  /// Whether commercial breaks are skipped without asking. On by default,
+  /// matching the real preference.
+  final bool autoSkipCommercials;
+
+  @override
+  Future<bool> getAutoSkipCommercials() async => autoSkipCommercials;
 }
 
 /// Tracks whether the proxy was torn down, without touching a real P2P/HTTP

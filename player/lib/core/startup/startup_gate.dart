@@ -71,7 +71,7 @@ class StartupSplash extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       // Follows the device locale: no settings exist yet at this point.
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       localeListResolutionCallback: resolveAppLocale,
       home: const Scaffold(

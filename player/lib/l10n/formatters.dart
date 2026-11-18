@@ -531,6 +531,7 @@ extension AppFormatters on AppLocalizations {
   String statsHdrText(StatsHdr hdr) {
     final source = hdr.rpuApplied ? statsHdrRpuApplied(hdr.format) : hdr.format;
     return switch (hdr.by) {
+      null => source,
       HdrTonemapper.player => statsHdrByPlayer(source),
       HdrTonemapper.server => statsHdrByServer(source),
       HdrTonemapper.playerLibplacebo => statsHdrByPlayerLibplacebo(source),
@@ -617,6 +618,7 @@ extension AppFormatters on AppLocalizations {
   String segmentSkipLabel(SegmentType type) => switch (type) {
         SegmentType.intro => segmentSkipIntro,
         SegmentType.credits => segmentSkipCredits,
+        SegmentType.commercial => segmentSkipCommercial,
         SegmentType.unknown => segmentSkip,
       };
 

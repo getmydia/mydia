@@ -58,7 +58,7 @@ defmodule Mydia.Streaming.FfmpegHdrTonemapLiveTest do
       )
 
     # Without this the test passes on an SDR-shaped plan that never tonemapped.
-    assert Enum.any?(args, &String.contains?(&1, "zscale=t=linear")),
+    assert Enum.any?(args, &String.contains?(&1, "t=linear:npl=100")),
            "plan did not select the zscale chain: #{inspect(args)}"
 
     # The transcoder asks for progress on stdout and logs at info; the check

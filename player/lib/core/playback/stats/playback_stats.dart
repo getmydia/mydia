@@ -184,7 +184,7 @@ enum HdrTonemapper { player, server, playerLibplacebo, edr }
 class StatsHdr {
   const StatsHdr({
     required this.format,
-    required this.by,
+    this.by,
     this.transfer,
     this.headroom,
     this.rpuApplied = false,
@@ -192,7 +192,9 @@ class StatsHdr {
 
   /// The server's display string (`HDR10`, `Dolby Vision 8`), English.
   final String format;
-  final HdrTonemapper by;
+
+  /// Null when who tonemaps is not known, so the row shows the format alone.
+  final HdrTonemapper? by;
 
   /// The output transfer, `PQ` or `HLG`. Only set when [by] is
   /// [HdrTonemapper.edr].

@@ -17,6 +17,7 @@ defmodule Mydia.Streaming.StreamPlanTest do
   alias Mydia.Settings.LibraryPath
   alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.StreamPlan
+  alias Mydia.Streaming.Tonemap
 
   defp media_file(attrs) do
     base = %MediaFile{
@@ -224,7 +225,7 @@ defmodule Mydia.Streaming.StreamPlanTest do
     end
   end
 
-  describe "encodes_video?/3" do
+  describe "encodes_video?/4" do
     test "a nil media file always encodes" do
       assert StreamPlan.encodes_video?(nil, nil, nil)
     end
@@ -234,6 +235,28 @@ defmodule Mydia.Streaming.StreamPlanTest do
 
       assert StreamPlan.encodes_video?(file, 1500, nil)
       refute StreamPlan.encodes_video?(file, nil, nil)
+    end
+
+    test "an HDR H.264 source encodes when the server can tonemap it" do
+      # Compatibility forces a transcode for this file once the server can
+      # tonemap; copying H.264 here would stream the HDR picture untouched.
+      file = media_file(codec: "h264", hdr_format: :hlg)
+
+      assert StreamPlan.encodes_video?(file, nil, nil, tonemap: %Tonemap{zscale: true})
+
+      plan = StreamPlan.for_hls(file, software_opts(tonemap: %Tonemap{zscale: true}))
+      assert plan.video.action == :encode
+      assert plan.video.tonemap == :zscale
+    end
+
+    test "an HDR H.264 source is still copied when the server cannot tonemap" do
+      file = media_file(codec: "h264", hdr_format: :hlg)
+
+      refute StreamPlan.encodes_video?(file, nil, nil, tonemap: Tonemap.none())
+
+      plan = StreamPlan.for_hls(file, software_opts(tonemap: Tonemap.none()))
+      assert plan.video.action == :copy
+      assert plan.video.tonemap == :none
     end
   end
 

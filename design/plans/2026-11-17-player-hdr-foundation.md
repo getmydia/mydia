@@ -328,7 +328,7 @@ platform and shows an HDR row in stats for nerds.
 - Produces: `List<String> webHdrFormats({required bool highDynamicRange, required bool pq, required bool hlg})`.
   - Returns `[]` unless `highDynamicRange`.
   - Otherwise `pq` adds `hdr10+` and `hdr10`, and `hlg` adds `hlg`.
-- Produces: `const Map<String, String> sdrTonemapMpvOptions = {'tone-mapping': 'bt.2390', 'hdr-compute-peak': 'auto', 'target-trc': 'srgb'};`.
+- Produces: `const Map<String, String> sdrTonemapMpvOptions = {'tone-mapping': 'bt.2390', 'hdr-compute-peak': 'auto'};`.
   It is applied with `NativePlayer.setProperty` wherever the existing
   per-player native setup sets properties (`audio_language_native.dart`
   shows the pattern), on every non-web platform.
@@ -339,7 +339,7 @@ platform and shows an HDR row in stats for nerds.
   - The `webHdrFormats` truth table: all false gives `[]`; HDR true with
     neither curve gives `[]`; `pq` only gives `['hdr10+', 'hdr10']`; both
     give all three.
-  - `sdrTonemapMpvOptions` has the three exact pairs.
+  - `sdrTonemapMpvOptions` has the two exact pairs and no `target-trc`.
 - [ ] **Step 2: Run them.** `cd player && flutter test test/core/player/hdr_claims_test.dart`
   should FAIL.
 - [ ] **Step 3: Implement.** The web glue in `device_profile_web.dart` uses
@@ -439,7 +439,7 @@ reference memory for connecting). No code changes unless the check passes.
 
 - [ ] **Step 1:** Write both sections.
 - [ ] **Step 2:** Run `./dev mix precommit`, in chunks if it outruns the
-  Bash timeout (see `test/README.md`), and `cd player && flutter analyze && flutter test`.
+  Bash timeout (see `test/README.md`), and `cd player && flutter analyze && flutter test --concurrency=1`.
   Everything passes.
 - [ ] **Step 3:** Run `git diff --stat origin/master...HEAD`. Every file
   listed appears in some task above.

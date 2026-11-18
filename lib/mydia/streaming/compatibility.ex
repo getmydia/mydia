@@ -109,8 +109,14 @@ defmodule Mydia.Streaming.Compatibility do
   Callers use this to drop candidates that preserve the offending stream.
   `HLS_COPY` repackages without re-encoding, so offering it to a client whose
   conditions just rejected the codec hands back the same undecodable bytes in a
-  new container. Returns `false` for a client that stated no conditions, so
-  nothing about the pre-conditions candidate lists changes for it.
+  new container.
+
+  Also returns `true` for an HDR file the client cannot show when the server
+  can tonemap it (`hdr_rejects?/3`): copying that stream would hand back the
+  same untonemapped picture. `opts` takes `:tonemap`, defaulting to the
+  server's probed capability. A client that stated no codec conditions is
+  therefore rejected only on HDR grounds; for an SDR file, or a server that
+  cannot tonemap, nothing about its candidate lists changes.
   """
   @spec conditions_reject?(MediaFile.t(), DeviceProfile.t(), keyword()) :: boolean()
   def conditions_reject?(%MediaFile{} = media_file, %DeviceProfile{} = profile, opts \\ []) do

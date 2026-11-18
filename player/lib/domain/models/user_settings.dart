@@ -10,11 +10,18 @@ class UserSettings {
   /// so seeking back into an intro on purpose keeps working.
   final bool autoSkipSegments;
 
+  /// Whether commercial breaks are skipped without asking.
+  ///
+  /// On by default. Like intros, each break is skipped at most once per
+  /// playback.
+  final bool autoSkipCommercials;
+
   const UserSettings({
     required this.serverUrl,
     required this.username,
     this.defaultQuality = 'auto',
     this.autoSkipSegments = false,
+    this.autoSkipCommercials = true,
   });
 
   UserSettings copyWith({
@@ -22,12 +29,14 @@ class UserSettings {
     String? username,
     String? defaultQuality,
     bool? autoSkipSegments,
+    bool? autoSkipCommercials,
   }) {
     return UserSettings(
       serverUrl: serverUrl ?? this.serverUrl,
       username: username ?? this.username,
       defaultQuality: defaultQuality ?? this.defaultQuality,
       autoSkipSegments: autoSkipSegments ?? this.autoSkipSegments,
+      autoSkipCommercials: autoSkipCommercials ?? this.autoSkipCommercials,
     );
   }
 
@@ -37,6 +46,7 @@ class UserSettings {
       'username': username,
       'defaultQuality': defaultQuality,
       'autoSkipSegments': autoSkipSegments,
+      'autoSkipCommercials': autoSkipCommercials,
     };
   }
 
@@ -46,6 +56,7 @@ class UserSettings {
       username: json['username'] as String? ?? '',
       defaultQuality: json['defaultQuality'] as String? ?? 'auto',
       autoSkipSegments: json['autoSkipSegments'] as bool? ?? false,
+      autoSkipCommercials: json['autoSkipCommercials'] as bool? ?? true,
     );
   }
 }

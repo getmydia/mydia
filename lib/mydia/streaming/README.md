@@ -323,9 +323,11 @@ Clients declare the HDR formats they render correctly in their device profile,
 using the tokens `dolby_vision`, `hdr10+`, `hdr10` and `hlg` (the legacy
 `hdr10plus` is normalized to `hdr10+`). "Plays with correct color" is the
 meaning of a claim: a client that lists `hdr10` promises a PQ picture that is
-not washed out. A profile that declares nothing falls back to
+not washed out. A request without a device profile falls back to
 `DeviceProfile.browser_default/0`, which claims every token, so such a client
-keeps direct playing HDR as it did before.
+keeps direct playing HDR as it did before. A profile that is present but omits
+`hdrFormats` claims nothing, and its HDR files transcode when the server can
+tonemap them.
 
 `Compatibility.hdr_rejects?/3` rejects direct play of an HDR file only when the
 client lacks every token the file carries and the server can tonemap that
@@ -352,6 +354,11 @@ skip, when ffmpeg lacks `zscale` or `libx265`. The plan only tonemaps when the
 `MediaFile` says the source is HDR, so the test passes a `%MediaFile{}` with
 `hdr_format` set; an untagged `MediaFile` reads as SDR and silently runs plain
 `scale`.
+
+The chain's first `zscale` names its input from the `Hdr` base (`tin=smpte2084`
+for HDR10 and HDR10+, `tin=arib-std-b67` for HLG, both `pin=bt2020:min=bt2020nc`)
+instead of reading the stream's colour tags, so a stream that arrives untagged
+does not fail with "no path between colorspaces".
 
 Cost of the zscale chain, measured with `ffmpeg -benchmark` on a 20 s HDR10
 clip, scaled to 720p and encoded with libx264 `-preset medium` (the transcoder's

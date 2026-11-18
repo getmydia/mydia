@@ -345,16 +345,26 @@ defmodule Mydia.Subtitles.Sidecars do
     end
   end
 
-  ## Private
-
-  defp dir_for(media_file) do
+  @doc """
+  The stored directory a media file's sidecars sit in, or `nil` when the file
+  has no resolvable location. Shared with `Mydia.Library.EdlSidecars`.
+  """
+  @spec dir_for(MediaFile.t()) :: String.t() | nil
+  def dir_for(media_file) do
     case MediaFile.storage_path(media_file) do
       nil -> nil
       path -> Path.dirname(path)
     end
   end
 
-  defp basename_for(path), do: path |> Path.basename() |> Path.rootname()
+  @doc """
+  The filename a sidecar's name starts with: the media file's basename without
+  its extension. Shared with `Mydia.Library.EdlSidecars`.
+  """
+  @spec basename_for(String.t()) :: String.t()
+  def basename_for(path), do: path |> Path.basename() |> Path.rootname()
+
+  ## Private
 
   # Every media file sharing this directory under `library_path_id`, trashed
   # rows included. `reconcile/1` and `reconcile_all/1` both call this (with
