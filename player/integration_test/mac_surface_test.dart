@@ -117,7 +117,23 @@ class _RecordingSurface implements MpvSurface {
       _traced('detach $handle', () => _inner.detach(handle));
 
   @override
-  Stream<DisplayInfo> get display => _inner.display;
+  Stream<DisplayInfo> get display =>
+      _inner.display.map((info) => _lastDisplay = info);
+}
+
+/// The plugin's latest display report, as the screen received it.
+DisplayInfo? _lastDisplay;
+
+/// Whether the Mac's console is locked. The lock screen hides the window,
+/// and macOS raises no EDR headroom for content nobody can see.
+Future<bool> _consoleLocked() async {
+  try {
+    final r = await Process.run('/usr/sbin/ioreg', ['-n', 'Root', '-d1', '-a']);
+    return RegExp(r'<key>IOConsoleLocked</key>\s*<true/>')
+        .hasMatch(r.stdout as String);
+  } catch (_) {
+    return false;
+  }
 }
 
 /// A real player that logs its disposal under its mpv handle.
@@ -371,14 +387,35 @@ void main() {
 
     final panel = find.byType(PlayerStatsPanel);
     expect(panel, findsOneWidget);
-    final headroom =
+    double? statsHeadroom() =>
         tester.widget<PlayerStatsPanel>(panel).statsContext().outputHeadroom;
+    final headroom = statsHeadroom();
     debugPrint('[mac_surface_test] stats headroom=$headroom on $display');
     if (display != null) {
       expect(headroom, isNotNull);
       expect(headroom!, greaterThan(1.0),
           reason: 'the built-in panel offers EDR headroom');
     }
+
+    // macOS raises the current headroom once EDR content is on screen, with
+    // no notification; the plugin re-reads it every second while attached,
+    // so the stats value must climb. Only asserted on an XDR-class screen
+    // that someone could see: an SDR panel with a little EDR (the Air's,
+    // potential 2.0) may stay near 1.2, which is also what a stale value
+    // read, and a locked Mac gets no EDR at all.
+    final potential = _lastDisplay?.potentialHeadroom ?? 1;
+    final locked = await _consoleLocked();
+    final assertClimb = potential > 2.0 && !locked;
+    if (assertClimb) {
+      await _waitFor(tester, 'stats headroom above 1.5',
+          () => (statsHeadroom() ?? 1) > 1.5,
+          timeout: const Duration(seconds: 5));
+    } else {
+      await tester.pump(const Duration(seconds: 2));
+    }
+    debugPrint('[mac_surface_test] stats headroom after the climb '
+        '${statsHeadroom()} (potential $potential, locked $locked, '
+        'climb asserted: $assertClimb)');
 
     final took = await _close(tester, rig);
     debugPrint('[mac_surface_test] close took $took; log: $_log');
@@ -475,7 +512,15 @@ void main() {
     expect(_log.where((e) => e.startsWith('detach $h')), isEmpty);
 
     await _close(tester, rig);
+    // With the screen locked, AppKit can hand the window back 11 px tall;
+    // the next test's loading view would overflow it. Wait for the restore.
     await windowManager.setBounds(before);
+    await _waitFor(
+        tester,
+        'window bounds restored',
+        () async =>
+            (await windowManager.getBounds()).height >= before.height - 1,
+        timeout: const Duration(seconds: 5));
   });
 
   testWidgets('closing mid-playback detaches first and does not hang',
