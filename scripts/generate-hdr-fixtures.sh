@@ -23,12 +23,16 @@ FRAMES=288 # 12 s at 24 fps
 
 # Re-exec inside nix when a tool is missing. Homebrew's ffmpeg can lack zscale
 # or libx265, so check the filters and encoders, not just the binary.
+# The listings are captured first: under pipefail, `grep -q` closing the
+# pipe at its first match can fail ffmpeg's next write and the whole check.
 have_tools() {
-  command -v ffmpeg >/dev/null &&
-    command -v dovi_tool >/dev/null &&
-    ffmpeg -nostdin -hide_banner -filters 2>/dev/null | grep -qw zscale &&
-    ffmpeg -nostdin -hide_banner -encoders 2>/dev/null | grep -qw libx265 &&
-    ffmpeg -nostdin -hide_banner -encoders 2>/dev/null | grep -qw libx264
+  command -v ffmpeg >/dev/null && command -v dovi_tool >/dev/null || return 1
+  local filters encoders
+  filters=$(ffmpeg -nostdin -hide_banner -filters 2>/dev/null) || return 1
+  encoders=$(ffmpeg -nostdin -hide_banner -encoders 2>/dev/null) || return 1
+  grep -qw zscale <<<"$filters" &&
+    grep -qw libx265 <<<"$encoders" &&
+    grep -qw libx264 <<<"$encoders"
 }
 if [ -z "${HDRFX_IN_NIX:-}" ] && ! have_tools; then
   exec env HDRFX_IN_NIX=1 nix shell nixpkgs#dovi-tool nixpkgs#ffmpeg-full \

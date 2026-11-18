@@ -425,12 +425,12 @@ void main() {
     final locked = await _consoleLocked();
     debugPrint('[mac_surface_test] stats headroom=$headroom on $display '
         '(locked $locked)');
+    // Only that a reading arrived: the current headroom can be exactly 1.0
+    // on an unlocked EDR panel at full brightness. Whether it rises is the
+    // climb check below, on a screen where that is reliable.
     if (display != null) {
       expect(headroom, isNotNull, reason: 'the plugin reported the screen');
-      if (!locked) {
-        expect(headroom!, greaterThan(1.0),
-            reason: 'the built-in panel offers EDR headroom');
-      }
+      expect(headroom!, greaterThanOrEqualTo(1.0));
     }
 
     // macOS raises the current headroom once EDR content is on screen, with

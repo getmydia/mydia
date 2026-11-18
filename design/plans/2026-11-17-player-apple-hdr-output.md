@@ -106,7 +106,7 @@ The probe must use the runtime order the player will use. That settles the spec'
   2. Create an `NSWindow` with a host `NSView`.
   3. On a background queue, set the Global Constraints attach order with `wid` = the host view pointer, then `loadfile levels_hdr10.mp4` (Task 1's output directory).
 
-  After 5 s it asserts:
+  It polls until each condition holds, up to 5 s, and on expiry reports which did not. The conditions:
   - `current-vo == "gpu-next"`;
   - `video-target-params/gamma == "pq"`;
   - exactly one on-screen window for the process (`CGWindowListCopyWindowInfo`);
@@ -177,7 +177,7 @@ The probe must use the runtime order the player will use. That settles the spec'
 
 **Interfaces:**
 - Produces, on method channel `mydia/mpv-surface`:
-  - `attach({handle: int, viewId: int, options: List<[String, String]>}) -> null`. It applies `wid` first (the host view pointer), then each option in order, then `vid=auto`, before `open`, when no source has tracks yet, so it cannot tell a working output from a failed one.
+  - `attach({handle: int, viewId: int, options: List<[String, String]>}) -> null`. It applies `wid` first (the host view pointer), then each option in order, then `vid=auto`, before `open`, when no source has tracks yet, so it cannot tell a working output from a failed one. It replies `null` on success and the error `attach-failed` when mpv refuses `wid` or `vid`; the caller then falls back to the texture before opening the media, and still detaches, since the `wid` write may have landed.
   - `awaitVideoOutput({handle: int}) -> {started: bool, failed: bool}`, called after `open` once the tracks are known. It polls for up to 2 s: with a video track listed, `started` once `current-vo` is set and `failed` once mpv deselects the video track; with tracks but no video, `started` at once; neither by the deadline is a timeout. This is the result the fallback test injects (see `player/docs/playback.md`).
   - `setOption({handle: int, name: String, value: String}) -> null`
   - `detach({handle: int}) -> null`. Sets `vid=no` and waits for `current-vo` to be empty, up to 3 s. Logs on timeout.

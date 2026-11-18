@@ -632,7 +632,7 @@ path.
   for the quality options media_kit lowers for its texture
   (`hdr-compute-peak=no` among them). mpv refusing `wid` or `vid` fails the
   attach, which falls back to the texture for that playback; a refused
-  option is only logged.
+  option is only logged. No reply within 5 seconds falls back the same way.
 - `awaitVideoOutput` runs once the source's tracks are known, and polls for
   up to 2 seconds. Once `track-list` lists a video track it answers
   `started` when `current-vo` is set, and `failed` once mpv deselects the
@@ -671,7 +671,10 @@ until a real Dolby Vision profile 5 file has been checked on an XDR screen.
 Settings, Diagnostics has "Use the legacy video output", stored under
 `legacy_mac_video_output` (bool, default false). On, the next playback uses the
 texture path and the stock media_kit behaviour; it is for a viewer whose video
-looks wrong or does not start. The row under it says which output is active.
+looks wrong or does not start. The row under it says which output the next
+playback is set to use, from the switch and any recorded failure. It is not
+the renderer of a playback in progress: one that fell back only for itself
+(below) still reads `gpu-next` there.
 
 When `awaitVideoOutput` reports that mpv rejected `gpu-next`, the screen
 detaches, rebuilds the playback on the texture path, and records the running
@@ -704,8 +707,10 @@ To bump it:
 3. Tag `v<upstream>-mydia.<n>` and publish the release.
 4. In `packages/media_kit_libs_macos_video_hdr/macos/Makefile`, set
    `MPV_XCFRAMEWORKS_VERSION` and `MPV_XCFRAMEWORKS_SHA256SUM`, delete
-   `macos/.cache` and `macos/Frameworks`, then rebuild and run the
-   integration test below.
+   `macos/.cache` and `macos/Frameworks`, and run `pod install` in
+   `player/macos` (the podspec's `make` fetches the frameworks; an
+   incremental build may skip it), then rebuild and run the integration test
+   below.
 
 ### Size
 
@@ -745,19 +750,20 @@ Two more rules follow from the same `DispatchQueue.main.sync`:
 real `Player`, the plugin and the shipped libmpv against local clips:
 HDR10 through `gpu-next` with a PQ target, SDR, fill, text subtitles,
 fullscreen, closing mid-playback, a source switch, ten open-and-close cycles,
-and the escape hatch. It runs on a Mac only and is not part of CI:
+and the escape hatch. It runs on a Mac only and is not part of CI. Prepare
+all the fixtures first: the generator writes every clip but `sdr_subs.mkv`,
+which the second step muxes (through `nix shell nixpkgs#ffmpeg-full` when no
+local ffmpeg exists, as the generator does):
 
     scripts/generate-hdr-fixtures.sh ~/mydia-hdr/fixtures
-    cd player
-    flutter test integration_test/mac_surface_test.dart -d macos \
-      --dart-define=MYDIA_HDR_FIXTURES=$HOME/mydia-hdr/fixtures
-
-The test also needs `sdr_subs.mkv`, which the generator does not write. In the
-fixtures directory:
-
+    cd ~/mydia-hdr/fixtures
     printf '1\n00:00:00,000 --> 00:00:10,000\nMydia surface subtitle check\n' > subs.srt
     ffmpeg -i sdr_testsrc.mp4 -i subs.srt -map 0:v -map 1:s -c:v copy \
       -c:s srt -metadata:s:s:0 language=eng sdr_subs.mkv
+    cd -
+    cd player
+    flutter test integration_test/mac_surface_test.dart -d macos \
+      --dart-define=MYDIA_HDR_FIXTURES=$HOME/mydia-hdr/fixtures
 
 With `MYDIA_HDR_FIXTURES` set, a missing clip fails the run; on the default
 path it skips. Keep the displays awake for the whole run: if every display is
@@ -769,5 +775,6 @@ On a Mac without Xcode, build the test into an app on one that has it:
 
 The define is compiled in, so it names the directory on the Mac that runs the
 app (leave it out to use that account's `~/mydia-hdr/fixtures`). Copy the app
-over and run `Mydia Player.app/Contents/MacOS/Mydia Player` from a shell: the
-results print to stdout.
+over and, from the directory holding it, run
+`"./Mydia Player.app/Contents/MacOS/Mydia Player"` (quoted: both names have
+spaces). The results print to stdout.
