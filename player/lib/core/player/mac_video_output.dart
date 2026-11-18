@@ -30,13 +30,28 @@ VideoOutputPath chooseVideoOutputPath({
   return eligible ? VideoOutputPath.surface : VideoOutputPath.texture;
 }
 
+/// The running build's version through [read] (`installedVersionReaderProvider`),
+/// or empty when it cannot be read.
+///
+/// Awaited rather than taken from `updateProvider`, whose version stays
+/// empty until its own read lands: a playback started before then would
+/// skip a failure recorded on this version, and could not record one.
+Future<String> readInstalledVersion(Future<String> Function() read) async {
+  try {
+    return await read();
+  } catch (e) {
+    debugPrint('[MpvSurface] Could not read the app version: $e');
+    return '';
+  }
+}
+
 /// Reads the hatch and the recorded failure, then decides with
 /// [chooseVideoOutputPath]. The one resolution the player screen and the
 /// device profile share, so a capability claim and the output that renders
 /// it cannot disagree.
 ///
-/// A read that throws counts as "no hatch, no failure", as the screen always
-/// treated it.
+/// Each read stands alone: one that throws counts as "no hatch" or "no
+/// failure", as the screen always treated it, and does not hide the other.
 Future<MacVideoOutputChoice> resolveVideoOutputChoice({
   required Future<bool> Function() readLegacyHatch,
   required Future<String?> Function() readFailedVersion,
@@ -50,9 +65,13 @@ Future<MacVideoOutputChoice> resolveVideoOutputChoice({
   String? failedVersion;
   try {
     legacy = await readLegacyHatch();
+  } catch (e) {
+    debugPrint('[MpvSurface] Could not read the legacy output setting: $e');
+  }
+  try {
     failedVersion = await readFailedVersion();
   } catch (e) {
-    debugPrint('[MpvSurface] Could not read output settings: $e');
+    debugPrint('[MpvSurface] Could not read the surface failure marker: $e');
   }
   final path = chooseVideoOutputPath(
     platform: target,

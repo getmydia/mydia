@@ -1,7 +1,7 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/player/subtitle_position.dart';
+import 'package:player/core/player/video_scaling.dart';
 import 'package:player/presentation/widgets/video_surface/mydia_subtitle_view.dart';
 import 'package:player/presentation/widgets/video_surface/surface_subtitle_lift.dart';
 
@@ -45,9 +45,39 @@ void main() {
 
     expect(subtitles.padding, const EdgeInsets.fromLTRB(16, 0, 16, 80));
     expect(subtitles.duration, const Duration(milliseconds: 250));
-    expect(positions, [
-      subPosForLift(lift: 80, box: box, videoWidth: 1920, videoHeight: 800),
-    ]);
+    // 80 px stays inside the ~92 px bar below a fitted 2.4:1 picture.
+    expect(positions, [100]);
+  });
+
+  test('a lift taller than the letterbox bar moves bitmap subtitles', () {
+    const box = Size(1000, 600);
+    final positions = <double>[];
+    final lift = SurfaceSubtitleLift(
+      player: player,
+      subtitles: subtitles,
+      box: () => box,
+      applyPosition: (_, pos) async => positions.add(pos),
+    );
+
+    lift.apply(120, duration: Duration.zero);
+
+    expect(positions.single, closeTo(93.2, 0.05));
+  });
+
+  test('fill measures the lift from the box edge: no bar to absorb it', () {
+    const box = Size(1000, 600);
+    final positions = <double>[];
+    final lift = SurfaceSubtitleLift(
+      player: player,
+      subtitles: subtitles,
+      box: () => box,
+      scaling: () => VideoScaling.fill,
+      applyPosition: (_, pos) async => positions.add(pos),
+    );
+
+    lift.apply(80, duration: Duration.zero);
+
+    expect(positions.single, closeTo(100 - 100 * 80 / 600, 0.001));
   });
 
   test('equality follows player and subtitles', () {
@@ -59,8 +89,13 @@ void main() {
         player: player,
         subtitles: _RecordingController(),
         box: () => const Size(1, 1));
+    final d = SurfaceSubtitleLift(
+        player: Player(platformPlayer: _FakePlatformPlayer()),
+        subtitles: subtitles,
+        box: () => const Size(1, 1));
     expect(a, b);
     expect(a.hashCode, b.hashCode);
     expect(a, isNot(c));
+    expect(a, isNot(d));
   });
 }

@@ -44,4 +44,49 @@ void main() {
   test('recordedFailureForOtherVersionIsIgnored', () {
     expect(_choose(failedVersion: '1.4.0'), VideoOutputPath.surface);
   });
+
+  group('resolveVideoOutputChoice', () {
+    Future<MacVideoOutputChoice> resolve({
+      required Future<bool> Function() hatch,
+      required Future<String?> Function() failed,
+    }) =>
+        resolveVideoOutputChoice(
+          readLegacyHatch: hatch,
+          readFailedVersion: failed,
+          appVersion: '1.5.0',
+          platform: TargetPlatform.macOS,
+          isWeb: false,
+        );
+
+    test('a hatch read that throws still reads the failure marker', () async {
+      final choice = await resolve(
+        hatch: () async => throw StateError('keychain'),
+        failed: () async => '1.5.0',
+      );
+      expect(choice.path, VideoOutputPath.texture);
+      expect(choice.failedEarlier, isTrue);
+    });
+
+    test('a hatch read that throws with no marker keeps the surface', () async {
+      final choice = await resolve(
+        hatch: () async => throw StateError('keychain'),
+        failed: () async => null,
+      );
+      expect(choice.path, VideoOutputPath.surface);
+    });
+
+    test('a marker read that throws still honours the hatch', () async {
+      final choice = await resolve(
+        hatch: () async => true,
+        failed: () async => throw StateError('keychain'),
+      );
+      expect(choice.path, VideoOutputPath.texture);
+      expect(choice.failedEarlier, isFalse);
+    });
+  });
+
+  test('readInstalledVersion answers empty when the read throws', () async {
+    expect(await readInstalledVersion(() async => throw StateError('x')), '');
+    expect(await readInstalledVersion(() async => '1.5.0'), '1.5.0');
+  });
 }

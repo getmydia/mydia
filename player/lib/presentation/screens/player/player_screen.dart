@@ -381,10 +381,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// here take the texture path whatever storage says.
   bool _surfaceFailed = false;
 
-  /// One-shot: the replay of a playback whose surface could not be set up
-  /// (no view, attach refused) takes the texture. Nothing is recorded, so
-  /// the next playback tries the surface again.
-  bool _textureForNextOpen = false;
+  /// The surface player whose start check is still running. A fallback the
+  /// adaptation policy asks for meanwhile waits in
+  /// [_fallbackAfterSurfaceStart]: an output that fails to come up can raise
+  /// a playback error too, and the start result, not that error, decides
+  /// between the texture and a transcode.
+  Player? _surfaceStarting;
+  FallbackToTranscode? _fallbackAfterSurfaceStart;
 
   /// Whether the texture path is in use because the surface failed, on this
   /// app version or for this playback, which the stats panel's Why row
@@ -2778,7 +2781,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!(ref.read(statsOverlayEnabledProvider).value ?? false)) return;
     final collector = PlaybackStatsCollector(
       signals: PlayerSignals.of(player),
-      sampler: frameStatsSamplerFor(player),
+      sampler: frameStatsSamplerFor(player, hdr: true),
     );
     _statsCollector = collector;
     collector.start();
@@ -2804,8 +2807,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final action = policy.observe(sample);
     if (action is FallbackToTranscode) {
+      final starting = _surfaceStarting;
+      if (starting != null && identical(starting, _player)) {
+        _fallbackAfterSurfaceStart ??= action;
+        return;
+      }
       unawaited(_fallbackToTranscode(action));
     }
+  }
+
+  /// Ends [player]'s surface start window and hands back the fallback the
+  /// policy asked for during it, if any. A no-op for any other player.
+  FallbackToTranscode? _endSurfaceStart(Player player) {
+    if (!identical(_surfaceStarting, player)) return null;
+    final deferred = _fallbackAfterSurfaceStart;
+    _surfaceStarting = null;
+    _fallbackAfterSurfaceStart = null;
+    return deferred;
   }
 
   Future<void> _fallbackToTranscode(FallbackToTranscode action) async {
@@ -2945,6 +2963,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     required bool Function() superseded,
   }) async {
     if (mounted && !superseded() && identical(_player, player)) return false;
+    _endSurfaceStart(player);
     if (identical(_player, player)) {
       _player = null;
       _videoController = null;
@@ -2963,20 +2982,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The video output for the playback about to start. A surface that
   /// failed in this screen pins it to the texture, ahead of a test's forced
   /// path and of storage, whose write may not have landed.
-  Future<VideoOutputPath> _resolveOutputPath() async {
-    if (_textureForNextOpen) {
-      _textureForNextOpen = false;
-      return VideoOutputPath.texture;
-    }
-    if (_surfaceFailed) return VideoOutputPath.texture;
+  ///
+  /// `fellBack` is the stats panel's Why for a choice read from storage,
+  /// null when this resolution has nothing to say about it. The caller
+  /// applies it only once it knows its load is still current.
+  Future<({VideoOutputPath path, bool? fellBack})> _resolveOutputPath() async {
+    if (_surfaceFailed) return (path: VideoOutputPath.texture, fellBack: null);
     final forced = widget.outputPath;
-    if (forced != null) return forced();
+    if (forced != null) return (path: forced(), fellBack: null);
     // `ref` is unusable once unmounted; the caller's supersede check then
     // throws before anything is built.
-    if (!mounted) return VideoOutputPath.texture;
+    if (!mounted) return (path: VideoOutputPath.texture, fellBack: null);
     final choice = await resolveMacVideoOutput(ref);
-    _videoOutputFellBack = choice.failedEarlier;
-    return choice.path;
+    return (path: choice.path, fellBack: choice.failedEarlier);
   }
 
   /// Shared tail of _initializePlayer: create player, open the media, start
@@ -3011,6 +3029,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// passes none: it has no generation of its own to check, so for it
   /// staleness is judged only by `identical(_player, player)`, exactly as
   /// before this parameter existed.
+  ///
+  /// [outputPath], when given, skips resolving the output: the texture
+  /// fallback replays its own playback on the texture this way, so the
+  /// override cannot outlive that playback and reach the next one.
   Future<Player> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders, {
@@ -3018,6 +3040,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     PlaybackPlan? verificationPlan,
     bool isSourceSwitch = false,
     int? loadGeneration,
+    VideoOutputPath? outputPath,
   }) async {
     bool superseded() =>
         loadGeneration != null && !_isCurrentLoad(loadGeneration);
@@ -3038,19 +3061,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Once per playback, and kept for its whole life: flipping the escape
     // hatch mid-playback applies to the next one.
-    final outputPath = await _resolveOutputPath();
+    final resolved = outputPath == null ? await _resolveOutputPath() : null;
 
     // Superseded during the awaits above, before a `Player` exists to hand
     // back or dispose. `_disposePlayer` already detached whatever the old
     // load held; creating one here would only leak it, exactly the finding
     // this generation check exists to close (see the doc comment above).
     if (superseded()) throw const _SupersededLoad();
+    final fellBack = resolved?.fellBack;
+    if (fellBack != null) _videoOutputFellBack = fellBack;
+    final videoOutput = outputPath ?? resolved!.path;
 
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
     _player = player;
     MpvSurfaceBinding? surfaceBinding;
-    if (outputPath == VideoOutputPath.surface) {
+    if (videoOutput == VideoOutputPath.surface) {
       // No `VideoController` on the surface: it would put media_kit's own
       // `vo=libmpv` output on the player. The binding mounts the view
       // (behind the loading view) and attaches before `open`.
@@ -3058,6 +3084,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         player: player,
         surface: widget.surface ?? const MpvSurfaceChannel(),
       );
+      _surfaceStarting = player;
+      _fallbackAfterSurfaceStart = null;
       if (mounted) setState(() => _surfaceBinding = surfaceBinding);
     } else {
       _videoController = VideoController(
@@ -3076,14 +3104,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // track): that failure holds for this app version. A view that never
     // appeared, a refused attach or an output still not up after 2 seconds
     // costs this playback only, and the next one tries the surface again.
+    //
+    // A transcode the policy asked for during the start check is dropped:
+    // the texture player arms its own verification, which sees again
+    // whatever fault survives the change of output.
     Future<Player> fallBackToTexture({required bool record}) async {
       debugPrint('[PlayerScreen] Surface did not start; using the texture');
+      _endSurfaceStart(player);
       _videoOutputFellBack = true;
       if (record) {
         _surfaceFailed = true;
         unawaited(recordMacSurfaceFailure(ref));
-      } else {
-        _textureForNextOpen = true;
       }
       _stopVerification();
       await _disposePlayer();
@@ -3095,6 +3126,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         verificationPlan: verificationPlan,
         isSourceSwitch: isSourceSwitch,
         loadGeneration: loadGeneration,
+        outputPath: VideoOutputPath.texture,
       );
     }
 
@@ -3173,7 +3205,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // explicit for the transcode-free path where the server sent HDR to a
     // client that claimed it, and the display still needs mapping. No-op on
     // web. Deliberately not applied to the media probe's player.
-    unawaited(applySdrTonemap(player, path: outputPath));
+    unawaited(applySdrTonemap(player, path: videoOutput));
 
     // Before `open`, deliberately: mpv chooses its audio track while loading
     // the file, so a preference applied afterwards does not reselect and the
@@ -3267,7 +3299,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
       switch (start) {
         case VideoOutputStart.started:
-          break;
+          // The output is up, so a fault reported meanwhile is the
+          // source's, and the transcode it asked for goes ahead.
+          final deferred = _endSurfaceStart(player);
+          if (deferred != null) unawaited(_fallbackToTranscode(deferred));
         case VideoOutputStart.failed:
           return fallBackToTexture(record: true);
         case VideoOutputStart.timedOut:
@@ -5962,6 +5997,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _videoController = null;
     final surfaceBinding = _surfaceBinding;
     _surfaceBinding = null;
+    if (player != null) _endSurfaceStart(player);
 
     await _positionSubscription?.cancel();
     _positionSubscription = null;
@@ -5995,6 +6031,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await surfaceBinding?.detach();
     await player?.dispose();
     if (player != null) releaseHlsEngine(player);
+  }
+
+  /// The error page's Retry. A playback error can raise that page while the
+  /// failed player is still installed (on the surface, still attached), so
+  /// it is torn down before the reload creates the next one. A load that
+  /// started meanwhile, a switch to another file say, wins.
+  Future<void> _retry() async {
+    final gen = _loadGeneration;
+    _stopVerification();
+    await _disposePlayer();
+    if (!_isCurrentLoad(gen)) return;
+    await _initializePlayer();
   }
 
   /// Rebuilds local playback when casting stops.
@@ -6062,8 +6110,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (_error != null) {
       return _withCastAffordance(
-        PlayerErrorView(
-            message: _error!(context.l10n), onRetry: _initializePlayer),
+        PlayerErrorView(message: _error!(context.l10n), onRetry: _retry),
       );
     }
 
@@ -6293,7 +6340,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
       videoOutputFellBack: _videoOutputFellBack,
-      outputHeadroom: _surfaceBinding == null ? null : (_edrHeadroom ?? 1),
+      // Null until the plugin reports the screen: an unmeasured headroom is
+      // not SDR, and the row keeps its plain wording until it is known.
+      outputHeadroom: _surfaceBinding == null ? null : _edrHeadroom,
     );
   }
 

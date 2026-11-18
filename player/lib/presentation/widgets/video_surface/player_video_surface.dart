@@ -30,6 +30,13 @@ import 'surface_subtitle_lift.dart';
 /// this means the plugin is missing, not slow.
 const _viewCreationTimeout = Duration(seconds: 5);
 
+/// How long a detach waits for the plugin's reply. The plugin itself gives
+/// up on `current-vo` after 3 seconds; this also bounds the `vid=no` write
+/// before that, and a serial queue held up by an mpv core that stopped
+/// answering. On expiry the plugin keeps the host views alive, so the
+/// player may still be disposed.
+const _detachReplyTimeout = Duration(seconds: 5);
+
 /// The surface's hold on one [Player]: its platform view, its handle while
 /// attached, and the panscan it last sent.
 ///
@@ -63,13 +70,13 @@ class MpvSurfaceBinding {
     final int viewId;
     final int handle;
     try {
-      final view = await Future.any<int?>([
-        _viewId.future,
-        _cancelled.future.then((_) => null),
-      ]).timeout(_viewCreationTimeout);
+      final view =
+          await _unlessCancelled(_viewId.future).timeout(_viewCreationTimeout);
       if (view == null) return false;
       viewId = view;
-      handle = await player.handle;
+      final resolved = await _unlessCancelled(player.handle);
+      if (resolved == null) return false;
+      handle = resolved;
     } on TimeoutException {
       debugPrint('[MpvSurface] platform view never appeared');
       return false;
@@ -84,10 +91,17 @@ class MpvSurfaceBinding {
       debugPrint('[MpvSurface] attach failed: ${e.code} ${e.message}');
       return false;
     }
+    // A detach sent while the attach was in flight is already queued behind
+    // it: nothing more may go to a handle on its way out.
+    if (_cancelled.isCompleted) return false;
     final scaling = _scaling;
     if (scaling != null) await _sendScaling(handle, scaling);
     return true;
   }
+
+  /// [future]'s value, or null once [detach] has run.
+  Future<T?> _unlessCancelled<T extends Object>(Future<T> future) =>
+      Future.any<T?>([future, _cancelled.future.then((_) => null)]);
 
   /// How mpv's output came up. Call once the source's tracks are known.
   ///
@@ -123,7 +137,7 @@ class MpvSurfaceBinding {
   }
 
   /// Takes the output out of the view. Completes before the player may be
-  /// disposed, and never throws. Idempotent.
+  /// disposed, within [_detachReplyTimeout], and never throws. Idempotent.
   Future<void> detach() => _detaching ??= _detach();
 
   Future<void> _detach() async {
@@ -131,7 +145,10 @@ class MpvSurfaceBinding {
     final handle = _handle;
     if (handle == null) return;
     try {
-      await surface.detach(handle);
+      await surface.detach(handle).timeout(_detachReplyTimeout);
+    } on TimeoutException {
+      debugPrint('[MpvSurface] detach got no reply within '
+          '${_detachReplyTimeout.inSeconds}s; disposing anyway');
     } catch (e) {
       debugPrint('[MpvSurface] detach failed: $e');
     }
@@ -217,6 +234,7 @@ class _PlayerVideoSurfaceState extends State<PlayerVideoSurface> {
                   player: player,
                   subtitles: binding.subtitles,
                   box: () => _box,
+                  scaling: () => widget.scaling,
                 ),
               ),
             ),
@@ -233,16 +251,16 @@ class _PlayerVideoSurfaceState extends State<PlayerVideoSurface> {
 /// Reads from storage rather than through the hatch's provider, which is
 /// auto-dispose and has no listener here. The decision itself is
 /// [resolveVideoOutputChoice], shared with the device profile.
-Future<MacVideoOutputChoice> resolveMacVideoOutput(WidgetRef ref) {
+Future<MacVideoOutputChoice> resolveMacVideoOutput(WidgetRef ref) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS) {
-    return Future.value((path: VideoOutputPath.texture, failedEarlier: false));
+    return (path: VideoOutputPath.texture, failedEarlier: false);
   }
   final settings = ref.read(coreSettingsServiceProvider);
-  final appVersion = ref.read(updateProvider).currentVersion;
+  final readVersion = ref.read(installedVersionReaderProvider);
   return resolveVideoOutputChoice(
     readLegacyHatch: settings.getLegacyMacVideoOutput,
     readFailedVersion: settings.getMacSurfaceFailedVersion,
-    appVersion: appVersion,
+    appVersion: await readInstalledVersion(readVersion),
   );
 }
 
@@ -253,7 +271,8 @@ Future<MacVideoOutputChoice> resolveMacVideoOutput(WidgetRef ref) {
 /// unmount meanwhile. The version is the one Diagnostics compares against.
 Future<void> recordMacSurfaceFailure(WidgetRef ref) async {
   final settings = ref.read(coreSettingsServiceProvider);
-  final version = ref.read(updateProvider).currentVersion;
+  final readVersion = ref.read(installedVersionReaderProvider);
+  final version = await readInstalledVersion(readVersion);
   if (version.isEmpty) return;
   try {
     await settings.setMacSurfaceFailedVersion(version);

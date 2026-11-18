@@ -86,4 +86,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(_padding(tester).bottom, 80);
   });
+
+  testWidgets('a new configuration padding applies while nothing lifts',
+      (tester) async {
+    Widget view(double bottom) => _host(MydiaSubtitleView(
+          player: player,
+          configuration: SubtitleViewConfiguration(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, bottom)),
+        ));
+    await tester.pumpWidget(view(24));
+    expect(_padding(tester).bottom, 24);
+
+    await tester.pumpWidget(view(40));
+    await tester.pumpAndSettle();
+    expect(_padding(tester).bottom, 40);
+  });
 }

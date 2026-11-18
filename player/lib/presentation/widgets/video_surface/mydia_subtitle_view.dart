@@ -44,7 +44,9 @@ class _MydiaSubtitleViewState extends State<MydiaSubtitleView> {
   static const _referenceHeight = 1080.0;
 
   late List<String> _subtitle = widget.player.state.subtitle;
-  late EdgeInsets _padding = widget.configuration.padding;
+
+  /// The controller's padding; the configuration's applies until it sets one.
+  EdgeInsets? _liftedPadding;
   Duration _duration = const Duration(milliseconds: 100);
   StreamSubscription<List<String>>? _subscription;
 
@@ -86,7 +88,7 @@ class _MydiaSubtitleViewState extends State<MydiaSubtitleView> {
     if (!mounted) return;
     setState(() {
       _duration = duration;
-      _padding = padding;
+      _liftedPadding = padding;
     });
   }
 
@@ -102,7 +104,7 @@ class _MydiaSubtitleViewState extends State<MydiaSubtitleView> {
         return Material(
           color: Colors.transparent,
           child: AnimatedContainer(
-            padding: _padding,
+            padding: _liftedPadding ?? widget.configuration.padding,
             duration: _duration,
             alignment: Alignment.bottomCenter,
             child: Text(

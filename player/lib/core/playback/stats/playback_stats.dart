@@ -270,7 +270,8 @@ class StatsContext {
   final StatsHdr? hdr;
 
   /// The screen's EDR headroom on the macOS video surface. Null on the
-  /// texture path, which keeps spec 1's HDR wording.
+  /// texture path, and on the surface until the plugin reports the screen;
+  /// either way the row keeps spec 1's HDR wording.
   final double? outputHeadroom;
 
   /// mpv's `decoder-desc`. Null on web.

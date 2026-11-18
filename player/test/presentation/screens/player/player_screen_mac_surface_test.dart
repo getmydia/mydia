@@ -12,16 +12,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart' show Video;
 import 'package:player/core/player/mac_video_output.dart';
 import 'package:player/core/player/mpv_surface_channel.dart';
+import 'package:player/core/player/video_scaling.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/settings/stats_overlay_setting.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
-import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -45,10 +46,20 @@ const _appVersion = '1.7.0';
 final _log = <String>[];
 
 class _FakeSurface implements MpvSurface {
-  _FakeSurface({this.start = VideoOutputStart.started, this.attachError});
+  _FakeSurface({
+    this.start = VideoOutputStart.started,
+    this.attachError,
+    this.startByHandle = const {},
+  });
 
   /// What [awaitVideoOutput] answers.
   VideoOutputStart start;
+
+  /// Per-handle answers that take precedence over [start].
+  final Map<int, VideoOutputStart> startByHandle;
+
+  /// Holds every [detach] until completed, when set.
+  Completer<void>? detachGate;
 
   /// Thrown by [attach] when set, the way the plugin refuses (`no-view`).
   final PlatformException? attachError;
@@ -62,10 +73,18 @@ class _FakeSurface implements MpvSurface {
     if (error != null) throw error;
   }
 
+  /// Holds [awaitVideoOutput]'s answer until completed, when set.
+  Completer<void>? startGate;
+
   @override
   Future<VideoOutputStart> awaitVideoOutput(int handle) async {
     _log.add('awaitVideoOutput $handle');
-    return start;
+    // The plugin can tell an audio-only source from a video one only once
+    // mpv has opened it and listed its tracks; a probe before that is a
+    // check that could not run.
+    if (!_log.contains('open $handle')) return VideoOutputStart.timedOut;
+    await startGate?.future;
+    return startByHandle[handle] ?? start;
   }
 
   @override
@@ -76,6 +95,7 @@ class _FakeSurface implements MpvSurface {
   @override
   Future<void> detach(int handle) async {
     _log.add('detach $handle');
+    await detachGate?.future;
   }
 
   // ignore: close_sinks
@@ -135,6 +155,9 @@ class _FakePlayer extends PlatformPlayer {
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {}
 
+  /// Reports a playback error, as mpv does for a decoder fault.
+  void fail(String message) => errorController.add(message);
+
   @override
   // ignore: must_call_super
   Future<void> dispose() async {
@@ -178,15 +201,17 @@ void _mockPlatformViews(WidgetTester tester) {
 }
 
 class _Rig {
-  _Rig(this.container, this.settings);
+  _Rig(this.container, this.settings, this.server);
   final ProviderContainer container;
   final SettingsService settings;
+  final ScriptedMydiaTransport server;
 }
 
 _Rig _rig() {
   final settings = SettingsService(storage: MockAuthStorage());
+  final server = _server();
   final container = buildPlayerScreenContainer(
-    server: _server(),
+    server: server,
     connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
@@ -194,9 +219,9 @@ _Rig _rig() {
     appVersion: _appVersion,
   );
   addTearDown(container.dispose);
-  // Starts the version read the failure is recorded under.
-  container.read(updateProvider);
-  return _Rig(container, settings);
+  // `updateProvider` is deliberately not read: its version is still empty
+  // until its own read lands, and the screen must not depend on that.
+  return _Rig(container, settings, server);
 }
 
 Future<void> _mount(
@@ -266,8 +291,8 @@ void main() {
     expect(find.byType(Video), findsNothing);
     expect(fake.isVideoControllerAttached, isFalse,
         reason: 'constructing a VideoController marks the player attached');
-    expect(_log.indexOf('attach 11'), lessThan(_log.indexOf('open 11')));
-    expect(_log, contains('awaitVideoOutput 11'));
+    expect(_log,
+        containsAllInOrder(['attach 11', 'open 11', 'awaitVideoOutput 11']));
 
     await _unmount(tester);
   });
@@ -334,7 +359,8 @@ void main() {
     expect(panel, findsOneWidget);
     expect(surface.displays.hasListener, isTrue);
     PlayerStatsPanel widget() => tester.widget<PlayerStatsPanel>(panel);
-    expect(widget().statsContext().outputHeadroom, 1.0);
+    expect(widget().statsContext().outputHeadroom, isNull,
+        reason: 'no display reading yet is not a headroom of 1');
 
     surface.displays.add(const DisplayInfo(
       edrHeadroom: 4.0,
@@ -453,6 +479,78 @@ void main() {
     await _unmount(tester);
   });
 
+  testWidgets(
+      'a slow start superseded during its detach leaves the next file '
+      'on the surface', (tester) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final players = <_FakePlayer>[];
+    Player next() {
+      final p = _FakePlayer(handleValue: 81 + players.length);
+      players.add(p);
+      return Player(platformPlayer: p);
+    }
+
+    final surface =
+        _FakeSurface(startByHandle: const {81: VideoOutputStart.timedOut})
+          ..detachGate = Completer<void>();
+    await _mount(tester, rig,
+        createPlayer: next, surface: surface, fileId: 'file-a');
+    await tester.runAsync(
+        () => pumpUntilReal(tester, () => _log.contains('detach 81')));
+    expect(_log, contains('detach 81'));
+
+    // The viewer moves on while the slow playback is still tearing down.
+    await _mount(tester, rig,
+        createPlayer: next, surface: surface, fileId: 'file-b');
+    surface.detachGate!.complete();
+    await tester.runAsync(() =>
+        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await pumpUntil(tester, _playing);
+
+    expect(_log, containsAllInOrder(['attach 82', 'open 82']),
+        reason: 'the texture retry belonged to the playback that timed out');
+    expect(find.byType(PlayerVideoSurface), findsOneWidget);
+
+    await _unmount(tester);
+  });
+
+  testWidgets(
+      'a fault during the start check does not start a transcode '
+      'when the surface falls back', (tester) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final players = <_FakePlayer>[];
+    Player next() {
+      final p = _FakePlayer(handleValue: players.isEmpty ? 91 : null);
+      players.add(p);
+      return Player(platformPlayer: p);
+    }
+
+    final surface = _FakeSurface(start: VideoOutputStart.failed)
+      ..startGate = Completer<void>();
+    await _mount(tester, rig, createPlayer: next, surface: surface);
+    await pumpUntil(tester, () => _log.contains('awaitVideoOutput 91'));
+    expect(_log, contains('awaitVideoOutput 91'));
+
+    // The output failing to come up can surface as a playback error too.
+    players[0].fail('vo: failed to initialize');
+    await tester.pump(const Duration(seconds: 2));
+    surface.startGate!.complete();
+    await tester.runAsync(() =>
+        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await pumpUntil(tester, _playing);
+
+    expect(find.byType(Video), findsOneWidget);
+    expect(
+      rig.server.requests.where((r) => r.variables.containsKey('strategy')),
+      isEmpty,
+      reason: 'the texture fallback decides; no transcode on top of it',
+    );
+
+    await _unmount(tester);
+  });
+
   testWidgets('audioOnlySourceNeverReportsSurfaceFailure', (tester) async {
     _mockPlatformViews(tester);
     final rig = _rig();
@@ -464,6 +562,8 @@ void main() {
     await pumpUntil(tester, _playing);
 
     expect(find.byType(PlayerVideoSurface), findsOneWidget);
+    expect(_log, containsAllInOrder(['open 41', 'awaitVideoOutput 41']),
+        reason: 'the start check runs once mpv has listed the tracks');
     await tester.runAsync(() async {
       expect(await rig.settings.getMacSurfaceFailedVersion(), isNull);
     });
@@ -499,6 +599,11 @@ void main() {
 
   testWidgets('fit and fill set panscan on the surface', (tester) async {
     _mockPlatformViews(tester);
+    // The screen loads the saved scaling and the taps save it: an empty
+    // in-memory box keeps both off disk and starts from Fit.
+    final box = (await tester.runAsync(() =>
+        Hive.openBox<String>(VideoScalingPrefs.boxName, bytes: Uint8List(0))))!;
+    addTearDown(() => tester.runAsync(box.close));
     final rig = _rig();
     final fake = _FakePlayer(handleValue: 61);
     final surface = _FakeSurface();

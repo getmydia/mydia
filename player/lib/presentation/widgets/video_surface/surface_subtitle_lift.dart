@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/subtitle_position.dart';
+import '../../../core/player/video_scaling.dart';
 import '../video_controls/chrome_subtitle_lift.dart';
 import 'mydia_subtitle_view.dart';
 
@@ -17,15 +18,23 @@ class SurfaceSubtitleLift implements SubtitleLift {
     required this.player,
     required this.subtitles,
     required this.box,
+    VideoScaling Function()? scaling,
     Future<void> Function(Player player, double subPos) applyPosition =
         applySubtitlePosition,
-  }) : _applyPosition = applyPosition;
+  })  : scaling = scaling ?? _fit,
+        _applyPosition = applyPosition;
+
+  static VideoScaling _fit() => VideoScaling.fit;
 
   final Player player;
   final MydiaSubtitleViewController subtitles;
 
   /// The size of the box subtitles are drawn in, read at apply time.
   final Size Function() box;
+
+  /// The picture's scaling, read at apply time. Fill (`panscan=1`) covers
+  /// the box, so no letterbox bar absorbs part of the lift.
+  final VideoScaling Function() scaling;
 
   final Future<void> Function(Player player, double subPos) _applyPosition;
 
@@ -47,13 +56,16 @@ class SurfaceSubtitleLift implements SubtitleLift {
       EdgeInsets.fromLTRB(16, 0, 16, bottom),
       duration: duration,
     );
+    // Without the picture's size, `subPosForLift` takes it to fill the box,
+    // which is what fill does.
+    final fitted = scaling() == VideoScaling.fit;
     unawaited(_applyPosition(
       player,
       subPosForLift(
         lift: bottom,
         box: box(),
-        videoWidth: player.state.width,
-        videoHeight: player.state.height,
+        videoWidth: fitted ? player.state.width : null,
+        videoHeight: fitted ? player.state.height : null,
       ),
     ));
   }

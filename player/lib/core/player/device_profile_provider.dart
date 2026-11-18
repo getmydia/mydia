@@ -59,10 +59,11 @@ final deviceProfileHolderProvider = Provider<DeviceProfileHolder>((ref) {
   // decides it. Read lazily, only on macOS, and never through `watch`.
   Future<VideoOutputPath> resolveMacOutputPath() async {
     final settings = ref.read(coreSettingsServiceProvider);
+    final readVersion = ref.read(installedVersionReaderProvider);
     final choice = await resolveVideoOutputChoice(
       readLegacyHatch: settings.getLegacyMacVideoOutput,
       readFailedVersion: settings.getMacSurfaceFailedVersion,
-      appVersion: ref.read(updateProvider).currentVersion,
+      appVersion: await readInstalledVersion(readVersion),
     );
     return choice.path;
   }
