@@ -104,7 +104,7 @@ The probe must use the runtime order the player will use. That settles the spec'
 - [ ] **Step 1: Write the probe.** It mirrors media_kit's sequence:
   1. Create the mpv handle with `vid=no`, then call `mpv_initialize`.
   2. Create an `NSWindow` with a host `NSView`.
-  3. On a background queue, set the Global Constraints attach order with `wid` = the host view pointer, then `loadfile levels.mp4`.
+  3. On a background queue, set the Global Constraints attach order with `wid` = the host view pointer, then `loadfile levels_hdr10.mp4` (Task 1's output directory).
 
   After 5 s it asserts:
   - `current-vo == "gpu-next"`;
@@ -177,7 +177,8 @@ The probe must use the runtime order the player will use. That settles the spec'
 
 **Interfaces:**
 - Produces, on method channel `mydia/mpv-surface`:
-  - `attach({handle: int, viewId: int, options: List<[String, String]>}) -> {started: bool}`. It applies `wid` first (the host view pointer), then each option in order, then `vid=auto`. It resolves `started` after polling `current-vo` for up to 2 s, but only when `track-list` has a video track. With no video track it resolves `started: true` immediately.
+  - `attach({handle: int, viewId: int, options: List<[String, String]>}) -> null`. It applies `wid` first (the host view pointer), then each option in order, then `vid=auto`, before `open`, when no source has tracks yet, so it cannot tell a working output from a failed one.
+  - `awaitVideoOutput({handle: int}) -> {started: bool, failed: bool}`, called after `open` once the tracks are known. It polls for up to 2 s: with a video track listed, `started` once `current-vo` is set and `failed` once mpv deselects the video track; with tracks but no video, `started` at once; neither by the deadline is a timeout. This is the result the fallback test injects (see `player/docs/playback.md`).
   - `setOption({handle: int, name: String, value: String}) -> null`
   - `detach({handle: int}) -> null`. Sets `vid=no` and waits for `current-vo` to be empty, up to 3 s. Logs on timeout.
 - Produces, on event channel `mydia/mpv-surface/display`: `{edrHeadroom: double, potentialHeadroom: double, screenName: String}`, sent on the host window's screen change and on `NSApplication.didChangeScreenParametersNotification`.

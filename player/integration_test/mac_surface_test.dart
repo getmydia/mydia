@@ -9,10 +9,16 @@
 //
 // The fixtures directory defaults to `~/mydia-hdr/fixtures`. It needs
 // `levels_hdr10.mp4`, `sdr_testsrc.mp4`, and `sdr_subs.mkv`: the SDR clip
-// with one English SRT track, muxed with
-// `ffmpeg -i sdr_testsrc.mp4 -i subs.srt -map 0:v -map 1:s -c:v copy -c:s srt`.
-// The whole file skips anywhere but macOS, and when a clip is missing. It
-// is not in `all_tests.dart`: CI's player E2E runs on Linux.
+// with one English SRT track. In the fixtures directory:
+//
+//   printf '1\n00:00:00,000 --> 00:00:10,000\nMydia surface subtitle check\n' > subs.srt
+//   ffmpeg -i sdr_testsrc.mp4 -i subs.srt -map 0:v -map 1:s -c:v copy \
+//     -c:s srt -metadata:s:s:0 language=eng sdr_subs.mkv
+//
+// The whole file skips anywhere but macOS, and on the default fixtures
+// path when a clip is missing. With `MYDIA_HDR_FIXTURES` given, a missing
+// clip fails the run instead, naming it: a wrong path must not pass as a
+// skip. It is not in `all_tests.dart`: CI's player E2E runs on Linux.
 //
 // Keep the Mac's displays awake for the whole run (`caffeinate -u` in a
 // loop when driving it over ssh). If every display is asleep when the video
@@ -40,6 +46,7 @@ import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/window/window_controller_native.dart';
 import 'package:player/core/window/window_fullscreen_controller.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/l10n/locale_aliases.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/player_screen_views.dart'
     show PlayerStatsPanel;
@@ -58,11 +65,11 @@ import 'helpers/test_bootstrap.dart';
 
 const _appVersion = '0.0.0-surface-it';
 
-final _fixtures = () {
-  const defined = String.fromEnvironment('MYDIA_HDR_FIXTURES');
-  if (defined.isNotEmpty) return defined;
-  return '${Platform.environment['HOME']}/mydia-hdr/fixtures';
-}();
+const _definedFixtures = String.fromEnvironment('MYDIA_HDR_FIXTURES');
+
+final _fixtures = _definedFixtures.isNotEmpty
+    ? _definedFixtures
+    : '${Platform.environment['HOME']}/mydia-hdr/fixtures';
 
 String _clip(String name) => '$_fixtures/$name';
 
@@ -71,14 +78,18 @@ const _sdr = 'sdr_testsrc.mp4';
 const _subs = 'sdr_subs.mkv';
 const _subtitleText = 'Mydia surface subtitle check';
 
-/// Why the file cannot run here, or null.
+/// The fixtures that are not where the run looks for them.
+List<String> _missingFixtures() => [
+      for (final name in [_hdr10, _sdr, _subs])
+        if (!File(_clip(name)).existsSync()) _clip(name),
+    ];
+
+/// Why the file cannot run here, or null. Only for the default fixtures
+/// path: an explicit one with clips missing fails instead (see `main`).
 String? _skipReason() {
   if (!Platform.isMacOS) return 'the surface path is macOS only';
-  for (final name in [_hdr10, _sdr, _subs]) {
-    if (!File(_clip(name)).existsSync()) {
-      return 'missing fixture ${_clip(name)}';
-    }
-  }
+  final missing = _missingFixtures();
+  if (missing.isNotEmpty) return 'missing fixture ${missing.first}';
   return null;
 }
 
@@ -148,6 +159,15 @@ class _TracedPlayer extends Player {
   @override
   Future<void> dispose() async {
     final h = handleValue ?? await handle;
+    // What mpv still outputs as disposal begins: empty once a detach did
+    // its job, still `gpu-next` when it only timed out.
+    String vo;
+    try {
+      vo = (await native.getProperty('current-vo')).trim();
+    } catch (e) {
+      vo = 'unreadable';
+    }
+    _log.add('dispose $h current-vo=$vo');
     _log.add('dispose $h start');
     await super.dispose();
     disposed = true;
@@ -251,7 +271,7 @@ Future<void> _mount(WidgetTester tester, _Rig rig, String clip,
   await tester.pumpWidget(UncontrolledProviderScope(
     container: rig.container,
     child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       home: PlayerScreen(
@@ -340,6 +360,16 @@ Future<String?> _moveToBuiltInDisplay() async {
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isMacOS && _definedFixtures.isNotEmpty) {
+    final missing = _missingFixtures();
+    if (missing.isNotEmpty) {
+      test('macOS surface fixtures', () {
+        fail('MYDIA_HDR_FIXTURES is set but these are missing: '
+            '${missing.join(', ')}');
+      });
+      return;
+    }
+  }
   final skip = _skipReason();
   if (skip != null) {
     test('macOS surface', () {}, skip: skip);
@@ -390,11 +420,17 @@ void main() {
     double? statsHeadroom() =>
         tester.widget<PlayerStatsPanel>(panel).statsContext().outputHeadroom;
     final headroom = statsHeadroom();
-    debugPrint('[mac_surface_test] stats headroom=$headroom on $display');
+    // A locked Mac reports a valid headroom of 1.0: the lock screen hides
+    // the window, and macOS raises no EDR for content nobody can see.
+    final locked = await _consoleLocked();
+    debugPrint('[mac_surface_test] stats headroom=$headroom on $display '
+        '(locked $locked)');
     if (display != null) {
-      expect(headroom, isNotNull);
-      expect(headroom!, greaterThan(1.0),
-          reason: 'the built-in panel offers EDR headroom');
+      expect(headroom, isNotNull, reason: 'the plugin reported the screen');
+      if (!locked) {
+        expect(headroom!, greaterThan(1.0),
+            reason: 'the built-in panel offers EDR headroom');
+      }
     }
 
     // macOS raises the current headroom once EDR content is on screen, with
@@ -404,7 +440,6 @@ void main() {
     // potential 2.0) may stay near 1.2, which is also what a stale value
     // read, and a locked Mac gets no EDR at all.
     final potential = _lastDisplay?.potentialHeadroom ?? 1;
-    final locked = await _consoleLocked();
     final assertClimb = potential > 2.0 && !locked;
     if (assertClimb) {
       await _waitFor(tester, 'stats headroom above 1.5',
@@ -436,8 +471,9 @@ void main() {
         () async => await _prop(p, 'panscan') != before);
     final after = await _prop(p, 'panscan');
     debugPrint('[mac_surface_test] panscan $before -> $after');
-    final filled = after.startsWith('1') ? after : before;
-    expect(double.parse(filled), 1.0);
+    // Fit is 0 and fill is 1, whichever one the stored preference started
+    // on.
+    expect({double.parse(before), double.parse(after)}, {0.0, 1.0});
     // Back to whatever it was, so the stored preference is unchanged.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
     await _waitFor(tester, 'panscan back',
@@ -538,6 +574,8 @@ void main() {
         _log,
         containsAllInOrder(
             ['detach $h start', 'detach $h end', 'dispose $h start']));
+    expect(_log, contains('dispose $h current-vo='),
+        reason: 'the output was gone before disposal, not just timed out');
   });
 
   testWidgets('the next source detaches the old handle before attaching',
@@ -602,6 +640,9 @@ void main() {
     );
     expect(find.byType(PlayerVideoSurface), findsNothing);
     expect(_log.where((e) => e.startsWith('attach')), isEmpty);
+    // A video output must actually be up, or the check below proves nothing.
+    await _waitFor(tester, 'texture output',
+        () async => (await _prop(rig.last, 'current-vo')).isNotEmpty);
     final vo = await _prop(rig.last, 'current-vo');
     debugPrint('[mac_surface_test] hatch current-vo=$vo');
     expect(vo, isNot('gpu-next'));

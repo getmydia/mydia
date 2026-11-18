@@ -200,8 +200,10 @@ builds `Video(...)`.
 - Everywhere else it is today's `Video(controller: ...)`.
 
 The path is chosen once, from the platform, and kept in the screen's state.
-A hidden setting, `debug.legacyMacVideoOutput`, forces the texture path on
-macOS. It is the escape hatch for running every file through the new path.
+**Settings → Diagnostics → Use the legacy video output** (stored as
+`legacy_mac_video_output`) forces the texture path on macOS. It is the escape
+hatch for running every file through the new path: a viewer whose video looks
+wrong or does not start turns it on.
 
 ### Player screen changes on macOS
 
