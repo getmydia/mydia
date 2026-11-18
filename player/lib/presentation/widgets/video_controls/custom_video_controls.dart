@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:media_kit/media_kit.dart' show Player;
 
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
@@ -8,10 +8,13 @@ import '../../../core/player/video_scaling.dart';
 import 'chrome_subtitle_lift.dart';
 import 'playback_chrome.dart';
 
-/// Builder for media_kit's `Video(controls: ...)` parameter.
+/// Builds [PlaybackChrome] for a player and the subtitle lift of whichever
+/// video output hosts it.
 ///
-/// All chrome now lives in [PlaybackChrome]; this file is only the adapter
-/// between media_kit's builder signature and that widget.
+/// All chrome lives in [PlaybackChrome]; this is only the adapter between the
+/// player screen's chrome arguments and that widget. The texture path's
+/// `Video(controls: ...)` and the macOS surface both call the builder it
+/// returns.
 ///
 /// [castAction] and [onCastTap] are `required` despite being nullable, which
 /// the other optional chrome parameters are not. Casting was invisible for the
@@ -21,7 +24,7 @@ import 'playback_chrome.dart';
 /// error states nobody demos. Requiring them turns "forgot the cast
 /// affordance" from something you have to notice into something that does not
 /// compile.
-Widget Function(VideoState) customVideoControlsBuilderWithCallback({
+Widget Function(Player player, SubtitleLift lift) playbackChromeBuilder({
   required StreamTimeline timeline,
   required Future<void> Function(Duration realTarget) onSeekToReal,
   required Widget? castAction,
@@ -51,15 +54,15 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
   FocusNode? scrubberFocusNode,
   ScrubThumbnails? scrubThumbnails,
 }) {
-  return (VideoState state) => PlaybackChrome(
-        player: state.widget.controller.player,
+  return (Player player, SubtitleLift lift) => PlaybackChrome(
+        player: player,
         chromeVisibility: chromeVisibility,
         playPauseFocusNode: playPauseFocusNode,
         chromeFocusNode: chromeFocusNode,
         scrub: scrub,
         scrubberFocusNode: scrubberFocusNode,
         scrubThumbnails: scrubThumbnails,
-        subtitleLift: VideoStateSubtitleLift(state),
+        subtitleLift: lift,
         timeline: timeline,
         onSeekToReal: onSeekToReal,
         title: title,

@@ -45,8 +45,18 @@ class StatsSample {
     this.droppedFrames,
     this.droppedFramesTotal,
     this.throughputKbps,
+    this.targetGamma,
+    this.colormatrix,
     this.history = const [],
   });
+
+  /// mpv's `video-target-params/gamma` (`pq`, `hlg`, `srgb`...): the
+  /// transfer mpv is drawing to. Null off native or when unset.
+  final String? targetGamma;
+
+  /// mpv's `video-params/colormatrix` (`dolbyvision` when an RPU is in
+  /// use). Null off native or when unset.
+  final String? colormatrix;
 
   /// Frames dropped since the previous sample. Null on the first sample of
   /// a source, and null wherever the engine reports no counters.
@@ -75,6 +85,10 @@ enum StatsWhyKind {
   browserReencodes,
   switchedEarlier,
   recentStall,
+
+  /// macOS: the HDR video surface failed to start on this app version, so
+  /// playback uses media_kit's texture.
+  macSurfaceFallback,
 }
 
 /// Why the panel says the current delivery is not the obvious one, as data.
@@ -159,12 +173,22 @@ class StatsQuality {
   final QualityRung? effective;
 }
 
-/// Who maps an HDR source down to the display's range.
-enum HdrTonemapper { player, server }
+/// Who maps an HDR source, and to what.
+///
+/// [player] and [server] are spec 1's two cases. The macOS video surface
+/// adds [playerLibplacebo] (libplacebo maps it down to SDR) and [edr] (no
+/// mapping: the HDR picture goes to the screen in EDR).
+enum HdrTonemapper { player, server, playerLibplacebo, edr }
 
 /// The source's HDR format and who tonemaps it.
 class StatsHdr {
-  const StatsHdr({required this.format, this.by});
+  const StatsHdr({
+    required this.format,
+    this.by,
+    this.transfer,
+    this.headroom,
+    this.rpuApplied = false,
+  });
 
   /// The server's display string (`HDR10`, `Dolby Vision 8`), English.
   final String format;
@@ -172,12 +196,27 @@ class StatsHdr {
   /// Null when who tonemaps is not known, so the row shows the format alone.
   final HdrTonemapper? by;
 
-  @override
-  bool operator ==(Object other) =>
-      other is StatsHdr && other.format == format && other.by == by;
+  /// The output transfer, `PQ` or `HLG`. Only set when [by] is
+  /// [HdrTonemapper.edr].
+  final String? transfer;
+
+  /// The screen's EDR headroom. Only set when [by] is [HdrTonemapper.edr].
+  final double? headroom;
+
+  /// mpv reports the `dolbyvision` color matrix: the RPU is in use.
+  final bool rpuApplied;
 
   @override
-  int get hashCode => Object.hash(format, by);
+  bool operator ==(Object other) =>
+      other is StatsHdr &&
+      other.format == format &&
+      other.by == by &&
+      other.transfer == transfer &&
+      other.headroom == headroom &&
+      other.rpuApplied == rpuApplied;
+
+  @override
+  int get hashCode => Object.hash(format, by, transfer, headroom, rpuApplied);
 }
 
 /// What the screen knows without measuring.
@@ -192,6 +231,7 @@ class StatsContext {
     this.sourceLabel,
     this.videoLabel,
     this.hdr,
+    this.outputHeadroom,
     this.decoderLabel,
     this.hardwareDecode,
     this.audioLabel,
@@ -228,6 +268,11 @@ class StatsContext {
   /// The source's HDR format and who tonemaps it. Null for an SDR source or
   /// an unknown format, which drops the row.
   final StatsHdr? hdr;
+
+  /// The screen's EDR headroom on the macOS video surface. Null on the
+  /// texture path, and on the surface until the plugin reports the screen;
+  /// either way the row keeps spec 1's HDR wording.
+  final double? outputHeadroom;
 
   /// mpv's `decoder-desc`. Null on web.
   final String? decoderLabel;

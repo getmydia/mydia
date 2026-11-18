@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:media_kit_video/media_kit_video.dart'
     show VideoControllerConfiguration;
 
+import 'mac_video_output.dart';
+
 /// mpv's hardware decoder for Android that keeps the frame on the GPU.
 ///
 /// The name is mpv's, not media_kit's: media_kit passes `hwdec` through to
@@ -38,6 +40,10 @@ const androidZeroCopyHwdec = 'mediacodec';
 /// mpv deliberately leaves `mediacodec` out of `auto-safe` because it converts
 /// to RGB and its handling of unusual colorspaces is unverified. Every other
 /// platform keeps media_kit's own default.
+///
+/// macOS on the surface path (`mac_video_output.dart`) builds no
+/// `VideoController` and does not use this: `surfaceAttachOptions` sets its
+/// output and decoder instead.
 VideoControllerConfiguration videoControllerConfigurationFor(
   TargetPlatform platform, {
   required bool isWeb,
@@ -64,3 +70,12 @@ const Map<String, String> sdrTonemapMpvOptions = {
   'tone-mapping': 'bt.2390',
   'hdr-compute-peak': 'auto',
 };
+
+/// The tonemap options to apply for a playback on [path].
+///
+/// Empty for [VideoOutputPath.surface]: gpu-next (libplacebo) maps HDR to the
+/// display itself, and `target-trc=srgb` would force an SDR target on a
+/// display that can show HDR. Only the texture, which always renders to SDR,
+/// gets [sdrTonemapMpvOptions].
+Map<String, String> sdrTonemapMpvOptionsFor(VideoOutputPath path) =>
+    path == VideoOutputPath.surface ? const {} : sdrTonemapMpvOptions;

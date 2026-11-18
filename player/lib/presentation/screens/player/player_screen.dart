@@ -31,6 +31,8 @@ import '../../../core/player/subtitle_delay.dart';
 import '../../../core/player/hdr_tonemap.dart';
 import '../../../core/player/subtitle_render.dart';
 import '../../../core/player/video_output_config.dart';
+import '../../../core/player/mac_video_output.dart';
+import '../../../core/player/mpv_surface_channel.dart';
 import '../../../core/player/video_scaling.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
@@ -84,7 +86,9 @@ import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/cast_chrome_icon.dart';
 import '../../widgets/video_controls/chrome_top_bar.dart';
+import '../../widgets/video_controls/chrome_subtitle_lift.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
+import '../../widgets/video_surface/player_video_surface.dart';
 import '../../widgets/video_controls/playback_chrome.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/video_controls/chrome_panel.dart';
@@ -186,6 +190,15 @@ class PlayerScreen extends ConsumerStatefulWidget {
   @visibleForTesting
   final PlayerWindowSizer Function()? createWindowSizer;
 
+  /// The macOS mpv surface. Null uses the plugin's channels; tests pass a
+  /// recording fake.
+  final MpvSurface? surface;
+
+  /// Picks the video output for each playback. Null decides from the
+  /// platform and settings (`resolveMacVideoOutput`); tests force a path.
+  @visibleForTesting
+  final VideoOutputPath Function()? outputPath;
+
   const PlayerScreen({
     super.key,
     required this.mediaId,
@@ -201,6 +214,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.createPlayer,
     required this.session,
     this.createWindowSizer,
+    this.surface,
+    this.outputPath,
   });
 
   @override
@@ -356,6 +371,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     implements RemotePlayerBinding {
   Player? _player;
   VideoController? _videoController;
+
+  /// The macOS surface holding `_player`'s output, when this playback took
+  /// [VideoOutputPath.surface]. Null on the texture path, which has
+  /// `_videoController` instead; never both.
+  MpvSurfaceBinding? _surfaceBinding;
+
+  /// Set once the surface failed to start in this screen: later playbacks
+  /// here take the texture path whatever storage says.
+  bool _surfaceFailed = false;
+
+  /// The surface player whose start check is still running. A fallback the
+  /// adaptation policy asks for meanwhile waits in
+  /// [_fallbackAfterSurfaceStart]: an output that fails to come up can raise
+  /// a playback error too, and the start result, not that error, decides
+  /// between the texture and a transcode.
+  Player? _surfaceStarting;
+  FallbackToTranscode? _fallbackAfterSurfaceStart;
+
+  /// Whether the texture path is in use because the surface failed, on this
+  /// app version or for this playback, which the stats panel's Why row
+  /// reports.
+  bool _videoOutputFellBack = false;
+
+  /// The surface screen's EDR headroom for the stats HDR row, kept only
+  /// while the stats collector runs. Null until the plugin reports one.
+  double? _edrHeadroom;
+  StreamSubscription<DisplayInfo>? _displaySubscription;
   ProgressReporter? _progressService;
 
   /// Play-to-first-frame marks for this screen's current load. Replaced on
@@ -2739,13 +2781,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!(ref.read(statsOverlayEnabledProvider).value ?? false)) return;
     final collector = PlaybackStatsCollector(
       signals: PlayerSignals.of(player),
-      sampler: frameStatsSamplerFor(player),
+      sampler: frameStatsSamplerFor(player, hdr: true),
     );
     _statsCollector = collector;
     collector.start();
+    // The headroom is read from the plugin's own stream, so the panel's
+    // cadence is the collector's and no timer is added.
+    _displaySubscription = _surfaceBinding?.surface.display.listen(
+      (info) => _edrHeadroom = info.edrHeadroom,
+      onError: (Object e) => debugPrint('[PlayerScreen] display stream: $e'),
+    );
   }
 
   void _stopStatsCollector() {
+    unawaited(_displaySubscription?.cancel());
+    _displaySubscription = null;
+    _edrHeadroom = null;
     unawaited(_statsCollector?.dispose());
     _statsCollector = null;
   }
@@ -2756,8 +2807,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final action = policy.observe(sample);
     if (action is FallbackToTranscode) {
+      final starting = _surfaceStarting;
+      if (starting != null && identical(starting, _player)) {
+        _fallbackAfterSurfaceStart ??= action;
+        return;
+      }
       unawaited(_fallbackToTranscode(action));
     }
+  }
+
+  /// Ends [player]'s surface start window and hands back the fallback the
+  /// policy asked for during it, if any. A no-op for any other player.
+  FallbackToTranscode? _endSurfaceStart(Player player) {
+    if (!identical(_surfaceStarting, player)) return null;
+    final deferred = _fallbackAfterSurfaceStart;
+    _surfaceStarting = null;
+    _fallbackAfterSurfaceStart = null;
+    return deferred;
   }
 
   Future<void> _fallbackToTranscode(FallbackToTranscode action) async {
@@ -2807,6 +2873,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       } catch (e) {
         debugPrint('[PlayerScreen] Could not update playback memory: $e');
       }
+    }
+
+    // The memory write above awaits: another file may have loaded since,
+    // and [plan] and [position] are this one's. Only the playback that asked
+    // for the fallback may switch.
+    if (!mounted ||
+        !identical(_player, player) ||
+        !identical(_playback, playback)) {
+      return;
+    }
+    // Nor may a bandwidth fallback outlive the viewer picking Original
+    // meanwhile, which asks for the file's own bytes over any transcode, as
+    // the policy's `reactsToBandwidth` does. A decode failure still applies.
+    if (action.reason == FailureReason.bandwidth &&
+        _selectedQuality.isOriginal) {
+      return;
     }
 
     // The choice stays the viewer's: `fallbackPlan` already honours it as
@@ -2897,16 +2979,38 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     required bool Function() superseded,
   }) async {
     if (mounted && !superseded() && identical(_player, player)) return false;
+    _endSurfaceStart(player);
     if (identical(_player, player)) {
       _player = null;
       _videoController = null;
+      final binding = _surfaceBinding;
+      _surfaceBinding = null;
       releaseHlsEngine(player);
+      await binding?.detach();
       await player.dispose();
       // Again, for an `open()` still queued on media_kit's lock: see
       // `releaseHlsEngine`.
       releaseHlsEngine(player);
     }
     return true;
+  }
+
+  /// The video output for the playback about to start. A surface that
+  /// failed in this screen pins it to the texture, ahead of a test's forced
+  /// path and of storage, whose write may not have landed.
+  ///
+  /// `fellBack` is the stats panel's Why for a choice read from storage,
+  /// null when this resolution has nothing to say about it. The caller
+  /// applies it only once it knows its load is still current.
+  Future<({VideoOutputPath path, bool? fellBack})> _resolveOutputPath() async {
+    if (_surfaceFailed) return (path: VideoOutputPath.texture, fellBack: null);
+    final forced = widget.outputPath;
+    if (forced != null) return (path: forced(), fellBack: null);
+    // `ref` is unusable once unmounted; the caller's supersede check then
+    // throws before anything is built.
+    if (!mounted) return (path: VideoOutputPath.texture, fellBack: null);
+    final choice = await resolveMacVideoOutput(ref);
+    return (path: choice.path, fellBack: choice.failedEarlier);
   }
 
   /// Shared tail of _initializePlayer: create player, open the media, start
@@ -2941,6 +3045,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// passes none: it has no generation of its own to check, so for it
   /// staleness is judged only by `identical(_player, player)`, exactly as
   /// before this parameter existed.
+  ///
+  /// [outputPath], when given, skips resolving the output: the texture
+  /// fallback replays its own playback on the texture this way, so the
+  /// override cannot outlive that playback and reach the next one.
   Future<Player> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders, {
@@ -2948,6 +3056,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     PlaybackPlan? verificationPlan,
     bool isSourceSwitch = false,
     int? loadGeneration,
+    VideoOutputPath? outputPath,
   }) async {
     bool superseded() =>
         loadGeneration != null && !_isCurrentLoad(loadGeneration);
@@ -2966,22 +3075,94 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // run at all.
     await prepareHlsEngine();
 
-    // Superseded during the await above, before a `Player` exists to hand
+    // Once per playback, and kept for its whole life: flipping the escape
+    // hatch mid-playback applies to the next one.
+    final resolved = outputPath == null ? await _resolveOutputPath() : null;
+
+    // Superseded during the awaits above, before a `Player` exists to hand
     // back or dispose. `_disposePlayer` already detached whatever the old
     // load held; creating one here would only leak it, exactly the finding
     // this generation check exists to close (see the doc comment above).
     if (superseded()) throw const _SupersededLoad();
+    final fellBack = resolved?.fellBack;
+    if (fellBack != null) _videoOutputFellBack = fellBack;
+    final videoOutput = outputPath ?? resolved!.path;
 
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
     _player = player;
-    _videoController = VideoController(
-      player,
-      configuration: videoControllerConfigurationFor(
-        defaultTargetPlatform,
-        isWeb: kIsWeb,
-      ),
-    );
+    MpvSurfaceBinding? surfaceBinding;
+    if (videoOutput == VideoOutputPath.surface) {
+      // No `VideoController` on the surface: it would put media_kit's own
+      // `vo=libmpv` output on the player. The binding mounts the view
+      // (behind the loading view) and attaches before `open`.
+      surfaceBinding = MpvSurfaceBinding(
+        player: player,
+        surface: widget.surface ?? const MpvSurfaceChannel(),
+      );
+      _surfaceStarting = player;
+      _fallbackAfterSurfaceStart = null;
+      if (mounted) setState(() => _surfaceBinding = surfaceBinding);
+    } else {
+      _videoController = VideoController(
+        player,
+        configuration: videoControllerConfigurationFor(
+          defaultTargetPlatform,
+          isWeb: kIsWeb,
+        ),
+      );
+    }
+
+    // Rebuilds this playback on the texture path: same source, same
+    // position, a fresh `Player`. Nothing has played yet when it runs.
+    //
+    // [record] only when mpv rejected gpu-next (it deselected the video
+    // track): that failure holds for this app version. A view that never
+    // appeared, a refused attach or an output still not up after 2 seconds
+    // costs this playback only, and the next one tries the surface again.
+    //
+    // A transcode the policy asked for during the start check is dropped:
+    // the texture player arms its own verification, which sees again
+    // whatever fault survives the change of output.
+    Future<Player> fallBackToTexture({required bool record}) async {
+      debugPrint('[PlayerScreen] Surface did not start; using the texture');
+      _endSurfaceStart(player);
+      _videoOutputFellBack = true;
+      if (record) {
+        _surfaceFailed = true;
+        unawaited(recordMacSurfaceFailure(ref));
+      }
+      _stopVerification();
+      // An error the surface player raised (a downloaded file has no policy
+      // to defer it to) is not the texture player's: back to loading before
+      // the teardown awaits, so the error page's Retry cannot start a load
+      // that supersedes this recovery. The retry reports its own errors.
+      if (mounted && !superseded() && _error != null) {
+        setState(() {
+          _error = null;
+          _isLoading = true;
+        });
+      }
+      await _disposePlayer();
+      if (superseded() || !mounted) return player;
+      return _openPlayerAndStart(
+        mediaSource,
+        httpHeaders,
+        plan: plan,
+        verificationPlan: verificationPlan,
+        isSourceSwitch: isSourceSwitch,
+        loadGeneration: loadGeneration,
+        outputPath: VideoOutputPath.texture,
+      );
+    }
+
+    if (surfaceBinding != null) {
+      final attached = await surfaceBinding.attach();
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
+      if (!attached) return fallBackToTexture(record: false);
+    }
     // Hands the backend the media_kit player so the web backend can reach the
     // underlying HTMLVideoElement. A no-op on native.
     //
@@ -3050,7 +3231,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // explicit for the transcode-free path where the server sent HDR to a
     // client that claimed it, and the display still needs mapping. No-op on
     // web. Deliberately not applied to the media probe's player.
-    unawaited(applySdrTonemap(player));
+    unawaited(applySdrTonemap(player, path: videoOutput));
 
     // Before `open`, deliberately: mpv chooses its audio track while loading
     // the file, so a preference applied afterwards does not reselect and the
@@ -3134,6 +3315,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // stream controllers `dispose()` already closed.
     if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
       return player;
+    }
+    // Only now does mpv know whether the source has video at all, which an
+    // audio-only file needs for the start check not to read as a failure.
+    if (surfaceBinding != null) {
+      final start = await surfaceBinding.awaitVideoOutput();
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
+      switch (start) {
+        case VideoOutputStart.started:
+          // The output is up, so a fault reported meanwhile is the
+          // source's, and the transcode it asked for goes ahead.
+          final deferred = _endSurfaceStart(player);
+          if (deferred != null) unawaited(_fallbackToTranscode(deferred));
+        case VideoOutputStart.failed:
+          return fallBackToTexture(record: true);
+        case VideoOutputStart.timedOut:
+          return fallBackToTexture(record: false);
+      }
     }
     _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {
@@ -5417,15 +5617,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     _player = null;
     _videoController = null;
+    final surfaceBinding = _surfaceBinding;
+    _surfaceBinding = null;
     // Before `dispose()`, or the hls.js media_kit leaks restarts playback on
     // the detached element, and again once it completes, because an `open()`
     // queued on media_kit's lock can attach a new hls.js after the first
     // release: see `releaseHlsEngine`. `dispose()` cannot be awaited here, so
     // the second release rides its future; a failure surfaces exactly as the
     // bare `dispose()` did.
+    //
+    // The surface detaches first: mpv must destroy its output while the
+    // host view still exists, and outside the `mpv_terminate_destroy`
+    // media_kit runs after dispose. `detach` never throws.
     if (player != null) {
       releaseHlsEngine(player);
-      unawaited(player.dispose().whenComplete(() => releaseHlsEngine(player)));
+      final disposed = surfaceBinding == null
+          ? player.dispose()
+          : surfaceBinding.detach().then((_) => player.dispose());
+      unawaited(disposed.whenComplete(() => releaseHlsEngine(player)));
     }
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
@@ -5812,6 +6021,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     _player = null;
     _videoController = null;
+    final surfaceBinding = _surfaceBinding;
+    _surfaceBinding = null;
+    if (player != null) _endSurfaceStart(player);
 
     await _positionSubscription?.cancel();
     _positionSubscription = null;
@@ -5841,8 +6053,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _stopStatsCollector();
 
     if (player != null) releaseHlsEngine(player);
+    // Detach before dispose, as `dispose()` does, for the same reason.
+    await surfaceBinding?.detach();
     await player?.dispose();
     if (player != null) releaseHlsEngine(player);
+  }
+
+  /// The error page's Retry. A playback error can raise that page while the
+  /// failed player is still installed (on the surface, still attached), so
+  /// it is torn down before the reload creates the next one. A load that
+  /// started meanwhile, a switch to another file say, wins. Taps while one
+  /// retry is under way join it, so a second one cannot skip the teardown.
+  ///
+  /// The slot belongs to the load it retries: a Retry on a later load does
+  /// not join an older one, and only the retry still holding the slot
+  /// clears it.
+  Future<void> _retry() {
+    final gen = _loadGeneration;
+    final current = _retrying;
+    if (current != null && _retryingGen == gen) return current;
+    late final Future<void> retry;
+    retry = _runRetry(gen).whenComplete(() {
+      if (identical(_retrying, retry)) _retrying = null;
+    });
+    _retrying = retry;
+    _retryingGen = gen;
+    return retry;
+  }
+
+  Future<void>? _retrying;
+  int? _retryingGen;
+
+  Future<void> _runRetry(int gen) async {
+    _stopVerification();
+    await _disposePlayer();
+    if (!_isCurrentLoad(gen)) return;
+    await _initializePlayer();
   }
 
   /// Rebuilds local playback when casting stops.
@@ -5889,20 +6135,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Widget _buildBody() {
+    final surfaceBinding = _surfaceBinding;
+    final subtitleSize =
+        ref.watch(subtitleSizeSettingProvider).value ?? SubtitleSize.medium;
+
     if (_isLoading) {
       final step = _loadingStep;
-      return _withCastAffordance(PlayerLoadingView(
+      final loading = _withCastAffordance(PlayerLoadingView(
           message: step == null ? null : context.l10n.loadingStepText(step)));
+      // The surface's view has to exist while loading: attach waits for it,
+      // and attach comes before `open`.
+      if (surfaceBinding == null) return loading;
+      return PlayerVideoSurface(
+        binding: surfaceBinding,
+        scaling: _scaling,
+        subtitleSize: subtitleSize,
+        overlay: loading,
+      );
     }
 
     if (_error != null) {
       return _withCastAffordance(
-        PlayerErrorView(
-            message: _error!(context.l10n), onRetry: _initializePlayer),
+        PlayerErrorView(message: _error!(context.l10n), onRetry: _retry),
       );
     }
 
-    if (_videoController == null) {
+    final videoController = _videoController;
+    if (videoController == null && surfaceBinding == null) {
       return _withCastAffordance(
         const Center(
           child: CircularProgressIndicator(
@@ -5912,74 +6171,80 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
+    final chrome = playbackChromeBuilder(
+      timeline: _timeline,
+      onSeekToReal: seekToReal,
+      title: widget.title,
+      chromeVisibility: _chromeVisibility,
+      playPauseFocusNode: _osdPlayPauseFocus,
+      chromeFocusNode: _chromeFocusNode,
+      // Remote tier only. Elsewhere the bar is pointer-driven and a
+      // cursor controller would only be something else to keep in sync.
+      scrub: InputCapabilities.directionalPrimary ? _scrub : null,
+      scrubberFocusNode: _scrubberFocus,
+      scrubThumbnails: _scrubThumbnails,
+      onBack: () => popOrGoHome(context),
+      // The chrome's own cast pill. Null on a build that cannot cast at
+      // all, which drops the pill rather than drawing an empty one.
+      castAction: _castSupported ? castChromeActionFor(ref) : null,
+      onCastTap: _showCastDevicePicker,
+      onAudioTap: _showAudioSelector,
+      onSubtitleTap: _showSubtitleSelector,
+      // Hidden when Auto and Original could never differ for this file
+      // (a local file, no plan yet, or a lossy source with no adaptive
+      // ladder), matching how audio disables itself at zero tracks
+      // rather than opening a one-item menu.
+      onQualityTap: qualityControlAvailable(
+              localFile: _isDownloadedSource,
+              plan: _plan,
+              sourceHeight: _planInputs?.sourceHeight)
+          ? _showQualitySelector
+          : null,
+      // Null where no fullscreen route exists, which hides the button
+      // rather than leaving a dead one, matching how `onQualityTap`
+      // above hides itself at a single quality rung.
+      onFullscreenTap: _fullscreen.available.value ? _fullscreen.toggle : null,
+      onAlwaysOnTopTap: _toggleAlwaysOnTop,
+      onScalingTap: _toggleScaling,
+      scaling: _scaling,
+      onPreviousEpisode: _upNext.hasPrevious ? _upNext.playPrevious : null,
+      onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
+      onActivity: _upNext.noteInput,
+      isFullscreen: _fullscreen.isFullscreen.value,
+      isAlwaysOnTop: _isAlwaysOnTop,
+      audioTrackCount: _audioTracks.length,
+      selectedAudioLabel: _selectedAudioTrack == null
+          ? null
+          : context.l10n.audioTrackName(_selectedAudioTrack!),
+      selectedSubtitleLabel: _selectedSubtitleTrack == null
+          ? null
+          : context.l10n.subtitleTrackName(_selectedSubtitleTrack!),
+      selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
+          selected: _selectedQuality, effective: _effectiveQuality)),
+    );
+
     // Video widget fills available space with black background
     // Using SizedBox.expand ensures proper sizing on all platforms
-    final subtitleSize =
-        ref.watch(subtitleSizeSettingProvider).value ?? SubtitleSize.medium;
-    Widget videoPlayer = SizedBox.expand(
-      child: LayoutBuilder(
-        builder: (context, constraints) => Video(
-          subtitleViewConfiguration:
-              subtitleViewConfigurationFor(constraints.biggest, subtitleSize),
-          controller: _videoController!,
-          controls: customVideoControlsBuilderWithCallback(
-            timeline: _timeline,
-            onSeekToReal: seekToReal,
-            title: widget.title,
-            chromeVisibility: _chromeVisibility,
-            playPauseFocusNode: _osdPlayPauseFocus,
-            chromeFocusNode: _chromeFocusNode,
-            // Remote tier only. Elsewhere the bar is pointer-driven and a
-            // cursor controller would only be something else to keep in sync.
-            scrub: InputCapabilities.directionalPrimary ? _scrub : null,
-            scrubberFocusNode: _scrubberFocus,
-            scrubThumbnails: _scrubThumbnails,
-            onBack: () => popOrGoHome(context),
-            // The chrome's own cast pill. Null on a build that cannot cast at
-            // all, which drops the pill rather than drawing an empty one.
-            castAction: _castSupported ? castChromeActionFor(ref) : null,
-            onCastTap: _showCastDevicePicker,
-            onAudioTap: _showAudioSelector,
-            onSubtitleTap: _showSubtitleSelector,
-            // Hidden when Auto and Original could never differ for this file
-            // (a local file, no plan yet, or a lossy source with no adaptive
-            // ladder), matching how audio disables itself at zero tracks
-            // rather than opening a one-item menu.
-            onQualityTap: qualityControlAvailable(
-                    localFile: _isDownloadedSource,
-                    plan: _plan,
-                    sourceHeight: _planInputs?.sourceHeight)
-                ? _showQualitySelector
-                : null,
-            // Null where no fullscreen route exists, which hides the button
-            // rather than leaving a dead one — matching how `onQualityTap`
-            // above hides itself at a single quality rung.
-            onFullscreenTap:
-                _fullscreen.available.value ? _fullscreen.toggle : null,
-            onAlwaysOnTopTap: _toggleAlwaysOnTop,
-            onScalingTap: _toggleScaling,
+    Widget videoPlayer = surfaceBinding != null
+        ? PlayerVideoSurface(
+            binding: surfaceBinding,
             scaling: _scaling,
-            onPreviousEpisode:
-                _upNext.hasPrevious ? _upNext.playPrevious : null,
-            onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
-            onActivity: _upNext.noteInput,
-            isFullscreen: _fullscreen.isFullscreen.value,
-            isAlwaysOnTop: _isAlwaysOnTop,
-            audioTrackCount: _audioTracks.length,
-            selectedAudioLabel: _selectedAudioTrack == null
-                ? null
-                : context.l10n.audioTrackName(_selectedAudioTrack!),
-            selectedSubtitleLabel: _selectedSubtitleTrack == null
-                ? null
-                : context.l10n.subtitleTrackName(_selectedSubtitleTrack!),
-            selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
-                selected: _selectedQuality, effective: _effectiveQuality)),
-          ),
-          fill: Colors.black,
-          fit: _scaling.boxFit,
-        ),
-      ),
-    );
+            subtitleSize: subtitleSize,
+            chrome: chrome,
+          )
+        : SizedBox.expand(
+            child: LayoutBuilder(
+              builder: (context, constraints) => Video(
+                subtitleViewConfiguration: subtitleViewConfigurationFor(
+                    constraints.biggest, subtitleSize),
+                controller: videoController!,
+                controls: (state) => chrome(state.widget.controller.player,
+                    VideoStateSubtitleLift(state)),
+                fill: Colors.black,
+                fit: _scaling.boxFit,
+              ),
+            ),
+          );
 
     // Wrap with gesture controls for mobile
     final player = _player;
@@ -6120,6 +6385,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       linkHealthy: status == null || !status.isRelayConnected,
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
+      videoOutputFellBack: _videoOutputFellBack,
+      // Null until the plugin reports the screen: an unmeasured headroom is
+      // not SDR, and the row keeps its plain wording until it is known.
+      outputHeadroom: _surfaceBinding == null ? null : _edrHeadroom,
     );
   }
 

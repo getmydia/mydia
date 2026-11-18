@@ -445,6 +445,18 @@ void main() {
           contains('18,4'));
     });
 
+    test('the HDR output row uses the language decimal separator', () async {
+      const value = StatsHdrValue(StatsHdr(
+        format: 'HDR10',
+        by: HdrTonemapper.edr,
+        transfer: 'PQ',
+        headroom: 13.8,
+      ));
+      expect((await l10n('en')).statsValue(value),
+          'HDR10, HDR output, PQ, headroom 13.8x');
+      expect((await l10n('es')).statsValue(value), contains('13,8'));
+    });
+
     test('every row and mode has a label in every language', () async {
       for (final tag in ['en', 'es', 'pt_BR']) {
         final loc = await l10n(tag);

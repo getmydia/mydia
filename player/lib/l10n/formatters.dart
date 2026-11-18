@@ -526,14 +526,29 @@ extension AppFormatters on AppLocalizations {
         PlaybackMode.localFile => statsModeLocalFile,
       };
 
+  /// The HDR row's value: the source format, `, RPU applied` when the
+  /// Dolby Vision RPU is in use, then how it is rendered.
+  String statsHdrText(StatsHdr hdr) {
+    final source = hdr.rpuApplied ? statsHdrRpuApplied(hdr.format) : hdr.format;
+    return switch (hdr.by) {
+      null => source,
+      HdrTonemapper.player => statsHdrByPlayer(source),
+      HdrTonemapper.server => statsHdrByServer(source),
+      HdrTonemapper.playerLibplacebo => statsHdrByPlayerLibplacebo(source),
+      HdrTonemapper.edr => () {
+          final output = statsHdrOutput(
+            hdr.transfer ?? '',
+            NumberFormat('0.0', localeName).format(hdr.headroom ?? 1),
+          );
+          return statsHdrSourceThenOutput(source, output);
+        }(),
+    };
+  }
+
   String statsValue(StatsValue value) => switch (value) {
         StatsText(:final text) => text,
         StatsWhyValue(:final why) => statsWhyText(why),
-        StatsHdrValue(:final hdr) => switch (hdr.by) {
-            HdrTonemapper.player => statsHdrByPlayer(hdr.format),
-            HdrTonemapper.server => statsHdrByServer(hdr.format),
-            null => hdr.format,
-          },
+        StatsHdrValue(:final hdr) => statsHdrText(hdr),
         StatsQualityValue(:final quality) => statsQualityText(quality),
         StatsModeValue(:final mode) => statsModeName(mode),
         StatsDecoderValue(:final label, :final hardware) => switch (hardware) {
@@ -699,6 +714,7 @@ extension AppFormatters on AppLocalizations {
             StatsWhyKind.browserReencodes => statsWhyBrowserReencodes,
             StatsWhyKind.switchedEarlier => statsWhySwitchedEarlier,
             StatsWhyKind.recentStall => statsWhyRecentStall,
+            StatsWhyKind.macSurfaceFallback => statsWhyMacSurfaceFallback,
           },
         StatsWhyCapped(:final rung) => statsWhyQualityCapped(qualityName(rung)),
         StatsWhyRemembered(:final codec) => statsWhyRememberedFailure(codec),

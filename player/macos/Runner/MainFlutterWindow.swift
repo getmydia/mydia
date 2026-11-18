@@ -10,6 +10,10 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
   /// collaborators weakly.
   private var nativeTabBar: NativeTabBarPlugin?
 
+  /// Owns `mydia/mpv-surface`; held here because its channels and view
+  /// factory registration hold it only through their handlers.
+  private var mpvSurface: MpvSurfacePlugin?
+
   /// Height of the band the Flutter title row draws into.
   /// kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart.
   private let titleBandHeight: CGFloat = 40
@@ -85,6 +89,8 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
     nativeTabBar = NativeTabBarPlugin(
       messenger: flutterViewController.engine.binaryMessenger,
       split: split, sidebar: sidebar, window: self)
+    mpvSurface = MpvSurfacePlugin.register(
+      with: flutterViewController.registrar(forPlugin: "MpvSurfacePlugin"), window: self)
 
     // Make the window look more native
     self.titlebarAppearsTransparent = true

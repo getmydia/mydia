@@ -50,6 +50,40 @@ class StatsText extends StatsValue {
   final String text;
 }
 
+/// What the HDR row says right now. Off the macOS surface this is the
+/// context's own value. On it, the player maps the source one of two ways,
+/// told apart by mpv's output transfer and the screen's headroom: HDR goes
+/// out in EDR when mpv draws PQ or HLG and the screen has headroom above 1,
+/// and libplacebo maps it down to SDR otherwise. A server transcode stays
+/// the server's.
+StatsHdr? statsHdrFor(StatsSample sample, StatsContext context) {
+  final hdr = context.hdr;
+  final headroom = context.outputHeadroom;
+  if (hdr == null || headroom == null || hdr.by != HdrTonemapper.player) {
+    return hdr;
+  }
+  final rpuApplied = sample.colormatrix == 'dolbyvision';
+  final transfer = switch (sample.targetGamma?.toLowerCase()) {
+    'pq' => 'PQ',
+    'hlg' => 'HLG',
+    _ => null,
+  };
+  if (transfer != null && headroom > 1) {
+    return StatsHdr(
+      format: hdr.format,
+      by: HdrTonemapper.edr,
+      transfer: transfer,
+      headroom: headroom,
+      rpuApplied: rpuApplied,
+    );
+  }
+  return StatsHdr(
+    format: hdr.format,
+    by: HdrTonemapper.playerLibplacebo,
+    rpuApplied: rpuApplied,
+  );
+}
+
 /// The HDR row: a format the panel words with who tonemaps it.
 class StatsHdrValue extends StatsValue {
   const StatsHdrValue(this.hdr);
@@ -148,8 +182,8 @@ List<StatsRow> statsRows(
       StatsRow(id: StatsRowId.source, value: StatsText(context.sourceLabel!)),
     if (context.videoLabel != null)
       StatsRow(id: StatsRowId.video, value: StatsText(context.videoLabel!)),
-    if (context.hdr != null)
-      StatsRow(id: StatsRowId.hdr, value: StatsHdrValue(context.hdr!)),
+    if (statsHdrFor(sample, context) case final hdr?)
+      StatsRow(id: StatsRowId.hdr, value: StatsHdrValue(hdr)),
     if (!compact && context.decoderLabel != null)
       StatsRow(
         id: StatsRowId.decoder,
@@ -220,11 +254,8 @@ String statsClipboardText(
     if (context.whyDetail != null) 'Detail: ${context.whyDetail}',
     if (context.sourceLabel != null) 'Source: ${context.sourceLabel}',
     if (context.videoLabel != null) 'Video: ${context.videoLabel}',
-    if (context.hdr != null)
-      switch (context.hdr!.by) {
-        null => 'HDR: ${context.hdr!.format}',
-        final by => 'HDR: ${context.hdr!.format}, tonemapped by ${by.name}',
-      },
+    if (statsHdrFor(sample, context) case final hdr?)
+      'HDR: ${english.statsValue(StatsHdrValue(hdr))}',
     if (context.decoderLabel != null) 'Decoder: ${_decoder(context)}',
     if (context.audioLabel != null) 'Audio: ${context.audioLabel}',
     if (sample.droppedFrames != null && sample.droppedFramesTotal != null)

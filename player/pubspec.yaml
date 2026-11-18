@@ -103,6 +103,13 @@ dependencies:
   file_selector: ^1.1.0
   qr_flutter: ^4.1.0
 
+# macOS ships getmydia's video-hdr libmpv (mpv 0.42, libplacebo, MoltenVK)
+# instead of media_kit's prebuilt one. Other platforms are untouched. See
+# packages/media_kit_libs_macos_video_hdr/README.md.
+dependency_overrides:
+  media_kit_libs_macos_video:
+    path: packages/media_kit_libs_macos_video_hdr
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -149,6 +156,7 @@ flutter:
   assets:
     - assets/fonts/Inter-LICENSE.txt
     - assets/fonts/Outfit-LICENSE.txt
+    - assets/licenses/apache-2.0.txt
 
   shaders:
     - shaders/liquid_glass.frag

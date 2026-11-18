@@ -185,3 +185,6 @@ bench/cardigann/data/
 # The demo seed's local title list (mix mydia.demo_seed). Real titles stay out
 # of the repository.
 /.demo-titles.local
+
+# Generated HDR test clips (scripts/generate-hdr-fixtures.sh). Never committed.
+test/fixtures/hdr/

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/player/mac_video_output.dart';
 import 'package:player/core/player/video_output_config.dart';
 
 void main() {
@@ -70,5 +71,16 @@ void main() {
   test('sdrTonemapMpvOptions leaves target-trc to mpv', () {
     // Forcing srgb would re-curve every SDR source, not just tonemapped HDR.
     expect(sdrTonemapMpvOptions, isNot(contains('target-trc')));
+  });
+
+  group('sdrTonemapMpvOptionsFor', () {
+    test('the texture applies the pinned options', () {
+      expect(sdrTonemapMpvOptionsFor(VideoOutputPath.texture),
+          sdrTonemapMpvOptions);
+    });
+
+    test('the macOS surface leaves tone mapping to libplacebo', () {
+      expect(sdrTonemapMpvOptionsFor(VideoOutputPath.surface), isEmpty);
+    });
   });
 }

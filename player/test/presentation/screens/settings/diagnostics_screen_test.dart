@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,13 +12,37 @@ import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/fullscreen/fullscreen_mode.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report_signal.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/diagnostics_sharing_section.dart';
+import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 import '../../../core/sources/mydia/fake_mydia_transport.dart';
+import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/mydia_test_source.dart';
 import '../../../test_utils/toast_harness.dart';
+
+/// Holds each macOS output read until the test releases it.
+class _HeldOutputReads extends SettingsService {
+  _HeldOutputReads() : super(storage: MockAuthStorage());
+
+  final releaseHatch = Completer<void>();
+  final releaseMarker = Completer<void>();
+
+  @override
+  Future<bool> getLegacyMacVideoOutput() async {
+    await releaseHatch.future;
+    return false;
+  }
+
+  @override
+  Future<String?> getMacSurfaceFailedVersion() async {
+    await releaseMarker.future;
+    return null;
+  }
+}
 
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   _FakeP2pStatusNotifier(this._status);
@@ -29,6 +56,7 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
 Future<void> _pump(
   WidgetTester tester, {
   required P2pStatus status,
+  SettingsService? settings,
 }) async {
   // The active source is a Mydia instance paired over p2p.
   final source = testMydiaSourceOver(
@@ -44,6 +72,8 @@ Future<void> _pump(
         p2pStatusNotifierProvider.overrideWith(
           () => _FakeP2pStatusNotifier(status),
         ),
+        if (settings != null)
+          coreSettingsServiceProvider.overrideWithValue(settings),
       ],
       child: const MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -236,6 +266,72 @@ void main() {
       expect(written, hasLength(1));
       for (final (label, value) in report.rows) {
         expect(written.single, contains('$label: $value'));
+      }
+    });
+  });
+
+  // The override must be cleared inside the test body: the binding checks
+  // foundation variables before any tearDown runs.
+  group('legacy video output switch', () {
+    testWidgets('is present on macOS', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        await _pump(tester,
+            status: const P2pStatus.initial(),
+            settings: SettingsService(storage: MockAuthStorage()));
+        await tester.pump();
+
+        expect(
+            find.byKey(const Key('legacy-mac-video-output')), findsOneWidget);
+        expect(
+            find.byKey(const Key('mac-video-output-status')), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('waits for both reads before reporting an output',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final settings = _HeldOutputReads();
+        await _pump(tester,
+            status: const P2pStatus.initial(), settings: settings);
+
+        final toggle = find.byKey(const Key('legacy-mac-video-output'));
+        expect(toggle, findsOneWidget);
+        expect(tester.widget<SettingsRow>(toggle).onChanged, isNull,
+            reason: 'the switch cannot be trusted before its value loads');
+        expect(find.byKey(const Key('mac-video-output-status')), findsNothing);
+
+        settings.releaseHatch.complete();
+        await tester.pump();
+        await tester.pump();
+
+        expect(tester.widget<SettingsRow>(toggle).onChanged, isNotNull);
+        expect(find.byKey(const Key('mac-video-output-status')), findsNothing,
+            reason: 'the failure marker has not been read yet');
+
+        settings.releaseMarker.complete();
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+            find.byKey(const Key('mac-video-output-status')), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('is absent on other platforms', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        await _pump(tester, status: const P2pStatus.initial());
+
+        expect(find.byKey(const Key('legacy-mac-video-output')), findsNothing);
+        expect(find.byKey(const Key('mac-video-output-status')), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
       }
     });
   });

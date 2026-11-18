@@ -428,4 +428,122 @@ void main() {
       );
     });
   });
+
+  group('hdr row on the macOS surface', () {
+    StatsContext surface({
+      double headroom = 13.8,
+      String format = 'HDR10',
+      PlaybackMode mode = PlaybackMode.direct,
+      HdrTonemapper by = HdrTonemapper.player,
+    }) =>
+        StatsContext(
+          mode: mode,
+          qualityLabel: 'Original',
+          duration: const Duration(minutes: 90),
+          hdr: StatsHdr(format: format, by: by),
+          outputHeadroom: headroom,
+        );
+
+    StatsSample sampleWith({String? gamma, String? colormatrix}) => StatsSample(
+          bufferedAhead: _sample.bufferedAhead,
+          position: _sample.position,
+          targetGamma: gamma,
+          colormatrix: colormatrix,
+        );
+
+    String row(StatsSample s, StatsContext c) =>
+        valueFor(statsRows(s, c, StatsDensity.full), 'HDR');
+
+    test('PQ output with headroom reads as HDR output', () {
+      expect(
+        row(sampleWith(gamma: 'pq'), surface()),
+        'HDR10, HDR output, PQ, headroom 13.8x',
+      );
+    });
+
+    test('HLG output with headroom', () {
+      expect(
+        row(sampleWith(gamma: 'hlg'), surface(headroom: 1.5)),
+        'HDR10, HDR output, HLG, headroom 1.5x',
+      );
+    });
+
+    test('headroom 1.0 or an sRGB target is libplacebo tonemapping', () {
+      expect(
+        row(sampleWith(gamma: 'pq'), surface(headroom: 1)),
+        'HDR10, tonemapped by player (libplacebo)',
+      );
+      expect(
+        row(sampleWith(gamma: 'srgb'), surface()),
+        'HDR10, tonemapped by player (libplacebo)',
+      );
+      expect(
+        row(sampleWith(), surface()),
+        'HDR10, tonemapped by player (libplacebo)',
+      );
+    });
+
+    test('a Dolby Vision colormatrix adds RPU applied to the source label', () {
+      expect(
+        row(
+          sampleWith(gamma: 'srgb', colormatrix: 'dolbyvision'),
+          surface(format: 'Dolby Vision 8'),
+        ),
+        'Dolby Vision 8, RPU applied, tonemapped by player (libplacebo)',
+      );
+    });
+
+    test('EDR Dolby Vision keeps the RPU note, in the panel and the copy', () {
+      final c = surface(format: 'Dolby Vision 8');
+      final s = sampleWith(gamma: 'pq', colormatrix: 'dolbyvision');
+      expect(
+        row(s, c),
+        'Dolby Vision 8, RPU applied, HDR output, PQ, headroom 13.8x',
+      );
+      expect(
+        statsClipboardText(s, c, appVersion: '1.0.0'),
+        contains(
+          'HDR: Dolby Vision 8, RPU applied, HDR output, PQ, headroom 13.8x',
+        ),
+      );
+    });
+
+    test('a server transcode keeps the server wording', () {
+      expect(
+        row(
+          sampleWith(gamma: 'pq'),
+          surface(mode: PlaybackMode.transcode, by: HdrTonemapper.server),
+        ),
+        'HDR10, tonemapped by server',
+      );
+    });
+
+    test('the texture path keeps spec 1 wording', () {
+      expect(
+        row(
+          sampleWith(gamma: 'pq'),
+          const StatsContext(
+            mode: PlaybackMode.direct,
+            qualityLabel: 'Original',
+            duration: Duration(minutes: 90),
+            hdr: StatsHdr(format: 'HDR10', by: HdrTonemapper.player),
+          ),
+        ),
+        'HDR10, tonemapped by player',
+      );
+    });
+
+    test('the clipboard matches the panel', () {
+      expect(
+        statsClipboardText(sampleWith(gamma: 'pq'), surface(),
+            appVersion: '1.0.0'),
+        contains('HDR: HDR10, HDR output, PQ, headroom 13.8x'),
+      );
+      expect(
+        statsClipboardText(sampleWith(gamma: 'srgb'), surface(),
+            appVersion: '1.0.0'),
+        contains('HDR: HDR10, tonemapped by player (libplacebo)'),
+      );
+    });
+  });
 }

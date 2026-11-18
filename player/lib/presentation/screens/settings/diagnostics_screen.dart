@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,9 @@ import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/fullscreen/fullscreen_report.dart';
 import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
+import '../../../core/player/mac_video_output.dart';
+import '../../../core/settings/legacy_mac_video_output_setting.dart';
+import '../../../core/settings/settings_providers.dart';
 import '../../../core/sources/mydia/source_link.dart';
 import '../../../core/sources/sources_providers.dart'
     show activeSourceIdProvider;
@@ -161,7 +165,8 @@ class DiagnosticsBody extends ConsumerWidget {
         const SizedBox(height: 18),
         ValueListenableBuilder<FullscreenReport?>(
           valueListenable: fullscreenReport,
-          builder: (context, report, _) => _PlaybackSection(report: report),
+          builder: (context, report, _) =>
+              _PlaybackSection(report: report, appVersion: version),
         ),
         const SizedBox(height: 24),
         FilledButton.icon(
@@ -209,18 +214,21 @@ class DiagnosticsBody extends ConsumerWidget {
 ///
 /// Read-only like everything else on this screen. It exists to be looked at
 /// once, on a device whose console is unreachable, and copied.
-class _PlaybackSection extends StatelessWidget {
-  const _PlaybackSection({required this.report});
+class _PlaybackSection extends ConsumerWidget {
+  const _PlaybackSection({required this.report, required this.appVersion});
 
   final FullscreenReport? report;
+  final String appVersion;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final report = this.report;
     final l10n = context.l10n;
+    final onMac = defaultTargetPlatform == TargetPlatform.macOS && !kIsWeb;
     return SettingsSection(
       label: l10n.settingsPlayback,
       children: [
+        if (onMac) ..._macVideoOutputRows(context, ref),
         if (report == null)
           SettingsRow.action(
             icon: Icons.fullscreen,
@@ -248,6 +256,66 @@ class _PlaybackSection extends StatelessWidget {
     );
   }
 }
+
+extension on _PlaybackSection {
+  /// The legacy-output switch and the line saying which output the next
+  /// playback is set to use. A playback that fell back to the texture only
+  /// for itself (a slow start) records nothing, so this line still names
+  /// gpu-next for it.
+  ///
+  /// The switch is disabled until its value loads, and the output line waits
+  /// for both reads: a guess shown meanwhile, or left up after a failed
+  /// read, would report an output playback is not using.
+  List<Widget> _macVideoOutputRows(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final legacyRead = ref.watch(legacyMacVideoOutputProvider);
+    final failedRead = ref.watch(_macSurfaceFailedVersionProvider);
+    final legacy = legacyRead.hasValue ? legacyRead.requireValue : null;
+    final failedVersion = failedRead.value;
+    // A recorded failure counts only against the running version, which
+    // `updateProvider` publishes after its own read: until then the marker
+    // cannot be compared, and the line would guess.
+    final bothRead = legacy != null &&
+        failedRead.hasValue &&
+        (failedVersion == null || appVersion.isNotEmpty);
+    final output = switch (chooseVideoOutputPath(
+      platform: defaultTargetPlatform,
+      isWeb: kIsWeb,
+      legacyHatch: legacy ?? false,
+      failedVersion: failedVersion,
+      appVersion: appVersion,
+    )) {
+      VideoOutputPath.surface => 'gpu-next',
+      VideoOutputPath.texture => 'texture',
+    };
+    return [
+      SettingsRow.toggle(
+        key: const Key('legacy-mac-video-output'),
+        icon: Icons.movie_filter_outlined,
+        title: l10n.settingsDiagnosticsLegacyVideoOutput,
+        subtitle: l10n.settingsDiagnosticsLegacyVideoOutputHint,
+        value: legacy ?? false,
+        onChanged: legacy == null
+            ? null
+            : (v) => ref.read(legacyMacVideoOutputProvider.notifier).set(v),
+      ),
+      if (bothRead)
+        SettingsRow.action(
+          key: const Key('mac-video-output-status'),
+          icon: Icons.tv_outlined,
+          title: failedVersion == appVersion
+              ? l10n.settingsDiagnosticsVideoOutputFallback(output)
+              : l10n.settingsDiagnosticsVideoOutput(output),
+        ),
+    ];
+  }
+}
+
+// Auto-dispose, so opening Diagnostics re-reads a failure the player
+// recorded since the last visit.
+final _macSurfaceFailedVersionProvider = FutureProvider.autoDispose<String?>(
+  (ref) => ref.read(coreSettingsServiceProvider).getMacSurfaceFailedVersion(),
+);
 
 class _Dot extends StatelessWidget {
   const _Dot({required this.color});

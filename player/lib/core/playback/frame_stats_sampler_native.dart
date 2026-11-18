@@ -7,16 +7,19 @@ import 'package:media_kit/media_kit.dart';
 import 'frame_stats_sampler.dart';
 import 'health_sample.dart';
 
-FrameStatsSampler samplerFor(Player player) {
+FrameStatsSampler samplerFor(Player player, {bool hdr = false}) {
   final platform = player.platform;
   if (platform is! NativePlayer) return const NoFrameStatsSampler();
-  return NativeFrameStatsSampler(platform);
+  return NativeFrameStatsSampler(platform, hdr: hdr);
 }
 
 class NativeFrameStatsSampler implements FrameStatsSampler {
-  NativeFrameStatsSampler(this._platform);
+  NativeFrameStatsSampler(this._platform, {this.hdr = false});
 
   final NativePlayer _platform;
+
+  /// Whether each reading also carries the HDR properties.
+  final bool hdr;
 
   @override
   Future<FrameStats?> sample() async {
@@ -36,9 +39,23 @@ class NativeFrameStatsSampler implements FrameStatsSampler {
       return FrameStats(
         droppedFrames: vo + decoder,
         throughputKbps: speed == null ? null : (speed * 8 / 1000).round(),
+        targetGamma: hdr ? await _optional('video-target-params/gamma') : null,
+        colormatrix: hdr ? await _optional('video-params/colormatrix') : null,
       );
     } catch (e) {
       debugPrint('[FrameStats] mpv property read failed: $e');
+      return null;
+    }
+  }
+
+  /// A property that is allowed to be unset (no video yet, or a video
+  /// output that reports no target). Its failure never invalidates the
+  /// counters above.
+  Future<String?> _optional(String name) async {
+    try {
+      final value = (await _platform.getProperty(name)).trim();
+      return value.isEmpty ? null : value;
+    } catch (_) {
       return null;
     }
   }
