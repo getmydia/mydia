@@ -5,10 +5,12 @@ import 'package:flutter/widgets.dart';
 /// Keyed by language code, or by `language_COUNTRY` for a regional variant
 /// that has its own file.
 const Map<String, String> _names = {
+  'cnr': 'Crnogorski',
   'en': 'English',
   'es': 'Español',
   'pt': 'Português',
   'pt_BR': 'Português (Brasil)',
+  'sr': 'Српски',
 };
 
 /// The picker label for [locale]; falls back to the language code for a
