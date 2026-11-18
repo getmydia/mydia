@@ -37,6 +37,8 @@ import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/settings/stats_overlay_setting.dart';
 import 'package:player/core/update/update_provider.dart';
+import 'package:player/core/window/window_controller_native.dart';
+import 'package:player/core/window/window_fullscreen_controller.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/player_screen_views.dart'
@@ -332,6 +334,14 @@ void main() {
     await ensureTestBootstrap();
     // `main` does this in the app; window_manager crashes without it.
     await windowManager.ensureInitialized();
+    // So does `desktop_window_native.dart`. The player's fullscreen state
+    // follows `windowFullscreenSignal`, which only this listener updates:
+    // without it the screen never learns it entered fullscreen, and the
+    // second `f` asks to enter again instead of leaving.
+    final fullscreen =
+        WindowFullscreenController(window: const WindowManagerController());
+    await fullscreen.seed();
+    windowManager.addListener(fullscreen);
   });
   setUp(_log.clear);
 
@@ -430,6 +440,9 @@ void main() {
     await _waitFor(tester, 'SDR tracks', () => _playing(rig));
     final p = rig.last;
     final h = p.handleValue;
+    // On an unlocked Mac each transition animates for about a second; keep
+    // the 12 s clip from ending (and pausing) halfway through the test.
+    await p.setPlaylistMode(PlaylistMode.single);
     final before = await windowManager.getBounds();
     debugPrint('[mac_surface_test] bounds before fullscreen $before '
         'osd ${await _prop(p, 'osd-dimensions')}');
