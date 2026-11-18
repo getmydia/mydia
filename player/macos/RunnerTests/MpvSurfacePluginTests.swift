@@ -40,9 +40,18 @@ final class FakeMpvApi: MpvApi {
   var writePairs: [String] { writes.map { "\($0.name)=\($0.value ?? "")" } }
   var currentVoReads: Int { calls.filter { $0.op == "get" && $0.name == "current-vo" }.count }
 
+  private var _refused: Set<String> = []
+  /// Option names whose writes fail, as mpv does for one it rejects.
+  var refused: Set<String> {
+    get { lock.withLock { _refused } }
+    set { lock.withLock { _refused = newValue } }
+  }
+
   func setOption(_ h: OpaquePointer, _ k: String, _ v: String) -> Int32 {
-    lock.withLock { _calls.append(Call(op: "set", name: k, value: v, onMain: Thread.isMainThread)) }
-    return 0
+    lock.withLock { () -> Int32 in
+      _calls.append(Call(op: "set", name: k, value: v, onMain: Thread.isMainThread))
+      return _refused.contains(k) ? -1 : 0
+    }
   }
 
   func getString(_ h: OpaquePointer, _ k: String) -> String? {
@@ -138,15 +147,44 @@ final class MpvSurfacePluginTests: XCTestCase {
   func testAttachNeverCallsMpvOnMainThread() {
     let api = FakeMpvApi(trackList: videoTracks, currentVo: [nil, "gpu-next"])
     let plugin = makePlugin(api: api)
-    _ = makeView(plugin)
+    // The plugin holds host views weakly: the test keeps this one alive.
+    let view = makeView(plugin)
 
-    call(plugin, "attach", attachArgs(options: [["vo", "gpu-next"]]))
-    call(plugin, "setOption", ["handle": handle, "name": "panscan", "value": "1.0"])
-    call(plugin, "awaitVideoOutput", ["handle": handle])
-    call(plugin, "detach", ["handle": handle])
+    withExtendedLifetime(view) {
+      XCTAssertNil(call(plugin, "attach", attachArgs(options: [["vo", "gpu-next"]])))
+      call(plugin, "setOption", ["handle": handle, "name": "panscan", "value": "1.0"])
+      call(plugin, "awaitVideoOutput", ["handle": handle])
+      call(plugin, "detach", ["handle": handle])
+    }
 
     XCTAssertFalse(api.calls.isEmpty)
     XCTAssertEqual(api.calls.filter(\.onMain), [])
+  }
+
+  func testAttachFailsWhenMpvRefusesWid() {
+    let api = FakeMpvApi()
+    api.refused = ["wid"]
+    let plugin = makePlugin(api: api)
+    let view = makeView(plugin)
+
+    let reply = withExtendedLifetime(view) {
+      call(plugin, "attach", attachArgs(options: [["vo", "gpu-next"]]))
+    }
+
+    XCTAssertEqual((reply as? FlutterError)?.code, "attach-failed")
+  }
+
+  func testAttachStillSucceedsWhenAnOptionIsRefused() {
+    let api = FakeMpvApi()
+    api.refused = ["dither"]
+    let plugin = makePlugin(api: api)
+    let view = makeView(plugin)
+
+    let reply = withExtendedLifetime(view) {
+      call(plugin, "attach", attachArgs(options: [["dither", "auto"]]))
+    }
+
+    XCTAssertNil(reply)
   }
 
   func testAttachToUnknownViewIsAnError() {
@@ -172,6 +210,43 @@ final class MpvSurfacePluginTests: XCTestCase {
     XCTAssertEqual(reply?["failed"] as? Bool, false)
     XCTAssertEqual(api.currentVoReads, 0)
     XCTAssertEqual(clock.now, 0)
+  }
+
+  func testTrackListStillEmptyAtTheDeadlineTimesOut() {
+    let api = FakeMpvApi(trackList: "[]", currentVo: [nil])
+    let clock = VirtualClock()
+    let plugin = makePlugin(api: api, clock: clock)
+
+    let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
+
+    XCTAssertEqual(reply?["started"] as? Bool, false)
+    XCTAssertEqual(reply?["failed"] as? Bool, false)
+    XCTAssertGreaterThanOrEqual(clock.now, 2.0)
+  }
+
+  func testUnreadableTrackListTimesOut() {
+    let api = FakeMpvApi(trackList: nil, currentVo: [nil])
+    let plugin = makePlugin(api: api)
+
+    let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
+
+    XCTAssertEqual(reply?["started"] as? Bool, false)
+    XCTAssertEqual(reply?["failed"] as? Bool, false)
+  }
+
+  func testVideoTrackListedAfterTheCheckStartsIsStillChecked() {
+    let api = FakeMpvApi(trackList: "[]", currentVo: [nil])
+    let clock = VirtualClock()
+    // mpv lists the tracks after the first poll, then rejects the output.
+    let plugin = makePlugin(api: api, clock: clock) { d in
+      clock.sleep(d)
+      api.trackList = self.videoDeselected
+    }
+
+    let reply = call(plugin, "awaitVideoOutput", ["handle": handle]) as? [String: Any]
+
+    XCTAssertEqual(reply?["started"] as? Bool, false)
+    XCTAssertEqual(reply?["failed"] as? Bool, true)
   }
 
   func testAwaitVideoOutputReportsTrueOnceVoAppears() {
@@ -262,6 +337,21 @@ final class MpvSurfacePluginTests: XCTestCase {
     XCTAssertTrue(logs.contains { $0.contains("timed out") }, "\(logs)")
   }
 
+  func testHostViewStaysRetainedWhenDetachTimesOut() {
+    let api = FakeMpvApi(currentVo: ["gpu-next"])
+    let plugin = makePlugin(api: api)
+
+    weak var weakView: MpvHostView?
+    autoreleasepool {
+      let view = makeView(plugin)
+      weakView = view
+      XCTAssertNil(call(plugin, "attach", attachArgs()))
+      call(plugin, "detach", ["handle": handle])
+    }
+
+    XCTAssertNotNil(weakView, "host view freed while mpv may still draw into it")
+  }
+
   func testDetachQueuedBehindAttachWaitsForIt() {
     let api = FakeMpvApi(trackList: videoTracks, currentVo: [nil, nil, "gpu-next", ""])
     let gate = DispatchSemaphore(value: 0)
@@ -276,13 +366,14 @@ final class MpvSurfacePluginTests: XCTestCase {
       }
       clock.sleep(d)
     }
-    _ = makeView(plugin)
+    let view = makeView(plugin)
 
     var order: [String] = []
     let attached = expectation(description: "attach")
     let awaited = expectation(description: "await")
     let detached = expectation(description: "detach")
-    plugin.handle(FlutterMethodCall(methodName: "attach", arguments: attachArgs())) { _ in
+    plugin.handle(FlutterMethodCall(methodName: "attach", arguments: attachArgs())) { reply in
+      XCTAssertNil(reply, "attach failed")
       order.append("attach")
       attached.fulfill()
     }
@@ -307,6 +398,7 @@ final class MpvSurfacePluginTests: XCTestCase {
     XCTAssertEqual(pairs.last, "vid=no")
     XCTAssertEqual(pairs.dropLast().last, "vid=auto")
     XCTAssertTrue(pairs.first?.hasPrefix("wid=") ?? false)
+    withExtendedLifetime(view) {}
   }
 
   // MARK: host view
@@ -480,8 +572,9 @@ final class MpvSurfacePluginTests: XCTestCase {
 
   func testRefreshTimerEmitsOnlyWhenHeadroomOrScreenChanges() {
     let h = makeDisplayHarness()
-    _ = makeView(h.plugin)
-    call(h.plugin, "attach", attachArgs())
+    let view = makeView(h.plugin)
+    defer { withExtendedLifetime(view) {} }
+    XCTAssertNil(call(h.plugin, "attach", attachArgs()))
     XCTAssertTrue(h.timer.running)
     XCTAssertEqual(h.timer.interval, 1)
 
@@ -513,9 +606,10 @@ final class MpvSurfacePluginTests: XCTestCase {
   func testRefreshTimerStopsAfterLastDetach() {
     let h = makeDisplayHarness()
     let first = makeView(h.plugin, id: 7)
-    _ = makeView(h.plugin, id: 8)
-    call(h.plugin, "attach", ["handle": 0x1000, "viewId": 7, "options": []])
-    call(h.plugin, "attach", ["handle": 0x2000, "viewId": 8, "options": []])
+    let second = makeView(h.plugin, id: 8)
+    defer { withExtendedLifetime(second) {} }
+    XCTAssertNil(call(h.plugin, "attach", ["handle": 0x1000, "viewId": 7, "options": []]))
+    XCTAssertNil(call(h.plugin, "attach", ["handle": 0x2000, "viewId": 8, "options": []]))
     XCTAssertEqual(h.timer.starts, 1)
 
     first.viewWillMove(toWindow: nil)
@@ -526,7 +620,7 @@ final class MpvSurfacePluginTests: XCTestCase {
     XCTAssertEqual(h.timer.stops, 1)
 
     // Reattaching starts it again.
-    call(h.plugin, "attach", ["handle": 0x2000, "viewId": 8, "options": []])
+    XCTAssertNil(call(h.plugin, "attach", ["handle": 0x2000, "viewId": 8, "options": []]))
     XCTAssertTrue(h.timer.running)
     XCTAssertEqual(h.timer.starts, 2)
   }

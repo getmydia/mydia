@@ -630,17 +630,25 @@ path.
   `vid=auto` last, because mpv creates the output when `vid` turns on and
   reads everything else at that moment. The list restores mpv's own defaults
   for the quality options media_kit lowers for its texture
-  (`hdr-compute-peak=no` among them).
-- `awaitVideoOutput` runs once the source's tracks are known. When the file
-  has a video track it polls for up to 2 seconds and answers `started` once
-  `current-vo` is set, `failed` once mpv deselects the video track (`vid`
-  reads `no`, or no video entry in `track-list` is selected, which is how
-  mpv gives up on an output that failed to initialize), and neither when
-  time runs out. Audio only answers `started` at once.
+  (`hdr-compute-peak=no` among them). mpv refusing `wid` or `vid` fails the
+  attach, which falls back to the texture for that playback; a refused
+  option is only logged.
+- `awaitVideoOutput` runs once the source's tracks are known, and polls for
+  up to 2 seconds. Once `track-list` lists a video track it answers
+  `started` when `current-vo` is set, and `failed` once mpv deselects the
+  video track (`vid` reads `no`, or no video entry in `track-list` is
+  selected, which is how mpv gives up on an output that failed to
+  initialize). A list with tracks but no video (audio only) answers
+  `started` at once. Neither answer by the deadline, including a track list
+  still empty, is a timeout. A playback fault reported while this runs waits
+  for the answer: the texture fallback replaces any transcode it asked for.
 - `detach` sets `vid=no` and waits for `current-vo` to clear, so the output is
   gone while its host view still exists. Both dispose paths call it before
-  `player.dispose()`. It gives up after 3 seconds and logs, so closing never
-  hangs. A host view leaving its window without a detach (hot restart, an
+  `player.dispose()`. The plugin gives up after 3 seconds; if the output is
+  still there it keeps the host views alive for good, since mpv may still
+  reach them. The Dart side waits for the reply for at most 5 seconds, which
+  also covers a `vid=no` write stuck behind a blocked mpv core, then disposes
+  anyway. A host view leaving its window without a detach (hot restart, an
   error path) detaches from `viewWillMove(toWindow: nil)`.
 - Fit and fill are mpv's `panscan` (0.0 and 1.0), sent through the plugin.
 - An event channel reports the window's screen and its EDR headroom
@@ -651,7 +659,10 @@ path.
 
 `core/player/mac_video_output.dart` decides the path for each playback, and the
 device profile uses the same resolution, so the HDR formats the player claims
-match the output that renders them (`mac_hdr_claims.dart`). The surface claims
+match the output that renders them (`mac_hdr_claims.dart`). The profile
+resolves it once, so a later switch to the texture is not reflected; both
+paths claim the same tokens today, and that has to change before the surface
+claims anything the texture does not. The surface claims
 `dolby_vision` only once `macDolbyVisionVerified` is true; it ships false
 until a real Dolby Vision profile 5 file has been checked on an XDR screen.
 
@@ -725,7 +736,8 @@ Two more rules follow from the same `DispatchQueue.main.sync`:
 - `mpv_terminate_destroy` must not run on the main thread either. media_kit
   calls it from Dart a few seconds after `player.dispose()`, which is safe
   only because Dart is off main, and because `detach` has already destroyed
-  the output by then.
+  the output by then, or, when it timed out, kept the host views it may
+  still reach alive.
 
 ### The integration test
 
@@ -740,11 +752,22 @@ and the escape hatch. It runs on a Mac only and is not part of CI:
     flutter test integration_test/mac_surface_test.dart -d macos \
       --dart-define=MYDIA_HDR_FIXTURES=$HOME/mydia-hdr/fixtures
 
-The test also needs `sdr_subs.mkv` (its header has the ffmpeg line). Keep the
-displays awake for the whole run: if every display is asleep when the output
-starts, mpv waits for a display link that never fires. On a Mac without Xcode,
-build the test into an app with
-`flutter build macos --debug --target integration_test/mac_surface_test.dart`
-on one that has it, copy the app over, and run
-`Mydia Player.app/Contents/MacOS/Mydia Player` from a shell: the results print
-to stdout.
+The test also needs `sdr_subs.mkv`, which the generator does not write. In the
+fixtures directory:
+
+    printf '1\n00:00:00,000 --> 00:00:10,000\nMydia surface subtitle check\n' > subs.srt
+    ffmpeg -i sdr_testsrc.mp4 -i subs.srt -map 0:v -map 1:s -c:v copy \
+      -c:s srt -metadata:s:s:0 language=eng sdr_subs.mkv
+
+With `MYDIA_HDR_FIXTURES` set, a missing clip fails the run; on the default
+path it skips. Keep the displays awake for the whole run: if every display is
+asleep when the output starts, mpv waits for a display link that never fires.
+On a Mac without Xcode, build the test into an app on one that has it:
+
+    flutter build macos --debug --target integration_test/mac_surface_test.dart \
+      --dart-define=MYDIA_HDR_FIXTURES=<fixtures path on the target Mac>
+
+The define is compiled in, so it names the directory on the Mac that runs the
+app (leave it out to use that account's `~/mydia-hdr/fixtures`). Copy the app
+over and run `Mydia Player.app/Contents/MacOS/Mydia Player` from a shell: the
+results print to stdout.

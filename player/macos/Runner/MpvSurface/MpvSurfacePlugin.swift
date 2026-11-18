@@ -11,14 +11,18 @@ import FlutterMacOS
 ///
 /// Method channel `mydia/mpv-surface`:
 /// - `attach({handle, viewId, options}) -> null`: sets `wid` to the host
-///   view, each `[name, value]` option in order, then `vid=auto`.
+///   view, each `[name, value]` option in order, then `vid=auto`. An error
+///   (`attach-failed`) when mpv refuses `wid` or `vid`; a refused option is
+///   only logged.
 /// - `setOption({handle, name, value}) -> null`
-/// - `awaitVideoOutput({handle}) -> {started, failed}`: with a video track
-///   in `track-list`, polls for up to 2 s until `current-vo` is set
-///   (`started`) or mpv deselects the video track (`failed`); both false
-///   means it timed out. Without a video track, `started` at once.
+/// - `awaitVideoOutput({handle}) -> {started, failed}`: polls for up to 2 s.
+///   Once `track-list` lists a video track, until `current-vo` is set
+///   (`started`) or mpv deselects the video track (`failed`). A list with
+///   tracks but no video is `started` at once. Both false means it timed
+///   out, which includes a track list still empty or unreadable at the end.
 /// - `detach({handle}) -> null`: sets `vid=no` and waits up to 3 s for
-///   `current-vo` to clear, logging if it does not.
+///   `current-vo` to clear. If it does not, the host views stay retained
+///   for good: mpv may still draw into them.
 ///
 /// Event channel `mydia/mpv-surface/display`:
 /// `{edrHeadroom, potentialHeadroom, screenName}` for the window's screen,
@@ -72,7 +76,8 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
   /// Host views by platform view id, held weakly: Flutter owns them.
   private let views = NSMapTable<NSNumber, MpvHostView>.strongToWeakObjects()
 
-  /// Host views kept alive until their detach completes. Main thread only.
+  /// Host views kept alive until their detach clears the output, and for
+  /// good when it never does. Main thread only.
   private var pendingDetach: [UUID: [MpvHostView]] = [:]
 
   private var methodChannel: FlutterMethodChannel?
@@ -192,14 +197,22 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       forgetAttachment(handleValue)
       view.attachedHandle = handleValue
       updateDisplayRefresh()
-      attach(handle, wid: wid, options: options) { result(nil) }
+      attach(handle, wid: wid, options: options) { ok in
+        if ok {
+          result(nil)
+        } else {
+          result(
+            FlutterError(
+              code: "attach-failed", message: "attach: mpv refused wid or vid", details: nil))
+        }
+      }
 
     case "setOption":
       guard let name = args["name"] as? String, let value = args["value"] as? String else {
         result(FlutterError(code: "bad-args", message: "setOption: name and value", details: nil))
         return
       }
-      onQueue(reply: { result(nil) }) { self.set(handle, name, value) }
+      onQueue(reply: { result(nil) }) { _ = self.set(handle, name, value) }
 
     case "awaitVideoOutput":
       awaitVideoOutput(handle) { outcome in result(outcome.reply) }
@@ -228,14 +241,17 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
 
   // MARK: mpv operations (all on `queue`)
 
+  /// Replies false when mpv refused `wid` or `vid`: without either there is
+  /// no output in the view. The caller's detach still clears what was set.
   private func attach(
     _ handle: OpaquePointer, wid: String, options: [(String, String)],
-    reply: @escaping () -> Void
+    reply: @escaping (Bool) -> Void
   ) {
-    onQueue(reply: reply) {
-      self.set(handle, "wid", wid)
+    queue.async {
+      var ok = self.set(handle, "wid", wid)
       for (name, value) in options { self.set(handle, name, value) }
-      self.set(handle, "vid", "auto")
+      ok = self.set(handle, "vid", "auto") && ok
+      DispatchQueue.main.async { reply(ok) }
     }
   }
 
@@ -256,32 +272,38 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
     _ handle: OpaquePointer, reply: @escaping (VideoOutputStart) -> Void
   ) {
     queue.async {
-      var outcome = VideoOutputStart.started
-      if !self.videoTracks(handle).isEmpty {
-        let settled = self.poll(timeout: Self.startTimeout) {
-          if !(self.api.getString(handle, "current-vo") ?? "").isEmpty {
-            outcome = .started
-            return true
-          }
-          if self.videoDeselected(handle) {
-            outcome = .failed
-            return true
-          }
-          return false
+      var outcome = VideoOutputStart.timedOut
+      let settled = self.poll(timeout: Self.startTimeout) {
+        // An empty or unreadable list says nothing yet: mpv may not have
+        // listed the tracks. Only a list with tracks and no video is audio.
+        guard let tracks = self.trackList(handle), !tracks.isEmpty else { return false }
+        if !tracks.contains(where: { $0["type"] as? String == "video" }) {
+          outcome = .started
+          return true
         }
-        if !settled { outcome = .timedOut }
-        switch outcome {
-        case .started: break
-        case .failed: self.log("mpv deselected the video track: the video output failed")
-        case .timedOut: self.log("video output did not start within \(Self.startTimeout)s")
+        if !(self.api.getString(handle, "current-vo") ?? "").isEmpty {
+          outcome = .started
+          return true
         }
+        if self.videoDeselected(handle) {
+          outcome = .failed
+          return true
+        }
+        return false
+      }
+      if !settled { outcome = .timedOut }
+      switch outcome {
+      case .started: break
+      case .failed: self.log("mpv deselected the video track: the video output failed")
+      case .timedOut: self.log("video output did not start within \(Self.startTimeout)s")
       }
       DispatchQueue.main.async { reply(outcome) }
     }
   }
 
-  private func detach(_ handle: OpaquePointer, reply: @escaping () -> Void) {
-    onQueue(reply: reply) {
+  /// Replies whether `current-vo` cleared within `detachTimeout`.
+  private func detach(_ handle: OpaquePointer, reply: @escaping (Bool) -> Void) {
+    queue.async {
       self.set(handle, "vid", "no")
       let cleared = self.poll(timeout: Self.detachTimeout) {
         (self.api.getString(handle, "current-vo") ?? "").isEmpty
@@ -289,6 +311,7 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
       if !cleared {
         self.log("detach timed out after \(Self.detachTimeout)s waiting for current-vo to clear")
       }
+      DispatchQueue.main.async { reply(cleared) }
     }
   }
 
@@ -297,13 +320,20 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
   /// `wid` is an unretained pointer and `views` is weak, so without this
   /// Flutter could free a host view while mpv's output teardown, which runs
   /// on main and removes mpv's subview from the `wid` view, is still queued.
+  /// When the output never went away, mpv may still reach the view through
+  /// `wid` (and does when the player is destroyed), so the hosts are kept
+  /// for the life of the app: a leaked view is the safe failure.
   private func detach(
     _ handle: OpaquePointer, keepingAlive hosts: [MpvHostView], reply: @escaping () -> Void
   ) {
     let token = UUID()
     if !hosts.isEmpty { pendingDetach[token] = hosts }
-    detach(handle) {
-      self.pendingDetach[token] = nil
+    detach(handle) { cleared in
+      if cleared {
+        self.pendingDetach[token] = nil
+      } else if !hosts.isEmpty {
+        self.log("keeping \(hosts.count) host view(s) alive: the output may still use them")
+      }
       reply()
     }
   }
@@ -315,18 +345,24 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
     }
   }
 
-  private func set(_ handle: OpaquePointer, _ name: String, _ value: String) {
+  @discardableResult
+  private func set(_ handle: OpaquePointer, _ name: String, _ value: String) -> Bool {
     let code = api.setOption(handle, name, value)
     if code != 0 { log("set \(name)=\(value) failed: \(code)") }
+    return code == 0
+  }
+
+  /// `track-list`; nil when it is unreadable.
+  private func trackList(_ handle: OpaquePointer) -> [[String: Any]]? {
+    guard let json = api.getString(handle, "track-list"),
+      let data = json.data(using: .utf8)
+    else { return nil }
+    return (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
   }
 
   /// The video entries of `track-list`; empty when it is unreadable.
   private func videoTracks(_ handle: OpaquePointer) -> [[String: Any]] {
-    guard let json = api.getString(handle, "track-list"),
-      let data = json.data(using: .utf8),
-      let tracks = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
-    else { return [] }
-    return tracks.filter { $0["type"] as? String == "video" }
+    (trackList(handle) ?? []).filter { $0["type"] as? String == "video" }
   }
 
   /// mpv's signal that the video output failed to initialize: it deselects

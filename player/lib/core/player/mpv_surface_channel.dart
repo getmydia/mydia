@@ -53,16 +53,22 @@ enum VideoOutputStart {
 abstract interface class MpvSurface {
   /// Writes `wid` (the view [viewId]), [surfaceAttachOptions], then
   /// `vid=auto`. Returns once the writes are done, before the output exists.
+  /// Throws a [PlatformException] (`attach-failed`) when mpv refuses `wid`
+  /// or `vid`; `wid` may already be set, so the caller still detaches.
   Future<void> attach(int handle, int viewId);
 
   /// How the output came up after `vid=auto`, checked for up to 2 seconds.
-  /// [VideoOutputStart.started] at once for a source with no video.
+  /// [VideoOutputStart.started] at once for a source whose listed tracks
+  /// include no video; [VideoOutputStart.timedOut] when mpv has listed no
+  /// tracks by then.
   Future<VideoOutputStart> awaitVideoOutput(int handle);
 
   Future<void> setOption(int handle, String name, String value);
 
   /// Sets `vid=no` and waits, up to 3 seconds, for the output to go. Must
-  /// complete before the player is disposed.
+  /// complete before the player is disposed. When the output does not go,
+  /// the plugin keeps the host view alive for good, so disposing the player
+  /// afterwards is still safe.
   Future<void> detach(int handle);
 
   /// The host window's screen, on every change of screen or headroom.
