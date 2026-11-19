@@ -11,7 +11,8 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
-import 'package:player/presentation/widgets/files/experimental_badge.dart';
+import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
+import 'package:player/presentation/screens/settings/widgets/settings_section.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 
@@ -48,26 +49,106 @@ void main() {
     expect(find.byKey(const Key('add-screen-marker')), findsOneWidget);
   });
 
-  Future<void> pumpAdd(WidgetTester tester, {required bool mydia}) =>
+  Future<void> pumpAdd(WidgetTester tester,
+          {required bool mydia, bool isWeb = false, bool? remote}) =>
       tester.pumpWidget(ProviderScope(
         overrides: [
           hasMydiaProvider.overrideWithValue(mydia),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: AddSourceScreen(),
+          home: AddSourceScreen(isWeb: isWeb, directionalPrimary: remote),
         ),
       ));
+
+  // A row with no callback is dimmed and skipped by focus.
+  bool rowEnabled(WidgetTester tester, String key) =>
+      tester.widget<SettingsRow>(find.byKey(Key(key))).onTap != null;
+
+  // The key of the row holding primary focus, or null when no row has it.
+  Key? focusedRow() => FocusManager.instance.primaryFocus?.context
+      ?.findAncestorWidgetOfExactType<SettingsRow>()
+      ?.key;
+
+  group('initial focus', () {
+    testWidgets('on a television, Mydia takes focus', (tester) async {
+      await pumpAdd(tester, mydia: false, remote: true);
+      await tester.pump();
+      expect(focusedRow(), const Key('add-source-mydia'));
+    });
+
+    testWidgets('on a television with Mydia dimmed, Plex takes focus',
+        (tester) async {
+      await pumpAdd(tester, mydia: true, isWeb: true, remote: true);
+      await tester.pump();
+      expect(rowEnabled(tester, 'add-source-mydia'), isFalse);
+      expect(focusedRow(), const Key('add-source-plex'));
+    });
+
+    testWidgets('with a pointer or touch, no row takes focus', (tester) async {
+      await pumpAdd(tester, mydia: false, remote: false);
+      await tester.pump();
+      expect(focusedRow(), isNull);
+    });
+  });
 
   testWidgets('the add screen offers Plex, Stash and Mydia', (tester) async {
     await pumpAdd(tester, mydia: false);
     expect(find.byKey(const Key('add-source-plex')), findsOneWidget);
     expect(find.byKey(const Key('add-source-jellyfin')), findsOneWidget);
     expect(find.byKey(const Key('add-source-stash')), findsOneWidget);
-    final mydia =
-        tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
-    expect(mydia.enabled, isTrue);
+    expect(rowEnabled(tester, 'add-source-mydia'), isTrue);
+  });
+
+  List<String> sectionLabels(WidgetTester tester) => tester
+      .widgetList<SettingsSection>(find.byType(SettingsSection))
+      .map((s) => s.label)
+      .toList();
+
+  testWidgets('natively, the rows are grouped Mydia, servers, files, backup',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [hasMydiaProvider.overrideWithValue(false)],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddSourceScreen(isWeb: false, foldersSupported: true),
+      ),
+    ));
+    expect(sectionLabels(tester),
+        ['Media servers', 'Files & storage · Experimental', 'Backup']);
+    // Mydia sits in an unlabelled card above every section.
+    expect(
+        tester.getTopLeft(find.byKey(const Key('add-source-mydia'))).dy,
+        lessThan(
+            tester.getTopLeft(find.byKey(const Key('add-source-plex'))).dy));
+    expect(
+        find.ancestor(
+            of: find.byKey(const Key('add-source-mydia')),
+            matching: find.byType(SettingsSection)),
+        findsNothing);
+    for (final (section, key) in [
+      ('Media servers', 'add-source-plex'),
+      ('Files & storage · Experimental', 'add-source-folder'),
+      ('Files & storage · Experimental', 'add-source-s3'),
+      ('Backup', 'add-source-restore'),
+    ]) {
+      expect(
+          find.descendant(
+              of: find.byWidgetPredicate(
+                  (w) => w is SettingsSection && w.label == section),
+              matching: find.byKey(Key(key))),
+          findsOneWidget);
+    }
+  });
+
+  testWidgets('on web, only Mydia and the media servers show', (tester) async {
+    await pumpAdd(tester, mydia: false, isWeb: true);
+    expect(sectionLabels(tester), ['Media servers']);
+    expect(find.byKey(const Key('add-source-mydia')), findsOneWidget);
   });
 
   testWidgets('Restore from backup is offered natively and opens the screen',
@@ -110,7 +191,10 @@ void main() {
     expect(find.byKey(const Key('add-source-restore')), findsNothing);
   });
 
-  testWidgets('Folder and WebDAV are marked experimental', (tester) async {
+  testWidgets('only the files and storage rows are marked experimental',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
       overrides: [hasMydiaProvider.overrideWithValue(false)],
       child: const MaterialApp(
@@ -119,23 +203,26 @@ void main() {
         home: AddSourceScreen(isWeb: false, foldersSupported: true),
       ),
     ));
-    for (final key in ['add-source-folder', 'add-source-webdav']) {
-      final label = find.descendant(
-          of: find.byKey(Key(key)), matching: find.text('Experimental'));
-      expect(label, findsOneWidget);
-      expect(label.hitTestable(), findsOneWidget);
-    }
-    for (final key in [
-      'add-source-plex',
-      'add-source-jellyfin',
-      'add-source-stash',
-      'add-source-mydia',
+    expect(find.text('Files & storage · Experimental').hitTestable(),
+        findsOneWidget);
+    final experimentalSection = find.byWidgetPredicate((w) =>
+        w is SettingsSection && w.label == 'Files & storage · Experimental');
+    for (final (key, inside) in [
+      ('add-source-folder', true),
+      ('add-source-webdav', true),
+      ('add-source-smb', true),
+      ('add-source-s3', true),
+      ('add-source-plex', false),
+      ('add-source-jellyfin', false),
+      ('add-source-stash', false),
+      ('add-source-mydia', false),
+      ('add-source-restore', false),
     ]) {
       expect(
           find.descendant(
-              of: find.byKey(Key(key)),
-              matching: find.byType(ExperimentalBadge)),
-          findsNothing);
+              of: experimentalSection, matching: find.byKey(Key(key))),
+          inside ? findsOneWidget : findsNothing,
+          reason: key);
     }
   });
 
@@ -161,13 +248,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final tile = find.byKey(const Key('add-source-mydia'));
-    expect(tester.widget<ListTile>(tile).enabled, isTrue);
+    expect(rowEnabled(tester, 'add-source-mydia'), isTrue);
     expect(
         find.text("Add a friend's or family member's server"), findsOneWidget);
     expect(find.textContaining('coming soon'), findsNothing);
-    // The list outgrows a 600px screen, so scroll to the last tile.
-    await tester.ensureVisible(tile);
-    await tester.pumpAndSettle();
     await tester.tap(tile);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('guest-marker')), findsOneWidget);
@@ -185,9 +269,7 @@ void main() {
         home: AddSourceScreen(isWeb: true),
       ),
     ));
-    final tile =
-        tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
-    expect(tile.enabled, isFalse);
+    expect(rowEnabled(tester, 'add-source-mydia'), isFalse);
     expect(find.text('Add more Mydia servers from the desktop or mobile app'),
         findsOneWidget);
   });
@@ -204,14 +286,11 @@ void main() {
         home: AddSourceScreen(isWeb: true),
       ),
     ));
-    final tile =
-        tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
-    expect(tile.enabled, isTrue);
+    expect(rowEnabled(tester, 'add-source-mydia'), isTrue);
     expect(find.text('Sign in to a Mydia server'), findsOneWidget);
   });
 
-  testWidgets('SMB is offered off web, marked experimental, and opens its form',
-      (tester) async {
+  testWidgets('SMB is offered off web and opens its form', (tester) async {
     final router = GoRouter(routes: [
       GoRoute(
           path: '/', builder: (_, __) => const AddSourceScreen(isWeb: false)),
@@ -230,8 +309,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final tile = find.byKey(const Key('add-source-smb'));
-    expect(find.descendant(of: tile, matching: find.text('Experimental')),
-        findsOneWidget);
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
     expect(find.text('A shared folder on a NAS, PC or Mac on your network'),
         findsOneWidget);
     await tester.tap(tile);
@@ -251,8 +330,7 @@ void main() {
     expect(find.byKey(const Key('add-source-smb')), findsNothing);
   });
 
-  testWidgets('S3 is offered off web, marked experimental, and opens its form',
-      (tester) async {
+  testWidgets('S3 is offered off web and opens its form', (tester) async {
     final router = GoRouter(routes: [
       GoRoute(
           path: '/', builder: (_, __) => const AddSourceScreen(isWeb: false)),
@@ -273,8 +351,6 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final tile = find.byKey(const Key('add-source-s3'));
-    expect(find.descendant(of: tile, matching: find.text('Experimental')),
-        findsOneWidget);
     expect(
         find.text(
             'Amazon S3, Backblaze B2, Cloudflare R2, Wasabi or a self-hosted server'),

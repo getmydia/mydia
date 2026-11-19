@@ -32,6 +32,10 @@ class SettingsRow extends StatelessWidget {
   final bool toggleValue;
   final ValueChanged<bool>? onChanged;
 
+  /// Takes focus when first built. `.navigation` only, for a screen whose
+  /// first row is where a remote should land.
+  final bool autofocus;
+
   /// A row that opens another screen.
   ///
   /// A null [onTap] dims the row. That is how the quality row reads while
@@ -44,6 +48,7 @@ class SettingsRow extends StatelessWidget {
     String? value,
     this.subtitleDotColor,
     required this.onTap,
+    this.autofocus = false,
   })  : _kind = _RowKind.navigation,
         valueLabel = value,
         trailing = null,
@@ -68,7 +73,8 @@ class SettingsRow extends StatelessWidget {
         onTap = null,
         danger = false,
         toggleValue = value,
-        subtitleDotColor = null;
+        subtitleDotColor = null,
+        autofocus = false;
 
   /// A row that does something in place, or that simply states a fact.
   ///
@@ -87,7 +93,8 @@ class SettingsRow extends StatelessWidget {
         valueLabel = null,
         toggleValue = false,
         onChanged = null,
-        subtitleDotColor = null;
+        subtitleDotColor = null,
+        autofocus = false;
 
   @override
   Widget build(BuildContext context) {
@@ -182,6 +189,7 @@ class SettingsRow extends StatelessWidget {
             )
           : FocusHighlight(
               onActivate: onTap,
+              autofocus: autofocus,
               // The InkWell keeps the pointer ripple. Focus belongs to
               // FocusHighlight, so the InkWell must not also be a stop.
               child: InkWell(
