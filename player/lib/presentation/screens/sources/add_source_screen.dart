@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../l10n/l10n.dart';
-import '../../widgets/files/experimental_badge.dart';
 import '../backup/restore_backup_screen.dart' show restoreBackupLocation;
+import '../settings/widgets/settings_row.dart';
+import '../settings/widgets/settings_section.dart';
 import 'add_folder_screen.dart' show localFoldersSupported;
 
 class AddSourceScreen extends ConsumerWidget {
@@ -26,103 +28,133 @@ class AddSourceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final hasMydia = ref.watch(hasMydiaProvider);
     final guestsUnavailable = hasMydia && isWeb;
+    void open(String location) => context.push(location);
+
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.sourcesAddTitle)),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            shrinkWrap: true,
-            children: [
-              ListTile(
-                key: const Key('add-source-plex'),
-                autofocus: true,
-                leading: const Icon(Icons.live_tv_rounded),
-                title: const Text('Plex'), // l10n-ignore: product name
-                subtitle: Text(context.l10n.sourcesAddPlexSubtitle),
-                onTap: () => context.push('/sources/add/plex'),
+      appBar: AppBar(title: Text(l10n.sourcesAddTitle)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 660),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // No label: it would only repeat the row's own title.
+                  SettingsCard(
+                    children: [
+                      SettingsRow.navigation(
+                        key: const Key('add-source-mydia'),
+                        icon: Icons.dns_rounded,
+                        title: 'Mydia', // l10n-ignore: product name
+                        subtitle: switch ((hasMydia, guestsUnavailable)) {
+                          (true, true) => l10n.sourcesAddMydiaOnlyInApps,
+                          (true, false) => l10n.sourcesAddMydiaShared,
+                          _ => l10n.sourcesAddMydiaSignIn,
+                        },
+                        // A null callback dims the row and drops it from
+                        // the focus order.
+                        onTap: guestsUnavailable
+                            ? null
+                            : () => open('/sources/add/mydia'),
+                        autofocus: !guestsUnavailable &&
+                            InputCapabilities.directionalPrimary,
+                      ),
+                    ],
+                  ),
+                  _gap,
+                  SettingsSection(
+                    label: l10n.sourcesAddSectionServers,
+                    children: [
+                      SettingsRow.navigation(
+                        key: const Key('add-source-plex'),
+                        icon: Icons.live_tv_rounded,
+                        title: 'Plex', // l10n-ignore: product name
+                        subtitle: l10n.sourcesAddPlexSubtitle,
+                        onTap: () => open('/sources/add/plex'),
+                        autofocus: guestsUnavailable &&
+                            InputCapabilities.directionalPrimary,
+                      ),
+                      SettingsRow.navigation(
+                        key: const Key('add-source-jellyfin'),
+                        icon: Icons.smart_display_rounded,
+                        title: 'Jellyfin', // l10n-ignore: product name
+                        subtitle: l10n.sourcesAddJellyfinSubtitle,
+                        onTap: () => open('/sources/add/jellyfin'),
+                      ),
+                      SettingsRow.navigation(
+                        key: const Key('add-source-stash'),
+                        icon: Icons.video_library_rounded,
+                        title: 'Stash', // l10n-ignore: product name
+                        subtitle: l10n.sourcesAddStashSubtitle,
+                        onTap: () => open('/sources/add/stash'),
+                      ),
+                    ],
+                  ),
+                  if (!isWeb) ...[
+                    _gap,
+                    SettingsSection(
+                      label: l10n.sourcesAddSectionFiles,
+                      children: [
+                        if (foldersSupported ?? localFoldersSupported)
+                          SettingsRow.navigation(
+                            key: const Key('add-source-folder'),
+                            icon: Icons.folder_rounded,
+                            title: l10n.sourcesAddFolderTitle,
+                            subtitle: l10n.sourcesAddFolderSubtitle,
+                            onTap: () => open('/sources/add/folder'),
+                          ),
+                        SettingsRow.navigation(
+                          key: const Key('add-source-webdav'),
+                          icon: Icons.folder_shared_rounded,
+                          title: 'WebDAV', // l10n-ignore: protocol name
+                          subtitle: l10n.sourcesAddWebDavSubtitle,
+                          onTap: () => open('/sources/add/webdav'),
+                        ),
+                        SettingsRow.navigation(
+                          key: const Key('add-source-smb'),
+                          icon: Icons.lan_rounded,
+                          title: 'SMB', // l10n-ignore: protocol name
+                          subtitle: l10n.sourcesAddSmbSubtitle,
+                          onTap: () => open('/sources/add/smb'),
+                        ),
+                        SettingsRow.navigation(
+                          key: const Key('add-source-s3'),
+                          icon: Icons.cloud_rounded,
+                          title: 'S3', // l10n-ignore: protocol name
+                          subtitle: l10n.sourcesAddS3Subtitle,
+                          onTap: () => open('/sources/add/s3'),
+                        ),
+                      ],
+                    ),
+                    _gap,
+                    SettingsSection(
+                      label: l10n.sourcesAddSectionBackup,
+                      children: [
+                        SettingsRow.navigation(
+                          key: const Key('add-source-restore'),
+                          icon: Icons.settings_backup_restore_rounded,
+                          title: l10n.backupRestoreTitle,
+                          subtitle: l10n.backupRestoreSubtitle,
+                          onTap: () => open(restoreBackupLocation),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
-              ListTile(
-                key: const Key('add-source-jellyfin'),
-                leading: const Icon(Icons.smart_display_rounded),
-                title: const Text('Jellyfin'), // l10n-ignore: product name
-                subtitle: Text(context.l10n.sourcesAddJellyfinSubtitle),
-                onTap: () => context.push('/sources/add/jellyfin'),
-              ),
-              ListTile(
-                key: const Key('add-source-stash'),
-                leading: const Icon(Icons.video_library_rounded),
-                title: const Text('Stash'), // l10n-ignore: product name
-                subtitle: Text(context.l10n.sourcesAddStashSubtitle),
-                onTap: () => context.push('/sources/add/stash'),
-              ),
-              if (!isWeb && (foldersSupported ?? localFoldersSupported))
-                ListTile(
-                  key: const Key('add-source-folder'),
-                  leading: const Icon(Icons.folder_rounded),
-                  title: ExperimentalTitle(
-                      title: Text(context.l10n.sourcesAddFolderTitle)),
-                  subtitle: Text(context.l10n.sourcesAddFolderSubtitle),
-                  onTap: () => context.push('/sources/add/folder'),
-                ),
-              if (!isWeb)
-                ListTile(
-                  key: const Key('add-source-webdav'),
-                  leading: const Icon(Icons.folder_shared_rounded),
-                  title: const ExperimentalTitle(
-                      title: Text('WebDAV')), // l10n-ignore: protocol name
-                  subtitle: Text(context.l10n.sourcesAddWebDavSubtitle),
-                  onTap: () => context.push('/sources/add/webdav'),
-                ),
-              if (!isWeb)
-                ListTile(
-                  key: const Key('add-source-smb'),
-                  leading: const Icon(Icons.lan_rounded),
-                  title: const ExperimentalTitle(
-                      title: Text('SMB')), // l10n-ignore: protocol name
-                  subtitle: Text(context.l10n.sourcesAddSmbSubtitle),
-                  onTap: () => context.push('/sources/add/smb'),
-                ),
-              if (!isWeb)
-                ListTile(
-                  key: const Key('add-source-s3'),
-                  leading: const Icon(Icons.cloud_rounded),
-                  title: const ExperimentalTitle(
-                      title: Text('S3')), // l10n-ignore: protocol name
-                  subtitle: Text(context.l10n.sourcesAddS3Subtitle),
-                  onTap: () => context.push('/sources/add/s3'),
-                ),
-              ListTile(
-                key: const Key('add-source-mydia'),
-                leading: const Icon(Icons.dns_rounded),
-                title: const Text('Mydia'), // l10n-ignore: product name
-                enabled: !guestsUnavailable,
-                subtitle: Text(switch ((hasMydia, guestsUnavailable)) {
-                  (true, true) => context.l10n.sourcesAddMydiaOnlyInApps,
-                  (true, false) => context.l10n.sourcesAddMydiaShared,
-                  _ => context.l10n.sourcesAddMydiaSignIn,
-                }),
-                onTap: () => context.push('/sources/add/mydia'),
-              ),
-              if (!isWeb) ...[
-                const Divider(height: 24),
-                ListTile(
-                  key: const Key('add-source-restore'),
-                  leading: const Icon(Icons.settings_backup_restore_rounded),
-                  title: Text(context.l10n.backupRestoreTitle),
-                  subtitle: Text(context.l10n.backupRestoreSubtitle),
-                  onTap: () => context.push(restoreBackupLocation),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
+
+  static const _gap = SizedBox(height: 24);
 }
 
 /// Under the login form: a way in for someone with no Mydia server.
