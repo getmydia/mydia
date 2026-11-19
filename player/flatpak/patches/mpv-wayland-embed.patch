@@ -1,0 +1,415 @@
+diff --git a/options/options.c b/options/options.c
+index a432414..3b92245 100644
+--- a/options/options.c
++++ b/options/options.c
+@@ -251,6 +251,9 @@ static const m_option_t mp_vo_opt_list[] = {
+ #if HAVE_EGL_ANDROID
+     {"android-surface-size", OPT_SIZE_BOX(android_surface_size)},
+ #endif
++#if HAVE_WAYLAND
++    {"wayland-surface-size", OPT_SIZE_BOX(wayland_surface_size)},
++#endif
+ #if HAVE_D3D11
+     {"d3d11-composition-size", OPT_SIZE_BOX(d3d11_composition_size)},
+ #endif
+diff --git a/options/options.h b/options/options.h
+index 1f8e7cb..5dae2f7 100644
+--- a/options/options.h
++++ b/options/options.h
+@@ -86,6 +86,7 @@ typedef struct mp_vo_opts {
+     int video_sync;
+ 
+     struct m_geometry android_surface_size;
++    struct m_geometry wayland_surface_size;
+ 
+     struct m_geometry d3d11_composition_size;
+ 
+diff --git a/video/out/vulkan/context_wayland.c b/video/out/vulkan/context_wayland.c
+index 6f64252..8967613 100644
+--- a/video/out/vulkan/context_wayland.c
++++ b/video/out/vulkan/context_wayland.c
+@@ -95,7 +95,8 @@ static bool wayland_vk_init(struct ra_ctx *ctx)
+     VkWaylandSurfaceCreateInfoKHR wlinfo = {
+          .sType   = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+          .display = ctx->vo->wl->display,
+-         .surface = ctx->vo->wl->surface,
++         .surface = ctx->vo->wl->embedded ? ctx->vo->wl->embed_surface
++                                          : ctx->vo->wl->surface,
+     };
+ 
+     struct ra_ctx_params params = {
+diff --git a/video/out/wayland_common.c b/video/out/wayland_common.c
+index d5a008c..6b1d97b 100644
+--- a/video/out/wayland_common.c
++++ b/video/out/wayland_common.c
+@@ -347,6 +347,33 @@ static char *session_file(void *talloc_ctx, const char *session, struct vo *vo);
+ static char *read_session_id(void *talloc_ctx, struct vo_wayland_state *wl, const char *path);
+ #endif
+ 
++/* Embedding: when mpv renders into a host's surface it shares the host's
++ * display connection, so every dispatch must stay on mpv's own queue or it
++ * would run the host toolkit's event handlers on mpv's thread. */
++static int wl_roundtrip(struct vo_wayland_state *wl)
++{
++    return wl->embedded ? wl_display_roundtrip_queue(wl->display, wl->embed_queue)
++                        : wl_display_roundtrip(wl->display);
++}
++
++static int wl_dispatch_pending(struct vo_wayland_state *wl)
++{
++    return wl->embedded ? wl_display_dispatch_queue_pending(wl->display, wl->embed_queue)
++                        : wl_display_dispatch_pending(wl->display);
++}
++
++static int wl_dispatch(struct vo_wayland_state *wl)
++{
++    return wl->embedded ? wl_display_dispatch_queue(wl->display, wl->embed_queue)
++                        : wl_display_dispatch(wl->display);
++}
++
++static int wl_prepare_read(struct vo_wayland_state *wl)
++{
++    return wl->embedded ? wl_display_prepare_read_queue(wl->display, wl->embed_queue)
++                        : wl_display_prepare_read(wl->display);
++}
++
+ /* Wayland listener boilerplate */
+ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
+                                  uint32_t serial, struct wl_surface *surface,
+@@ -2805,7 +2832,8 @@ static void registry_handle_add(void *data, struct wl_registry *reg, uint32_t id
+     if (!strcmp(interface, wl_compositor_interface.name) && (ver >= 4) && found++) {
+         ver = MPMIN(ver, 6); /* Cap at 6 in case new events are added later. */
+         wl->compositor = wl_registry_bind(reg, id, &wl_compositor_interface, ver);
+-        wl->surface = wl_compositor_create_surface(wl->compositor);
++        if (!wl->embedded)
++            wl->surface = wl_compositor_create_surface(wl->compositor);
+         wl->video_surface = wl_compositor_create_surface(wl->compositor);
+         wl->osd_surface = wl_compositor_create_surface(wl->compositor);
+         wl->callback_surface = !strcmp(wl->vo->driver->name, "dmabuf-wayland") ?
+@@ -2818,7 +2846,8 @@ static void registry_handle_add(void *data, struct wl_registry *reg, uint32_t id
+         wl_region_destroy(region);
+ 
+         wl->cursor_surface = wl_compositor_create_surface(wl->compositor);
+-        wl_surface_add_listener(wl->surface, &surface_listener, wl);
++        if (!wl->embedded)
++            wl_surface_add_listener(wl->surface, &surface_listener, wl);
+     }
+ 
+     if (!strcmp(interface, wl_subcompositor_interface.name) && found++) {
+@@ -2857,7 +2886,9 @@ static void registry_handle_add(void *data, struct wl_registry *reg, uint32_t id
+         wl_list_insert(&wl->output_list, &output->link);
+     }
+ 
+-    if (!strcmp(interface, wl_seat_interface.name) && found++) {
++    /* An embedded mpv takes no input: a seat's pointer would also receive
++     * the host's enter events and fight it over the cursor. */
++    if (!wl->embedded && !strcmp(interface, wl_seat_interface.name) && found++) {
+         if (ver < 5)
+             MP_WARN(wl, "Scrolling won't work because the compositor doesn't "
+                         "support version 5 of wl_seat protocol!\n");
+@@ -3974,6 +4005,12 @@ static void set_geometry(struct vo_wayland_state *wl, bool resize)
+         wl->window_size = (struct mp_rect){0, 0, vo->dwidth, vo->dheight};
+     wl->initial_size_hint = false;
+ 
++    /* Embedded, the host decides the size, in buffer pixels. */
++    if (wl->embedded && opts->wayland_surface_size.wh_valid) {
++        wl->window_size = (struct mp_rect){0, 0, opts->wayland_surface_size.w,
++                                           opts->wayland_surface_size.h};
++    }
++
+     if (resize) {
+         if (!wl->locked_size)
+             wl->geometry = wl->window_size;
+@@ -4121,6 +4158,8 @@ static void toggle_maximized(struct vo_wayland_state *wl)
+ 
+ static void update_app_id(struct vo_wayland_state *wl)
+ {
++    if (!wl->xdg_toplevel)
++        return;
+     xdg_toplevel_set_app_id(wl->xdg_toplevel, wl->opts->appid);
+ }
+ 
+@@ -4182,8 +4221,8 @@ static void wayland_dispatch_events(struct vo_wayland_state *wl, int nfds, int64
+         {.fd = wl->wakeup_pipe[0], .events = POLLIN },
+     };
+ 
+-    while (wl_display_prepare_read(wl->display) != 0)
+-        wl_display_dispatch_pending(wl->display);
++    while (wl_prepare_read(wl) != 0)
++        wl_dispatch_pending(wl);
+     wl_display_flush(wl->display);
+ 
+     mp_poll(fds, nfds, timeout_ns);
+@@ -4203,7 +4242,7 @@ static void wayland_dispatch_events(struct vo_wayland_state *wl, int nfds, int64
+     if (fds[1].revents & POLLIN)
+         mp_flush_wakeup_pipe(wl->wakeup_pipe[0]);
+ 
+-    wl_display_dispatch_pending(wl->display);
++    wl_dispatch_pending(wl);
+ }
+ 
+ static void xdg_activate(struct vo_wayland_state *wl)
+@@ -4258,7 +4297,36 @@ int vo_wayland_control(struct vo *vo, int *events, int request, void *arg)
+ {
+     struct vo_wayland_state *wl = vo->wl;
+     struct mp_vo_opts *opts = wl->opts;
+-    wl_display_dispatch_pending(wl->display);
++    wl_dispatch_pending(wl);
++
++    /* Embedded, the host owns the window: only events, the surface size and
++     * display queries apply. */
++    if (wl->embedded) {
++        switch (request) {
++        case VOCTRL_VO_OPTS_CHANGED: {
++            void *opt;
++            while (m_config_cache_get_next_changed(wl->opts_cache, &opt)) {
++                if (opt == &opts->wayland_surface_size) {
++                    set_geometry(wl, false);
++                    wl->geometry = wl->window_size;
++                    wl->pending_vo_events |= VO_EVENT_RESIZE;
++                }
++            }
++            return VO_TRUE;
++        }
++        case VOCTRL_CHECK_EVENTS: /* no seats, so only the surface's events */
++        case VOCTRL_GET_DISPLAY_FPS:
++        case VOCTRL_GET_DISPLAY_RES:
++        case VOCTRL_GET_HIDPI_SCALE:
++        case VOCTRL_GET_DISPLAY_NAMES:
++        case VOCTRL_GET_ICC_PROFILE:
++        case VOCTRL_GET_UNFS_WINDOW_SIZE:
++        case VOCTRL_CONTENT_TYPE:
++            break;
++        default:
++            return VO_NOTIMPL;
++        }
++    }
+ 
+     switch (request) {
+     case VOCTRL_CHECK_EVENTS: {
+@@ -4365,7 +4433,7 @@ int vo_wayland_control(struct vo *vo, int *events, int request, void *arg)
+         if (!wl->opts->fullscreen && !wl->tiled) {
+             if (wl->opts->window_maximized) {
+                 xdg_toplevel_unset_maximized(wl->xdg_toplevel);
+-                wl_display_dispatch_pending(wl->display);
++                wl_dispatch_pending(wl);
+                 /* Make sure the compositor let us unmaximize */
+                 if (wl->opts->window_maximized)
+                     return VO_TRUE;
+@@ -4549,34 +4617,62 @@ bool vo_wayland_init(struct vo *vo)
+     wl_list_init(&wl->seat_list);
+     wl_list_init(&wl->tranche_list);
+ 
+-    wl->display = wl_display_connect(NULL);
+-    if (!wl->display) {
+-        MP_MSG(wl, vo->probing ? MSGL_V : MSGL_FATAL,
+-               "Couldn't connect to Wayland display: %s\n", strerror(errno));
+-        goto err;
++    struct mpv_wayland_embed *embed = NULL;
++    if (vo->opts->WinID > 0) {
++        embed = (struct mpv_wayland_embed *)(intptr_t)vo->opts->WinID;
++        if (embed->magic != MPV_WAYLAND_EMBED_MAGIC || !embed->display || !embed->surface) {
++            MP_FATAL(wl, "--wid does not point at an mpv_wayland_embed.\n");
++            goto err;
++        }
++    }
++
++    if (embed) {
++        /* The host's connection and surface. Everything mpv creates hangs off
++         * a display wrapper on a private queue, and the host's surface moves
++         * to that queue too, so mpv only ever dispatches its own events. */
++        wl->embedded = true;
++        wl->display = embed->display;
++        wl->embed_queue = wl_display_create_queue_with_name(wl->display, "mpv embed queue");
++        wl->embed_wrapper = wl_proxy_create_wrapper(wl->display);
++        wl_proxy_set_queue((struct wl_proxy *)wl->embed_wrapper, wl->embed_queue);
++        /* A wrapper, not the host's proxy: objects mpv creates from it (frame
++         * callbacks, viewports, feedback) land on mpv's queue, and the host's
++         * proxy keeps its own queue and gets no mpv listener that would
++         * dangle after uninit. */
++        wl->embed_surface = embed->surface;
++        wl->surface = wl_proxy_create_wrapper(embed->surface);
++        wl_proxy_set_queue((struct wl_proxy *)wl->surface, wl->embed_queue);
++        MP_VERBOSE(wl, "Embedding into a host surface.\n");
++    } else {
++        wl->display = wl_display_connect(NULL);
++        if (!wl->display) {
++            MP_MSG(wl, vo->probing ? MSGL_V : MSGL_FATAL,
++                   "Couldn't connect to Wayland display: %s\n", strerror(errno));
++            goto err;
++        }
+     }
+ 
+     if (!create_input(wl))
+         goto err;
+ 
+ #if HAVE_WAYLAND_PROTOCOLS_1_48
+-    if (wl->opts->wayland_session && *wl->opts->wayland_session)
++    if (!wl->embedded && wl->opts->wayland_session && *wl->opts->wayland_session)
+         wl->session_file = session_file(wl, wl->opts->wayland_session, vo);
+ #endif
+ 
+-    wl->registry = wl_display_get_registry(wl->display);
++    wl->registry = wl_display_get_registry(wl->embedded ? wl->embed_wrapper : wl->display);
+     wl_registry_add_listener(wl->registry, &registry_listener, wl);
+ 
+     /* Do a roundtrip to run the registry */
+-    wl_display_roundtrip(wl->display);
++    wl_roundtrip(wl);
+ 
+-    if (!wl->surface) {
++    if (!wl->compositor || !wl->surface) {
+         MP_FATAL(wl, "Compositor doesn't support %s (ver. 4)\n",
+                  wl_compositor_interface.name);
+         goto err;
+     }
+ 
+-    if (!wl->wm_base) {
++    if (!wl->embedded && !wl->wm_base) {
+         MP_FATAL(wl, "Compositor doesn't support the required %s protocol!\n",
+                  xdg_wm_base_interface.name);
+         goto err;
+@@ -4598,10 +4694,14 @@ bool vo_wayland_init(struct vo *vo)
+     if (!create_viewports(wl))
+         goto err;
+ 
+-    if (!create_xdg_surface(wl))
++    if (!wl->embedded && !create_xdg_surface(wl))
+         goto err;
+ 
+-    if (wl->xdg_activation) {
++    if (wl->embedded) {
++        /* No configure event will come: the host has already mapped its
++         * window, and mpv's surface maps with its first buffer. */
++        wl->surface_configured = true;
++    } else if (wl->xdg_activation) {
+         xdg_activate(wl);
+     } else {
+         MP_VERBOSE(wl, "Compositor doesn't support the %s protocol!\n",
+@@ -4683,7 +4783,9 @@ bool vo_wayland_init(struct vo *vo)
+                    wp_presentation_interface.name);
+     }
+ 
+-    if (wl->xdg_decoration_manager) {
++    if (wl->embedded) {
++        wl->opts->border = false;
++    } else if (wl->xdg_decoration_manager) {
+         wl->xdg_toplevel_decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(wl->xdg_decoration_manager, wl->xdg_toplevel);
+         zxdg_toplevel_decoration_v1_add_listener(wl->xdg_toplevel_decoration, &decoration_listener, wl);
+         request_decoration_mode(
+@@ -4741,9 +4843,11 @@ bool vo_wayland_init(struct vo *vo)
+     // are processed in order, this also ensures that all requests preceding
+     // the above surface commit have also been seen by the compositor.
+     while (!wl->surface_configured) {
+-        if (wl_display_dispatch(wl->display) < 0)
++        if (wl_dispatch(wl) < 0)
+             goto err;
+     }
++    if (wl->embedded)
++        wl_roundtrip(wl);
+ 
+     return true;
+ 
+@@ -4821,7 +4925,7 @@ void vo_wayland_uninit(struct vo *vo)
+ 
+     // Ensure that any in-flight vo_wayland_preferred_description_info get deallocated.
+     if (wl->display)
+-        wl_display_roundtrip(wl->display);
++        wl_roundtrip(wl);
+ 
+     if (wl->compositor)
+         wl_compositor_destroy(wl->compositor);
+@@ -4928,20 +5032,26 @@ void vo_wayland_uninit(struct vo *vo)
+     if (wl->single_pixel_manager)
+         wp_single_pixel_buffer_manager_v1_destroy(wl->single_pixel_manager);
+ 
+-    if (wl->surface)
+-        wl_surface_destroy(wl->surface);
++    /* Each subsurface before its surface. Mutter answers the reverse order
++     * with "invalid object", a fatal protocol error; harmless when mpv owns
++     * the connection and disconnects next, fatal to the host when embedded. */
++    if (wl->osd_subsurface)
++        wl_subsurface_destroy(wl->osd_subsurface);
+ 
+     if (wl->osd_surface)
+         wl_surface_destroy(wl->osd_surface);
+ 
+-    if (wl->osd_subsurface)
+-        wl_subsurface_destroy(wl->osd_subsurface);
++    if (wl->video_subsurface)
++        wl_subsurface_destroy(wl->video_subsurface);
+ 
+     if (wl->video_surface)
+         wl_surface_destroy(wl->video_surface);
+ 
+-    if (wl->video_subsurface)
+-        wl_subsurface_destroy(wl->video_subsurface);
++    if (wl->surface && wl->embedded) {
++        wl_proxy_wrapper_destroy(wl->surface);
++    } else if (wl->surface) {
++        wl_surface_destroy(wl->surface);
++    }
+ 
+     if (wl->wm_base)
+         xdg_wm_base_destroy(wl->wm_base);
+@@ -4983,8 +5093,17 @@ void vo_wayland_uninit(struct vo *vo)
+         xdg_session_v1_destroy(wl->xdg_session);
+ #endif
+ 
+-    if (wl->display)
++    if (wl->embedded) {
++        /* The connection is the host's: flush what mpv destroyed, then drop
++         * only mpv's wrapper and queue. */
++        wl_display_flush(wl->display);
++        if (wl->embed_wrapper)
++            wl_proxy_wrapper_destroy(wl->embed_wrapper);
++        if (wl->embed_queue)
++            wl_event_queue_destroy(wl->embed_queue);
++    } else if (wl->display) {
+         wl_display_disconnect(wl->display);
++    }
+ 
+     if (wl->compositor_format_size)
+         munmap(wl->compositor_format_map, wl->compositor_format_size);
+@@ -5033,10 +5152,11 @@ void vo_wayland_wait_frame(struct vo_wayland_state *wl)
+     /* If the compositor does not have presentation time, we cannot be sure
+      * that this wait is accurate. Do a hacky block with wl_display_roundtrip. */
+     if (!wl->use_present && !wl_display_get_error(wl->display))
+-        wl_display_roundtrip(wl->display);
++        wl_roundtrip(wl);
+ 
+-    /* Only use this heuristic if the compositor doesn't support the suspended state. */
+-    if (wl->frame_wait && xdg_toplevel_get_version(wl->xdg_toplevel) < 6) {
++    /* Only use this heuristic if the compositor doesn't support the suspended
++     * state. An embedded mpv never sees toplevel states, so it always does. */
++    if (wl->frame_wait && (wl->embedded || xdg_toplevel_get_version(wl->xdg_toplevel) < 6)) {
+         // Only consider consecutive missed callbacks.
+         if (wl->timeout_count > 1) {
+             wl->hidden = true;
+diff --git a/video/out/wayland_common.h b/video/out/wayland_common.h
+index 1f91bdd..d238ff8 100644
+--- a/video/out/wayland_common.h
++++ b/video/out/wayland_common.h
+@@ -53,7 +53,22 @@ struct vo_wayland_toplevel_pending_state {
+     uint32_t new_decoration_mode;
+ };
+ 
++/* What --wid points at when mpv renders into a host application's surface.
++ * The host owns the display connection and the surface (normally a
++ * subsurface of its own window); mpv uses them on a private event queue and
++ * creates no window, input or decorations of its own. */
++#define MPV_WAYLAND_EMBED_MAGIC 0x6d707665u /* "mpve" */
++struct mpv_wayland_embed {
++    uint32_t magic;
++    struct wl_display *display;
++    struct wl_surface *surface;
++};
++
+ struct vo_wayland_state {
++    bool                     embedded;
++    struct wl_event_queue   *embed_queue;
++    struct wl_display       *embed_wrapper;
++    struct wl_surface       *embed_surface;
+     struct m_config_cache   *opts_cache;
+     struct mp_log           *log;
+     struct mp_vo_opts       *opts;
