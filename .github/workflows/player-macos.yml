@@ -50,7 +50,9 @@ env:
 jobs:
   build:
     name: Build macOS
-    runs-on: macos-latest
+    # The same image as player-ios.yml, so both Apple builds use the Xcode 27
+    # SDKs App Store Connect requires from April 2027.
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@v7
