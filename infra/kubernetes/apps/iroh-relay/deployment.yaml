@@ -29,20 +29,15 @@ spec:
           # Pinned by digest as well as tag: a re-published tag cannot swap the
           # binary underneath us.
           #
-          # Held back from v1.0.3. That image is a static musl build carrying
-          # noq-udp 1.1.0, which panics on the FIRST received datagram
-          # (n0-computer/noq#774: musl declares cmsghdr with align 4, but the
-          # SCM_TIMESTAMPNS path decodes a timespec with align 8, and
-          # SO_TIMESTAMPNS is set unconditionally on Linux). Rolling it out on
-          # 2026-08-19 put the relay into CrashLoopBackOff and was rolled back.
-          # Only iroh 1.0.3 took noq 1.1.0; 1.0.1 and 1.0.2 are on noq 1.0.x.
+          # v1.4.2 is the iroh-relay security release: the empty-datagram and
+          # oversized-frame disconnects of other clients, the WebSocket ping
+          # flood, and stuck client writes blocking shutdown. It also carries
+          # the rustls fixes (RUSTSEC-2026-0346 to 0349) that arrived in v1.4.0.
           #
           # Before changing this line, run ./verify-image.sh <image>. A plain
-          # boot test cannot catch this: the panic needs real UDP traffic.
-          #
-          # Next target is v1.4.0, for the rustls advisories RUSTSEC-2026-0346
-          # to 0349. v1.1.0 to v1.3.0 are skipped: they carry a vulnerable rustls.
-          image: n0computer/iroh-relay:v1.0.0@sha256:0124f8c335d9ad6618db13dc580b597ad5f1be0c987b6742696f4c1f5e325720
+          # boot test cannot catch a panic on received traffic (see README.md,
+          # the v1.0.3 musl noq-udp incident).
+          image: n0computer/iroh-relay:v1.4.2@sha256:1de2c273ff3e2cf1261b16ef7e569f9b36ab858a54481ebeedf7d9da2e17a4df
           args: ["--config-path", "/config/config.toml"]
           ports:
             - name: http
