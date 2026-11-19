@@ -16,7 +16,10 @@ import 'add_folder_screen.dart' show localFoldersSupported;
 
 class AddSourceScreen extends ConsumerWidget {
   const AddSourceScreen(
-      {super.key, this.isWeb = kIsWeb, this.foldersSupported});
+      {super.key,
+      this.isWeb = kIsWeb,
+      this.foldersSupported,
+      this.directionalPrimary});
 
   /// Third-party sources do not exist on web, so a second Mydia added there
   /// would vanish. Overridable for tests.
@@ -26,11 +29,16 @@ class AddSourceScreen extends ConsumerWidget {
   /// Overridable for tests.
   final bool? foldersSupported;
 
+  /// Overrides [InputCapabilities.directionalPrimary], which tests cannot set.
+  /// On a television the first enabled row takes focus; elsewhere none does.
+  final bool? directionalPrimary;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final hasMydia = ref.watch(hasMydiaProvider);
     final guestsUnavailable = hasMydia && isWeb;
+    final remote = directionalPrimary ?? InputCapabilities.directionalPrimary;
     void open(String location) => context.push(location);
 
     return Scaffold(
@@ -61,8 +69,7 @@ class AddSourceScreen extends ConsumerWidget {
                         onTap: guestsUnavailable
                             ? null
                             : () => open('/sources/add/mydia'),
-                        autofocus: !guestsUnavailable &&
-                            InputCapabilities.directionalPrimary,
+                        autofocus: remote && !guestsUnavailable,
                       ),
                     ],
                   ),
@@ -76,8 +83,7 @@ class AddSourceScreen extends ConsumerWidget {
                         title: 'Plex', // l10n-ignore: product name
                         subtitle: l10n.sourcesAddPlexSubtitle,
                         onTap: () => open('/sources/add/plex'),
-                        autofocus: guestsUnavailable &&
-                            InputCapabilities.directionalPrimary,
+                        autofocus: remote && guestsUnavailable,
                       ),
                       SettingsRow.navigation(
                         key: const Key('add-source-jellyfin'),

@@ -50,7 +50,7 @@ void main() {
   });
 
   Future<void> pumpAdd(WidgetTester tester,
-          {required bool mydia, bool isWeb = false}) =>
+          {required bool mydia, bool isWeb = false, bool? remote}) =>
       tester.pumpWidget(ProviderScope(
         overrides: [
           hasMydiaProvider.overrideWithValue(mydia),
@@ -58,13 +58,40 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: AddSourceScreen(isWeb: isWeb),
+          home: AddSourceScreen(isWeb: isWeb, directionalPrimary: remote),
         ),
       ));
 
   // A row with no callback is dimmed and skipped by focus.
   bool rowEnabled(WidgetTester tester, String key) =>
       tester.widget<SettingsRow>(find.byKey(Key(key))).onTap != null;
+
+  // The key of the row holding primary focus, or null when no row has it.
+  Key? focusedRow() => FocusManager.instance.primaryFocus?.context
+      ?.findAncestorWidgetOfExactType<SettingsRow>()
+      ?.key;
+
+  group('initial focus', () {
+    testWidgets('on a television, Mydia takes focus', (tester) async {
+      await pumpAdd(tester, mydia: false, remote: true);
+      await tester.pump();
+      expect(focusedRow(), const Key('add-source-mydia'));
+    });
+
+    testWidgets('on a television with Mydia dimmed, Plex takes focus',
+        (tester) async {
+      await pumpAdd(tester, mydia: true, isWeb: true, remote: true);
+      await tester.pump();
+      expect(rowEnabled(tester, 'add-source-mydia'), isFalse);
+      expect(focusedRow(), const Key('add-source-plex'));
+    });
+
+    testWidgets('with a pointer or touch, no row takes focus', (tester) async {
+      await pumpAdd(tester, mydia: false, remote: false);
+      await tester.pump();
+      expect(focusedRow(), isNull);
+    });
+  });
 
   testWidgets('the add screen offers Plex, Stash and Mydia', (tester) async {
     await pumpAdd(tester, mydia: false);
