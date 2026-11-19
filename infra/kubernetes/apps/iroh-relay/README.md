@@ -39,7 +39,18 @@ Mydia's own crates are not affected, since all three `Cargo.lock` files already
 resolve `noq-udp 1.4.0`. This is purely a property of the prebuilt relay image,
 so do not change anything in `native/` or `player/rust/` in response to it.
 
-## v1.4.0 is the next target
+## v1.4.2 is live (2026-11-18)
+
+cae1-1 went from v1.0.0 straight to v1.4.2 on 2026-11-18, after
+`verify-image.sh` passed. v1.4.2 is iroh's relay security release: a client
+could disconnect *another* client with an empty datagram or a frame one byte
+too large, a WebSocket ping flood could exhaust memory, and a client that
+stopped reading held its connection open forever and blocked shutdown. Six
+nodes were connected before the rollout and six had reconnected within 90 s.
+
+The section below records why v1.1.0 to v1.3.0 were skipped.
+
+## Why v1.4.0 was the target
 
 iroh 1.4.0 fixes RUSTSEC-2026-0346 to 0349 by moving to rustls 0.23.46, and n0
 asks relay operators to upgrade. The advisories cover Debug impls leaking TLS
