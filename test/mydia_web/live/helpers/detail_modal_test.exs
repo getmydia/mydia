@@ -109,4 +109,39 @@ defmodule MydiaWeb.Live.Helpers.DetailModalTest do
       assert refreshed.assigns.selected_item == fresh
     end
   end
+
+  describe "refresh_selected/3" do
+    # A title opened from the dialog's own rail is in no host list once its
+    # recommendations replace that rail (#1448). The fallback is what keeps
+    # the header from offering "Add to Library" after the add.
+    test "applies the fallback when the id is in none of the lists" do
+      stale = %{provider_id: "5", media_type: :movie, in_library: false}
+
+      refreshed =
+        DetailModal.refresh_selected(socket(stale), [[%{provider_id: "9"}]], fn item ->
+          Map.put(item, :in_library, true)
+        end)
+
+      assert refreshed.assigns.selected_item == %{stale | in_library: true}
+    end
+
+    test "prefers a list match over the fallback" do
+      stale = %{provider_id: "5", media_type: :movie, in_library: false}
+      fresh = %{provider_id: "5", media_type: :movie, in_library: true, title: "From list"}
+
+      refreshed =
+        DetailModal.refresh_selected(socket(stale), [[fresh]], fn _ ->
+          flunk("fallback must not run when a list holds the item")
+        end)
+
+      assert refreshed.assigns.selected_item == fresh
+    end
+
+    test "is a no-op with no dialog open" do
+      refreshed =
+        DetailModal.refresh_selected(socket(nil), [], fn _ -> flunk("no dialog is open") end)
+
+      assert is_nil(refreshed.assigns.selected_item)
+    end
+  end
 end

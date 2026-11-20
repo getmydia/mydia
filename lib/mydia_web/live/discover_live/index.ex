@@ -981,16 +981,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp refresh_lists(socket, items, recommendations, enrich_rows) do
     socket = socket |> RegionalRows.map_items(enrich_rows) |> PersonModal.refresh_titles()
 
-    DetailModal.refresh_selected(socket, [
-      items,
-      recommendations,
-      PersonModal.titles(socket.assigns) | RegionalRows.item_lists(socket.assigns)
-    ])
+    lists = [items, recommendations, PersonModal.titles(socket.assigns)]
+    lists = lists ++ RegionalRows.item_lists(socket.assigns)
+    DetailModal.refresh_selected(socket, lists, &hd(enrich_rows.([&1])))
   end
 
+  # The dialog's own title is last: one reached through its rail is in no other
+  # list once that rail is replaced (#1448).
   defp selectable_lists(assigns) do
     [assigns.items, assigns.selected_recommendations, PersonModal.titles(assigns)] ++
-      RegionalRows.item_lists(assigns)
+      RegionalRows.item_lists(assigns) ++ [List.wrap(assigns[:selected_item])]
   end
 
   defp enrich(results, socket) do

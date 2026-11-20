@@ -143,9 +143,9 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
   keeps offering "Add to Library" for a title that is now in the library, and a
   second click fails on the tmdb_id index.
 
-  An id that is in none of the lists leaves the selection untouched rather than
-  clearing it: the dialog is still open, and blanking it would close it out from
-  under the user.
+  An id that is in none of the lists is never cleared: the dialog is still
+  open, and blanking it would close it out from under the user. Without a
+  `fallback` (below) the selection is left as it was.
 
   The stale item's `media_type` is passed to `find_selectable_item/3` alongside
   its id. The Dashboard (`[trending_movies, trending_tv]`) and Discover (an
@@ -153,17 +153,24 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
   ids per type, so a movie and a show can share one. Without the type check a
   refresh could swap the dialog onto a same-id title of the other kind instead
   of just refreshing the one already open.
+
+  `fallback`, when given, re-derives the snapshot for an item that is in none
+  of the lists. A title opened from the dialog's own rail is in that position
+  as soon as its recommendations replace the rail it came from (#1448), so a
+  host with a rail passes the same enrichment its lists just received. A list
+  match still wins, since that copy carries whatever else the host tracks.
   """
-  def refresh_selected(socket, lists) do
+  def refresh_selected(socket, lists, fallback \\ & &1) when is_function(fallback, 1) do
     case socket.assigns.selected_item do
       nil ->
         socket
 
       item ->
-        case find_selectable_item(lists, item.provider_id, Map.get(item, :media_type)) do
-          nil -> socket
-          fresh -> assign(socket, :selected_item, fresh)
-        end
+        fresh =
+          find_selectable_item(lists, item.provider_id, Map.get(item, :media_type)) ||
+            fallback.(item)
+
+        assign(socket, :selected_item, fresh)
     end
   end
 end
