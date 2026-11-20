@@ -467,6 +467,48 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       refute has_element?(view, "#download-client-priority-profile")
     end
 
+    # Issue #1442: a grey "mydia" placeholder made empty inputs look saved, and
+    # an empty input means the torrent is added without a category.
+    test "empty category inputs carry no value-like placeholder and say blank means none", %{
+      view: view
+    } do
+      view
+      |> element(~s{button[phx-click="new_download_client"]})
+      |> render_click()
+
+      for key <- ~w(movie tv music) do
+        assert has_element?(view, "#download-client-categories-#{key}")
+        refute has_element?(view, "#download-client-categories-#{key}[placeholder]")
+      end
+
+      assert has_element?(
+               view,
+               "#download-client-categories-hint",
+               "Leave blank to add torrents without a category"
+             )
+    end
+
+    test "the client row shows the per-content-type category", %{conn: conn} do
+      shared =
+        download_client_fixture(%{
+          "categories" => %{"movie" => "mydia", "tv" => "mydia", "music" => "mydia"}
+        })
+
+      split =
+        download_client_fixture(%{"categories" => %{"movie" => "films", "tv" => "series"}})
+
+      none = download_client_fixture(%{})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+      assert has_element?(view, "#client-category-#{shared.id}", "Category: mydia")
+      assert has_element?(view, "#client-category-#{split.id}", "Movies: films")
+      assert has_element?(view, "#client-category-#{split.id}", "TV Shows: series")
+      # Music has no category, so it is left out rather than shown as shared.
+      refute has_element?(view, "#client-category-#{split.id}", "Music")
+      assert has_element?(view, "#client-category-#{none.id}", "No category")
+    end
+
     test "legacy single-category clients prefill all three content-type inputs", %{conn: conn} do
       {:ok, legacy_client} =
         Settings.create_download_client_config(%{
@@ -989,5 +1031,24 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       settings = Settings.get_download_client_config!(client.id).connection_settings
       assert settings["use_category_subfolders"] in [false, "false"]
     end
+  end
+
+  defp download_client_fixture(attrs) do
+    {:ok, client} =
+      Settings.create_download_client_config(
+        Map.merge(
+          %{
+            "name" => "qbit_#{System.unique_integer([:positive])}",
+            "type" => "qbittorrent",
+            "host" => "localhost",
+            "port" => "8080",
+            "enabled" => "true",
+            "priority" => "1"
+          },
+          attrs
+        )
+      )
+
+    client
   end
 end

@@ -308,6 +308,15 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     content_type = Keyword.get(opts, :content_type)
     category = resolve_category(client_config, content_type, opts)
     title = Keyword.get(opts, :title)
+
+    # Values go in the message, not metadata: the default formatter drops
+    # metadata, and "why was this added without a category" (#1442) should be
+    # answerable from a plain log.
+    Logger.info(
+      "Adding to download client: client=#{inspect(client_config.name)} " <>
+        "content_type=#{inspect(content_type)} category=#{category_label(category)}"
+    )
+
     priority = Keyword.get(opts, :priority, Priority.default())
 
     torrent_opts =
@@ -326,6 +335,11 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
         {:error, {:client_error, error}}
     end
   end
+
+  defp category_label(category) when is_binary(category) and category != "",
+    do: inspect(category)
+
+  defp category_label(_none), do: "none"
 
   @doc false
   # Resolves the per-content-type category from the client config, falling back

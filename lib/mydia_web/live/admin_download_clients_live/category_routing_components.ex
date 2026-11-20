@@ -2,6 +2,63 @@ defmodule MydiaWeb.AdminDownloadClientsLive.CategoryRoutingComponents do
   @moduledoc false
   use MydiaWeb, :html
 
+  # Client types that take per-content-type categories. Blackhole uses
+  # filesystem paths and debrid uses a hosted service, so neither has one.
+  @category_aware_types ~w(qbittorrent transmission rtorrent sabnzbd nzbget)
+
+  @doc "Whether the admin UI offers categories for this client type."
+  def category_aware_type?(type) when is_atom(type) and not is_nil(type),
+    do: category_aware_type?(Atom.to_string(type))
+
+  def category_aware_type?(type), do: type in @category_aware_types
+
+  @doc "The content types a client can route to its own category, with labels."
+  def content_types do
+    [
+      {"movie", gettext("Movies")},
+      {"tv", gettext("TV Shows")},
+      {"music", gettext("Music")}
+    ]
+  end
+
+  @doc """
+  What a client row says about its categories: one value when every content
+  type shares it, one entry per content type otherwise, and "No category" when
+  torrents are added without one (#1442). Falls back to the legacy single
+  `category` field the same way `Mydia.Downloads.Queue.resolve_category/3` does.
+  """
+  def category_summary(client) do
+    categories = client.categories || %{}
+    legacy = present(client.category)
+
+    resolved =
+      for {key, label} <- content_types(),
+          value = present(Map.get(categories, key)) || legacy,
+          do: {label, value}
+
+    case resolved |> Enum.map(&elem(&1, 1)) |> Enum.uniq() do
+      [] ->
+        gettext("No category")
+
+      [value] when length(resolved) == 3 ->
+        gettext("Category: %{category}", category: value)
+
+      _mixed ->
+        Enum.map_join(resolved, ", ", fn {label, value} ->
+          gettext("%{content_type}: %{category}", content_type: label, category: value)
+        end)
+    end
+  end
+
+  defp present(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp present(_value), do: nil
+
   attr :content_types, :list, required: true
   attr :categories_value, :map, required: true
   attr :legacy_category, :string, required: true
@@ -30,6 +87,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.CategoryRoutingComponents do
       <p class="text-xs text-base-content/50">
         {gettext("Optional. Routes downloads to the right client-side category by content type.")}
       </p>
+      <%!-- No placeholder on these inputs: a grey sample value made empty
+            fields look saved (#1442). --%>
+      <p id="download-client-categories-hint" class="text-xs text-base-content/50">
+        {gettext("Leave blank to add torrents without a category.")}
+      </p>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <%= for {key, label} <- @content_types do %>
@@ -38,7 +100,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.CategoryRoutingComponents do
             id={"download-client-categories-#{key}"}
             type="text"
             label={label}
-            placeholder="mydia"
             value={
               Map.get(@categories_value, key) || (@has_legacy_only? && @legacy_category) ||
                 ""

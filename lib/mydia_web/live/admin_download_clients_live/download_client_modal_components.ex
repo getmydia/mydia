@@ -9,13 +9,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
   alias MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents
   alias MydiaWeb.AdminDownloadClientsLive.SeedboxComponents
 
-  # Client types that surface category configuration in the admin form.
-  # Blackhole uses filesystem paths and debrid uses a hosted service, so
-  # neither has a per-content-type category taxonomy.
-  @category_aware_types ~w(qbittorrent transmission rtorrent sabnzbd nzbget)
-
   # Client types that surface the 5-tier priority profile UI. Same set as
-  # `@category_aware_types` minus blackhole — every adapter that maps the
+  # `CategoryRoutingComponents.category_aware_type?/1` — every adapter that maps the
   # abstract priority to a native value is listed here.
   @priority_profile_types ~w(qbittorrent transmission rtorrent sabnzbd nzbget)
 
@@ -89,14 +84,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
     ]
   end
 
-  defp content_types do
-    [
-      {"movie", gettext("Movies")},
-      {"tv", gettext("TV Shows")},
-      {"music", gettext("Music")}
-    ]
-  end
-
   defp priority_placeholders("qbittorrent") do
     unset = gettext("(unset)")
     Map.new(~w(verylow low normal high veryhigh), &{&1, unset})
@@ -153,7 +140,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
         _ -> %{}
       end
 
-    show_categories? = selected_type in @category_aware_types
+    show_categories? = CategoryRoutingComponents.category_aware_type?(selected_type)
     show_priority_profile? = selected_type in @priority_profile_types
     show_remote_fetch? = selected_type in @remote_fetch_types
     show_external_torrents? = selected_type in @external_torrent_types
@@ -184,7 +171,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
       |> assign(:category_capable_type?, category_capable_type?(selected_type))
       |> assign(:priority_placeholders, priority_placeholders)
       |> assign(:priority_tiers, priority_tiers())
-      |> assign(:content_types, content_types())
+      |> assign(:content_types, CategoryRoutingComponents.content_types())
 
     ~H"""
     <.admin_modal
