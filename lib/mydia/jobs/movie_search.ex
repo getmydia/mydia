@@ -359,27 +359,16 @@ defmodule Mydia.Jobs.MovieSearch do
            query,
            [min_seeders: min_seeders] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: [], indexer_errors: indexer_errors}} ->
-        if indexer_errors != [] do
-          Logger.warning("Movie search failed due to indexer errors",
-            media_item_id: movie.id,
-            title: movie.title,
-            query: query,
-            errors: inspect(indexer_errors)
-          )
+      {:ok, %{results: []} = res} ->
+        # A UI search takes no backoff, and one every indexer's rate limit
+        # held back records no miss either.
+        unless RateLimitDeferral.deferred?(res,
+                 media_item_id: movie.id,
+                 title: movie.title,
+                 query: query
+               ) do
+          record_no_results(movie, res, query, [])
         end
-
-        Logger.warning("No results found for movie",
-          media_item_id: movie.id,
-          title: movie.title,
-          query: query
-        )
-
-        # Log search event for no results
-        Events.search_no_results(movie, %{
-          "query" => query,
-          "indexers_searched" => indexers_count
-        })
 
         {:no_results,
          %{
@@ -921,6 +910,8 @@ defmodule Mydia.Jobs.MovieSearch do
   # on the upgrade path. Every bucket records the miss so each reason backs
   # off on its own schedule; Activity gets one event per search, carrying the
   # first bucket's schedule.
+  defp record_movie_backoff(_movie, _reason, []), do: :ok
+
   defp record_movie_backoff(%MediaItem{} = movie, reason, [primary | _] = resource_types) do
     Enum.each(resource_types, fn resource_type ->
       case Search.record_failure(resource_type, movie.id, reason) do

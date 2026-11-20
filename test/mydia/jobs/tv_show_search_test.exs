@@ -481,6 +481,54 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert Search.get_backoff("season", show.id, season_number: 1) == nil
     end
 
+    test "show mode: all indexers cooling down skips the episode fallback and records no miss",
+         %{show: show} do
+      configs = replace_indexers_with_newznab(["Cool A", "Cool B"])
+      cool_down(configs)
+      report_search_events(configs)
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => show.id})
+
+      # Only the season pack search reached the gate, once per indexer.
+      assert drain_search_events() == [:skipped_cooldown, :skipped_cooldown]
+      assert Mydia.Events.list_events(type: "search.no_results") == []
+    end
+
+    test "show mode: an episode search held back by a 429 records no miss", %{show: show} do
+      bypass = Bypass.open()
+      [config] = replace_indexers_with_newznab(["Busy A"])
+
+      {:ok, config} =
+        Settings.update_indexer_config(config, %{base_url: "http://localhost:#{bypass.port}"})
+
+      # The season pack search finds nothing; the tracker then answers 429.
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      Bypass.stub(bypass, "GET", "/api", fn conn ->
+        case Agent.get_and_update(calls, &{&1, &1 + 1}) do
+          0 ->
+            Plug.Conn.resp(
+              conn,
+              200,
+              ~s(<?xml version="1.0"?><rss version="2.0"><channel><title>x</title></channel></rss>)
+            )
+
+          _ ->
+            Plug.Conn.resp(conn, 429, "slow down")
+        end
+      end)
+
+      report_search_events([config])
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => show.id})
+
+      # Season pack (empty answer), episode 1 (429), episode 2 (cooldown).
+      assert drain_search_events() == [:ok, :rate_limited, :skipped_cooldown]
+
+      assert [%{metadata: %{"search_type" => "season_pack"}}] =
+               Mydia.Events.list_events(type: "search.no_results")
+    end
+
     test "one indexer cooling and one empty still backs off and falls back to episodes",
          %{show: show} do
       bypass = Bypass.open()

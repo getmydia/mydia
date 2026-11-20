@@ -173,6 +173,35 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert Search.get_backoff("movie", movie.id) == nil
     end
 
+    test "specific mode: all indexers cooling down records no miss but still completes" do
+      movie = media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2019})
+      ["Cool A", "Cool B"] |> replace_indexers_with_newznab() |> cool_down()
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert_received {:search_completed, movie_id, %{results_found: 0}}
+      assert movie_id == movie.id
+      assert Mydia.Events.list_events(type: "search.no_results") == []
+      assert Search.get_backoff("movie", movie.id) == nil
+    end
+
+    test "specific mode: a genuinely empty search records the miss without a backoff" do
+      bypass = Bypass.open()
+      movie = media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2019})
+      [open] = replace_indexers_with_newznab(["Open B"])
+
+      {:ok, _} =
+        Settings.update_indexer_config(open, %{base_url: "http://localhost:#{bypass.port}"})
+
+      stub_empty_newznab_feed(bypass)
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert [_event] = Mydia.Events.list_events(type: "search.no_results")
+      assert Search.get_backoff("movie", movie.id) == nil
+    end
+
     test "one indexer cooling and one empty still backs off" do
       bypass = Bypass.open()
       movie = media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2019})

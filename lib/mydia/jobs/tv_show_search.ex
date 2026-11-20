@@ -2370,26 +2370,27 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No season pack results found, falling back to individual episodes",
-          media_item_id: media_item.id,
-          title: media_item.title,
-          season_number: season_number
-        )
+      {:ok, %{results: []} = res} ->
+        # Every indexer rate-limited: no miss to record, and the episode
+        # searches would be held back the same way.
+        if RateLimitDeferral.deferred?(res, media_item_id: media_item.id, query: query) do
+          {new_count, %{results_found: 0, downloads_initiated: 0}}
+        else
+          Logger.warning("No season pack results found, falling back to individual episodes",
+            media_item_id: media_item.id,
+            title: media_item.title,
+            season_number: season_number
+          )
 
-        # Log no results event for season pack search
-        Events.search_no_results(
-          media_item,
-          %{
+          Events.search_no_results(media_item, %{
             "query" => query,
             "indexers_searched" => count_enabled_indexers(),
             "season_number" => season_number,
             "search_type" => "season_pack"
-          }
-        )
+          })
 
-        # Fall back to searching individual episodes
-        search_individual_episodes_with_stats(episodes, new_count, args)
+          search_individual_episodes_with_stats(episodes, new_count, args)
+        end
 
       {:ok, %{results: results}} ->
         Logger.info("Found #{length(results)} season pack results",
@@ -2573,23 +2574,20 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No results found for episode",
-          episode_id: episode.id,
-          show: episode.media_item.title,
-          season: episode.season_number,
-          episode: episode.episode_number,
-          query: query
-        )
+      {:ok, %{results: []} = res} ->
+        if RateLimitDeferral.deferred?(res, episode_id: episode.id, query: query) do
+          {{:error, :rate_limited}, 0}
+        else
+          Logger.warning("No results found for episode", episode_id: episode.id, query: query)
 
-        # Log search event for no results
-        Events.search_no_results(
-          episode.media_item,
-          %{"query" => query, "indexers_searched" => count_enabled_indexers()},
-          episode: episode
-        )
+          Events.search_no_results(
+            episode.media_item,
+            %{"query" => query, "indexers_searched" => count_enabled_indexers()},
+            episode: episode
+          )
 
-        {:ok, 0}
+          {:ok, 0}
+        end
 
       {:ok, %{results: results}} ->
         Logger.info("Found #{length(results)} results for episode",
