@@ -203,9 +203,12 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       # itself, is in neither of this page's own lists, and searching just
       # :recommendations dropped a guest's Request click there silently.
       # Discover hit the same failure for its modal; see the explanatory
-      # comment on its `{:request_media, ...}` handle_info clause.
+      # comment on its `{:request_media, ...}` handle_info clause. The dialog's
+      # own title comes last: one reached through the dialog's rail is in no
+      # list at all once its recommendations replace that rail (#1448).
       case DetailModal.find_selectable_item(
-             DetailModalEvents.item_lists(socket),
+             DetailModalEvents.item_lists(socket) ++
+               [List.wrap(socket.assigns[:selected_item])],
              id_string,
              param_media_type(params["media_type"])
            ) do
@@ -260,7 +263,10 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
 
         {:noreply,
          socket
-         |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
+         |> DetailModal.refresh_selected(
+           DetailModalEvents.item_lists(socket),
+           &hd(MediaRequestHelpers.enrich_with_request_status([&1], status_map))
+         )
          |> put_flash(
            :info,
            gettext("%{title} requested. An admin will review it soon.", title: request.title)
@@ -507,7 +513,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       )
       |> PersonModal.refresh_titles()
 
-    DetailModal.refresh_selected(socket, DetailModalEvents.item_lists(socket))
+    # The fallback covers a title the dialog was swapped onto through its own
+    # rail, which is in none of the lists once that rail is replaced (#1448).
+    DetailModal.refresh_selected(socket, DetailModalEvents.item_lists(socket), fn item ->
+      [item] |> mark_owned(added, navigate: false) |> hd()
+    end)
   end
 
   defp viewed_media_type(socket), do: item_type(socket.assigns.media_item)

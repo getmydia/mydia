@@ -159,15 +159,35 @@ jobs:
               - 'mix.exs'
               - 'mix.lock'
               - 'Dockerfile'
+              # The image's flutter-builder stage resolves and builds the
+              # player from these, copied piecemeal. A PR that changes only
+              # them used to pull the master image and never run that stage,
+              # which is how #1444 merged a path dependency the Dockerfile did
+              # not copy and broke every release build after it. player/lib
+              # and player/web stay out: Build / Web in ci-player.yml already
+              # builds them, and they change on nearly every player PR.
+              - 'player/pubspec.yaml'
+              - 'player/build.yaml'
+              - 'player/l10n.yaml'
+              - 'player/packages/**'
+              - 'player/assets/**'
+              - 'player/shaders/**'
+              - 'player/rust_builder/pubspec.yaml'
             # player/pubspec.lock is deliberately absent. The image's pub cache
             # is only a warm start: run-tests.sh runs `pub get
             # --enforce-lockfile` against the checkout, which fetches whatever
             # a new lock adds. Rebuilding for a lock change cost ~4 min and
             # tested nothing the pull path does not. publish-toolbox still
             # rebuilds on every master push, so the warm cache catches up.
+            # pubspec.yaml and packages/ are here even though the lock is not:
+            # the image's warm `pub get` resolves the graph from them, so a new
+            # path dependency it cannot see fails the build outright rather
+            # than leaving a cold cache.
             toolbox:
               - 'player/.fvmrc'
               - 'player/Dockerfile.test'
+              - 'player/pubspec.yaml'
+              - 'player/packages/**'
               - 'rust-toolchain.toml'
             relay:
               - 'metadata-relay/**'
