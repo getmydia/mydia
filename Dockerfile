@@ -59,6 +59,9 @@ COPY player/l10n.yaml ./
 COPY player/lib ./lib
 COPY player/web ./web
 COPY player/rust_builder ./rust_builder
+# Path dependencies pubspec.yaml declares (the macOS video-hdr libmpv). The web
+# build never compiles them, but `pub get` cannot resolve without them.
+COPY player/packages ./packages
 # Everything `pubspec.yaml` declares under `flutter: assets:`/`fonts:`/`shaders:`
 # — the bundled Inter faces, their license and the fragment shaders.
 # `flutter build web` hard-fails ("No file or variants found for asset") if a

@@ -3110,10 +3110,6 @@
     "@sourcesAddWebDavSubtitle": {
         "description": "Subtitle of the WebDAV entry on the Add server screen. WebDAV is a protocol name and is not translated."
     },
-    "filesExperimentalBadge": "Eksperimentalno",
-    "@filesExperimentalBadge": {
-        "description": "Small label beside the Folder and WebDAV entries on the Add server screen, warning that files libraries are an experimental feature."
-    },
     "filesExperimentalNotice": "Biblioteke zasnovane na fasciklama i WebDAV-u su u veoma eksperimentalnoj fazi. Očekujte sitne nedostatke prilikom skeniranja, uparivanja i reprodukcije i prijavite sve što ne radi kako treba.",
     "@filesExperimentalNotice": {
         "description": "Notice at the top of the Add folder and Add WebDAV screens, warning that files libraries are an experimental feature. WebDAV is a protocol name and is not translated."

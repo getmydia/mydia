@@ -428,4 +428,119 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
     refute has_element?(view, ~s(#media-detail-modal button[phx-click="add_selected_item"]))
     assert has_element?(view, "#trending-detail-modal-actions a", "Go to Movie")
   end
+
+  describe "a title the dialog was swapped onto through its own rail (#1448)" do
+    # The swapped title's own recommendations replace the rail it was picked
+    # from, so from then on it is in none of this page's lists. The header's
+    # Add and Request must still act on it and still refresh it.
+    setup do
+      source_tmdb_id = unique_provider_id()
+      first_tmdb_id = unique_provider_id()
+      # The add fetches through the stub's ref-keyed catalog, which knows one
+      # movie; see the franchise test above.
+      swapped_tmdb_id = MetadataStubProvider.movie_tmdb_id()
+      onward_tmdb_id = unique_provider_id()
+
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Harrow Lane",
+          year: 2021,
+          tmdb_id: source_tmdb_id
+        })
+
+      warm_recommendations_cache(source_tmdb_id, :movie, [
+        %{"id" => first_tmdb_id, "title" => "Salt Verge", "release_date" => "2019-04-11"}
+      ])
+
+      warm_recommendations_cache(first_tmdb_id, :movie, [
+        %{"id" => swapped_tmdb_id, "title" => "Ninth Tide", "release_date" => "2015-08-03"}
+      ])
+
+      warm_recommendations_cache(swapped_tmdb_id, :movie, [
+        %{"id" => onward_tmdb_id, "title" => "Copper Tide", "release_date" => "2017-02-02"}
+      ])
+
+      %{
+        movie: movie,
+        first_tmdb_id: first_tmdb_id,
+        swapped_tmdb_id: swapped_tmdb_id,
+        onward_tmdb_id: onward_tmdb_id
+      }
+    end
+
+    test "adding it from the header shows Go to Movie", ctx do
+      view = swap_to_dialog_rail_title(ctx.conn, ctx)
+
+      view
+      |> element(
+        ~s(#trending-detail-modal-actions button[phx-click="add_selected_item"][phx-value-ref="tmdb:#{ctx.swapped_tmdb_id}"])
+      )
+      |> render_click()
+
+      render_async(view, 5000)
+
+      assert Mydia.Repo.get_by(Mydia.Media.MediaItem, tmdb_id: ctx.swapped_tmdb_id)
+
+      refute has_element?(
+               view,
+               ~s(#trending-detail-modal-actions button[phx-click="add_selected_item"])
+             )
+
+      assert has_element?(view, "#trending-detail-modal-actions a", "Go to Movie")
+    end
+
+    test "a guest requesting it from the header shows Requested", ctx do
+      conn = log_in_user(ctx.conn, user_fixture(%{role: "guest"}))
+      view = swap_to_dialog_rail_title(conn, ctx)
+
+      view
+      |> element(
+        ~s(#trending-detail-modal-actions button[phx-click="request_selected_item"][phx-value-ref="tmdb:#{ctx.swapped_tmdb_id}"])
+      )
+      |> render_click()
+
+      assert [request] = Mydia.MediaRequests.list_requests(status: "pending")
+      assert request.tmdb_id == ctx.swapped_tmdb_id
+
+      assert has_element?(
+               view,
+               ~s(#trending-detail-modal-actions button[phx-click="request_selected_item"][disabled]),
+               "Requested"
+             )
+    end
+  end
+
+  defp swap_to_dialog_rail_title(conn, ctx) do
+    {:ok, view, _html} = live(conn, ~p"/media/#{ctx.movie.id}")
+    render_async(view, 5000)
+
+    view
+    |> element(
+      ~s(#recommendations-rail div[phx-click="show_details"][phx-value-id="#{ctx.first_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    view
+    |> element(
+      ~s(#media-detail-modal-rail div[phx-click="show_details"][phx-value-id="#{ctx.swapped_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    assert has_element?(
+             view,
+             ~s(#media-detail-modal-rail div[phx-click="show_details"][phx-value-id="#{ctx.onward_tmdb_id}"])
+           )
+
+    refute has_element?(
+             view,
+             ~s(#media-detail-modal-rail div[phx-click="show_details"][phx-value-id="#{ctx.swapped_tmdb_id}"])
+           )
+
+    view
+  end
 end

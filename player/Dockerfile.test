@@ -115,6 +115,10 @@ COPY player/pubspec.yaml player/pubspec.lock ./
 # to resolve the whole graph. Its windows/, linux/ and cargokit/ sources are
 # not read until the plugin builds, against the bind-mounted tree.
 COPY player/rust_builder/pubspec.yaml ./rust_builder/pubspec.yaml
+# packages/ holds the other path dependencies (the macOS video-hdr libmpv).
+# Copied whole, as the release Dockerfile does, so a new package there needs no
+# edit here; the directory is a few kilobytes.
+COPY player/packages ./packages
 # Enforced like every other `pub get` in CI and the release image: the lock
 # resolves on the .fvmrc SDK on a complete graph, so a mismatch is a failure
 # here rather than a silently re-resolved cache.
