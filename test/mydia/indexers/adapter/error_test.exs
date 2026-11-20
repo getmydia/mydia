@@ -26,6 +26,44 @@ defmodule Mydia.Indexers.Adapter.ErrorTest do
     end
   end
 
+  describe "retry_after_ms/1" do
+    test "reads delta-seconds, case-insensitively" do
+      assert Error.retry_after_ms([{"Retry-After", "120"}]) == 120_000
+      assert Error.retry_after_ms([{"retry-after", "7"}]) == 7_000
+    end
+
+    test "reads Req's map of lists and the host's name/value maps" do
+      assert Error.retry_after_ms(%{"retry-after" => ["30"]}) == 30_000
+      assert Error.retry_after_ms([%{name: "retry-after", value: "15"}]) == 15_000
+    end
+
+    test "reads an HTTP date in the future" do
+      date =
+        :calendar.universal_time()
+        |> :calendar.datetime_to_gregorian_seconds()
+        |> Kernel.+(90)
+        |> :calendar.gregorian_seconds_to_datetime()
+        |> http_date()
+
+      assert ms = Error.retry_after_ms([{"Retry-After", date}])
+      assert ms in 85_000..90_000
+    end
+
+    test "returns nil for past dates, negatives, garbage and no header" do
+      assert Error.retry_after_ms([{"Retry-After", "Wed, 21 Oct 2015 07:28:00 GMT"}]) == nil
+      assert Error.retry_after_ms([{"Retry-After", "-5"}]) == nil
+      assert Error.retry_after_ms([{"Retry-After", "soon"}]) == nil
+      assert Error.retry_after_ms([]) == nil
+    end
+
+    defp http_date({{y, m, d}, {hh, mm, ss}}) do
+      day = Enum.at(~w(Mon Tue Wed Thu Fri Sat Sun), :calendar.day_of_the_week(y, m, d) - 1)
+      mon = Enum.at(~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec), m - 1)
+      pad = &String.pad_leading(Integer.to_string(&1), 2, "0")
+      "#{day}, #{pad.(d)} #{mon} #{y} #{pad.(hh)}:#{pad.(mm)}:#{pad.(ss)} GMT"
+    end
+  end
+
   describe "error type helpers" do
     test "connection_failed/2 creates connection error" do
       error = Error.connection_failed("Connection refused")
@@ -199,7 +237,7 @@ defmodule Mydia.Indexers.Adapter.ErrorTest do
       assert %Error{
                type: :rate_limited,
                message: "Rate limit exceeded (429)",
-               details: %{status: 429, retry_after: 120}
+               details: %{status: 429, retry_after: 120_000}
              } = error
     end
 

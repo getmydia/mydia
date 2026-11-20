@@ -27,6 +27,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
 
   require Logger
 
+  alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Parity.{Recorder, Replay, RequestKey}
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
@@ -178,6 +179,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
 
     try do
       result = do_exchange(ctx, req)
+      note_rate_limit(ctx, result)
       maybe_record(ctx, req, result)
       log_outcome(req, result)
       result
@@ -185,6 +187,17 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
       record_network(ctx, System.monotonic_time(:microsecond) - started)
     end
   end
+
+  # The guest turns a 429 into a bare `request_limit` error, so the header is
+  # handed to the RateLimiter here for the cooldown gate to consume.
+  defp note_rate_limit(ctx, {:ok, %{status: 429, headers: headers}}) do
+    case Error.retry_after_ms(headers) do
+      ms when is_integer(ms) -> RateLimiter.note_retry_after(ctx.definition_id, ms)
+      _ -> :ok
+    end
+  end
+
+  defp note_rate_limit(_ctx, _result), do: :ok
 
   # Captures use the Elixir engine's transport reasons; the guest only knows
   # the four host error kinds. A capture recorded through the native engine

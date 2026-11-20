@@ -640,6 +640,16 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert message =~ "Rate limit"
     end
 
+    test "429 carries Retry-After in milliseconds" do
+      response = %{status: 429, body: "", headers: [{"retry-after", "30"}]}
+
+      assert {:error, %Error{type: :rate_limited, details: %{retry_after: 30_000}}} =
+               CardigannSearchEngine.validate_response(response)
+
+      assert {:error, %Error{type: :rate_limited, details: %{retry_after: nil}}} =
+               CardigannSearchEngine.validate_response(%{status: 429, body: "", headers: []})
+    end
+
     test "rejects 500 server error" do
       response = %{status: 500, body: "Internal Server Error", headers: []}
 

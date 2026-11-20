@@ -312,8 +312,7 @@ defmodule Mydia.Indexers.Adapter.Error do
   end
 
   def from_req_error(%Req.Response{status: 429} = response) do
-    retry_after = get_retry_after(response)
-    details = %{status: 429, retry_after: retry_after}
+    details = %{status: 429, retry_after: retry_after_ms(response.headers)}
     rate_limited("Rate limit exceeded (429)", details)
   end
 
@@ -324,6 +323,50 @@ defmodule Mydia.Indexers.Adapter.Error do
   def from_req_error(error) do
     unknown("Unexpected error: #{inspect(error)}", %{error: error})
   end
+
+  @doc """
+  Reads the `Retry-After` header as milliseconds.
+
+  Accepts a list of `{name, value}` tuples, a list of `%{name:, value:}` maps,
+  or Req's map of lowercase names to value lists. The value may be delta-seconds
+  or an HTTP date. Past dates, negatives and unparseable values return `nil`.
+
+  ## Examples
+
+      iex> Error.retry_after_ms([{"Retry-After", "120"}])
+      120000
+
+      iex> Error.retry_after_ms(%{"retry-after" => ["30"]})
+      30000
+
+      iex> Error.retry_after_ms([])
+      nil
+  """
+  @spec retry_after_ms([{String.t(), String.t()}] | [map()] | map() | nil) ::
+          non_neg_integer() | nil
+  def retry_after_ms(headers) when is_map(headers) or is_list(headers) do
+    Enum.find_value(headers, fn
+      {name, values} ->
+        if retry_after_name?(name), do: first_retry_after(values)
+
+      %{name: name, value: value} ->
+        if retry_after_name?(name), do: first_retry_after(value)
+
+      _ ->
+        nil
+    end)
+  end
+
+  def retry_after_ms(_), do: nil
+
+  defp retry_after_name?(name), do: String.downcase(to_string(name)) == "retry-after"
+
+  defp first_retry_after(values) do
+    values |> List.wrap() |> Enum.find_value(&parse_retry_after_value/1)
+  end
+
+  defp parse_retry_after_value(value) when is_binary(value), do: parse_retry_after(value)
+  defp parse_retry_after_value(_), do: nil
 
   @doc """
   Returns a human-readable error message.
@@ -361,19 +404,25 @@ defmodule Mydia.Indexers.Adapter.Error do
 
   # Private helpers
 
-  defp get_retry_after(%Req.Response{headers: headers}) do
-    headers
-    |> Enum.find_value(fn {key, value} ->
-      if String.downcase(key) == "retry-after", do: parse_retry_after(value)
-    end)
-  end
+  defp parse_retry_after(value) do
+    value = String.trim(value)
 
-  defp parse_retry_after(value) when is_binary(value) do
     case Integer.parse(value) do
-      {seconds, _} -> seconds
-      :error -> nil
+      {seconds, ""} when seconds >= 0 -> seconds * 1000
+      {_, ""} -> nil
+      _ -> parse_http_date(value)
     end
   end
 
-  defp parse_retry_after(_), do: nil
+  defp parse_http_date(value) do
+    case :httpd_util.convert_request_date(String.to_charlist(value)) do
+      {{_, _, _}, {_, _, _}} = erl ->
+        now = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
+        ms = (:calendar.datetime_to_gregorian_seconds(erl) - now) * 1000
+        if ms > 0, do: ms
+
+      _ ->
+        nil
+    end
+  end
 end

@@ -651,7 +651,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
      Error.search_failed("Redirected (HTTP #{status})#{suffix} and the redirect was not followed")}
   end
 
-  def validate_response(%{status: status, body: body}) do
+  def validate_response(%{status: status, body: body} = response) do
     cond do
       status == 200 ->
         :ok
@@ -660,7 +660,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         {:error, Error.connection_failed("Authentication failed")}
 
       status == 429 ->
-        {:error, Error.rate_limited("Rate limit exceeded")}
+        retry_after = Error.retry_after_ms(Map.get(response, :headers) || [])
+        {:error, Error.rate_limited("Rate limit exceeded", %{retry_after: retry_after})}
 
       status >= 500 ->
         {:error, Error.search_failed("Server error: HTTP #{status}")}

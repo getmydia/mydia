@@ -114,8 +114,11 @@ defmodule Mydia.Indexers.Adapter.Newznab do
         {:ok, %Req.Response{status: 403}} ->
           {:error, Error.authentication_failed("Access forbidden")}
 
-        {:ok, %Req.Response{status: 429}} ->
-          {:error, Error.rate_limited("Rate limit exceeded")}
+        {:ok, %Req.Response{status: 429} = response} ->
+          {:error,
+           Error.rate_limited("Rate limit exceeded", %{
+             retry_after: Error.retry_after_ms(response.headers)
+           })}
 
         {:ok, %Req.Response{status: status, body: body}} ->
           Logger.error("Newznab search failed with status #{status}: #{inspect(body)}")

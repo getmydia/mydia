@@ -44,6 +44,25 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
                )
     end
 
+    test "a 429 hands its Retry-After to the RateLimiter", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "120")
+        |> Plug.Conn.resp(429, "slow down")
+      end)
+
+      assert {:ok, %{status: 429}} = HostHttp.exchange(ctx, req("GET", base <> "/search"))
+
+      until = Mydia.Indexers.RateLimiter.record_rate_limited(ctx.definition_id, nil)
+      ms = DateTime.diff(until, DateTime.utc_now(), :millisecond)
+      # 120s beats the ladder's 1 minute floor, so the hint is what set it
+      assert ms in 115_000..120_500
+    end
+
     test "a login watch flags only the login URL on the tracker's own host", %{
       bypass: bypass,
       ctx: ctx,
