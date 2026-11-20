@@ -12330,7 +12330,7 @@ msgstr ""
 msgid "%{minutes}m %{seconds}s"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:205
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:215
 #, elixir-autogen, elixir-format
 msgid "%{ms} ms"
 msgstr ""
@@ -12433,7 +12433,7 @@ msgstr ""
 msgid "%{retained} kept by a restore that found the library path occupied, %{orphaned} with no record behind them."
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:206
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:216
 #, elixir-autogen, elixir-format
 msgid "%{seconds} s"
 msgstr ""
@@ -13419,7 +13419,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_custom_formats_live/components.ex:39
 #: lib/mydia_web/live/admin_indexers_live/cardigann_engine_components.ex:281
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:197
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:207
 #: lib/mydia_web/status_labels.ex:182
 #, elixir-autogen, elixir-format
 msgid "Built-in"
@@ -15611,7 +15611,7 @@ msgstr ""
 msgid "In priority order"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:76
+#: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:104
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:76
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:69
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:299
@@ -16490,7 +16490,7 @@ msgstr ""
 msgid "No extra memory"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:164
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:174
 #, elixir-autogen, elixir-format
 msgid "No failures in the last 14 days."
 msgstr ""
@@ -17474,7 +17474,7 @@ msgstr ""
 msgid "Recent Activity"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:162
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:172
 #, elixir-autogen, elixir-format
 msgid "Recent failures: %{name}"
 msgstr ""
@@ -19966,8 +19966,8 @@ msgid "match_type must be 'all' or 'any'"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:84
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:201
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:204
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:211
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:214
 #, elixir-autogen, elixir-format
 msgid "n/a"
 msgstr ""
@@ -21403,7 +21403,7 @@ msgstr ""
 msgid "%{ok}/%{attempts}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:198
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:208
 #, elixir-autogen, elixir-format
 msgid "Prowlarr"
 msgstr ""
@@ -22423,7 +22423,7 @@ msgstr ""
 msgid "429s"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:146
+#: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:153
 #, elixir-autogen, elixir-format
 msgid "Cooling down until %{time}"
 msgstr ""
