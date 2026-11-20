@@ -407,6 +407,24 @@ void main() {
     Future<FilesMediaSource> open(ProviderContainer c) async {
       final media =
           c.read(mediaSourceProvider(filesLocalSource.id))! as FilesMediaSource;
+      // The probe does real file I/O, which a fixed number of microtask turns
+      // does not always outlast on a loaded CI runner: wait for its verdict.
+      if (media.connection == SourceConnectionStatus.connecting) {
+        final done = Completer<void>();
+        void listener() {
+          if (media.connection != SourceConnectionStatus.connecting &&
+              !done.isCompleted) {
+            done.complete();
+          }
+        }
+
+        media.statusListenable.addListener(listener);
+        try {
+          await done.future.timeout(const Duration(seconds: 10));
+        } finally {
+          media.statusListenable.removeListener(listener);
+        }
+      }
       await _settle();
       return media;
     }
