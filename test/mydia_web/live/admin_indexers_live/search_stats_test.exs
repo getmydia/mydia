@@ -222,6 +222,43 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     refute has_element?(view, "#indexer-cooldown-#{quiet.id}")
   end
 
+  test "the badge goes away once the cooldown ends", %{conn: conn, busy: busy} do
+    Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+    assert has_element?(view, "#indexer-cooldown-#{busy.id}")
+
+    Mydia.Indexers.RateLimiter.expire_cooldown(busy.id)
+    # What the page's timer sends when the earliest cooldown ends.
+    send(view.pid, :search_stats_cooldown_ended)
+
+    refute has_element?(view, "#indexer-cooldown-#{busy.id}")
+  end
+
+  test "a cooldown deadline already past renders no badge" do
+    past = DateTime.add(DateTime.utc_now(), -60, :second)
+    display = Mydia.TimeDisplay.resolve(nil, "Etc/UTC", "en")
+
+    html =
+      render_component(&MydiaWeb.AdminIndexersLive.SearchStatsComponents.cooldown_badge/1,
+        indexer_id: "past",
+        until: past,
+        display: display
+      )
+
+    refute html =~ "indexer-cooldown-past"
+
+    future = DateTime.add(DateTime.utc_now(), 60, :second)
+
+    html =
+      render_component(&MydiaWeb.AdminIndexersLive.SearchStatsComponents.cooldown_badge/1,
+        indexer_id: "future",
+        until: future,
+        display: display
+      )
+
+    assert html =~ "indexer-cooldown-future"
+  end
+
   test "a library indexer cooling down shows the badge too", %{conn: conn} do
     original = Application.get_env(:mydia, :features, [])
     Application.put_env(:mydia, :features, Keyword.put(original, :cardigann_enabled, true))

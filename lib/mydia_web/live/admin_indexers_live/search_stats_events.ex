@@ -5,7 +5,9 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
   `CardigannEngineEvents`).
 
   Stats load on a window change and through `refresh/1`, which the page calls
-  whenever it reloads its library indexers (mount, Test, save, toggle).
+  whenever it reloads its library indexers (mount, Test, save, toggle). The
+  cooldowns are also reread when the earliest shown one ends, so its badge
+  goes away on time.
   """
 
   use Gettext, backend: MydiaWeb.Gettext
@@ -25,6 +27,7 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
       cooldowns: Map.get(socket.assigns, :cooldowns, %{})
     )
     |> attach_hook(:search_stats_events, :handle_event, &handle_event/3)
+    |> attach_hook(:search_stats_cooldowns, :handle_info, &handle_info/2)
   end
 
   @doc """
@@ -33,10 +36,30 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
   """
   @spec refresh(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def refresh(socket) do
-    assign(socket,
-      search_stats: SearchStats.summary(window(socket)),
-      cooldowns: cooldowns(socket)
-    )
+    socket
+    |> assign(search_stats: SearchStats.summary(window(socket)))
+    |> refresh_cooldowns()
+  end
+
+  # Rereads the cooldowns and, while any runs, wakes when the earliest ends so
+  # its badge goes away on time.
+  defp refresh_cooldowns(socket) do
+    cooldowns = cooldowns(socket)
+    if ref = socket.assigns[:cooldown_timer], do: Process.cancel_timer(ref)
+
+    assign(socket, cooldowns: cooldowns, cooldown_timer: schedule_expiry(socket, cooldowns))
+  end
+
+  defp schedule_expiry(socket, cooldowns) when map_size(cooldowns) > 0 do
+    if connected?(socket), do: send_at_earliest(cooldowns)
+  end
+
+  defp schedule_expiry(_socket, _cooldowns), do: nil
+
+  defp send_at_earliest(cooldowns) do
+    earliest = cooldowns |> Map.values() |> Enum.min(DateTime)
+    ms = max(DateTime.diff(earliest, DateTime.utc_now(), :millisecond), 0) + 100
+    Process.send_after(self(), :search_stats_cooldown_ended, ms)
   end
 
   defp cooldowns(socket) do
@@ -45,6 +68,11 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
         into: %{},
         do: {id, until}
   end
+
+  defp handle_info(:search_stats_cooldown_ended, socket),
+    do: {:halt, socket |> assign(cooldown_timer: nil) |> refresh_cooldowns()}
+
+  defp handle_info(_message, socket), do: {:cont, socket}
 
   defp all_indexers(socket),
     do: Map.get(socket.assigns, :indexers, []) ++ Map.get(socket.assigns, :library_indexers, [])
