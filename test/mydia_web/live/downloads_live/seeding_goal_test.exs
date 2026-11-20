@@ -197,4 +197,37 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
 
     assert has_element?(view, "#download-upload-#{downloading.id}", "3.0 KB/s")
   end
+
+  test "shows the uploaded amount on seeding and downloading rows", %{conn: conn, client: client} do
+    seeding =
+      download!(client, @unmet_hash,
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+    downloading = download!(client, @guarded_hash, [])
+
+    ListAdapter.put([
+      %{status(@unmet_hash, :seeding, 0.42, nil) | uploaded: 2048},
+      %{status(@guarded_hash, :downloading, 0.1, nil) | progress: 40.0, uploaded: 2048}
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
+    assert has_element?(view, "#download-uploaded-#{seeding.id}", "2.0 KB")
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    assert has_element?(view, "#download-uploaded-#{downloading.id}", "2.0 KB")
+  end
+
+  test "omits the uploaded amount for a row not in the client", %{conn: conn, client: client} do
+    gone =
+      download!(client, @stopped_hash,
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+    ListAdapter.put([])
+    {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
+
+    assert has_element?(view, "#download-upload-#{gone.id}")
+    refute has_element?(view, "#download-uploaded-#{gone.id}")
+  end
 end
