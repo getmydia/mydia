@@ -229,7 +229,13 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInFormComponents do
 
       <.seeding_fields form={@form} sources={@sources} />
 
-      <details class="collapse collapse-arrow bg-base-200 border border-base-300">
+      <%!-- The server never renders `open`, so without the ignore every
+           keypress's re-render folded the section shut (issue #1436). --%>
+      <details
+        id="built-in-advanced"
+        class="collapse collapse-arrow bg-base-200 border border-base-300"
+        phx-mounted={JS.ignore_attributes(["open"])}
+      >
         <summary class="collapse-title text-sm font-medium">{gettext("Advanced")}</summary>
         <div class="collapse-content space-y-4">
           <.text_field

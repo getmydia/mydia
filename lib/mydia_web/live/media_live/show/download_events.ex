@@ -61,13 +61,15 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
      |> assign(:download_to_cancel, nil)}
   end
 
-  def cancel_download(_params, socket) do
+  def cancel_download(params, socket) do
+    delete_files = params["delete_files"] == "true"
+
     # download_to_cancel may be the enriched row shown in the confirm modal.
     # Removal.request/3 matches %Download{}, so reload the schema row.
     with_download(socket, socket.assigns.download_to_cancel.id, fn download ->
       # The client call runs in Mydia.Jobs.RemoveDownload. A client deleting data
       # can take many seconds to answer, and this page froze for all of them.
-      case Downloads.request_removal(download, "cancel", delete_files: false) do
+      case Downloads.request_removal(download, "cancel", delete_files: delete_files) do
         {:ok, _pending} ->
           {:noreply,
            socket

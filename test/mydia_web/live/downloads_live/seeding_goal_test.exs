@@ -129,19 +129,19 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     refute has_element?(view, "#download-seeding-#{plain.id}")
     assert has_element?(view, "#download-seeding-#{stopped.id}", "0.10 / 1.0 · 2d / 3d")
 
-    # In flight and under the goal: the cancel confirm names the tracker, the
+    # In flight and under the goal: the cancel dialog names the tracker, the
     # goal and the standing, and warns. Removal stays possible.
-    assert has_element?(
-             view,
-             "#row-cancel-#{guarded.id}[data-confirm*='Velvet Lantern requires a ratio of 1.0 or 3d of seeding']"
-           )
+    view |> element("#row-cancel-#{guarded.id}") |> render_click()
 
     assert has_element?(
              view,
-             "#row-cancel-#{guarded.id}[data-confirm*='at a ratio of 0.42 after 1d of seeding']"
+             "#remove-confirm-warning",
+             "Velvet Lantern requires a ratio of 1.0 or 3d of seeding"
            )
 
-    assert has_element?(view, "#row-cancel-#{guarded.id}[data-confirm*='hit-and-run']")
+    assert has_element?(view, "#remove-confirm-warning", "at a ratio of 0.42 after 1d of seeding")
+    assert has_element?(view, "#remove-confirm-warning", "hit-and-run")
+    view |> element("#remove-confirm-cancel") |> render_click()
 
     # Goal met, or no goal at all: the remove dialog has no warning.
     for download <- [met, plain] do
@@ -157,6 +157,7 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     refute has_element?(view, "#remove-confirm-modal")
 
     view |> element("#row-cancel-#{guarded.id}") |> render_click()
+    view |> element("#remove-confirm-form") |> render_submit(%{"delete_files" => "true"})
     assert Mydia.Downloads.get_download!(guarded.id).removal_requested_at
   end
 

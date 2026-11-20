@@ -127,6 +127,68 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirmTest do
     end
   end
 
+  # Issue #1436: Cancel used a browser confirm and always kept the partial
+  # files, which blocked a later grab of the same release.
+  describe "an in-flight download's cancel button" do
+    defp in_flight_download!(client) do
+      item = media_item_fixture(%{title: "Fictional Tin Meadow"})
+
+      Adapter.put([
+        %DownloadStatus{
+          id: @hash,
+          name: "Fictional Tin Meadow",
+          state: :downloading,
+          progress: 40.0
+        }
+      ])
+
+      download_fixture(%{
+        media_item_id: item.id,
+        title: "Fictional Tin Meadow",
+        download_client: client.name,
+        download_client_id: @hash
+      })
+    end
+
+    test "asks first, deleting the partial files by default", %{conn: conn, client: client} do
+      download = in_flight_download!(client)
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      refute has_element?(view, "#row-cancel-#{download.id}[data-confirm]")
+      view |> element("#row-cancel-#{download.id}") |> render_click()
+
+      assert has_element?(view, "#remove-confirm-modal[open]", "Fictional Tin Meadow")
+      assert has_element?(view, "#remove-confirm-modal", "Cancel download")
+      assert has_element?(view, "#remove-confirm-delete-files[checked]")
+      assert has_element?(view, "#remove-confirm-cancel", "Keep downloading")
+      refute Mydia.Downloads.get_download!(download.id).removal_requested_at
+
+      view |> element("#remove-confirm-form") |> render_submit(%{"delete_files" => "true"})
+
+      refute has_element?(view, "#remove-confirm-modal")
+      removing = Mydia.Downloads.get_download!(download.id)
+      assert removing.removal_requested_at
+      assert removing.removal_kind == "cancel"
+      assert removing.removal_delete_files
+    end
+
+    test "can keep the partial files", %{conn: conn, client: client} do
+      download = in_flight_download!(client)
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      view |> element("#row-cancel-#{download.id}") |> render_click()
+      view |> element("#remove-confirm-form") |> render_change(%{"delete_files" => "false"})
+
+      assert has_element?(view, "#remove-confirm-submit", "Cancel download")
+
+      view |> element("#remove-confirm-form") |> render_submit(%{"delete_files" => "false"})
+
+      removing = Mydia.Downloads.get_download!(download.id)
+      assert removing.removal_kind == "cancel"
+      refute removing.removal_delete_files
+    end
+  end
+
   describe "a client torrent awaiting a match in Issues" do
     setup %{client: client} do
       torrent = %ExternalTorrent{
