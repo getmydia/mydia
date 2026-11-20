@@ -509,6 +509,28 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       assert has_element?(view, "#client-category-#{none.id}", "No category")
     end
 
+    test "saving a legacy client migrates it, so a blanked field means no category", %{
+      conn: conn
+    } do
+      legacy = download_client_fixture(%{"category" => "all"})
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+      view
+      |> element(~s{button[phx-click="edit_download_client"][phx-value-id="#{legacy.id}"]})
+      |> render_click()
+
+      view
+      |> form("#download-client-form", %{
+        "download_client_config" => %{"categories" => %{"tv" => ""}}
+      })
+      |> render_submit()
+
+      saved = Settings.get_download_client_config!(legacy.id)
+      assert saved.category == nil
+      assert saved.categories == %{"movie" => "all", "music" => "all"}
+      assert Mydia.Downloads.Queue.resolve_category(saved, "tv", []) == nil
+    end
+
     test "legacy single-category clients prefill all three content-type inputs", %{conn: conn} do
       {:ok, legacy_client} =
         Settings.create_download_client_config(%{
