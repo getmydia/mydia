@@ -17,24 +17,24 @@ msgstr ""
 "cnr/>\n"
 "Plural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;\n"
-"PO-Revision-Date: 2026-11-17 19:09+0000\n"
+"PO-Revision-Date: 2026-11-17 20:59+0000\n"
 "X-Generator: Weblate 2026.12.dev0\n"
 
 ## From Ecto.Changeset.cast/4
 msgid "can't be blank"
-msgstr "Ne smije biti prazno"
+msgstr "ne smije biti prazno"
 
 ## From Ecto.Changeset.unique_constraint/3
 msgid "has already been taken"
-msgstr "Već je zauzeto"
+msgstr "već je zauzeto"
 
 ## From Ecto.Changeset.put_change/3
 msgid "is invalid"
-msgstr "Nevažeć"
+msgstr "nevažeć"
 
 ## From Ecto.Changeset.validate_acceptance/3
 msgid "must be accepted"
-msgstr "Mora biti prihvaćeno"
+msgstr "mora biti prihvaćeno"
 
 ## From Ecto.Changeset.validate_format/3
 msgid "has invalid format"
@@ -50,14 +50,14 @@ msgstr "je rezervisano"
 
 ## From Ecto.Changeset.validate_confirmation/3
 msgid "does not match confirmation"
-msgstr "Ne podudara se sa potvrdom"
+msgstr "me podudara se sa potvrdom"
 
 ## From Ecto.Changeset.no_assoc_constraint/3
 msgid "is still associated with this entry"
 msgstr "je još uvijek povezano sa ovim unosom"
 
 msgid "are still associated with this entry"
-msgstr "su još uvijek povezano sa ovim unosom"
+msgstr "su još uvijek povezani sa ovim unosom"
 
 ## From Ecto.Changeset.validate_length/3
 msgid "should have %{count} item(s)"
@@ -122,10 +122,10 @@ msgid "must be greater than %{number}"
 msgstr "mora biti veće od %{number}"
 
 msgid "must be less than or equal to %{number}"
-msgstr "mora biti manje ili jednako %{number}"
+msgstr "mora biti manje ili jednako od %{number}"
 
 msgid "must be greater than or equal to %{number}"
-msgstr "mora biti veće ili jednako %{number}"
+msgstr "mora biti veće ili jednako od %{number}"
 
 msgid "must be equal to %{number}"
-msgstr "mora biti jednako %{number}"
+msgstr "mora biti jednako sa %{number}"

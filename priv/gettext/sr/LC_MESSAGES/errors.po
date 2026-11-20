@@ -12,117 +12,120 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: sr\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Last-Translator: Automatically generated\n"
-"Language-Team: none\n"
-"Plural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
-"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;\n"
+"Last-Translator: Tony <t00n1x@users.noreply.hosted.weblate.org>\n"
+"Language-Team: Serbian <https://hosted.weblate.org/projects/mydia/errors/sr/>"
+"\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"PO-Revision-Date: 2026-11-17 20:59+0000\n"
+"X-Generator: Weblate 2026.12.dev0\n"
 
 ## From Ecto.Changeset.cast/4
 msgid "can't be blank"
-msgstr ""
+msgstr "не сме бити празно"
 
 ## From Ecto.Changeset.unique_constraint/3
 msgid "has already been taken"
-msgstr ""
+msgstr "веђ је заузето"
 
 ## From Ecto.Changeset.put_change/3
 msgid "is invalid"
-msgstr ""
+msgstr "неважеђ"
 
 ## From Ecto.Changeset.validate_acceptance/3
 msgid "must be accepted"
-msgstr ""
+msgstr "мора бити прихвађено"
 
 ## From Ecto.Changeset.validate_format/3
 msgid "has invalid format"
-msgstr ""
+msgstr "има неважеђи формат"
 
 ## From Ecto.Changeset.validate_subset/3
 msgid "has an invalid entry"
-msgstr ""
+msgstr "има неважеђи унос"
 
 ## From Ecto.Changeset.validate_exclusion/3
 msgid "is reserved"
-msgstr ""
+msgstr "је резервисано"
 
 ## From Ecto.Changeset.validate_confirmation/3
 msgid "does not match confirmation"
-msgstr ""
+msgstr "не подудара се са потврдом"
 
 ## From Ecto.Changeset.no_assoc_constraint/3
 msgid "is still associated with this entry"
-msgstr ""
+msgstr "је још увек повезано са овим уносом"
 
 msgid "are still associated with this entry"
-msgstr ""
+msgstr "су још увек повезани са овим уносом"
 
 ## From Ecto.Changeset.validate_length/3
 msgid "should have %{count} item(s)"
 msgid_plural "should have %{count} item(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има %{count} ставку"
+msgstr[1] "треба да има %{count} ставке"
+msgstr[2] "треба да има %{count} ставки"
 
 msgid "should be %{count} character(s)"
 msgid_plural "should be %{count} character(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има %{count} знак"
+msgstr[1] "треба да има %{count} знака"
+msgstr[2] "треба да има %{count} знакова"
 
 msgid "should be %{count} byte(s)"
 msgid_plural "should be %{count} byte(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да буде %{count} бајт"
+msgstr[1] "треба да буде %{count} бајта"
+msgstr[2] "треба да буде %{count} бајтова"
 
 msgid "should have at least %{count} item(s)"
 msgid_plural "should have at least %{count} item(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има најманје %{count} ставку"
+msgstr[1] "треба да има најманје %{count} ставке"
+msgstr[2] "треба да има најманје %{count} ставки"
 
 msgid "should be at least %{count} character(s)"
 msgid_plural "should be at least %{count} character(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има најманје %{count} знак"
+msgstr[1] "треба да има најманје %{count} знака"
+msgstr[2] "треба да има најманје %{count} знакова"
 
 msgid "should be at least %{count} byte(s)"
 msgid_plural "should be at least %{count} byte(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има најманје %{count} бајт"
+msgstr[1] "треба да има најманје %{count} бајта"
+msgstr[2] "треба да има најманје %{count} бајтова"
 
 msgid "should have at most %{count} item(s)"
 msgid_plural "should have at most %{count} item(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има највише %{count} ставку"
+msgstr[1] "треба да има највише %{count} ставке"
+msgstr[2] "треба да има највише %{count} ставки"
 
 msgid "should be at most %{count} character(s)"
 msgid_plural "should be at most %{count} character(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има највише %{count} знак"
+msgstr[1] "треба да има највише %{count} знака"
+msgstr[2] "треба да има највише %{count} знакова"
 
 msgid "should be at most %{count} byte(s)"
 msgid_plural "should be at most %{count} byte(s)"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "треба да има највише %{count} бајт"
+msgstr[1] "треба да има највише %{count} бајта"
+msgstr[2] "треба да има највише %{count} бајтова"
 
 ## From Ecto.Changeset.validate_number/3
 msgid "must be less than %{number}"
-msgstr ""
+msgstr "мора бити маље од %{number}"
 
 msgid "must be greater than %{number}"
-msgstr ""
+msgstr "мора бити веђе од %{number}"
 
 msgid "must be less than or equal to %{number}"
-msgstr ""
+msgstr "мора бити маље или једнако од %{number}"
 
 msgid "must be greater than or equal to %{number}"
-msgstr ""
+msgstr "мора бити веђе или једнако од %{number}"
 
 msgid "must be equal to %{number}"
-msgstr ""
+msgstr "мора бити једнако са %{number}"
