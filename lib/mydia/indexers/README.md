@@ -289,6 +289,16 @@ and an `error_type` on each `indexer_errors` entry, and
 `Indexers.deferred_by_rate_limits?/1` tells a search that found nothing
 because every indexer was rate-limited from one that genuinely found nothing.
 
+The hourly Cardigann health sweep (`CardigannHealthCheck.check_all_enabled/0`)
+runs at minute 45, away from the hourly movie search at minute 0. It skips a
+definition that is cooling down and leaves its stored status alone, and it
+records a definition healthy without a request when a real search of it
+succeeded in the last hour. A probe it does send takes a per-minute slot like
+a search. A 429 from any probe starts or extends the cooldown and marks the
+definition degraded without counting a failure: a tracker throttling Mydia is
+not broken. The Test button (`test_connection/2`) always probes, cooldown or
+not, so a success there ends a cooldown early.
+
 State lives in ETS in `RateLimiter` and nothing is persisted: a restart
 forgets every cooldown and the ladder starts over. The WASM Cardigann engine
 cannot put `Retry-After` on the guest's error, so the host HTTP function notes

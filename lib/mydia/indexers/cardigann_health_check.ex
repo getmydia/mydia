@@ -16,6 +16,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   import Ecto.Query, only: [from: 2]
 
+  require Logger
+
   alias Mydia.Indexers
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Adapter.Registry
@@ -30,12 +32,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
   alias Mydia.Indexers.CardigannSearchEngine
+  alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.SearchStats
   alias Mydia.Indexers.SearchStats.Network
   alias Mydia.Repo
 
   @type test_result :: %{
           optional(:network_ms) => non_neg_integer() | nil,
+          optional(:rate_limited) => true,
           success: boolean(),
           status: String.t(),
           message: String.t(),
@@ -50,6 +54,10 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   @tv_probe_query "Breaking Bad"
   @generic_probe_query "ubuntu"
 
+  # The sweep runs hourly, so a real search inside the last hour stands in for
+  # this round's probe.
+  @recent_success_seconds 3_600
+
   @typedoc """
   Outcome of a real search against one base URL.
 
@@ -59,10 +67,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   `execute_search/4` fails over past `base_url` to later candidates on a
   retryable failure (a dead or wrong mirror answering 404, say), so the
   candidate that answered is not always the one the probe was asked to try.
+
+  `{:rate_limited, error}` is the tracker answering HTTP 429; the error's
+  `details.retry_after` carries its `Retry-After` in milliseconds, or nil.
   """
   @type probe_outcome ::
           {:ok, non_neg_integer(), String.t()}
           | {:cloudflare, String.t()}
+          | {:rate_limited, Error.t()}
           | {:error, String.t()}
 
   @doc """
@@ -150,9 +162,16 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   This function is designed to be called periodically by a background job
   to monitor the health of all enabled indexers.
 
+  The sweep stays out of a tracker's way: a definition cooling down after an
+  HTTP 429 is skipped and keeps its stored status, one whose real search
+  succeeded in the last hour is recorded healthy without a request, and a
+  probe takes one of the indexer's per-minute search slots like a search.
+  `test_connection/2` follows none of these rules.
+
   ## Returns
 
-  - `{:ok, results}` - Map of definition_id => test_result
+  - `{:ok, results}` - Map of definition_id => test_result. Skipped definitions
+    are left out.
   """
   @spec check_all_enabled() :: {:ok, map()}
   def check_all_enabled do
@@ -165,12 +184,13 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       enabled_definitions
       |> Task.async_stream(
         fn definition ->
-          {definition.id, execute_health_check(definition)}
+          {definition.id, sweep(definition)}
         end,
         timeout: :infinity,
         max_concurrency: 5
       )
       |> Enum.reduce(%{}, fn
+        {:ok, {_id, :skipped}}, acc -> acc
         {:ok, {id, {:ok, result}}}, acc -> Map.put(acc, id, result)
         {:ok, {id, {:error, reason}}}, acc -> Map.put(acc, id, %{error: reason})
         _, acc -> acc
@@ -178,6 +198,65 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
     {:ok, results}
   end
+
+  defp sweep(definition) do
+    case sweep_action(definition) do
+      :probe -> probe_in_slot(definition)
+      {:skip_cooling, until} -> skip(definition, "cooling down until #{clock(until)}")
+      :trust_recent_success -> trust_recent_success(definition)
+    end
+  end
+
+  @spec sweep_action(CardigannDefinition.t()) ::
+          :probe | {:skip_cooling, DateTime.t()} | :trust_recent_success
+  defp sweep_action(definition) do
+    cond do
+      until = RateLimiter.cooldown_until(definition.id) -> {:skip_cooling, until}
+      recent_success?(definition.id) -> :trust_recent_success
+      true -> :probe
+    end
+  end
+
+  defp recent_success?(indexer_id) do
+    case RateLimiter.last_success_at(indexer_id) do
+      nil -> false
+      at -> DateTime.diff(DateTime.utc_now(), at) < @recent_success_seconds
+    end
+  end
+
+  defp probe_in_slot(definition) do
+    limit = Indexers.cardigann_config(definition).rate_limit
+
+    case RateLimiter.take_search_slot(definition.id, limit) do
+      :ok -> execute_health_check(definition)
+      {:error, :limited, _count} -> skip(definition, "Mydia's per-minute limit reached")
+    end
+  end
+
+  defp skip(definition, reason) do
+    Logger.info("[CardigannHealthCheck] #{definition.name} skipped: #{reason}")
+    :skipped
+  end
+
+  # A real search that worked is stronger evidence than a probe, so the sweep
+  # records it instead of sending one more request.
+  defp trust_recent_success(definition) do
+    at = RateLimiter.last_success_at(definition.id)
+
+    write_health(definition, %{health_status: "healthy", last_health_check_at: DateTime.utc_now()})
+
+    {:ok,
+     %{
+       success: true,
+       status: "healthy",
+       message: "Healthy: a search succeeded at #{clock(at)}",
+       response_time_ms: nil,
+       error: nil
+     }}
+  end
+
+  # Hours and minutes in UTC, like the other indexer logs.
+  defp clock(%DateTime{} = at), do: Calendar.strftime(at, "%H:%M")
 
   @doc """
   Probes each base URL candidate in order and returns the first that responds.
@@ -245,6 +324,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
          :ok <- ensure_usable(results, stats) do
       {:ok, length(results), winner}
     else
+      {:error, %Error{type: :rate_limited} = error} -> {:rate_limited, error}
       {:error, %Error{message: message}} -> classify_probe_error(message)
     end
   end
@@ -387,6 +467,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     network_ms = Network.take_ms()
     elapsed = System.monotonic_time(:millisecond) - start_time
 
+    if match?({:ok, _results}, outcome), do: RateLimiter.record_success(definition.id)
+
     case outcome do
       {:error, %Error{type: :login_required}} ->
         {:ok, needs_login_result()}
@@ -418,6 +500,9 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     }
   end
 
+  defp prowlarr_result(definition, {:error, %Error{type: :rate_limited} = error}, elapsed),
+    do: rate_limited_result(definition, error, elapsed)
+
   defp prowlarr_result(definition, {:error, %Error{message: message}}, elapsed) do
     case classify_probe_error(message) do
       {:cloudflare, message} ->
@@ -438,6 +523,22 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           error: message
         }
     end
+  end
+
+  # A tracker throttling Mydia is not broken, so the 429 cools the indexer down
+  # (the same cooldown a search sees) without counting as a failure; see the
+  # rate_limited clause of update_health_status/2.
+  defp rate_limited_result(definition, %Error{} = error, elapsed) do
+    until = RateLimiter.record_rate_limited(definition.id, (error.details || %{})[:retry_after])
+
+    %{
+      success: false,
+      rate_limited: true,
+      status: "degraded",
+      message: "Tracker answered HTTP 429; paused until #{clock(until)}",
+      response_time_ms: elapsed,
+      error: error.message
+    }
   end
 
   # Nothing is persisted: needs_login is cleared only by a real login, so
@@ -517,6 +618,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     outcome = probe_search(parsed, user_config, active_link)
     elapsed = System.monotonic_time(:millisecond) - start_time
 
+    if match?({:ok, _count, _served_by}, outcome), do: RateLimiter.record_success(definition.id)
+
     case outcome do
       {:ok, 0, served_by} ->
         store_link_state(
@@ -572,6 +675,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           response_time_ms: elapsed,
           error: message
         }
+
+      {:rate_limited, error} ->
+        # The tracker said nothing about this mirror's search beyond "not now",
+        # so it is not promoted.
+        store_link_state(definition, nil, link_status)
+        rate_limited_result(definition, error, elapsed)
 
       {:error, message} ->
         # The homepage answered but the search did not, so this candidate is not
@@ -697,24 +806,32 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   @doc false
   def update_health_status(definition, result) do
-    now = DateTime.utc_now()
+    write_health(definition, health_attrs(definition, result, DateTime.utc_now()))
+  end
 
-    attrs =
-      if result.success do
-        %{
-          health_status: result.status,
-          last_health_check_at: now,
-          last_successful_query_at: now,
-          consecutive_failures: 0
-        }
-      else
-        %{
-          health_status: result.status,
-          last_health_check_at: now,
-          consecutive_failures: (definition.consecutive_failures || 0) + 1
-        }
-      end
+  # A 429 leaves consecutive_failures alone: the tracker is throttling Mydia,
+  # not broken.
+  defp health_attrs(_definition, %{rate_limited: true} = result, now),
+    do: %{health_status: result.status, last_health_check_at: now}
 
+  defp health_attrs(_definition, %{success: true} = result, now) do
+    %{
+      health_status: result.status,
+      last_health_check_at: now,
+      last_successful_query_at: now,
+      consecutive_failures: 0
+    }
+  end
+
+  defp health_attrs(definition, result, now) do
+    %{
+      health_status: result.status,
+      last_health_check_at: now,
+      consecutive_failures: (definition.consecutive_failures || 0) + 1
+    }
+  end
+
+  defp write_health(definition, attrs) do
     changeset = CardigannDefinition.health_check_changeset(definition, attrs)
 
     # The probe takes seconds and works on a struct loaded before it started. A
