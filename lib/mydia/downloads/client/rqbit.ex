@@ -208,7 +208,7 @@ defmodule Mydia.Downloads.Client.Rqbit do
     guarded(config, fn ->
       req = HTTP.new_request(config)
       # Before the request: see `build_status/3`.
-      requested_at = DateTime.utc_now()
+      requested_at = request_clock()
 
       with {:ok, details} <- fetch_details(req, client_id),
            {:ok, stats} <- fetch_stats(req, client_id) do
@@ -221,7 +221,7 @@ defmodule Mydia.Downloads.Client.Rqbit do
   def list_torrents(config, opts \\ []) do
     guarded(config, fn ->
       req = HTTP.new_request(config)
-      requested_at = DateTime.utc_now()
+      requested_at = request_clock()
 
       case HTTP.get(req, "/torrents", params: %{with_stats: true}) do
         {:ok, %{status: status, body: %{"torrents" => torrents}}} when status in 200..299 ->
@@ -245,15 +245,21 @@ defmodule Mydia.Downloads.Client.Rqbit do
     |> apply_filters(opts)
   end
 
+  # When a status read was asked for: the wall clock to store, the monotonic
+  # clock to time it.
+  defp request_clock, do: {DateTime.utc_now(), System.monotonic_time(:millisecond)}
+
   # The time the upload counter was asked for, or nil when the answer took
-  # longer than `@max_ordered_read_ms` (the `:max_ordered_read_ms` option
-  # overrides it). `Mydia.Downloads.ObservedUpload` counts a lower counter as
+  # longer than `@max_ordered_read_ms` (the `:max_ordered_read_ms` option can
+  # only lower it). `Mydia.Downloads.ObservedUpload` counts a lower counter as
   # a reset only when asked for 300 seconds after the last one; a read that
   # finished within this bound cannot be older than one asked for that much
-  # later, whatever the request timeout is set to.
-  defp ordered_read_at(config, requested_at) do
-    bound = get_in(config, [:options, :max_ordered_read_ms]) || @max_ordered_read_ms
-    if DateTime.diff(DateTime.utc_now(), requested_at, :millisecond) <= bound, do: requested_at
+  # later, whatever the request timeout is set to. Timed on the monotonic
+  # clock, so a wall-clock change mid-request cannot pass a slow read.
+  defp ordered_read_at(config, {requested_at, started_ms}) do
+    override = get_in(config, [:options, :max_ordered_read_ms]) || @max_ordered_read_ms
+    bound = min(override, @max_ordered_read_ms)
+    if System.monotonic_time(:millisecond) - started_ms <= bound, do: requested_at
   end
 
   @impl true
