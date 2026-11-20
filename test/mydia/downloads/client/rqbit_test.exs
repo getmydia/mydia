@@ -388,6 +388,18 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert status.progress == 50.0
     end
 
+    test "marks the upload counter as session-only", %{bypass: bypass, config: config} do
+      stub_details(bypass)
+
+      stub_stats(
+        bypass,
+        stats(state: "live", finished: true, progress_bytes: 1000, total_bytes: 1000)
+      )
+
+      assert {:ok, status} = Rqbit.get_status(config, @hash)
+      assert status.uploaded_session_only? == true
+    end
+
     test "initializing maps to :checking", %{bypass: bypass, config: config} do
       stub_details(bypass)
       stub_stats(bypass, stats(state: "initializing", finished: false))

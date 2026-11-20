@@ -454,6 +454,10 @@ defmodule Mydia.Downloads.Client.Rqbit do
       size: total_bytes,
       eta: parse_eta(stats),
       ratio: ratio(stats["uploaded_bytes"], total_bytes),
+      # rqbit 9.0.1 counts `uploaded_bytes` only while the torrent is live: 0
+      # once paused, and from 0 again after a restart. Mydia keeps the total
+      # (`Mydia.Downloads.ObservedUpload`).
+      uploaded_session_only?: true,
       save_path: output_folder,
       files: resolve_torrent_files(output_folder, details["files"]),
       file_progress:

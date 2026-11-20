@@ -16,6 +16,7 @@ defmodule Mydia.Downloads.History do
   alias Mydia.Downloads.ClientStatusCache
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.ObservedUpload
   alias Mydia.Downloads.Seedbox
   alias Mydia.Downloads.StatusFilter
   alias Mydia.Downloads.Structs.{DownloadMetadata, EnrichedDownload}
@@ -710,6 +711,8 @@ defmodule Mydia.Downloads.History do
       size: torrent_status.size,
       downloaded: torrent_status.downloaded,
       uploaded: torrent_status.uploaded,
+      live_uploaded: torrent_status.uploaded,
+      uploaded_session_only?: Map.get(torrent_status, :uploaded_session_only?) == true,
       ratio: torrent_status.ratio,
       seeding_time: Map.get(torrent_status, :seeding_time),
       seeders: if(metadata, do: metadata.seeders, else: nil),
@@ -730,6 +733,7 @@ defmodule Mydia.Downloads.History do
       in_client?: true
     })
     |> struct!(EnrichedDownload.import_state(download))
+    |> ObservedUpload.overlay()
   end
 
   defp enrich_download_with_unknown_status(download) do
