@@ -40,6 +40,11 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :downloaded,
     :uploaded,
     :ratio,
+    # The client's own upload counter. Differs from `uploaded` when the client
+    # counts only its current session (`uploaded_session_only?`): `uploaded`
+    # and `ratio` are then Mydia's kept total (`Mydia.Downloads.ObservedUpload`).
+    :live_uploaded,
+    :uploaded_session_only?,
     # Seconds seeded, when the client counts it. See DownloadStatus.
     :seeding_time,
     :seeders,
@@ -155,6 +160,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           downloaded: integer(),
           uploaded: integer(),
           ratio: float(),
+          live_uploaded: integer() | nil,
+          uploaded_session_only?: boolean() | nil,
           seeding_time: non_neg_integer() | nil,
           seeders: integer() | nil,
           leechers: integer() | nil,
