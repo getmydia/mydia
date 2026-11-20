@@ -832,6 +832,30 @@ renders it is worth checking this way first: count the server renders for that
 test. Fixed by making `login/3` wait for its redirect and by moving the suite
 onto `visit_liveview/3`, which fails naming the page the browser is actually on.
 
+## Player (`Test / Player`)
+
+### A Hive test times out after 30 seconds, and only in CI
+
+`very_good test` runs the whole player suite in one isolate, so Hive's
+global state carries over from file to file. Hive keeps a table of boxes
+being opened, keyed by name and not by path, and any later `openBox` of
+that name waits on the pending entry. A `testWidgets` case that starts an
+`openBox` without overriding its provider starts it in the fake async zone.
+If an earlier file left Hive initialised on a real directory, the open waits
+for file IO that the fake zone never resumes, the entry never clears, and
+the next test to open that box hangs until its timeout. It passes locally,
+both alone and under `./dev player test`, because neither run has the earlier
+`Hive.init`.
+
+On 2026-11-20 that was `open_files_library_boxes_test.dart`, stuck on
+`playback_progress`, which the real `AppShell` opens through
+`sourceProgressFlushProvider` as soon as it mounts. It failed on master too.
+The fix is `noProgressFlushOverride` (`test/test_utils/no_downloads.dart`)
+in every test that mounts the real shell. To find which box is stuck, open
+each candidate name with `.timeout(const Duration(seconds: 3))` from the
+failing test and print the ones that time out. To see the run order, dispatch
+`ci-player.yml` on a throwaway branch.
+
 ## Getting the real output
 
 `gh run view --job <id> --log-failed` returns Postgres server log noise, where
