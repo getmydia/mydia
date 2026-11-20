@@ -1158,6 +1158,41 @@ defmodule Mydia.IndexersTest do
       assert id == other.id
     end
 
+    test "a cooldown or per-minute skip takes no daily query slot" do
+      name = "Daily Cap Tracker #{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Mydia.Settings.TrackerRuleConfigs.create(%{tracker: name, query_limit: 1})
+
+      config = gate_config(name: name, rate_limit: 1)
+
+      RateLimiter.record_rate_limited(config.id, nil)
+      assert {:error, %Error{details: %{source: :cooldown}}} = Indexers.search(config, "q")
+      RateLimiter.expire_cooldown(config.id)
+
+      assert {:ok, []} = Indexers.search(config, "q")
+      assert_received {:searched, _}
+
+      # Per-minute limit refuses before the daily cap is consulted.
+      assert {:error, %Error{details: %{source: :local_limit}}} = Indexers.search(config, "q")
+      refute_received {:searched, _}
+    end
+
+    test "the daily cap refuses once its slot is spent" do
+      name = "Daily Cap Tracker #{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Mydia.Settings.TrackerRuleConfigs.create(%{tracker: name, query_limit: 1})
+
+      config = gate_config(name: name)
+
+      assert {:ok, []} = Indexers.search(config, "q")
+
+      assert {:error, %Error{details: %{source: :daily_cap}}} = Indexers.search(config, "q")
+      assert_received {:searched, _}
+      refute_received {:searched, _}
+    end
+
     test "prowlarr is never gated" do
       bypass = Bypass.open()
 

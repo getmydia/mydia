@@ -25,9 +25,8 @@ defmodule Mydia.Indexers do
   require Logger
   alias Mydia.Indexers.Adapter
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Indexers.{ResultDedup, TrackerLimits, TrackerSightings}
+  alias Mydia.Indexers.{ResultDedup, SearchGate, TrackerLimits, TrackerSightings}
   alias Mydia.Indexers.SearchStats
-  alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Indexers.CardigannAuth
@@ -88,23 +87,25 @@ defmodule Mydia.Indexers do
 
   # Prowlarr runs its own backoff for the trackers behind it, so Mydia never
   # gates or cools it down (README, "Rate limits and cooldown").
-  # Its 429s are still labelled `:tracker`, without starting a cooldown.
+  # Its 429s are still labelled `:tracker`, without starting a cooldown. A
+  # tracker rule's daily search cap still applies to it by name.
   def search(%Settings.IndexerConfig{type: :prowlarr} = config, query, opts) do
     config
-    |> indexer_config_to_adapter_config()
-    |> search(query, opts)
-    |> tag_tracker_rate_limit()
+    |> TrackerLimits.guard_query(fn ->
+      config |> indexer_config_to_adapter_config() |> search(query, opts)
+    end)
+    |> SearchGate.tag_tracker_rate_limit()
   end
 
   def search(%Settings.IndexerConfig{} = config, query, opts) do
-    gated_search(config.id, config.name, config.rate_limit, fn ->
+    SearchGate.run(config, fn ->
       search(indexer_config_to_adapter_config(config), query, opts)
     end)
   end
 
-  def search(%{type: type, id: id, rate_limit: rate_limit} = config, query, opts)
+  def search(%{type: type, id: id, rate_limit: _} = config, query, opts)
       when is_atom(type) and type != :prowlarr and is_binary(id) do
-    gated_search(id, config[:name], rate_limit, fn ->
+    SearchGate.run(config, fn ->
       with {:ok, adapter} <- Adapter.Registry.get_adapter(type) do
         adapter.search(config, query, opts)
       end
@@ -116,98 +117,6 @@ defmodule Mydia.Indexers do
       adapter.search(config, query, opts)
     end
   end
-
-  # The gate in front of one indexer's search, keyed by its id (never its
-  # name): a cooldown after HTTP 429 sends nothing, then the per-minute slot,
-  # then the search, whose outcome clears or starts a cooldown. Every
-  # `:rate_limited` error leaving here carries `details.source`.
-  defp gated_search(id, name, rate_limit, search_fun) do
-    with :ok <- check_cooldown(id, name),
-         :ok <- take_search_slot(id, name, rate_limit) do
-      search_fun.() |> record_search_outcome(id, name)
-    end
-  end
-
-  defp check_cooldown(id, name) do
-    case RateLimiter.cooldown_until(id) do
-      nil ->
-        :ok
-
-      until ->
-        Logger.info("Skipping #{name}: cooling down after HTTP 429 until #{clock(until)}")
-
-        {:error,
-         Adapter.Error.rate_limited("Cooling down after HTTP 429 until #{clock(until)}", %{
-           source: :cooldown,
-           until: until
-         })}
-    end
-  end
-
-  defp take_search_slot(id, name, rate_limit) do
-    case RateLimiter.take_search_slot(id, rate_limit) do
-      :ok ->
-        :ok
-
-      {:error, :limited, _count} ->
-        reason = "Mydia's limit of #{rate_limit} searches/minute reached"
-        Logger.info("Skipping #{name}: #{reason}")
-
-        {:error,
-         Adapter.Error.rate_limited(reason, %{
-           source: :local_limit,
-           retry_after: :timer.minutes(1)
-         })}
-    end
-  end
-
-  defp record_search_outcome({:ok, _} = result, id, _name) do
-    RateLimiter.record_success(id)
-    result
-  end
-
-  defp record_search_outcome(
-         {:error, %Adapter.Error{type: :rate_limited, details: details} = error},
-         id,
-         name
-       ) do
-    details = details || %{}
-
-    if Map.has_key?(details, :source) do
-      {:error, error}
-    else
-      retry_after = Map.get(details, :retry_after)
-      until = RateLimiter.record_rate_limited(id, retry_after)
-
-      Logger.warning("#{name} answered HTTP 429; pausing it until #{clock(until)}",
-        retry_after_ms: retry_after
-      )
-
-      {:error,
-       %{
-         error
-         | message: "Tracker answered HTTP 429; paused until #{clock(until)}",
-           details: Map.merge(details, %{source: :tracker, until: until})
-       }}
-    end
-  end
-
-  defp record_search_outcome(result, _id, _name), do: result
-
-  defp tag_tracker_rate_limit(
-         {:error, %Adapter.Error{type: :rate_limited, details: details} = error}
-       ) do
-    details = details || %{}
-
-    if Map.has_key?(details, :source),
-      do: {:error, error},
-      else: {:error, %{error | details: Map.put(details, :source, :tracker)}}
-  end
-
-  defp tag_tracker_rate_limit(result), do: result
-
-  # Hours and minutes in UTC, like the other indexer logs.
-  defp clock(%DateTime{} = at), do: Calendar.strftime(at, "%H:%M")
 
   @doc """
   Searches all enabled indexers configured in the system.
@@ -415,21 +324,8 @@ defmodule Mydia.Indexers do
     end
   end
 
-  @doc """
-  True when a `search_all/2` result found nothing only because every indexer
-  searched was rate-limited (a 429, a cooldown, Mydia's per-minute limit or a
-  daily cap). Such a search says nothing about whether releases exist.
-  """
-  @spec deferred_by_rate_limits?(map()) :: boolean()
-  def deferred_by_rate_limits?(%{
-        results: [],
-        indexers_searched: searched,
-        indexer_errors: errors
-      })
-      when searched > 0 and length(errors) == searched,
-      do: Enum.all?(errors, &(&1.error_type == :rate_limited))
-
-  def deferred_by_rate_limits?(_result), do: false
+  @doc "See `Mydia.Indexers.SearchGate.deferred_by_rate_limits?/1`."
+  defdelegate deferred_by_rate_limits?(result), to: SearchGate
 
   defp exit_error_type(:timeout), do: :deadline
   defp exit_error_type(_reason), do: :crashed
@@ -756,20 +652,15 @@ defmodule Mydia.Indexers do
     SearchStats.Network.reset()
 
     {error, results, error_message} =
-      case TrackerLimits.guard_query(config, fn -> search(config, query, opts) end) do
+      case search(config, query, opts) do
         {:ok, results} ->
-          # Per-indexer-config NZB min-post-age filter (#121). Applied here
-          # rather than post-merge because `SearchResult.indexer` is the
-          # *upstream* label for relay-style indexers (Prowlarr, Jackett) —
-          # one Mydia config like "Prowlarr" can fan out to many upstream
-          # indexers ("DOGnzb", "altHUB", etc.) so a post-merge lookup
-          # keyed by `result.indexer` would never match the configured
-          # name. Doing it here, with the originating config in scope,
-          # sidesteps that gap entirely.
+          # NZB min-post-age filter (#121), here rather than post-merge: a
+          # relay (Prowlarr, Jackett) labels `SearchResult.indexer` with the
+          # upstream name, which never matches this config's name.
           {nil, reject_too_fresh_nzbs_for_config(results, config), nil}
 
         {:error, error} ->
-          unless deliberate_skip?(error) do
+          unless SearchGate.deliberate_skip?(error) do
             Logger.warning("Indexer search failed for #{config.name}: #{inspect(error)}")
           end
 
@@ -781,7 +672,7 @@ defmodule Mydia.Indexers do
 
     SearchStats.Telemetry.emit(config,
       kind: :search,
-      outcome: if(error, do: error_outcome(error), else: :ok),
+      outcome: if(error, do: SearchGate.outcome(error), else: :ok),
       duration_ms: duration,
       result_count: length(results),
       network_ms: SearchStats.Network.take_ms(),
@@ -853,27 +744,7 @@ defmodule Mydia.Indexers do
     end
   end
 
-  # Mydia chose not to search (cooldown, its own per-minute limit, a daily
-  # cap); the gate or TrackerLimits already logged why at info level.
-  defp deliberate_skip?(%Adapter.Error{type: :rate_limited, details: %{source: source}}),
-    do: source in [:cooldown, :local_limit, :daily_cap]
-
-  defp deliberate_skip?(_error), do: false
-
   defp format_indexer_error(%Adapter.Error{message: message}), do: message
-
-  # A deliberate skip sent nothing, so it is recorded apart from a tracker 429
-  # and kept out of attempts and success (SearchStats.Summary).
-  defp error_outcome(%Adapter.Error{type: :rate_limited, details: %{source: :cooldown}}),
-    do: :skipped_cooldown
-
-  defp error_outcome(%Adapter.Error{type: :rate_limited, details: %{source: :local_limit}}),
-    do: :skipped_local_limit
-
-  defp error_outcome(%Adapter.Error{type: :rate_limited, details: %{source: :daily_cap}}),
-    do: :skipped_daily_cap
-
-  defp error_outcome(%Adapter.Error{type: type}), do: type
 
   defp filter_by_seeders(results, min_seeders) when min_seeders > 0 do
     # NZB results have nil seeders; the min-seeders setting is torrent-only.
