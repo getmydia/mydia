@@ -2457,11 +2457,8 @@ defmodule Mydia.Jobs.TVShowSearch do
 
               {new_count, %{results_found: length(results), downloads_initiated: 0}}
 
-            :no_results ->
-              {count, ep_stats} = search_individual_episodes_with_stats(episodes, new_count, args)
-              {count, %{ep_stats | results_found: ep_stats.results_found + length(results)}}
-
-            {:error, _reason} ->
+            # :no_results or any other {:error, _}
+            _no_grab ->
               {count, ep_stats} = search_individual_episodes_with_stats(episodes, new_count, args)
               {count, %{ep_stats | results_found: ep_stats.results_found + length(results)}}
           end
