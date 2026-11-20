@@ -491,6 +491,12 @@ over the player, and leaving fullscreen there keeps it hidden. The viewer's
 collapsed choice is stored under `MydiaSidebarViewerCollapsed`, apart from
 the split view's autosave, which also records a forced collapse.
 
+That collapse and its restore are not animated on macOS. The player resizes
+the window to the video as it opens and back as it closes, and a window
+resize landing during an animated collapse is applied to the panes twice:
+both end up taller than the window, cut off at the top until the next manual
+resize.
+
 The `ShellRoute` sets `notifyRootObserver: false`. Without it go_router
 forwards every shell page to `PageCoverObserver`, which then reports Home
 itself as covered and collapses the sidebar at launch.
