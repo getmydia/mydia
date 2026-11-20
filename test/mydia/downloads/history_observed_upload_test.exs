@@ -8,32 +8,8 @@ defmodule Mydia.Downloads.HistoryObservedUploadTest do
 
   alias Mydia.Downloads
   alias Mydia.Downloads.Client.Registry
+  alias Mydia.Downloads.ListStatusAdapter, as: ListAdapter
   alias Mydia.Downloads.Structs.DownloadStatus
-
-  defmodule ListAdapter do
-    @behaviour Mydia.Downloads.Client
-
-    def put(statuses), do: :persistent_term.put({__MODULE__, :statuses}, statuses)
-
-    @impl true
-    def list_torrents(_config, _opts),
-      do: {:ok, :persistent_term.get({__MODULE__, :statuses}, [])}
-
-    @impl true
-    def supported_protocols, do: [:torrent]
-    @impl true
-    def test_connection(_config), do: {:error, :not_implemented}
-    @impl true
-    def add_torrent(_config, _torrent, _opts), do: {:error, :not_implemented}
-    @impl true
-    def get_status(_config, _client_id), do: {:error, :not_implemented}
-    @impl true
-    def pause_torrent(_config, _client_id), do: :ok
-    @impl true
-    def resume_torrent(_config, _client_id), do: :ok
-    @impl true
-    def remove_torrent(_config, _client_id, _opts), do: :ok
-  end
 
   @hash "6666666666666666666666666666666666666666"
 
@@ -42,7 +18,7 @@ defmodule Mydia.Downloads.HistoryObservedUploadTest do
     Registry.register(:rqbit, ListAdapter)
 
     on_exit(fn ->
-      :persistent_term.erase({ListAdapter, :statuses})
+      ListAdapter.clear()
       if original, do: Registry.register(:rqbit, original)
     end)
 
