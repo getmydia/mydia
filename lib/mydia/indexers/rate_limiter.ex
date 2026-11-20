@@ -34,6 +34,7 @@ defmodule Mydia.Indexers.RateLimiter do
 
   @table_name :indexer_rate_limits
   @cleanup_interval :timer.minutes(5)
+  @cooldown_topic "indexer_cooldowns"
 
   # Cooldown after a 429, indexed by how many 429s in a row (each one after
   # the previous cooldown ended) the indexer has answered. Stays at the last
@@ -101,8 +102,18 @@ defmodule Mydia.Indexers.RateLimiter do
     # Taken either way, so a hint never outlives the 429 it was noted for.
     hint = take_retry_hint(indexer_id)
     retry_ms = min(retry_after_ms || hint || 0, @max_retry_after_ms)
-    store_cooldown({:cooldown, indexer_id}, retry_ms)
+    until = store_cooldown({:cooldown, indexer_id}, retry_ms)
+    # After the store, so a subscriber that rereads sees this cooldown.
+    Phoenix.PubSub.broadcast(Mydia.PubSub, @cooldown_topic, {:indexer_cooldown, indexer_id})
+    until
   end
+
+  @doc """
+  Subscribes the caller to `{:indexer_cooldown, indexer_id}` messages, sent
+  whenever a 429 starts or extends an indexer's cooldown.
+  """
+  @spec subscribe_cooldowns() :: :ok | {:error, term()}
+  def subscribe_cooldowns, do: Phoenix.PubSub.subscribe(Mydia.PubSub, @cooldown_topic)
 
   # A hint older than @retry_hint_max_age_ms belongs to some earlier 429 whose
   # error never reached record_rate_limited/2, so it is dropped unused. A fresh
@@ -237,12 +248,20 @@ defmodule Mydia.Indexers.RateLimiter do
           else: put_retry_hint(indexer_id, ms, noted_at)
 
       [{^key, old}] ->
-        if fresh_hint?(old, System.monotonic_time(:millisecond)) and
-             hint_end(old) >= hint_end(new) do
-          :ok
-        else
-          replace_retry_hint(key, old, new)
-        end
+        replace_retry_hint(key, old, merge_hint(old, new))
+    end
+  end
+
+  # Freshness follows the newest note and the deadline is the later of the
+  # two, so a long hint kept past a shorter, newer one does not go stale on
+  # the older timestamp. A hint already stale when the new one arrives is
+  # simply replaced.
+  defp merge_hint({_, old_noted} = old, {_, new_noted} = new) do
+    if new_noted - old_noted <= @retry_hint_max_age_ms and hint_end(old) > hint_end(new) do
+      noted_at = max(old_noted, new_noted)
+      {hint_end(old) - noted_at, noted_at}
+    else
+      new
     end
   end
 

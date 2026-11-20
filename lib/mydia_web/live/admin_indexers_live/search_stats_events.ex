@@ -19,6 +19,8 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
 
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(socket) do
+    if connected?(socket), do: RateLimiter.subscribe_cooldowns()
+
     socket
     |> assign(
       search_stats_window: window(socket),
@@ -71,6 +73,10 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
 
   defp handle_info(:search_stats_cooldown_ended, socket),
     do: {:halt, socket |> assign(cooldown_timer: nil) |> refresh_cooldowns()}
+
+  # A background search started or extended a cooldown after the page loaded.
+  defp handle_info({:indexer_cooldown, _indexer_id}, socket),
+    do: {:halt, refresh_cooldowns(socket)}
 
   defp handle_info(_message, socket), do: {:cont, socket}
 

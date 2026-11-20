@@ -101,6 +101,19 @@ defmodule Mydia.Indexers.RateLimiterCooldownTest do
       assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)), 600_000, 1_000
     end
 
+    test "a kept long hint stays fresh as of the newest note" do
+      id = unique_id()
+      now = System.monotonic_time(:millisecond)
+      # Noted 301 s ago, so it would read stale by its own timestamp, but a
+      # newer, shorter hint 2 s ago keeps its deadline and refreshes it.
+      :ok = RateLimiter.put_retry_hint(id, :timer.hours(1), now - 301_000)
+      :ok = RateLimiter.put_retry_hint(id, 600_000, now - 2_000)
+
+      assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)),
+                      :timer.hours(1) - 301_000,
+                      1_000
+    end
+
     test "a hint older than 5 minutes is ignored" do
       id = unique_id()
       six_minutes_ago = System.monotonic_time(:millisecond) - :timer.minutes(6)

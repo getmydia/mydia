@@ -277,8 +277,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
     end
   end
 
-  # The gate turned the request down before anything was sent.
-  defp refused?(%GateError{type: type}), do: type in [:blocked, :capability_denied, :invalid_url]
+  # The gate turned the request down, or failed to resolve the host, before
+  # anything was sent.
+  defp refused?(%GateError{type: type}) when type in [:blocked, :capability_denied, :invalid_url],
+    do: true
+
+  defp refused?(%GateError{details: %{dispatched: false}}), do: true
+  defp refused?(%GateError{}), do: false
 
   # The guest only sees a failed request. The adapter turns an empty, failed
   # search into an error, and when the cause was the proxy it needs the

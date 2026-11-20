@@ -15611,7 +15611,7 @@ msgstr ""
 msgid "In priority order"
 msgstr ""
 
-#: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:104
+#: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:110
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:76
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:69
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:299

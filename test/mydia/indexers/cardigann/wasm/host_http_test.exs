@@ -64,6 +64,20 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
       assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
     end
 
+    test "does not count a request whose DNS resolution failed", %{ctx: ctx} do
+      network = :atomics.new(2, signed: false)
+      Mydia.Indexers.SearchStats.Network.reset()
+
+      ctx =
+        ctx
+        |> Map.put(:network, network)
+        |> Map.put(:gate_opts, resolver: fn _host -> {:error, :nxdomain} end)
+
+      assert {:error, _} = HostHttp.exchange(ctx, req("GET", "http://no-such-host.example/"))
+      assert :atomics.get(network, 2) == 0
+      assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
+    end
+
     test "a 429 hands its Retry-After to the RateLimiter", %{
       bypass: bypass,
       ctx: ctx,

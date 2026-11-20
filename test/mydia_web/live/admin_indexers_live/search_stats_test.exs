@@ -198,6 +198,19 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     refute has_element?(view, "#indexer-stats-#{busy.id}-none-rate-limited.text-warning")
   end
 
+  test "a cooldown started after the page loaded shows without a refresh", %{
+    conn: conn,
+    busy: busy
+  } do
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+    refute has_element?(view, "#indexer-cooldown-#{busy.id}")
+
+    Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+
+    assert render(view) =~ "indexer-cooldown-#{busy.id}"
+    assert has_element?(view, "#indexer-cooldown-#{busy.id}")
+  end
+
   test "an indexer cooling down after a 429 says until when", %{
     conn: conn,
     busy: busy,
