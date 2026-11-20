@@ -64,21 +64,25 @@ recorded.
 | `live >= session` | `bytes + (live - session)` | `live` |
 | `live < session` (the client reset: pause or restart) | `bytes + live` | `live` |
 
-`total(entry, live)` is `step(entry, live)["bytes"]`, so what is written and
-what is shown can never disagree.
-
-Recording uses `step(entry, live, read_at)`, which also stamps `"seen_at"`
+Recording and every overlay use `step(entry, live, read_at)`, so what is
+written and what is shown can never disagree. It also stamps `"seen_at"`
 (full precision) whenever `bytes` or `session` change. `read_at` is when the
-counter was read: the rqbit adapter stamps `DownloadStatus.observed_at` just
-before it sends the request (so a delayed response parsed late still dates
-from when it was asked for), carried as `EnrichedDownload.live_uploaded_at`,
-with the pass's clock as the fallback. Only requests reordered in transit to
-the local client could still invert two reads. A counter read no later than `"seen_at"`
-changes nothing. DownloadMonitor passes can overlap (a cron tick and a fast
-follow-up), and a pass can start later yet read the client earlier; without
-this, the older counter writing late would read as a reset and be added in
-full, inflating the total. The pass start time alone is not enough to order
-them.
+counter was asked for: the rqbit adapter stamps `DownloadStatus.observed_at`
+just before it sends the request (so a delayed response parsed late still
+dates from when it was asked for), carried as
+`EnrichedDownload.live_uploaded_at`, with the pass's clock as the fallback.
+
+DownloadMonitor passes can overlap (a cron tick and a fast follow-up), and
+an older counter landing last would read as a reset and be added in full,
+inflating the total. Two guards stop it:
+
+- A counter read no later than `"seen_at"` changes nothing.
+- A counter below `session` counts as a reset only when read at least 300
+  seconds after `"seen_at"`. Two requests in flight together need not be
+  read by rqbit in the order they were sent, so request time alone cannot
+  order them; but a request that much older has long timed out (retries are
+  off, and a status read takes at most two requests of 35s by default). A
+  real reset is credited in full by a later pass, at most a few minutes on.
 
 On first sight the current session's bytes count in full. Unlike seed time,
 which starts from 0 on purpose because no client reported it, uploaded bytes
@@ -141,7 +145,7 @@ beside it and stay correct after the pause, which is what the issue asks for.
 ## Testing
 
 - `ObservedUpload` units: increase, reset, a reset to 0 while paused, first
-  sight, a malformed entry, and `total/2` agreeing with `step/2`.
+  sight, a malformed entry, and overlapping reads that must not count as a reset.
 - `record/2`: writes only changed entries; skips unflagged, stale and
   not-in-client rows; one bad row does not stop the others; other metadata
   keys survive.

@@ -121,9 +121,19 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
     ObservedUpload.record([row(download, %{live_uploaded: 200})], newer)
     ObservedUpload.record([row(download, %{live_uploaded: 100})], ~U[2031-05-10 12:00:00.100000Z])
     assert entry(download) == %{"bytes" => 200, "session" => 200}
+  end
 
-    # A later pass in the same second with a lower counter is a real reset.
-    ObservedUpload.record([row(download, %{live_uploaded: 50})], ~U[2031-05-10 12:00:00.900000Z])
+  test "a lower counter read soon after the entry is never counted as a reset" do
+    download = download_fixture(%{metadata: %{}})
+
+    # Two overlapping requests: A asked first and read 200; B asked a second
+    # later, yet rqbit read it earlier (100). B lands after A.
+    ObservedUpload.record([row(download, %{live_uploaded: 200})], ~U[2031-05-10 12:00:01Z])
+    ObservedUpload.record([row(download, %{live_uploaded: 100})], ~U[2031-05-10 12:00:02Z])
+    assert entry(download) == %{"bytes" => 200, "session" => 200}
+
+    # A real reset is still credited in full once read well after the entry.
+    ObservedUpload.record([row(download, %{live_uploaded: 50})], ~U[2031-05-10 12:05:01Z])
     assert entry(download) == %{"bytes" => 250, "session" => 50}
   end
 

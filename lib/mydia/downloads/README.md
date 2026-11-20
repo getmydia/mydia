@@ -82,9 +82,11 @@ For those rows `Mydia.Downloads.ObservedUpload.record/2`, called by
 `DownloadMonitor` right after the seed time, banks the counter in
 `Download.metadata["observed_upload"]` (`"bytes"` is the total, `"session"` the
 counter as last seen; a counter below `"session"` is a new session and counts in
-full; `"seen_at"` is when the counter that last changed them was read, rqbit's
-`DownloadStatus.observed_at`, and an older read from an overlapping pass changes
-nothing, or its lower counter would be added as a reset). `ObservedUpload.overlay/1` then replaces `uploaded` and `ratio` on every
+full; `"seen_at"` is when the counter that last changed them was asked for,
+rqbit's `DownloadStatus.observed_at`). Overlapping passes must not add an older,
+lower counter as a reset: a read no later than `"seen_at"` changes nothing, and a
+lower counter counts as a reset only when read 300 seconds or more after it, longer
+than any request can stay in flight. `ObservedUpload.overlay/1` then replaces `uploaded` and `ratio` on every
 enriched row (`EnrichedDownload.live_uploaded` keeps the client's own counter),
 and `ClientRemoval.terms_met?/2` applies `overlay_status/2` to the status it
 reads, so a torrent paused at its goal keeps its ratio and ratio goals do not

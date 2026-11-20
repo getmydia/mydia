@@ -50,6 +50,10 @@ defmodule Mydia.Downloads.ObservedUpload do
 
   @key "observed_upload"
 
+  # Well past the longest status read (two requests of 5s connect + 30s
+  # receive by default) and past two monitor intervals. See `step/3`.
+  @reset_after_seconds 300
+
   @doc "The stored entry when well formed, else nil."
   @spec entry(map() | nil) :: map() | nil
   def entry(%{@key => %{"bytes" => bytes, "session" => session} = entry})
@@ -81,6 +85,14 @@ defmodule Mydia.Downloads.ObservedUpload do
   torrent costs no write. A counter read no later than `"seen_at"` is older
   than the one that last changed the entry (overlapping monitor passes): it
   would read as a reset and be added in full, so it changes nothing.
+
+  A counter below `"session"` counts as a reset only when read at least
+  `@reset_after_seconds` after `"seen_at"`. The read time is when the request
+  was sent, and the order of two requests in flight together is not the
+  order rqbit read them, so a lower counter read soon after the entry may be
+  the older read. Any request that much older has long timed out (no retry,
+  35s per request by default). A real reset is credited in full by a later
+  pass.
   """
   @spec step(map() | nil, non_neg_integer(), DateTime.t()) :: map()
   def step(entry, live, now) do
@@ -89,11 +101,22 @@ defmodule Mydia.Downloads.ObservedUpload do
 
     cond do
       valid && out_of_order?(valid, now) -> valid
+      valid && live < valid["session"] && not long_after?(valid, now) -> valid
       valid && Map.take(valid, ["bytes", "session"]) == stepped -> valid
       # Full precision: two passes in the same second must still be ordered.
       true -> Map.put(stepped, "seen_at", DateTime.to_iso8601(now))
     end
   end
+
+  # An entry without a valid `"seen_at"` has no read to be confused with.
+  defp long_after?(%{"seen_at" => seen_at}, now) when is_binary(seen_at) do
+    case DateTime.from_iso8601(seen_at) do
+      {:ok, seen, _offset} -> DateTime.diff(now, seen, :second) >= @reset_after_seconds
+      _invalid -> true
+    end
+  end
+
+  defp long_after?(_entry, _now), do: true
 
   defp out_of_order?(%{"seen_at" => seen_at}, now) when is_binary(seen_at) do
     case DateTime.from_iso8601(seen_at) do
@@ -103,10 +126,6 @@ defmodule Mydia.Downloads.ObservedUpload do
   end
 
   defp out_of_order?(_entry, _now), do: false
-
-  @doc "The total after this counter, without recording it."
-  @spec total(map() | nil, non_neg_integer()) :: non_neg_integer()
-  def total(entry, live), do: step(entry, live)["bytes"]
 
   @doc """
   A row with `uploaded` and `ratio` read from the kept total. Only a row whose
@@ -124,7 +143,8 @@ defmodule Mydia.Downloads.ObservedUpload do
         row
 
       is_nil(Map.get(row, :status_as_of)) ->
-        overlaid(row, entry(row.metadata), live(row.live_uploaded), row.size)
+        read_at = read_at(row, DateTime.utc_now())
+        overlaid(row, entry(row.metadata), live(row.live_uploaded), read_at, row.size)
 
       true ->
         read_at = read_at(row, row.status_as_of)
@@ -158,12 +178,16 @@ defmodule Mydia.Downloads.ObservedUpload do
 
   @doc "The same as `overlay/1`, for a `DownloadStatus` and its download's metadata."
   @spec overlay_status(DownloadStatus.t(), map() | nil) :: DownloadStatus.t()
-  def overlay_status(%DownloadStatus{uploaded_session_only?: true} = status, metadata),
-    do: overlaid(status, entry(metadata), live(status.uploaded), status.size)
+  def overlay_status(%DownloadStatus{uploaded_session_only?: true} = status, metadata) do
+    read_at = status.observed_at || DateTime.utc_now()
+    overlaid(status, entry(metadata), live(status.uploaded), read_at, status.size)
+  end
 
   def overlay_status(status, _metadata), do: status
 
-  defp overlaid(row, entry, live, size), do: with_total(row, total(entry, live), size)
+  # The total `step/3` would record for this read, without recording it.
+  defp overlaid(row, entry, live, read_at, size),
+    do: with_total(row, step(entry, live, read_at)["bytes"], size)
 
   defp with_total(row, uploaded, size) do
     ratio = if is_integer(size) and size > 0, do: uploaded / size, else: row.ratio

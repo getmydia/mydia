@@ -45,14 +45,6 @@ defmodule Mydia.Downloads.ObservedUploadTest do
     end
   end
 
-  test "total/2 agrees with step/2" do
-    entry = %{"bytes" => 800, "session" => 800}
-
-    for live <- [0, 100, 800, 1200] do
-      assert ObservedUpload.total(entry, live) == ObservedUpload.step(entry, live)["bytes"]
-    end
-  end
-
   describe "overlay/1" do
     defp row(attrs \\ %{}) do
       struct!(
@@ -190,5 +182,36 @@ defmodule Mydia.Downloads.ObservedUploadTest do
 
     assert ObservedUpload.overlay_status(%{status | uploaded_session_only?: false}, meta).ratio ==
              0.0
+  end
+
+  test "overlay_status/2 counts a lower counter as a reset only well after the entry" do
+    meta = %{
+      "observed_upload" => %{
+        "bytes" => 2000,
+        "session" => 2000,
+        "seen_at" => "2031-05-10T12:00:00Z"
+      }
+    }
+
+    status = %DownloadStatus{
+      id: "h",
+      name: "n",
+      state: :seeding,
+      progress: 100.0,
+      uploaded: 150,
+      ratio: 0.15,
+      size: 1000,
+      uploaded_session_only?: true,
+      observed_at: ~U[2031-05-10 12:00:30Z]
+    }
+
+    # Read 30s after the entry: an overlapping older read, not a reset.
+    assert %{uploaded: 2000, ratio: 2.0} = ObservedUpload.overlay_status(status, meta)
+
+    assert %{uploaded: 2150} =
+             ObservedUpload.overlay_status(
+               %{status | observed_at: ~U[2031-05-10 12:05:00Z]},
+               meta
+             )
   end
 end
