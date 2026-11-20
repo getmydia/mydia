@@ -43,6 +43,8 @@ defmodule Mydia.Indexers.RateLimiter do
   @max_retry_after_ms :timer.hours(24)
   # A cooldown that ended this long ago no longer steps the ladder.
   @cooldown_idle_ms :timer.hours(24)
+  # A Retry-After hint is ignored once it is older than this.
+  @retry_hint_max_age_ms :timer.minutes(5)
 
   ## Client API
 
@@ -97,14 +99,20 @@ defmodule Mydia.Indexers.RateLimiter do
   @spec record_rate_limited(String.t(), non_neg_integer() | nil) :: DateTime.t()
   def record_rate_limited(indexer_id, retry_after_ms) do
     # Taken either way, so a hint never outlives the 429 it was noted for.
-    hint =
-      case :ets.take(@table_name, {:retry_hint, indexer_id}) do
-        [{_key, ms}] -> ms
-        [] -> nil
-      end
-
+    hint = take_retry_hint(indexer_id)
     retry_ms = min(retry_after_ms || hint || 0, @max_retry_after_ms)
     store_cooldown({:cooldown, indexer_id}, retry_ms)
+  end
+
+  # A hint older than @retry_hint_max_age_ms belongs to some earlier 429 whose
+  # error never reached record_rate_limited/2, so it is dropped unused.
+  defp take_retry_hint(indexer_id) do
+    now = System.monotonic_time(:millisecond)
+
+    case :ets.take(@table_name, {:retry_hint, indexer_id}) do
+      [{_key, {ms, noted_at}}] when now - noted_at <= @retry_hint_max_age_ms -> ms
+      _none_or_stale -> nil
+    end
   end
 
   defp store_cooldown(key, retry_ms) do
@@ -201,11 +209,17 @@ defmodule Mydia.Indexers.RateLimiter do
   Notes a Retry-After seen where the 429 error itself cannot carry it.
 
   The next `record_rate_limited/2` call without its own Retry-After uses it
-  and deletes it.
+  and deletes it, unless the hint is more than 5 minutes old by then.
   """
   @spec note_retry_after(String.t(), non_neg_integer()) :: :ok
-  def note_retry_after(indexer_id, ms) when is_integer(ms) and ms >= 0 do
-    :ets.insert(@table_name, {{:retry_hint, indexer_id}, ms})
+  def note_retry_after(indexer_id, ms) when is_integer(ms) and ms >= 0,
+    do: put_retry_hint(indexer_id, ms, System.monotonic_time(:millisecond))
+
+  @doc false
+  # Test hook: notes a hint as if at monotonic time `noted_at` (milliseconds).
+  @spec put_retry_hint(String.t(), non_neg_integer(), integer()) :: :ok
+  def put_retry_hint(indexer_id, ms, noted_at) do
+    :ets.insert(@table_name, {{:retry_hint, indexer_id}, {ms, noted_at}})
     :ok
   end
 

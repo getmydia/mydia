@@ -73,6 +73,14 @@ defmodule Mydia.Indexers.RateLimiterCooldownTest do
       RateLimiter.expire_cooldown(id)
       assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)), 300_000, 1_000
     end
+
+    test "a hint older than 5 minutes is ignored" do
+      id = unique_id()
+      six_minutes_ago = System.monotonic_time(:millisecond) - :timer.minutes(6)
+      :ok = RateLimiter.put_retry_hint(id, 600_000, six_minutes_ago)
+
+      assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)), 60_000, 1_000
+    end
   end
 
   test "success clears the cooldown and resets the ladder" do
