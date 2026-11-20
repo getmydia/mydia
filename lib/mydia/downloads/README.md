@@ -93,7 +93,9 @@ reads, so a torrent paused at its goal keeps its ratio and ratio goals do not
 restart on each pause. On first sight the current session counts in full:
 uploaded bytes are a reported fact, unlike seed time. Uploads in a session that
 ended before Mydia saw it, or between the last poll and a manual pause or
-restart, are lost, so the total errs low and the torrent seeds longer.
+restart, are lost, and so is a reset seen inside the 300 seconds when the new
+session's counter passes the old one before the next pass: the total errs low,
+never high, and the torrent seeds longer.
 
 **Limits.** At grab, `Mydia.Downloads.SeedingLimits` sends the goal through the
 optional `set_share_limits/3` adapter callback, best effort. qBittorrent gets

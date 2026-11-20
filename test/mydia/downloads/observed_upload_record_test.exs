@@ -114,6 +114,21 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
     assert b.uploaded == 200
   end
 
+  # The documented trade: a reset inside the window that the counter passes
+  # before the next pass is undercounted, never overcounted. Inside the
+  # window a lower read cannot be told from an older read landing late, and
+  # crediting it as a reset would inflate the total if it were the latter.
+  test "a reset inside the window that the counter passes is undercounted, never overcounted" do
+    download = download_fixture(%{metadata: %{}})
+
+    ObservedUpload.record([row(download, %{live_uploaded: 2000})], ~U[2031-05-10 12:00:00Z])
+    ObservedUpload.record([row(download, %{live_uploaded: 500})], ~U[2031-05-10 12:01:00Z])
+    ObservedUpload.record([row(download, %{live_uploaded: 2500})], ~U[2031-05-10 12:02:00Z])
+
+    # 4500 were uploaded if 500 was a reset, 2500 if it was a late older read.
+    assert entry(download) == %{"bytes" => 2500, "session" => 2500}
+  end
+
   test "passes in the same second are still ordered" do
     download = download_fixture(%{metadata: %{}})
     newer = ~U[2031-05-10 12:00:00.800000Z]

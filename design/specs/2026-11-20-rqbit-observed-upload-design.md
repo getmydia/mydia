@@ -82,7 +82,11 @@ inflating the total. Two guards stop it:
   read by rqbit in the order they were sent, so request time alone cannot
   order them; but a request that much older has long timed out (retries are
   off, and a status read takes at most two requests of 35s by default). A
-  real reset is credited in full by a later pass, at most a few minutes on.
+  real reset is credited by a later pass while the counter is still below
+  `session`. If the new session's counter passes the old one first, the reset
+  reads as growth and its earlier uploads are lost: inside the window a
+  reset cannot be told from an older read landing late, and crediting it
+  would overcount in that case. The total errs low, never high.
 
 On first sight the current session's bytes count in full. Unlike seed time,
 which starts from 0 on purpose because no client reported it, uploaded bytes

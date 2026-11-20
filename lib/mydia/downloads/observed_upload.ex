@@ -27,10 +27,11 @@ defmodule Mydia.Downloads.ObservedUpload do
   - counter below `session`: the client reset (pause or restart), and the
     whole counter is new uploads.
 
-  A pause or restart between two passes loses at most one interval's
-  uploads: the total undercounts, which errs toward seeding longer. The
-  policies run after `record/2` in the same pass, so their own pause loses
-  nothing.
+  A pause or restart between two passes loses the uploads around it, more
+  when the new session's counter passes the old one before Mydia credits the
+  reset (`step/3`): the total undercounts, never overcounts, which errs
+  toward seeding longer. The policies run after `record/2` in the same pass,
+  so their own pause loses nothing.
 
   `overlay/1` replaces `uploaded` and `ratio` on an enriched row with the
   total (`Mydia.Downloads.History` applies it to every row it builds), and
@@ -91,8 +92,12 @@ defmodule Mydia.Downloads.ObservedUpload do
   was sent, and the order of two requests in flight together is not the
   order rqbit read them, so a lower counter read soon after the entry may be
   the older read. Any request that much older has long timed out (no retry,
-  35s per request by default). A real reset is credited in full by a later
-  pass.
+  35s per request by default). A real reset is credited by a later pass
+  while the counter is still below `"session"`; once the new session's
+  counter passes it first, the reset reads as growth and the uploads before
+  it are lost. Inside the window a reset cannot be told from an older read
+  landing late, and crediting it would overcount in that case, so the total
+  errs low.
   """
   @spec step(map() | nil, non_neg_integer(), DateTime.t()) :: map()
   def step(entry, live, now) do
