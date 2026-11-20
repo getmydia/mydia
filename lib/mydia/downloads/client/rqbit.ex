@@ -203,10 +203,12 @@ defmodule Mydia.Downloads.Client.Rqbit do
   def get_status(config, client_id) do
     guarded(config, fn ->
       req = HTTP.new_request(config)
+      # Before the request: see `build_status/3`.
+      requested_at = DateTime.utc_now()
 
       with {:ok, details} <- fetch_details(req, client_id),
            {:ok, stats} <- fetch_stats(req, client_id) do
-        {:ok, build_status(details, stats)}
+        {:ok, build_status(details, stats, requested_at)}
       end
     end)
   end
@@ -215,10 +217,11 @@ defmodule Mydia.Downloads.Client.Rqbit do
   def list_torrents(config, opts \\ []) do
     guarded(config, fn ->
       req = HTTP.new_request(config)
+      requested_at = DateTime.utc_now()
 
       case HTTP.get(req, "/torrents", params: %{with_stats: true}) do
         {:ok, %{status: status, body: %{"torrents" => torrents}}} when status in 200..299 ->
-          {:ok, parse_torrent_list(torrents, opts)}
+          {:ok, parse_torrent_list(torrents, opts, requested_at)}
 
         {:ok, %{status: status}} when status in 200..299 ->
           {:ok, []}
@@ -232,9 +235,9 @@ defmodule Mydia.Downloads.Client.Rqbit do
     end)
   end
 
-  defp parse_torrent_list(torrents, opts) do
+  defp parse_torrent_list(torrents, opts, requested_at) do
     torrents
-    |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}) end)
+    |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}, requested_at) end)
     |> apply_filters(opts)
   end
 
@@ -437,7 +440,7 @@ defmodule Mydia.Downloads.Client.Rqbit do
   # single-file torrents; without an explicit file list MediaImport would
   # recurse that shared folder and import every neighboring torrent's files
   # into the wrong series library.
-  defp build_status(details, stats) do
+  defp build_status(details, stats, requested_at) do
     finished = stats["finished"] == true
     total_bytes = stats["total_bytes"] || 0
     output_folder = details["output_folder"] || ""
@@ -459,8 +462,9 @@ defmodule Mydia.Downloads.Client.Rqbit do
       # (`Mydia.Downloads.ObservedUpload`).
       uploaded_session_only?: true,
       # Orders the counter across overlapping polls: a poll that started later
-      # can read the client earlier.
-      observed_at: DateTime.utc_now(),
+      # can read the client earlier. Taken before the request, so a delayed
+      # response that is parsed late still dates from when it was asked for.
+      observed_at: requested_at,
       save_path: output_folder,
       files: resolve_torrent_files(output_folder, details["files"]),
       file_progress:

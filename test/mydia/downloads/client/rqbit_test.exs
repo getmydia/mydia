@@ -560,6 +560,30 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert status.save_path == "/downloads"
     end
 
+    # A delayed response must not get a later read time than a newer one
+    # parsed sooner, so the time is taken before the request, not after.
+    test "stamps the read time before the request, not after the response", %{
+      bypass: bypass,
+      config: config
+    } do
+      test_pid = self()
+
+      Bypass.expect(bypass, "GET", "/torrents", fn conn ->
+        send(test_pid, {:served_at, DateTime.utc_now()})
+        Process.sleep(50)
+
+        json_resp(conn, 200, %{
+          "torrents" => [
+            %{"id" => 0, "info_hash" => @hash, "name" => "Movie", "stats" => stats()}
+          ]
+        })
+      end)
+
+      assert {:ok, [status]} = Rqbit.list_torrents(config, [])
+      assert_received {:served_at, served_at}
+      assert DateTime.compare(status.observed_at, served_at) in [:lt, :eq]
+    end
+
     test "category filter is a no-op — all torrents returned", %{bypass: bypass, config: config} do
       Bypass.expect(bypass, "GET", "/torrents", fn conn ->
         json_resp(conn, 200, %{

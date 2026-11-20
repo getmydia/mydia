@@ -69,9 +69,11 @@ what is shown can never disagree.
 
 Recording uses `step(entry, live, read_at)`, which also stamps `"seen_at"`
 (full precision) whenever `bytes` or `session` change. `read_at` is when the
-counter was read: the rqbit adapter stamps `DownloadStatus.observed_at` as it
-parses the response, carried as `EnrichedDownload.live_uploaded_at`, with the
-pass's clock as the fallback. A counter read no later than `"seen_at"`
+counter was read: the rqbit adapter stamps `DownloadStatus.observed_at` just
+before it sends the request (so a delayed response parsed late still dates
+from when it was asked for), carried as `EnrichedDownload.live_uploaded_at`,
+with the pass's clock as the fallback. Only requests reordered in transit to
+the local client could still invert two reads. A counter read no later than `"seen_at"`
 changes nothing. DownloadMonitor passes can overlap (a cron tick and a fast
 follow-up), and a pass can start later yet read the client earlier; without
 this, the older counter writing late would read as a reset and be added in
