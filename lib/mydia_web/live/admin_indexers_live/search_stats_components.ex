@@ -136,13 +136,14 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
 
   attr :indexer_id, :string, required: true
   attr :until, DateTime, default: nil
+  attr :display, Mydia.TimeDisplay, required: true
 
   @doc "The indexer row's badge while Mydia holds off after an HTTP 429."
   def cooldown_badge(assigns) do
     ~H"""
     <span :if={@until} id={"indexer-cooldown-#{@indexer_id}"} class="badge badge-warning badge-sm">
       <.icon name="hero-clock" class="w-3 h-3 mr-1" />
-      {gettext("Cooling down until %{time}", time: Calendar.strftime(@until, "%H:%M"))}
+      {gettext("Cooling down until %{time}", time: format(@until, :time, @display))}
     </span>
     """
   end

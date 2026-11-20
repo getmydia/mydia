@@ -166,14 +166,25 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
   end
 
   test "requests, 429s and skips each get a cell", %{conn: conn, busy: busy} do
-    insert!(busy, %{http_requests: 3})
-    insert!(busy, %{outcome: "rate_limited", http_requests: 1, error_message: "HTTP 429"})
-    insert!(busy, %{outcome: "skipped_cooldown", error_message: "Cooling down"})
+    # One minute for all three, so the peak is their sum.
+    at = %{DateTime.add(DateTime.utc_now(), -3600, :second) | second: 10}
+    insert!(busy, %{http_requests: 3, inserted_at: at})
+
+    insert!(busy, %{
+      outcome: "rate_limited",
+      http_requests: 1,
+      error_message: "HTTP 429",
+      inserted_at: at
+    })
+
+    insert!(busy, %{outcome: "skipped_cooldown", error_message: "Cooling down", inserted_at: at})
+    insert!(busy, %{kind: "health", outcome: "degraded", http_requests: 2, inserted_at: at})
     {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
     stats = "#indexer-stats-#{busy.id}-none"
-    assert has_element?(view, "#{stats}-requests", "4")
-    assert has_element?(view, "#{stats}-requests", "peak 4/min")
+    # The health probe's requests count too.
+    assert has_element?(view, "#{stats}-requests", "6")
+    assert has_element?(view, "#{stats}-requests", "peak 6/min")
     assert has_element?(view, "#{stats}-rate-limited.text-warning", "1")
     assert has_element?(view, "#{stats}-skipped", "1")
     assert has_element?(view, "#{stats}-success", "1/2")
@@ -198,7 +209,14 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     assert has_element?(
              view,
              "#indexer-cooldown-#{busy.id}",
-             "Cooling down until #{Calendar.strftime(until, "%H:%M")}"
+             # The admin's time display, not bare UTC: with no preference and
+             # an English locale that is the instance zone on a 12-hour clock.
+             "Cooling down until " <>
+               MydiaWeb.DateTimeFormat.format(
+                 until,
+                 :time,
+                 Mydia.TimeDisplay.resolve(nil, Mydia.TimeDisplay.instance_time_zone(), "en")
+               )
            )
 
     refute has_element?(view, "#indexer-cooldown-#{quiet.id}")

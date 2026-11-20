@@ -318,10 +318,13 @@ runs in the searching process, and the Prowlarr engine hands its guest's count
 back through `Engine.call/3`. A search the gate refused is not a request:
 it records outcome `skipped_cooldown`, `skipped_local_limit` or
 `skipped_daily_cap` (not `rate_limited`, which is the tracker's 429), no
-`http_requests`, and stays out of attempts and success rate. The admin
-Indexers page shows the window's requests with the busiest minute ("peak
-N/min"), the tracker's 429s and the skips, and a "Cooling down until HH:MM"
-(UTC) badge on an indexer that is cooling down.
+`http_requests`, and stays out of attempts and success rate. A search killed
+at the deadline (`outcome: :deadline`) dies with its count and records no
+`http_requests`, so the slowest searches are under-counted. The admin
+Indexers page shows the window's requests, searches and health probes alike,
+with the busiest minute ("peak N/min"), the tracker's 429s and the skips
+(searches only), and a "Cooling down until" badge, in the viewer's time
+display, on an indexer that is cooling down.
 
 ## Tracker limits
 

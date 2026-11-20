@@ -9,9 +9,9 @@ defmodule Mydia.Indexers.SearchStats.Summary do
   A search Mydia chose not to send (outcomes starting `skipped_`: a cooldown,
   its own per-minute limit, a daily cap) is counted in `skipped` and nowhere
   else: it is not an attempt and took no time. `requests` is the HTTP requests
-  sent to the tracker over the window, `peak_per_minute` the most sent in one
-  calendar minute, and `rate_limited` the searches the tracker answered with
-  HTTP 429.
+  sent to the tracker over the window by every kind of call (health probes
+  too), `peak_per_minute` the most sent in one calendar minute, and
+  `rate_limited` the searches the tracker answered with HTTP 429.
   """
 
   defstruct [
@@ -34,13 +34,17 @@ defmodule Mydia.Indexers.SearchStats.Summary do
   @timeouts ["timeout", "deadline"]
 
   @doc """
-  Builds a summary from
-  `{indexer_id, engine, outcome, duration_ms, result_count, http_requests, inserted_at}`
-  rows.
+  Builds a summary of `kind` calls from
+  `{indexer_id, engine, outcome, duration_ms, result_count, http_requests, inserted_at, kind}`
+  rows. A row of another kind adds only to `requests` and `peak_per_minute`.
   """
-  @spec build(String.t(), String.t() | nil, [tuple()]) :: t()
-  def build(indexer_id, engine, rows) do
-    {skipped, sent} = Enum.split_with(rows, &skipped?(elem(&1, 2)))
+  @spec build(String.t(), String.t() | nil, [tuple()], String.t()) :: t()
+  def build(indexer_id, engine, rows, kind \\ "search") do
+    {skipped, sent} =
+      rows
+      |> Enum.filter(&(elem(&1, 7) == kind))
+      |> Enum.split_with(&skipped?(elem(&1, 2)))
+
     durations = sent |> Enum.map(&elem(&1, 3)) |> Enum.sort()
     ok_rows = Enum.filter(sent, &(elem(&1, 2) == "ok"))
 

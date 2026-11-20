@@ -75,9 +75,10 @@ defmodule Mydia.Indexers.SearchStatsTest do
     end
 
     test "carries request counts, 429s and skips" do
-      insert!(%{outcome: "ok", http_requests: 3})
-      insert!(%{outcome: "rate_limited", http_requests: 1})
-      insert!(%{outcome: "skipped_cooldown", http_requests: nil})
+      at = %{ago(1) | second: 10}
+      insert!(%{outcome: "ok", http_requests: 3, inserted_at: at})
+      insert!(%{outcome: "rate_limited", http_requests: 1, inserted_at: at})
+      insert!(%{outcome: "skipped_cooldown", http_requests: nil, inserted_at: at})
 
       assert %{"def-1" => [s]} = SearchStats.summary(:day)
       assert s.attempts == 2
@@ -86,11 +87,44 @@ defmodule Mydia.Indexers.SearchStatsTest do
       assert s.skipped == 1
       assert s.peak_per_minute == 4
     end
+
+    test "health probe requests count toward requests, nothing else" do
+      # Both in one minute, whatever the clock says when the test runs.
+      at = %{ago(1) | second: 10}
+      insert!(%{outcome: "ok", http_requests: 2, inserted_at: at})
+
+      insert!(%{
+        kind: "health",
+        outcome: "degraded",
+        duration_ms: 9_000,
+        http_requests: 3,
+        inserted_at: at
+      })
+
+      assert %{"def-1" => [s]} = SearchStats.summary(:day)
+      assert s.attempts == 1
+      assert s.requests == 5
+      assert s.peak_per_minute == 5
+      assert s.p90_ms == 100
+    end
   end
 
   describe "Summary.build/3" do
-    defp row(outcome, requests, at, duration \\ 100),
-      do: {"def-1", "builtin", outcome, duration, 2, requests, at}
+    defp row(outcome, requests, at, duration \\ 100, kind \\ "search"),
+      do: {"def-1", "builtin", outcome, duration, 2, requests, at, kind}
+
+    test "another kind's rows add only their requests" do
+      at = ~U[2026-11-19 10:00:30.000000Z]
+
+      s =
+        Summary.build("def-1", "builtin", [
+          row("ok", 2, at),
+          row("degraded", 3, at, 9_000, "health")
+        ])
+
+      assert %Summary{attempts: 1, successes: 1, requests: 5, peak_per_minute: 5} = s
+      assert s.p90_ms == 100
+    end
 
     test "skips are neither attempts nor requests, and stay out of latency" do
       at = ~U[2026-11-19 10:00:30.000000Z]
