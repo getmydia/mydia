@@ -99,6 +99,32 @@ defmodule Mydia.Downloads.ObservedUploadTest do
                ObservedUpload.overlay(%{stale | metadata: nil, live_uploaded: 150})
     end
 
+    test "a stale snapshot read before the stored entry adds nothing" do
+      # Paused after 2000 uploaded: the entry was recorded at 12:05 with session 0.
+      metadata = %{
+        "observed_upload" => %{
+          "bytes" => 2000,
+          "session" => 0,
+          "seen_at" => "2031-05-10T12:05:00Z"
+        }
+      }
+
+      stale =
+        row(%{metadata: metadata, live_uploaded: 1500, status_as_of: ~U[2031-05-10 12:10:00Z]})
+
+      # A pre-pause snapshot (read at 12:04) holds uploads already in `bytes`.
+      assert %{uploaded: 2000} =
+               ObservedUpload.overlay(%{stale | live_uploaded_at: ~U[2031-05-10 12:04:00Z]})
+
+      # Without a read time, the snapshot's own date decides.
+      assert %{uploaded: 2000} =
+               ObservedUpload.overlay(%{stale | status_as_of: ~U[2031-05-10 12:04:00Z]})
+
+      # A snapshot read after the entry holds new uploads.
+      assert %{uploaded: 3500} =
+               ObservedUpload.overlay(%{stale | live_uploaded_at: ~U[2031-05-10 12:06:00Z]})
+    end
+
     test "size 0 or nil leaves the ratio as reported" do
       for size <- [0, nil] do
         overlaid = ObservedUpload.overlay(row(%{size: size}))

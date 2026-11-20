@@ -112,8 +112,10 @@ defmodule Mydia.Downloads.ObservedUpload do
   A row with `uploaded` and `ratio` read from the kept total. Only a row whose
   client counts per session and that is in the client changes. A stale row
   (`status_as_of` set, a cached counter) adds only growth past the stored
-  session: a counter older than the stored one is not a reset. The ratio is
-  left as reported when `size` is unknown or 0.
+  session, and nothing when it was read no later than the stored entry: a
+  counter older than the stored one is not a reset, and a snapshot from
+  before the entry holds uploads already counted. The ratio is left as
+  reported when `size` is unknown or 0.
   """
   @spec overlay(map()) :: map()
   def overlay(row) do
@@ -125,14 +127,17 @@ defmodule Mydia.Downloads.ObservedUpload do
         overlaid(row, entry(row.metadata), live(row.live_uploaded), row.size)
 
       true ->
-        with_total(row, stale_total(entry(row.metadata), live(row.live_uploaded)), row.size)
+        read_at = read_at(row, row.status_as_of)
+        uploaded = stale_total(entry(row.metadata), live(row.live_uploaded), read_at)
+        with_total(row, uploaded, row.size)
     end
   end
 
-  defp stale_total(nil, live), do: live
+  defp stale_total(nil, live, _read_at), do: live
 
-  defp stale_total(%{"bytes" => bytes, "session" => session}, live),
-    do: bytes + max(live - session, 0)
+  defp stale_total(%{"bytes" => bytes, "session" => session} = entry, live, read_at) do
+    if out_of_order?(entry, read_at), do: bytes, else: bytes + max(live - session, 0)
+  end
 
   @doc """
   Sets an enriched row's upload fields from the client's status:
