@@ -67,6 +67,13 @@ recorded.
 `total(entry, live)` is `step(entry, live)["bytes"]`, so what is written and
 what is shown can never disagree.
 
+Recording uses `step(entry, live, now)`, which also stamps `"seen_at"` with
+the pass time whenever `bytes` or `session` change. A pass whose `now` is not
+after `"seen_at"` changes nothing. DownloadMonitor passes can overlap (a cron
+tick and a fast follow-up), and without this an earlier pass writing late
+would read its lower counter as a reset and add it in full, inflating the
+total. `ObservedSeedTime` guards the same way.
+
 On first sight the current session's bytes count in full. Unlike seed time,
 which starts from 0 on purpose because no client reported it, uploaded bytes
 are a fact the client reports. Uploads from sessions that ended before this
