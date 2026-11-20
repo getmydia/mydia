@@ -631,6 +631,44 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert DateTime.diff(until, DateTime.utc_now()) in 295..300
     end
 
+    test "a homepage 429 cools the definition and stops the mirror walk" do
+      test_pid = self()
+      throttled = Bypass.open()
+      second = Bypass.open()
+
+      Bypass.stub(throttled, "GET", "/", fn conn ->
+        send(test_pid, {:contacted, :throttled})
+
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "300")
+        |> Plug.Conn.resp(429, "Too Many Requests")
+      end)
+
+      Bypass.stub(second, "GET", "/", fn conn ->
+        send(test_pid, {:contacted, :second})
+        Plug.Conn.resp(conn, 200, "<html/>")
+      end)
+
+      definition =
+        cardigann_definition_fixture(%{enabled: true})
+        |> put_link(["http://localhost:#{throttled.port}", "http://localhost:#{second.port}"])
+        |> set_health(%{health_status: "healthy", consecutive_failures: 1})
+
+      on_exit(fn -> RateLimiter.clear_indexer(definition.id) end)
+
+      assert {:ok, results} = CardigannHealthCheck.check_all_enabled()
+      assert %{success: false, rate_limited: true, status: "degraded"} = results[definition.id]
+
+      assert_received {:contacted, :throttled}
+      refute_received {:contacted, :second}
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.consecutive_failures == 1
+
+      until = RateLimiter.cooldown_until(definition.id)
+      assert DateTime.diff(until, DateTime.utc_now()) in 295..300
+    end
+
     test "the Test button probes during a cooldown and a success clears it" do
       bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
       definition = linked_definition(bypass)

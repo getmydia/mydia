@@ -117,7 +117,8 @@ defmodule Mydia.Jobs.CardigannHealthCheck do
     {:ok, results} = CardigannHealthCheck.check_all_enabled()
 
     total = map_size(results)
-    successful = Enum.count(results, fn {_id, result} -> result.success end)
+    # A crashed probe's entry is `%{error: reason}`, with no :success key.
+    successful = Enum.count(results, fn {_id, result} -> result[:success] == true end)
     failed = total - successful
 
     Logger.info("[CardigannHealthCheckJob] Health checks completed",

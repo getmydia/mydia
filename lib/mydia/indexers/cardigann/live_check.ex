@@ -45,7 +45,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
     base_url =
       case CardigannHealthCheck.probe_candidates(parsed, config) do
         {:ok, link, _status} -> link
-        {:error, _status} -> List.first(parsed.links)
+        _unreachable_or_rate_limited -> List.first(parsed.links)
       end
 
     search = search(parsed, config, base_url, CardigannHealthCheck.probe_query(parsed))
