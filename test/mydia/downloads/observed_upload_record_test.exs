@@ -4,13 +4,17 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
   import Mydia.DownloadsFixtures
 
   alias Mydia.Downloads.{Download, ObservedUpload}
+  alias Mydia.Downloads.Structs.EnrichedDownload
   alias Mydia.Repo
 
   @t0 ~U[2031-05-10 12:00:00Z]
 
   defp row(download, attrs) do
-    Map.merge(
-      %{
+    struct!(
+      %EnrichedDownload{
+        title: "Fictional Copper Lagoon",
+        download_client: "rqbit",
+        status: "seeding",
         id: download.id,
         metadata: download.metadata,
         uploaded_session_only?: true,
@@ -78,6 +82,29 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
 
     ObservedUpload.record([row(download, %{live_uploaded: 200})], DateTime.add(t1, 120, :second))
     assert %{"bytes" => 200, "session" => 200} = entry(download)
+  end
+
+  test "a rejected pass returns the stored total, not its own counter stepped" do
+    download = download_fixture(%{metadata: %{}})
+
+    ObservedUpload.record([row(download, %{live_uploaded: 200})], DateTime.add(@t0, 120, :second))
+    [rejected] = ObservedUpload.record([row(download, %{live_uploaded: 150})], @t0)
+
+    assert rejected.uploaded == 200
+    assert rejected.ratio == 0.4
+  end
+
+  test "passes in the same second are still ordered" do
+    download = download_fixture(%{metadata: %{}})
+    newer = ~U[2031-05-10 12:00:00.800000Z]
+
+    ObservedUpload.record([row(download, %{live_uploaded: 200})], newer)
+    ObservedUpload.record([row(download, %{live_uploaded: 100})], ~U[2031-05-10 12:00:00.100000Z])
+    assert entry(download) == %{"bytes" => 200, "session" => 200}
+
+    # A later pass in the same second with a lower counter is a real reset.
+    ObservedUpload.record([row(download, %{live_uploaded: 50})], ~U[2031-05-10 12:00:00.900000Z])
+    assert entry(download) == %{"bytes" => 250, "session" => 50}
   end
 
   test "skips unflagged, stale and not-in-client rows" do

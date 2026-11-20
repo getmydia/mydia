@@ -84,16 +84,13 @@ defmodule Mydia.Downloads.ObservedUpload do
   @spec step(map() | nil, non_neg_integer(), DateTime.t()) :: map()
   def step(entry, live, now) do
     stepped = step(entry, live)
+    valid = entry(%{@key => entry})
 
     cond do
-      out_of_order?(entry, now) ->
-        entry
-
-      Map.take(entry || %{}, ["bytes", "session"]) == stepped ->
-        entry
-
-      true ->
-        Map.put(stepped, "seen_at", now |> DateTime.truncate(:second) |> DateTime.to_iso8601())
+      valid && out_of_order?(valid, now) -> valid
+      valid && Map.take(valid, ["bytes", "session"]) == stepped -> valid
+      # Full precision: two passes in the same second must still be ordered.
+      true -> Map.put(stepped, "seen_at", DateTime.to_iso8601(now))
     end
   end
 
@@ -112,16 +109,29 @@ defmodule Mydia.Downloads.ObservedUpload do
 
   @doc """
   A row with `uploaded` and `ratio` read from the kept total. Only a row whose
-  client counts per session, that is in the client, and whose status is live
-  (no `status_as_of`) changes. The ratio is left as reported when `size` is
-  unknown or 0.
+  client counts per session and that is in the client changes. A stale row
+  (`status_as_of` set, a cached counter) adds only growth past the stored
+  session: a counter older than the stored one is not a reset. The ratio is
+  left as reported when `size` is unknown or 0.
   """
   @spec overlay(map()) :: map()
   def overlay(row) do
-    if tracked?(row),
-      do: overlaid(row, entry(row.metadata), live(row.live_uploaded), row.size),
-      else: row
+    cond do
+      not overlaid?(row) ->
+        row
+
+      is_nil(Map.get(row, :status_as_of)) ->
+        overlaid(row, entry(row.metadata), live(row.live_uploaded), row.size)
+
+      true ->
+        with_total(row, stale_total(entry(row.metadata), live(row.live_uploaded)), row.size)
+    end
   end
+
+  defp stale_total(nil, live), do: live
+
+  defp stale_total(%{"bytes" => bytes, "session" => session}, live),
+    do: bytes + max(live - session, 0)
 
   @doc """
   Sets an enriched row's upload fields from the client's status:
@@ -146,8 +156,9 @@ defmodule Mydia.Downloads.ObservedUpload do
 
   def overlay_status(status, _metadata), do: status
 
-  defp overlaid(row, entry, live, size) do
-    uploaded = total(entry, live)
+  defp overlaid(row, entry, live, size), do: with_total(row, total(entry, live), size)
+
+  defp with_total(row, uploaded, size) do
     ratio = if is_integer(size) and size > 0, do: uploaded / size, else: row.ratio
     %{row | uploaded: uploaded, ratio: ratio}
   end
@@ -176,8 +187,10 @@ defmodule Mydia.Downloads.ObservedUpload do
   # monitor's poll.
   defp record_row(row, now) do
     case write(row.id, live(row.live_uploaded), now) do
-      {:ok, %{} = entry} ->
-        overlay(%{row | metadata: Map.put(row.metadata || %{}, @key, entry)})
+      # The stored total, not this pass's counter stepped again: a rejected
+      # (out-of-order) counter would read as a reset against the newer entry.
+      {:ok, %{"bytes" => bytes} = entry} ->
+        with_total(%{row | metadata: Map.put(row.metadata || %{}, @key, entry)}, bytes, row.size)
 
       _not_written ->
         row
@@ -222,8 +235,10 @@ defmodule Mydia.Downloads.ObservedUpload do
     entry
   end
 
-  defp tracked?(row) do
-    Map.get(row, :uploaded_session_only?) == true and Map.get(row, :in_client?) == true and
-      is_nil(Map.get(row, :status_as_of))
-  end
+  # A row whose client counts per session and that is in the client.
+  defp overlaid?(row),
+    do: Map.get(row, :uploaded_session_only?) == true and Map.get(row, :in_client?) == true
+
+  # Recorded only from a live answer, never from a cached counter.
+  defp tracked?(row), do: overlaid?(row) and is_nil(Map.get(row, :status_as_of))
 end

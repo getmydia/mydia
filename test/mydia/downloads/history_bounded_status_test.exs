@@ -124,6 +124,39 @@ defmodule Mydia.Downloads.HistoryBoundedStatusTest do
     assert elapsed_us < 400_000
   end
 
+  test "a snapshot's older upload counter is not read as an rqbit reset", %{
+    client: client,
+    download: download
+  } do
+    {:ok, _} =
+      Downloads.update_download(download, %{
+        metadata: %{"observed_upload" => %{"bytes" => 2000, "session" => 2000}}
+      })
+
+    snapshot(
+      %{
+        @hash => %DownloadStatus{
+          id: @hash,
+          name: "Fictional Release",
+          state: :seeding,
+          progress: 100.0,
+          uploaded: 150,
+          ratio: 0.15,
+          size: 1000,
+          uploaded_session_only?: true
+        }
+      },
+      client
+    )
+
+    enriched =
+      row(Downloads.list_downloads_with_status(filter: :all, bounded: true), download)
+
+    assert enriched.status_as_of
+    assert enriched.uploaded == 2000
+    assert enriched.ratio == 2.0
+  end
+
   test "a torrent absent from the snapshot is unknown, never missing", %{
     client: client,
     download: download

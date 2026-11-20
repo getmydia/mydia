@@ -651,7 +651,7 @@ defmodule Mydia.Downloads.History do
   end
 
   defp with_status_as_of(%EnrichedDownload{} = enriched, fetched_at) do
-    %{enriched | status_as_of: fetched_at}
+    ObservedUpload.overlay(%{enriched | status_as_of: fetched_at})
   end
 
   defp with_removal_state(%EnrichedDownload{} = enriched, %Download{} = download) do

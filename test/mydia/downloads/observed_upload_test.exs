@@ -2,7 +2,7 @@ defmodule Mydia.Downloads.ObservedUploadTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Downloads.ObservedUpload
-  alias Mydia.Downloads.Structs.DownloadStatus
+  alias Mydia.Downloads.Structs.{DownloadStatus, EnrichedDownload}
 
   describe "step/2" do
     test "first sight counts the current session in full" do
@@ -32,6 +32,19 @@ defmodule Mydia.Downloads.ObservedUploadTest do
     end
   end
 
+  describe "step/3" do
+    @at ~U[2031-05-10 12:00:00.800000Z]
+
+    test "a malformed non-map entry is replaced, not raised on" do
+      assert %{"bytes" => 50, "session" => 50, "seen_at" => _} =
+               ObservedUpload.step("bad", 50, @at)
+    end
+
+    test "stamps seen_at at full precision" do
+      assert ObservedUpload.step(nil, 50, @at)["seen_at"] == "2031-05-10T12:00:00.800000Z"
+    end
+  end
+
   test "total/2 agrees with step/2" do
     entry = %{"bytes" => 800, "session" => 800}
 
@@ -42,8 +55,12 @@ defmodule Mydia.Downloads.ObservedUploadTest do
 
   describe "overlay/1" do
     defp row(attrs \\ %{}) do
-      Map.merge(
-        %{
+      struct!(
+        %EnrichedDownload{
+          id: "d1",
+          title: "Fictional Copper Lagoon",
+          download_client: "rqbit",
+          status: "seeding",
           uploaded_session_only?: true,
           in_client?: true,
           status_as_of: nil,
@@ -66,12 +83,20 @@ defmodule Mydia.Downloads.ObservedUploadTest do
       assert ObservedUpload.overlay(row) == row
     end
 
-    test "a stale or not-in-client row is unchanged" do
-      stale = row(%{status_as_of: ~U[2031-05-10 12:00:00Z]})
+    test "a not-in-client row is unchanged" do
       gone = row(%{in_client?: false})
-
-      assert ObservedUpload.overlay(stale) == stale
       assert ObservedUpload.overlay(gone) == gone
+    end
+
+    test "a stale row adds only growth, never reading an older counter as a reset" do
+      stale = row(%{status_as_of: ~U[2031-05-10 12:00:00Z]})
+
+      # A cached counter older than the stored session is not a new session.
+      assert %{uploaded: 2000, ratio: 2.0} = ObservedUpload.overlay(%{stale | live_uploaded: 150})
+      assert %{uploaded: 2500} = ObservedUpload.overlay(%{stale | live_uploaded: 2500})
+
+      assert %{uploaded: 150} =
+               ObservedUpload.overlay(%{stale | metadata: nil, live_uploaded: 150})
     end
 
     test "size 0 or nil leaves the ratio as reported" do
