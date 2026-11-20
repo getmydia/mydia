@@ -458,6 +458,9 @@ defmodule Mydia.Downloads.Client.Rqbit do
       # once paused, and from 0 again after a restart. Mydia keeps the total
       # (`Mydia.Downloads.ObservedUpload`).
       uploaded_session_only?: true,
+      # Orders the counter across overlapping polls: a poll that started later
+      # can read the client earlier.
+      observed_at: DateTime.utc_now(),
       save_path: output_folder,
       files: resolve_torrent_files(output_folder, details["files"]),
       file_progress:

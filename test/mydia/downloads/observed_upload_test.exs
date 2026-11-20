@@ -113,6 +113,38 @@ defmodule Mydia.Downloads.ObservedUploadTest do
     end
   end
 
+  test "put_upload/2 carries the client's read time with the counter" do
+    read_at = ~U[2031-05-10 12:00:03Z]
+
+    status = %DownloadStatus{
+      id: "h",
+      name: "n",
+      state: :seeding,
+      progress: 100.0,
+      uploaded: 300,
+      ratio: 0.3,
+      size: 1000,
+      uploaded_session_only?: true,
+      observed_at: read_at
+    }
+
+    row =
+      ObservedUpload.put_upload(
+        %EnrichedDownload{
+          id: "d1",
+          title: "Fictional Copper Lagoon",
+          download_client: "rqbit",
+          status: "seeding",
+          in_client?: true,
+          metadata: %{}
+        },
+        status
+      )
+
+    assert row.live_uploaded == 300
+    assert row.live_uploaded_at == read_at
+  end
+
   test "overlay_status/2 applies to a flagged DownloadStatus" do
     status =
       DownloadStatus.new(%{

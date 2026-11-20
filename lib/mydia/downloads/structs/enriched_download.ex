@@ -44,6 +44,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     # counts only its current session (`uploaded_session_only?`): `uploaded`
     # and `ratio` are then Mydia's kept total (`Mydia.Downloads.ObservedUpload`).
     :live_uploaded,
+    # When the client reported `live_uploaded` (`DownloadStatus.observed_at`).
+    :live_uploaded_at,
     :uploaded_session_only?,
     # Seconds seeded, when the client counts it. See DownloadStatus.
     :seeding_time,
@@ -161,6 +163,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           uploaded: integer(),
           ratio: float(),
           live_uploaded: integer() | nil,
+          live_uploaded_at: DateTime.t() | nil,
           uploaded_session_only?: boolean() | nil,
           seeding_time: non_neg_integer() | nil,
           seeders: integer() | nil,

@@ -94,6 +94,26 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
     assert rejected.ratio == 0.4
   end
 
+  test "orders by when the counter was read, not when the pass started" do
+    download = download_fixture(%{metadata: %{}})
+
+    # Pass A started first but read the client last (200); pass B started
+    # later, read earlier (100), and writes after A.
+    ObservedUpload.record(
+      [row(download, %{live_uploaded: 200, live_uploaded_at: ~U[2031-05-10 12:00:05Z]})],
+      ~U[2031-05-10 12:00:00Z]
+    )
+
+    [b] =
+      ObservedUpload.record(
+        [row(download, %{live_uploaded: 100, live_uploaded_at: ~U[2031-05-10 12:00:03Z]})],
+        ~U[2031-05-10 12:00:01Z]
+      )
+
+    assert entry(download) == %{"bytes" => 200, "session" => 200}
+    assert b.uploaded == 200
+  end
+
   test "passes in the same second are still ordered" do
     download = download_fixture(%{metadata: %{}})
     newer = ~U[2031-05-10 12:00:00.800000Z]

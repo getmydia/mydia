@@ -400,6 +400,15 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert status.uploaded_session_only? == true
     end
 
+    test "stamps when the status was read", %{bypass: bypass, config: config} do
+      stub_details(bypass)
+      stub_stats(bypass, stats(state: "live", finished: true, total_bytes: 1000))
+
+      before = DateTime.utc_now()
+      assert {:ok, status} = Rqbit.get_status(config, @hash)
+      assert DateTime.compare(status.observed_at, before) in [:gt, :eq]
+    end
+
     test "initializing maps to :checking", %{bypass: bypass, config: config} do
       stub_details(bypass)
       stub_stats(bypass, stats(state: "initializing", finished: false))

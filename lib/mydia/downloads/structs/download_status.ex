@@ -78,6 +78,10 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
     # total (`Mydia.Downloads.ObservedUpload`) and reads `uploaded` and
     # `ratio` from it.
     uploaded_session_only?: false,
+    # When the adapter read this status from the client, for adapters whose
+    # counters need ordering across overlapping polls (rqbit; see
+    # `Mydia.Downloads.ObservedUpload`). Nil otherwise.
+    observed_at: nil,
     # Categories or labels the client reports for this item, as the client
     # spells them. Empty for a client with no such concept (rqbit) and for
     # every adapter that does not report them.
@@ -137,6 +141,7 @@ defmodule Mydia.Downloads.Structs.DownloadStatus do
           completed_at: DateTime.t() | nil,
           seeding_time: non_neg_integer() | nil,
           uploaded_session_only?: boolean(),
+          observed_at: DateTime.t() | nil,
           failure_category: FailureCategory.t() | nil,
           failure_detail: String.t() | nil,
           categories: [String.t()]

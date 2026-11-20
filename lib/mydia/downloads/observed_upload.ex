@@ -16,8 +16,9 @@ defmodule Mydia.Downloads.ObservedUpload do
                              "seen_at" => "2031-05-10T12:00:00Z"}
 
   `bytes` is the running total, `session` the client's counter as last
-  recorded, `seen_at` the pass that last changed them (`step/3` ignores an
-  older, overlapping pass). `step/2` moves it on:
+  recorded, `seen_at` when the counter that last changed them was read
+  (`step/3` ignores an older read from an overlapping pass). `step/2` moves
+  it on:
 
   - no entry (or a malformed one): `bytes` and `session` are the counter, so
     the current session counts in full on first sight. Uploads from sessions
@@ -75,10 +76,10 @@ defmodule Mydia.Downloads.ObservedUpload do
   defp next(bytes, live), do: %{"bytes" => bytes, "session" => live}
 
   @doc """
-  `step/2` for a pass at `now`. A change is stamped `"seen_at"`; an entry the
-  counter leaves as it was is returned untouched, so a quiet torrent costs no
-  write. A pass whose `now` is not after `"seen_at"` started before the pass
-  that last changed the entry (overlapping monitor passes): its older counter
+  `step/2` for a counter read at `now`. A change is stamped `"seen_at"`; an
+  entry the counter leaves as it was is returned untouched, so a quiet
+  torrent costs no write. A counter read no later than `"seen_at"` is older
+  than the one that last changed the entry (overlapping monitor passes): it
   would read as a reset and be added in full, so it changes nothing.
   """
   @spec step(map() | nil, non_neg_integer(), DateTime.t()) :: map()
@@ -145,6 +146,7 @@ defmodule Mydia.Downloads.ObservedUpload do
       | uploaded: status.uploaded,
         ratio: status.ratio,
         live_uploaded: status.uploaded,
+        live_uploaded_at: Map.get(status, :observed_at),
         uploaded_session_only?: Map.get(status, :uploaded_session_only?) == true
     })
   end
@@ -174,19 +176,25 @@ defmodule Mydia.Downloads.ObservedUpload do
 
   Returns the rows, each recorded one carrying its new entry in `metadata`
   and overlaid from it, so the policies on the same pass see the total. A
-  row whose write failed is returned as it was. `now` is the pass's clock,
-  as for `Mydia.Downloads.ObservedSeedTime.record/2`, and orders overlapping
-  passes (`step/3`).
+  row whose write failed is returned as it was.
+
+  Overlapping passes are ordered (`step/3`) by when each read its counter:
+  the row's `live_uploaded_at` (`DownloadStatus.observed_at`), else `now`,
+  the pass's clock. A pass that starts later can read the client earlier, so
+  the pass's start alone would not order them.
   """
   @spec record([map()], DateTime.t()) :: [map()]
   def record(rows, now \\ DateTime.utc_now()) do
     Enum.map(rows, fn row -> if tracked?(row), do: record_row(row, now), else: row end)
   end
 
+  defp read_at(%{live_uploaded_at: %DateTime{} = read_at}, _now), do: read_at
+  defp read_at(_row, now), do: now
+
   # Each row on its own: one failing row must not skip the rest, nor fail the
   # monitor's poll.
   defp record_row(row, now) do
-    case write(row.id, live(row.live_uploaded), now) do
+    case write(row.id, live(row.live_uploaded), read_at(row, now)) do
       # The stored total, not this pass's counter stepped again: a rejected
       # (out-of-order) counter would read as a reset against the newer entry.
       {:ok, %{"bytes" => bytes} = entry} ->

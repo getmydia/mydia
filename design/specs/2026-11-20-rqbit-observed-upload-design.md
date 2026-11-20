@@ -67,12 +67,16 @@ recorded.
 `total(entry, live)` is `step(entry, live)["bytes"]`, so what is written and
 what is shown can never disagree.
 
-Recording uses `step(entry, live, now)`, which also stamps `"seen_at"` with
-the pass time whenever `bytes` or `session` change. A pass whose `now` is not
-after `"seen_at"` changes nothing. DownloadMonitor passes can overlap (a cron
-tick and a fast follow-up), and without this an earlier pass writing late
-would read its lower counter as a reset and add it in full, inflating the
-total. `ObservedSeedTime` guards the same way.
+Recording uses `step(entry, live, read_at)`, which also stamps `"seen_at"`
+(full precision) whenever `bytes` or `session` change. `read_at` is when the
+counter was read: the rqbit adapter stamps `DownloadStatus.observed_at` as it
+parses the response, carried as `EnrichedDownload.live_uploaded_at`, with the
+pass's clock as the fallback. A counter read no later than `"seen_at"`
+changes nothing. DownloadMonitor passes can overlap (a cron tick and a fast
+follow-up), and a pass can start later yet read the client earlier; without
+this, the older counter writing late would read as a reset and be added in
+full, inflating the total. The pass start time alone is not enough to order
+them.
 
 On first sight the current session's bytes count in full. Unlike seed time,
 which starts from 0 on purpose because no client reported it, uploaded bytes
