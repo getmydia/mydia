@@ -628,9 +628,17 @@ local repro command are in `player/docs/workflow.md`. The browser and
 television-tier steps still use plain `flutter test` on enumerated files.
 
 `Test / Player E2E` rebuilds its toolbox image only when `player/.fvmrc`,
-`player/Dockerfile.test` or `rust-toolchain.toml` change. A `pubspec.lock`
-change pulls the master image, and the run's own `pub get --enforce-lockfile`
-fetches the difference.
+`player/Dockerfile.test`, `player/pubspec.yaml`, `player/packages/` or
+`rust-toolchain.toml` change. A `pubspec.lock` change pulls the master image,
+and the run's own `pub get --enforce-lockfile` fetches the difference.
+
+It also builds the server image, instead of pulling it, when a PR touches the
+player inputs the release `Dockerfile` copies one by one: `pubspec.yaml`,
+`build.yaml`, `l10n.yaml`, `packages/`, `assets/`, `shaders/` and
+`rust_builder/pubspec.yaml`. `CI / Docker` runs only on push to master, so
+without this a player-only PR could break the release image unseen until after
+merge, which is what #1444 did with a path dependency the Dockerfile never
+copied.
 
 ## The precompiled Cardigann guest
 
