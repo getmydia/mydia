@@ -59,6 +59,21 @@ defmodule MydiaWeb.MediaLive.Show.DownloadCancelTest do
     refute Repo.get!(Download, download.id).removal_delete_files
   end
 
+  test "an account that cannot manage downloads cannot cancel one", %{conn: conn} do
+    movie = media_item_fixture(%{type: "movie", title: "Fictional Lantern Weir", year: 2021})
+    download = download_fixture(%{media_item_id: movie.id})
+    conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_click(view, "show_download_cancel_confirm", %{"download-id" => download.id})
+
+    assert render_click(view, "cancel_download", %{"delete_files" => "true"}) =~
+             "You do not have permission to manage downloads"
+
+    refute Repo.get!(Download, download.id).removal_requested_at
+    refute_enqueued(worker: Mydia.Jobs.RemoveDownload)
+  end
+
   test "the cancel dialog warns of a hit-and-run before the tracker's goal is met, and still cancels",
        %{conn: conn} do
     movie = media_item_fixture(%{type: "movie", title: "Fictional Copper Estuary", year: 2024})

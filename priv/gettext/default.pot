@@ -3229,7 +3229,7 @@ msgstr ""
 msgid "Cancel transcode"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/download_events.ex:100
+#: lib/mydia_web/live/media_live/show/download_events.ex:108
 #, elixir-autogen, elixir-format
 msgid "Cancelling the download"
 msgstr ""
@@ -3241,7 +3241,7 @@ msgid_plural "Cancelling. This release was stalled, so Mydia won't grab it again
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/download_events.ex:95
+#: lib/mydia_web/live/media_live/show/download_events.ex:103
 #, elixir-autogen, elixir-format
 msgid "Cancelling. This release was stalled, so Mydia won't grab it again for %{days} days."
 msgstr ""
@@ -4608,12 +4608,12 @@ msgid "Download paused"
 msgstr ""
 
 #: lib/mydia_web/live/downloads_live/index.ex:350
-#: lib/mydia_web/live/media_live/show/download_events.ex:199
+#: lib/mydia_web/live/media_live/show/download_events.ex:207
 #, elixir-autogen, elixir-format
 msgid "Download re-initiated"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/download_events.ex:133
+#: lib/mydia_web/live/media_live/show/download_events.ex:141
 #, elixir-autogen, elixir-format
 msgid "Download removed from history"
 msgstr ""
@@ -4954,7 +4954,7 @@ msgstr ""
 msgid "Failed to apply episode monitoring"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/download_events.ex:84
+#: lib/mydia_web/live/media_live/show/download_events.ex:92
 #, elixir-autogen, elixir-format
 msgid "Failed to cancel download"
 msgstr ""
@@ -4974,7 +4974,7 @@ msgstr ""
 msgid "Failed to delete %{title}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/download_events.ex:138
+#: lib/mydia_web/live/media_live/show/download_events.ex:146
 #, elixir-autogen, elixir-format
 msgid "Failed to delete download"
 msgstr ""
@@ -5101,7 +5101,7 @@ msgid "Failed to resume download: %{reason}"
 msgstr ""
 
 #: lib/mydia_web/live/downloads_live/retry.ex:79
-#: lib/mydia_web/live/media_live/show/download_events.ex:206
+#: lib/mydia_web/live/media_live/show/download_events.ex:214
 #, elixir-autogen, elixir-format
 msgid "Failed to retry download: %{reason}"
 msgstr ""
@@ -5131,7 +5131,7 @@ msgstr ""
 msgid "Failed to update collection"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/download_events.ex:211
+#: lib/mydia_web/live/media_live/show/download_events.ex:219
 #, elixir-autogen, elixir-format
 msgid "Failed to update download"
 msgstr ""
@@ -9513,7 +9513,7 @@ msgstr ""
 
 #: lib/mydia_web/live/downloads_live/index.ex:1318
 #: lib/mydia_web/live/media_live/show/download_events.ex:32
-#: lib/mydia_web/live/media_live/show/download_events.ex:157
+#: lib/mydia_web/live/media_live/show/download_events.ex:165
 #, elixir-autogen, elixir-format
 msgid "That download no longer exists."
 msgstr ""

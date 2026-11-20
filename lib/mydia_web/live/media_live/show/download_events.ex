@@ -61,7 +61,15 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
      |> assign(:download_to_cancel, nil)}
   end
 
+  # The page is open to any signed-in account, and a cancel can delete files.
   def cancel_download(params, socket) do
+    case Authorization.authorize_manage_downloads(socket) do
+      :ok -> request_cancel(params, socket)
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  defp request_cancel(params, socket) do
     delete_files = params["delete_files"] == "true"
 
     # download_to_cancel may be the enriched row shown in the confirm modal.
