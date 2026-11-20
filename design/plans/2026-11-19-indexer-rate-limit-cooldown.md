@@ -277,7 +277,7 @@ Added after the plan was approved, at the maintainer's request.
   - Migration: `add :http_requests, :integer` (nullable), portable on both adapters. Use a real timestamp and run the duplicate-version check from AGENTS.md, "Migration filenames", before committing.
   - `error_outcome/1`: `:rate_limited` with source `:cooldown`/`:local_limit`/`:daily_cap` maps to the matching `skipped_*` atom; everything else unchanged.
   - Telemetry carries `http_requests` as a measurement; `Event` stores it; `SearchStats.summary/2` selects `inserted_at` and `http_requests` too.
-  - `search_with_metrics/3` completion log (`Logger.debug` today) gains `http_requests: n` metadata and becomes `Logger.info` only when `n > 0`... keep it `debug`; add the metadata only.
+  - `search_with_metrics/3` completion log (`Logger.debug` today) gains `http_requests: n` metadata and stays at `debug` (the UI is the primary surface; 429s and skips already log at warning and info).
   - UI: three `stat` cells after Timeouts, copy via gettext: "Requests" (value `requests`, suffix "peak %{n}/min"), "429s", "Skipped". Cooldown badge: `<span class="badge badge-warning badge-sm">` with `hero-clock` icon, "Cooling down until %{time}" in UTC `%H:%M`, beside the existing health badge on both row variants. `index.ex` assigns `cooldowns: %{id => DateTime}` built from `RateLimiter.cooldown_until/1` for the listed indexers on mount and on the existing stats refresh.
   - Run `./dev mix gettext.extract --merge` if the gettext README requires it for new strings.
 - [ ] **Step 4: Run, expect PASS**, then `./dev mix test test/mydia/indexers test/mydia_web/live/admin_indexers_live`.
