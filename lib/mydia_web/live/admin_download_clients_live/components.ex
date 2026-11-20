@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
   use MydiaWeb, :html
 
   alias Mydia.Settings
+  alias MydiaWeb.AdminDownloadClientsLive.CategoryRoutingComponents
 
   @doc """
   Renders the Download Clients tab content.
@@ -53,8 +54,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
       </:title>
       <:descriptor>
         <span class="font-mono">{endpoint_label(@client)}</span>
-        <span :if={@client.category} class="ml-2">
-          {gettext("Category: %{category}", category: @client.category)}
+        <span
+          :if={CategoryRoutingComponents.category_aware_type?(@client.type)}
+          id={"client-category-#{@client.id}"}
+          class="ml-2"
+        >
+          {CategoryRoutingComponents.category_summary(@client)}
         </span>
         <%!-- Only when the operator changed it. :auto is the
               default and says nothing worth a row of chrome. --%>

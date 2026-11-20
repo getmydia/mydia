@@ -125,7 +125,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
 
   @impl true
   def handle_event("save_download_client", %{"download_client_config" => params}, socket) do
-    normalized = normalize_client_params(params)
+    normalized = params |> normalize_client_params() |> migrate_legacy_category()
 
     result =
       case socket.assigns.download_client_mode do
@@ -483,6 +483,15 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
     |> normalize_map_field("categories")
     |> normalize_map_field("priority_profile")
   end
+
+  # The per-content-type inputs are prefilled from the legacy single
+  # `category`, so submitting them carries that value over. Clearing the
+  # legacy field completes the migration the form promises: otherwise a
+  # field the operator blanked still falls back to it (#1442).
+  defp migrate_legacy_category(%{"categories" => %{}} = params),
+    do: Map.put(params, "category", nil)
+
+  defp migrate_legacy_category(params), do: params
 
   defp normalize_map_field(params, key) do
     case Map.get(params, key) do
