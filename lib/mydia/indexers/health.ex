@@ -36,6 +36,7 @@ defmodule Mydia.Indexers.Health do
 
   alias Mydia.Settings
   alias Mydia.Indexers
+  alias Mydia.Indexers.RateLimiter
   alias Mydia.Health
 
   @cache_ttl :timer.minutes(5)
@@ -77,9 +78,38 @@ defmodule Mydia.Indexers.Health do
     else
       case get_cached_health(indexer_id) do
         {:ok, health} -> {:ok, health}
-        :not_found -> perform_health_check(indexer_id)
+        :not_found -> unless_cooling(indexer_id)
       end
     end
+  end
+
+  # An indexer cooling down after HTTP 429 gets no caps request until the
+  # cooldown ends (README, "Rate limits and cooldown"); it keeps its last
+  # status, however old. A forced check is an operator asking, so it probes.
+  defp unless_cooling(indexer_id) do
+    case RateLimiter.cooldown_until(indexer_id) do
+      nil -> perform_health_check(indexer_id)
+      until -> {:ok, last_or_cooling_result(indexer_id, until)}
+    end
+  end
+
+  defp last_or_cooling_result(indexer_id, until) do
+    case :ets.lookup(@table_name, indexer_id) do
+      [{^indexer_id, health, _cached_at}] -> health
+      [] -> cooling_result(until)
+    end
+  rescue
+    ArgumentError -> cooling_result(until)
+  end
+
+  # Neither healthy nor a failure: the tracker answered, just not now.
+  defp cooling_result(until) do
+    %{
+      status: :unknown,
+      checked_at: nil,
+      details: %{cooling_until: until},
+      error: "Cooling down after HTTP 429 until #{Calendar.strftime(until, "%H:%M")}"
+    }
   end
 
   @doc """
@@ -262,6 +292,8 @@ defmodule Mydia.Indexers.Health do
   defp perform_all_health_checks do
     Settings.list_indexer_configs()
     |> Enum.filter(& &1.enabled)
+    # A cooling indexer keeps its cached status; see unless_cooling/1.
+    |> Enum.reject(&RateLimiter.cooldown_until(&1.id))
     |> Enum.each(fn config ->
       # Perform health check asynchronously
       Task.start(fn ->

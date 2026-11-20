@@ -14,7 +14,13 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   - Consecutive failure tracking
   """
 
-  import Ecto.Query, only: [from: 2]
+  import Mydia.Indexers.CardigannHealthCheck.Status,
+    only: [
+      determine_health_status: 3,
+      needs_login_result: 0,
+      note_success: 2,
+      rate_limited_result: 3
+    ]
 
   alias Mydia.Indexers
   alias Mydia.Indexers.Adapter.Error
@@ -23,12 +29,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   alias Mydia.Indexers.Cardigann.EngineSwitcher
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.ResponseCheck
   alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
+  alias Mydia.Indexers.CardigannHealthCheck.{Status, Sweep}
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.SearchStats
   alias Mydia.Indexers.SearchStats.Network
@@ -36,6 +44,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   @type test_result :: %{
           optional(:network_ms) => non_neg_integer() | nil,
+          optional(:rate_limited) => true,
           success: boolean(),
           status: String.t(),
           message: String.t(),
@@ -59,10 +68,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   `execute_search/4` fails over past `base_url` to later candidates on a
   retryable failure (a dead or wrong mirror answering 404, say), so the
   candidate that answered is not always the one the probe was asked to try.
+
+  `{:rate_limited, error}` is the tracker answering HTTP 429; the error's
+  `details.retry_after` carries its `Retry-After` in milliseconds, or nil.
   """
   @type probe_outcome ::
           {:ok, non_neg_integer(), String.t()}
           | {:cloudflare, String.t()}
+          | {:rate_limited, Error.t()}
           | {:error, String.t()}
 
   @doc """
@@ -119,8 +132,11 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   @spec execute_health_check(CardigannDefinition.t(), keyword()) ::
           {:ok, test_result()} | {:error, String.t()}
   def execute_health_check(%CardigannDefinition{} = definition, _opts \\ []) do
+    # The probe (homepage GET, search, any login) runs in this process, so
+    # Network counts its requests.
+    Network.reset()
     result = run_health_check(definition)
-    record_health(definition, result)
+    record_health(definition, result, Network.take_requests())
     result
   end
 
@@ -145,39 +161,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   end
 
   @doc """
-  Runs health checks for all enabled Cardigann indexers.
-
-  This function is designed to be called periodically by a background job
-  to monitor the health of all enabled indexers.
-
-  ## Returns
-
-  - `{:ok, results}` - Map of definition_id => test_result
+  Runs health checks for all enabled Cardigann indexers, skipping cooling
+  ones and trusting a recent real search. See `Sweep`.
   """
   @spec check_all_enabled() :: {:ok, map()}
-  def check_all_enabled do
-    enabled_definitions =
-      CardigannDefinition
-      |> Repo.all()
-      |> Enum.filter(& &1.enabled)
+  defdelegate check_all_enabled, to: Sweep
 
-    results =
-      enabled_definitions
-      |> Task.async_stream(
-        fn definition ->
-          {definition.id, execute_health_check(definition)}
-        end,
-        timeout: :infinity,
-        max_concurrency: 5
-      )
-      |> Enum.reduce(%{}, fn
-        {:ok, {id, {:ok, result}}}, acc -> Map.put(acc, id, result)
-        {:ok, {id, {:error, reason}}}, acc -> Map.put(acc, id, %{error: reason})
-        _, acc -> acc
-      end)
-
-    {:ok, results}
-  end
+  @doc false
+  defdelegate update_health_status(definition, result), to: Status
 
   @doc """
   Probes each base URL candidate in order and returns the first that responds.
@@ -185,9 +176,15 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   The returned map is suitable for storing in `CardigannDefinition.link_status`
   and records every candidate tried, not only the winner, so the admin UI can
   show why a mirror was skipped.
+
+  A homepage answering HTTP 429 stops the walk with
+  `{:rate_limited, retry_after_ms, status}`: the tracker is throttling Mydia,
+  and asking its other mirrors would only add to it.
   """
   @spec probe_candidates(Parsed.t(), map()) ::
-          {:ok, String.t(), map()} | {:error, map()}
+          {:ok, String.t(), map()}
+          | {:rate_limited, non_neg_integer() | nil, map()}
+          | {:error, map()}
   def probe_candidates(%Parsed{} = parsed, user_config) do
     parsed
     |> Links.candidates()
@@ -195,6 +192,10 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       case test_homepage(candidate, user_config) do
         {:ok, http_status} ->
           {:halt, {:ok, candidate, Map.put(status, candidate, ok_entry(http_status))}}
+
+        {:rate_limited, retry_after} ->
+          {:halt,
+           {:rate_limited, retry_after, Map.put(status, candidate, error_entry("HTTP 429"))}}
 
         {:error, error} ->
           {:cont, {:error, Map.put(status, candidate, error_entry(error))}}
@@ -240,11 +241,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
          # resolving relative result URLs against the (possibly stale) base_url
          # argument below.
          winner = served_by(base_url),
-         :ok <- CardigannSearchEngine.validate_response(response),
+         :ok <- ResponseCheck.validate_response(response),
          {:ok, results, stats} <- parse_probe_results(parsed, response, winner, opts),
          :ok <- ensure_usable(results, stats) do
       {:ok, length(results), winner}
     else
+      {:error, %Error{type: :rate_limited} = error} -> {:rate_limited, error}
       {:error, %Error{message: message}} -> classify_probe_error(message)
     end
   end
@@ -352,14 +354,15 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   # Private Functions
 
   # A needs_login check is not a probe of the tracker, so it is not recorded.
-  defp record_health(_definition, {:ok, %{status: "needs_login"}}), do: :ok
+  defp record_health(_definition, {:ok, %{status: "needs_login"}}, _requests), do: :ok
 
-  defp record_health(definition, {:ok, result}) do
+  defp record_health(definition, {:ok, result}, requests) do
     SearchStats.Telemetry.emit(Indexers.cardigann_config(definition),
       kind: :health,
       outcome: if(result.status == "healthy", do: :ok, else: result.status),
       duration_ms: result.response_time_ms || 0,
       network_ms: result[:network_ms],
+      http_requests: requests,
       error_message: result[:error]
     )
   end
@@ -386,6 +389,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
     network_ms = Network.take_ms()
     elapsed = System.monotonic_time(:millisecond) - start_time
+
+    note_success(definition, outcome)
 
     case outcome do
       {:error, %Error{type: :login_required}} ->
@@ -418,6 +423,9 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     }
   end
 
+  defp prowlarr_result(definition, {:error, %Error{type: :rate_limited} = error}, elapsed),
+    do: rate_limited_result(definition, error, elapsed)
+
   defp prowlarr_result(definition, {:error, %Error{message: message}}, elapsed) do
     case classify_probe_error(message) do
       {:cloudflare, message} ->
@@ -438,18 +446,6 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           error: message
         }
     end
-  end
-
-  # Nothing is persisted: needs_login is cleared only by a real login, so
-  # a check must neither overwrite it nor count as a failure.
-  defp needs_login_result do
-    %{
-      success: false,
-      status: "needs_login",
-      message: "Needs login",
-      response_time_ms: nil,
-      error: nil
-    }
   end
 
   defp builtin_probe(definition, parsed_definition) do
@@ -490,6 +486,11 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
             start_time
           )
 
+        {:rate_limited, retry_after, link_status} ->
+          store_link_state(definition, nil, link_status)
+          error = Error.rate_limited("Homepage answered HTTP 429", %{retry_after: retry_after})
+          rate_limited_result(definition, error, System.monotonic_time(:millisecond) - start_time)
+
         {:error, link_status} ->
           store_link_state(definition, nil, link_status)
           elapsed = System.monotonic_time(:millisecond) - start_time
@@ -516,6 +517,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp search_leg(definition, parsed, user_config, active_link, link_status, start_time) do
     outcome = probe_search(parsed, user_config, active_link)
     elapsed = System.monotonic_time(:millisecond) - start_time
+
+    note_success(definition, outcome)
 
     case outcome do
       {:ok, 0, served_by} ->
@@ -572,6 +575,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           response_time_ms: elapsed,
           error: message
         }
+
+      {:rate_limited, error} ->
+        # The tracker said nothing about this mirror's search beyond "not now",
+        # so it is not promoted.
+        store_link_state(definition, nil, link_status)
+        rate_limited_result(definition, error, elapsed)
 
       {:error, message} ->
         # The homepage answered but the search did not, so this candidate is not
@@ -634,9 +643,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp test_homepage(nil, _user_config), do: {:error, "No base URL configured"}
 
   defp test_homepage(base_url, user_config) do
-    base_url
-    |> Req.get(homepage_request_opts(user_config))
-    |> classify_homepage(base_url)
+    response = Req.get(base_url, Network.count_dispatches(homepage_request_opts(user_config)))
+    classify_homepage(response, base_url)
   end
 
   defp homepage_request_opts(user_config) do
@@ -660,6 +668,9 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     end
   end
 
+  defp classify_homepage({:ok, %Req.Response{status: 429, headers: headers}}, _url),
+    do: {:rate_limited, Error.retry_after_ms(headers)}
+
   defp classify_homepage({:ok, %Req.Response{status: status}}, _url),
     do: {:error, "HTTP #{status}"}
 
@@ -673,65 +684,6 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       {msg, _} when is_binary(msg) -> {:error, msg}
       {nil, %Req.TransportError{reason: r}} -> {:error, "Connection failed: #{inspect(r)}"}
       {nil, other} -> {:error, "Request failed: #{inspect(other)}"}
-    end
-  end
-
-  defp determine_health_status(definition, success, response_time) do
-    cond do
-      success && response_time < 5_000 ->
-        "healthy"
-
-      success && response_time < 15_000 ->
-        "degraded"
-
-      success ->
-        "degraded"
-
-      definition.consecutive_failures >= 3 ->
-        "unhealthy"
-
-      true ->
-        "degraded"
-    end
-  end
-
-  @doc false
-  def update_health_status(definition, result) do
-    now = DateTime.utc_now()
-
-    attrs =
-      if result.success do
-        %{
-          health_status: result.status,
-          last_health_check_at: now,
-          last_successful_query_at: now,
-          consecutive_failures: 0
-        }
-      else
-        %{
-          health_status: result.status,
-          last_health_check_at: now,
-          consecutive_failures: (definition.consecutive_failures || 0) + 1
-        }
-      end
-
-    changeset = CardigannDefinition.health_check_changeset(definition, attrs)
-
-    # The probe takes seconds and works on a struct loaded before it started. A
-    # search may have set needs_login meanwhile, and only a login clears it, so
-    # the write is conditional on the row's current status, not the struct's.
-    with true <- changeset.valid?,
-         {1, _} <-
-           Repo.update_all(
-             from(d in CardigannDefinition,
-               where: d.id == ^definition.id and d.health_status != "needs_login"
-             ),
-             set: Map.to_list(changeset.changes)
-           ) do
-      {:ok, Repo.get!(CardigannDefinition, definition.id)}
-    else
-      false -> {:error, changeset}
-      {0, _} -> {:ok, Repo.get!(CardigannDefinition, definition.id)}
     end
   end
 

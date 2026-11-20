@@ -93,6 +93,60 @@ defmodule Mydia.Indexers.HealthTest do
     end
   end
 
+  describe "indexers cooling down after HTTP 429" do
+    alias Mydia.Indexers.RateLimiter
+
+    defp reporting_newznab(name) do
+      test_pid = self()
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/api", fn conn ->
+        send(test_pid, {:probed, name})
+        Plug.Conn.resp(conn, 500, "")
+      end)
+
+      {:ok, indexer} =
+        Settings.create_indexer_config(%{
+          name: name,
+          type: :newznab,
+          base_url: "http://localhost:#{bypass.port}",
+          api_key: "key",
+          enabled: true
+        })
+
+      on_exit(fn -> RateLimiter.clear_indexer(indexer.id) end)
+      indexer
+    end
+
+    test "the scheduled check sends a cooling indexer nothing" do
+      start_supervised!(Health)
+      cooling = reporting_newznab("Cooling Feed")
+      open = reporting_newznab("Open Feed")
+      RateLimiter.record_rate_limited(cooling.id, nil)
+
+      Health.refresh_all_indexers()
+
+      assert_receive {:probed, "Open Feed"}, 2_000
+      refute_receive {:probed, "Cooling Feed"}, 300
+      assert Health.get_failure_count(cooling.id) == 0
+
+      # Let the open feed's task finish before the monitor stops.
+      assert wait_until(fn -> Health.status_map([open])[open.id].status != :unknown end)
+    end
+
+    test "an uncached check of a cooling indexer is neither healthy nor a failure" do
+      start_supervised!(Health)
+      cooling = reporting_newznab("Cooling Feed")
+      RateLimiter.record_rate_limited(cooling.id, nil)
+
+      assert {:ok, %{status: :unknown, error: "Cooling down after HTTP 429 until " <> _}} =
+               Health.check_health(cooling.id)
+
+      refute_receive {:probed, _}, 100
+      assert Health.get_failure_count(cooling.id) == 0
+    end
+  end
+
   describe "paused Prowlarr indexers" do
     test "a healthy Prowlarr check carries the paused list in details" do
       start_supervised!(Health)

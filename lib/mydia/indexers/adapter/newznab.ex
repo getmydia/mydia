@@ -46,6 +46,7 @@ defmodule Mydia.Indexers.Adapter.Newznab do
 
   alias Mydia.Indexers.{SearchResult, QualityParser, NewznabEndpoint}
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.SearchStats.Network
   alias Mydia.Downloads.Client.Helpers
   alias Mydia.Indexers.Structs.TrackerTerms
 
@@ -100,11 +101,17 @@ defmodule Mydia.Indexers.Adapter.Newznab do
     with {:ok, url} <- build_search_url(config, query, opts) do
       Logger.debug("Newznab search: #{Helpers.redact_url(url)}")
 
-      case Req.get(url,
-             receive_timeout: timeout,
-             connect_options: [timeout: @connect_timeout],
-             retry: false
-           ) do
+      response =
+        Req.get(
+          url,
+          Network.count_dispatches(
+            receive_timeout: timeout,
+            connect_options: [timeout: @connect_timeout],
+            retry: false
+          )
+        )
+
+      case response do
         {:ok, %Req.Response{status: 200, body: body}} ->
           parse_search_response(body, config.name)
 
@@ -114,8 +121,11 @@ defmodule Mydia.Indexers.Adapter.Newznab do
         {:ok, %Req.Response{status: 403}} ->
           {:error, Error.authentication_failed("Access forbidden")}
 
-        {:ok, %Req.Response{status: 429}} ->
-          {:error, Error.rate_limited("Rate limit exceeded")}
+        {:ok, %Req.Response{status: 429} = response} ->
+          {:error,
+           Error.rate_limited("Rate limit exceeded", %{
+             retry_after: Error.retry_after_ms(response.headers)
+           })}
 
         {:ok, %Req.Response{status: status, body: body}} ->
           Logger.error("Newznab search failed with status #{status}: #{inspect(body)}")

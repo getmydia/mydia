@@ -17,18 +17,28 @@ defmodule Mydia.Indexers.SearchStats do
 
   @type window :: :day | :week
 
-  @doc "Summaries per indexer id, one per engine, busiest first."
+  @doc """
+  Summaries per indexer id, one per engine, busiest first.
+
+  Everything but `requests` and `peak_per_minute` describes calls of `kind`.
+  Those two count every call that sent a request, health probes included,
+  since a probe hits the tracker as surely as a search does.
+  """
   @spec summary(window(), String.t()) :: %{String.t() => [Summary.t()]}
   def summary(window, kind \\ "search") do
     since = DateTime.add(DateTime.utc_now(), -window_seconds(window), :second)
 
     from(e in Event,
-      where: e.kind == ^kind and e.inserted_at >= ^since,
-      select: {e.indexer_id, e.engine, e.outcome, e.duration_ms, e.result_count}
+      where: e.inserted_at >= ^since and (e.kind == ^kind or e.http_requests > 0),
+      select:
+        {e.indexer_id, e.engine, e.outcome, e.duration_ms, e.result_count, e.http_requests,
+         e.inserted_at, e.kind}
     )
     |> Repo.all()
-    |> Enum.group_by(fn {indexer_id, engine, _, _, _} -> {indexer_id, engine} end)
-    |> Enum.map(fn {{indexer_id, engine}, rows} -> Summary.build(indexer_id, engine, rows) end)
+    |> Enum.group_by(&{elem(&1, 0), elem(&1, 1)})
+    |> Enum.map(fn {{indexer_id, engine}, rows} ->
+      Summary.build(indexer_id, engine, rows, kind)
+    end)
     |> Enum.group_by(& &1.indexer_id)
     |> Map.new(fn {indexer_id, summaries} ->
       {indexer_id, Enum.sort_by(summaries, & &1.attempts, :desc)}

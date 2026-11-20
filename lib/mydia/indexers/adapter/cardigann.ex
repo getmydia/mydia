@@ -271,9 +271,15 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
                  "Cloudflare protection detected on #{url}. Enable FlareSolverr for this indexer."
                )}
 
+            {:rate_limited, error} ->
+              {:error, error}
+
             {:error, message} ->
               {:error, Error.search_failed("Reached #{url} but the search failed: #{message}")}
           end
+
+        {:rate_limited, retry_after, _status} ->
+          {:error, Error.rate_limited("Homepage answered HTTP 429", %{retry_after: retry_after})}
 
         {:error, status} when map_size(status) == 0 ->
           {:error, Error.invalid_config("No base URL configured in definition")}

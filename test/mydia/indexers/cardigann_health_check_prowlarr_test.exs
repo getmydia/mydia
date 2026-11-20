@@ -8,6 +8,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckProwlarrTest do
   alias Mydia.Indexers
   alias Mydia.Indexers.Adapter.{Error, Registry}
   alias Mydia.Indexers.CardigannHealthCheck
+  alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.SearchStats.Telemetry
   alias Mydia.Indexers.SearchResult
   alias Mydia.Repo
@@ -96,6 +97,27 @@ defmodule Mydia.Indexers.CardigannHealthCheckProwlarrTest do
 
     assert {:ok, %{success: false, error: "Connection failed: :nxdomain"}} =
              CardigannHealthCheck.test_connection(d.id)
+  end
+
+  test "a 429 cools the definition without counting a failure", %{definition: d} do
+    on_exit(fn -> RateLimiter.clear_indexer(d.id) end)
+    answer({:error, Error.rate_limited("Rate limit exceeded", %{retry_after: 120_000})})
+
+    assert {:ok, %{success: false, rate_limited: true, status: "degraded"} = result} =
+             CardigannHealthCheck.test_connection(d.id)
+
+    assert result.message =~ "Tracker answered HTTP 429; paused until "
+    assert Repo.reload!(d).consecutive_failures == d.consecutive_failures
+    assert DateTime.diff(RateLimiter.cooldown_until(d.id), DateTime.utc_now()) in 115..120
+  end
+
+  test "a successful probe clears a cooldown", %{definition: d} do
+    on_exit(fn -> RateLimiter.clear_indexer(d.id) end)
+    RateLimiter.record_rate_limited(d.id, nil)
+    answer({:ok, [release()]})
+
+    assert {:ok, %{success: true}} = CardigannHealthCheck.test_connection(d.id)
+    assert RateLimiter.cooldown_until(d.id) == nil
   end
 
   test "each probe emits a health event tagged with the engine", %{definition: d, ref: ref} do

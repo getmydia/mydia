@@ -5,13 +5,15 @@ defmodule Mydia.Indexers.TrackerLimits do
   Both count over a rolling 24 hours and are optional: Prowlarr may already
   enforce its own.
 
-  * **Searches.** `guard_query/2` wraps one indexer's search in
-    `Mydia.Indexers.search_all/2`. A rule applies to the Mydia indexer whose
-    name matches the rule's tracker: a built-in Cardigann definition, or a
-    Jackett or Torznab feed for a single tracker. An aggregate Prowlarr or
-    Jackett connection sends one search to many trackers Mydia never sees, so
-    trackers behind it rely on Prowlarr's limits. Every attempt counts, since
-    the tracker saw the request either way. Counts live in
+  * **Searches.** `guard_query/2` wraps one indexer's search, last in
+    `Mydia.Indexers.SearchGate` before the request goes out. A rule applies
+    to the Mydia indexer whose name matches the rule's tracker: a built-in
+    Cardigann definition, or a Jackett or Torznab feed for a single tracker.
+    An aggregate Prowlarr or Jackett connection sends one search to many
+    trackers Mydia never sees, so trackers behind it rely on Prowlarr's
+    limits. A search that goes out counts whatever it returns, since the
+    tracker saw the request either way; one refused by a cooldown or Mydia's
+    per-minute limit sent nothing and takes no daily slot. Counts live in
     `Mydia.Indexers.RateLimiter` (ETS) and reset on restart. At the cap the
     indexer is skipped with a rate-limited error, which manual search shows
     in the indexer's status.
@@ -61,7 +63,7 @@ defmodule Mydia.Indexers.TrackerLimits do
       {:error, :limited, count} ->
         reason = "daily query limit reached (#{count}/#{limit})"
         Logger.info("Skipping indexer search: #{reason}", indexer: Map.get(config, :name))
-        {:error, Adapter.Error.rate_limited(reason)}
+        {:error, Adapter.Error.rate_limited(reason, %{source: :daily_cap})}
     end
   end
 

@@ -73,6 +73,98 @@ defmodule Mydia.Indexers.SearchStatsTest do
       insert!(%{outcome: "connection_failed"})
       assert %{"def-1" => [%{avg_results: nil}]} = SearchStats.summary(:day)
     end
+
+    test "carries request counts, 429s and skips" do
+      at = %{ago(1) | second: 10}
+      insert!(%{outcome: "ok", http_requests: 3, inserted_at: at})
+      insert!(%{outcome: "rate_limited", http_requests: 1, inserted_at: at})
+      insert!(%{outcome: "skipped_cooldown", http_requests: nil, inserted_at: at})
+
+      assert %{"def-1" => [s]} = SearchStats.summary(:day)
+      assert s.attempts == 2
+      assert s.requests == 4
+      assert s.rate_limited == 1
+      assert s.skipped == 1
+      assert s.peak_per_minute == 4
+    end
+
+    test "health probe requests count toward requests, nothing else" do
+      # Both in one minute, whatever the clock says when the test runs.
+      at = %{ago(1) | second: 10}
+      insert!(%{outcome: "ok", http_requests: 2, inserted_at: at})
+
+      insert!(%{
+        kind: "health",
+        outcome: "degraded",
+        duration_ms: 9_000,
+        http_requests: 3,
+        inserted_at: at
+      })
+
+      assert %{"def-1" => [s]} = SearchStats.summary(:day)
+      assert s.attempts == 1
+      assert s.requests == 5
+      assert s.peak_per_minute == 5
+      assert s.p90_ms == 100
+    end
+  end
+
+  describe "Summary.build/3" do
+    defp row(outcome, requests, at, duration \\ 100, kind \\ "search"),
+      do: {"def-1", "builtin", outcome, duration, 2, requests, at, kind}
+
+    test "another kind's rows add only their requests" do
+      at = ~U[2026-11-19 10:00:30.000000Z]
+
+      s =
+        Summary.build("def-1", "builtin", [
+          row("ok", 2, at),
+          row("degraded", 3, at, 9_000, "health")
+        ])
+
+      assert %Summary{attempts: 1, successes: 1, requests: 5, peak_per_minute: 5} = s
+      assert s.p90_ms == 100
+    end
+
+    test "skips are neither attempts nor requests, and stay out of latency" do
+      at = ~U[2026-11-19 10:00:30.000000Z]
+
+      s =
+        Summary.build("def-1", "builtin", [
+          row("ok", 3, at),
+          row("rate_limited", 1, at),
+          row("skipped_cooldown", nil, at, 0),
+          row("skipped_daily_cap", nil, at, 0)
+        ])
+
+      assert s.attempts == 2
+      assert s.successes == 1
+      assert s.requests == 4
+      assert s.rate_limited == 1
+      assert s.skipped == 2
+      assert s.p50_ms == 100
+      assert Summary.success_rate(s) == 0.5
+    end
+
+    test "peak_per_minute is the busiest calendar minute's request total" do
+      s =
+        Summary.build("def-1", "builtin", [
+          row("ok", 2, ~U[2026-11-19 10:00:01.000000Z]),
+          row("ok", 3, ~U[2026-11-19 10:00:59.000000Z]),
+          row("ok", 4, ~U[2026-11-19 10:01:00.000000Z]),
+          row("timeout", nil, ~U[2026-11-19 10:01:10.000000Z])
+        ])
+
+      assert s.requests == 9
+      assert s.peak_per_minute == 5
+    end
+
+    test "no requests reads as zero" do
+      s = Summary.build("def-1", nil, [row("skipped_local_limit", nil, DateTime.utc_now())])
+
+      assert %Summary{attempts: 0, requests: 0, peak_per_minute: 0, skipped: 1} = s
+      assert Summary.success_rate(s) == nil
+    end
   end
 
   test "recent_failures/2 returns newest non-ok rows for one indexer" do

@@ -165,6 +165,138 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     refute has_element?(view, "#indexer-stats-#{busy.id}-none-engine")
   end
 
+  test "requests, 429s and skips each get a cell", %{conn: conn, busy: busy} do
+    # One minute for all three, so the peak is their sum.
+    at = %{DateTime.add(DateTime.utc_now(), -3600, :second) | second: 10}
+    insert!(busy, %{http_requests: 3, inserted_at: at})
+
+    insert!(busy, %{
+      outcome: "rate_limited",
+      http_requests: 1,
+      error_message: "HTTP 429",
+      inserted_at: at
+    })
+
+    insert!(busy, %{outcome: "skipped_cooldown", error_message: "Cooling down", inserted_at: at})
+    insert!(busy, %{kind: "health", outcome: "degraded", http_requests: 2, inserted_at: at})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    stats = "#indexer-stats-#{busy.id}-none"
+    # The health probe's requests count too.
+    assert has_element?(view, "#{stats}-requests", "6")
+    assert has_element?(view, "#{stats}-requests", "peak 6/min")
+    assert has_element?(view, "#{stats}-rate-limited.text-warning", "1")
+    assert has_element?(view, "#{stats}-skipped", "1")
+    assert has_element?(view, "#{stats}-success", "1/2")
+  end
+
+  test "no 429s reads muted", %{conn: conn, busy: busy} do
+    insert!(busy, %{http_requests: 1})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none-rate-limited", "0")
+    refute has_element?(view, "#indexer-stats-#{busy.id}-none-rate-limited.text-warning")
+  end
+
+  test "a cooldown started after the page loaded shows without a refresh", %{
+    conn: conn,
+    busy: busy
+  } do
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+    refute has_element?(view, "#indexer-cooldown-#{busy.id}")
+
+    Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+
+    assert render(view) =~ "indexer-cooldown-#{busy.id}"
+    assert has_element?(view, "#indexer-cooldown-#{busy.id}")
+  end
+
+  test "a success that clears a cooldown removes the badge without a refresh", %{
+    conn: conn,
+    busy: busy
+  } do
+    Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+    assert has_element?(view, "#indexer-cooldown-#{busy.id}")
+
+    Mydia.Indexers.RateLimiter.record_success(busy.id)
+
+    refute render(view) =~ "indexer-cooldown-#{busy.id}"
+  end
+
+  test "an indexer cooling down after a 429 says until when", %{
+    conn: conn,
+    busy: busy,
+    quiet: quiet
+  } do
+    until = Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(
+             view,
+             "#indexer-cooldown-#{busy.id}",
+             # The admin's time display, not bare UTC: with no preference and
+             # an English locale that is the instance zone on a 12-hour clock.
+             "Cooling down until " <>
+               MydiaWeb.DateTimeFormat.format(
+                 until,
+                 :time,
+                 Mydia.TimeDisplay.resolve(nil, Mydia.TimeDisplay.instance_time_zone(), "en")
+               )
+           )
+
+    refute has_element?(view, "#indexer-cooldown-#{quiet.id}")
+  end
+
+  test "the badge goes away once the cooldown ends", %{conn: conn, busy: busy} do
+    Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+    assert has_element?(view, "#indexer-cooldown-#{busy.id}")
+
+    Mydia.Indexers.RateLimiter.expire_cooldown(busy.id)
+    # What the page's timer sends when the earliest cooldown ends.
+    send(view.pid, :search_stats_cooldown_ended)
+
+    refute has_element?(view, "#indexer-cooldown-#{busy.id}")
+  end
+
+  test "a cooldown deadline already past renders no badge" do
+    past = DateTime.add(DateTime.utc_now(), -60, :second)
+    display = Mydia.TimeDisplay.resolve(nil, "Etc/UTC", "en")
+
+    html =
+      render_component(&MydiaWeb.AdminIndexersLive.SearchStatsComponents.cooldown_badge/1,
+        indexer_id: "past",
+        until: past,
+        display: display
+      )
+
+    refute html =~ "indexer-cooldown-past"
+
+    future = DateTime.add(DateTime.utc_now(), 60, :second)
+
+    html =
+      render_component(&MydiaWeb.AdminIndexersLive.SearchStatsComponents.cooldown_badge/1,
+        indexer_id: "future",
+        until: future,
+        display: display
+      )
+
+    assert html =~ "indexer-cooldown-future"
+  end
+
+  test "a library indexer cooling down shows the badge too", %{conn: conn} do
+    original = Application.get_env(:mydia, :features, [])
+    Application.put_env(:mydia, :features, Keyword.put(original, :cardigann_enabled, true))
+    on_exit(fn -> Application.put_env(:mydia, :features, original) end)
+
+    definition = Mydia.IndexersFixtures.cardigann_definition_fixture(%{enabled: true})
+    Mydia.Indexers.RateLimiter.record_rate_limited(definition.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-cooldown-#{definition.id}", "Cooling down until")
+  end
+
   test "timeouts are flagged as a warning", %{conn: conn, busy: busy} do
     insert!(busy, %{})
     insert!(busy, %{outcome: "timeout", error_message: "Cardigann call timed out"})

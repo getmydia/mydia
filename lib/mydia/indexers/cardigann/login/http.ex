@@ -13,6 +13,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Http do
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Login.Inputs
   alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Indexers.SearchStats.Network
 
   @max_hops 5
 
@@ -84,7 +85,11 @@ defmodule Mydia.Indexers.Cardigann.Login.Http do
         receive_timeout: 30_000
       ] ++ Keyword.take(opts, [:form, :params])
 
-    case Req.request(req_opts) do
+    # A login runs in the searching process (SessionManager is not a server),
+    # so its requests count with the search's.
+    response = Req.request(Network.count_dispatches(req_opts))
+
+    case response do
       {:ok, %Req.Response{} = resp} ->
         {:ok, resp}
 

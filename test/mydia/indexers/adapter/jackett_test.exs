@@ -282,6 +282,31 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
     end
   end
 
+  describe "search/3 rate limiting" do
+    test "carries Retry-After on a 429 in milliseconds" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "30")
+        |> Plug.Conn.resp(429, "Too Many Requests")
+      end)
+
+      config = %{
+        type: :jackett,
+        name: "Test Jackett",
+        host: "localhost",
+        port: bypass.port,
+        api_key: "test-api-key",
+        use_ssl: false,
+        options: %{timeout: 5_000}
+      }
+
+      assert {:error, %Error{type: :rate_limited, details: %{retry_after: 30_000}}} =
+               Jackett.search(config, "Ubuntu")
+    end
+  end
+
   describe "info_url guid fallback" do
     defp torznab_item(fields) do
       """

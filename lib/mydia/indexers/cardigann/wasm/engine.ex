@@ -19,8 +19,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   `%{duration: native, network: native, queue: native}` (`network` is the time
   spent inside host HTTP exchanges, `queue` the time spent waiting for a free
   instance slot, see `Slots`) and metadata `%{export: atom, outcome: atom}`.
-  The same network time is added to `Mydia.Indexers.SearchStats.Network` in
-  the calling process, which is how a search's per-indexer metrics see it.
+  The same network time, and the number of requests the exchanges sent, are
+  added to `Mydia.Indexers.SearchStats.Network` in the calling process, which
+  is how a search's per-indexer metrics see them.
 
   The `ctx` is `t:Mydia.Indexers.Cardigann.Wasm.HostHttp.ctx/0`. It may carry
   an `:indexer_name` (defaults to `definition_id`) used to label the releases.
@@ -351,7 +352,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     duration = System.monotonic_time() - started
 
     network_us = if network, do: :atomics.get(network, 1), else: 0
-    if network, do: Network.add(network_us)
+
+    if network do
+      Network.add(network_us)
+      Network.add_requests(:atomics.get(network, 2))
+    end
+
     network_native = System.convert_time_unit(network_us, :microsecond, :native)
 
     outcome = outcome(result)

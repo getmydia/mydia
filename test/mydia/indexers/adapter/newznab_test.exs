@@ -162,6 +162,19 @@ defmodule Mydia.Indexers.Adapter.NewznabTest do
       assert {:error, %Error{type: :authentication_failed}} = Newznab.test_connection(config)
     end
 
+    test "carries Retry-After on a 429 in milliseconds" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/api", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "30")
+        |> Plug.Conn.resp(429, "Too Many Requests")
+      end)
+
+      assert {:error, %Error{type: :rate_limited, details: %{retry_after: 30_000}}} =
+               Newznab.search(build_config(bypass), "test")
+    end
+
     test "returns error on server error" do
       bypass = Bypass.open()
 

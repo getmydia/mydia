@@ -1069,6 +1069,253 @@ defmodule Mydia.IndexersTest do
     end
   end
 
+  defmodule GateStub do
+    @moduledoc false
+    # Reports each search to the test and answers with `config.reply`.
+    def search(config, _query, _opts) do
+      send(config.test_pid, {:searched, config.id})
+      config.reply
+    end
+  end
+
+  describe "rate-limit gate" do
+    alias Mydia.Indexers.Adapter
+    alias Mydia.Indexers.Adapter.Error
+    alias Mydia.Indexers.RateLimiter
+
+    setup do
+      Adapter.Registry.register(:gate_stub, GateStub)
+      :ok
+    end
+
+    defp gate_config(attrs) do
+      Map.merge(
+        %{
+          type: :gate_stub,
+          id: "gate-#{System.unique_integer([:positive])}",
+          name: "Stub",
+          rate_limit: nil,
+          test_pid: self(),
+          reply: {:ok, []}
+        },
+        Map.new(attrs)
+      )
+    end
+
+    test "a 429 cools the indexer and the next call sends nothing" do
+      config = gate_config(reply: {:error, Error.rate_limited("x", %{retry_after: 120_000})})
+
+      assert {:error, %Error{type: :rate_limited, details: details, message: message}} =
+               Indexers.search(config, "q")
+
+      assert details.source == :tracker
+      assert_in_delta DateTime.diff(details.until, DateTime.utc_now(), :second), 120, 5
+      assert message =~ ~r/^Tracker answered HTTP 429; paused until \d\d:\d\d$/
+      assert_received {:searched, _}
+
+      assert {:error, %Error{type: :rate_limited, details: %{source: :cooldown, until: until}}} =
+               Indexers.search(config, "q")
+
+      assert until == details.until
+      refute_received {:searched, _}
+    end
+
+    test "success clears a cooldown" do
+      config = gate_config(reply: {:ok, []})
+      RateLimiter.record_rate_limited(config.id, nil)
+      RateLimiter.expire_cooldown(config.id)
+
+      assert {:ok, []} = Indexers.search(config, "q")
+      assert RateLimiter.cooldown_until(config.id) == nil
+
+      # The ladder restarted: the next 429 waits the first step (1 minute),
+      # not the second (5 minutes).
+      until = RateLimiter.record_rate_limited(config.id, nil)
+      assert_in_delta DateTime.diff(until, DateTime.utc_now(), :second), 60, 5
+    end
+
+    test "a failed search still takes a slot" do
+      config = gate_config(rate_limit: 1, reply: {:error, Error.search_failed("x")})
+
+      assert {:error, %Error{type: :search_failed}} = Indexers.search(config, "q")
+
+      assert {:error, %Error{type: :rate_limited, details: %{source: :local_limit}} = error} =
+               Indexers.search(config, "q")
+
+      assert error.message == "Mydia's limit of 1 searches/minute reached"
+      assert_received {:searched, _}
+      refute_received {:searched, _}
+    end
+
+    test "cooldown is per id" do
+      cooled = gate_config(name: "Same Name")
+      other = gate_config(name: "Same Name")
+      RateLimiter.record_rate_limited(cooled.id, nil)
+
+      assert {:error, %Error{details: %{source: :cooldown}}} = Indexers.search(cooled, "q")
+      assert {:ok, []} = Indexers.search(other, "q")
+      assert_received {:searched, id}
+      assert id == other.id
+    end
+
+    test "a cooldown or per-minute skip takes no daily query slot" do
+      name = "Daily Cap Tracker #{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Mydia.Settings.TrackerRuleConfigs.create(%{tracker: name, query_limit: 1})
+
+      config = gate_config(name: name, rate_limit: 1)
+
+      RateLimiter.record_rate_limited(config.id, nil)
+      assert {:error, %Error{details: %{source: :cooldown}}} = Indexers.search(config, "q")
+      RateLimiter.expire_cooldown(config.id)
+
+      assert {:ok, []} = Indexers.search(config, "q")
+      assert_received {:searched, _}
+
+      # Per-minute limit refuses before the daily cap is consulted.
+      assert {:error, %Error{details: %{source: :local_limit}}} = Indexers.search(config, "q")
+      refute_received {:searched, _}
+    end
+
+    test "the daily cap refuses once its slot is spent" do
+      name = "Daily Cap Tracker #{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Mydia.Settings.TrackerRuleConfigs.create(%{tracker: name, query_limit: 1})
+
+      config = gate_config(name: name)
+
+      assert {:ok, []} = Indexers.search(config, "q")
+
+      assert {:error, %Error{details: %{source: :daily_cap}}} = Indexers.search(config, "q")
+      assert_received {:searched, _}
+      refute_received {:searched, _}
+    end
+
+    test "prowlarr is never gated" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/search", fn conn ->
+        json_resp(conn, 200, [])
+      end)
+
+      config =
+        indexer_config_fixture(%{
+          name: "gate-prowlarr",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      RateLimiter.record_rate_limited(config.id, nil)
+
+      assert {:ok, []} = Indexers.search(config, "q")
+    end
+
+    test "a prowlarr 429 is labelled tracker without a cooldown" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/search", fn conn ->
+        json_resp(conn, 429, %{})
+      end)
+
+      config =
+        indexer_config_fixture(%{
+          name: "gate-prowlarr-429",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      assert {:error, %Error{type: :rate_limited, details: details}} =
+               Indexers.search(config, "q")
+
+      assert details.source == :tracker
+      refute Map.has_key?(details, :until)
+      assert RateLimiter.cooldown_until(config.id) == nil
+    end
+
+    test "a cooldown skip does not log a search failure" do
+      disable_persisted_indexer_configs()
+      # No route on this Bypass: any request would fail the test.
+      bypass = Bypass.open()
+
+      config =
+        indexer_config_fixture(%{
+          name: "gate-jackett-quiet",
+          type: :jackett,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      RateLimiter.record_rate_limited(config.id, nil)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          Indexers.search_all("Fictional Feature 2031", indexer_ids: [config.id])
+        end)
+
+      refute log =~ "Indexer search failed"
+    end
+
+    test "manual search reports the cooldown on the indexer row" do
+      disable_persisted_indexer_configs()
+      # No route on this Bypass: any request would fail the test.
+      bypass = Bypass.open()
+
+      config =
+        indexer_config_fixture(%{
+          name: "gate-jackett",
+          type: :jackett,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      RateLimiter.record_rate_limited(config.id, nil)
+      parent = self()
+
+      {:ok, result} =
+        Indexers.search_all("Fictional Feature 2031",
+          indexer_ids: [config.id],
+          on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+        )
+
+      assert_received {:progress, %{indexer_id: id, status: :error, error: error}}
+      assert id == config.id
+      assert error =~ ~r/cooling down after HTTP 429 until \d\d:\d\d/i
+
+      assert result.indexers_searched == 1
+      assert [%{error_type: :rate_limited}] = result.indexer_errors
+      assert Indexers.deferred_by_rate_limits?(result)
+    end
+
+    test "deferred_by_rate_limits?/1" do
+      limited = %{indexer: "A", error: "x", error_type: :rate_limited}
+      failed = %{indexer: "B", error: "x", error_type: :search_failed}
+
+      assert Indexers.deferred_by_rate_limits?(%{
+               results: [],
+               indexers_searched: 2,
+               indexer_errors: [limited, limited]
+             })
+
+      refute Indexers.deferred_by_rate_limits?(%{
+               results: [],
+               indexers_searched: 2,
+               indexer_errors: [limited]
+             })
+
+      refute Indexers.deferred_by_rate_limits?(%{
+               results: [],
+               indexers_searched: 2,
+               indexer_errors: [limited, failed]
+             })
+
+      refute Indexers.deferred_by_rate_limits?(%{
+               results: [],
+               indexers_searched: 0,
+               indexer_errors: []
+             })
+    end
+  end
+
   defp stub_paused(bypass, entries) do
     till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
 

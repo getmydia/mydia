@@ -209,13 +209,18 @@ defmodule Mydia.Plugins.Net.Gate do
 
     case resolver.(host) do
       {:ok, []} ->
-        {:error, Error.new(:network_error, "no addresses for #{host}")}
+        {:error, Error.new(:network_error, "no addresses for #{host}", %{dispatched: false})}
 
       {:ok, ips} ->
         validate_resolved(ips, opts)
 
       {:error, reason} ->
-        {:error, Error.new(:network_error, "could not resolve #{host}: #{inspect(reason)}")}
+        # `dispatched: false` marks a failure before anything was sent, so a
+        # caller counting requests can tell it from a later network error.
+        {:error,
+         Error.new(:network_error, "could not resolve #{host}: #{inspect(reason)}", %{
+           dispatched: false
+         })}
     end
   end
 

@@ -7,6 +7,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
   alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Indexers.CardigannDefinition.Parsed
+  alias Mydia.Indexers.RateLimiter
   alias Mydia.Repo
 
   import Ecto.Query
@@ -479,6 +480,215 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       assert {:ok, results} = CardigannHealthCheck.check_all_enabled()
       assert results == %{}
+    end
+  end
+
+  describe "check_all_enabled/0 and rate limits" do
+    @one_row ~s"""
+    <html><body><table class="results">
+    <tr><td class="title">Some Release</td>
+    <td class="download"><a href="/download/1">grab</a></td></tr>
+    </table></body></html>
+    """
+
+    # Every request the Bypass sees is reported to the test process, so a test
+    # can assert the tracker was never contacted.
+    defp reporting_bypass(search_fun) do
+      test_pid = self()
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/", fn conn ->
+        send(test_pid, {:contacted, "/"})
+        Plug.Conn.resp(conn, 200, "<html/>")
+      end)
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:contacted, "/search"})
+        search_fun.(conn)
+      end)
+
+      bypass
+    end
+
+    defp linked_definition(bypass, attrs \\ %{}) do
+      definition = cardigann_definition_fixture(Map.merge(%{enabled: true}, attrs))
+      definition = put_link(definition, "http://localhost:#{bypass.port}")
+      on_exit(fn -> RateLimiter.clear_indexer(definition.id) end)
+      definition
+    end
+
+    defp set_health(definition, attrs) do
+      {:ok, definition} = definition |> Ecto.Changeset.change(attrs) |> Repo.update()
+      definition
+    end
+
+    test "sweep skips a definition that is cooling down" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+
+      definition =
+        bypass
+        |> linked_definition()
+        |> set_health(%{health_status: "degraded", consecutive_failures: 2})
+
+      RateLimiter.record_rate_limited(definition.id, nil)
+
+      assert {:ok, results} = CardigannHealthCheck.check_all_enabled()
+      refute Map.has_key?(results, definition.id)
+      refute_received {:contacted, _}
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.health_status == "degraded"
+      assert reloaded.consecutive_failures == 2
+      assert reloaded.last_health_check_at == definition.last_health_check_at
+    end
+
+    test "sweep trusts a recent successful search" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+
+      # The last check was a while ago; a real search succeeded since.
+      checked_at = DateTime.add(DateTime.utc_now(), -1_800, :second) |> DateTime.truncate(:second)
+
+      definition =
+        bypass
+        |> linked_definition()
+        |> set_health(%{
+          health_status: "degraded",
+          last_health_check_at: checked_at,
+          consecutive_failures: 2
+        })
+
+      RateLimiter.record_success(definition.id)
+
+      assert {:ok, %{} = results} = CardigannHealthCheck.check_all_enabled()
+
+      assert %{success: true, status: "healthy", message: "Healthy: a search succeeded at " <> _} =
+               results[definition.id]
+
+      refute_received {:contacted, _}
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.health_status == "healthy"
+      assert DateTime.compare(reloaded.last_health_check_at, checked_at) == :gt
+      assert reloaded.consecutive_failures == 0
+    end
+
+    test "a probe's own success does not stand in for the next sweep's probe" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+      definition = linked_definition(bypass)
+
+      assert {:ok, %{} = first} = CardigannHealthCheck.check_all_enabled()
+      assert %{success: true, message: "Search returned" <> _} = first[definition.id]
+
+      assert {:ok, %{} = second} = CardigannHealthCheck.check_all_enabled()
+      assert %{success: true, message: "Search returned" <> _} = second[definition.id]
+
+      assert_received {:contacted, "/search"}
+      assert_received {:contacted, "/search"}
+    end
+
+    test "trusting a recent success leaves a needs_login row parked" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+      definition = linked_definition(bypass)
+
+      RateLimiter.record_success(definition.id)
+
+      # The sweep loaded the struct before a search parked the row.
+      Repo.update_all(
+        from(d in CardigannDefinition, where: d.id == ^definition.id),
+        set: [health_status: "needs_login"]
+      )
+
+      assert {:ok, %{} = results} = CardigannHealthCheck.check_all_enabled()
+      assert %{status: "needs_login", success: false} = results[definition.id]
+      assert Repo.get!(CardigannDefinition, definition.id).health_status == "needs_login"
+    end
+
+    test "a probe 429 cools the definition without counting a failure" do
+      bypass =
+        reporting_bypass(fn conn ->
+          conn
+          |> Plug.Conn.put_resp_header("retry-after", "300")
+          |> Plug.Conn.resp(429, "Too Many Requests")
+        end)
+
+      definition =
+        bypass
+        |> linked_definition()
+        |> set_health(%{health_status: "healthy", consecutive_failures: 1})
+
+      assert {:ok, results} = CardigannHealthCheck.check_all_enabled()
+      assert %{success: false, rate_limited: true, status: "degraded"} = results[definition.id]
+      assert results[definition.id].message =~ "Tracker answered HTTP 429; paused until "
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.consecutive_failures == 1
+      assert reloaded.health_status == "degraded"
+      assert reloaded.last_health_check_at != nil
+
+      until = RateLimiter.cooldown_until(definition.id)
+      assert %DateTime{} = until
+      # Longer than the first ladder step (1 minute): Retry-After was honoured.
+      assert DateTime.diff(until, DateTime.utc_now()) in 295..300
+    end
+
+    test "a homepage 429 cools the definition and stops the mirror walk" do
+      test_pid = self()
+      throttled = Bypass.open()
+      second = Bypass.open()
+
+      Bypass.stub(throttled, "GET", "/", fn conn ->
+        send(test_pid, {:contacted, :throttled})
+
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "300")
+        |> Plug.Conn.resp(429, "Too Many Requests")
+      end)
+
+      Bypass.stub(second, "GET", "/", fn conn ->
+        send(test_pid, {:contacted, :second})
+        Plug.Conn.resp(conn, 200, "<html/>")
+      end)
+
+      definition =
+        cardigann_definition_fixture(%{enabled: true})
+        |> put_link(["http://localhost:#{throttled.port}", "http://localhost:#{second.port}"])
+        |> set_health(%{health_status: "healthy", consecutive_failures: 1})
+
+      on_exit(fn -> RateLimiter.clear_indexer(definition.id) end)
+
+      assert {:ok, results} = CardigannHealthCheck.check_all_enabled()
+      assert %{success: false, rate_limited: true, status: "degraded"} = results[definition.id]
+
+      assert_received {:contacted, :throttled}
+      refute_received {:contacted, :second}
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.consecutive_failures == 1
+
+      until = RateLimiter.cooldown_until(definition.id)
+      assert DateTime.diff(until, DateTime.utc_now()) in 295..300
+    end
+
+    test "the Test button probes during a cooldown and a success clears it" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+      definition = linked_definition(bypass)
+
+      RateLimiter.record_rate_limited(definition.id, nil)
+
+      assert {:ok, %{success: true}} = CardigannHealthCheck.test_connection(definition.id)
+      assert_received {:contacted, "/search"}
+      assert RateLimiter.cooldown_until(definition.id) == nil
+      assert RateLimiter.get_stats(definition.id).requests_last_minute == 0
+    end
+
+    test "a probe takes a search slot" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+      definition = linked_definition(bypass)
+
+      assert {:ok, results} = CardigannHealthCheck.check_all_enabled()
+      assert Map.has_key?(results, definition.id)
+      assert_received {:contacted, "/search"}
+      assert RateLimiter.get_stats(definition.id).requests_last_minute == 1
     end
   end
 

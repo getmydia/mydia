@@ -54,10 +54,11 @@ defmodule Mydia.Indexers.TrackerLimitsTest do
       assert {:ok, :first} = TrackerLimits.guard_query(config, fn -> {:ok, :first} end)
       assert {:error, _} = TrackerLimits.guard_query(config, fn -> {:error, :down} end)
 
-      assert {:error, %Adapter.Error{type: :rate_limited, message: message}} =
+      assert {:error, %Adapter.Error{type: :rate_limited, message: message, details: details}} =
                TrackerLimits.guard_query(config, fn -> flunk("searched past the cap") end)
 
       assert message == "daily query limit reached (2/2)"
+      assert details.source == :daily_cap
     end
 
     test "concurrent searches never take more than the last slot" do

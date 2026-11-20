@@ -37,6 +37,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :cardigann_engine_expanded, :boolean, default: false
   attr :search_stats, :map, default: %{}
   attr :search_stats_window, :atom, default: :day
+  attr :cooldowns, :map, default: %{}, doc: "indexer id => cooldown end, for those cooling down"
   attr :tracker_terms, :list, default: []
 
   def indexers_tab(assigns) do
@@ -73,6 +74,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
               health={Map.get(@indexer_health, indexer.id, %{status: :unknown})}
               retesting={MapSet.member?(@retesting_paused, indexer.id)}
               stats={Map.get(@search_stats, indexer.id, [])}
+              cooldown={Map.get(@cooldowns, indexer.id)}
+              display={@display}
             />
           </:row>
           <:empty>{gettext("No indexer connections.")}</:empty>
@@ -110,6 +113,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           <.library_indexer_row
             indexer={indexer}
             stats={Map.get(@search_stats, indexer.id, [])}
+            cooldown={Map.get(@cooldowns, indexer.id)}
+            display={@display}
             active_engine={(@cardigann_engine && @cardigann_engine.active) || :builtin}
             flaresolverr_available={
               @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
@@ -128,6 +133,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :health, :map, required: true
   attr :retesting, :boolean, default: false
   attr :stats, :list, default: []
+  attr :cooldown, DateTime, default: nil
+  attr :display, Mydia.TimeDisplay, required: true
 
   defp indexer_row(assigns) do
     assigns =
@@ -178,6 +185,11 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           <.icon name={health_status_icon(@health.status)} class="w-3 h-3 mr-1" />
           {health_status_label(@health.status)}
         </span>
+        <SearchStatsComponents.cooldown_badge
+          indexer_id={@indexer.id}
+          until={@cooldown}
+          display={@display}
+        />
         <%= if @health.status == :unhealthy and @health[:error] do %>
           <div class="tooltip tooltip-left" data-tip={@health.error}>
             <.icon name="hero-information-circle" class="w-4 h-4 text-error" />
@@ -247,6 +259,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :flaresolverr_available, :boolean, required: true
   attr :active_engine, :atom, default: :builtin
   attr :stats, :list, default: []
+  attr :cooldown, DateTime, default: nil
+  attr :display, Mydia.TimeDisplay, required: true
 
   defp library_indexer_row(assigns) do
     ~H"""
@@ -275,6 +289,11 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             {library_health_status_label(@indexer.health_status)}
           </span>
         <% end %>
+        <SearchStatsComponents.cooldown_badge
+          indexer_id={@indexer.id}
+          until={@cooldown}
+          display={@display}
+        />
         <%= if needs_library_config?(@indexer) do %>
           <div class="tooltip" data-tip={gettext("This indexer requires configuration")}>
             <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />

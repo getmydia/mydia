@@ -325,8 +325,9 @@ config :mydia, Oban,
        {"0 2 * * 0", Mydia.Jobs.EventCleanup},
        # Sync Cardigann definitions daily at 3 AM
        {"0 3 * * *", Mydia.Jobs.DefinitionSync},
-       # Check Cardigann indexer health every hour
-       {"0 * * * *", Mydia.Jobs.CardigannHealthCheck},
+       # Check Cardigann indexer health every hour at minute 45, away from the
+       # hourly movie search that already hits the same trackers at minute 0
+       {"45 * * * *", Mydia.Jobs.CardigannHealthCheck},
        # Check for import lists due for sync every 15 minutes
        {"*/15 * * * *", Mydia.Jobs.ImportListScheduler},
        # Enqueue scans for library paths whose scan_interval has elapsed (opt-in per path)

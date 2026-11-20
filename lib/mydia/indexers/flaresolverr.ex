@@ -54,6 +54,7 @@ defmodule Mydia.Indexers.FlareSolverr do
   alias Mydia.Downloads.Client.Helpers
   alias Mydia.Indexers.FlareSolverr.Gate
   alias Mydia.Indexers.FlareSolverr.Response
+  alias Mydia.Indexers.SearchStats.Network
 
   require Logger
 
@@ -375,7 +376,10 @@ defmodule Mydia.Indexers.FlareSolverr do
   end
 
   defp post_to_flaresolverr(flaresolverr_url, body, timeout, url) do
-    case Req.post(flaresolverr_url, json: body, receive_timeout: timeout, retry: false) do
+    response = Req.post(flaresolverr_url, json: body, receive_timeout: timeout, retry: false)
+    count_tracker_request(response)
+
+    case response do
       {:ok, %Req.Response{status: 200, body: response_body}} when is_map(response_body) ->
         handle_response(response_body, url)
 
@@ -403,6 +407,15 @@ defmodule Mydia.Indexers.FlareSolverr do
         {:error, {:request_error, reason}}
     end
   end
+
+  # FlareSolverr fetches the tracker page itself, so a request it answered (or
+  # timed out on) counts as one to the tracker. One it never received does not.
+  defp count_tracker_request({:ok, %Req.Response{}}), do: Network.add_request()
+
+  defp count_tracker_request({:error, %Req.TransportError{reason: :timeout}}),
+    do: Network.add_request()
+
+  defp count_tracker_request(_failed), do: :ok
 
   defp handle_response(%{"status" => "ok"} = body, url) do
     case Response.from_json(body) do

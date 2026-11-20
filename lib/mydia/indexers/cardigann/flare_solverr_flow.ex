@@ -13,6 +13,7 @@ defmodule Mydia.Indexers.Cardigann.FlareSolverrFlow do
   """
 
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Cardigann.ResponseCheck
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.FlareSolverr
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
@@ -120,7 +121,7 @@ defmodule Mydia.Indexers.Cardigann.FlareSolverrFlow do
   end
 
   defp validated(response) do
-    with :ok <- CardigannSearchEngine.validate_response(response), do: {:ok, response}
+    with :ok <- ResponseCheck.validate_response(response), do: {:ok, response}
   end
 
   @doc """

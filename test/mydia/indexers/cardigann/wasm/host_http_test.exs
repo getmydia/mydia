@@ -44,6 +44,91 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
                )
     end
 
+    test "counts each request sent into the engine's network counter", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      Bypass.expect_once(bypass, "GET", "/search", &Plug.Conn.resp(&1, 503, "busy"))
+      network = :atomics.new(2, signed: false)
+      ctx = Map.put(ctx, :network, network)
+      Mydia.Indexers.SearchStats.Network.reset()
+
+      assert {:ok, %{status: 503}} = HostHttp.exchange(ctx, req("GET", base <> "/search"))
+      # A refused URL never leaves Mydia.
+      assert {:error, {:blocked, _}} =
+               HostHttp.exchange(ctx, req("GET", "http://169.254.169.254/"))
+
+      assert :atomics.get(network, 2) == 1
+      # Handed to the engine's caller through the counter, not left here.
+      assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
+    end
+
+    test "does not count a request whose DNS resolution failed", %{ctx: ctx} do
+      network = :atomics.new(2, signed: false)
+      Mydia.Indexers.SearchStats.Network.reset()
+
+      ctx =
+        ctx
+        |> Map.put(:network, network)
+        |> Map.put(:gate_opts, resolver: fn _host -> {:error, :nxdomain} end)
+
+      assert {:error, _} = HostHttp.exchange(ctx, req("GET", "http://no-such-host.example/"))
+      assert :atomics.get(network, 2) == 0
+      assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
+    end
+
+    test "does not count a request with an unsupported method", %{ctx: ctx, base: base} do
+      network = :atomics.new(2, signed: false)
+      Mydia.Indexers.SearchStats.Network.reset()
+      ctx = Map.put(ctx, :network, network)
+
+      assert {:error, _} = HostHttp.exchange(ctx, req("BREW", base <> "/search"))
+      assert :atomics.get(network, 2) == 0
+      assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
+    end
+
+    test "a 429 hands its Retry-After to the RateLimiter", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "120")
+        |> Plug.Conn.resp(429, "slow down")
+      end)
+
+      ctx = Map.put(ctx, :operation, :search)
+      assert {:ok, %{status: 429}} = HostHttp.exchange(ctx, req("GET", base <> "/search"))
+
+      until = Mydia.Indexers.RateLimiter.record_rate_limited(ctx.definition_id, nil)
+      ms = DateTime.diff(until, DateTime.utc_now(), :millisecond)
+      # 120s beats the ladder's 1 minute floor, so the hint is what set it
+      assert ms in 115_000..120_500
+    end
+
+    for op <- [:download, :login] do
+      test "a #{op} 429 leaves no Retry-After hint for the next search", %{
+        bypass: bypass,
+        ctx: ctx,
+        base: base
+      } do
+        Bypass.expect_once(bypass, "GET", "/grab", fn conn ->
+          conn
+          |> Plug.Conn.put_resp_header("retry-after", "86400")
+          |> Plug.Conn.resp(429, "slow down")
+        end)
+
+        ctx = Map.put(ctx, :operation, unquote(op))
+        assert {:ok, %{status: 429}} = HostHttp.exchange(ctx, req("GET", base <> "/grab"))
+
+        # The search's own 429 without a header waits one plain ladder step.
+        until = Mydia.Indexers.RateLimiter.record_rate_limited(ctx.definition_id, nil)
+        assert DateTime.diff(until, DateTime.utc_now(), :millisecond) in 55_000..60_500
+      end
+    end
+
     test "a login watch flags only the login URL on the tracker's own host", %{
       bypass: bypass,
       ctx: ctx,
@@ -270,7 +355,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
 
       HostHttp.exchange(ctx, req("GET", base <> "/slow"))
       assert :atomics.get(network, 1) >= 45_000
-      assert :atomics.get(network, 2) == 0
+      # Index 2 counts requests, not time.
+      assert :atomics.get(network, 2) == 1
     end
   end
 

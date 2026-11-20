@@ -27,12 +27,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
 
   require Logger
 
+  alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Parity.{Recorder, Replay, RequestKey}
   alias Mydia.Indexers.Cardigann.Parity.Capture.Exchange
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
   alias Mydia.Indexers.RateLimiter
+  alias Mydia.Indexers.SearchStats.Network
   alias Mydia.Plugins.Error, as: GateError
   alias Mydia.Plugins.Net.Gate
 
@@ -49,9 +51,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           required(:flaresolverr) => map() | nil,
           # labels the releases a search returns; defaults to definition_id
           optional(:indexer_name) => String.t(),
+          # the engine call this exchange belongs to (`Wasm.Adapter` sets it);
+          # only a search or a probe leaves a Retry-After hint for the gate
+          optional(:operation) => :search | :test | :download | :login | :capabilities,
           # test-only: allow localhost Bypass (e.g. allow_private_except_link_local: true)
           optional(:gate_opts) => keyword(),
-          # benchmark only: index 1 accumulates the exchanges' wall-clock microseconds
+          # set by Engine.call/3: index 1 accumulates the exchanges' wall-clock
+          # microseconds, index 2 the requests they sent
           optional(:network) => :atomics.atomics_ref(),
           # test-only: called with {:task, pid}, {:watcher, pid} and {:instance, pid} by the engine
           optional(:guest_probe) => (term() -> any()),
@@ -177,7 +183,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
     started = System.monotonic_time(:microsecond)
 
     try do
-      result = do_exchange(ctx, req)
+      result = count_requests(ctx, fn -> do_exchange(ctx, req) end)
+      note_rate_limit(ctx, result)
       maybe_record(ctx, req, result)
       log_outcome(req, result)
       result
@@ -185,6 +192,20 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
       record_network(ctx, System.monotonic_time(:microsecond) - started)
     end
   end
+
+  # The guest turns a 429 into a bare `request_limit` error, so the header is
+  # handed to the RateLimiter here for the cooldown gate to consume. Only a
+  # search or a probe: a grab or login 429 is never recorded as a cooldown, so
+  # its Retry-After (a day, say) must not lengthen the next search's.
+  defp note_rate_limit(%{operation: op} = ctx, {:ok, %{status: 429, headers: headers}})
+       when op in [:search, :test] do
+    case Error.retry_after_ms(headers) do
+      ms when is_integer(ms) -> RateLimiter.note_retry_after(ctx.definition_id, ms)
+      _ -> :ok
+    end
+  end
+
+  defp note_rate_limit(_ctx, _result), do: :ok
 
   # Captures use the Elixir engine's transport reasons; the guest only knows
   # the four host error kinds. A capture recorded through the native engine
@@ -245,14 +266,25 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
 
     case Gate.request(req.url, opts) do
       {:ok, %{status: status, headers: headers, body: body}} ->
+        Network.add_request()
         {headers, body} = headers |> normalize_headers() |> decompress(body)
         {:ok, %{status: status, headers: headers, body: body}}
 
       {:error, %GateError{} = error} ->
+        unless refused?(error), do: Network.add_request()
         note_proxy_failure(ctx, error)
         {:error, map_error(error)}
     end
   end
+
+  # The gate turned the request down (including an unsupported method), or
+  # failed to resolve the host, before anything was sent.
+  defp refused?(%GateError{type: type})
+       when type in [:blocked, :capability_denied, :invalid_url, :invalid_request],
+       do: true
+
+  defp refused?(%GateError{details: %{dispatched: false}}), do: true
+  defp refused?(%GateError{}), do: false
 
   # The guest only sees a failed request. The adapter turns an empty, failed
   # search into an error, and when the cause was the proxy it needs the
@@ -453,6 +485,23 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
 
   defp record_network(%{network: network}, micros), do: :atomics.add(network, 1, micros)
   defp record_network(_ctx, _micros), do: :ok
+
+  # The exchange runs in the Wasmex instance's process, not the search's, so
+  # the requests it sent (its own, and FlareSolverr's) move from this
+  # process's `Network` count to index 2 of the engine's counter, which
+  # `Engine.call/3` adds back in its caller.
+  defp count_requests(%{network: network}, fun) do
+    outer = Network.take_requests()
+
+    try do
+      fun.()
+    after
+      :atomics.add(network, 2, Network.take_requests() || 0)
+      if outer, do: Network.add_requests(outer)
+    end
+  end
+
+  defp count_requests(_ctx, fun), do: fun.()
 
   defp log_outcome(req, {:ok, %{status: status}}),
     do: Logger.debug("Cardigann http #{req.method} #{URI.parse(req.url).host} -> #{status}")

@@ -60,7 +60,8 @@ defmodule Mydia.Jobs.TVShowSearch do
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.GrabDelay
   alias Mydia.Indexers.ReleaseRanker
-  alias Mydia.Jobs.SearchDeferral
+  alias Mydia.Jobs.{RateLimitDeferral, SearchDeferral}
+  import RateLimitDeferral, only: [count_enabled_indexers: 0]
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Library
   alias Mydia.Media.{MediaItem, Episode}
@@ -925,6 +926,10 @@ defmodule Mydia.Jobs.TVShowSearch do
         record_season_backoff(media_item, season_number, "no_results", ["season"])
         search_individual_episodes(episodes, new_count, args)
 
+      {:rate_limited, _query} ->
+        # Episode searches would be refused too; the next run retries the pack.
+        new_count
+
       {:no_packs, _query} ->
         Logger.warning("Falling back to individual episodes after no valid season packs",
           media_item_id: media_item.id,
@@ -935,55 +940,50 @@ defmodule Mydia.Jobs.TVShowSearch do
         search_individual_episodes(episodes, new_count, args)
 
       {:packs, season_pack_results, query} ->
-        result =
-          process_season_pack_results(
-            media_item,
-            season_number,
-            episodes,
-            season_pack_results,
-            args,
-            query,
-            []
-          )
+        media_item
+        |> process_season_pack_results(
+          season_number,
+          episodes,
+          season_pack_results,
+          args,
+          query,
+          []
+        )
+        |> after_season_pack(media_item, season_number, episodes, new_count, args)
+    end
+  end
 
-        # If season pack processing failed, fall back to individual episodes
-        # But if it's a duplicate (already downloading), skip entirely
-        case result do
-          :ok ->
-            new_count
+  # If season pack processing failed, fall back to individual episodes. But
+  # if it's a duplicate (already downloading), skip entirely.
+  defp after_season_pack(result, media_item, season_number, episodes, new_count, args) do
+    case result do
+      done when done in [:ok, :deferred] ->
+        new_count
 
-          :deferred ->
-            new_count
+      {:error, :duplicate_download} ->
+        Logger.info(
+          "Season pack already downloading, skipping individual episode search",
+          media_item_id: media_item.id,
+          title: media_item.title,
+          season_number: season_number
+        )
 
-          {:error, :duplicate_download} ->
-            Logger.info(
-              "Season pack already downloading, skipping individual episode search",
-              media_item_id: media_item.id,
-              title: media_item.title,
-              season_number: season_number
-            )
+        new_count
 
-            new_count
+      :no_results ->
+        search_individual_episodes(episodes, new_count, args)
 
-          :no_results ->
-            search_individual_episodes(episodes, new_count, args)
-
-          {:error, _reason} ->
-            search_individual_episodes(episodes, new_count, args)
-        end
+      {:error, _reason} ->
+        search_individual_episodes(episodes, new_count, args)
     end
   end
 
   # Shared skeleton behind search_season/5 and do_search_season_upgrade/5:
   # builds the query, searches indexers, and filters to season-shaped
-  # results, logging and emitting the no-result / no-packs events along the
-  # way. Deliberately does not record backoff or decide what happens next -
-  # the two callers differ on both. search_season/5 falls back to
-  # individual episode searches and records backoff only on the
-  # no-indexer-results outcome (a pre-existing asymmetry, not something
-  # this refactor changes). do_search_season_upgrade/5 never falls back and
-  # always records backoff, in Reasons.buckets(:season, reasons), on both
-  # empty outcomes.
+  # results, logging and emitting the no-result / no-packs events. It records
+  # no backoff and decides nothing: search_season/5 falls back to episodes
+  # (backoff only on :no_results); the upgrade path never falls back and
+  # backs off on both empty outcomes. Neither backs off on :rate_limited.
   #
   # opts:
   #   * `:search_type` - "season_pack" (default) or "season_pack_upgrade",
@@ -1003,21 +1003,29 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No season pack results found",
-          media_item_id: media_item.id,
-          title: media_item.title,
-          season_number: season_number
-        )
+      {:ok, %{results: []} = res} ->
+        if RateLimitDeferral.deferred?(res,
+             media_item_id: media_item.id,
+             title: media_item.title,
+             query: query
+           ) do
+          {:rate_limited, query}
+        else
+          Logger.warning("No season pack results found",
+            media_item_id: media_item.id,
+            title: media_item.title,
+            season_number: season_number
+          )
 
-        Events.search_no_results(media_item, %{
-          "query" => query,
-          "indexers_searched" => count_enabled_indexers(),
-          "season_number" => season_number,
-          "search_type" => search_type
-        })
+          Events.search_no_results(media_item, %{
+            "query" => query,
+            "indexers_searched" => count_enabled_indexers(),
+            "season_number" => season_number,
+            "search_type" => search_type
+          })
 
-        {:no_results, query}
+          {:no_results, query}
+        end
 
       {:ok, %{results: results}} ->
         Logger.info("Found #{length(results)} season pack results",
@@ -1392,24 +1400,30 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No results found for episode",
-          episode_id: episode.id,
-          show: episode.media_item.title,
-          season: episode.season_number,
-          episode: episode.episode_number,
-          query: query
-        )
+      {:ok, %{results: []} = res} ->
+        unless RateLimitDeferral.deferred?(res,
+                 media_item_id: episode.media_item.id,
+                 title: episode.media_item.title,
+                 query: query
+               ) do
+          Logger.warning("No results found for episode",
+            episode_id: episode.id,
+            show: episode.media_item.title,
+            season: episode.season_number,
+            episode: episode.episode_number,
+            query: query
+          )
 
-        # Record backoff for no results
-        record_episode_backoff(episode, "no_results", resource_types)
+          # Record backoff for no results
+          record_episode_backoff(episode, "no_results", resource_types)
 
-        # Log search event for no results
-        Events.search_no_results(
-          episode.media_item,
-          %{"query" => query, "indexers_searched" => count_enabled_indexers()},
-          episode: episode
-        )
+          # Log search event for no results
+          Events.search_no_results(
+            episode.media_item,
+            %{"query" => query, "indexers_searched" => count_enabled_indexers()},
+            episode: episode
+          )
+        end
 
         :ok
 
@@ -1844,6 +1858,9 @@ defmodule Mydia.Jobs.TVShowSearch do
         record_season_backoff(media_item, season_number, "no_results", resource_types)
         :ok
 
+      {:rate_limited, _query} ->
+        :ok
+
       {:no_packs, _query} ->
         record_season_backoff(media_item, season_number, "all_filtered", resource_types)
         :ok
@@ -2239,23 +2256,6 @@ defmodule Mydia.Jobs.TVShowSearch do
     )
   end
 
-  defp count_enabled_indexers do
-    # Count enabled indexers from Settings
-    indexers = Mydia.Settings.list_indexer_configs()
-    enabled_count = Enum.count(indexers, & &1.enabled)
-
-    # Also count Cardigann indexers if feature is enabled
-    cardigann_count =
-      if Application.get_env(:mydia, :features, [])[:cardigann_indexers] do
-        Mydia.Indexers.list_cardigann_definitions()
-        |> Enum.count(& &1.enabled)
-      else
-        0
-      end
-
-    enabled_count + cardigann_count
-  end
-
   defp process_episodes_with_smart_logic_and_stats(
          media_item,
          episodes,
@@ -2370,26 +2370,27 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No season pack results found, falling back to individual episodes",
-          media_item_id: media_item.id,
-          title: media_item.title,
-          season_number: season_number
-        )
+      {:ok, %{results: []} = res} ->
+        # Every indexer rate-limited: no miss to record, and the episode
+        # searches would be held back the same way.
+        if RateLimitDeferral.deferred?(res, media_item_id: media_item.id, query: query) do
+          {new_count, %{results_found: 0, downloads_initiated: 0}}
+        else
+          Logger.warning("No season pack results found, falling back to individual episodes",
+            media_item_id: media_item.id,
+            title: media_item.title,
+            season_number: season_number
+          )
 
-        # Log no results event for season pack search
-        Events.search_no_results(
-          media_item,
-          %{
+          Events.search_no_results(media_item, %{
             "query" => query,
             "indexers_searched" => count_enabled_indexers(),
             "season_number" => season_number,
             "search_type" => "season_pack"
-          }
-        )
+          })
 
-        # Fall back to searching individual episodes
-        search_individual_episodes_with_stats(episodes, new_count, args)
+          search_individual_episodes_with_stats(episodes, new_count, args)
+        end
 
       {:ok, %{results: results}} ->
         Logger.info("Found #{length(results)} season pack results",
@@ -2456,11 +2457,8 @@ defmodule Mydia.Jobs.TVShowSearch do
 
               {new_count, %{results_found: length(results), downloads_initiated: 0}}
 
-            :no_results ->
-              {count, ep_stats} = search_individual_episodes_with_stats(episodes, new_count, args)
-              {count, %{ep_stats | results_found: ep_stats.results_found + length(results)}}
-
-            {:error, _reason} ->
+            # :no_results or any other {:error, _}
+            _no_grab ->
               {count, ep_stats} = search_individual_episodes_with_stats(episodes, new_count, args)
               {count, %{ep_stats | results_found: ep_stats.results_found + length(results)}}
           end
@@ -2573,23 +2571,20 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No results found for episode",
-          episode_id: episode.id,
-          show: episode.media_item.title,
-          season: episode.season_number,
-          episode: episode.episode_number,
-          query: query
-        )
+      {:ok, %{results: []} = res} ->
+        if RateLimitDeferral.deferred?(res, episode_id: episode.id, query: query) do
+          {{:error, :rate_limited}, 0}
+        else
+          Logger.warning("No results found for episode", episode_id: episode.id, query: query)
 
-        # Log search event for no results
-        Events.search_no_results(
-          episode.media_item,
-          %{"query" => query, "indexers_searched" => count_enabled_indexers()},
-          episode: episode
-        )
+          Events.search_no_results(
+            episode.media_item,
+            %{"query" => query, "indexers_searched" => count_enabled_indexers()},
+            episode: episode
+          )
 
-        {:ok, 0}
+          {:ok, 0}
+        end
 
       {:ok, %{results: results}} ->
         Logger.info("Found #{length(results)} results for episode",

@@ -1,6 +1,7 @@
 defmodule Mydia.Indexers.CardigannSearchEngineTest do
   use ExUnit.Case, async: true
 
+  alias Mydia.Indexers.Cardigann.ResponseCheck
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.Adapter.Error
@@ -612,14 +613,14 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   describe "validate_response/1" do
     test "accepts valid 200 response" do
       response = %{status: 200, body: "<html>...</html>", headers: []}
-      assert :ok = CardigannSearchEngine.validate_response(response)
+      assert :ok = ResponseCheck.validate_response(response)
     end
 
     test "rejects 401 authentication error" do
       response = %{status: 401, body: "Unauthorized", headers: []}
 
       assert {:error, %Error{type: :connection_failed, message: message}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
 
       assert message =~ "Authentication failed"
     end
@@ -628,23 +629,33 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       response = %{status: 403, body: "Forbidden", headers: []}
 
       assert {:error, %Error{type: :connection_failed}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
     end
 
     test "rejects 429 rate limit error" do
       response = %{status: 429, body: "Too Many Requests", headers: []}
 
       assert {:error, %Error{type: :rate_limited, message: message}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
 
       assert message =~ "Rate limit"
+    end
+
+    test "429 carries Retry-After in milliseconds" do
+      response = %{status: 429, body: "", headers: [{"retry-after", "30"}]}
+
+      assert {:error, %Error{type: :rate_limited, details: %{retry_after: 30_000}}} =
+               ResponseCheck.validate_response(response)
+
+      assert {:error, %Error{type: :rate_limited, details: %{retry_after: nil}}} =
+               ResponseCheck.validate_response(%{status: 429, body: "", headers: []})
     end
 
     test "rejects 500 server error" do
       response = %{status: 500, body: "Internal Server Error", headers: []}
 
       assert {:error, %Error{type: :search_failed, message: message}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
 
       assert message =~ "Server error"
     end
@@ -653,7 +664,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       response = %{status: 404, body: "Not Found", headers: []}
 
       assert {:error, %Error{type: :search_failed, message: message}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
 
       assert message =~ "HTTP 404"
     end
@@ -937,7 +948,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       # through the validation flow - 403 with Cloudflare content should be detected
       # We test the validate_response function behavior
       assert {:error, %Error{type: :connection_failed}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
     end
 
     test "detects Cloudflare 403 response with cf_clearance" do
@@ -952,7 +963,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       }
 
       assert {:error, %Error{type: :connection_failed}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
     end
 
     test "detects DDoS-Guard 403 response" do
@@ -967,7 +978,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       }
 
       assert {:error, %Error{type: :connection_failed}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
     end
 
     test "detects Cloudflare 503 response" do
@@ -982,7 +993,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       }
 
       assert {:error, %Error{type: :search_failed}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
     end
 
     test "regular 403 without Cloudflare markers is still rejected" do
@@ -994,7 +1005,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
 
       # Regular 403 should still fail, just not as Cloudflare
       assert {:error, %Error{type: :connection_failed}} =
-               CardigannSearchEngine.validate_response(response)
+               ResponseCheck.validate_response(response)
     end
   end
 

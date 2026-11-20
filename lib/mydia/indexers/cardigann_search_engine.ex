@@ -62,6 +62,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.Parity.Seam
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.Cardigann.RequestError
+  alias Mydia.Indexers.Cardigann.ResponseCheck
   alias Mydia.Indexers.Cardigann.SearchPaths
   alias Mydia.Indexers.Cardigann.SearchRequest
   alias Mydia.Indexers.Cardigann.SessionCookies
@@ -71,6 +72,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.FlareSolverr
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
+  alias Mydia.Indexers.SearchStats.Network
 
   require Logger
 
@@ -284,7 +286,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
             config
           )
         else
-          with :ok <- validate_response(response) do
+          with :ok <- ResponseCheck.validate_response(response) do
             {:ok, response}
           end
         end
@@ -505,7 +507,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   `definition.follow_redirect`. An http(s) Location instead honours
   `follow_redirect`: when it is `false` the hop is not taken and this returns
   an error naming the status and Location, the same wording
-  `validate_response/1` uses for an unfollowed redirect in the search path.
+  `ResponseCheck.validate_response/1` uses for an unfollowed redirect in the
+  search path.
   """
   @spec execute_download_request(
           Parsed.t(),
@@ -569,7 +572,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
          config,
          hops
        ) do
-    case location_header(headers) do
+    case ResponseCheck.location_header(headers) do
       nil ->
         {:error, Error.search_failed("Redirect with no Location header for #{url}")}
 
@@ -601,8 +604,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp safe_request(:get, url, req_opts), do: run_req(&Req.get/2, url, req_opts)
   defp safe_request(:post, url, req_opts), do: run_req(&Req.post/2, url, req_opts)
 
+  # Each dispatch counts, a followed redirect included, response or transport
+  # error alike; a parity replay never left Mydia.
   defp run_req(fun, url, req_opts) do
-    fun.(url, req_opts)
+    fun.(url, if(Seam.replaying?(), do: req_opts, else: Network.count_dispatches(req_opts)))
   rescue
     exception ->
       Logger.error(
@@ -612,89 +617,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, exception}
   end
 
-  @doc """
-  Validates the HTTP response before passing to the result parser.
-
-  Checks for common error conditions:
-  - Rate limiting (429)
-  - Authentication errors (401, 403)
-  - Server errors (5xx)
-  - Invalid response format
-
-  ## Returns
-
-  - `:ok` - Response is valid and ready for parsing
-  - `{:error, reason}` - Response indicates an error
-
-  ## Examples
-
-      iex> validate_response(%{status: 200, body: "<html>...</html>"})
-      :ok
-
-      iex> validate_response(%{status: 429, body: "Rate limit exceeded"})
-      {:error, %Error{type: :rate_limited}}
-  """
-  @spec validate_response(http_response()) :: :ok | {:error, Error.t()}
-
-  # An unfollowed redirect used to land in the catch-all below as
-  # "Unexpected status: 302", which told an operator nothing about where the
-  # indexer was trying to send them. This is now only reachable when a
-  # definition sets `followredirect: false`, since search follows by default.
-  #
-  # Task 5's retryable_failure?/1 matches on the "Redirected (HTTP " prefix.
-  def validate_response(%{status: status} = response) when status in 300..399 do
-    location = response |> Map.get(:headers) |> location_header()
-
-    suffix = if location, do: " to #{location}", else: " with no Location header"
-
-    {:error,
-     Error.search_failed("Redirected (HTTP #{status})#{suffix} and the redirect was not followed")}
-  end
-
-  def validate_response(%{status: status, body: body}) do
-    cond do
-      status == 200 ->
-        :ok
-
-      status == 401 || status == 403 ->
-        {:error, Error.connection_failed("Authentication failed")}
-
-      status == 429 ->
-        {:error, Error.rate_limited("Rate limit exceeded")}
-
-      status >= 500 ->
-        {:error, Error.search_failed("Server error: HTTP #{status}")}
-
-      status >= 400 ->
-        Logger.warning("Cardigann search returned HTTP #{status}: #{inspect(body)}")
-        {:error, Error.search_failed("HTTP #{status}")}
-
-      true ->
-        Logger.warning("Unexpected HTTP status: #{status}")
-        {:error, Error.search_failed("Unexpected status: #{status}")}
-    end
-  end
-
   # Private functions
-
-  # Req 0.5 returns headers as a map of lowercase name to a list of values;
-  # older shapes and hand-built test responses use a keyword-ish list.
-  defp location_header(headers) when is_map(headers) do
-    case Map.get(headers, "location") do
-      [value | _] -> value
-      value when is_binary(value) -> value
-      _ -> nil
-    end
-  end
-
-  defp location_header(headers) when is_list(headers) do
-    Enum.find_value(headers, fn
-      {name, value} -> if String.downcase(to_string(name)) == "location", do: value
-      _ -> nil
-    end)
-  end
-
-  defp location_header(_), do: nil
 
   defp get_base_url(definition, opts) do
     case Keyword.get(opts, :base_url) do

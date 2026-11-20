@@ -379,6 +379,176 @@ defmodule Mydia.Jobs.TVShowSearchTest do
     end
   end
 
+  # Replaces the setup's Prowlarr indexer with Newznab ones: Prowlarr is never
+  # gated by the rate limiter, so it cannot be put into a cooldown.
+  defp replace_indexers_with_newznab(names) do
+    Settings.list_indexer_configs()
+    |> Enum.reject(&Mydia.Settings.runtime_config?/1)
+    |> Enum.each(&Settings.update_indexer_config(&1, %{enabled: false}))
+
+    for name <- names do
+      {:ok, config} =
+        Settings.create_indexer_config(%{
+          name: name,
+          type: :newznab,
+          base_url: "http://localhost:1",
+          api_key: "test-key",
+          enabled: true
+        })
+
+      config
+    end
+  end
+
+  defp cool_down(configs) do
+    Enum.each(configs, &Mydia.Indexers.RateLimiter.record_rate_limited(&1.id, nil))
+  end
+
+  defp stub_empty_newznab_feed(bypass) do
+    Bypass.stub(bypass, "GET", "/api", fn conn ->
+      Plug.Conn.resp(
+        conn,
+        200,
+        ~s(<?xml version="1.0"?><rss version="2.0"><channel><title>x</title></channel></rss>)
+      )
+    end)
+  end
+
+  # Reports every search event for `configs` as {:search_event, outcome}.
+  defp report_search_events(configs) do
+    test_pid = self()
+    ids = MapSet.new(configs, & &1.id)
+    handler = "tv-search-events-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      Mydia.Indexers.SearchStats.Telemetry.event(),
+      fn _event, _measurements, meta, _config ->
+        if meta.kind == :search and MapSet.member?(ids, meta.indexer_id),
+          do: send(test_pid, {:search_event, meta.outcome})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+  end
+
+  defp drain_search_events(acc \\ []) do
+    receive do
+      {:search_event, outcome} -> drain_search_events([outcome | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
+  describe "indexer rate limits (#1443)" do
+    setup do
+      show = media_item_fixture(%{type: "tv_show", title: "Quiet Harbor Show"})
+
+      episodes =
+        for number <- 1..2 do
+          episode_fixture(%{
+            media_item_id: show.id,
+            season_number: 1,
+            episode_number: number,
+            air_date: ~D[2020-01-01]
+          })
+        end
+
+      %{show: show, episodes: episodes}
+    end
+
+    defp search_season_one(show) do
+      perform_job(TVShowSearch, %{
+        "mode" => "season",
+        "media_item_id" => show.id,
+        "season_number" => 1
+      })
+    end
+
+    test "all indexers cooling down skips the episode fallback and records no backoff",
+         %{show: show, episodes: episodes} do
+      configs = replace_indexers_with_newznab(["Cool A", "Cool B"])
+      cool_down(configs)
+      report_search_events(configs)
+
+      search_season_one(show)
+
+      # Only the season pack search reached the gate, once per indexer.
+      assert drain_search_events() == [:skipped_cooldown, :skipped_cooldown]
+
+      for episode <- episodes, do: assert(Search.get_backoff("episode", episode.id) == nil)
+      assert Search.get_backoff("season", show.id, season_number: 1) == nil
+    end
+
+    test "show mode: all indexers cooling down skips the episode fallback and records no miss",
+         %{show: show} do
+      configs = replace_indexers_with_newznab(["Cool A", "Cool B"])
+      cool_down(configs)
+      report_search_events(configs)
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => show.id})
+
+      # Only the season pack search reached the gate, once per indexer.
+      assert drain_search_events() == [:skipped_cooldown, :skipped_cooldown]
+      assert Mydia.Events.list_events(type: "search.no_results") == []
+    end
+
+    test "show mode: an episode search held back by a 429 records no miss", %{show: show} do
+      bypass = Bypass.open()
+      [config] = replace_indexers_with_newznab(["Busy A"])
+
+      {:ok, config} =
+        Settings.update_indexer_config(config, %{base_url: "http://localhost:#{bypass.port}"})
+
+      # The season pack search finds nothing; the tracker then answers 429.
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      Bypass.stub(bypass, "GET", "/api", fn conn ->
+        case Agent.get_and_update(calls, &{&1, &1 + 1}) do
+          0 ->
+            Plug.Conn.resp(
+              conn,
+              200,
+              ~s(<?xml version="1.0"?><rss version="2.0"><channel><title>x</title></channel></rss>)
+            )
+
+          _ ->
+            Plug.Conn.resp(conn, 429, "slow down")
+        end
+      end)
+
+      report_search_events([config])
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => show.id})
+
+      # Season pack (empty answer), episode 1 (429), episode 2 (cooldown).
+      assert drain_search_events() == [:ok, :rate_limited, :skipped_cooldown]
+
+      assert [%{metadata: %{"search_type" => "season_pack"}}] =
+               Mydia.Events.list_events(type: "search.no_results")
+    end
+
+    test "one indexer cooling and one empty still backs off and falls back to episodes",
+         %{show: show} do
+      bypass = Bypass.open()
+      [cooling, open] = replace_indexers_with_newznab(["Cool A", "Open B"])
+      cool_down([cooling])
+
+      {:ok, open} =
+        Settings.update_indexer_config(open, %{base_url: "http://localhost:#{bypass.port}"})
+
+      stub_empty_newznab_feed(bypass)
+      report_search_events([cooling, open])
+
+      search_season_one(show)
+
+      assert %{} = Search.get_backoff("season", show.id, season_number: 1)
+      # The season pack search plus at least one episode search.
+      assert length(drain_search_events()) > 2
+    end
+  end
+
   describe "perform/1 - season mode" do
     test "returns error when media item does not exist" do
       fake_id = Ecto.UUID.generate()
