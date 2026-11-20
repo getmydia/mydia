@@ -495,6 +495,8 @@ extension AppFormatters on AppLocalizations {
         StatsRowId.source => statsRowSource,
         StatsRowId.video => statsRowVideo,
         StatsRowId.hdr => statsRowHdr,
+        StatsRowId.color => statsRowColor,
+        StatsRowId.display => statsRowDisplay,
         StatsRowId.decoder => statsRowDecoder,
         StatsRowId.audio => statsRowAudio,
         StatsRowId.frames => statsRowFrames,
@@ -545,10 +547,39 @@ extension AppFormatters on AppLocalizations {
     };
   }
 
+  /// One end of the Color row: mpv's primaries and transfer names as they
+  /// are (`bt.2020, pq`), then the peak for a PQ or HLG end (`4000 nits`).
+  String _colorText(ColorParams color) {
+    final peak = color.peakNits;
+    return [
+      if (color.primaries != null) color.primaries!,
+      if (color.gamma != null) color.gamma!,
+      if (color.isHdr && peak != null)
+        statsColorPeak(NumberFormat('0', localeName).format(peak)),
+    ].join(', ');
+  }
+
   String statsValue(StatsValue value) => switch (value) {
         StatsText(:final text) => text,
         StatsWhyValue(:final why) => statsWhyText(why),
         StatsHdrValue(:final hdr) => statsHdrText(hdr),
+        StatsColorValue(:final source, :final output) => switch ((
+            source,
+            output
+          )) {
+            (final s?, final o?) =>
+              statsColorSourceToOutput(_colorText(s), _colorText(o)),
+            (final s?, null) => _colorText(s),
+            (null, final o?) => statsColorOutputOnly(_colorText(o)),
+            (null, null) => '',
+          },
+        StatsDisplayValue(:final headroom, :final potential) => () {
+            final number = NumberFormat('0.0', localeName);
+            return potential == null
+                ? statsDisplayHeadroom(number.format(headroom))
+                : statsDisplayHeadroomOf(
+                    number.format(headroom), number.format(potential));
+          }(),
         StatsQualityValue(:final quality) => statsQualityText(quality),
         StatsModeValue(:final mode) => statsModeName(mode),
         StatsDecoderValue(:final label, :final hardware) => switch (hardware) {
