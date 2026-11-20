@@ -102,13 +102,14 @@ defmodule Mydia.Indexers.Adapter.Newznab do
       Logger.debug("Newznab search: #{Helpers.redact_url(url)}")
 
       response =
-        Req.get(url,
-          receive_timeout: timeout,
-          connect_options: [timeout: @connect_timeout],
-          retry: false
+        Req.get(
+          url,
+          Network.count_dispatches(
+            receive_timeout: timeout,
+            connect_options: [timeout: @connect_timeout],
+            retry: false
+          )
         )
-
-      Network.add_request()
 
       case response do
         {:ok, %Req.Response{status: 200, body: body}} ->

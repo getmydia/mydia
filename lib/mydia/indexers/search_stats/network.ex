@@ -9,9 +9,11 @@ defmodule Mydia.Indexers.SearchStats.Network do
   tried. `search_with_metrics/3` resets the totals before the call and takes
   them after.
 
-  Requests are counted where they leave Mydia (`add_request/0`): the built-in
-  Cardigann engine, its login, FlareSolverr, the Prowlarr engine's host HTTP
-  exchanges, Newznab, Jackett and the health probe's homepage GET. A request
+  Requests are counted where they leave Mydia: the built-in Cardigann engine,
+  its login, the Newznab and Jackett searches and the health probe's homepage
+  GET through `count_dispatches/1` (each redirect hop is a request), and
+  FlareSolverr and the Prowlarr engine's host HTTP exchanges (one exchange,
+  redirects off) through `add_request/0`. A request
   answered by a parity replay is not counted. Work done in another process
   hands its count back to the caller (`add_requests/1`); the Prowlarr engine
   does that for its guest's exchanges.
@@ -46,6 +48,28 @@ defmodule Mydia.Indexers.SearchStats.Network do
   @doc "Counts one HTTP request sent to the tracker."
   @spec add_request() :: :ok
   def add_request, do: add_requests(1)
+
+  @doc """
+  Adds to Req `opts` a plugin that counts every request Req dispatches.
+
+  Req follows a redirect inside one call, so counting once after `Req.get/2`
+  returns would see a 302 and its target as one request. The plugin appends a
+  request step, which Req runs again for each redirected request, just before
+  the adapter sends it.
+  """
+  @spec count_dispatches(keyword()) :: keyword()
+  def count_dispatches(opts) when is_list(opts) do
+    plugin = &attach_counter/1
+    Keyword.update(opts, :plugins, [plugin], fn plugins -> plugins ++ [plugin] end)
+  end
+
+  defp attach_counter(%Req.Request{} = request),
+    do: Req.Request.append_request_steps(request, mydia_count_request: &count_dispatch/1)
+
+  defp count_dispatch(request) do
+    add_request()
+    request
+  end
 
   @doc "Counts `count` requests another process sent on this call's behalf."
   @spec add_requests(non_neg_integer()) :: :ok

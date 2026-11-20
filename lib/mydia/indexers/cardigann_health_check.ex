@@ -643,8 +643,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp test_homepage(nil, _user_config), do: {:error, "No base URL configured"}
 
   defp test_homepage(base_url, user_config) do
-    response = Req.get(base_url, homepage_request_opts(user_config))
-    Network.add_request()
+    response = Req.get(base_url, Network.count_dispatches(homepage_request_opts(user_config)))
     classify_homepage(response, base_url)
   end
 

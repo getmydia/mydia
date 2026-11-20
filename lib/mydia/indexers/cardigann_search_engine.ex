@@ -604,12 +604,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp safe_request(:get, url, req_opts), do: run_req(&Req.get/2, url, req_opts)
   defp safe_request(:post, url, req_opts), do: run_req(&Req.post/2, url, req_opts)
 
-  # Counted once Req returns, response or transport error alike; a raise
-  # (a malformed URL, say) sent nothing, and a parity replay never left Mydia.
+  # Each dispatch counts, a followed redirect included, response or transport
+  # error alike; a parity replay never left Mydia.
   defp run_req(fun, url, req_opts) do
-    result = fun.(url, req_opts)
-    unless Seam.replaying?(), do: Network.add_request()
-    result
+    fun.(url, if(Seam.replaying?(), do: req_opts, else: Network.count_dispatches(req_opts)))
   rescue
     exception ->
       Logger.error(

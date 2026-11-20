@@ -226,6 +226,81 @@ defmodule Mydia.Indexers.SearchStats.HttpRequestsTest do
     assert hits() == 1
   end
 
+  defp empty_feed(conn) do
+    conn
+    |> Plug.Conn.put_resp_content_type("application/xml")
+    |> Plug.Conn.resp(200, ~s(<?xml version="1.0"?><rss version="2.0"><channel></channel></rss>))
+  end
+
+  defp redirect_to(conn, location) do
+    conn
+    |> Plug.Conn.put_resp_header("location", location)
+    |> Plug.Conn.resp(302, "")
+  end
+
+  for type <- [:newznab, :jackett] do
+    test "a redirected #{type} search counts both requests", %{ref: ref, bypass: bypass} do
+      count_hits(bypass, fn conn ->
+        case conn.request_path do
+          "/moved" <> _ -> empty_feed(conn)
+          _ -> redirect_to(conn, "/moved")
+        end
+      end)
+
+      config =
+        indexer_config_fixture(%{
+          name: "Imaginary Moved Feed",
+          type: unquote(type),
+          base_url: "http://localhost:#{bypass.port}",
+          api_key: "invented"
+        })
+
+      Indexers.search_all("Invented Lantern", indexer_ids: [config.id])
+
+      {m, _md} = event(ref)
+      assert hits() == 2
+      assert m.http_requests == 2
+    end
+  end
+
+  test "a redirected Cardigann page counts both requests", %{ref: ref, bypass: bypass} do
+    count_hits(bypass, fn conn ->
+      case conn.request_path do
+        "/browse/1" -> redirect_to(conn, "/browse/moved")
+        "/browse/moved" -> html(conn, rows(1))
+        "/browse/2" -> html(conn, rows(2))
+      end
+    end)
+
+    definition = insert_definition!(bypass, "")
+
+    {:ok, %{results: [_ | _]}} =
+      Indexers.search_all("Invented Lantern", indexer_ids: [definition.id])
+
+    {m, _md} = event(ref)
+    assert hits() == 3
+    assert m.http_requests == 3
+  end
+
+  test "a health probe counts a redirected homepage GET twice", %{ref: ref, bypass: bypass} do
+    count_hits(bypass, fn conn ->
+      case conn.request_path do
+        "/" -> redirect_to(conn, "/home")
+        "/home" -> html(conn, "<html>Fictional Pages</html>")
+        "/browse/1" -> html(conn, rows(1))
+      end
+    end)
+
+    definition = insert_definition!(bypass, "")
+
+    assert {:ok, %{success: true}} = CardigannHealthCheck.execute_health_check(definition)
+
+    {m, md} = event(ref)
+    assert md.kind == :health
+    assert hits() == 3
+    assert m.http_requests == 3
+  end
+
   test "a search skipped for a cooldown sends nothing and says so", %{ref: ref, bypass: bypass} do
     config =
       indexer_config_fixture(%{

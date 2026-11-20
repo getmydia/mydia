@@ -327,7 +327,9 @@ that call sent toward the tracker. That is every built-in Cardigann request
 (each mirror tried, each later page, downloads excluded since they are not
 searches), its login, a FlareSolverr solve, each Prowlarr-engine host
 exchange, the Newznab or Jackett call, and the health probe's homepage GET.
-A request the egress gate refused or a parity replay answered never left Mydia
+A redirect Req follows is a request of its own: those paths pass their options
+through `Network.count_dispatches/1`, whose request step Req runs again for
+each hop, so a 302 and its target count 2. A request the egress gate refused or a parity replay answered never left Mydia
 and is not counted; Prowlarr's own requests go to Prowlarr, not the tracker,
 and are not either. Counting is per process (`SearchStats.Network`): a login
 runs in the searching process, and the Prowlarr engine hands its guest's count

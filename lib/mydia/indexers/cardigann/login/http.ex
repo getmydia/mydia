@@ -85,10 +85,9 @@ defmodule Mydia.Indexers.Cardigann.Login.Http do
         receive_timeout: 30_000
       ] ++ Keyword.take(opts, [:form, :params])
 
-    response = Req.request(req_opts)
     # A login runs in the searching process (SessionManager is not a server),
     # so its requests count with the search's.
-    Network.add_request()
+    response = Req.request(Network.count_dispatches(req_opts))
 
     case response do
       {:ok, %Req.Response{} = resp} ->
