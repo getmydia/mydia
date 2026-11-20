@@ -86,30 +86,24 @@ defmodule Mydia.Indexers do
           {:ok, [SearchResult.t()]} | {:error, Adapter.Error.t()}
   def search(config, query, opts \\ [])
 
-  def search(%Settings.IndexerConfig{} = config, query, opts) do
-    case RateLimiter.take_search_slot(config.id, config.rate_limit) do
-      :ok ->
-        adapter_config = indexer_config_to_adapter_config(config)
-        search(adapter_config, query, opts)
+  # Prowlarr runs its own backoff for the trackers behind it, so Mydia never
+  # gates or cools it down (README, "Rate limits and cooldown").
+  def search(%Settings.IndexerConfig{type: :prowlarr} = config, query, opts),
+    do: search(indexer_config_to_adapter_config(config), query, opts)
 
-      {:error, :limited, _count} ->
-        Logger.warning("Rate limit exceeded for indexer #{config.name}")
-        {:error, Adapter.Error.rate_limited("Rate limit exceeded")}
-    end
+  def search(%Settings.IndexerConfig{} = config, query, opts) do
+    gated_search(config.id, config.name, config.rate_limit, fn ->
+      search(indexer_config_to_adapter_config(config), query, opts)
+    end)
   end
 
   def search(%{type: type, id: id, rate_limit: rate_limit} = config, query, opts)
-      when is_atom(type) and is_binary(id) do
-    case RateLimiter.take_search_slot(id, rate_limit) do
-      :ok ->
-        with {:ok, adapter} <- Adapter.Registry.get_adapter(type) do
-          adapter.search(config, query, opts)
-        end
-
-      {:error, :limited, _count} ->
-        Logger.warning("Rate limit exceeded for Cardigann indexer #{config[:name]}")
-        {:error, Adapter.Error.rate_limited("Rate limit exceeded")}
-    end
+      when is_atom(type) and type != :prowlarr and is_binary(id) do
+    gated_search(id, config[:name], rate_limit, fn ->
+      with {:ok, adapter} <- Adapter.Registry.get_adapter(type) do
+        adapter.search(config, query, opts)
+      end
+    end)
   end
 
   def search(%{type: type} = config, query, opts) when is_atom(type) do
@@ -117,6 +111,86 @@ defmodule Mydia.Indexers do
       adapter.search(config, query, opts)
     end
   end
+
+  # The gate in front of one indexer's search, keyed by its id (never its
+  # name): a cooldown after HTTP 429 sends nothing, then the per-minute slot,
+  # then the search, whose outcome clears or starts a cooldown. Every
+  # `:rate_limited` error leaving here carries `details.source`.
+  defp gated_search(id, name, rate_limit, search_fun) do
+    with :ok <- check_cooldown(id, name),
+         :ok <- take_search_slot(id, name, rate_limit) do
+      search_fun.() |> record_search_outcome(id, name)
+    end
+  end
+
+  defp check_cooldown(id, name) do
+    case RateLimiter.cooldown_until(id) do
+      nil ->
+        :ok
+
+      until ->
+        Logger.info("Skipping #{name}: cooling down after HTTP 429 until #{clock(until)}")
+
+        {:error,
+         Adapter.Error.rate_limited("Cooling down after HTTP 429 until #{clock(until)}", %{
+           source: :cooldown,
+           until: until
+         })}
+    end
+  end
+
+  defp take_search_slot(id, name, rate_limit) do
+    case RateLimiter.take_search_slot(id, rate_limit) do
+      :ok ->
+        :ok
+
+      {:error, :limited, _count} ->
+        reason = "Mydia's limit of #{rate_limit} searches/minute reached"
+        Logger.info("Skipping #{name}: #{reason}")
+
+        {:error,
+         Adapter.Error.rate_limited(reason, %{
+           source: :local_limit,
+           retry_after: :timer.minutes(1)
+         })}
+    end
+  end
+
+  defp record_search_outcome({:ok, _} = result, id, _name) do
+    RateLimiter.record_success(id)
+    result
+  end
+
+  defp record_search_outcome(
+         {:error, %Adapter.Error{type: :rate_limited, details: details} = error},
+         id,
+         name
+       ) do
+    details = details || %{}
+
+    if Map.has_key?(details, :source) do
+      {:error, error}
+    else
+      retry_after = Map.get(details, :retry_after)
+      until = RateLimiter.record_rate_limited(id, retry_after)
+
+      Logger.warning("#{name} answered HTTP 429; pausing it until #{clock(until)}",
+        retry_after_ms: retry_after
+      )
+
+      {:error,
+       %{
+         error
+         | message: "Tracker answered HTTP 429; paused until #{clock(until)}",
+           details: Map.merge(details, %{source: :tracker, until: until})
+       }}
+    end
+  end
+
+  defp record_search_outcome(result, _id, _name), do: result
+
+  # Hours and minutes in UTC, like the other indexer logs.
+  defp clock(%DateTime{} = at), do: Calendar.strftime(at, "%H:%M")
 
   @doc """
   Searches all enabled indexers configured in the system.
@@ -176,7 +250,12 @@ defmodule Mydia.Indexers do
       {:ok, [%SearchResult{}, ...]}
   """
   @spec search_all(binary(), keyword()) ::
-          {:ok, %{results: [SearchResult.t()], indexer_errors: [map()]}}
+          {:ok,
+           %{
+             results: [SearchResult.t()],
+             indexer_errors: [%{indexer: String.t(), error: String.t(), error_type: atom()}],
+             indexers_searched: non_neg_integer()
+           }}
   def search_all(query, opts \\ []) do
     indexer_ids = Keyword.get(opts, :indexer_ids)
     on_start = Keyword.get(opts, :on_start, fn _pending -> :ok end)
@@ -208,7 +287,7 @@ defmodule Mydia.Indexers do
 
     if all_indexers == [] do
       Logger.info("No enabled indexers found for query: #{query}")
-      {:ok, %{results: [], indexer_errors: []}}
+      {:ok, %{results: [], indexer_errors: [], indexers_searched: 0}}
     else
       start_time = System.monotonic_time(:millisecond)
       total = length(all_indexers)
@@ -254,7 +333,12 @@ defmodule Mydia.Indexers do
             if metrics.success do
               {results ++ acc_results, acc_errors, completed}
             else
-              error = %{indexer: metrics.indexer, error: metrics.error}
+              error = %{
+                indexer: metrics.indexer,
+                error: metrics.error,
+                error_type: metrics.error_type
+              }
+
               {acc_results, [error | acc_errors], completed}
             end
 
@@ -287,7 +371,8 @@ defmodule Mydia.Indexers do
               total: total
             })
 
-            {acc_results, [%{indexer: name, error: message} | acc_errors], completed}
+            error = %{indexer: name, error: message, error_type: exit_error_type(reason)}
+            {acc_results, [error | acc_errors], completed}
         end)
 
       results =
@@ -304,9 +389,33 @@ defmodule Mydia.Indexers do
           "errors=#{length(indexer_errors)}, time=#{total_time}ms"
       )
 
-      {:ok, %{results: results, indexer_errors: Enum.reverse(indexer_errors)}}
+      {:ok,
+       %{
+         results: results,
+         indexer_errors: Enum.reverse(indexer_errors),
+         indexers_searched: total
+       }}
     end
   end
+
+  @doc """
+  True when a `search_all/2` result found nothing only because every indexer
+  searched was rate-limited (a 429, a cooldown, Mydia's per-minute limit or a
+  daily cap). Such a search says nothing about whether releases exist.
+  """
+  @spec deferred_by_rate_limits?(map()) :: boolean()
+  def deferred_by_rate_limits?(%{
+        results: [],
+        indexers_searched: searched,
+        indexer_errors: errors
+      })
+      when searched > 0 and length(errors) == searched,
+      do: Enum.all?(errors, &(&1.error_type == :rate_limited))
+
+  def deferred_by_rate_limits?(_result), do: false
+
+  defp exit_error_type(:timeout), do: :deadline
+  defp exit_error_type(_reason), do: :crashed
 
   @doc """
   Filters, deduplicates and ranks a raw result set.
@@ -673,7 +782,8 @@ defmodule Mydia.Indexers do
       success: success,
       duration_ms: duration,
       result_count: length(results),
-      error: error_message
+      error: error_message,
+      error_type: if(success, do: nil, else: outcome)
     }
 
     Logger.debug(

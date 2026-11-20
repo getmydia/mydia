@@ -248,6 +248,53 @@ second-preference 720p trails a 1080p by less than 10. What keeps resolution
 first in automatic search is the `:preferred_qualities` sort key
 `RankingOptions` builds from the profile, which sits outside the score.
 
+## Rate limits and cooldown
+
+Every search of one indexer goes through a gate in `Indexers.search/3`, keyed
+by the indexer's id, never its display name. In order:
+
+1. Cooldown: if the indexer answered HTTP 429 recently and its cooldown has
+   not ended, the search returns at once and sends nothing.
+2. Per-minute slot: `RateLimiter.take_search_slot/2` against the indexer's
+   `rate_limit` (searches per minute; blank means none). The slot counts
+   whether or not the search then works.
+3. The adapter's search.
+4. A success clears the cooldown and resets the ladder. A 429 from the
+   adapter starts or extends one.
+
+The cooldown follows a ladder: 1m, 5m, 15m, 30m, 1h, 3h, 6h, then 6h for
+every further 429. The wait is the current step or the response's
+`Retry-After`, whichever is longer, with `Retry-After` capped at 24 hours. A
+`Retry-After: 0`, a date in the past or an unparsable value leaves the step
+alone. A 429 that arrives while a cooldown is running does not step the
+ladder; the cooldown just keeps the later end.
+
+Every `:rate_limited` error carries `details.source`:
+
+| source | meaning |
+|---|---|
+| `:tracker` | the indexer answered HTTP 429 (`details.until` is when Mydia tries again) |
+| `:cooldown` | Mydia is holding off after an earlier 429 (`details.until`) |
+| `:local_limit` | Mydia's own per-minute limit for the indexer, not the tracker's |
+| `:daily_cap` | the tracker rule's daily `query_limit` (`TrackerLimits`, below) |
+
+Prowlarr (`type: :prowlarr`) is never gated or cooled down: it runs its own
+backoff for the trackers behind it (see "Prowlarr pauses indexers").
+
+Manual search goes through the same gate. A cooled-down indexer shows "Cooling
+down after HTTP 429 until HH:MM" (UTC) as its status and is not contacted; a
+manual search never overrides a cooldown, because a request during a
+tracker's block only extends it. `search_all/2` reports `indexers_searched`
+and an `error_type` on each `indexer_errors` entry, and
+`Indexers.deferred_by_rate_limits?/1` tells a search that found nothing
+because every indexer was rate-limited from one that genuinely found nothing.
+
+State lives in ETS in `RateLimiter` and nothing is persisted: a restart
+forgets every cooldown and the ladder starts over. The WASM Cardigann engine
+cannot put `Retry-After` on the guest's error, so the host HTTP function notes
+it with `RateLimiter.note_retry_after/2` and the next `record_rate_limited/2`
+for that indexer consumes it.
+
 ## Tracker limits
 
 `tracker_rules` also carry `grab_limit` and `query_limit`, each per rolling 24

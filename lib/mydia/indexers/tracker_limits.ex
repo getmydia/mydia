@@ -61,7 +61,7 @@ defmodule Mydia.Indexers.TrackerLimits do
       {:error, :limited, count} ->
         reason = "daily query limit reached (#{count}/#{limit})"
         Logger.info("Skipping indexer search: #{reason}", indexer: Map.get(config, :name))
-        {:error, Adapter.Error.rate_limited(reason)}
+        {:error, Adapter.Error.rate_limited(reason, %{source: :daily_cap})}
     end
   end
 
