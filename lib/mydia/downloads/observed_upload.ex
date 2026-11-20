@@ -12,10 +12,12 @@ defmodule Mydia.Downloads.ObservedUpload do
   Each `Mydia.Jobs.DownloadMonitor` pass calls `record/2`, which banks the
   client's counter into `Download.metadata`:
 
-      "observed_upload" => %{"bytes" => 5368709120, "session" => 1073741824}
+      "observed_upload" => %{"bytes" => 5368709120, "session" => 1073741824,
+                             "seen_at" => "2031-05-10T12:00:00Z"}
 
   `bytes` is the running total, `session` the client's counter as last
-  recorded. `step/2` moves it on:
+  recorded, `seen_at` the pass that last changed them (`step/3` ignores an
+  older, overlapping pass). `step/2` moves it on:
 
   - no entry (or a malformed one): `bytes` and `session` are the counter, so
     the current session counts in full on first sight. Uploads from sessions
@@ -71,6 +73,38 @@ defmodule Mydia.Downloads.ObservedUpload do
   end
 
   defp next(bytes, live), do: %{"bytes" => bytes, "session" => live}
+
+  @doc """
+  `step/2` for a pass at `now`. A change is stamped `"seen_at"`; an entry the
+  counter leaves as it was is returned untouched, so a quiet torrent costs no
+  write. A pass whose `now` is not after `"seen_at"` started before the pass
+  that last changed the entry (overlapping monitor passes): its older counter
+  would read as a reset and be added in full, so it changes nothing.
+  """
+  @spec step(map() | nil, non_neg_integer(), DateTime.t()) :: map()
+  def step(entry, live, now) do
+    stepped = step(entry, live)
+
+    cond do
+      out_of_order?(entry, now) ->
+        entry
+
+      Map.take(entry || %{}, ["bytes", "session"]) == stepped ->
+        entry
+
+      true ->
+        Map.put(stepped, "seen_at", now |> DateTime.truncate(:second) |> DateTime.to_iso8601())
+    end
+  end
+
+  defp out_of_order?(%{"seen_at" => seen_at}, now) when is_binary(seen_at) do
+    case DateTime.from_iso8601(seen_at) do
+      {:ok, seen, _offset} -> DateTime.compare(now, seen) != :gt
+      _invalid -> false
+    end
+  end
+
+  defp out_of_order?(_entry, _now), do: false
 
   @doc "The total after this counter, without recording it."
   @spec total(map() | nil, non_neg_integer()) :: non_neg_integer()
@@ -130,17 +164,18 @@ defmodule Mydia.Downloads.ObservedUpload do
   Returns the rows, each recorded one carrying its new entry in `metadata`
   and overlaid from it, so the policies on the same pass see the total. A
   row whose write failed is returned as it was. `now` is the pass's clock,
-  as for `Mydia.Downloads.ObservedSeedTime.record/2`; the total needs none.
+  as for `Mydia.Downloads.ObservedSeedTime.record/2`, and orders overlapping
+  passes (`step/3`).
   """
   @spec record([map()], DateTime.t()) :: [map()]
-  def record(rows, _now \\ DateTime.utc_now()) do
-    Enum.map(rows, fn row -> if tracked?(row), do: record_row(row), else: row end)
+  def record(rows, now \\ DateTime.utc_now()) do
+    Enum.map(rows, fn row -> if tracked?(row), do: record_row(row, now), else: row end)
   end
 
   # Each row on its own: one failing row must not skip the rest, nor fail the
   # monitor's poll.
-  defp record_row(row) do
-    case write(row.id, live(row.live_uploaded)) do
+  defp record_row(row, now) do
+    case write(row.id, live(row.live_uploaded), now) do
       {:ok, %{} = entry} ->
         overlay(%{row | metadata: Map.put(row.metadata || %{}, @key, entry)})
 
@@ -161,8 +196,8 @@ defmodule Mydia.Downloads.ObservedUpload do
   # writes on SQLite), as in `Mydia.Downloads.ObservedSeedTime`, so another
   # writer's keys are kept. A plain update_all: this runs every poll, and
   # update_download/2 would broadcast a Downloads page reload each time.
-  defp write(id, live) do
-    Repo.transaction(fn -> id |> locked_row() |> Repo.one() |> step_row(live) end)
+  defp write(id, live, now) do
+    Repo.transaction(fn -> id |> locked_row() |> Repo.one() |> step_row(live, now) end)
   end
 
   defp locked_row(id) do
@@ -171,12 +206,12 @@ defmodule Mydia.Downloads.ObservedUpload do
   end
 
   # The stored entry after this pass, or nil for a row deleted meanwhile.
-  defp step_row(nil, _live), do: nil
+  defp step_row(nil, _live, _now), do: nil
 
-  defp step_row(%Download{id: id, metadata: metadata}, live) do
+  defp step_row(%Download{id: id, metadata: metadata}, live, now) do
     metadata = metadata || %{}
     previous = Map.get(metadata, @key)
-    entry = step(previous, live)
+    entry = step(previous, live, now)
 
     if entry != previous,
       do:

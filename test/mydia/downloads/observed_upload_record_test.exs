@@ -25,7 +25,13 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
     )
   end
 
-  defp entry(download), do: Repo.get!(Download, download.id).metadata["observed_upload"]
+  # The stored totals, without the `"seen_at"` stamp.
+  defp entry(download) do
+    case Repo.get!(Download, download.id).metadata["observed_upload"] do
+      nil -> nil
+      stored -> Map.take(stored, ["bytes", "session"])
+    end
+  end
 
   test "banks the live counter and returns the row overlaid" do
     download = download_fixture(%{metadata: %{}})
@@ -34,7 +40,9 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
 
     assert entry(download) == %{"bytes" => 300, "session" => 300}
     assert recorded.uploaded == 300
-    assert recorded.metadata["observed_upload"] == %{"bytes" => 300, "session" => 300}
+
+    assert recorded.metadata["observed_upload"] ==
+             %{"bytes" => 300, "session" => 300, "seen_at" => "2031-05-10T12:00:00Z"}
   end
 
   test "a pause after uploading keeps the total" do
@@ -56,6 +64,20 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
 
     assert entry(download) == %{"bytes" => 400, "session" => 400}
     assert second.uploaded == 400
+  end
+
+  test "an out-of-order pass credits nothing" do
+    download = download_fixture(%{metadata: %{}})
+    t1 = DateTime.add(@t0, 120, :second)
+
+    ObservedUpload.record([row(download, %{live_uploaded: 150})], t1)
+    # An overlapping pass that read the client earlier writes after the later one.
+    ObservedUpload.record([row(download, %{live_uploaded: 100})], @t0)
+
+    assert %{"bytes" => 150, "session" => 150} = entry(download)
+
+    ObservedUpload.record([row(download, %{live_uploaded: 200})], DateTime.add(t1, 120, :second))
+    assert %{"bytes" => 200, "session" => 200} = entry(download)
   end
 
   test "skips unflagged, stale and not-in-client rows" do
@@ -105,7 +127,7 @@ defmodule Mydia.Downloads.ObservedUploadRecordTest do
     assert_received {:update, _query}
 
     metadata = Repo.get!(Download, download.id).metadata
-    assert metadata["observed_upload"] == %{"bytes" => 350, "session" => 350}
+    assert entry(download) == %{"bytes" => 350, "session" => 350}
     assert metadata["observed_seeding"] == %{"seconds" => 60, "last_seen_at" => nil}
   end
 
