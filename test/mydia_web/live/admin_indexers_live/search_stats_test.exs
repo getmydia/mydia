@@ -211,6 +211,19 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     assert has_element?(view, "#indexer-cooldown-#{busy.id}")
   end
 
+  test "a success that clears a cooldown removes the badge without a refresh", %{
+    conn: conn,
+    busy: busy
+  } do
+    Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+    assert has_element?(view, "#indexer-cooldown-#{busy.id}")
+
+    Mydia.Indexers.RateLimiter.record_success(busy.id)
+
+    refute render(view) =~ "indexer-cooldown-#{busy.id}"
+  end
+
   test "an indexer cooling down after a 429 says until when", %{
     conn: conn,
     busy: busy,

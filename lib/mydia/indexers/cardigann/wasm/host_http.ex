@@ -277,10 +277,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
     end
   end
 
-  # The gate turned the request down, or failed to resolve the host, before
-  # anything was sent.
-  defp refused?(%GateError{type: type}) when type in [:blocked, :capability_denied, :invalid_url],
-    do: true
+  # The gate turned the request down (including an unsupported method), or
+  # failed to resolve the host, before anything was sent.
+  defp refused?(%GateError{type: type})
+       when type in [:blocked, :capability_denied, :invalid_url, :invalid_request],
+       do: true
 
   defp refused?(%GateError{details: %{dispatched: false}}), do: true
   defp refused?(%GateError{}), do: false

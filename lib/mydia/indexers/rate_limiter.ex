@@ -199,12 +199,17 @@ defmodule Mydia.Indexers.RateLimiter do
 
   @doc """
   Records a successful search: clears the cooldown and resets the ladder.
+  Subscribers hear about it when a cooldown was actually cleared.
   """
   @spec record_success(String.t()) :: :ok
   def record_success(indexer_id) do
-    :ets.delete(@table_name, {:cooldown, indexer_id})
+    cleared? = :ets.take(@table_name, {:cooldown, indexer_id}) != []
     :ets.delete(@table_name, {:retry_hint, indexer_id})
     :ets.insert(@table_name, {{:success, indexer_id}, DateTime.utc_now()})
+
+    if cleared?,
+      do: Phoenix.PubSub.broadcast(Mydia.PubSub, @cooldown_topic, {:indexer_cooldown, indexer_id})
+
     :ok
   end
 

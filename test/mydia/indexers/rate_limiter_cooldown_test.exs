@@ -183,4 +183,18 @@ defmodule Mydia.Indexers.RateLimiterCooldownTest do
     # The hint went too: a fresh 429 waits one plain ladder step.
     assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)), 60_000, 1_000
   end
+
+  test "a success that clears a cooldown notifies subscribers, one with none does not" do
+    id = unique_id()
+    :ok = RateLimiter.subscribe_cooldowns()
+
+    RateLimiter.record_rate_limited(id, nil)
+    assert_receive {:indexer_cooldown, ^id}
+
+    RateLimiter.record_success(id)
+    assert_receive {:indexer_cooldown, ^id}
+
+    RateLimiter.record_success(id)
+    refute_receive {:indexer_cooldown, ^id}, 100
+  end
 end

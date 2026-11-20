@@ -78,6 +78,16 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
       assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
     end
 
+    test "does not count a request with an unsupported method", %{ctx: ctx, base: base} do
+      network = :atomics.new(2, signed: false)
+      Mydia.Indexers.SearchStats.Network.reset()
+      ctx = Map.put(ctx, :network, network)
+
+      assert {:error, _} = HostHttp.exchange(ctx, req("BREW", base <> "/search"))
+      assert :atomics.get(network, 2) == 0
+      assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
+    end
+
     test "a 429 hands its Retry-After to the RateLimiter", %{
       bypass: bypass,
       ctx: ctx,

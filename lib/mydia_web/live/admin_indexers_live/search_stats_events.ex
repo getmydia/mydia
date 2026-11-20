@@ -19,8 +19,6 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
 
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(socket) do
-    if connected?(socket), do: RateLimiter.subscribe_cooldowns()
-
     socket
     |> assign(
       search_stats_window: window(socket),
@@ -28,8 +26,20 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
       # The page may have refreshed before attaching; keep what it read.
       cooldowns: Map.get(socket.assigns, :cooldowns, %{})
     )
+    |> subscribe_cooldowns()
     |> attach_hook(:search_stats_events, :handle_event, &handle_event/3)
     |> attach_hook(:search_stats_cooldowns, :handle_info, &handle_info/2)
+  end
+
+  # Re-read after subscribing: a cooldown that started between the page's
+  # first read and the subscription would otherwise be missed until it ended.
+  defp subscribe_cooldowns(socket) do
+    if connected?(socket) do
+      RateLimiter.subscribe_cooldowns()
+      refresh_cooldowns(socket)
+    else
+      socket
+    end
   end
 
   @doc """
