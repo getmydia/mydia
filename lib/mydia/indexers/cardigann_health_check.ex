@@ -29,6 +29,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   alias Mydia.Indexers.Cardigann.EngineSwitcher
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.ResponseCheck
   alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition
@@ -240,7 +241,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
          # resolving relative result URLs against the (possibly stale) base_url
          # argument below.
          winner = served_by(base_url),
-         :ok <- CardigannSearchEngine.validate_response(response),
+         :ok <- ResponseCheck.validate_response(response),
          {:ok, results, stats} <- parse_probe_results(parsed, response, winner, opts),
          :ok <- ensure_usable(results, stats) do
       {:ok, length(results), winner}

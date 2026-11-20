@@ -14,6 +14,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
 
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.LiveCheck.Outcome
+  alias Mydia.Indexers.Cardigann.ResponseCheck
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannDownload
@@ -97,7 +98,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
     with {:ok, response} <-
            normalize(CardigannSearchEngine.execute_search(parsed, opts, config, %{})),
          winner = served_by(base_url),
-         :ok <- CardigannSearchEngine.validate_response(response),
+         :ok <- ResponseCheck.validate_response(response),
          {:ok, path} <- CardigannSearchEngine.select_search_path(parsed, opts),
          {:ok, results, stats} <-
            CardigannResultParser.parse_results_with_stats(parsed, response, parsed.name,

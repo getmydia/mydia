@@ -29,7 +29,7 @@ defmodule Mydia.Indexers.Cardigann.SessionCookies do
   # (checked against the pinned Req, not assumed). Following one would hand the
   # session to whatever host the Location names, which is a leak an attacker can
   # trigger from a hijacked mirror rather than an accident. Unfollowed 3xx keeps
-  # the honest handling: `CardigannSearchEngine.validate_response/1` names the
+  # the honest handling: `Cardigann.ResponseCheck.validate_response/1` names the
   # Location, and failover moves on to the next candidate. Redirect following is
   # unaffected for every request without cookies.
   #
