@@ -75,12 +75,34 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
         |> Plug.Conn.resp(429, "slow down")
       end)
 
+      ctx = Map.put(ctx, :operation, :search)
       assert {:ok, %{status: 429}} = HostHttp.exchange(ctx, req("GET", base <> "/search"))
 
       until = Mydia.Indexers.RateLimiter.record_rate_limited(ctx.definition_id, nil)
       ms = DateTime.diff(until, DateTime.utc_now(), :millisecond)
       # 120s beats the ladder's 1 minute floor, so the hint is what set it
       assert ms in 115_000..120_500
+    end
+
+    for op <- [:download, :login] do
+      test "a #{op} 429 leaves no Retry-After hint for the next search", %{
+        bypass: bypass,
+        ctx: ctx,
+        base: base
+      } do
+        Bypass.expect_once(bypass, "GET", "/grab", fn conn ->
+          conn
+          |> Plug.Conn.put_resp_header("retry-after", "86400")
+          |> Plug.Conn.resp(429, "slow down")
+        end)
+
+        ctx = Map.put(ctx, :operation, unquote(op))
+        assert {:ok, %{status: 429}} = HostHttp.exchange(ctx, req("GET", base <> "/grab"))
+
+        # The search's own 429 without a header waits one plain ladder step.
+        until = Mydia.Indexers.RateLimiter.record_rate_limited(ctx.definition_id, nil)
+        assert DateTime.diff(until, DateTime.utc_now(), :millisecond) in 55_000..60_500
+      end
     end
 
     test "a login watch flags only the login URL on the tracker's own host", %{

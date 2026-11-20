@@ -51,6 +51,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           required(:flaresolverr) => map() | nil,
           # labels the releases a search returns; defaults to definition_id
           optional(:indexer_name) => String.t(),
+          # the engine call this exchange belongs to (`Wasm.Adapter` sets it);
+          # only a search or a probe leaves a Retry-After hint for the gate
+          optional(:operation) => :search | :test | :download | :login | :capabilities,
           # test-only: allow localhost Bypass (e.g. allow_private_except_link_local: true)
           optional(:gate_opts) => keyword(),
           # set by Engine.call/3: index 1 accumulates the exchanges' wall-clock
@@ -191,8 +194,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   end
 
   # The guest turns a 429 into a bare `request_limit` error, so the header is
-  # handed to the RateLimiter here for the cooldown gate to consume.
-  defp note_rate_limit(ctx, {:ok, %{status: 429, headers: headers}}) do
+  # handed to the RateLimiter here for the cooldown gate to consume. Only a
+  # search or a probe: a grab or login 429 is never recorded as a cooldown, so
+  # its Retry-After (a day, say) must not lengthen the next search's.
+  defp note_rate_limit(%{operation: op} = ctx, {:ok, %{status: 429, headers: headers}})
+       when op in [:search, :test] do
     case Error.retry_after_ms(headers) do
       ms when is_integer(ms) -> RateLimiter.note_retry_after(ctx.definition_id, ms)
       _ -> :ok

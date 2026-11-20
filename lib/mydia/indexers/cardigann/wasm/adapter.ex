@@ -566,6 +566,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       call,
       definition
       |> ctx(config, doc)
+      |> Map.put(:operation, elem(call, 0))
       |> put_login_watch(opts[:login_watch])
       |> put_proxy_note(opts[:proxy_note]),
       Keyword.get(opts, :timeout, @default_timeout_ms)
