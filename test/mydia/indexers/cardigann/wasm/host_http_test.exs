@@ -44,6 +44,26 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
                )
     end
 
+    test "counts each request sent into the engine's network counter", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      Bypass.expect_once(bypass, "GET", "/search", &Plug.Conn.resp(&1, 503, "busy"))
+      network = :atomics.new(2, signed: false)
+      ctx = Map.put(ctx, :network, network)
+      Mydia.Indexers.SearchStats.Network.reset()
+
+      assert {:ok, %{status: 503}} = HostHttp.exchange(ctx, req("GET", base <> "/search"))
+      # A refused URL never leaves Mydia.
+      assert {:error, {:blocked, _}} =
+               HostHttp.exchange(ctx, req("GET", "http://169.254.169.254/"))
+
+      assert :atomics.get(network, 2) == 1
+      # Handed to the engine's caller through the counter, not left here.
+      assert Mydia.Indexers.SearchStats.Network.take_requests() == nil
+    end
+
     test "a 429 hands its Retry-After to the RateLimiter", %{
       bypass: bypass,
       ctx: ctx,
@@ -289,7 +309,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
 
       HostHttp.exchange(ctx, req("GET", base <> "/slow"))
       assert :atomics.get(network, 1) >= 45_000
-      assert :atomics.get(network, 2) == 0
+      # Index 2 counts requests, not time.
+      assert :atomics.get(network, 2) == 1
     end
   end
 

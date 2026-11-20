@@ -23,6 +23,7 @@ defmodule Mydia.Indexers.SearchStats.Event do
     field :error_message, :string
     field :duration_ms, :integer
     field :network_ms, :integer
+    field :http_requests, :integer
     field :result_count, :integer
     field :inserted_at, :utc_datetime_usec
   end
@@ -41,6 +42,7 @@ defmodule Mydia.Indexers.SearchStats.Event do
       error_message: truncate(metadata[:error_message]),
       duration_ms: native_to_ms(measurements[:duration]) || 0,
       network_ms: native_to_ms(measurements[:network]),
+      http_requests: measurements[:http_requests],
       result_count: measurements[:result_count] || 0,
       inserted_at: DateTime.utc_now()
     }

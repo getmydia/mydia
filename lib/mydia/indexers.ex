@@ -755,7 +755,7 @@ defmodule Mydia.Indexers do
     start_time = System.monotonic_time(:millisecond)
     SearchStats.Network.reset()
 
-    {outcome, results, error_message} =
+    {error, results, error_message} =
       case TrackerLimits.guard_query(config, fn -> search(config, query, opts) end) do
         {:ok, results} ->
           # Per-indexer-config NZB min-post-age filter (#121). Applied here
@@ -766,24 +766,26 @@ defmodule Mydia.Indexers do
           # keyed by `result.indexer` would never match the configured
           # name. Doing it here, with the originating config in scope,
           # sidesteps that gap entirely.
-          {:ok, reject_too_fresh_nzbs_for_config(results, config), nil}
+          {nil, reject_too_fresh_nzbs_for_config(results, config), nil}
 
         {:error, error} ->
           unless deliberate_skip?(error) do
             Logger.warning("Indexer search failed for #{config.name}: #{inspect(error)}")
           end
 
-          {error_outcome(error), [], format_indexer_error(error)}
+          {error, [], format_indexer_error(error)}
       end
 
     duration = System.monotonic_time(:millisecond) - start_time
+    http_requests = SearchStats.Network.take_requests()
 
     SearchStats.Telemetry.emit(config,
       kind: :search,
-      outcome: outcome,
+      outcome: if(error, do: error_outcome(error), else: :ok),
       duration_ms: duration,
       result_count: length(results),
       network_ms: SearchStats.Network.take_ms(),
+      http_requests: http_requests,
       error_message: error_message
     )
 
@@ -792,7 +794,7 @@ defmodule Mydia.Indexers do
     paused =
       if Keyword.get(opts, :report_paused, false), do: paused_indexer_list(config), else: []
 
-    success = outcome == :ok
+    success = is_nil(error)
 
     metrics = %{
       paused: paused,
@@ -802,12 +804,13 @@ defmodule Mydia.Indexers do
       duration_ms: duration,
       result_count: length(results),
       error: error_message,
-      error_type: if(success, do: nil, else: outcome)
+      error_type: if(success, do: nil, else: error.type)
     }
 
     Logger.debug(
       "Indexer search: name=#{config.name}, success=#{success}, " <>
-        "results=#{length(results)}, duration=#{duration}ms"
+        "results=#{length(results)}, duration=#{duration}ms",
+      http_requests: http_requests || 0
     )
 
     {metrics, results}
@@ -858,6 +861,17 @@ defmodule Mydia.Indexers do
   defp deliberate_skip?(_error), do: false
 
   defp format_indexer_error(%Adapter.Error{message: message}), do: message
+
+  # A deliberate skip sent nothing, so it is recorded apart from a tracker 429
+  # and kept out of attempts and success (SearchStats.Summary).
+  defp error_outcome(%Adapter.Error{type: :rate_limited, details: %{source: :cooldown}}),
+    do: :skipped_cooldown
+
+  defp error_outcome(%Adapter.Error{type: :rate_limited, details: %{source: :local_limit}}),
+    do: :skipped_local_limit
+
+  defp error_outcome(%Adapter.Error{type: :rate_limited, details: %{source: :daily_cap}}),
+    do: :skipped_daily_cap
 
   defp error_outcome(%Adapter.Error{type: type}), do: type
 

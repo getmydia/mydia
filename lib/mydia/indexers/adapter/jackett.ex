@@ -43,6 +43,7 @@ defmodule Mydia.Indexers.Adapter.Jackett do
 
   alias Mydia.Indexers.{SearchResult, QualityParser}
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.SearchStats.Network
   alias Mydia.Downloads.Client.Helpers
   alias Mydia.Indexers.Structs.TrackerTerms
 
@@ -88,11 +89,16 @@ defmodule Mydia.Indexers.Adapter.Jackett do
 
     Logger.debug("Jackett search: #{Helpers.redact_url(url)}")
 
-    case Req.get(url,
-           receive_timeout: timeout,
-           connect_options: [timeout: @connect_timeout],
-           retry: false
-         ) do
+    response =
+      Req.get(url,
+        receive_timeout: timeout,
+        connect_options: [timeout: @connect_timeout],
+        retry: false
+      )
+
+    Network.add_request()
+
+    case response do
       {:ok, %Req.Response{status: 200, body: body}} ->
         parse_search_response(body, config.name)
 

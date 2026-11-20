@@ -131,8 +131,11 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   @spec execute_health_check(CardigannDefinition.t(), keyword()) ::
           {:ok, test_result()} | {:error, String.t()}
   def execute_health_check(%CardigannDefinition{} = definition, _opts \\ []) do
+    # The probe (homepage GET, search, any login) runs in this process, so
+    # Network counts its requests.
+    Network.reset()
     result = run_health_check(definition)
-    record_health(definition, result)
+    record_health(definition, result, Network.take_requests())
     result
   end
 
@@ -456,14 +459,15 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   # Private Functions
 
   # A needs_login check is not a probe of the tracker, so it is not recorded.
-  defp record_health(_definition, {:ok, %{status: "needs_login"}}), do: :ok
+  defp record_health(_definition, {:ok, %{status: "needs_login"}}, _requests), do: :ok
 
-  defp record_health(definition, {:ok, result}) do
+  defp record_health(definition, {:ok, result}, requests) do
     SearchStats.Telemetry.emit(Indexers.cardigann_config(definition),
       kind: :health,
       outcome: if(result.status == "healthy", do: :ok, else: result.status),
       duration_ms: result.response_time_ms || 0,
       network_ms: result[:network_ms],
+      http_requests: requests,
       error_message: result[:error]
     )
   end
@@ -767,9 +771,9 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp test_homepage(nil, _user_config), do: {:error, "No base URL configured"}
 
   defp test_homepage(base_url, user_config) do
-    base_url
-    |> Req.get(homepage_request_opts(user_config))
-    |> classify_homepage(base_url)
+    response = Req.get(base_url, homepage_request_opts(user_config))
+    Network.add_request()
+    classify_homepage(response, base_url)
   end
 
   defp homepage_request_opts(user_config) do

@@ -96,8 +96,54 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
             {summary.timeouts}
           </span>
         </span>
+        <span class="stat py-1 px-3">
+          <span class="stat-title text-[11px]">{gettext("Requests")}</span>
+          <span
+            id={stats_id(@indexer_id, summary) <> "-requests"}
+            class="stat-value text-sm font-semibold"
+          >
+            {summary.requests}
+            <span class={suffix_class()}>
+              {gettext("peak %{n}/min", n: summary.peak_per_minute)}
+            </span>
+          </span>
+        </span>
+        <span class="stat py-1 px-3">
+          <span class="stat-title text-[11px]">{gettext("429s")}</span>
+          <span
+            id={stats_id(@indexer_id, summary) <> "-rate-limited"}
+            class={[
+              "stat-value text-sm font-semibold",
+              if(summary.rate_limited > 0, do: "text-warning", else: "text-base-content/50")
+            ]}
+          >
+            {summary.rate_limited}
+          </span>
+        </span>
+        <span class="stat py-1 px-3">
+          <span class="stat-title text-[11px]">{gettext("Skipped")}</span>
+          <span
+            id={stats_id(@indexer_id, summary) <> "-skipped"}
+            class="stat-value text-sm font-semibold text-base-content/50"
+          >
+            {summary.skipped}
+          </span>
+        </span>
       </button>
     </div>
+    """
+  end
+
+  attr :indexer_id, :string, required: true
+  attr :until, DateTime, default: nil
+
+  @doc "The indexer row's badge while Mydia holds off after an HTTP 429."
+  def cooldown_badge(assigns) do
+    ~H"""
+    <span :if={@until} id={"indexer-cooldown-#{@indexer_id}"} class="badge badge-warning badge-sm">
+      <.icon name="hero-clock" class="w-3 h-3 mr-1" />
+      {gettext("Cooling down until %{time}", time: Calendar.strftime(@until, "%H:%M"))}
+    </span>
     """
   end
 

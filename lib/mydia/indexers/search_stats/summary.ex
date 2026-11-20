@@ -5,6 +5,13 @@ defmodule Mydia.Indexers.SearchStats.Summary do
   Durations cover every attempt, failures included: a timed-out tracker is
   exactly the latency a user waits through. `avg_results` covers successful
   searches only. Percentiles are nearest-rank.
+
+  A search Mydia chose not to send (outcomes starting `skipped_`: a cooldown,
+  its own per-minute limit, a daily cap) is counted in `skipped` and nowhere
+  else: it is not an attempt and took no time. `requests` is the HTTP requests
+  sent to the tracker over the window, `peak_per_minute` the most sent in one
+  calendar minute, and `rate_limited` the searches the tracker answered with
+  HTTP 429.
   """
 
   defstruct [
@@ -13,6 +20,10 @@ defmodule Mydia.Indexers.SearchStats.Summary do
     attempts: 0,
     successes: 0,
     timeouts: 0,
+    requests: 0,
+    peak_per_minute: 0,
+    rate_limited: 0,
+    skipped: 0,
     p50_ms: nil,
     p90_ms: nil,
     avg_results: nil
@@ -22,18 +33,27 @@ defmodule Mydia.Indexers.SearchStats.Summary do
 
   @timeouts ["timeout", "deadline"]
 
-  @doc "Builds a summary from `{indexer_id, engine, outcome, duration_ms, result_count}` rows."
+  @doc """
+  Builds a summary from
+  `{indexer_id, engine, outcome, duration_ms, result_count, http_requests, inserted_at}`
+  rows.
+  """
   @spec build(String.t(), String.t() | nil, [tuple()]) :: t()
   def build(indexer_id, engine, rows) do
-    durations = rows |> Enum.map(&elem(&1, 3)) |> Enum.sort()
-    ok_rows = Enum.filter(rows, &(elem(&1, 2) == "ok"))
+    {skipped, sent} = Enum.split_with(rows, &skipped?(elem(&1, 2)))
+    durations = sent |> Enum.map(&elem(&1, 3)) |> Enum.sort()
+    ok_rows = Enum.filter(sent, &(elem(&1, 2) == "ok"))
 
     %__MODULE__{
       indexer_id: indexer_id,
       engine: engine,
-      attempts: length(rows),
+      attempts: length(sent),
       successes: length(ok_rows),
-      timeouts: Enum.count(rows, &(elem(&1, 2) in @timeouts)),
+      timeouts: Enum.count(sent, &(elem(&1, 2) in @timeouts)),
+      requests: rows |> Enum.map(&requests/1) |> Enum.sum(),
+      peak_per_minute: peak_per_minute(rows),
+      rate_limited: Enum.count(sent, &(elem(&1, 2) == "rate_limited")),
+      skipped: length(skipped),
       p50_ms: percentile(durations, 50),
       p90_ms: percentile(durations, 90),
       avg_results: average(Enum.map(ok_rows, &elem(&1, 4)))
@@ -45,6 +65,20 @@ defmodule Mydia.Indexers.SearchStats.Summary do
 
   def success_rate(%__MODULE__{successes: successes, attempts: attempts}),
     do: successes / attempts
+
+  defp skipped?("skipped_" <> _source), do: true
+  defp skipped?(_outcome), do: false
+
+  defp requests(row), do: elem(row, 5) || 0
+
+  defp peak_per_minute(rows) do
+    rows
+    |> Enum.group_by(&minute(elem(&1, 6)), &requests/1)
+    |> Enum.map(fn {_minute, counts} -> Enum.sum(counts) end)
+    |> Enum.max(fn -> 0 end)
+  end
+
+  defp minute(%DateTime{} = at), do: DateTime.truncate(%{at | second: 0}, :second)
 
   # Integer arithmetic for ceil(percent * n / 100), so no float rounding
   # moves the rank.

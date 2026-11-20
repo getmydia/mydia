@@ -71,6 +71,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.FlareSolverr
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
+  alias Mydia.Indexers.SearchStats.Network
 
   require Logger
 
@@ -601,8 +602,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp safe_request(:get, url, req_opts), do: run_req(&Req.get/2, url, req_opts)
   defp safe_request(:post, url, req_opts), do: run_req(&Req.post/2, url, req_opts)
 
+  # Counted once Req returns, response or transport error alike; a raise
+  # (a malformed URL, say) sent nothing, and a parity replay never left Mydia.
   defp run_req(fun, url, req_opts) do
-    fun.(url, req_opts)
+    result = fun.(url, req_opts)
+    unless Seam.replaying?(), do: Network.add_request()
+    result
   rescue
     exception ->
       Logger.error(

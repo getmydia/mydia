@@ -165,6 +165,57 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
     refute has_element?(view, "#indexer-stats-#{busy.id}-none-engine")
   end
 
+  test "requests, 429s and skips each get a cell", %{conn: conn, busy: busy} do
+    insert!(busy, %{http_requests: 3})
+    insert!(busy, %{outcome: "rate_limited", http_requests: 1, error_message: "HTTP 429"})
+    insert!(busy, %{outcome: "skipped_cooldown", error_message: "Cooling down"})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    stats = "#indexer-stats-#{busy.id}-none"
+    assert has_element?(view, "#{stats}-requests", "4")
+    assert has_element?(view, "#{stats}-requests", "peak 4/min")
+    assert has_element?(view, "#{stats}-rate-limited.text-warning", "1")
+    assert has_element?(view, "#{stats}-skipped", "1")
+    assert has_element?(view, "#{stats}-success", "1/2")
+  end
+
+  test "no 429s reads muted", %{conn: conn, busy: busy} do
+    insert!(busy, %{http_requests: 1})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none-rate-limited", "0")
+    refute has_element?(view, "#indexer-stats-#{busy.id}-none-rate-limited.text-warning")
+  end
+
+  test "an indexer cooling down after a 429 says until when", %{
+    conn: conn,
+    busy: busy,
+    quiet: quiet
+  } do
+    until = Mydia.Indexers.RateLimiter.record_rate_limited(busy.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(
+             view,
+             "#indexer-cooldown-#{busy.id}",
+             "Cooling down until #{Calendar.strftime(until, "%H:%M")}"
+           )
+
+    refute has_element?(view, "#indexer-cooldown-#{quiet.id}")
+  end
+
+  test "a library indexer cooling down shows the badge too", %{conn: conn} do
+    original = Application.get_env(:mydia, :features, [])
+    Application.put_env(:mydia, :features, Keyword.put(original, :cardigann_enabled, true))
+    on_exit(fn -> Application.put_env(:mydia, :features, original) end)
+
+    definition = Mydia.IndexersFixtures.cardigann_definition_fixture(%{enabled: true})
+    Mydia.Indexers.RateLimiter.record_rate_limited(definition.id, nil)
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-cooldown-#{definition.id}", "Cooling down until")
+  end
+
   test "timeouts are flagged as a warning", %{conn: conn, busy: busy} do
     insert!(busy, %{})
     insert!(busy, %{outcome: "timeout", error_message: "Cardigann call timed out"})

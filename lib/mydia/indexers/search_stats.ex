@@ -24,10 +24,12 @@ defmodule Mydia.Indexers.SearchStats do
 
     from(e in Event,
       where: e.kind == ^kind and e.inserted_at >= ^since,
-      select: {e.indexer_id, e.engine, e.outcome, e.duration_ms, e.result_count}
+      select:
+        {e.indexer_id, e.engine, e.outcome, e.duration_ms, e.result_count, e.http_requests,
+         e.inserted_at}
     )
     |> Repo.all()
-    |> Enum.group_by(fn {indexer_id, engine, _, _, _} -> {indexer_id, engine} end)
+    |> Enum.group_by(&{elem(&1, 0), elem(&1, 1)})
     |> Enum.map(fn {{indexer_id, engine}, rows} -> Summary.build(indexer_id, engine, rows) end)
     |> Enum.group_by(& &1.indexer_id)
     |> Map.new(fn {indexer_id, summaries} ->

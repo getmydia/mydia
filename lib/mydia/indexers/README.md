@@ -305,6 +305,24 @@ cannot put `Retry-After` on the guest's error, so the host HTTP function notes
 it with `RateLimiter.note_retry_after/2` and the next `record_rate_limited/2`
 for that indexer consumes it.
 
+To show how hard Mydia hits each tracker, every search and health probe
+records `http_requests` on its `indexer_search_events` row: the HTTP requests
+that call sent toward the tracker. That is every built-in Cardigann request
+(each mirror tried, each later page, downloads excluded since they are not
+searches), its login, a FlareSolverr solve, each Prowlarr-engine host
+exchange, the Newznab or Jackett call, and the health probe's homepage GET.
+A request the egress gate refused or a parity replay answered never left Mydia
+and is not counted; Prowlarr's own requests go to Prowlarr, not the tracker,
+and are not either. Counting is per process (`SearchStats.Network`): a login
+runs in the searching process, and the Prowlarr engine hands its guest's count
+back through `Engine.call/3`. A search the gate refused is not a request:
+it records outcome `skipped_cooldown`, `skipped_local_limit` or
+`skipped_daily_cap` (not `rate_limited`, which is the tracker's 429), no
+`http_requests`, and stays out of attempts and success rate. The admin
+Indexers page shows the window's requests with the busiest minute ("peak
+N/min"), the tracker's 429s and the skips, and a "Cooling down until HH:MM"
+(UTC) badge on an indexer that is cooling down.
+
 ## Tracker limits
 
 `tracker_rules` also carry `grab_limit` and `query_limit`, each per rolling 24

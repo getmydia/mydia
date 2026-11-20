@@ -9,7 +9,7 @@ defmodule Mydia.Indexers.SearchStats.EventTest do
   test "from_telemetry/2 builds a row with strings, milliseconds and a fresh id" do
     event =
       Event.from_telemetry(
-        %{duration: ms(1_500), network: ms(1_200), result_count: 7},
+        %{duration: ms(1_500), network: ms(1_200), result_count: 7, http_requests: 3},
         %{
           indexer_id: "def-1",
           indexer_name: "Fictional Tracker",
@@ -30,6 +30,7 @@ defmodule Mydia.Indexers.SearchStats.EventTest do
              outcome: "timeout",
              duration_ms: 1_500,
              network_ms: 1_200,
+             http_requests: 3,
              result_count: 7
            } = event
 
@@ -52,6 +53,7 @@ defmodule Mydia.Indexers.SearchStats.EventTest do
 
     assert event.engine == nil
     assert event.network_ms == nil
+    assert event.http_requests == nil
     assert event.result_count == 0
     assert event.error_message == nil
   end

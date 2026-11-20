@@ -4,7 +4,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   alias Mydia.{Indexers, Settings}
   alias Mydia.Settings.IndexerConfig
   alias Mydia.Indexers.Health, as: IndexerHealth
-  alias Mydia.Indexers.{CardigannFeatureFlags, FlareSolverr}
+  alias Mydia.Indexers.{CardigannFeatureFlags, FlareSolverr, RateLimiter}
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
@@ -953,6 +953,18 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     |> assign(library_indexers: library_indexers, library_indexer_stats: library_indexer_stats)
     |> TrackerTermsEvents.reload()
     |> SearchStatsEvents.refresh()
+    |> assign_cooldowns()
+  end
+
+  # Read beside the stats, so a cooldown shows up whenever they reload.
+  defp assign_cooldowns(socket) do
+    cooldowns =
+      for %{id: id} <- socket.assigns.indexers ++ socket.assigns.library_indexers,
+          until = RateLimiter.cooldown_until(id),
+          into: %{},
+          do: {id, until}
+
+    assign(socket, :cooldowns, cooldowns)
   end
 
   defp get_indexer_health_status(indexers) do
