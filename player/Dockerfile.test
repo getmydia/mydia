@@ -115,6 +115,8 @@ COPY player/pubspec.yaml player/pubspec.lock ./
 # to resolve the whole graph. Its windows/, linux/ and cargokit/ sources are
 # not read until the plugin builds, against the bind-mounted tree.
 COPY player/rust_builder/pubspec.yaml ./rust_builder/pubspec.yaml
+# The macOS video-hdr libmpv is a path dependency too, read the same way.
+COPY player/packages/media_kit_libs_macos_video_hdr/pubspec.yaml ./packages/media_kit_libs_macos_video_hdr/pubspec.yaml
 # Enforced like every other `pub get` in CI and the release image: the lock
 # resolves on the .fvmrc SDK on a complete graph, so a mismatch is a failure
 # here rather than a silently re-resolved cache.
