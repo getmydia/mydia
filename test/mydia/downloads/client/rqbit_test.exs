@@ -560,6 +560,28 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert status.save_path == "/downloads"
     end
 
+    test "a read slower than the ordering bound is not counted as session-only", %{
+      bypass: bypass,
+      config: config
+    } do
+      config = put_in(config, [:options, :max_ordered_read_ms], 20)
+
+      Bypass.expect(bypass, "GET", "/torrents", fn conn ->
+        Process.sleep(60)
+
+        json_resp(conn, 200, %{
+          "torrents" => [
+            %{"id" => 0, "info_hash" => @hash, "name" => "Movie", "stats" => stats()}
+          ]
+        })
+      end)
+
+      # Too slow to order against another read: shown as reported, never recorded.
+      assert {:ok, [status]} = Rqbit.list_torrents(config, [])
+      assert status.uploaded_session_only? == false
+      assert status.observed_at == nil
+    end
+
     # A delayed response must not get a later read time than a newer one
     # parsed sooner, so the time is taken before the request, not after.
     test "stamps the read time before the request, not after the response", %{

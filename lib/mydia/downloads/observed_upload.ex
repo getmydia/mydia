@@ -91,8 +91,10 @@ defmodule Mydia.Downloads.ObservedUpload do
   `@reset_after_seconds` after `"seen_at"`. The read time is when the request
   was sent, and the order of two requests in flight together is not the
   order rqbit read them, so a lower counter read soon after the entry may be
-  the older read. Any request that much older has long timed out (no retry,
-  35s per request by default). A real reset is credited by a later pass
+  the older read. The rqbit adapter keeps only reads that finished within
+  120 seconds of being asked for (`observed_at`, else not session-only), so
+  a read asked for 300 seconds after the entry's cannot be the older one,
+  whatever the request timeout is set to. A real reset is credited by a later pass
   while the counter is still below `"session"`; once the new session's
   counter passes it first, the reset reads as growth and the uploads before
   it are lost. Inside the window a reset cannot be told from an older read

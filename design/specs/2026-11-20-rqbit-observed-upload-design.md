@@ -80,8 +80,12 @@ inflating the total. Two guards stop it:
 - A counter below `session` counts as a reset only when read at least 300
   seconds after `"seen_at"`. Two requests in flight together need not be
   read by rqbit in the order they were sent, so request time alone cannot
-  order them; but a request that much older has long timed out (retries are
-  off, and a status read takes at most two requests of 35s by default). A
+  order them. The rqbit adapter therefore stamps `observed_at` (and marks
+  the counter session-only) only for a read that finished within 120 seconds
+  of being asked for; a slower read is shown as reported, which errs low,
+  and never recorded. A read asked for 300 seconds after the stored one was
+  answered after the stored read finished, so it cannot be the older read,
+  whatever the request timeout is set to. A
   real reset is credited by a later pass while the counter is still below
   `session`. If the new session's counter passes the old one first, the reset
   reads as growth and its earlier uploads are lost: inside the window a
