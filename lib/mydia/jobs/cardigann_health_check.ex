@@ -127,14 +127,23 @@ defmodule Mydia.Jobs.CardigannHealthCheck do
     )
 
     # Log individual failures for monitoring
-    Enum.each(results, fn {id, result} ->
-      unless result.success do
+    Enum.each(results, fn
+      {_id, %{success: true}} ->
+        :ok
+
+      # A tracker throttling Mydia is not broken; the result's message names
+      # when the cooldown ends.
+      {id, %{rate_limited: true} = result} ->
+        Logger.info("[CardigannHealthCheckJob] Rate-limited by tracker: #{result.message}",
+          definition_id: id
+        )
+
+      {id, result} ->
         Logger.warning("[CardigannHealthCheckJob] Indexer unhealthy",
           definition_id: id,
-          status: result.status,
-          error: result.error
+          status: result[:status],
+          error: result[:error]
         )
-      end
     end)
 
     :ok

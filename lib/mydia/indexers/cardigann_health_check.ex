@@ -212,17 +212,30 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp sweep_action(definition) do
     cond do
       until = RateLimiter.cooldown_until(definition.id) -> {:skip_cooling, until}
-      recent_success?(definition.id) -> :trust_recent_success
+      success_since_last_check?(definition) -> :trust_recent_success
       true -> :probe
     end
   end
 
-  defp recent_success?(indexer_id) do
-    case RateLimiter.last_success_at(indexer_id) do
-      nil -> false
-      at -> DateTime.diff(DateTime.utc_now(), at) < @recent_success_seconds
+  # Only a search that succeeded after the stored last check counts. A probe
+  # records its own success before update_health_status/2 writes
+  # last_health_check_at, and that column holds whole seconds, so comparing the
+  # success truncated to the second, strictly later, keeps a probe from
+  # vouching for the next sweep (a zero-row degraded probe would otherwise read
+  # as healthy an hour later).
+  defp success_since_last_check?(definition) do
+    case RateLimiter.last_success_at(definition.id) do
+      nil ->
+        false
+
+      at ->
+        DateTime.diff(DateTime.utc_now(), at) < @recent_success_seconds and
+          later_than_last_check?(DateTime.truncate(at, :second), definition.last_health_check_at)
     end
   end
+
+  defp later_than_last_check?(_at, nil), do: true
+  defp later_than_last_check?(at, checked_at), do: DateTime.compare(at, checked_at) == :gt
 
   defp probe_in_slot(definition) do
     limit = Indexers.cardigann_config(definition).rate_limit
@@ -243,16 +256,27 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp trust_recent_success(definition) do
     at = RateLimiter.last_success_at(definition.id)
 
-    write_health(definition, %{health_status: "healthy", last_health_check_at: DateTime.utc_now()})
+    attrs = %{
+      health_status: "healthy",
+      last_health_check_at: DateTime.utc_now(),
+      consecutive_failures: 0
+    }
 
-    {:ok,
-     %{
-       success: true,
-       status: "healthy",
-       message: "Healthy: a search succeeded at #{clock(at)}",
-       response_time_ms: nil,
-       error: nil
-     }}
+    case write_health(definition, attrs) do
+      # The conditional write skipped a row a search parked meanwhile.
+      {:ok, %CardigannDefinition{health_status: "needs_login"}} ->
+        {:ok, needs_login_result()}
+
+      _written ->
+        {:ok,
+         %{
+           success: true,
+           status: "healthy",
+           message: "Healthy: a search succeeded at #{clock(at)}",
+           response_time_ms: nil,
+           error: nil
+         }}
+    end
   end
 
   # Hours and minutes in UTC, like the other indexer logs.
@@ -810,7 +834,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   end
 
   # A 429 leaves consecutive_failures alone: the tracker is throttling Mydia,
-  # not broken.
+  # not broken. Writing "degraded" over "unhealthy" is deliberate: the tracker
+  # answered.
   defp health_attrs(_definition, %{rate_limited: true} = result, now),
     do: %{health_status: result.status, last_health_check_at: now}
 
@@ -837,13 +862,20 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     # The probe takes seconds and works on a struct loaded before it started. A
     # search may have set needs_login meanwhile, and only a login clears it, so
     # the write is conditional on the row's current status, not the struct's.
+    # Every attr is written, not just changeset.changes: the changes are a diff
+    # against that stale struct, and are empty when a check in the same second
+    # repeats its values, which update_all rejects.
     with true <- changeset.valid?,
          {1, _} <-
            Repo.update_all(
              from(d in CardigannDefinition,
                where: d.id == ^definition.id and d.health_status != "needs_login"
              ),
-             set: Map.to_list(changeset.changes)
+             set:
+               changeset
+               |> Ecto.Changeset.apply_changes()
+               |> Map.take(Map.keys(attrs))
+               |> Map.to_list()
            ) do
       {:ok, Repo.get!(CardigannDefinition, definition.id)}
     else

@@ -545,10 +545,17 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     test "sweep trusts a recent successful search" do
       bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
 
+      # The last check was a while ago; a real search succeeded since.
+      checked_at = DateTime.add(DateTime.utc_now(), -1_800, :second) |> DateTime.truncate(:second)
+
       definition =
         bypass
         |> linked_definition()
-        |> set_health(%{health_status: "degraded", last_health_check_at: nil})
+        |> set_health(%{
+          health_status: "degraded",
+          last_health_check_at: checked_at,
+          consecutive_failures: 2
+        })
 
       RateLimiter.record_success(definition.id)
 
@@ -561,14 +568,46 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       reloaded = Repo.get!(CardigannDefinition, definition.id)
       assert reloaded.health_status == "healthy"
-      assert reloaded.last_health_check_at != nil
+      assert DateTime.compare(reloaded.last_health_check_at, checked_at) == :gt
+      assert reloaded.consecutive_failures == 0
+    end
+
+    test "a probe's own success does not stand in for the next sweep's probe" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+      definition = linked_definition(bypass)
+
+      assert {:ok, %{} = first} = CardigannHealthCheck.check_all_enabled()
+      assert %{success: true, message: "Search returned" <> _} = first[definition.id]
+
+      assert {:ok, %{} = second} = CardigannHealthCheck.check_all_enabled()
+      assert %{success: true, message: "Search returned" <> _} = second[definition.id]
+
+      assert_received {:contacted, "/search"}
+      assert_received {:contacted, "/search"}
+    end
+
+    test "trusting a recent success leaves a needs_login row parked" do
+      bypass = reporting_bypass(&Plug.Conn.resp(&1, 200, @one_row))
+      definition = linked_definition(bypass)
+
+      RateLimiter.record_success(definition.id)
+
+      # The sweep loaded the struct before a search parked the row.
+      Repo.update_all(
+        from(d in CardigannDefinition, where: d.id == ^definition.id),
+        set: [health_status: "needs_login"]
+      )
+
+      assert {:ok, %{} = results} = CardigannHealthCheck.check_all_enabled()
+      assert %{status: "needs_login", success: false} = results[definition.id]
+      assert Repo.get!(CardigannDefinition, definition.id).health_status == "needs_login"
     end
 
     test "a probe 429 cools the definition without counting a failure" do
       bypass =
         reporting_bypass(fn conn ->
           conn
-          |> Plug.Conn.put_resp_header("retry-after", "60")
+          |> Plug.Conn.put_resp_header("retry-after", "300")
           |> Plug.Conn.resp(429, "Too Many Requests")
         end)
 
@@ -588,7 +627,8 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       until = RateLimiter.cooldown_until(definition.id)
       assert %DateTime{} = until
-      assert DateTime.diff(until, DateTime.utc_now()) in 55..60
+      # Longer than the first ladder step (1 minute): Retry-After was honoured.
+      assert DateTime.diff(until, DateTime.utc_now()) in 295..300
     end
 
     test "the Test button probes during a cooldown and a success clears it" do
