@@ -74,6 +74,33 @@ defmodule Mydia.Indexers.RateLimiterCooldownTest do
       assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)), 300_000, 1_000
     end
 
+    test "a shorter hint does not replace a longer fresh one" do
+      id = unique_id()
+      :ok = RateLimiter.note_retry_after(id, :timer.hours(1))
+      :ok = RateLimiter.note_retry_after(id, 60_000)
+
+      assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)),
+                      :timer.hours(1),
+                      1_000
+    end
+
+    test "a longer hint replaces a shorter one" do
+      id = unique_id()
+      :ok = RateLimiter.note_retry_after(id, 120_000)
+      :ok = RateLimiter.note_retry_after(id, 600_000)
+
+      assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)), 600_000, 1_000
+    end
+
+    test "a stale hint is replaced even by a shorter one" do
+      id = unique_id()
+      six_minutes_ago = System.monotonic_time(:millisecond) - :timer.minutes(6)
+      :ok = RateLimiter.put_retry_hint(id, :timer.hours(1), six_minutes_ago)
+      :ok = RateLimiter.note_retry_after(id, 600_000)
+
+      assert_in_delta ms_from_now(RateLimiter.record_rate_limited(id, nil)), 600_000, 1_000
+    end
+
     test "a hint older than 5 minutes is ignored" do
       id = unique_id()
       six_minutes_ago = System.monotonic_time(:millisecond) - :timer.minutes(6)

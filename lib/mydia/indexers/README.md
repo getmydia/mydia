@@ -317,7 +317,8 @@ State lives in ETS in `RateLimiter` and nothing is persisted: a restart
 forgets every cooldown and the ladder starts over. The WASM Cardigann engine
 cannot put `Retry-After` on the guest's error, so the host HTTP function notes
 it with `RateLimiter.note_retry_after/2` and the next `record_rate_limited/2`
-for that indexer consumes it, unless the hint is more than 5 minutes old.
+for that indexer consumes it, unless the hint is more than 5 minutes old. A
+new hint never shortens a fresh one: the hint whose wait ends later is kept.
 
 To show how hard Mydia hits each tracker, every search and health probe
 records `http_requests` on its `indexer_search_events` row: the HTTP requests

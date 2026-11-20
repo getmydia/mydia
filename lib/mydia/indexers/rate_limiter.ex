@@ -105,15 +105,19 @@ defmodule Mydia.Indexers.RateLimiter do
   end
 
   # A hint older than @retry_hint_max_age_ms belongs to some earlier 429 whose
-  # error never reached record_rate_limited/2, so it is dropped unused.
+  # error never reached record_rate_limited/2, so it is dropped unused. A fresh
+  # hint yields what is left of its wait, counted from when it was noted.
   defp take_retry_hint(indexer_id) do
     now = System.monotonic_time(:millisecond)
 
     case :ets.take(@table_name, {:retry_hint, indexer_id}) do
-      [{_key, {ms, noted_at}}] when now - noted_at <= @retry_hint_max_age_ms -> ms
-      _none_or_stale -> nil
+      [{_key, hint}] -> if fresh_hint?(hint, now), do: max(hint_end(hint) - now, 0)
+      [] -> nil
     end
   end
+
+  defp fresh_hint?({_ms, noted_at}, now), do: now - noted_at <= @retry_hint_max_age_ms
+  defp hint_end({ms, noted_at}), do: noted_at + ms
 
   defp store_cooldown(key, retry_ms) do
     now = System.monotonic_time(:millisecond)
@@ -210,6 +214,10 @@ defmodule Mydia.Indexers.RateLimiter do
 
   The next `record_rate_limited/2` call without its own Retry-After uses it
   and deletes it, unless the hint is more than 5 minutes old by then.
+
+  A hint never shortens a fresh one already noted: of the two, the one whose
+  wait ends later is kept, so a short answer to one concurrent search cannot
+  erase a long pause another was told to take.
   """
   @spec note_retry_after(String.t(), non_neg_integer()) :: :ok
   def note_retry_after(indexer_id, ms) when is_integer(ms) and ms >= 0,
@@ -219,8 +227,34 @@ defmodule Mydia.Indexers.RateLimiter do
   # Test hook: notes a hint as if at monotonic time `noted_at` (milliseconds).
   @spec put_retry_hint(String.t(), non_neg_integer(), integer()) :: :ok
   def put_retry_hint(indexer_id, ms, noted_at) do
-    :ets.insert(@table_name, {{:retry_hint, indexer_id}, {ms, noted_at}})
-    :ok
+    key = {:retry_hint, indexer_id}
+    new = {ms, noted_at}
+
+    case :ets.lookup(@table_name, key) do
+      [] ->
+        if :ets.insert_new(@table_name, {key, new}),
+          do: :ok,
+          else: put_retry_hint(indexer_id, ms, noted_at)
+
+      [{^key, old}] ->
+        if fresh_hint?(old, System.monotonic_time(:millisecond)) and
+             hint_end(old) >= hint_end(new) do
+          :ok
+        else
+          replace_retry_hint(key, old, new)
+        end
+    end
+  end
+
+  # Swaps `old` for `new` only if no other process changed the hint since it
+  # was read, else compares again against the hint that won.
+  defp replace_retry_hint({:retry_hint, indexer_id} = key, old, {ms, noted_at} = new) do
+    spec = [{{key, old}, [], [{{{:const, key}, {:const, new}}}]}]
+
+    case :ets.select_replace(@table_name, spec) do
+      1 -> :ok
+      _lost -> put_retry_hint(indexer_id, ms, noted_at)
+    end
   end
 
   @doc """
