@@ -75,17 +75,23 @@ final class MydiaSplitViewController: NSSplitViewController {
   /// False collapses the sidebar and hides the toolbar (its toggle) for a
   /// page that covers the shell, the player; true restores whatever the
   /// viewer had.
+  ///
+  /// Not animated: the player resizes the window to the video right after
+  /// it opens and back right after it closes. A window resize landing while
+  /// the split view animates a collapse is applied to the panes twice, which
+  /// left both taller than the window and their tops cut off until the next
+  /// manual resize.
   func setChromeVisible(_ visible: Bool) {
     if visible {
       guard forcedCollapsed else { return }
       forcedCollapsed = false
       setToolbarVisible(true)
-      sidebarItem.animator().isCollapsed = viewerCollapsed
+      sidebarItem.isCollapsed = viewerCollapsed
     } else {
       guard !forcedCollapsed else { return }
       forcedCollapsed = true
       setToolbarVisible(false)
-      sidebarItem.animator().isCollapsed = true
+      sidebarItem.isCollapsed = true
     }
   }
 
