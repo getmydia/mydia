@@ -250,17 +250,24 @@ first in automatic search is the `:preferred_qualities` sort key
 
 ## Rate limits and cooldown
 
-Every search of one indexer goes through a gate in `Indexers.search/3`, keyed
-by the indexer's id, never its display name. In order:
+Every search of one indexer goes through a gate (`Indexers.SearchGate`, run
+from `Indexers.search/3`), keyed by the indexer's id, never its display name.
+In order:
 
 1. Cooldown: if the indexer answered HTTP 429 recently and its cooldown has
    not ended, the search returns at once and sends nothing.
 2. Per-minute slot: `RateLimiter.take_search_slot/2` against the indexer's
    `rate_limit` (searches per minute; blank means none). The slot counts
    whether or not the search then works.
-3. The adapter's search.
-4. A success clears the cooldown and resets the ladder. A 429 from the
+3. Daily cap: the tracker rule's `query_limit` (`TrackerLimits.guard_query/2`).
+   It comes last, so a search refused by a cooldown or the per-minute limit
+   takes no daily slot.
+4. The adapter's search.
+5. A success clears the cooldown and resets the ladder. A 429 from the
    adapter starts or extends one.
+
+Only searches are gated. Grabs (Cardigann download URLs) and logins are not
+held back by a cooldown, and a 429 on either is not recorded as one.
 
 The cooldown follows a ladder: 1m, 5m, 15m, 30m, 1h, 3h, 6h, then 6h for
 every further 429. The wait is the current step or the response's
@@ -294,16 +301,23 @@ runs at minute 45, away from the hourly movie search at minute 0. It skips a
 definition that is cooling down and leaves its stored status alone, and it
 records a definition healthy without a request when a real search of it
 succeeded in the last hour. A probe it does send takes a per-minute slot like
-a search. A 429 from any probe starts or extends the cooldown and marks the
-definition degraded without counting a failure: a tracker throttling Mydia is
-not broken. The Test button (`test_connection/2`) always probes, cooldown or
-not, so a success there ends a cooldown early.
+a search. A 429 from the probe, on its homepage GET or its search, starts or
+extends the cooldown and marks the definition degraded without counting a
+failure: a tracker throttling Mydia is not broken. A homepage 429 also stops
+the mirror walk, so the tracker's other mirrors are not asked. The Test button
+(`test_connection/2`) always probes, cooldown or not, so a success there ends
+a cooldown early.
+
+The caps health monitor (`Indexers.Health`, every 3 minutes for each indexer
+config) skips an indexer that is cooling down and keeps its last status; an
+uncached check of one returns `:unknown` without a request and counts no
+failure. A forced check (the indexer's Test button) still probes.
 
 State lives in ETS in `RateLimiter` and nothing is persisted: a restart
 forgets every cooldown and the ladder starts over. The WASM Cardigann engine
 cannot put `Retry-After` on the guest's error, so the host HTTP function notes
 it with `RateLimiter.note_retry_after/2` and the next `record_rate_limited/2`
-for that indexer consumes it.
+for that indexer consumes it, unless the hint is more than 5 minutes old.
 
 To show how hard Mydia hits each tracker, every search and health probe
 records `http_requests` on its `indexer_search_events` row: the HTTP requests
@@ -331,14 +345,16 @@ display, on an indexer that is cooling down.
 `tracker_rules` also carry `grab_limit` and `query_limit`, each per rolling 24
 hours and optional. `TrackerLimits` applies them:
 
-- Searches: `search_all/2` runs each indexer's search through
-  `TrackerLimits.guard_query/2`. A rule applies to the Mydia indexer whose name
+- Searches: each indexer's search runs through `TrackerLimits.guard_query/2`,
+  last in the search gate ("Rate limits and cooldown"). A rule applies to the Mydia indexer whose name
   matches its tracker (a built-in Cardigann definition, or a Jackett or Torznab
   feed for one tracker). A Prowlarr or aggregate Jackett connection sends one
   search to trackers Mydia cannot see, so a per-tracker `query_limit` cannot
   cap it: use Prowlarr's own limits, or one Jackett connection per tracker,
   named after it.
-  Every attempt counts. At the cap the indexer is skipped with a
+  Every search that goes out counts, whatever it returns; one refused by a
+  cooldown or the per-minute limit sent nothing and does not. At the cap the
+  indexer is skipped with a
   `:rate_limited` error, which manual search shows as the indexer's status.
   Counts live in `RateLimiter`'s rolling windows, in ETS, and reset on
   restart. `reserve_window/3` inserts the slot before counting and backs out
