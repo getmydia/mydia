@@ -138,8 +138,9 @@ its result shows the next allowed time.
 
 In `MovieSearch` and `TVShowSearch` (movie, episode and season paths): when
 results are empty and every indexer error is `:rate_limited` (any source),
-record no search backoff. Log `search.deferred` with reason
-`indexers_rate_limited` and let the next cron run retry. A mix of
+record no search backoff. Log `Search deferred: every indexer is
+rate-limited`; no event is recorded, since `search.deferred` means a grab
+delay. Let the next cron run retry. A mix of
 rate-limited and other errors, or any indexer answering with zero results,
 keeps today's `no_results` backoff.
 

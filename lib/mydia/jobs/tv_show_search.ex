@@ -925,6 +925,11 @@ defmodule Mydia.Jobs.TVShowSearch do
         record_season_backoff(media_item, season_number, "no_results", ["season"])
         search_individual_episodes(episodes, new_count, args)
 
+      {:rate_limited, _query} ->
+        # Every indexer was rate-limited: fall back to episodes, but record no
+        # season backoff, so the next run retries the pack.
+        search_individual_episodes(episodes, new_count, args)
+
       {:no_packs, _query} ->
         Logger.warning("Falling back to individual episodes after no valid season packs",
           media_item_id: media_item.id,
@@ -1003,21 +1008,30 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No season pack results found",
-          media_item_id: media_item.id,
-          title: media_item.title,
-          season_number: season_number
-        )
+      {:ok, %{results: []} = res} ->
+        if Indexers.deferred_by_rate_limits?(res) do
+          Logger.info("Search deferred: every indexer is rate-limited",
+            media_item_id: media_item.id,
+            query: query
+          )
 
-        Events.search_no_results(media_item, %{
-          "query" => query,
-          "indexers_searched" => count_enabled_indexers(),
-          "season_number" => season_number,
-          "search_type" => search_type
-        })
+          {:rate_limited, query}
+        else
+          Logger.warning("No season pack results found",
+            media_item_id: media_item.id,
+            title: media_item.title,
+            season_number: season_number
+          )
 
-        {:no_results, query}
+          Events.search_no_results(media_item, %{
+            "query" => query,
+            "indexers_searched" => count_enabled_indexers(),
+            "season_number" => season_number,
+            "search_type" => search_type
+          })
+
+          {:no_results, query}
+        end
 
       {:ok, %{results: results}} ->
         Logger.info("Found #{length(results)} season pack results",
@@ -1392,24 +1406,31 @@ defmodule Mydia.Jobs.TVShowSearch do
            query,
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: []}} ->
-        Logger.warning("No results found for episode",
-          episode_id: episode.id,
-          show: episode.media_item.title,
-          season: episode.season_number,
-          episode: episode.episode_number,
-          query: query
-        )
+      {:ok, %{results: []} = res} ->
+        if Indexers.deferred_by_rate_limits?(res) do
+          Logger.info("Search deferred: every indexer is rate-limited",
+            media_item_id: episode.media_item.id,
+            query: query
+          )
+        else
+          Logger.warning("No results found for episode",
+            episode_id: episode.id,
+            show: episode.media_item.title,
+            season: episode.season_number,
+            episode: episode.episode_number,
+            query: query
+          )
 
-        # Record backoff for no results
-        record_episode_backoff(episode, "no_results", resource_types)
+          # Record backoff for no results
+          record_episode_backoff(episode, "no_results", resource_types)
 
-        # Log search event for no results
-        Events.search_no_results(
-          episode.media_item,
-          %{"query" => query, "indexers_searched" => count_enabled_indexers()},
-          episode: episode
-        )
+          # Log search event for no results
+          Events.search_no_results(
+            episode.media_item,
+            %{"query" => query, "indexers_searched" => count_enabled_indexers()},
+            episode: episode
+          )
+        end
 
         :ok
 
@@ -1842,6 +1863,9 @@ defmodule Mydia.Jobs.TVShowSearch do
     case run_season_pack_search(media_item, season_number, search_type: "season_pack_upgrade") do
       {:no_results, _query} ->
         record_season_backoff(media_item, season_number, "no_results", resource_types)
+        :ok
+
+      {:rate_limited, _query} ->
         :ok
 
       {:no_packs, _query} ->

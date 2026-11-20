@@ -593,30 +593,37 @@ defmodule Mydia.Jobs.MovieSearch do
            query,
            [min_seeders: min_seeders] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: [], indexer_errors: indexer_errors}} ->
-        if indexer_errors != [] do
-          Logger.warning("Movie search failed due to indexer errors",
+      {:ok, %{results: [], indexer_errors: indexer_errors} = res} ->
+        if Indexers.deferred_by_rate_limits?(res) do
+          Logger.info("Search deferred: every indexer is rate-limited",
+            media_item_id: movie.id,
+            query: query
+          )
+        else
+          if indexer_errors != [] do
+            Logger.warning("Movie search failed due to indexer errors",
+              media_item_id: movie.id,
+              title: movie.title,
+              query: query,
+              errors: inspect(indexer_errors)
+            )
+          end
+
+          Logger.warning("No results found for movie",
             media_item_id: movie.id,
             title: movie.title,
-            query: query,
-            errors: inspect(indexer_errors)
+            query: query
           )
+
+          # Record backoff for no results
+          record_movie_backoff(movie, "no_results", resource_types)
+
+          # Log search event for no results
+          Events.search_no_results(movie, %{
+            "query" => query,
+            "indexers_searched" => count_enabled_indexers()
+          })
         end
-
-        Logger.warning("No results found for movie",
-          media_item_id: movie.id,
-          title: movie.title,
-          query: query
-        )
-
-        # Record backoff for no results
-        record_movie_backoff(movie, "no_results", resource_types)
-
-        # Log search event for no results
-        Events.search_no_results(movie, %{
-          "query" => query,
-          "indexers_searched" => count_enabled_indexers()
-        })
 
         :no_results
 

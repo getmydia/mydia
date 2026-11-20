@@ -127,6 +127,69 @@ defmodule Mydia.Jobs.MovieSearchTest do
     %{bypass: bypass, library_path: library_path}
   end
 
+  # Replaces the setup's Prowlarr indexer with Newznab ones: Prowlarr is never
+  # gated by the rate limiter, so it cannot be put into a cooldown.
+  defp replace_indexers_with_newznab(names) do
+    Settings.list_indexer_configs()
+    |> Enum.reject(&Mydia.Settings.runtime_config?/1)
+    |> Enum.each(&Settings.update_indexer_config(&1, %{enabled: false}))
+
+    for name <- names do
+      {:ok, config} =
+        Settings.create_indexer_config(%{
+          name: name,
+          type: :newznab,
+          base_url: "http://localhost:1",
+          api_key: "test-key",
+          enabled: true
+        })
+
+      config
+    end
+  end
+
+  defp cool_down(configs) do
+    Enum.each(configs, &Mydia.Indexers.RateLimiter.record_rate_limited(&1.id, nil))
+  end
+
+  defp stub_empty_newznab_feed(bypass) do
+    Bypass.stub(bypass, "GET", "/api", fn conn ->
+      Plug.Conn.resp(
+        conn,
+        200,
+        ~s(<?xml version="1.0"?><rss version="2.0"><channel><title>x</title></channel></rss>)
+      )
+    end)
+  end
+
+  describe "indexer rate limits (#1443)" do
+    test "all indexers cooling down records no backoff" do
+      movie = media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2019})
+      ["Cool A", "Cool B"] |> replace_indexers_with_newznab() |> cool_down()
+
+      assert :ok =
+               perform_job(MovieSearch, %{"mode" => "all_monitored"})
+
+      assert Search.get_backoff("movie", movie.id) == nil
+    end
+
+    test "one indexer cooling and one empty still backs off" do
+      bypass = Bypass.open()
+      movie = media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2019})
+      [cooling, open] = replace_indexers_with_newznab(["Cool A", "Open B"])
+      cool_down([cooling])
+
+      {:ok, _} =
+        Settings.update_indexer_config(open, %{base_url: "http://localhost:#{bypass.port}"})
+
+      stub_empty_newznab_feed(bypass)
+
+      perform_job(MovieSearch, %{"mode" => "all_monitored"})
+
+      assert %{} = Search.get_backoff("movie", movie.id)
+    end
+  end
+
   describe "perform/1 - specific mode" do
     test "returns error when media item does not exist" do
       fake_id = Ecto.UUID.generate()
