@@ -243,3 +243,43 @@ Run: `./dev mix test test/mydia/jobs/movie_search_test.exs test/mydia/jobs/tv_sh
 - [ ] **Step 5: Full check.** `./dev mix precommit` (in five foreground chunks per test/README.md if it outruns the shell timeout). Expected: clean.
 
 - [ ] **Step 6: Commit** `fix(search): skip search backoff when every indexer is rate-limited`
+
+---
+
+### Task 6: Request-rate visibility (spec section 8)
+
+Added after the plan was approved, at the maintainer's request.
+
+**Files:**
+- Modify: `lib/mydia/indexers/search_stats/network.ex` (request counter beside the time total)
+- Modify: outbound paths: `lib/mydia/indexers/cardigann_search_engine.ex` (`safe_request/3`), `lib/mydia/indexers/cardigann/login/http.ex:87`, `lib/mydia/indexers/flaresolverr.ex:378`, `lib/mydia/indexers/cardigann/wasm/host_http.ex` (`exchange/2`), `lib/mydia/indexers/adapter/newznab.ex:103`, `lib/mydia/indexers/adapter/jackett.ex:91`, `lib/mydia/indexers/cardigann_health_check.ex:638`
+- Create: `priv/repo/migrations/<real timestamp>_add_http_requests_to_indexer_search_events.exs`
+- Modify: `lib/mydia/indexers/search_stats/{event,telemetry,summary}.ex`, `lib/mydia/indexers/search_stats.ex`, `lib/mydia/indexers.ex` (`search_with_metrics/3`, `error_outcome/1`)
+- Modify: `lib/mydia_web/live/admin_indexers_live/search_stats_components.ex`, `lib/mydia_web/live/admin_indexers_live/components.ex` (rows at :240 and :373), `lib/mydia_web/live/admin_indexers_live/index.ex` (assign cooldowns)
+- Test: `test/mydia/indexers/search_stats_test.exs` (or the existing summary test file), `test/mydia/indexers_test.exs`, `test/mydia_web/live/admin_indexers_live/*_test.exs`
+
+**Interfaces:**
+- Consumes: Task 3's `details.source`; Task 1's `RateLimiter.cooldown_until/1`.
+- Produces:
+  - `SearchStats.Network.add_request() :: :ok`, `SearchStats.Network.take_requests() :: non_neg_integer() | nil`; `reset/0` clears both.
+  - `Summary` fields `requests :: non_neg_integer()`, `peak_per_minute :: non_neg_integer()`, `rate_limited :: non_neg_integer()` (outcome `"rate_limited"`), `skipped :: non_neg_integer()` (outcomes starting `"skipped_"`). `attempts` and `successes` exclude skipped rows.
+  - Outcomes for gate refusals: `:skipped_cooldown`, `:skipped_local_limit`, `:skipped_daily_cap`.
+
+- [ ] **Step 1: Failing tests**
+  - Counting: a Cardigann search through `search_all/2` against a Bypass definition with two search paths records `http_requests == 2` on its event; a Newznab search records 1; a search refused by a cooldown records outcome `"skipped_cooldown"` and `http_requests` nil or 0.
+  - Login in another process: if `Cardigann.SessionManager` runs the login in a GenServer, a search that logs in first records login requests plus search requests (assert the sum against Bypass hit counts).
+  - `Summary.build/3`: rows with outcomes ok, rate_limited, skipped_cooldown and `http_requests` 3, 1, nil give `attempts == 2`, `requests == 4`, `rate_limited == 1`, `skipped == 1`; `peak_per_minute` is the largest per-minute sum of `http_requests` by `inserted_at` minute.
+  - LiveView: the stats strip renders `#<stats_id>-requests`, `-rate-limited` (class `text-warning` when above 0) and `-skipped`; an indexer with `RateLimiter.record_rate_limited/2` set renders `#indexer-cooldown-<id>` with "Cooling down until".
+- [ ] **Step 2: Run, expect FAIL.**
+- [ ] **Step 3: Implement.**
+  - Count at each outbound path after the request is sent (success or HTTP error; not for a refused or replayed request: skip when `Seam.replaying?()`).
+  - Network counts are process-local. Verify each path runs in the search task's process; where one does not (a SessionManager GenServer, a spawned task), return the count to the caller and add it there. Do not switch to a global counter.
+  - Migration: `add :http_requests, :integer` (nullable), portable on both adapters. Use a real timestamp and run the duplicate-version check from AGENTS.md, "Migration filenames", before committing.
+  - `error_outcome/1`: `:rate_limited` with source `:cooldown`/`:local_limit`/`:daily_cap` maps to the matching `skipped_*` atom; everything else unchanged.
+  - Telemetry carries `http_requests` as a measurement; `Event` stores it; `SearchStats.summary/2` selects `inserted_at` and `http_requests` too.
+  - `search_with_metrics/3` completion log (`Logger.debug` today) gains `http_requests: n` metadata and becomes `Logger.info` only when `n > 0`... keep it `debug`; add the metadata only.
+  - UI: three `stat` cells after Timeouts, copy via gettext: "Requests" (value `requests`, suffix "peak %{n}/min"), "429s", "Skipped". Cooldown badge: `<span class="badge badge-warning badge-sm">` with `hero-clock` icon, "Cooling down until %{time}" in UTC `%H:%M`, beside the existing health badge on both row variants. `index.ex` assigns `cooldowns: %{id => DateTime}` built from `RateLimiter.cooldown_until/1` for the listed indexers on mount and on the existing stats refresh.
+  - Run `./dev mix gettext.extract --merge` if the gettext README requires it for new strings.
+- [ ] **Step 4: Run, expect PASS**, then `./dev mix test test/mydia/indexers test/mydia_web/live/admin_indexers_live`.
+- [ ] **Step 5: README:** add a paragraph to "Rate limits and cooldown" on what `http_requests` counts and that skips are not requests.
+- [ ] **Step 6: Commit** `feat(indexers): show HTTP requests, 429s and skips per indexer`

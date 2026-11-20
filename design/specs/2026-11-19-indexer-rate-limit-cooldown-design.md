@@ -149,6 +149,28 @@ keeps today's `no_results` backoff.
 covering the gate order, the ladder, the sources and the health sweep rules,
 next to "Tracker limits".
 
+### 8. Request-rate visibility
+
+Added during implementation at the maintainer's request: show how hard Mydia
+hits each tracker.
+
+- **Counted unit: HTTP requests that reach the tracker.** Every outbound path
+  adds to a per-search count: built-in Cardigann requests (mirrors and later
+  pages), login, FlareSolverr solves, WASM host exchanges, Newznab, Jackett,
+  and the health probe's homepage GET. Prowlarr is not counted: its requests
+  go to Prowlarr, not the tracker.
+- **Stored** in a nullable integer column `http_requests` on
+  `indexer_search_events`, so it follows the existing 14-day retention and
+  day/week window.
+- **Skips are not requests.** A search the gate refused records outcome
+  `skipped_cooldown`, `skipped_local_limit` or `skipped_daily_cap` instead of
+  `rate_limited`, and is excluded from attempts and success.
+- **Admin Indexers stats row** gains Requests (window total, "peak N/min"),
+  429s (tracker-sent, warning colour above 0) and Skipped. The indexer row
+  shows "Cooling down until HH:MM" from `RateLimiter.cooldown_until/1`.
+- **Logs:** the per-indexer completion line in `search_with_metrics` carries
+  `http_requests`.
+
 ## Out of scope
 
 - User-editable per-indexer request delays or limits.
