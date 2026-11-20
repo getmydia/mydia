@@ -8,7 +8,7 @@ void main() {
       ('vo', 'gpu-next'),
       ('gpu-api', 'vulkan'),
       ('gpu-context', 'macvk'),
-      ('target-colorspace-hint', 'yes'),
+      ('target-colorspace-hint', 'no'),
       ('hwdec', 'videotoolbox'),
       ('scale', 'lanczos'),
       ('dscale', 'hermite'),
@@ -24,6 +24,17 @@ void main() {
     final names = surfaceAttachOptions().map((o) => o.$1);
     expect(names, isNot(contains('wid')));
     expect(names, isNot(contains('vid')));
+  });
+
+  test('the colorspace hint is on for PQ and HLG only', () {
+    expect(colorspaceHintFor('pq'), 'yes');
+    expect(colorspaceHintFor('hlg'), 'yes');
+    for (final sdr in ['bt.1886', 'srgb', 'gamma2.2', 'linear']) {
+      expect(colorspaceHintFor(sdr), 'no', reason: sdr);
+    }
+    for (final unknown in [null, '', 'auto']) {
+      expect(colorspaceHintFor(unknown), isNull, reason: '$unknown');
+    }
   });
 
   test('panscan is 0 for fit and 1 for fill', () {

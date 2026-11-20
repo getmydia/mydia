@@ -68,6 +68,9 @@ class _Player extends PlatformPlayer {
     return _handle.future;
   }
 
+  /// Reports [params] the way mpv's `video-params` observer would.
+  void emitVideoParams(VideoParams params) => videoParamsController.add(params);
+
   @override
   // ignore: must_call_super, the fake has no native player to release.
   Future<void> dispose() async {}
@@ -164,6 +167,54 @@ void main() {
 
     await tester.pump(const Duration(seconds: 2));
     expect(done, isTrue);
+  });
+
+  group('target-colorspace-hint follows the source gamma', () {
+    Future<(MpvSurfaceBinding, _Surface, _Player)> attached(
+        WidgetTester tester) async {
+      final surface = _Surface();
+      final binding = await _mount(tester, surface: surface, handle: 9);
+      expect(await binding.attach(), isTrue);
+      await tester.pump();
+      surface.setOptions.clear();
+      return (binding, surface, binding.player.platform! as _Player);
+    }
+
+    Future<void> report(WidgetTester tester, _Player p, String gamma) async {
+      p.emitVideoParams(VideoParams(gamma: gamma));
+      await tester.pump();
+    }
+
+    testWidgets('SDR keeps the attach value and sends nothing', (tester) async {
+      final (_, surface, p) = await attached(tester);
+      await report(tester, p, 'bt.1886');
+      expect(surface.setOptions, isEmpty);
+    });
+
+    testWidgets('PQ turns it on once, and SDR after it turns it off',
+        (tester) async {
+      final (_, surface, p) = await attached(tester);
+      await report(tester, p, 'pq');
+      await report(tester, p, 'pq');
+      await report(tester, p, 'srgb');
+      expect(surface.setOptions, [
+        (9, 'target-colorspace-hint', 'yes'),
+        (9, 'target-colorspace-hint', 'no'),
+      ]);
+    });
+
+    testWidgets('an unknown gamma changes nothing', (tester) async {
+      final (_, surface, p) = await attached(tester);
+      await report(tester, p, 'auto');
+      expect(surface.setOptions, isEmpty);
+    });
+
+    testWidgets('nothing is sent after a detach', (tester) async {
+      final (binding, surface, p) = await attached(tester);
+      await binding.detach();
+      await report(tester, p, 'hlg');
+      expect(surface.setOptions, isEmpty);
+    });
   });
 
   testWidgets(
