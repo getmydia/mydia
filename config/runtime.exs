@@ -432,6 +432,23 @@ if config_env() == :dev do
     data_dir: "priv/data"
 end
 
+# The test database name carries MIX_TEST_PARTITION so scripts/test-partitioned.sh
+# and the CI shards can run side by side (SQLite allows one writer per file). It
+# lives here rather than in config/test.exs because compile-time config that
+# differs between runs forces Mix to recompile every file; see the note at the
+# top of config/test.exs.
+if config_env() == :test do
+  partition = System.get_env("MIX_TEST_PARTITION")
+
+  test_database =
+    case compiled_adapter do
+      Ecto.Adapters.Postgres -> System.get_env("DATABASE_NAME") || "mydia_test#{partition}"
+      _ -> Path.expand("../mydia_test#{partition}.db", __DIR__)
+    end
+
+  config :mydia, Mydia.Repo, database: test_database
+end
+
 # Feature flags configuration for dev/test (reads from environment variable)
 if config_env() in [:dev, :test] do
   cardigann_enabled =

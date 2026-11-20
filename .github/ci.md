@@ -582,6 +582,21 @@ The one exception: a PR whose restore matched nothing (it changed `mix.lock`,
 each job, under the same prefix plus `pr-<number>`, so its later pushes restore
 that instead of compiling cold. Those entries age out after 7 days.
 
+A restored `_build` is only useful if this job's compile-time config matches
+the config of the job that saved it. Mix stores each app's compile-time config
+in the manifest, and when the `:mydia` app's config differs it recompiles every
+file, cache hit or not. `config/test.exs` used to put `MIX_TEST_PARTITION` in
+the Repo database name. Master's `_build` is saved by whichever SQLite shard
+finishes first, so Lint, Dialyzer, E2E and the other three shards all saw a
+config change and recompiled all ~1455 files: 3 to 4.5 minutes per job, on
+every run, until 2026-11-20. The partitioned name now lives in
+`config/runtime.exs`, which Mix does not track. Anything that varies per job or
+per run (partition numbers, ports, temp paths, `CI`) belongs in `runtime.exs`
+or in a different app's config, never under `:mydia` in `config/test.exs`.
+"Compiling 1455 files" in a job that restored `_build` is the symptom. To check
+a candidate locally, compile, `touch config/test.exs`, change the variable and
+compile again: a handful of files is fine, all of them is this bug.
+
 The Actions cache has a 10 GB limit per repository, and it is evicted least
 recently used first. On 2026-10-15 it held 10.6 GB, 3.8 GB of that two
 `flutter-windows` SDK entries, so eviction had been dropping the 155 MB `_build`

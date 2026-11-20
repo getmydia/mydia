@@ -3,9 +3,11 @@ import Config
 # Configure your database based on DATABASE_TYPE environment variable
 # Use DATABASE_TYPE=postgres to use PostgreSQL, otherwise SQLite is used
 #
-# The MIX_TEST_PARTITION environment variable can be used
-# to provide built-in test partitioning in CI environment.
-# Run `mix help test` for more information.
+# The Repo's `database` is set in config/runtime.exs, not here, because it
+# depends on MIX_TEST_PARTITION. Mix recompiles every file when the app's
+# compile-time config changes, so a partition-suffixed name here made each CI
+# shard (and every job restoring another shard's _build cache) rebuild all
+# ~1455 files. Keep values that vary per job or per run out of this file.
 database_adapter =
   case System.get_env("DATABASE_TYPE") do
     "postgres" -> Ecto.Adapters.Postgres
@@ -43,8 +45,6 @@ case database_adapter do
     config :mydia, Mydia.Repo,
       hostname: System.get_env("DATABASE_HOST") || "localhost",
       port: String.to_integer(System.get_env("DATABASE_PORT") || "5433"),
-      database:
-        System.get_env("DATABASE_NAME") || "mydia_test#{System.get_env("MIX_TEST_PARTITION")}",
       username: System.get_env("DATABASE_USER") || "postgres",
       password: System.get_env("DATABASE_PASSWORD") || "postgres",
       pool_size: 10,
@@ -54,9 +54,6 @@ case database_adapter do
 
   Ecto.Adapters.SQLite3 ->
     config :mydia, Mydia.Repo,
-      # Partition-suffixed so scripts/test-partitioned.sh can run partitions
-      # side by side; SQLite allows one writer per file.
-      database: Path.expand("../mydia_test#{System.get_env("MIX_TEST_PARTITION")}.db", __DIR__),
       pool_size: 5,
       pool: Ecto.Adapters.SQL.Sandbox,
       pool_timeout: 60_000
