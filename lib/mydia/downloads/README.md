@@ -75,6 +75,22 @@ polled rows with their new entry merged in, and `DownloadMonitor` hands those to
 seconds rather than the time since completion: a seed-time target set after a
 torrent finished counts from when Mydia started observing it.
 
+The ratio needs the same help for rqbit. rqbit 9.0.1 counts `uploaded_bytes`
+only while a torrent is live: it reads 0 once paused and starts again from 0
+after a restart, so its adapter sets `DownloadStatus.uploaded_session_only?`.
+For those rows `Mydia.Downloads.ObservedUpload.record/2`, called by
+`DownloadMonitor` right after the seed time, banks the counter in
+`Download.metadata["observed_upload"]` (`"bytes"` is the total, `"session"` the
+counter as last seen; a counter below `"session"` is a new session and counts in
+full). `ObservedUpload.overlay/1` then replaces `uploaded` and `ratio` on every
+enriched row (`EnrichedDownload.live_uploaded` keeps the client's own counter),
+and `ClientRemoval.terms_met?/2` applies `overlay_status/2` to the status it
+reads, so a torrent paused at its goal keeps its ratio and ratio goals do not
+restart on each pause. On first sight the current session counts in full:
+uploaded bytes are a reported fact, unlike seed time. Uploads in a session that
+ended before Mydia saw it, or between the last poll and a manual pause or
+restart, are lost, so the total errs low and the torrent seeds longer.
+
 **Limits.** At grab, `Mydia.Downloads.SeedingLimits` sends the goal through the
 optional `set_share_limits/3` adapter callback, best effort. qBittorrent gets
 `ratioLimit` and `seedingTimeLimit` (minutes, rounded up), with `-1` rather than
