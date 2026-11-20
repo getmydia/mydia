@@ -37,7 +37,6 @@ defmodule Mydia.Indexers.RateLimiterThrottleTest do
   test "throttle state does not disturb the sliding-window counters" do
     id = unique_id()
     RateLimiter.throttle(id, 10)
-    assert RateLimiter.check_rate_limit(id, 1) == :ok
     assert RateLimiter.get_stats(id).requests_last_minute == 0
   end
 

@@ -87,49 +87,28 @@ defmodule Mydia.Indexers do
   def search(config, query, opts \\ [])
 
   def search(%Settings.IndexerConfig{} = config, query, opts) do
-    case RateLimiter.check_rate_limit(config.id, config.rate_limit) do
+    case RateLimiter.take_search_slot(config.id, config.rate_limit) do
       :ok ->
         adapter_config = indexer_config_to_adapter_config(config)
-        result = search(adapter_config, query, opts)
+        search(adapter_config, query, opts)
 
-        # Recorded on success, even with no results.
-        case result do
-          {:ok, _results} -> RateLimiter.record_request(config.id)
-          {:error, _} -> :ok
-        end
-
-        result
-
-      {:error, :rate_limited, retry_after} ->
-        Logger.warning(
-          "Rate limit exceeded for indexer #{config.name}, retry after #{retry_after}ms"
-        )
-
-        {:error, Adapter.Error.rate_limited("Rate limit exceeded, retry after #{retry_after}ms")}
+      {:error, :limited, _count} ->
+        Logger.warning("Rate limit exceeded for indexer #{config.name}")
+        {:error, Adapter.Error.rate_limited("Rate limit exceeded")}
     end
   end
 
   def search(%{type: type, id: id, rate_limit: rate_limit} = config, query, opts)
       when is_atom(type) and is_binary(id) do
-    case RateLimiter.check_rate_limit(id, rate_limit) do
+    case RateLimiter.take_search_slot(id, rate_limit) do
       :ok ->
         with {:ok, adapter} <- Adapter.Registry.get_adapter(type) do
-          result = adapter.search(config, query, opts)
-
-          case result do
-            {:ok, _results} -> RateLimiter.record_request(id)
-            {:error, _} -> :ok
-          end
-
-          result
+          adapter.search(config, query, opts)
         end
 
-      {:error, :rate_limited, retry_after} ->
-        Logger.warning(
-          "Rate limit exceeded for Cardigann indexer #{config[:name]}, retry after #{retry_after}ms"
-        )
-
-        {:error, Adapter.Error.rate_limited("Rate limit exceeded, retry after #{retry_after}ms")}
+      {:error, :limited, _count} ->
+        Logger.warning("Rate limit exceeded for Cardigann indexer #{config[:name]}")
+        {:error, Adapter.Error.rate_limited("Rate limit exceeded")}
     end
   end
 

@@ -9,23 +9,24 @@ defmodule Mydia.Indexers.RateLimiter do
   ## Rate Limiting Strategy
 
   - Uses a sliding window approach for accurate rate limiting
-  - Tracks individual requests with timestamps in ETS
-  - Automatically cleans up expired request records
+  - Tracks individual searches as slots with timestamps in ETS
+  - Automatically cleans up expired records
   - Each indexer can have its own rate limit configuration
+  - Tracks a cooldown per indexer after it answers HTTP 429, on a ladder
+    that grows while 429s keep coming and resets on the next success
 
   ## Usage
 
-      # Check if request is allowed
-      case RateLimiter.check_rate_limit(indexer_id, rate_limit) do
+      # Take a search slot (the slot counts whether or not the search works)
+      case RateLimiter.take_search_slot(indexer_id, rate_limit) do
         :ok ->
-          # Make the request
-          RateLimiter.record_request(indexer_id)
           do_api_call()
 
-        {:error, :rate_limited, retry_after} ->
-          # Wait or reject
-          {:error, "Rate limit exceeded, retry after \#{retry_after}ms"}
+        {:error, :limited, _count} ->
+          {:error, "Rate limit exceeded"}
       end
+
+  Nothing here is persisted: all state lives in ETS and resets on restart.
   """
 
   use GenServer
@@ -33,6 +34,15 @@ defmodule Mydia.Indexers.RateLimiter do
 
   @table_name :indexer_rate_limits
   @cleanup_interval :timer.minutes(5)
+
+  # Cooldown after a 429, indexed by how many 429s in a row (each one after
+  # the previous cooldown ended) the indexer has answered. Stays at the last
+  # step.
+  @cooldown_ladder_ms [60_000, 300_000, 900_000, 1_800_000, 3_600_000, 10_800_000, 21_600_000]
+  @max_cooldown_level length(@cooldown_ladder_ms) - 1
+  @max_retry_after_ms :timer.hours(24)
+  # A cooldown that ended this long ago no longer steps the ladder.
+  @cooldown_idle_ms :timer.hours(24)
 
   ## Client API
 
@@ -44,60 +54,158 @@ defmodule Mydia.Indexers.RateLimiter do
   end
 
   @doc """
-  Checks if a request can be made for the given indexer.
+  Takes one of the indexer's per-minute search slots before a search.
 
-  Returns `:ok` if the request is allowed, or `{:error, :rate_limited, retry_after_ms}`
-  if the rate limit would be exceeded.
-
-  ## Parameters
-
-  - `indexer_id` - Unique identifier for the indexer
-  - `rate_limit` - Maximum requests per minute (nil means no limit)
-
-  ## Examples
-
-      iex> check_rate_limit("prowlarr-1", 60)
-      :ok
-
-      iex> check_rate_limit("prowlarr-1", 1)
-      {:error, :rate_limited, 45000}
+  `limit` is the indexer's searches per minute; `nil` or `<= 0` means no
+  limit. Returns `:ok`, or `{:error, :limited, count}` without taking a slot.
+  The slot is taken atomically (see `reserve_window/3`) and counts whether or
+  not the search then succeeds.
   """
-  @spec check_rate_limit(String.t(), integer() | nil) ::
-          :ok | {:error, :rate_limited, non_neg_integer()}
-  def check_rate_limit(_indexer_id, nil), do: :ok
-  def check_rate_limit(_indexer_id, rate_limit) when rate_limit <= 0, do: :ok
+  @spec take_search_slot(String.t(), integer() | nil) ::
+          :ok | {:error, :limited, non_neg_integer()}
+  def take_search_slot(_indexer_id, nil), do: :ok
+  def take_search_slot(_indexer_id, limit) when limit <= 0, do: :ok
 
-  def check_rate_limit(indexer_id, rate_limit) when is_integer(rate_limit) do
+  def take_search_slot(indexer_id, limit) when is_integer(limit),
+    do: reserve_window({:search, indexer_id}, limit, :timer.minutes(1))
+
+  @doc """
+  Returns when the indexer's 429 cooldown ends, or `nil` when it has none.
+  """
+  @spec cooldown_until(String.t()) :: DateTime.t() | nil
+  def cooldown_until(indexer_id) do
     now = System.monotonic_time(:millisecond)
-    window_start = now - :timer.minutes(1)
 
-    # Count requests in the last minute
-    request_count = count_requests(indexer_id, window_start)
-
-    if request_count < rate_limit do
-      :ok
-    else
-      # Calculate when the oldest request will expire
-      retry_after = calculate_retry_after(indexer_id, window_start)
-      {:error, :rate_limited, retry_after}
+    case :ets.lookup(@table_name, {:cooldown, indexer_id}) do
+      [{_key, {until_mono, _level, until_utc}}] when until_mono > now -> to_datetime(until_utc)
+      _ -> nil
     end
   end
 
   @doc """
-  Records a request for the given indexer.
+  Records that the indexer answered HTTP 429 and returns when its cooldown ends.
 
-  Should be called immediately after a successful rate limit check.
+  The cooldown is the current ladder step (1 minute, then 5, 15, 30 minutes,
+  1, 3 and 6 hours) or `retry_after_ms` (capped at 24 hours), whichever is
+  longer. When `retry_after_ms` is `nil`, a hint left by `note_retry_after/2`
+  is used instead, once.
 
-  ## Examples
-
-      iex> record_request("prowlarr-1")
-      :ok
+  A 429 that arrives while a cooldown is still running does not step the
+  ladder: the cooldown keeps the later of its current end and the new one.
+  The next 429 after it ended steps up one rung.
   """
-  @spec record_request(String.t()) :: :ok
-  def record_request(indexer_id) do
+  @spec record_rate_limited(String.t(), non_neg_integer() | nil) :: DateTime.t()
+  def record_rate_limited(indexer_id, retry_after_ms) do
+    # Taken either way, so a hint never outlives the 429 it was noted for.
+    hint =
+      case :ets.take(@table_name, {:retry_hint, indexer_id}) do
+        [{_key, ms}] -> ms
+        [] -> nil
+      end
+
+    retry_ms = min(retry_after_ms || hint || 0, @max_retry_after_ms)
+    store_cooldown({:cooldown, indexer_id}, retry_ms)
+  end
+
+  defp store_cooldown(key, retry_ms) do
     now = System.monotonic_time(:millisecond)
-    # Store {indexer_id, timestamp} as the key for easy cleanup
-    :ets.insert(@table_name, {{indexer_id, now}, true})
+
+    case :ets.lookup(@table_name, key) do
+      [] ->
+        entry = cooldown_entry(now, now + cooldown_wait(0, retry_ms), 0)
+
+        if :ets.insert_new(@table_name, {key, entry}),
+          do: entry_datetime(entry),
+          else: store_cooldown(key, retry_ms)
+
+      [{^key, {until_mono, level, _until_utc} = old}] when until_mono > now ->
+        new_until = max(until_mono, now + cooldown_wait(level, retry_ms))
+
+        if new_until == until_mono,
+          do: entry_datetime(old),
+          else: replace_cooldown(key, old, cooldown_entry(now, new_until, level), retry_ms)
+
+      [{^key, {_until_mono, level, _until_utc} = old}] ->
+        level = min(level + 1, @max_cooldown_level)
+        entry = cooldown_entry(now, now + cooldown_wait(level, retry_ms), level)
+        replace_cooldown(key, old, entry, retry_ms)
+    end
+  end
+
+  # Swaps `old` for `new` only if nobody changed the entry since it was read,
+  # else starts over from the entry that won.
+  defp replace_cooldown(key, old, new, retry_ms) do
+    spec = [{{key, old}, [], [{{{:const, key}, {:const, new}}}]}]
+
+    case :ets.select_replace(@table_name, spec) do
+      1 -> entry_datetime(new)
+      _lost -> store_cooldown(key, retry_ms)
+    end
+  end
+
+  defp cooldown_wait(level, retry_ms), do: max(Enum.at(@cooldown_ladder_ms, level), retry_ms)
+
+  # The wall-clock end is stored as integer milliseconds beside the monotonic
+  # one, so the whole entry stays a plain term `select_replace` can match.
+  defp cooldown_entry(now_mono, until_mono, level),
+    do: {until_mono, level, System.os_time(:millisecond) + (until_mono - now_mono)}
+
+  defp entry_datetime({_until_mono, _level, until_utc}), do: to_datetime(until_utc)
+
+  defp to_datetime(ms), do: DateTime.from_unix!(ms, :millisecond)
+
+  @doc false
+  # Test hook: ends the indexer's cooldown now while keeping its ladder step.
+  @spec expire_cooldown(String.t()) :: :ok
+  def expire_cooldown(indexer_id) do
+    key = {:cooldown, indexer_id}
+
+    case :ets.lookup(@table_name, key) do
+      [{^key, {_until_mono, level, _until_utc}}] ->
+        :ets.insert(
+          @table_name,
+          {key, {System.monotonic_time(:millisecond), level, System.os_time(:millisecond)}}
+        )
+
+        :ok
+
+      [] ->
+        :ok
+    end
+  end
+
+  @doc """
+  Records a successful search: clears the cooldown and resets the ladder.
+  """
+  @spec record_success(String.t()) :: :ok
+  def record_success(indexer_id) do
+    :ets.delete(@table_name, {:cooldown, indexer_id})
+    :ets.delete(@table_name, {:retry_hint, indexer_id})
+    :ets.insert(@table_name, {{:success, indexer_id}, DateTime.utc_now()})
+    :ok
+  end
+
+  @doc """
+  Returns when the indexer last searched successfully since the app started,
+  or `nil`.
+  """
+  @spec last_success_at(String.t()) :: DateTime.t() | nil
+  def last_success_at(indexer_id) do
+    case :ets.lookup(@table_name, {:success, indexer_id}) do
+      [{_key, at}] -> at
+      [] -> nil
+    end
+  end
+
+  @doc """
+  Notes a Retry-After seen where the 429 error itself cannot carry it.
+
+  The next `record_rate_limited/2` call without its own Retry-After uses it
+  and deletes it.
+  """
+  @spec note_retry_after(String.t(), non_neg_integer()) :: :ok
+  def note_retry_after(indexer_id, ms) when is_integer(ms) and ms >= 0 do
+    :ets.insert(@table_name, {{:retry_hint, indexer_id}, ms})
     :ok
   end
 
@@ -113,11 +221,14 @@ defmodule Mydia.Indexers.RateLimiter do
   @spec check_window(term(), non_neg_integer(), pos_integer()) ::
           {:ok, non_neg_integer()} | {:error, :limited, non_neg_integer()}
   def check_window(key, limit, window_ms) do
+    count = count_window(key, window_ms)
+    if count < limit, do: {:ok, count}, else: {:error, :limited, count}
+  end
+
+  defp count_window(key, window_ms) do
     since = System.monotonic_time(:millisecond) - window_ms
     spec = [{{{:window, key, :"$1", :_}, :_}, [{:>=, :"$1", since}], [true]}]
-    count = :ets.select_count(@table_name, spec)
-
-    if count < limit, do: {:ok, count}, else: {:error, :limited, count}
+    :ets.select_count(@table_name, spec)
   end
 
   @doc """
@@ -219,7 +330,8 @@ defmodule Mydia.Indexers.RateLimiter do
   @doc """
   Gets statistics for rate limit usage.
 
-  Returns the number of requests made in the last minute for the given indexer.
+  Returns the number of search slots taken in the last minute for the given
+  indexer.
 
   ## Examples
 
@@ -229,11 +341,11 @@ defmodule Mydia.Indexers.RateLimiter do
   @spec get_stats(String.t()) :: map()
   def get_stats(indexer_id) do
     now = System.monotonic_time(:millisecond)
-    window_start = now - :timer.minutes(1)
-    request_count = count_requests(indexer_id, window_start)
+    window_ms = :timer.minutes(1)
+    window_start = now - window_ms
 
     %{
-      requests_last_minute: request_count,
+      requests_last_minute: count_window({:search, indexer_id}, window_ms),
       window_start: window_start,
       current_time: now
     }
@@ -278,62 +390,39 @@ defmodule Mydia.Indexers.RateLimiter do
 
   @impl true
   def handle_call({:clear_indexer, indexer_id}, _from, state) do
-    # Delete all entries for this indexer
-    match_spec = [
-      {{{:"$1", :_}, :_}, [{:==, :"$1", indexer_id}], [true]}
-    ]
+    keys = [{:cooldown, indexer_id}, {:success, indexer_id}, {:retry_hint, indexer_id}]
+    Enum.each(keys, &:ets.delete(@table_name, &1))
 
-    deleted = :ets.select_delete(@table_name, match_spec)
-    Logger.debug("Cleared #{deleted} rate limit entries for indexer #{indexer_id}")
+    slots = [{{{:window, {:search, indexer_id}, :_, :_}, :_}, [], [true]}]
+    deleted = :ets.select_delete(@table_name, slots)
+    Logger.debug("Cleared rate limit state and #{deleted} search slots for indexer #{indexer_id}")
 
     {:reply, :ok, state}
   end
 
   ## Private Functions
 
-  defp count_requests(indexer_id, window_start) do
-    match_spec = [
-      {{{:"$1", :"$2"}, :_}, [{:andalso, {:==, :"$1", indexer_id}, {:>=, :"$2", window_start}}],
-       [true]}
-    ]
-
-    :ets.select_count(@table_name, match_spec)
-  end
-
-  defp calculate_retry_after(indexer_id, window_start) do
-    # Find the oldest request in the current window
-    match_spec = [
-      {{{:"$1", :"$2"}, :_}, [{:andalso, {:==, :"$1", indexer_id}, {:>=, :"$2", window_start}}],
-       [:"$2"]}
-    ]
-
-    case :ets.select(@table_name, match_spec, 1) do
-      {[oldest_timestamp], _continuation} ->
-        # Time until this request falls out of the window
-        now = System.monotonic_time(:millisecond)
-        window_end = oldest_timestamp + :timer.minutes(1)
-        max(0, window_end - now)
-
-      :"$end_of_table" ->
-        # No requests found, shouldn't happen but return 0
-        0
-    end
-  end
-
   defp cleanup_old_requests do
-    # Remove requests older than 2 minutes (beyond the sliding window)
-    cutoff = System.monotonic_time(:millisecond) - :timer.minutes(2)
+    now = System.monotonic_time(:millisecond)
 
-    match_spec = [
-      {{{:_, :"$1"}, :_}, [{:<, :"$1", cutoff}], [true]}
-    ]
+    # Two-element keys whose second element is a timestamp older than 2
+    # minutes. The cooldown, success and retry-hint keys are also two-element
+    # (`{:cooldown, id}`), but their second element is the indexer id, a
+    # binary, and Erlang term order puts every binary after every number, so
+    # this guard never deletes them.
+    cutoff = now - :timer.minutes(2)
+    match_spec = [{{{:_, :"$1"}, :_}, [{:<, :"$1", cutoff}], [true]}]
 
     # Rolling-window events carry their own expiry.
-    now = System.monotonic_time(:millisecond)
     window_spec = [{{{:window, :_, :_, :_}, :"$1"}, [{:<, :"$1", now}], [true]}]
 
+    # A cooldown that ended a day ago is idle: drop it so the ladder restarts.
+    idle_cutoff = now - @cooldown_idle_ms
+    cooldown_spec = [{{{:cooldown, :_}, {:"$1", :_, :_}}, [{:<, :"$1", idle_cutoff}], [true]}]
+
     deleted =
-      :ets.select_delete(@table_name, match_spec) + :ets.select_delete(@table_name, window_spec)
+      :ets.select_delete(@table_name, match_spec) + :ets.select_delete(@table_name, window_spec) +
+        :ets.select_delete(@table_name, cooldown_spec)
 
     if deleted > 0 do
       Logger.debug("Cleaned up #{deleted} old rate limit entries")
