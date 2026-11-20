@@ -710,10 +710,6 @@ defmodule Mydia.Downloads.History do
       eta: torrent_status.eta,
       size: torrent_status.size,
       downloaded: torrent_status.downloaded,
-      uploaded: torrent_status.uploaded,
-      live_uploaded: torrent_status.uploaded,
-      uploaded_session_only?: Map.get(torrent_status, :uploaded_session_only?) == true,
-      ratio: torrent_status.ratio,
       seeding_time: Map.get(torrent_status, :seeding_time),
       seeders: if(metadata, do: metadata.seeders, else: nil),
       leechers: if(metadata, do: metadata.leechers, else: nil),
@@ -733,7 +729,7 @@ defmodule Mydia.Downloads.History do
       in_client?: true
     })
     |> struct!(EnrichedDownload.import_state(download))
-    |> ObservedUpload.overlay()
+    |> ObservedUpload.put_upload(torrent_status)
   end
 
   defp enrich_download_with_unknown_status(download) do

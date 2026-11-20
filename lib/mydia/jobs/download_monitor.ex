@@ -13,9 +13,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   A download removed from its client by hand before import is marked "missing"
   and kept in the Issues tab, where the operator can investigate or delete it.
-  Seed time for clients that do not count it: `Mydia.Downloads.ObservedSeedTime`.
-  Upload totals for clients that count only the current session (rqbit):
-  `Mydia.Downloads.ObservedUpload`.
   """
 
   use Oban.Worker,

@@ -89,6 +89,22 @@ defmodule Mydia.Downloads.ObservedUpload do
       else: row
   end
 
+  @doc """
+  Sets an enriched row's upload fields from the client's status:
+  `live_uploaded` and `uploaded_session_only?` as reported, and `uploaded`
+  and `ratio` through `overlay/1`.
+  """
+  @spec put_upload(map(), DownloadStatus.t() | map()) :: map()
+  def put_upload(row, status) do
+    overlay(%{
+      row
+      | uploaded: status.uploaded,
+        ratio: status.ratio,
+        live_uploaded: status.uploaded,
+        uploaded_session_only?: Map.get(status, :uploaded_session_only?) == true
+    })
+  end
+
   @doc "The same as `overlay/1`, for a `DownloadStatus` and its download's metadata."
   @spec overlay_status(DownloadStatus.t(), map() | nil) :: DownloadStatus.t()
   def overlay_status(%DownloadStatus{uploaded_session_only?: true} = status, metadata),
