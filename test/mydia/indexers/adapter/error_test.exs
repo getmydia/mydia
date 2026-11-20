@@ -56,6 +56,12 @@ defmodule Mydia.Indexers.Adapter.ErrorTest do
       assert Error.retry_after_ms([]) == nil
     end
 
+    test "returns nil for values too short for the HTTP-date parser" do
+      for value <- ["", "   ", "x", "abc"] do
+        assert Error.retry_after_ms([{"Retry-After", value}]) == nil
+      end
+    end
+
     defp http_date({{y, m, d}, {hh, mm, ss}}) do
       day = Enum.at(~w(Mon Tue Wed Thu Fri Sat Sun), :calendar.day_of_the_week(y, m, d) - 1)
       mon = Enum.at(~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec), m - 1)

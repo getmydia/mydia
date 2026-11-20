@@ -415,7 +415,7 @@ defmodule Mydia.Indexers.Adapter.Error do
   end
 
   defp parse_http_date(value) do
-    case :httpd_util.convert_request_date(String.to_charlist(value)) do
+    case convert_request_date(value) do
       {{_, _, _}, {_, _, _}} = erl ->
         now = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
         ms = (:calendar.datetime_to_gregorian_seconds(erl) - now) * 1000
@@ -424,5 +424,13 @@ defmodule Mydia.Indexers.Adapter.Error do
       _ ->
         nil
     end
+  end
+
+  # OTP's parser has no clause for values shorter than four characters ("",
+  # "x"), so it raises instead of returning `bad_date`.
+  defp convert_request_date(value) do
+    :httpd_util.convert_request_date(String.to_charlist(value))
+  rescue
+    _ -> :bad_date
   end
 end
