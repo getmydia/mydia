@@ -6,6 +6,8 @@ defmodule Mydia.Downloads.ListStatusAdapter do
   """
   @behaviour Mydia.Downloads.Client
 
+  alias Mydia.Downloads.Client.Error
+
   def put(statuses), do: :persistent_term.put({__MODULE__, :statuses}, statuses)
 
   def clear, do: :persistent_term.erase({__MODULE__, :statuses})
@@ -17,11 +19,11 @@ defmodule Mydia.Downloads.ListStatusAdapter do
   @impl true
   def supported_protocols, do: [:torrent]
   @impl true
-  def test_connection(_config), do: {:error, :not_implemented}
+  def test_connection(_config), do: {:error, Error.unknown("not implemented")}
   @impl true
-  def add_torrent(_config, _torrent, _opts), do: {:error, :not_implemented}
+  def add_torrent(_config, _torrent, _opts), do: {:error, Error.unknown("not implemented")}
   @impl true
-  def get_status(_config, _client_id), do: {:error, :not_implemented}
+  def get_status(_config, _client_id), do: {:error, Error.unknown("not implemented")}
   @impl true
   def pause_torrent(_config, _client_id), do: :ok
   @impl true
