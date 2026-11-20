@@ -482,7 +482,9 @@
     />
   <% end %>
   <%= if @show_download_cancel_confirm && @download_to_cancel do %>
-    <Modals.download_cancel_confirm_modal download_to_cancel={@download_to_cancel} />
+    <MydiaWeb.MediaLive.Show.DownloadCancelModal.download_cancel_confirm_modal download_to_cancel={
+      @download_to_cancel
+    } />
   <% end %>
   <%= if @show_download_delete_confirm && @download_to_delete do %>
     <Modals.download_delete_confirm_modal download_to_delete={@download_to_delete} />

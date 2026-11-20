@@ -11,7 +11,6 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   import MydiaWeb.Formatters
 
   alias MydiaWeb.DownloadsLive.{Filters, ListView, Summary, Tab}
-  alias MydiaWeb.SeedingComponents
   alias Phoenix.LiveView.JS
 
   attr :summary, Summary, required: true
@@ -409,14 +408,9 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             icon="hero-x-mark"
             title={gettext("Cancel download")}
             destructive
-            phx-click="cancel_download"
+            phx-click="open_remove_confirm"
+            phx-value-kind="cancel"
             phx-value-id={@download.id}
-            data-confirm={
-              SeedingComponents.confirm_text(
-                @download,
-                gettext("Cancel %{title}?", title: ListView.display_title(@download))
-              )
-            }
           />
         <% else %>
           <.row_action

@@ -590,50 +590,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   end
 
   @doc """
-  Download cancel confirmation modal.
-  """
-  attr :download_to_cancel, :map, required: true
-
-  def download_cancel_confirm_modal(assigns) do
-    ~H"""
-    <div class="modal modal-open">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">{gettext("Cancel Download?")}</h3>
-        <p class="py-4">{gettext("Are you sure you want to cancel this download?")}</p>
-        <div class="bg-base-200 p-3 rounded-box mb-4">
-          <p class="text-sm font-medium">{@download_to_cancel.title}</p>
-          <%= if quality = @download_to_cancel.metadata["quality"] do %>
-            <p class="text-sm text-base-content/70 mt-1">
-              {gettext("Quality:")}
-              <span class="badge badge-sm">{format_download_quality(quality)}</span>
-            </p>
-          <% end %>
-          <%= if @download_to_cancel.progress do %>
-            <p class="text-sm text-base-content/70 mt-1">
-              {gettext("Progress:")} {format_progress(@download_to_cancel.progress)}%
-            </p>
-          <% end %>
-        </div>
-        <MydiaWeb.SeedingComponents.removal_warning download={@download_to_cancel} />
-        <p class="text-warning text-sm mb-4">
-          <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" />
-          {gettext("The download will be stopped and marked as cancelled.")}
-        </p>
-        <div class="modal-action">
-          <button type="button" phx-click="hide_download_cancel_confirm" class="btn btn-ghost">
-            {gettext("Keep Downloading")}
-          </button>
-          <button type="button" phx-click="cancel_download" class="btn btn-warning">
-            {gettext("Cancel Download")}
-          </button>
-        </div>
-      </div>
-      <div class="modal-backdrop" phx-click="hide_download_cancel_confirm"></div>
-    </div>
-    """
-  end
-
-  @doc """
   Download delete confirmation modal for removing a download record.
   """
   attr :download_to_delete, :map, required: true

@@ -318,6 +318,21 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert has_element?(view, "#built-in-settings-modal")
     end
 
+    # Issue #1436: each keypress in State path or API port re-rendered the
+    # form without `open`, folding the section shut under the cursor.
+    test "the Advanced section keeps the browser's open state across re-renders", %{
+      conn: conn
+    } do
+      view = open_settings(conn)
+
+      assert has_element?(view, "details#built-in-advanced[phx-mounted*='ignore_attrs']")
+      assert has_element?(view, "#built-in-advanced[phx-mounted*='open']")
+
+      view |> element("#built-in-settings-form") |> render_change(%{"state_path" => "/tmp/x"})
+
+      assert has_element?(view, "#built-in-advanced[phx-mounted*='ignore_attrs']")
+    end
+
     test "the download path explains what a change affects; Cancel has an id", %{conn: conn} do
       view = open_settings(conn)
 

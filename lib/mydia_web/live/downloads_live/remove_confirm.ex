@@ -1,11 +1,14 @@
 defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
   @moduledoc """
   The confirm dialog for removing one torrent from its client: a finished
-  download's trash button, and a client torrent stranded in Issues.
+  download's trash button, an in-flight download's cancel button, and a
+  client torrent stranded in Issues.
 
-  Both ask whether the downloaded files go too. Deleting is the default:
+  All ask whether the downloaded files go too. Deleting is the default:
   import hardlinks or copies, so the library keeps its copy, and leaving the
-  data behind is what filled the download folder in issue #1422. A browser
+  data behind is what filled the download folder in issue #1422. A cancelled
+  download's partial files are worth nothing to Mydia, and left behind they
+  made a later grab of the same release fail (issue #1436). A browser
   `data-confirm` cannot carry that checkbox, hence the dialog.
   """
 
@@ -14,15 +17,17 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
   alias Mydia.Downloads
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.Structs.ExternalTorrent
+  alias MydiaWeb.DownloadsLive.ListView
   alias MydiaWeb.SeedingComponents
 
   @enforce_keys [:target, :title]
-  defstruct [:target, :title, warning: nil, delete_files: true]
+  defstruct [:target, :title, kind: :clear, warning: nil, delete_files: true]
 
   @type target :: {:download, binary()} | {:torrent, binary()}
   @type t :: %__MODULE__{
           target: target(),
           title: String.t(),
+          kind: :clear | :cancel,
           warning: String.t() | nil,
           delete_files: boolean()
         }
@@ -40,6 +45,20 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
       warning: SeedingComponents.removal_warning_text(download)
     }
   end
+
+  @doc """
+  The dialog for a Downloads row's `open_remove_confirm` kind: `"download"`
+  for a finished download's trash button, `"cancel"` for an in-flight one.
+
+  A cancel is titled with the name its row shows, and submitting it requests
+  a `"cancel"` removal, which keeps the stalled-release blacklist and the
+  no-client handling a clear does not have.
+  """
+  @spec for_row(String.t(), map()) :: t()
+  def for_row("download", download), do: for_download(download)
+
+  def for_row("cancel", download),
+    do: %{for_download(download) | kind: :cancel, title: ListView.display_title(download)}
 
   @doc "The dialog for a client torrent Mydia does not track."
   @spec for_torrent(Mydia.Downloads.Structs.ExternalTorrent.t()) :: t()
@@ -64,17 +83,13 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
   def remove_confirm_modal(assigns) do
     ~H"""
     <.modal :if={@confirm} id="remove-confirm-modal" show on_cancel="close_remove_confirm">
-      <:title>{gettext("Remove from client")}</:title>
+      <:title>{dialog_title(@confirm.kind)}</:title>
       <form
         id="remove-confirm-form"
         phx-change="toggle_remove_delete_files"
         phx-submit="confirm_remove"
       >
-        <p class="text-base-content/80 break-words">
-          {gettext("Remove %{title} from the download client and clear it from Mydia?",
-            title: @confirm.title
-          )}
-        </p>
+        <p class="text-base-content/80 break-words">{question(@confirm)}</p>
         <p
           :if={@confirm.warning}
           id="remove-confirm-warning"
@@ -93,14 +108,10 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
             checked={@confirm.delete_files}
             class="checkbox checkbox-error"
           />
-          <span class="label-text whitespace-normal">
-            {gettext("Also delete the downloaded files from the download folder")}
-          </span>
+          <span class="label-text whitespace-normal">{checkbox_label(@confirm.kind)}</span>
         </label>
         <p class="text-sm text-base-content/60 mt-2">
-          {if @confirm.delete_files,
-            do: gettext("Files already imported into your library are kept. This cannot be undone."),
-            else: gettext("The files stay in the download folder until you remove them.")}
+          {files_note(@confirm.kind, @confirm.delete_files)}
         </p>
       </form>
       <:actions>
@@ -110,7 +121,7 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
           class="btn btn-ghost"
           phx-click="close_remove_confirm"
         >
-          {gettext("Cancel")}
+          {dismiss_label(@confirm.kind)}
         </button>
         <button
           id="remove-confirm-submit"
@@ -118,12 +129,45 @@ defmodule MydiaWeb.DownloadsLive.RemoveConfirm do
           form="remove-confirm-form"
           class={["btn", (@confirm.delete_files && "btn-error") || "btn-primary"]}
         >
-          {if @confirm.delete_files,
-            do: gettext("Remove and delete files"),
-            else: gettext("Remove")}
+          {submit_label(@confirm.kind, @confirm.delete_files)}
         </button>
       </:actions>
     </.modal>
     """
   end
+
+  defp dialog_title(:cancel), do: gettext("Cancel download")
+  defp dialog_title(:clear), do: gettext("Remove from client")
+
+  defp question(%__MODULE__{kind: :cancel, title: title}),
+    do: gettext("Cancel %{title} and remove it from the download client?", title: title)
+
+  defp question(%__MODULE__{title: title}),
+    do: gettext("Remove %{title} from the download client and clear it from Mydia?", title: title)
+
+  defp checkbox_label(:cancel),
+    do: gettext("Also delete the partly downloaded files from the download folder")
+
+  defp checkbox_label(:clear),
+    do: gettext("Also delete the downloaded files from the download folder")
+
+  defp files_note(_kind, true = _delete_files),
+    do: gettext("Files already imported into your library are kept. This cannot be undone.")
+
+  defp files_note(:cancel, false),
+    do:
+      gettext(
+        "The partial files stay in the download folder until you remove them. Grabbing this release again can fail while they are there."
+      )
+
+  defp files_note(:clear, false),
+    do: gettext("The files stay in the download folder until you remove them.")
+
+  defp dismiss_label(:cancel), do: gettext("Keep downloading")
+  defp dismiss_label(:clear), do: gettext("Cancel")
+
+  defp submit_label(:cancel, true), do: gettext("Cancel and delete files")
+  defp submit_label(:cancel, false), do: gettext("Cancel download")
+  defp submit_label(:clear, true), do: gettext("Remove and delete files")
+  defp submit_label(:clear, false), do: gettext("Remove")
 end
