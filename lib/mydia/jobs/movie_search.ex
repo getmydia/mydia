@@ -38,7 +38,8 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.{RankingOptions, ReleaseIdentity}
   alias Mydia.Indexers.GrabDelay
-  alias Mydia.Jobs.SearchDeferral
+  alias Mydia.Jobs.{RateLimitDeferral, SearchDeferral}
+  import RateLimitDeferral, only: [count_enabled_indexers: 0]
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Library
@@ -482,23 +483,6 @@ defmodule Mydia.Jobs.MovieSearch do
     end
   end
 
-  defp count_enabled_indexers do
-    # Count enabled indexers from Settings
-    indexers = Mydia.Settings.list_indexer_configs()
-    enabled_count = Enum.count(indexers, & &1.enabled)
-
-    # Also count Cardigann indexers if feature is enabled
-    cardigann_count =
-      if Application.get_env(:mydia, :features, [])[:cardigann_indexers] do
-        Mydia.Indexers.list_cardigann_definitions()
-        |> Enum.count(& &1.enabled)
-      else
-        0
-      end
-
-    enabled_count + cardigann_count
-  end
-
   @doc false
   # Public for direct testing of the search-selection filter.
   def load_monitored_movies_without_files do
@@ -593,36 +577,13 @@ defmodule Mydia.Jobs.MovieSearch do
            query,
            [min_seeders: min_seeders] ++ Indexers.background_search_opts()
          ) do
-      {:ok, %{results: [], indexer_errors: indexer_errors} = res} ->
-        if Indexers.deferred_by_rate_limits?(res) do
-          Logger.info("Search deferred: every indexer is rate-limited",
-            media_item_id: movie.id,
-            query: query
-          )
-        else
-          if indexer_errors != [] do
-            Logger.warning("Movie search failed due to indexer errors",
-              media_item_id: movie.id,
-              title: movie.title,
-              query: query,
-              errors: inspect(indexer_errors)
-            )
-          end
-
-          Logger.warning("No results found for movie",
-            media_item_id: movie.id,
-            title: movie.title,
-            query: query
-          )
-
-          # Record backoff for no results
-          record_movie_backoff(movie, "no_results", resource_types)
-
-          # Log search event for no results
-          Events.search_no_results(movie, %{
-            "query" => query,
-            "indexers_searched" => count_enabled_indexers()
-          })
+      {:ok, %{results: []} = res} ->
+        unless RateLimitDeferral.deferred?(res,
+                 media_item_id: movie.id,
+                 title: movie.title,
+                 query: query
+               ) do
+          record_no_results(movie, res, query, resource_types)
         end
 
         :no_results
@@ -635,6 +596,30 @@ defmodule Mydia.Jobs.MovieSearch do
 
         process_search_results(movie, results, args, query, opts)
     end
+  end
+
+  defp record_no_results(movie, %{indexer_errors: indexer_errors}, query, resource_types) do
+    if indexer_errors != [] do
+      Logger.warning("Movie search failed due to indexer errors",
+        media_item_id: movie.id,
+        title: movie.title,
+        query: query,
+        errors: inspect(indexer_errors)
+      )
+    end
+
+    Logger.warning("No results found for movie",
+      media_item_id: movie.id,
+      title: movie.title,
+      query: query
+    )
+
+    record_movie_backoff(movie, "no_results", resource_types)
+
+    Events.search_no_results(movie, %{
+      "query" => query,
+      "indexers_searched" => count_enabled_indexers()
+    })
   end
 
   defp build_search_query(%MediaItem{title: title, year: nil}) do

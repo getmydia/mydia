@@ -414,28 +414,90 @@ defmodule Mydia.Jobs.TVShowSearchTest do
     end)
   end
 
+  # Reports every search event for `configs` as {:search_event, outcome}.
+  defp report_search_events(configs) do
+    test_pid = self()
+    ids = MapSet.new(configs, & &1.id)
+    handler = "tv-search-events-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      Mydia.Indexers.SearchStats.Telemetry.event(),
+      fn _event, _measurements, meta, _config ->
+        if meta.kind == :search and MapSet.member?(ids, meta.indexer_id),
+          do: send(test_pid, {:search_event, meta.outcome})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+  end
+
+  defp drain_search_events(acc \\ []) do
+    receive do
+      {:search_event, outcome} -> drain_search_events([outcome | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
   describe "indexer rate limits (#1443)" do
-    test "all indexers cooling down records no episode or season backoff" do
+    setup do
       show = media_item_fixture(%{type: "tv_show", title: "Quiet Harbor Show"})
 
-      episode =
-        episode_fixture(%{
-          media_item_id: show.id,
-          season_number: 1,
-          episode_number: 1,
-          air_date: ~D[2020-01-01]
-        })
+      episodes =
+        for number <- 1..2 do
+          episode_fixture(%{
+            media_item_id: show.id,
+            season_number: 1,
+            episode_number: number,
+            air_date: ~D[2020-01-01]
+          })
+        end
 
-      ["Cool A", "Cool B"] |> replace_indexers_with_newznab() |> cool_down()
+      %{show: show, episodes: episodes}
+    end
 
+    defp search_season_one(show) do
       perform_job(TVShowSearch, %{
         "mode" => "season",
         "media_item_id" => show.id,
         "season_number" => 1
       })
+    end
 
-      assert Search.get_backoff("episode", episode.id) == nil
+    test "all indexers cooling down skips the episode fallback and records no backoff",
+         %{show: show, episodes: episodes} do
+      configs = replace_indexers_with_newznab(["Cool A", "Cool B"])
+      cool_down(configs)
+      report_search_events(configs)
+
+      search_season_one(show)
+
+      # Only the season pack search reached the gate, once per indexer.
+      assert drain_search_events() == [:skipped_cooldown, :skipped_cooldown]
+
+      for episode <- episodes, do: assert(Search.get_backoff("episode", episode.id) == nil)
       assert Search.get_backoff("season", show.id, season_number: 1) == nil
+    end
+
+    test "one indexer cooling and one empty still backs off and falls back to episodes",
+         %{show: show} do
+      bypass = Bypass.open()
+      [cooling, open] = replace_indexers_with_newznab(["Cool A", "Open B"])
+      cool_down([cooling])
+
+      {:ok, open} =
+        Settings.update_indexer_config(open, %{base_url: "http://localhost:#{bypass.port}"})
+
+      stub_empty_newznab_feed(bypass)
+      report_search_events([cooling, open])
+
+      search_season_one(show)
+
+      assert %{} = Search.get_backoff("season", show.id, season_number: 1)
+      # The season pack search plus at least one episode search.
+      assert length(drain_search_events()) > 2
     end
   end
 

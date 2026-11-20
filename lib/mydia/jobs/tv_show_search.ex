@@ -60,7 +60,8 @@ defmodule Mydia.Jobs.TVShowSearch do
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.GrabDelay
   alias Mydia.Indexers.ReleaseRanker
-  alias Mydia.Jobs.SearchDeferral
+  alias Mydia.Jobs.{RateLimitDeferral, SearchDeferral}
+  import RateLimitDeferral, only: [count_enabled_indexers: 0]
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Library
   alias Mydia.Media.{MediaItem, Episode}
@@ -926,9 +927,8 @@ defmodule Mydia.Jobs.TVShowSearch do
         search_individual_episodes(episodes, new_count, args)
 
       {:rate_limited, _query} ->
-        # Every indexer was rate-limited: fall back to episodes, but record no
-        # season backoff, so the next run retries the pack.
-        search_individual_episodes(episodes, new_count, args)
+        # Episode searches would be refused too; the next run retries the pack.
+        new_count
 
       {:no_packs, _query} ->
         Logger.warning("Falling back to individual episodes after no valid season packs",
@@ -940,55 +940,50 @@ defmodule Mydia.Jobs.TVShowSearch do
         search_individual_episodes(episodes, new_count, args)
 
       {:packs, season_pack_results, query} ->
-        result =
-          process_season_pack_results(
-            media_item,
-            season_number,
-            episodes,
-            season_pack_results,
-            args,
-            query,
-            []
-          )
+        media_item
+        |> process_season_pack_results(
+          season_number,
+          episodes,
+          season_pack_results,
+          args,
+          query,
+          []
+        )
+        |> after_season_pack(media_item, season_number, episodes, new_count, args)
+    end
+  end
 
-        # If season pack processing failed, fall back to individual episodes
-        # But if it's a duplicate (already downloading), skip entirely
-        case result do
-          :ok ->
-            new_count
+  # If season pack processing failed, fall back to individual episodes. But
+  # if it's a duplicate (already downloading), skip entirely.
+  defp after_season_pack(result, media_item, season_number, episodes, new_count, args) do
+    case result do
+      done when done in [:ok, :deferred] ->
+        new_count
 
-          :deferred ->
-            new_count
+      {:error, :duplicate_download} ->
+        Logger.info(
+          "Season pack already downloading, skipping individual episode search",
+          media_item_id: media_item.id,
+          title: media_item.title,
+          season_number: season_number
+        )
 
-          {:error, :duplicate_download} ->
-            Logger.info(
-              "Season pack already downloading, skipping individual episode search",
-              media_item_id: media_item.id,
-              title: media_item.title,
-              season_number: season_number
-            )
+        new_count
 
-            new_count
+      :no_results ->
+        search_individual_episodes(episodes, new_count, args)
 
-          :no_results ->
-            search_individual_episodes(episodes, new_count, args)
-
-          {:error, _reason} ->
-            search_individual_episodes(episodes, new_count, args)
-        end
+      {:error, _reason} ->
+        search_individual_episodes(episodes, new_count, args)
     end
   end
 
   # Shared skeleton behind search_season/5 and do_search_season_upgrade/5:
   # builds the query, searches indexers, and filters to season-shaped
-  # results, logging and emitting the no-result / no-packs events along the
-  # way. Deliberately does not record backoff or decide what happens next -
-  # the two callers differ on both. search_season/5 falls back to
-  # individual episode searches and records backoff only on the
-  # no-indexer-results outcome (a pre-existing asymmetry, not something
-  # this refactor changes). do_search_season_upgrade/5 never falls back and
-  # always records backoff, in Reasons.buckets(:season, reasons), on both
-  # empty outcomes.
+  # results, logging and emitting the no-result / no-packs events. It records
+  # no backoff and decides nothing: search_season/5 falls back to episodes
+  # (backoff only on :no_results); the upgrade path never falls back and
+  # backs off on both empty outcomes. Neither backs off on :rate_limited.
   #
   # opts:
   #   * `:search_type` - "season_pack" (default) or "season_pack_upgrade",
@@ -1009,12 +1004,11 @@ defmodule Mydia.Jobs.TVShowSearch do
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
       {:ok, %{results: []} = res} ->
-        if Indexers.deferred_by_rate_limits?(res) do
-          Logger.info("Search deferred: every indexer is rate-limited",
-            media_item_id: media_item.id,
-            query: query
-          )
-
+        if RateLimitDeferral.deferred?(res,
+             media_item_id: media_item.id,
+             title: media_item.title,
+             query: query
+           ) do
           {:rate_limited, query}
         else
           Logger.warning("No season pack results found",
@@ -1407,12 +1401,11 @@ defmodule Mydia.Jobs.TVShowSearch do
            [min_seeders: get_min_seeders()] ++ Indexers.background_search_opts()
          ) do
       {:ok, %{results: []} = res} ->
-        if Indexers.deferred_by_rate_limits?(res) do
-          Logger.info("Search deferred: every indexer is rate-limited",
-            media_item_id: episode.media_item.id,
-            query: query
-          )
-        else
+        unless RateLimitDeferral.deferred?(res,
+                 media_item_id: episode.media_item.id,
+                 title: episode.media_item.title,
+                 query: query
+               ) do
           Logger.warning("No results found for episode",
             episode_id: episode.id,
             show: episode.media_item.title,
@@ -2261,23 +2254,6 @@ defmodule Mydia.Jobs.TVShowSearch do
       "downloads",
       {:search_completed, media_item_id, stats}
     )
-  end
-
-  defp count_enabled_indexers do
-    # Count enabled indexers from Settings
-    indexers = Mydia.Settings.list_indexer_configs()
-    enabled_count = Enum.count(indexers, & &1.enabled)
-
-    # Also count Cardigann indexers if feature is enabled
-    cardigann_count =
-      if Application.get_env(:mydia, :features, [])[:cardigann_indexers] do
-        Mydia.Indexers.list_cardigann_definitions()
-        |> Enum.count(& &1.enabled)
-      else
-        0
-      end
-
-    enabled_count + cardigann_count
   end
 
   defp process_episodes_with_smart_logic_and_stats(
