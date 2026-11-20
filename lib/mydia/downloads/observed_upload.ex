@@ -36,7 +36,14 @@ defmodule Mydia.Downloads.ObservedUpload do
   metadata JSON.
   """
 
+  import Ecto.Query, warn: false
+
+  require Logger
+
+  alias Mydia.DB
+  alias Mydia.Downloads.Download
   alias Mydia.Downloads.Structs.DownloadStatus
+  alias Mydia.Repo
 
   @key "observed_upload"
 
@@ -97,6 +104,72 @@ defmodule Mydia.Downloads.ObservedUpload do
 
   defp live(uploaded) when is_integer(uploaded) and uploaded >= 0, do: uploaded
   defp live(_unknown), do: 0
+
+  @doc """
+  Banks the client's counter (`live_uploaded`) for each polled row (enriched
+  download) that `overlay/1` applies to, writing only entries that changed.
+  Steps from `live_uploaded`, never from the overlaid `uploaded`, so a row
+  recorded twice counts once.
+
+  Returns the rows, each recorded one carrying its new entry in `metadata`
+  and overlaid from it, so the policies on the same pass see the total. A
+  row whose write failed is returned as it was. `now` is the pass's clock,
+  as for `Mydia.Downloads.ObservedSeedTime.record/2`; the total needs none.
+  """
+  @spec record([map()], DateTime.t()) :: [map()]
+  def record(rows, _now \\ DateTime.utc_now()) do
+    Enum.map(rows, fn row -> if tracked?(row), do: record_row(row), else: row end)
+  end
+
+  # Each row on its own: one failing row must not skip the rest, nor fail the
+  # monitor's poll.
+  defp record_row(row) do
+    case write(row.id, live(row.live_uploaded)) do
+      {:ok, %{} = entry} ->
+        overlay(%{row | metadata: Map.put(row.metadata || %{}, @key, entry)})
+
+      _not_written ->
+        row
+    end
+  rescue
+    exception ->
+      Logger.error("Recording observed upload failed; the poll continues",
+        download_id: row.id,
+        error: Exception.message(exception)
+      )
+
+      row
+  end
+
+  # Read and written under one transaction (locked on PostgreSQL, serialized
+  # writes on SQLite), as in `Mydia.Downloads.ObservedSeedTime`, so another
+  # writer's keys are kept. A plain update_all: this runs every poll, and
+  # update_download/2 would broadcast a Downloads page reload each time.
+  defp write(id, live) do
+    Repo.transaction(fn -> id |> locked_row() |> Repo.one() |> step_row(live) end)
+  end
+
+  defp locked_row(id) do
+    query = where(Download, [d], d.id == ^id)
+    if DB.postgres?(), do: lock(query, "FOR UPDATE"), else: query
+  end
+
+  # The stored entry after this pass, or nil for a row deleted meanwhile.
+  defp step_row(nil, _live), do: nil
+
+  defp step_row(%Download{id: id, metadata: metadata}, live) do
+    metadata = metadata || %{}
+    previous = Map.get(metadata, @key)
+    entry = step(previous, live)
+
+    if entry != previous,
+      do:
+        Repo.update_all(where(Download, [d], d.id == ^id),
+          set: [metadata: Map.put(metadata, @key, entry)]
+        )
+
+    entry
+  end
 
   defp tracked?(row) do
     Map.get(row, :uploaded_session_only?) == true and Map.get(row, :in_client?) == true and

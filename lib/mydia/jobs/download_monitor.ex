@@ -14,6 +14,8 @@ defmodule Mydia.Jobs.DownloadMonitor do
   A download removed from its client by hand before import is marked "missing"
   and kept in the Issues tab, where the operator can investigate or delete it.
   Seed time for clients that do not count it: `Mydia.Downloads.ObservedSeedTime`.
+  Upload totals for clients that count only the current session (rqbit):
+  `Mydia.Downloads.ObservedUpload`.
   """
 
   use Oban.Worker,
@@ -103,6 +105,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       |> Enum.reject(& &1.removal_requested_at)
 
     downloads = Mydia.Downloads.ObservedSeedTime.record(downloads, now)
+    downloads = Mydia.Downloads.ObservedUpload.record(downloads, now)
     Mydia.Downloads.BuiltIn.Policies.run(downloads, now)
     # Re-adopt downloads whose client was renamed, deleted, or disabled but
     # whose torrent is still sitting in exactly one other configured client.
