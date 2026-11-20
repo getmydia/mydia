@@ -88,8 +88,13 @@ defmodule Mydia.Indexers do
 
   # Prowlarr runs its own backoff for the trackers behind it, so Mydia never
   # gates or cools it down (README, "Rate limits and cooldown").
-  def search(%Settings.IndexerConfig{type: :prowlarr} = config, query, opts),
-    do: search(indexer_config_to_adapter_config(config), query, opts)
+  # Its 429s are still labelled `:tracker`, without starting a cooldown.
+  def search(%Settings.IndexerConfig{type: :prowlarr} = config, query, opts) do
+    config
+    |> indexer_config_to_adapter_config()
+    |> search(query, opts)
+    |> tag_tracker_rate_limit()
+  end
 
   def search(%Settings.IndexerConfig{} = config, query, opts) do
     gated_search(config.id, config.name, config.rate_limit, fn ->
@@ -188,6 +193,18 @@ defmodule Mydia.Indexers do
   end
 
   defp record_search_outcome(result, _id, _name), do: result
+
+  defp tag_tracker_rate_limit(
+         {:error, %Adapter.Error{type: :rate_limited, details: details} = error}
+       ) do
+    details = details || %{}
+
+    if Map.has_key?(details, :source),
+      do: {:error, error},
+      else: {:error, %{error | details: Map.put(details, :source, :tracker)}}
+  end
+
+  defp tag_tracker_rate_limit(result), do: result
 
   # Hours and minutes in UTC, like the other indexer logs.
   defp clock(%DateTime{} = at), do: Calendar.strftime(at, "%H:%M")
@@ -752,7 +769,9 @@ defmodule Mydia.Indexers do
           {:ok, reject_too_fresh_nzbs_for_config(results, config), nil}
 
         {:error, error} ->
-          Logger.warning("Indexer search failed for #{config.name}: #{inspect(error)}")
+          unless deliberate_skip?(error) do
+            Logger.warning("Indexer search failed for #{config.name}: #{inspect(error)}")
+          end
 
           {error_outcome(error), [], format_indexer_error(error)}
       end
@@ -830,6 +849,13 @@ defmodule Mydia.Indexers do
         results
     end
   end
+
+  # Mydia chose not to search (cooldown, its own per-minute limit, a daily
+  # cap); the gate or TrackerLimits already logged why at info level.
+  defp deliberate_skip?(%Adapter.Error{type: :rate_limited, details: %{source: source}}),
+    do: source in [:cooldown, :local_limit, :daily_cap]
+
+  defp deliberate_skip?(_error), do: false
 
   defp format_indexer_error(%Adapter.Error{message: message}), do: message
 

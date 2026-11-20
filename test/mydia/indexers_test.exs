@@ -1177,6 +1177,50 @@ defmodule Mydia.IndexersTest do
       assert {:ok, []} = Indexers.search(config, "q")
     end
 
+    test "a prowlarr 429 is labelled tracker without a cooldown" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/search", fn conn ->
+        json_resp(conn, 429, %{})
+      end)
+
+      config =
+        indexer_config_fixture(%{
+          name: "gate-prowlarr-429",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      assert {:error, %Error{type: :rate_limited, details: details}} =
+               Indexers.search(config, "q")
+
+      assert details.source == :tracker
+      refute Map.has_key?(details, :until)
+      assert RateLimiter.cooldown_until(config.id) == nil
+    end
+
+    test "a cooldown skip does not log a search failure" do
+      disable_persisted_indexer_configs()
+      # No route on this Bypass: any request would fail the test.
+      bypass = Bypass.open()
+
+      config =
+        indexer_config_fixture(%{
+          name: "gate-jackett-quiet",
+          type: :jackett,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      RateLimiter.record_rate_limited(config.id, nil)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          Indexers.search_all("Fictional Feature 2031", indexer_ids: [config.id])
+        end)
+
+      refute log =~ "Indexer search failed"
+    end
+
     test "manual search reports the cooldown on the indexer row" do
       disable_persisted_indexer_configs()
       # No route on this Bypass: any request would fail the test.
