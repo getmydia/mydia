@@ -13,18 +13,41 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
   import Phoenix.Component, only: [assign: 2]
   import Phoenix.LiveView
 
-  alias Mydia.Indexers.SearchStats
+  alias Mydia.Indexers.{RateLimiter, SearchStats}
 
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(socket) do
     socket
-    |> assign(search_stats_window: window(socket), search_failures: nil)
+    |> assign(
+      search_stats_window: window(socket),
+      search_failures: nil,
+      # The page may have refreshed before attaching; keep what it read.
+      cooldowns: Map.get(socket.assigns, :cooldowns, %{})
+    )
     |> attach_hook(:search_stats_events, :handle_event, &handle_event/3)
   end
 
-  @doc "Reloads the stats for the current window (24 hours before `attach/1` runs)."
+  @doc """
+  Reloads the stats for the current window (24 hours before `attach/1` runs)
+  and, beside them, which indexers are cooling down after HTTP 429.
+  """
   @spec refresh(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
-  def refresh(socket), do: assign(socket, search_stats: SearchStats.summary(window(socket)))
+  def refresh(socket) do
+    assign(socket,
+      search_stats: SearchStats.summary(window(socket)),
+      cooldowns: cooldowns(socket)
+    )
+  end
+
+  defp cooldowns(socket) do
+    for %{id: id} <- all_indexers(socket),
+        until = RateLimiter.cooldown_until(id),
+        into: %{},
+        do: {id, until}
+  end
+
+  defp all_indexers(socket),
+    do: Map.get(socket.assigns, :indexers, []) ++ Map.get(socket.assigns, :library_indexers, [])
 
   defp window(socket), do: Map.get(socket.assigns, :search_stats_window, :day)
 
@@ -48,7 +71,8 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
   defp handle_event(_event, _params, socket), do: {:cont, socket}
 
   defp indexer_name(socket, id) do
-    (Map.get(socket.assigns, :indexers, []) ++ Map.get(socket.assigns, :library_indexers, []))
+    socket
+    |> all_indexers()
     |> Enum.find_value(gettext("Indexer"), fn indexer -> indexer.id == id && indexer.name end)
   end
 end
