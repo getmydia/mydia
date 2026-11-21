@@ -53,14 +53,31 @@ fi
 
 names() {
   # $1: attribute path of an attrset; prints "<path>.<name>" per member.
-  nix eval --json "$flake#$1" --apply builtins.attrNames 2>/dev/null \
+  nix eval --json "$flake#$1" --apply builtins.attrNames \
     | jq -r --arg p "$1" '.[] | "\($p).\(.)"'
+}
+
+# Appends the members of attrset $1 to attrs. A failed listing (a bad
+# --rev, an evaluation error) exits here with Nix's diagnostic rather than
+# reading as an empty set; mapfile over a process substitution would hide it.
+add_names() {
+  local out
+  if ! out=$(names "$1"); then
+    echo "error: could not list $1 in $flake" >&2
+    exit 1
+  fi
+  if [ -n "$out" ]; then
+    mapfile -t -O "${#attrs[@]}" attrs <<< "$out"
+  fi
 }
 
 if [ "${#attrs[@]}" -eq 0 ]; then
   case "$mode" in
-    builds) mapfile -t attrs < <(names "legacyPackages.$system.ciInternal") ;;
-    all) mapfile -t attrs < <(names "legacyPackages.$system.ciInternal"; names "checks.$system") ;;
+    builds) add_names "legacyPackages.$system.ciInternal" ;;
+    all)
+      add_names "legacyPackages.$system.ciInternal"
+      add_names "checks.$system"
+      ;;
     *) echo "error: --mode must be builds or all" >&2; exit 1 ;;
   esac
 fi
