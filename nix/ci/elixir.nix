@@ -284,11 +284,17 @@
     in
     {
       checks = {
-        # .formatter.exs covers config/, lib/, test/ and priv/*/; its plugin
-        # (Phoenix.LiveView.HTMLFormatter) and import_deps need the deps.
+        # .formatter.exs covers config/, lib/, test/, priv/*/ and the root
+        # *.exs files (.credo.ratchet.exs is the one elixirApp lacks); its
+        # plugin (Phoenix.LiveView.HTMLFormatter) and import_deps need the
+        # deps.
         elixir-format = mkCheck {
           name = "elixir-format";
-          set = fs.unions [ sources.elixirApp sources.elixirTest ];
+          set = fs.unions [
+            sources.elixirApp
+            sources.elixirTest
+            (root + "/.credo.ratchet.exs")
+          ];
           script = ''
             ${copyDeps ciInternal.mixDepsCompiled-sqlite}
             mix do loadpaths --no-deps-check + format --check-formatted
