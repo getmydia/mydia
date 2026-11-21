@@ -19,9 +19,11 @@
         </div>
         <%!-- What the active search and filters actually match, and cost.
               Both figures come from LibraryListing.snapshot/2, which already
-              walks every matching row before it slices. --%>
+              walks every matching row before it slices.
+              rounded-none: daisyUI's .stats pairs a corner radius with
+              overflow-x: auto, which clips the flush-left first label. --%>
         <div :if={@loading?} class="skeleton h-9 w-48 mt-1"></div>
-        <div :if={not @loading?} class="stats stats-horizontal bg-transparent mt-1">
+        <div :if={not @loading?} class="stats stats-horizontal rounded-none bg-transparent mt-1">
           <div class="stat px-0 pr-6 py-0">
             <div class="stat-title text-xs">{gettext("Items")}</div>
             <div id="library-item-count" class="stat-value text-2xl tabular-nums">
