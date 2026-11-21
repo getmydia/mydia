@@ -16,6 +16,9 @@
       inherit (import ../beam-deps.nix { inherit pkgs beamPackages rustToolchain; })
         crateRegistries mixNixDeps heroicons;
 
+      # The source file sets nix/ci uses; mkMydia takes its src from one.
+      ciSources = import ../ci/sources.nix { inherit lib; root = ../..; };
+
       # Pre-fetch Rust/Cargo dependencies for the p2p NIF (required for sandbox build).
       #
       # Uses importCargoLock rather than fetchCargoVendor: fetchCargoVendor's
@@ -194,7 +197,11 @@
         beamPackages.mixRelease ({
           pname = "mydia" + (if databaseType == "postgres" then "-postgres" else "");
           inherit version;
-          src = ../..;
+          # A file set of exactly what the build reads (sources.nix
+          # `mydiaPackage`), not the whole repository: with `../..` every
+          # tracked edit, docs included, changed the package's hash and
+          # rebuilt it, and with it every VM test that boots it.
+          src = ciSources.toSource ciSources.mydiaPackage;
 
           mixNixDeps = mixNixDeps;
 

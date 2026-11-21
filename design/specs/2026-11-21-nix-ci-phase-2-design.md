@@ -83,7 +83,7 @@ Checks:
 | `player-linux` | `player-codegen`, `player-p2p-so` | Build / Linux, including the no-symlinks assertion |
 | `player-icons` | `player/web`, icon sources | Check / Web icons (`tool/gen-web-icons.sh --check`) |
 | `e2e-browser` | `mydia-test-build-sqlite`, `assets` | Test / E2E Browser (run) |
-| `player-e2e` | `packages.default`, `packages.metadata-relay`, `player-linux`, `player-codegen` | Test / Player E2E |
+| `player-e2e` | `packages.default`, `packages.metadata-relay`, `player-codegen`, `player-p2p-so` (the client builds its own debug app; it does not use `player-linux`'s bundle) | Test / Player E2E |
 
 The Flutter package comes from `player/flutter-version.nix`, so `.fvmrc` stays
 the single Flutter pin and `Check / Flutter Pin` keeps enforcing it.
@@ -191,7 +191,11 @@ migration and cost macOS/Windows minutes.
    from scratch (no incremental `.dart_tool`).
 2. Any change to server or player sources rebuilds the closure `player-e2e`
    needs. An unchanged closure is a cache hit, which today's pull path (about
-   10 minutes on every PR) never was.
+   10 minutes on every PR) never was. `packages.default` takes the
+   `mydiaPackage` file set of `nix/ci/sources.nix`, not the whole repository,
+   so "server sources" means what the release reads (the Elixir app, assets,
+   the NIF and plugin crates, the Cardigann guest directory); a docs, workflow,
+   test or `design/` change leaves the package and `player-e2e` cached.
 3. Android costs one full build on every PR, by design.
 4. As in phase 1, a flaky check that passes once is cached as passed.
 

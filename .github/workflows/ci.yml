@@ -238,10 +238,12 @@ jobs:
 
   # The NixOS module VM tests (nixos-module, nixos-module-postgres): same
   # build and push as `checks`, but outside the Nix / Checks verdict, so they
-  # block nothing. The package they boot takes the whole repo as its source
-  # (src = ../..), so they rerun on nearly every commit, and a QEMU boot on a
-  # shared runner is the slowest and flakiest build in the set. That made them
-  # cost ~28 runner-minutes on every PR, a docs-only one included, so on
+  # block nothing. A QEMU boot on a shared runner is the slowest and flakiest
+  # build in the set. The package they boot used to take the whole repo as
+  # its source, so they reran on every commit and cost ~28 runner-minutes on
+  # every PR, a docs-only one included. It now takes the `mydiaPackage` file
+  # set (nix/ci/sources.nix), so a docs-only PR would find them cached, but
+  # the PR policy below predates that and is unchanged: on
   # pull_request they run only for Dependabot's PRs: the Dependabot gate
   # merges with GITHUB_TOKEN, which starts no master run, so the PR run is
   # the only one a dependency bump gets, and the gate requires it to pass.

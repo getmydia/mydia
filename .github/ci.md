@@ -21,16 +21,18 @@ is why there is no separate `Build / Packages` job.
 `scripts/ci-plan.sh` lists them apart from the other checks, and ci.yml
 builds them in their own matrix job, `Nix / NixOS (<name>)`, which
 `Nix / Checks` does not include, so they are not part of `Test` or
-`Test / PostgreSQL`. Two reasons: the packages take `src = ../..`, so unlike
-every other check these two rerun, package build included, on almost every
-commit; and a QEMU boot on a shared runner is the slowest and flakiest build
-in the set. Gating every merge on them would make a VM hiccup a merge
-blocker.
+`Test / PostgreSQL`. A QEMU boot on a shared runner is the slowest and
+flakiest build in the set, and gating every merge on them would make a VM
+hiccup a merge blocker.
 
-They also skip most pull requests. Because the package reads the whole
-repository, a docs-only or translation-only PR rebuilt both, about 28
+They also skip most pull requests. When this was decided the packages took
+`src = ../..`, so a docs-only or translation-only PR rebuilt both, about 28
 runner-minutes and 16 minutes of wall clock per PR, for a result nobody had
-to read. The job runs on master pushes, on manual dispatches, and on
+to read. The packages now take the `mydiaPackage` file set
+(`nix/ci/sources.nix`: the Elixir app, assets, the NIF and plugin crates and
+the Cardigann guest directory), so an edit outside it leaves them, and these
+tests, cached; the PR policy has not been revisited since. The job runs on
+master pushes, on manual dispatches, and on
 pull requests opened by Dependabot; master pins include its outputs.
 Dependabot is the exception because the Dependabot gate merges with
 `GITHUB_TOKEN`, which starts no master run (see "Dependabot merges through
@@ -555,8 +557,7 @@ with what each derivation reads, is in `nix/ci/README.md`, "The derivation
 graph". In short: a `lib/` edit rebuilds the two test builds and everything
 on top of them and leaves the dependency builds, the PLT, the NIFs and the
 Rust and relay checks cached; a `test/` edit reruns only the shards; a
-workflow edit reruns only `ci-workflow-triggers` (plus, on master, the
-non-blocking NixOS tests, whose package takes the whole repo as source). A
+workflow edit reruns only `ci-workflow-triggers`. A
 Weblate `.po`-only PR
 rebuilds the test build and runs every shard, because Gettext compiles the
 catalogs into the backend; the old `Translations` fast path is gone. A

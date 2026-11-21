@@ -28,9 +28,11 @@
 #
 # nixos: the uncached checks of the `nixos` group, selected the same way.
 #   The workflow builds them in their own matrix, which the `Nix / Checks`
-#   verdict does not include: the package they boot is built from the whole
-#   repo (src = ../..), so they rerun on nearly every commit, and a QEMU boot
-#   is the slowest and flakiest build in the set. Their needs do not count
+#   verdict does not include: a QEMU boot is the slowest and flakiest build
+#   in the set. (They were also kept apart because the package they boot took
+#   the whole repo as source and reran on nearly every commit; it now takes
+#   the `mydiaPackage` file set, so that reason is gone, but which jobs run
+#   is unchanged.) Their needs do not count
 #   toward `inputs`: the inputs wave sits in front of the blocking checks,
 #   so a derivation only the NixOS tests need (the packages) must never
 #   build or fail there. The NixOS jobs build it themselves.
