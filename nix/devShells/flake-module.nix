@@ -201,7 +201,12 @@
           fi
           frbVersion="$(sed -n 's/^flutter_rust_bridge = "=\(.*\)"$/\1/p' \
             player/rust/mydia_player_p2p/Cargo.toml)"
-          if [ -z "$frbVersion" ]; then
+          # MYDIA_SKIP_FRB_CODEGEN_INSTALL=1 skips this for builds that never
+          # regenerate bindings (ci.yml's Build / Android), sparing them a
+          # cargo install from crates.io on every fresh runner.
+          if [ -n "''${MYDIA_SKIP_FRB_CODEGEN_INSTALL:-}" ]; then
+            :
+          elif [ -z "$frbVersion" ]; then
             echo "ERROR: could not read the flutter_rust_bridge pin from player/rust/mydia_player_p2p/Cargo.toml" >&2
           elif ! flutter_rust_bridge_codegen --version 2>/dev/null | grep -qF "$frbVersion"; then
             echo "Installing flutter_rust_bridge_codegen $frbVersion..."

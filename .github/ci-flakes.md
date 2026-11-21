@@ -84,10 +84,22 @@ catalogued hang and network-block modes -- `Build / Linux` and `Flatpak / Build`
 -- were deliberately left out. Requiring either would trade a merge hole for a
 merge deadlock.
 
+Under Nix CI that list understates what blocks. `Test` and `Test / PostgreSQL`
+gate on `Nix / Checks`, which fails when any leg of the check matrix fails,
+because a matrix leg's result is not addressable through `needs`. So every
+flake check blocks merge through `Test`, whatever its own context name says:
+the Rust checks, `guards`, `player-linux` and `player-icons` included. That is
+deliberate. The hang and network-block modes that kept `Build / Linux` out of
+the list belonged to the runner job; `player-linux` builds offline in the
+sandbox, and a check that passes once is cached. `Build / Linux` and
+`Check / Web icons` stay out of the ruleset because `Test` already carries
+them. `Build / Android`, `Build / macOS`, `Build / Windows` and
+`Flatpak / Build` are not flake checks and remain advisory.
+
 `Test / Player E2E` was promoted 2026-09-16. It had been green on 63 of 63 master
 pushes before PR #832 merged it red, and it stayed red for a day because nothing
-blocked on it. It reports on every PR for the same reason `ci-player.yml` does:
-`ci-player-e2e.yml` has no workflow-level `paths:` filter, and its
+blocked on it. It reports on every PR for the same reason `ci-player.yml` used
+to: `ci-player-e2e.yml` has no workflow-level `paths:` filter, and its
 `dorny/paths-filter` result gates steps, never the job, so a PR with nothing
 relevant concludes green in seconds. Keep it that way.
 
@@ -98,23 +110,28 @@ GitHub required-status-checks block forever on a context that never reports.
 touching no `player/**` file the workflow never started and `Build / Web` never
 registered. The short required list was the workaround.
 
-The filter now lives in a `changes` job inside the workflow, so every job always
-reports -- concluding in a few seconds with its steps skipped when nothing
-relevant changed. That is what made the two contexts requirable. The gating
-conditions are **step-level, never job-level**: a job-level `if:` concludes the
-job `skipped`, and whether a ruleset counts a skipped required check as satisfied
-is configuration-dependent. `grep -n "^    if:" .github/workflows/ci-player.yml`
-must return nothing; that is the whole safety net.
+The filter then moved into a `changes` job inside the workflow, so every job
+always reported, concluding in a few seconds with its steps skipped when nothing
+relevant changed. That is what made the two contexts requirable. Its gating
+conditions were step-level, never job-level: a job-level `if:` concludes the job
+`skipped`, and whether a ruleset counts a skipped required check as satisfied is
+configuration-dependent.
 
-`ci.yml` uses a second pattern that meets the same rule. Its build jobs carry
-non-required names and conclude `skipped` when every check is already cached
-(an empty matrix); the required names sit on aggregator jobs with
-`if: always()` that conclude success or failure. The `Guard the required-check aggregators` step in `ci.yml` is that
-file's safety net.
+Since Nix CI phase 2, `Test / Player` and `Build / Web` (and `Build / Linux`,
+`Check / Web icons`) are aggregators in `ci.yml`, and `Build / Android` is a
+plain `ci.yml` job with no `needs` that runs on every PR. `ci.yml`'s build jobs
+carry non-required names and conclude `skipped` when every check is already
+cached (an empty matrix); the required names sit on aggregator jobs with
+`if: always()` that conclude success or failure. The
+`Guard the required-check aggregators` step in `ci.yml` is the safety net. What
+is left of `ci-player.yml` holds no required context, so it is
+`paths:`-filtered at the workflow level again; never move a required name back
+into it.
 
-Measured behaviour on real PRs: on one touching `native/`, `Build / Web` ran
-4m17s and `Test / Player` 12m57s. On one touching only `site/`, they reported
-`pass` in 2s and 4s.
+Measured behaviour on real PRs under the `changes` job: on one touching
+`native/`, `Build / Web` ran 4m17s and `Test / Player` 12m57s. On one touching
+only `site/`, they reported `pass` in 2s and 4s. Under Nix CI, a PR that does
+not touch what a player check reads finds it cached.
 
 ### The failure that prompted all of this
 
@@ -268,7 +285,10 @@ catch unresolvable shared libraries, `libmpv` above all, so if the log has no
 catch what it is there to catch. The two modes are sequential, so clearing the
 first can expose the second; be willing to re-run twice.
 
-**Build / Linux can hang indefinitely on "Install Linux dependencies".** Seen
+**Build / Linux could hang indefinitely on "Install Linux dependencies".**
+Historical: `Build / Linux` is now an aggregator over the `player-linux` Nix
+check, which installs nothing with apt, so this mode is gone from it. It still
+applies to any job that runs `apt-get install`, such as the Flatpak jobs. Seen
 2026-08-19 on PR #507, where the job sat in that step for 90+ minutes while
 Windows (11m), macOS (13m) and Android (17m) all finished. Master's `Build / Linux`
 completes in about 6.5 minutes, which is the comparison that identifies it. It
@@ -311,12 +331,13 @@ same SHA then compiled both plugins fine. Check the diff for `native/`, `*.rs`,
 have affected the wasip2 component build.
 
 **Setup Flutter fails in about 25s with `Process completed with exit code 35`**, on
-any `ci-player.yml` job. Seen 2026-08-30 on PR #621.
+any `ci-player.yml` job (today the Windows and macOS builds; `Build / Web` was
+one until it moved to the `player-web` Nix check). Seen 2026-08-30 on PR #621.
 `subosito/flutter-action@v2` shells out to curl to fetch the SDK, and exit 35 is
 `CURLE_SSL_CONNECT_ERROR`, a TLS handshake failure against the download host. The
 job dies before `flutter pub get`, so every later step shows `skipped` and the
 surface reading is "the whole build was skipped" rather than "one download
-failed". The tell is the runtime, since a real `Build / Web` takes 2 to 4 minutes.
+failed". The tell is the runtime, since a real build takes minutes.
 Get the per-step breakdown before reading logs, which works while the run is still
 going:
 
@@ -350,8 +371,8 @@ gh api repos/getmydia/mydia/actions/jobs/<job-id> --jq '.steps[] | "\(.conclusio
   `describe "prepare/3"` so tests no longer leak background `ffmpeg` processes
   (`Ecto.StaleEntryError` / `DBConnection.OwnershipError` noise).
 - `mix local.hex` / `mix local.rebar` transient `builds.hex.pm` failures:
-  wrapped in `scripts/ci-mix-bootstrap.sh` (3 attempts) backed by a small
-  `mix-archives-v1` cache.
+  were wrapped in a retrying `scripts/ci-mix-bootstrap.sh`, deleted once no CI
+  job ran Mix outside Nix with a fetched Hex (the checks load Hex from the store).
 
 `Mydia.DataCase` forces `async: false` on SQLite but honours `async: true` on
 Postgres, so the Postgres job runs modules concurrently and is where order- and
@@ -865,7 +886,8 @@ onto `visit_liveview/3`, which fails naming the page the browser is actually on.
 
 ### A Hive test times out after 30 seconds, and only in CI
 
-`very_good test` runs the whole player suite in one isolate, so Hive's
+CI runs the whole player suite as one very_good-style bundle in one isolate
+(the `player-test` check), so Hive's
 global state carries over from file to file. Hive keeps a table of boxes
 being opened, keyed by name and not by path, and any later `openBox` of
 that name waits on the pending entry. A `testWidgets` case that starts an
@@ -894,8 +916,9 @@ finishes before that test stops pumping is a real-time race.
 `VideoScalingPrefs` and `SubtitleLanguagePrefs` now use their box only once
 startup has opened it. To find which box is stuck, open
 each candidate name with `.timeout(const Duration(seconds: 3))` from the
-failing test and print the ones that time out. To see the run order, dispatch
-`ci-player.yml` on a throwaway branch.
+failing test and print the ones that time out. To see the run order, build
+the check locally (`nix build .#checks.x86_64-linux.player-test -L`): it
+bundles the files sorted by path, so the order is the same on every machine.
 
 ### `source_detail_controllers_test.dart`: "next up lands after the header"
 

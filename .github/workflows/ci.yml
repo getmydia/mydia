@@ -17,9 +17,11 @@ name: CI
 # is no path filter: the derivation graph is the filter.
 #
 # Four jobs stay outside the sandbox: Guards (yq over this file), Lint /
-# Ratchet (reads git history), Rust / SMB integration (needs a root smbd) and
-# the E2E browser tests (devenv). The required checks Test, Test /
-# PostgreSQL and Test / E2E Browser sit on aggregators at the end.
+# Ratchet (reads git history), Rust / SMB integration (needs a root smbd)
+# and Build / Android (Gradle has no lockfile Nix could fetch from). The
+# required checks Test, Test / PostgreSQL, Test / E2E Browser, Test / Player,
+# Build / Web, Build / Linux and Check / Web icons sit on aggregators at the
+# end; the player ones gate on the player-* checks through Nix / Checks.
 
 on:
   push:
@@ -45,9 +47,8 @@ permissions:
   contents: read
 
 env:
-  # Harden Rust crate fetches against transient crates.io flakiness (the E2E
-  # job's `mix compile` builds the Rustler NIFs, the SMB job builds its
-  # crate). CI intermittently hit "download of … failed / curl failed / [16]
+  # Harden Rust crate fetches against transient crates.io flakiness (the SMB
+  # job builds its crate outside the sandbox). CI intermittently hit "download of … failed / curl failed / [16]
   # Error in the HTTP2 framing layer". Forcing HTTP/1.1 (no multiplexing)
   # sidesteps that libcurl HTTP/2 bug and a generous retry count rides out
   # brief network blips.
@@ -68,14 +69,16 @@ jobs:
         with:
           persist-credentials: false
 
-      # The three required contexts in the Master ruleset must never conclude
+      # The required contexts in the Master ruleset must never conclude
       # `skipped` (.github/ci-flakes.md, "Why the list was short"). Each lives on
-      # an aggregator whose only job-level condition is always().
+      # an aggregator whose only job-level condition is always(). Build /
+      # Android is a plain job with no `needs`, so nothing can skip it.
       - name: Guard the required-check aggregators
         run: |
           set -euo pipefail
           FAIL=0
-          for name in "Test" "Test / PostgreSQL" "Test / E2E Browser"; do
+          for name in "Test" "Test / PostgreSQL" "Test / E2E Browser" \
+                      "Test / Player" "Build / Web" "Build / Linux" "Check / Web icons"; do
             count=$(yq -r "[.jobs[] | select(.name == \"$name\")] | length" .github/workflows/ci.yml)
             cond=$(yq -r ".jobs[] | select(.name == \"$name\") | .if" .github/workflows/ci.yml)
             if [ "$count" != "1" ] || [ "$cond" != "always()" ]; then
@@ -420,85 +423,72 @@ jobs:
           test -n "${MYDIA_SMB_TEST_HOST:-}"
           nix develop .#ci -c cargo test --features test-introspection --manifest-path player/rust/mydia_smb/Cargo.toml
 
-  # The browser tests stay a devenv job: chromium and chromedriver come from
-  # devenv.nix (CHROME_PATH / CHROMEDRIVER_PATH), and so do node and the
-  # asset tooling. The compiled app is not built here: like the ratchet, the
-  # job restores the cached SQLite test build (scripts/ci-restore-test-build.sh)
-  # and runs devenv from /build/source. devenv's Elixir and OTP are the
-  # checks' own (both resolve beam-version.nix on flake.lock's nixpkgs), so
-  # with the build's compile-time variables exported Mix finds nothing to
-  # compile. What the test build lacks, assets and node_modules, is built
-  # here. It waits for the inputs wave, which pushes that test build when
-  # the run changed it, and runs even when the plan failed (the restore then
-  # builds the test build itself), so this required check never skips.
-  test-e2e:
-    name: Test / E2E Browser (run)
-    needs: [plan, inputs]
-    if: ${{ !cancelled() }}
+  # The release APK, on every run. It cannot be a derivation: Gradle has no
+  # dependency lockfile for nixpkgs' mitmCache to fetch from, and Flutter's
+  # Android engine artifacts in the sandbox are unproven (design/specs/
+  # 2026-11-21-nix-ci-phase-2-design.md, "Android"). The toolchain is the
+  # .#android dev shell `./dev player android build` uses (Flutter from
+  # player/.fvmrc, the Android SDK and NDK, JDK 17, Rust with the Android
+  # targets), substituted from the caches. No pub or Gradle cache: both fetch
+  # on each run. It needs no niks3 push: a dev shell is not a check output.
+  #
+  # The Build APK step drives cargokit, which cross-compiles
+  # player/rust/mydia_player_p2p (and native/mydia_p2p_core under it) against
+  # the NDK, so this is what keeps the Rust/Dart FFI boundary under PR
+  # coverage on Android. `flutter pub run`, not `dart run`: a bare `dart run`
+  # re-checks the resolution without Flutter's SDK and fails.
+  build-android:
+    name: Build / Android
     runs-on: ubuntu-latest
-    env:
-      MIX_ENV: test
-      # Only used if Mix does recompile the deps (a toolchain mismatch):
-      # Wasmex carries a local patch in its Rust half (patches/wasmex), so it
-      # is built from source instead of downloading its precompiled NIF.
-      WASMEX_BUILD: "1"
-
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Read-only, so no Cachix token: everything the restore may build here
-      # (the test build and, on a cache miss, mixDepsCompiled, wasmexNif, the
-      # NIFs, pluginWasm) belongs in niks3, not Cachix. The devenv environment
-      # comes from Cachix and cache.nixos.org as before.
-      - name: Set up devenv
-        uses: ./.github/actions/setup-devenv
+      # Keeps free-disk: the Android SDK and NDK closure is several GB.
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+        with:
+          push: 'false'
 
-      # Bind-mounts the checkout at /build/source; later steps run there.
-      - name: Restore the cached test build
-        run: scripts/ci-restore-test-build.sh --mount
-
-      # GitHub sets CI=true, which makes devenv.nix skip its enterShell setup
-      # tasks, so the heredoc runs the equivalent setup (hex/rebar) itself, in
-      # one `devenv shell` so the environment evaluates once. No
-      # `mix deps.get`: deps/ came with the test build. The MYDIA_* variables
-      # are the test build's compile-time config, copied from `env` in
-      # nix/ci/elixir.nix: keep the two in sync, or a different value
-      # recompiles the whole app. run-feature-tests.sh finds
-      # chromium on PATH and honors CHROMEDRIVER_PATH, so no separate Chrome
-      # action is needed.
-      - name: Feature tests (E2E) under devenv
-        working-directory: /build/source
+      # --enforce-lockfile fails the job when pubspec.lock does not resolve on
+      # the .fvmrc SDK, instead of quietly testing a re-resolved tree.
+      # The APK build never regenerates the Rust/Dart bindings, so the dev
+      # shell's flutter_rust_bridge_codegen install is skipped.
+      - name: Build APK
+        env:
+          MYDIA_SKIP_FRB_CODEGEN_INSTALL: "1"
         run: |
-          devenv shell -- bash <<'DEVENV'
-          set -euo pipefail
-          export MIX_ENV=test
-          export MYDIA_PREBUILT_NIFS=1 MYDIA_PREBUILT_PLUGINS=1 MYDIA_SKIP_CARDIGANN_FETCH=1
-          unset DATABASE_TYPE
-          ./scripts/ci-mix-bootstrap.sh
-          mix compile
-          npm ci --prefix assets
-          mix assets.deploy
-          ./scripts/run-feature-tests.sh
-          DEVENV
+          nix develop .#android --command bash -c '
+            set -euo pipefail
+            cd player
+            flutter pub get --enforce-lockfile
+            flutter pub run build_runner build
+            flutter build apk --release --target-platform android-arm,android-arm64
+          '
 
-      - name: Upload screenshots on failure
-        if: failure()
+      - name: Check APK ABIs
+        run: ./scripts/check-apk-abis.sh player/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wallaby-screenshots
-          path: tmp/wallaby_screenshots/
+          name: mydia-player-android-apk
+          path: player/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
 
   # Required contexts live on these aggregators: each always runs and
   # concludes success or failure, never `skipped` (whether the ruleset counts
   # `skipped` as passing is configuration-dependent, .github/ci-flakes.md).
   # Each accepts `success` or `skipped` from what it needs. `Guards`
-  # enforces the always() condition. Test and Test / PostgreSQL both gate on
-  # the whole Nix matrix through Nix / Checks: a matrix leg's result is not
-  # addressable through `needs`.
+  # enforces the always() condition. All of them gate on the whole Nix matrix
+  # through Nix / Checks (Test / E2E Browser for the e2e-browser check, Test /
+  # Player for player-test, player-test-web, player-analyze and
+  # player-l10n-test, Build / Web for player-web, Build / Linux for
+  # player-linux, Check / Web icons for player-icons): a matrix leg's result
+  # is not addressable through `needs`.
   test:
     name: Test
     needs: [guards, nix-result, ratchet, smb]
@@ -529,7 +519,65 @@ jobs:
 
   test-e2e-result:
     name: Test / E2E Browser
-    needs: [test-e2e]
+    needs: [nix-result]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  test-player-result:
+    name: Test / Player
+    needs: [nix-result]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  build-web-result:
+    name: Build / Web
+    needs: [nix-result]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  # No artifact: the Nix bundle's runpath points into /nix/store, so it runs
+  # nowhere else. Release bundles come from player-linux.yml.
+  build-linux-result:
+    name: Build / Linux
+    needs: [nix-result]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  icons-result:
+    name: Check / Web icons
+    needs: [nix-result]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest

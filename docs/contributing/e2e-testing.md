@@ -33,8 +33,12 @@ Feature tests are excluded from `./dev test` by the `:feature` tag, because they
 need chromedriver. devenv provides chromium and chromedriver in-shell and sets
 `CHROME_PATH` / `CHROMEDRIVER_PATH`, so no extra setup is required.
 
-Screenshots of failures land in `tmp/wallaby_screenshots/`. CI uploads them as an
-artifact on the `Test / E2E Browser (run)` job.
+A failing test does not take a screenshot by itself: call `take_screenshot/2`
+where you want one, and it lands in `tmp/wallaby_screenshots/`. CI runs the suite
+as the `e2e-browser` Nix check and uploads no screenshots. To get them from that
+check, run it locally with
+`nix build .#checks.x86_64-linux.e2e-browser --keep-failed` and look under the
+path it prints on failure, inside the kept build directory.
 
 ## What belongs in a browser test
 

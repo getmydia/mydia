@@ -286,14 +286,47 @@
           '';
         });
 
+      # The player's flutter_rust_bridge library, release profile, at
+      # lib/libmydia_player_p2p.so, as cargokit builds it for `flutter build
+      # linux --release`. ciPlayer's player-linux hands it to the plugin's
+      # CMake glue instead of letting cargokit run cargo.
+      #
+      # Its dependency build is its own: the crate's cargoDeps above are the
+      # dev profile, which a --release build cannot reuse (cargo keeps
+      # target/release apart). What is shared with the crate's checks is the
+      # vendored registry, which crane keys on the lockfile.
+      playerP2pSo =
+        let
+          common = crateArgs {
+            name = "player-p2p-so";
+            dir = "player/rust/mydia_player_p2p";
+            set = sources.playerCrate "mydia_player_p2p";
+            profile = "release";
+          } // {
+            cargoExtraArgs = "--locked --lib";
+            doCheck = false;
+          };
+        in
+        craneLib.buildPackage (common // {
+          cargoArtifacts = craneLib.buildDepsOnly common;
+          installPhaseCommand = ''
+            mkdir -p $out/lib
+            cp target/release/libmydia_player_p2p.so $out/lib/
+          '';
+        });
+
       rustChecks = crateChecks // {
         rust-p2p-core-wasm = p2pCoreWasm;
         rust-plugins = rustPlugins;
       };
     in
     {
-      # For ci-crate-list (nix/ci/guards.nix).
-      _module.args.ciRust.crateDirs = map (c: c.dir) crates;
+      # For ci-crate-list (nix/ci/guards.nix), and the player's p2p library
+      # for player-linux (nix/ci/player.nix).
+      _module.args.ciRust = {
+        crateDirs = map (c: c.dir) crates;
+        inherit playerP2pSo;
+      };
 
       ciChecks = rustChecks;
 
@@ -302,6 +335,7 @@
       ciInternal = crateDeps // {
         nifs-mydia_p2p = mkNif "mydia_p2p";
         nifs-mydia_subsync = mkNif "mydia_subsync";
+        player-p2p-so = playerP2pSo;
         inherit pluginWasm;
       };
     };

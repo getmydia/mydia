@@ -83,7 +83,7 @@
       # Pre-fetch npm dependencies (required for sandbox build)
       npmDeps = pkgs.fetchNpmDeps {
         src = ../../assets;
-        hash = "sha256-Ykq1s0zWPyZNgf8iKeVsATHsplXnHeVKxhvtlLHlcyM=";
+        hash = "sha256-qJUGJy4AmdwP40o9nNQJD29DOpYahtvXRzfYjDcAwoY=";
       };
 
       # Tailwind CSS v4 standalone binary. nixpkgs does ship tailwindcss_4, but
@@ -409,6 +409,14 @@
 
     in
     {
+      # The asset toolchain, shared with nix/ci/tests.nix (ciInternal.assets,
+      # for the e2e-browser check) so CI builds the assets from the same npm
+      # cache, Tailwind and esbuild as the package, with one npmDeps hash.
+      _module.args.mydiaAssetTools = {
+        inherit npmDeps tailwindcss_4 tailwindVersion platformSuffix;
+        inherit (pkgs) esbuild;
+      };
+
       packages = {
         default = mydia;
         postgres = mydia-postgres;
