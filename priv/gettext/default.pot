@@ -151,7 +151,7 @@ msgstr ""
 
 #: lib/mydia_web/components/video_player_components.ex:259
 #: lib/mydia_web/components/video_player_components.ex:294
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:228
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:231
 #: lib/mydia_web/live/media_live/show/components.ex:141
 #: lib/mydia_web/live/media_live/show/season_components.ex:631
 #, elixir-autogen, elixir-format
@@ -199,7 +199,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:46
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:141
 #: lib/mydia_web/live/admin_quality_profiles_live/modal_components.ex:192
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:298
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:330
 #: lib/mydia_web/live/admin_requests_live/components.ex:343
 #: lib/mydia_web/live/admin_requests_live/components.ex:413
 #: lib/mydia_web/live/admin_settings_live/proxy_components.ex:152
@@ -1230,6 +1230,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:169
 #: lib/mydia_web/live/admin_indexers_live/library_browser_components.ex:201
 #: lib/mydia_web/live/admin_indexers_live/library_config_components.ex:122
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:259
 #: lib/mydia_web/live/admin_settings_live/proxy_components.ex:154
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:166
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:349
@@ -7858,7 +7859,7 @@ msgstr ""
 msgid "Recoverable from Configuration > Trash until it is purged"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:151
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:154
 #: lib/mydia_web/live/downloads_live/files_panel.ex:122
 #: lib/mydia_web/live/downloads_live/index.html.heex:22
 #: lib/mydia_web/live/jobs_live/components.ex:8
@@ -11029,7 +11030,7 @@ msgstr ""
 msgid "two seasons of %{counts}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:169
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:197
 #: lib/mydia_web/live/downloads_live/issue_list.ex:141
 #: lib/mydia_web/live/downloads_live/issue_list.ex:147
 #, elixir-autogen, elixir-format
@@ -12073,7 +12074,7 @@ msgid_plural "%{count} could not be restored."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:117
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:120
 #, elixir-autogen, elixir-format
 msgid "%{count} device online"
 msgid_plural "%{count} devices online"
@@ -12490,7 +12491,7 @@ msgstr ""
 msgid "(base)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:319
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:351
 #, elixir-autogen, elixir-format
 msgid "(connecting...)"
 msgstr ""
@@ -12649,7 +12650,7 @@ msgstr ""
 msgid "AWS (%{region})"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:250
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:282
 #, elixir-autogen, elixir-format
 msgid "About Tailscale"
 msgstr ""
@@ -12802,7 +12803,7 @@ msgstr ""
 msgid "Add Subtitle Provider"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:187
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:190
 #, elixir-autogen, elixir-format
 msgid "Add URL"
 msgstr ""
@@ -12822,7 +12823,7 @@ msgstr ""
 msgid "Add any notes about this approval..."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:278
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:310
 #, elixir-autogen, elixir-format
 msgid "Add direct URL"
 msgstr ""
@@ -13022,7 +13023,7 @@ msgstr ""
 msgid "Allow automatic quality upgrades"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:47
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:50
 #, elixir-autogen, elixir-format
 msgid "Allow player connections"
 msgstr ""
@@ -13242,7 +13243,7 @@ msgstr ""
 msgid "Auto-add to library"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:220
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:223
 #, elixir-autogen, elixir-format
 msgid "Auto-detected URLs"
 msgstr ""
@@ -13922,7 +13923,7 @@ msgstr ""
 msgid "Confirm Password"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:259
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:291
 #, elixir-autogen, elixir-format
 msgid "Connect Players from Anywhere"
 msgstr ""
@@ -13942,7 +13943,7 @@ msgstr ""
 msgid "Connect a server, or add one from the Add server menu, and Mydia refreshes its library as soon as an import finishes, so new episodes show up without waiting for the server's next scheduled scan."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:51
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:54
 #, elixir-autogen, elixir-format
 msgid "Connect mobile apps from anywhere"
 msgstr ""
@@ -13952,7 +13953,7 @@ msgstr ""
 msgid "Connect to Prowlarr/Jackett"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:55
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:58
 #, elixir-autogen, elixir-format
 msgid "Connecting to relay..."
 msgstr ""
@@ -14032,7 +14033,7 @@ msgstr ""
 msgid "Converting runtime indexer to database-managed configuration"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:141
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:144
 #, elixir-autogen, elixir-format
 msgid "Copy Node ID: %{id}"
 msgstr ""
@@ -14393,22 +14394,22 @@ msgstr ""
 msgid "Different lengths"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:117
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:145
 #, elixir-autogen, elixir-format
 msgid "Direct URL added successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:142
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:170
 #, elixir-autogen, elixir-format
 msgid "Direct URL removed successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:181
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:184
 #, elixir-autogen, elixir-format
 msgid "Direct URLs"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:191
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:194
 #, elixir-autogen, elixir-format
 msgid "Direct URLs allow the app to bypass the relay when on the same network for faster streaming."
 msgstr ""
@@ -14754,7 +14755,7 @@ msgstr ""
 msgid "Enable automatic syncing"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:261
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:293
 #, elixir-autogen, elixir-format
 msgid "Enable remote access so your phone and tablet can connect to this Mydia server."
 msgstr ""
@@ -15002,7 +15003,7 @@ msgstr[1] ""
 msgid "Failed to add (reset to retry)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:124
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:152
 #, elixir-autogen, elixir-format
 msgid "Failed to add direct URL: %{reason}"
 msgstr ""
@@ -15097,7 +15098,7 @@ msgstr ""
 msgid "Failed to remove %{key}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:149
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:177
 #, elixir-autogen, elixir-format
 msgid "Failed to remove direct URL: %{reason}"
 msgstr ""
@@ -15661,7 +15662,7 @@ msgstr ""
 msgid "Info+"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:57
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:60
 #, elixir-autogen, elixir-format
 msgid "Initializing..."
 msgstr ""
@@ -16432,7 +16433,7 @@ msgstr ""
 msgid "No Rejected requests found."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:231
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:234
 #, elixir-autogen, elixir-format
 msgid "No URLs detected. Check the server's network configuration."
 msgstr ""
@@ -16572,7 +16573,7 @@ msgstr ""
 msgid "No library paths configured yet. Add a media directory to get started."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:213
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:216
 #, elixir-autogen, elixir-format
 msgid "No manual URLs yet. Add one so the player can skip the relay."
 msgstr ""
@@ -16730,7 +16731,7 @@ msgstr ""
 msgid "Nobody is watching. Last played %{elapsed} ago."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:81
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:109
 #, elixir-autogen, elixir-format
 msgid "Node ID copied to clipboard"
 msgstr ""
@@ -16962,22 +16963,22 @@ msgstr ""
 msgid "Outcome"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:103
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:106
 #, elixir-autogen, elixir-format
 msgid "P2P Connecting..."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:101
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:104
 #, elixir-autogen, elixir-format
 msgid "P2P Online"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:105
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:108
 #, elixir-autogen, elixir-format
 msgid "P2P Starting..."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:170
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:173
 #, elixir-autogen, elixir-format
 msgid "P2P powered by iroh"
 msgstr ""
@@ -17118,7 +17119,7 @@ msgstr ""
 msgid "Player API"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:53
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:56
 #, elixir-autogen, elixir-format
 msgid "Players can connect via P2P"
 msgstr ""
@@ -17543,17 +17544,17 @@ msgstr ""
 msgid "Rejection Reason"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:110
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:113
 #, elixir-autogen, elixir-format
 msgid "Relay connected"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:112
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:115
 #, elixir-autogen, elixir-format
 msgid "Relay disconnected"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:161
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:164
 #, elixir-autogen, elixir-format
 msgid "Relay:"
 msgstr ""
@@ -17651,7 +17652,7 @@ msgstr ""
 msgid "Remove After Import"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:203
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:206
 #, elixir-autogen, elixir-format
 msgid "Remove URL"
 msgstr ""
@@ -18243,7 +18244,8 @@ msgstr ""
 msgid "Set Manually"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:77
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:80
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:263
 #, elixir-autogen, elixir-format
 msgid "Set by %{var}. Remove the variable to change it here."
 msgstr ""
@@ -18410,7 +18412,7 @@ msgstr ""
 msgid "Stats window"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:158
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:186
 #, elixir-autogen, elixir-format
 msgid "Status refreshed"
 msgstr ""
@@ -19067,7 +19069,7 @@ msgstr ""
 msgid "Timeout (ms)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:238
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:270
 #, elixir-autogen, elixir-format
 msgid "Tip:"
 msgstr ""
@@ -19378,7 +19380,7 @@ msgstr ""
 msgid "Use \"Create Local User\" to manually create users with local authentication."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:239
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:271
 #, elixir-autogen, elixir-format
 msgid "Use %{tailscale} for secure access from anywhere. Add your Tailscale address, for example %{example}."
 msgstr ""
@@ -19605,7 +19607,7 @@ msgstr ""
 msgid "Where subtitles are searched and downloaded"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:279
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:311
 #, elixir-autogen, elixir-format
 msgid "Where this server can be reached directly, e.g. on the same network"
 msgstr ""
@@ -20267,19 +20269,19 @@ msgctxt "changed field"
 msgid "Year"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:322
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:354
 #, elixir-autogen, elixir-format
 msgctxt "connection type"
 msgid "Direct"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:324
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:356
 #, elixir-autogen, elixir-format
 msgctxt "connection type"
 msgid "Mixed"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:323
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:355
 #, elixir-autogen, elixir-format
 msgctxt "connection type"
 msgid "Relay"
@@ -20291,7 +20293,7 @@ msgctxt "crash reports"
 msgid "Clear"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/components.ex:301
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:333
 #, elixir-autogen, elixir-format
 msgctxt "direct url"
 msgid "Add"
@@ -22459,4 +22461,34 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/list_components.ex:340
 #, elixir-autogen, elixir-format
 msgid "Uploaded"
+msgstr ""
+
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:100
+#, elixir-autogen, elixir-format
+msgid "%{url} is not an https URL."
+msgstr ""
+
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:238
+#, elixir-autogen, elixir-format
+msgid "Custom relay"
+msgstr ""
+
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:104
+#, elixir-autogen, elixir-format
+msgid "Failed to save the relay"
+msgstr ""
+
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:89
+#, elixir-autogen, elixir-format
+msgid "Relay saved"
+msgstr ""
+
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:96
+#, elixir-autogen, elixir-format
+msgid "The relay is set by IROH_RELAY_URL and cannot be changed here."
+msgstr ""
+
+#: lib/mydia_web/live/admin_remote_access_live/components.ex:243
+#, elixir-autogen, elixir-format
+msgid "Use your own iroh relay instead of Mydia's. Separate several with commas. Leave empty for the default. iroh's public relays stay as a fallback."
 msgstr ""

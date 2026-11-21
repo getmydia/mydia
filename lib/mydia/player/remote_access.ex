@@ -18,6 +18,8 @@ defmodule Mydia.Player.RemoteAccess do
   @cache_key {__MODULE__, :enabled}
   @env_var "ENABLE_REMOTE_ACCESS"
   @setting_key "remote_access.enabled"
+  @relay_env_var "IROH_RELAY_URL"
+  @relay_setting_key "remote_access.relay_urls"
   @child_id Mydia.Player.RemoteAccess.Supervisor
 
   @doc "The environment variable that controls the setting and locks the toggle."
@@ -145,6 +147,106 @@ defmodule Mydia.Player.RemoteAccess do
       :ok -> :ok
       {:error, :not_found} -> :ok
     end
+  end
+
+  @doc "The environment variable that sets the custom relays and locks the field."
+  @spec relay_env_var() :: String.t()
+  def relay_env_var, do: @relay_env_var
+
+  @doc "The `config_settings` key the custom relay field writes."
+  @spec relay_setting_key() :: String.t()
+  def relay_setting_key, do: @relay_setting_key
+
+  @doc """
+  The layered `remote_access.relay_urls`: the iroh relays this install uses
+  instead of mydia's. Empty means mydia's (see `Mydia.P2p.RelayList`).
+  """
+  @spec relay_urls() :: [String.t()]
+  def relay_urls do
+    case Settings.get_runtime_config() do
+      %{remote_access: %{relay_urls: urls}} when is_list(urls) -> urls
+      _ -> []
+    end
+  end
+
+  @doc "Whether `IROH_RELAY_URL` is set, which makes the relay field read-only."
+  @spec relay_env_locked?((String.t() -> String.t() | nil)) :: boolean()
+  def relay_env_locked?(getenv \\ &System.get_env/1),
+    do: Mydia.Settings.env_var_set?(@relay_env_var, getenv)
+
+  @doc """
+  Saves the custom relay list, then restarts the p2p subtree if it is running,
+  so the node rejoins on the new relays without a server restart. An empty
+  list deletes the row, which hands the choice back to mydia's list.
+
+  Takes the same lock and options as `set_enabled/2`.
+  """
+  @spec set_relay_urls([String.t()], keyword()) :: :ok | {:error, term()}
+  def set_relay_urls(urls, opts \\ []) when is_list(urls) do
+    getenv = Keyword.get(opts, :getenv, &System.get_env/1)
+    urls = urls |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+
+    cond do
+      relay_env_locked?(getenv) ->
+        {:error, :env_locked}
+
+      bad = Enum.find(urls, &(not Mydia.Config.Schema.RemoteAccess.relay_url?(&1))) ->
+        {:error, {:invalid_url, bad}}
+
+      true ->
+        :global.trans(
+          {__MODULE__, self()},
+          fn -> do_save_relays(urls, opts) end,
+          [node()]
+        )
+    end
+  end
+
+  defp do_save_relays(urls, opts) do
+    with :ok <- write_relays(urls, Keyword.get(opts, :updated_by_id)),
+         {:ok, _config} <- Loader.reload() do
+      restart_if_running(Keyword.get(opts, :supervisor, Mydia.Player.Supervisor))
+    end
+  end
+
+  defp write_relays([], _updated_by_id) do
+    case Settings.get_config_setting_by_key(@relay_setting_key) do
+      nil -> :ok
+      setting -> setting |> Settings.delete_config_setting() |> ok()
+    end
+  end
+
+  defp write_relays(urls, updated_by_id) do
+    %{
+      key: @relay_setting_key,
+      value: Enum.join(urls, ","),
+      category: :remote_access,
+      updated_by_id: updated_by_id
+    }
+    |> Settings.upsert_config_setting()
+    |> ok()
+  end
+
+  defp ok({:ok, _}), do: :ok
+  defp ok({:error, _} = error), do: error
+
+  # The relay list is read once, when Mydia.P2p.Server starts its host, so a
+  # running node only sees a new one by starting over. A stopped subtree
+  # (remote access off, or a test environment) picks it up when it next starts.
+  defp restart_if_running(supervisor) do
+    running? =
+      supervisor
+      |> Supervisor.which_children()
+      |> Enum.any?(fn {id, pid, _, _} -> id == @child_id and is_pid(pid) end)
+
+    if running? do
+      with :ok <- sync(false, supervisor), do: sync(true, supervisor)
+    else
+      :ok
+    end
+  catch
+    # No supervisor at all: the player subtree never started.
+    :exit, _ -> :ok
   end
 
   defp startable? do

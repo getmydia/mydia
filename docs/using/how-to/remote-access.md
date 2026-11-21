@@ -28,6 +28,16 @@ Optionally set `P2P_BIND_PORT` to a fixed UDP port and forward it, which lets pe
 hole-punch a direct connection instead of falling back to a relay. See
 [Environment Variables](../reference/environment-variables.md) for all three.
 
+### Custom Relay
+
+If you run your own [iroh relay](https://www.iroh.computer/docs/concepts/relay),
+enter its URL under **Admin › System › Remote Access › Custom relay**. The p2p
+node reconnects through it right away, and paired devices follow without being
+re-paired. Clear the field to go back to Mydia's relays.
+
+`IROH_RELAY_URL` does the same from the environment and locks the field. Either
+way, iroh's public relays stay in the list as a fallback.
+
 ### Direct URLs
 
 Direct URLs are automatically detected from your instance's network configuration:

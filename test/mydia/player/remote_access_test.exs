@@ -228,4 +228,74 @@ defmodule Mydia.Player.RemoteAccessTest do
       refute running?(parent)
     end
   end
+
+  describe "set_relay_urls/2" do
+    @relay_a "https://relay-a.example.test"
+    @relay_b "https://relay-b.example.test"
+
+    defp subtree_pid(parent) do
+      [{_, pid, _, _}] = Supervisor.which_children(parent)
+      pid
+    end
+
+    test "remote_access.relay_urls is a key the admin UI may write" do
+      assert Paths.known?(RemoteAccess.relay_setting_key())
+    end
+
+    test "refuses while IROH_RELAY_URL is set, and writes nothing" do
+      getenv = fn "IROH_RELAY_URL" -> @relay_a end
+
+      assert {:error, :env_locked} = RemoteAccess.set_relay_urls([@relay_b], getenv: getenv)
+      assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
+    end
+
+    test "rejects a URL that is not https, and writes nothing" do
+      assert {:error, {:invalid_url, "http://relay.example.test"}} =
+               RemoteAccess.set_relay_urls(["http://relay.example.test"], getenv: fn _ -> nil end)
+
+      assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
+    end
+
+    test "saves the list and restarts a running subtree so the node picks it up" do
+      %{parent: parent} = start_stub_tree()
+      before = subtree_pid(parent)
+
+      assert :ok =
+               RemoteAccess.set_relay_urls([@relay_a, @relay_b],
+                 getenv: fn _ -> nil end,
+                 supervisor: parent
+               )
+
+      assert %{value: "#{@relay_a},#{@relay_b}", category: :remote_access} =
+               Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls")
+
+      assert RemoteAccess.relay_urls() == [@relay_a, @relay_b]
+      assert is_pid(subtree_pid(parent))
+      refute subtree_pid(parent) == before
+    end
+
+    test "an empty list removes the row, back to mydia's relays" do
+      %{parent: parent} = start_stub_tree()
+      opts = [getenv: fn _ -> nil end, supervisor: parent]
+
+      assert :ok = RemoteAccess.set_relay_urls([@relay_a], opts)
+      assert :ok = RemoteAccess.set_relay_urls([], opts)
+
+      assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
+      assert RemoteAccess.relay_urls() == []
+    end
+
+    test "leaves a stopped subtree stopped" do
+      %{parent: parent} = start_stub_tree()
+      :ok = RemoteAccess.sync(false, parent)
+
+      assert :ok =
+               RemoteAccess.set_relay_urls([@relay_a],
+                 getenv: fn _ -> nil end,
+                 supervisor: parent
+               )
+
+      refute running?(parent)
+    end
+  end
 end

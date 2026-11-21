@@ -470,6 +470,7 @@ defmodule MydiaWeb.Api.ConfigController do
       "media.tv_path" => "TV_PATH",
       "logging.level" => "LOG_LEVEL",
       "remote_access.enabled" => "ENABLE_REMOTE_ACCESS",
+      "remote_access.relay_urls" => "IROH_RELAY_URL",
       "cardigann.engine" => "CARDIGANN_ENGINE"
     }
 

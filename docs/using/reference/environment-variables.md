@@ -121,6 +121,7 @@ name as `s3://<name>/<prefix>`.
 | `CARDIGANN_WASM_PATH` | When the Prowlarr-based engine is selected (on the Indexers page or with `CARDIGANN_ENGINE=prowlarr`): path to a local `cardigann-<hash>.wasm`, for servers without internet access. Checked against the checksum built into the release | (unset) |
 | `ENABLE_IMPORT_LISTS` | Enable import lists for syncing external lists (TMDB watchlists, popular, etc.) | `true` |
 | `ENABLE_REMOTE_ACCESS` | P2P remote access for the player. Also a toggle under **Admin › System › Remote Access**; when the variable is set it wins and the toggle is locked | `true` |
+| `IROH_RELAY_URL` | Your own iroh relay, used instead of Mydia's. Comma-separate several, in preference order; each must be an `https://` URL or startup stops. iroh's public relays remain as a fallback. Also a field under **Admin › System › Remote Access**; when the variable is set it wins and the field is locked | (unset) |
 
 `ENABLE_PLAYER=false` is for servers nobody plays from. Mydia then starts no p2p
 node, answers 404 on the player's routes, and hides the Player and Devices

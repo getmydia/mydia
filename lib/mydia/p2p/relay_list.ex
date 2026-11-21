@@ -9,9 +9,11 @@ defmodule Mydia.P2p.RelayList do
 
   Precedence, highest first:
 
-    1. An explicit `IROH_RELAY_URL`. Used alone, and the fetch is skipped
-       entirely. Someone who set it did so to pin their install to one relay,
-       so merging mydia's list into theirs would defeat the setting.
+    1. `remote_access.relay_urls` from the layered config: `IROH_RELAY_URL`
+       (comma-separated), the YAML file, or the admin UI. Used alone, and the
+       fetch is skipped entirely. Someone who set it did so to pin their
+       install to their own relay, so merging mydia's list into theirs would
+       defeat the setting.
     2. `p2p.relays` from a successful fetch.
     3. The last successful fetch, read from disk.
     4. The compiled-in default.
@@ -78,19 +80,22 @@ defmodule Mydia.P2p.RelayList do
     end
   end
 
+  # `:override` takes a list or a single string, for tests. Without it the
+  # layered config answers, which already parsed IROH_RELAY_URL.
   defp override(opts) do
     raw =
       case Keyword.fetch(opts, :override) do
         {:ok, value} -> value
-        :error -> System.get_env("IROH_RELAY_URL")
+        :error -> Mydia.Player.RemoteAccess.relay_urls()
       end
 
-    # System.get_env/1 returns "" for a variable explicitly set empty, and ""
-    # is truthy in Elixir, so trimming is what actually treats blank as unset.
-    case raw do
-      nil -> []
-      value -> value |> String.trim() |> List.wrap() |> valid_urls()
-    end
+    raw
+    |> List.wrap()
+    |> Enum.map(fn
+      url when is_binary(url) -> String.trim(url)
+      other -> other
+    end)
+    |> valid_urls()
   end
 
   defp fetch(opts) do
@@ -147,18 +152,7 @@ defmodule Mydia.P2p.RelayList do
 
   defp relays_from(_), do: []
 
-  defp valid_urls(urls) do
-    Enum.filter(urls, fn
-      url when is_binary(url) ->
-        case URI.parse(url) do
-          %URI{scheme: "https", host: host} when is_binary(host) and host != "" -> true
-          _ -> false
-        end
-
-      _ ->
-        false
-    end)
-  end
+  defp valid_urls(urls), do: Enum.filter(urls, &Mydia.Config.Schema.RemoteAccess.relay_url?/1)
 
   defp read_cache(path) do
     with {:ok, contents} <- File.read(path),
