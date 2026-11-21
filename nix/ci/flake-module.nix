@@ -33,14 +33,17 @@
   config.perSystem = { pkgs, system, config, ... }:
     let
       toolchains = import ../toolchains.nix { inherit inputs pkgs system; };
-      inherit (toolchains) beamPackages rustToolchain rustToolchainCi;
+      inherit (toolchains) beamPackages;
+
+      # The CI toolchain: the rust-toolchain.toml version with fmt and clippy
+      # (nix/toolchains.nix `rustToolchainCi`). The package keeps its own
+      # `rustToolchain`; nothing under nix/ci uses that one.
+      rustToolchain = toolchains.rustToolchainCi;
 
       root = ../..;
       sources = import ./sources.nix { inherit lib root; };
 
-      # The checks lint and test on the rust-toolchain.toml version, with fmt
-      # and clippy, rather than on the package's toolchain (nix/toolchains.nix).
-      craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchainCi;
+      craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
 
       # Directories whose tracked files must belong to a source file set.
       codeDirs = [ "lib" "config" "priv" "test" "native" "plugins" "server" "metadata-relay" ];

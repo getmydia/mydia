@@ -11,6 +11,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{
     Event, HlsRequest, HlsResponseHeader, HlsStreamResponse, Host, HostConfig, HLS_PEER_STOPPED,
 };
@@ -59,8 +61,8 @@ async fn open_stream() -> (
     HlsStreamResponse,
     tokio::task::JoinHandle<()>,
 ) {
-    let (server, server_id) = Host::new(test_config());
-    let (client, _client_id) = Host::new(test_config());
+    let (server, server_id) = support::host(test_config());
+    let (client, _client_id) = support::host(test_config());
     let server = Arc::new(server);
     let client = Arc::new(client);
 

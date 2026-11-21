@@ -126,10 +126,12 @@
           set = sources.nativeCrate "mydia_subsync";
         }
         {
-          # The Samba integration tests need a root-run smbd (the old CI
-          # started one with sudo), which the sandbox cannot provide. Without
-          # MYDIA_SMB_TEST_HOST they report "skipped" and pass; the unit tests
-          # and the rest run as before.
+          # The Samba integration tests need a root smbd
+          # (tests/samba/run-samba.sh starts it with sudo), which the sandbox
+          # cannot provide. Here, without MYDIA_SMB_TEST_HOST, they report
+          # "skipped" and pass, and the unit tests run as before. The
+          # integration tests stay in an ordinary ci.yml job that starts the
+          # harness and runs with MYDIA_SMB_REQUIRE_HARNESS=1.
           name = "mydia_smb";
           dir = "player/rust/mydia_smb";
           set = sources.playerCrate "mydia_smb";

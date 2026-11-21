@@ -638,9 +638,28 @@ pub struct Host {
     node_id: String,
 }
 
+/// How long the event loop waits for a home relay before emitting `Ready`
+/// without one.
+const RELAY_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// How a host's endpoint treats relays. Every real host uses `PRODUCTION`;
+/// the other shapes exist only for tests.
+#[derive(Clone, Copy)]
+struct RelaySetup {
+    disabled: bool,
+    online_wait: std::time::Duration,
+}
+
+impl RelaySetup {
+    const PRODUCTION: Self = Self {
+        disabled: false,
+        online_wait: RELAY_WAIT,
+    };
+}
+
 impl Host {
     pub fn new(config: HostConfig) -> (Self, String) {
-        Self::spawn(config, false)
+        Self::spawn(config, RelaySetup::PRODUCTION)
     }
 
     /// A host whose endpoint has relays disabled, so `endpoint.online()`
@@ -649,10 +668,32 @@ impl Host {
     /// a home relay is chosen.
     #[cfg(feature = "test-introspection")]
     pub fn new_without_relays(config: HostConfig) -> (Self, String) {
-        Self::spawn(config, true)
+        Self::spawn(
+            config,
+            RelaySetup {
+                disabled: true,
+                online_wait: RELAY_WAIT,
+            },
+        )
     }
 
-    fn spawn(config: HostConfig, relays_disabled: bool) -> (Self, String) {
+    /// A host that never touches a relay: relays are disabled and the relay
+    /// wait is skipped, so `Ready` follows the bind at once. Peers reach it
+    /// over the direct addresses in its `EndpointAddr`. Test-only: it keeps
+    /// the tests off iroh's public relays, which a sandboxed build cannot
+    /// reach and where every host would otherwise sit out the full 30s wait.
+    #[cfg(any(test, feature = "test-introspection"))]
+    pub fn new_offline(config: HostConfig) -> (Self, String) {
+        Self::spawn(
+            config,
+            RelaySetup {
+                disabled: true,
+                online_wait: std::time::Duration::ZERO,
+            },
+        )
+    }
+
+    fn spawn(config: HostConfig, relays: RelaySetup) -> (Self, String) {
         let secret_key = load_or_generate_keypair(&config);
         let node_id = secret_key.public().to_string();
         let node_id_str = node_id.clone();
@@ -675,7 +716,7 @@ impl Host {
             cmd_rx,
             shutdown_rx,
             event_tx,
-            relays_disabled,
+            relays,
         ));
 
         (
@@ -1355,7 +1396,7 @@ async fn run_event_loop(
     mut cmd_rx: mpsc::Receiver<Command>,
     mut shutdown_rx: watch::Receiver<bool>,
     event_tx: mpsc::Sender<Event>,
-    relays_disabled: bool,
+    relays: RelaySetup,
 ) {
     // Initialize tracing to forward logs to Elixir
     init_tracing(event_tx.clone());
@@ -1379,7 +1420,7 @@ async fn run_event_loop(
     }
 
     // Configure relay
-    if relays_disabled {
+    if relays.disabled {
         builder = builder.relay_mode(RelayMode::Disabled);
     } else if let Some(mode) = build_relay_mode(&config) {
         builder = builder.relay_mode(mode);
@@ -1451,7 +1492,7 @@ async fn run_event_loop(
     // `GetNodeAddr` needs our own home relay first. Holding every command
     // here cost a player ~3s of launch time before its first request.
     tracing::info!("Waiting for relay connection...");
-    let online = runtime::time::timeout(std::time::Duration::from_secs(30), endpoint.online());
+    let online = runtime::time::timeout(relays.online_wait, endpoint.online());
     let mut online = std::pin::pin!(online);
     let mut online_done = false;
     // `GetNodeAddr` asked before the wait ends, answered right after `Ready`:
@@ -3677,8 +3718,8 @@ mod tests {
     /// 1 until the 10s wait loop below gives up.
     #[tokio::test(flavor = "multi_thread")]
     async fn connected_peers_is_pruned_when_the_connection_closes() {
-        let (server, _server_id) = Host::new(test_config());
-        let (client, client_id) = Host::new(test_config());
+        let (server, _server_id) = Host::new_offline(test_config());
+        let (client, client_id) = Host::new_offline(test_config());
         spawn_event_drain(&server);
         spawn_event_drain(&client);
 
@@ -3717,8 +3758,8 @@ mod tests {
     /// times out: the count never drops back to 0.
     #[tokio::test(flavor = "multi_thread")]
     async fn pending_responses_is_reclaimed_when_the_response_times_out() {
-        let (responder, responder_id) = Host::new(test_config());
-        let (dialer, _dialer_id) = Host::new(test_config());
+        let (responder, responder_id) = Host::new_offline(test_config());
+        let (dialer, _dialer_id) = Host::new_offline(test_config());
         spawn_event_drain(&responder);
         spawn_event_drain(&dialer);
 
@@ -3787,8 +3828,8 @@ mod tests {
     /// the event channel was full, so the requests below went unanswered.
     #[tokio::test(flavor = "multi_thread")]
     async fn ping_is_answered_while_the_host_app_is_not_draining_events() {
-        let (responder, responder_id) = Host::new(test_config());
-        let (dialer, _dialer_id) = Host::new(test_config());
+        let (responder, responder_id) = Host::new_offline(test_config());
+        let (dialer, _dialer_id) = Host::new_offline(test_config());
         spawn_event_drain(&dialer);
 
         // `Connected` is sent before the connection's serve loop is spawned,
@@ -3960,8 +4001,8 @@ mod tests {
     /// the request keeps waiting and the connection survives.
     #[tokio::test(flavor = "multi_thread")]
     async fn a_slow_graphql_answer_is_not_treated_as_a_stall() {
-        let (responder, responder_id) = Host::new(test_config());
-        let (dialer, _dialer_id) = Host::new(test_config());
+        let (responder, responder_id) = Host::new_offline(test_config());
+        let (dialer, _dialer_id) = Host::new_offline(test_config());
         spawn_event_drain(&responder);
         spawn_event_drain(&dialer);
 
@@ -3991,8 +4032,8 @@ mod tests {
     /// fresh one and succeeds.
     #[tokio::test(flavor = "multi_thread")]
     async fn a_request_right_after_a_close_uses_a_fresh_connection() {
-        let (responder, responder_id) = Host::new(test_config());
-        let (dialer, _dialer_id) = Host::new(test_config());
+        let (responder, responder_id) = Host::new_offline(test_config());
+        let (dialer, _dialer_id) = Host::new_offline(test_config());
         spawn_event_drain(&responder);
         spawn_event_drain(&dialer);
 
@@ -4016,8 +4057,8 @@ mod tests {
     /// `RemoteControl` in this test, which stands in for that silence.
     #[tokio::test(flavor = "multi_thread")]
     async fn an_unanswered_control_request_closes_its_connection() {
-        let (responder, responder_id) = Host::new(test_config());
-        let (dialer, _dialer_id) = Host::new(test_config());
+        let (responder, responder_id) = Host::new_offline(test_config());
+        let (dialer, _dialer_id) = Host::new_offline(test_config());
         spawn_event_drain(&responder);
         spawn_event_drain(&dialer);
 
@@ -4064,7 +4105,7 @@ mod tests {
     async fn dropping_the_host_frees_its_bound_udp_port() {
         let port = free_udp_port();
 
-        let (host, _host_id) = Host::new(HostConfig {
+        let (host, _host_id) = Host::new_offline(HostConfig {
             bind_port: Some(port),
             ..test_config()
         });
@@ -4092,7 +4133,7 @@ mod tests {
     async fn shutdown_does_not_wait_for_a_command_that_never_finishes() {
         let port = free_udp_port();
 
-        let (host, _host_id) = Host::new(HostConfig {
+        let (host, _host_id) = Host::new_offline(HostConfig {
             bind_port: Some(port),
             ..test_config()
         });
@@ -4169,8 +4210,8 @@ mod tests {
             ..test_config()
         };
 
-        let (server, _server_id) = Host::new(test_config());
-        let (client_one, client_id) = Host::new(client_config());
+        let (server, _server_id) = Host::new_offline(test_config());
+        let (client_one, client_id) = Host::new_offline(client_config());
         spawn_event_drain(&client_one);
         let disconnects = spawn_disconnect_counter(&server, client_id.clone());
 
@@ -4189,7 +4230,7 @@ mod tests {
 
         // The second client under the shared key starts only now, once the
         // first is connected, rather than racing it to the relay.
-        let (client_two, client_two_id) = Host::new(client_config());
+        let (client_two, client_two_id) = Host::new_offline(client_config());
         assert_eq!(
             client_id, client_two_id,
             "both clients must present the same node id for this to exercise \
@@ -4267,8 +4308,8 @@ mod tests {
             ..test_config()
         };
 
-        let (server, _server_id) = Host::new(test_config());
-        let (client_one, client_id) = Host::new(client_config());
+        let (server, _server_id) = Host::new_offline(test_config());
+        let (client_one, client_id) = Host::new_offline(client_config());
         spawn_event_drain(&client_one);
         let disconnects = spawn_disconnect_counter(&server, client_id.clone());
 
@@ -4287,7 +4328,7 @@ mod tests {
 
         // As in the test above, the second client under the shared key starts
         // only once the first is connected.
-        let (client_two, _) = Host::new(client_config());
+        let (client_two, _) = Host::new_offline(client_config());
         spawn_event_drain(&client_two);
         wait_for_addr(&client_two).await;
         client_two

@@ -6,6 +6,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::time::Duration;
 
@@ -58,8 +60,8 @@ async fn two_hosts_exchange_a_request() {
 }
 
 async fn two_hosts_exchange_a_request_body() {
-    let (responder, responder_id) = Host::new(test_config());
-    let (dialer, _dialer_id) = Host::new(test_config());
+    let (responder, responder_id) = support::host(test_config());
+    let (dialer, _dialer_id) = support::host(test_config());
 
     // Wait for the responder to be ready and learn its address.
     let responder_addr = wait_for_ready(&responder).await;
@@ -123,8 +125,8 @@ async fn a_response_larger_than_64_kib_reaches_the_dialer() {
 async fn large_response_body() {
     const SIZE: usize = 256 * 1024;
 
-    let (responder, responder_id) = Host::new(test_config());
-    let (dialer, _dialer_id) = Host::new(test_config());
+    let (responder, responder_id) = support::host(test_config());
+    let (dialer, _dialer_id) = support::host(test_config());
     let responder_addr = wait_for_ready(&responder).await;
 
     // See two_hosts_exchange_a_request_body for why the responder is handed

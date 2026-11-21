@@ -6,6 +6,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{Host, HostConfig};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -23,8 +25,8 @@ async fn wait_for_addr(host: &Host) -> String {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn slow_or_unreachable_dial_does_not_block_local_queries() {
-    let (host, _node_id) = Host::new(HostConfig::default());
-    let (other_host, other_node_id) = Host::new(HostConfig::default());
+    let (host, _node_id) = support::host(HostConfig::default());
+    let (other_host, other_node_id) = support::host(HostConfig::default());
     other_host.shutdown().await;
     let host = Arc::new(host);
 
@@ -61,7 +63,7 @@ async fn slow_or_unreachable_dial_does_not_block_local_queries() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn invalid_endpoint_addr_json_returns_error_immediately() {
-    let (host, _node_id) = Host::new(HostConfig::default());
+    let (host, _node_id) = support::host(HostConfig::default());
     let _addr = wait_for_addr(&host).await;
 
     let start = Instant::now();
@@ -77,9 +79,9 @@ async fn invalid_endpoint_addr_json_returns_error_immediately() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn concurrent_dials_to_valid_peers_both_succeed() {
-    let (server1, server1_id) = Host::new(HostConfig::default());
-    let (server2, server2_id) = Host::new(HostConfig::default());
-    let (client, _client_id) = Host::new(HostConfig::default());
+    let (server1, server1_id) = support::host(HostConfig::default());
+    let (server2, server2_id) = support::host(HostConfig::default());
+    let (client, _client_id) = support::host(HostConfig::default());
 
     let server1_addr = wait_for_addr(&server1).await;
     let server2_addr = wait_for_addr(&server2).await;

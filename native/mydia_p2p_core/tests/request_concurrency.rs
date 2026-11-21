@@ -6,6 +6,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -23,8 +25,8 @@ async fn wait_for_addr(host: &Host) -> String {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn fast_request_does_not_queue_behind_slow_request() {
-    let (server, server_id) = Host::new(HostConfig::default());
-    let (client, _client_id) = Host::new(HostConfig::default());
+    let (server, server_id) = support::host(HostConfig::default());
+    let (client, _client_id) = support::host(HostConfig::default());
 
     let server = Arc::new(server);
     let client = Arc::new(client);
@@ -81,8 +83,8 @@ async fn fast_request_does_not_queue_behind_slow_request() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn twenty_concurrent_requests_execute_quickly() {
-    let (server, server_id) = Host::new(HostConfig::default());
-    let (client, _client_id) = Host::new(HostConfig::default());
+    let (server, server_id) = support::host(HostConfig::default());
+    let (client, _client_id) = support::host(HostConfig::default());
 
     let server_addr = wait_for_addr(&server).await;
     client.dial(server_addr).await.expect("dial failed");

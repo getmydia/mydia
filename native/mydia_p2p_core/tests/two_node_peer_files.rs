@@ -5,8 +5,10 @@
     reason = "integration test crate"
 )]
 
+mod support;
+
 use mydia_p2p_core::{
-    Event, Host, HostConfig, MydiaRequest, MydiaResponse, PeerFilesRequest, PeerFilesResponse,
+    Event, HostConfig, MydiaRequest, MydiaResponse, PeerFilesRequest, PeerFilesResponse,
     WireSharedAccount,
 };
 use std::time::Duration;
@@ -25,8 +27,8 @@ fn test_config() -> HostConfig {
 #[tokio::test]
 async fn two_hosts_exchange_peer_files_manifest() {
     tokio::time::timeout(TEST_TIMEOUT, async {
-        let (responder, responder_id) = Host::new(test_config());
-        let (dialer, dialer_id) = Host::new(test_config());
+        let (responder, responder_id) = support::host(test_config());
+        let (dialer, dialer_id) = support::host(test_config());
 
         let responder_addr = {
             let mut rx = responder.event_rx.lock().await;
