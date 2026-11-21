@@ -68,7 +68,10 @@ mv player/pubspec.lock.json.tmp player/pubspec.lock.json
 for target in "${npm_deps_targets[@]}"; do
   read -r lockfile binding <<<"$target"
   echo "$binding.hash <- $lockfile"
-  npm_deps_hash_write "$binding" "$(npm_deps_hash "$lockfile")"
+  # A separate assignment, so set -e stops here when the prefetch fails
+  # instead of writing an empty hash.
+  computed="$(npm_deps_hash "$lockfile")"
+  npm_deps_hash_write "$binding" "$computed"
 done
 
 echo "devenv.lock nixpkgs <- flake.lock nixpkgs"

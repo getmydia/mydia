@@ -67,6 +67,13 @@ npm_deps_hash_pinned() {
 # Pin a new hash for a binding. Scoped to its fetchNpmDeps block so no other
 # `hash =` in the file can match.
 npm_deps_hash_write() {
+  case "$2" in
+    sha256-?*) ;;
+    *)
+      echo "refusing to pin '$2' as $1's hash: not a sha256- SRI hash" >&2
+      return 1
+      ;;
+  esac
   sed -i -E "$(_npm_deps_block "$1") s|hash = \"sha256-[^\"]+\";|hash = \"$2\";|" \
     "$npm_deps_flake_module"
 }
