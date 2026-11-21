@@ -98,8 +98,8 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   end
 
   # Mirrors MydiaWeb.SearchLive.StreamingTest's fixture of the same name: a
-  # real indexer whose HTTP call is parked behind a Bypass server that sleeps
-  # past the test's lifetime. Retrying an indexer starts a second real search
+  # real indexer whose HTTP call is parked behind a Bypass server until the
+  # test ends. Retrying an indexer starts a second real search
   # under the SAME search_id (by design), so a fast-resolving indexer (e.g. a
   # plain indexer_config_fixture hitting localhost:9696, which fails almost
   # instantly) can race the test's post-click assertion and legitimately
@@ -107,13 +107,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   # race entirely rather than narrowing it.
   defp pending_indexer_fixture(name) do
     bypass = Bypass.open()
-    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
-
-    Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
-      Bypass.pass(bypass)
-      Process.sleep(3_000)
-      Plug.Conn.resp(conn, 200, "[]")
-    end)
+    Mydia.IndexerMock.park_prowlarr_search(bypass)
 
     indexer_config_fixture(%{
       name: name,
@@ -277,8 +271,8 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   # spinner while `!@results_empty?` renders the list -- leaving the modal
   # body showing an empty list with no spinner and no message.
   #
-  # The indexer is parked behind a Bypass that sleeps past this test's
-  # lifetime, so neither on_indexer_result nor handle_search_async can land.
+  # The indexer is parked behind a Bypass that answers only once this test
+  # has ended, so neither on_indexer_result nor handle_search_async can land.
   test "a freshly opened manual search shows the spinner, not an empty list", %{conn: conn} do
     media_item = media_item_fixture(%{title: "Dune", type: "movie"})
     pending_indexer_fixture("slow-indexer")

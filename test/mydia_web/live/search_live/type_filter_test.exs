@@ -40,13 +40,7 @@ defmodule MydiaWeb.SearchLive.TypeFilterTest do
   # real search open, and synthetic progress delivers the results.
   defp pending_indexer do
     bypass = Bypass.open()
-    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
-
-    Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
-      Bypass.pass(bypass)
-      Process.sleep(3_000)
-      Plug.Conn.resp(conn, 200, "[]")
-    end)
+    Mydia.IndexerMock.park_prowlarr_search(bypass)
 
     indexer_config_fixture(%{
       name: "pending",
