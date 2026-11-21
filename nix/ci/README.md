@@ -163,8 +163,8 @@ does not carry.
 
 The NixOS module VM tests are checks, but `scripts/ci-plan.sh` lists them
 separately and ci.yml runs them outside the `Nix / Checks` verdict, on
-master pushes and manual dispatches only (`.github/ci.md`, "The NixOS
-module tests run on master only and block nothing").
+master pushes, manual dispatches and Dependabot PRs only (`.github/ci.md`,
+"The NixOS module tests skip human PRs and block nothing").
 
 ## ciInternal and the CI planner
 

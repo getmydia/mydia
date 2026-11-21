@@ -247,8 +247,8 @@ updates:
   # fixup closes both: when flake.lock's nixpkgs moves it runs `devenv update`,
   # then scripts/regenerate-derived.sh copies flake.lock's nixpkgs node into
   # devenv.lock, and check-generated-freshness.sh fails any tree where the two
-  # differ. The NixOS module tests in ci-nix.yml run on any PR that changes
-  # flake.lock, so a nixpkgs that breaks the package fails here, not on master.
+  # differ. ci.yml runs the NixOS module tests on Dependabot's PRs (and on no
+  # other PR), so a nixpkgs that breaks the package fails here, not on master.
   #
   # Version updates only: the nix ecosystem has no security updates. Inputs
   # track commits rather than versions, so there is no semver and no major to
