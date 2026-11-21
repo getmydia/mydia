@@ -83,7 +83,10 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/player-e2e-toolbox:buildcache,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true
 
   test-player-e2e:
-    name: Test / Player E2E
+    # Renamed from Test / Player E2E, which is now the aggregator in ci.yml
+    # over the Nix player-e2e VM test. Kept only to compare the two until
+    # this workflow is deleted.
+    name: Old / Player E2E
     runs-on: ubuntu-latest
     # Runaway guard only, not a performance mechanism: speed comes from the
     # pull-by-default design (prebuilt images pulled from the registry), not
