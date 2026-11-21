@@ -136,13 +136,24 @@ Two CI jobs cannot be checks and run as ordinary jobs in `devShells.ci`:
   origin/master`, which reads git history, and on master pushes the
   advisory `mix_unused` report. It substitutes
   `ciInternal.mydiaTestBuild-sqlite` instead of compiling:
-  `scripts/ci-test-build-workspace.sh` copies the build into the checkout
-  bind-mounted at `/build/source` (Mix records absolute paths), dates every
-  file to the epoch as the store does (so Mix sees nothing stale) and gives
-  `deps/heroicons` the `.git` the deps check reads. Mix then recompiles only
-  a handful of files.
+  `scripts/ci-restore-test-build.sh --mount` bind-mounts the checkout at
+  `/build/source` (Mix records absolute paths), copies the build into it,
+  dates every file to the epoch as the store does (so Mix sees nothing
+  stale) and gives `deps/heroicons` the `.git` the deps check reads. Mix
+  then recompiles only a handful of files.
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests, which need a
   root smbd; `rust-mydia_smb-test` skips them.
+
+`Test / E2E Browser (run)` restores the same build with the same script but
+runs in devenv, for chromium, chromedriver and node; devenv's Elixir and OTP
+are the same store paths as this shell's, and the job exports the build's
+`MYDIA_*` compile-time variables itself. It builds the assets the test build
+does not carry.
+
+The NixOS module VM tests are checks, but `scripts/ci-plan.sh` lists them
+separately and ci.yml runs them outside the `Nix / Checks` verdict
+(`.github/ci.md`, "The NixOS module tests run on every PR but block
+nothing").
 
 ## ciInternal and the CI planner
 

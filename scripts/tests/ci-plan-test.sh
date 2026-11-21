@@ -41,7 +41,7 @@ expect_json() {
 }
 
 # The build matrices alone; `all` has its own case.
-matrices() { jq -c '{inputs, checks}' <<<"$1" 2>/dev/null || printf '%s' "$1"; }
+matrices() { jq -c '{inputs, checks, nixos}' <<<"$1" 2>/dev/null || printf '%s' "$1"; }
 
 # Store paths are fixture names, never real outputs.
 drv() { printf '/nix/store/%032d-%s.drv' 0 "$1"; }
@@ -87,7 +87,7 @@ write_internal
 : > "$STUB_LOG"
 out="$("$SCRIPT")" || note_failure "one uncached check: exited non-zero"
 expect_json "one uncached check" \
-  '{"inputs":[],"checks":[{"name":"elixir-format","attr":"checks.x86_64-linux.elixir-format","group":"lint"}]}' \
+  '{"inputs":[],"checks":[{"name":"elixir-format","attr":"checks.x86_64-linux.elixir-format","group":"lint"}],"nixos":[]}' \
   "$(matrices "$out")"
 grep -q -- '--flake \.#checks\.x86_64-linux ' "$STUB_LOG" || note_failure "checks not evaluated from .#checks.x86_64-linux"
 grep -q -- '--check-cache-status' "$STUB_LOG" || note_failure "--check-cache-status not passed"
@@ -96,6 +96,8 @@ grep -q -- '--force-recurse' "$STUB_LOG" || note_failure "--force-recurse not pa
 # 2. Shared inputs: a ciInternal derivation that 2+ uncached checks still need
 #    is an input, named by its first alias; one needed by a single check, or a
 #    shared derivation outside ciInternal, is not. "local" is not "cached".
+#    The nixos group goes to its own list (outside the Nix / Checks verdict),
+#    and its needs still count toward inputs (dialyzer-plt here).
 {
   job test-sqlite-1 notBuilt test-sqlite-1 mydia-test-build-sqlite mix-deps-compiled some-shared-tool
   job test-sqlite-2 notBuilt test-sqlite-2 mydia-test-build-sqlite mix-deps-compiled some-shared-tool
@@ -104,24 +106,28 @@ grep -q -- '--force-recurse' "$STUB_LOG" || note_failure "--force-recurse not pa
   job rust-server-test local
   job rust-mydia_subsync-test cached
   job relay-test notBuilt relay-test
-  job nixos-module notBuilt nixos-module
+  job nixos-module notBuilt nixos-module dialyzer-plt
+  job nixos-module-postgres cached
   job zz-unknown notBuilt zz-unknown
 } > "$FIXTURES/checks.jsonl"
 out="$("$SCRIPT")" || note_failure "shared inputs: exited non-zero"
 expect_json "shared inputs" '{
   "inputs": [
+    {"name":"dialyzer-plt","attr":"ciInternal.dialyzer-plt","group":"other"},
     {"name":"mixDepsCompiled-postgres","attr":"ciInternal.mixDepsCompiled-postgres","group":"other"},
     {"name":"mydiaTestBuild-sqlite","attr":"ciInternal.mydiaTestBuild-sqlite","group":"other"}
   ],
   "checks": [
     {"name":"dialyzer","attr":"checks.x86_64-linux.dialyzer","group":"lint"},
-    {"name":"nixos-module","attr":"checks.x86_64-linux.nixos-module","group":"nixos"},
     {"name":"relay-test","attr":"checks.x86_64-linux.relay-test","group":"relay"},
     {"name":"rust-server-test","attr":"checks.x86_64-linux.rust-server-test","group":"server"},
     {"name":"test-postgres-1","attr":"checks.x86_64-linux.test-postgres-1","group":"postgres"},
     {"name":"test-sqlite-1","attr":"checks.x86_64-linux.test-sqlite-1","group":"sqlite"},
     {"name":"test-sqlite-2","attr":"checks.x86_64-linux.test-sqlite-2","group":"sqlite"},
     {"name":"zz-unknown","attr":"checks.x86_64-linux.zz-unknown","group":"other"}
+  ],
+  "nixos": [
+    {"name":"nixos-module","attr":"checks.x86_64-linux.nixos-module","group":"nixos"}
   ]
 }' "$(matrices "$out")"
 
@@ -133,7 +139,7 @@ expect_json "shared inputs" '{
   job test-sqlite-1 cached
 } > "$FIXTURES/checks.jsonl"
 out="$("$SCRIPT")" || note_failure "all cached: exited non-zero"
-grep -q '"inputs":\[\],"checks":\[\],' <<<"$out" || note_failure "all cached: got '$out', wanted compact empty matrices"
+grep -q '"inputs":\[\],"checks":\[\],"nixos":\[\],' <<<"$out" || note_failure "all cached: got '$out', wanted compact empty matrices"
 expect_json "all for pins" "$(jq -cn --arg o "$(outp '')" '[
   {name: "dialyzer-plt", out: "\($o)dialyzer-plt"},
   {name: "elixir-format", out: "\($o)elixir-format"},
@@ -173,7 +179,7 @@ write_internal
 out="$("$SCRIPT")" || note_failure "groups: exited non-zero"
 expect_json "groups" \
   '{"ci-fileset-coverage":"lint","elixir-lint":"lint","nixos-module-postgres":"nixos","rust-mydia_p2p-clippy":"rust","rust-p2p-core-wasm":"rust","rust-plugins":"rust","rust-server-fmt":"server","test-postgres-2":"postgres","test-sqlite-3":"sqlite"}' \
-  "$(jq -c '.checks | map({(.name): .group}) | add' <<<"$out")"
+  "$(jq -c '.checks + .nixos | map({(.name): .group}) | add' <<<"$out")"
 
 # 5. An evaluation error fails the plan and names the attribute.
 {

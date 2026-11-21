@@ -5,7 +5,8 @@ description: >-
 
 # There is no Mix, cargo or PLT cache here any more: the backend checks are
 # flake checks cached in niks3 (.github/ci.md, "ci.yml: the flake-check
-# graph"), and the E2E job compiles from scratch.
+# graph"), and the E2E job restores the cached test build from there
+# (scripts/ci-restore-test-build.sh).
 inputs:
   cachix-auth-token:
     description: CACHIX_AUTH_TOKEN. Composite actions cannot read secrets, so callers pass it.
@@ -13,6 +14,11 @@ inputs:
   skip-push:
     description: "'true' to only read from Cachix (fork PRs)."
     default: 'true'
+  push-filter:
+    description: >-
+      Regular expression of store paths never to push to Cachix, for paths
+      that came from elsewhere (the E2E job's test build, from niks3).
+    default: ''
 
 runs:
   using: composite
@@ -33,6 +39,7 @@ runs:
         authToken: ${{ inputs.cachix-auth-token }}
         extraPullNames: devenv
         skipPush: ${{ inputs.skip-push }}
+        pushFilter: ${{ inputs.push-filter }}
 
     # The devenv CLI comes from the nixpkgs flake.lock pins, which
     # check-generated-freshness.sh holds equal to devenv.lock's, so a

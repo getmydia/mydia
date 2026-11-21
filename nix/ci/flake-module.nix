@@ -69,7 +69,7 @@
       # and the checks' Mix environment (MIX_ENV=test, Hex offline from the
       # store, MYDIA_PREBUILT_NIFS/PLUGINS), so Mix accepts a copy of
       # ciInternal.mydiaTestBuild-sqlite as up to date. See
-      # scripts/ci-test-build-workspace.sh.
+      # scripts/ci-restore-test-build.sh.
       devShells.ci = pkgs.mkShell {
         packages = [
           beamPackages.erlang

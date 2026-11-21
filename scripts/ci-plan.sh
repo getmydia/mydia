@@ -9,7 +9,7 @@
 # Output (stdout, one compact line):
 #
 #   {"inputs":[{"name","attr","group"}...],"checks":[{"name","attr","group"}...],
-#    "all":[{"name","out"}...]}
+#    "nixos":[{"name","attr","group"}...],"all":[{"name","out"}...]}
 #
 # `attr` is what the workflow passes to `nix build .#<attr>`.
 #
@@ -23,7 +23,15 @@
 #   reports "cached" (in a configured substituter), "local" (in this store
 #   only) or "notBuilt". "local" is kept on purpose: on a fresh runner it
 #   means the cache lacks the path, and building it is a no-op that lets the
-#   build job push it.
+#   build job push it. The `nixos` group (the NixOS module VM tests) is not
+#   in this list: see nixos.
+#
+# nixos: the uncached checks of the `nixos` group, selected the same way.
+#   The workflow builds them in their own matrix, which the `Nix / Checks`
+#   verdict does not include: the package they boot is built from the whole
+#   repo (src = ../..), so they rerun on nearly every commit, and a QEMU boot
+#   is the slowest and flakiest build in the set. Their needs still count
+#   toward `inputs`.
 #
 # inputs: the `ciInternal` derivations (compiled deps, test builds, the
 #   Dialyzer PLT, NIFs, plugin wasm, ...) that two or more of those checks
@@ -101,10 +109,12 @@ jq -c -n --arg system "$system" \
       | group_by(.)
       | map(select(length >= 2) | $nameOf[first])
       | sort) as $inputs
+  | ($uncached | map(.attr) | sort
+      | map({name: ., attr: "checks.\($system).\(.)", group: group})) as $built
   | {
       inputs: ($inputs | map({name: ., attr: "ciInternal.\(.)", group: group})),
-      checks: ($uncached | map(.attr) | sort
-                | map({name: ., attr: "checks.\($system).\(.)", group: group})),
+      checks: ($built | map(select(.group != "nixos"))),
+      nixos: ($built | map(select(.group == "nixos"))),
       all: ($checks + $internal
               | map({name: .attr, out: out_path} | select(.out))
               | sort_by(.name))

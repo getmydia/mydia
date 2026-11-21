@@ -7,7 +7,8 @@ name: CI
 #   plan          nix-eval-jobs --check-cache-status: which checks the cache lacks
 #   inputs        ciInternal derivations two or more of those checks need, built once
 #   checks        one job per uncached check; inputs come from the cache by now
-#   Nix / Checks  the aggregator of the three above
+#   nixos         the NixOS module VM tests, the same way but non-blocking
+#   Nix / Checks  the aggregator of plan, inputs and checks
 #   pins          master only: refresh the master-<name> pin of every output
 #
 # A run where nothing changed what the checks read plans two empty matrices,
@@ -88,6 +89,7 @@ jobs:
     outputs:
       inputs: ${{ steps.plan.outputs.inputs }}
       checks: ${{ steps.plan.outputs.checks }}
+      nixos: ${{ steps.plan.outputs.nixos }}
       all: ${{ steps.plan.outputs.all }}
     steps:
       - name: Checkout
@@ -118,17 +120,19 @@ jobs:
           {
             echo "inputs=$(jq -c .inputs "$plan")"
             echo "checks=$(jq -c .checks "$plan")"
+            echo "nixos=$(jq -c .nixos "$plan")"
             echo "all=$(jq -c .all "$plan")"
           } >> "$GITHUB_OUTPUT"
 
           {
             echo "### Nix plan"
             echo
-            echo "$(jq '.inputs | length' "$plan") inputs and $(jq '.checks | length' "$plan") checks to build; everything else is cached."
+            echo "$(jq '.inputs | length' "$plan") inputs, $(jq '.checks | length' "$plan") checks and $(jq '.nixos | length' "$plan") NixOS VM tests (non-blocking) to build; everything else is cached."
             echo
             jq -r '
               (.inputs | map("- input `\(.name)`")),
-              (.checks | map("- `\(.name)` (\(.group))"))
+              (.checks | map("- `\(.name)` (\(.group))")),
+              (.nixos | map("- `\(.name)` (nixos, non-blocking)"))
               | .[]' "$plan"
           } >> "$GITHUB_STEP_SUMMARY"
           jq 'del(.all)' "$plan"
@@ -201,9 +205,49 @@ jobs:
         with:
           pin: master-${{ matrix.name }}
 
+      - name: Build
+        env:
+          ATTR: ${{ matrix.attr }}
+        run: ./scripts/ci-nix-build.sh "$ATTR" "$RUNNER_TEMP/out-paths"
+
+      - name: Push to the cache
+        run: |
+          mapfile -t paths < "$RUNNER_TEMP/out-paths"
+          "$NIX_CI_PUSH" "${paths[@]}"
+
+  # The NixOS module VM tests (nixos-module, nixos-module-postgres): same
+  # build and push as `checks`, but outside the Nix / Checks verdict, so they
+  # block nothing. The package they boot takes the whole repo as its source
+  # (src = ../..), so they rerun on nearly every commit, and a QEMU boot on a
+  # shared runner is the slowest and flakiest build in the set. They still
+  # run on every PR and show their own result; a red one is worth a look
+  # before merge. Master pins include them.
+  nixos:
+    name: Nix / NixOS (${{ matrix.name }})
+    needs: [plan, inputs]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.nixos != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.nixos) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+        with:
+          pin: master-${{ matrix.name }}
+
       # The NixOS module tests boot a QEMU VM.
       - name: Enable KVM access
-        if: matrix.group == 'nixos'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -227,7 +271,8 @@ jobs:
     timeout-minutes: 5
     steps:
       # A skipped build job means an empty matrix (everything was cached) or,
-      # for inputs, a run that cannot push. Pins are not part of the verdict.
+      # for inputs, a run that cannot push. Pins and the NixOS VM tests are
+      # not part of the verdict.
       - name: Assert every planned build succeeded
         env:
           PLAN: ${{ needs.plan.result }}
@@ -256,7 +301,7 @@ jobs:
   # warns, never fails the run, and the aggregators ignore it.
   pins:
     name: Nix / Pins
-    needs: [plan, inputs, checks]
+    needs: [plan, inputs, checks, nixos]
     if: always() && needs.plan.result == 'success' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -283,7 +328,7 @@ jobs:
   # Blocks new complexity, nesting and module-size debt relative to the merge
   # base (see "Ratchets" in CONTRIBUTING.md). It reads git history, so it is
   # a job rather than a check, but it compiles nothing: it lays the cached
-  # test build over the checkout (scripts/ci-test-build-workspace.sh, which
+  # test build over the checkout (scripts/ci-restore-test-build.sh, which
   # needs the checkout at /build/source). It waits for the inputs wave,
   # which builds and pushes that test build when the run changed it.
   ratchet:
@@ -306,14 +351,9 @@ jobs:
           push: 'false'
           free-disk: 'false'
 
-      - name: Mount the checkout at /build/source
-        run: |
-          sudo mkdir -p /build/source
-          sudo mount --bind "$GITHUB_WORKSPACE" /build/source
-
-      - name: Lay the cached test build over the checkout
-        working-directory: /build/source
-        run: scripts/ci-test-build-workspace.sh
+      # Bind-mounts the checkout at /build/source; later steps run there.
+      - name: Restore the cached test build
+        run: scripts/ci-restore-test-build.sh --mount
 
       - name: Ratchet
         working-directory: /build/source
@@ -362,13 +402,24 @@ jobs:
           nix develop .#ci -c cargo test --features test-introspection --manifest-path player/rust/mydia_smb/Cargo.toml
 
   # The browser tests stay a devenv job: chromium and chromedriver come from
-  # devenv.nix (CHROME_PATH / CHROMEDRIVER_PATH). It compiles from scratch;
-  # there is no Actions cache.
+  # devenv.nix (CHROME_PATH / CHROMEDRIVER_PATH), and so do node and the
+  # asset tooling. The compiled app is not built here: like the ratchet, the
+  # job restores the cached SQLite test build (scripts/ci-restore-test-build.sh)
+  # and runs devenv from /build/source. devenv's Elixir and OTP are the
+  # checks' own (both resolve beam-version.nix on flake.lock's nixpkgs), so
+  # with the build's compile-time variables exported Mix finds nothing to
+  # compile. What the test build lacks, assets and node_modules, is built
+  # here. It waits for the inputs wave, which pushes that test build when
+  # the run changed it, and runs even when the plan failed (the restore then
+  # builds the test build itself), so this required check never skips.
   test-e2e:
     name: Test / E2E Browser (run)
+    needs: [plan, inputs]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     env:
       MIX_ENV: test
+      # Only used if Mix does recompile the deps (a toolchain mismatch):
       # Wasmex carries a local patch in its Rust half (patches/wasmex), so it
       # is built from source instead of downloading its precompiled NIF.
       WASMEX_BUILD: "1"
@@ -376,25 +427,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
 
+      # The restored test build comes from niks3; keep it out of Cachix.
       - name: Set up devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          push-filter: mydia-test-build
+
+      # Bind-mounts the checkout at /build/source; later steps run there.
+      - name: Restore the cached test build
+        run: scripts/ci-restore-test-build.sh --mount
 
       # GitHub sets CI=true, which makes devenv.nix skip its enterShell setup
-      # tasks, so the heredoc runs the equivalent setup (hex/rebar/deps)
-      # itself, in one `devenv shell` so the environment evaluates once.
-      # run-feature-tests.sh finds chromium on PATH and honors
-      # CHROMEDRIVER_PATH, so no separate Chrome action is needed.
+      # tasks, so the heredoc runs the equivalent setup (hex/rebar) itself, in
+      # one `devenv shell` so the environment evaluates once. No
+      # `mix deps.get`: deps/ came with the test build. The MYDIA_* variables
+      # are the test build's compile-time config (nix/ci/elixir.nix); a
+      # different value would recompile the app. run-feature-tests.sh finds
+      # chromium on PATH and honors CHROMEDRIVER_PATH, so no separate Chrome
+      # action is needed.
       - name: Feature tests (E2E) under devenv
+        working-directory: /build/source
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
           export MIX_ENV=test
+          export MYDIA_PREBUILT_NIFS=1 MYDIA_PREBUILT_PLUGINS=1 MYDIA_SKIP_CARDIGANN_FETCH=1
+          unset DATABASE_TYPE
           ./scripts/ci-mix-bootstrap.sh
-          mix deps.get
           mix compile
           npm ci --prefix assets
           mix assets.deploy

@@ -10,21 +10,28 @@ here silently replaces the project's front page with this document. It did, from
 46cbdfdb0 until it was noticed. Any new doc in this directory needs a name other
 than `README.md`.
 
-## The NixOS module tests are flake checks
+## The NixOS module tests run on every PR but block nothing
 
 `nixos-module` and `nixos-module-postgres` (`nix/checks/flake-module.nix`) boot
-the package in a QEMU VM. They are ordinary entries in ci.yml's check matrix
-(below), not gated on `flake.lock` any more, and they build
-`packages.default` and `packages.postgres` as inputs
-(`ciInternal.package-default`, `ciInternal.package-postgres`), which is why
-there is no separate `Build / Packages` job. The packages take `src = ../..`,
-so unlike the other checks these two rerun, package build included, on
-almost every commit.
+the package in a QEMU VM. They are flake checks, no longer gated on
+`flake.lock`, and they build `packages.default` and `packages.postgres` as
+inputs (`ciInternal.package-default`, `ciInternal.package-postgres`), which
+is why there is no separate `Build / Packages` job.
 
-A green PR therefore does say the package builds and the module boots. For a
-`.nix` change still build the affected checks locally before pushing
-(`nix build .#checks.x86_64-linux.<name> -L`), since the VM tests are the
-slowest legs of the matrix.
+`scripts/ci-plan.sh` lists them apart from the other checks, and ci.yml
+builds them in their own matrix job, `Nix / NixOS (<name>)`, which
+`Nix / Checks` does not include, so they are not part of `Test` or
+`Test / PostgreSQL`. Two reasons: the packages take `src = ../..`, so unlike
+every other check these two rerun, package build included, on almost every
+commit; and a QEMU boot on a shared runner is the slowest and flakiest build
+in the set. Gating every merge on them would make a VM hiccup a merge
+blocker. They still run on every PR and report their own result, and master
+pins include them.
+
+So a red `Nix / NixOS` is a real signal nobody is forced to read. Look at it
+before merging any `.nix`, `flake.lock` or packaging change, and for such a
+change build the affected checks locally first
+(`nix build .#checks.x86_64-linux.<name> -L`).
 
 ## npmDeps.hash must move with package-lock.json
 
@@ -529,8 +536,12 @@ The jobs, in order:
   It is skipped when the run cannot push (a fork PR, Dependabot).
 - `Nix / <check>` is one job per uncached check: `scripts/ci-nix-build.sh`,
   then a push of the output.
-- `Nix / Checks` aggregates the three: success when the plan succeeded and
-  each build job succeeded or was skipped (an empty matrix).
+- `Nix / NixOS (<name>)` builds the uncached NixOS module VM tests the same
+  way, outside the verdict (see "The NixOS module tests run on every PR but
+  block nothing").
+- `Nix / Checks` aggregates plan, inputs and checks: success when the plan
+  succeeded and each of the two build jobs succeeded or was skipped (an
+  empty matrix).
 - `Nix / Pins` runs on master only and pins every check and `ciInternal`
   output as `master-<name>` (below). It never fails the run.
 
@@ -580,7 +591,7 @@ pushes chosen attributes by hand.
 ### niks3
 
 CI pushes through niks3 at `niks3.mydia.dev` with a GitHub OIDC token, so
-only `Nix / Input`, `Nix / <check>` and `Nix / Pins` hold
+only `Nix / Input`, `Nix / <check>`, `Nix / NixOS` and `Nix / Pins` hold
 `id-token: write`. A push that fails three times warns and never fails the
 job. niks3 garbage-collects unpinned paths after 14 days; PR runs push
 without a pin, and `Nix / Pins` refreshes the `master-<name>` pins on every
@@ -600,16 +611,28 @@ the signing key and health checks are in
 - `Lint / Ratchet` runs `mix mydia.ratchet --from-git-merge-base
   origin/master`, which reads git history, and on master pushes the advisory
   `mix_unused` report. It compiles nothing:
-  `scripts/ci-test-build-workspace.sh` lays the cached
-  `ciInternal.mydiaTestBuild-sqlite` over the checkout, bind-mounted at
-  `/build/source` because Mix records absolute paths, with every file dated
-  to the epoch, and the job runs Mix in `nix develop .#ci`
-  (`nix/ci/README.md`, "Outside the sandbox").
+  `scripts/ci-restore-test-build.sh --mount` bind-mounts the checkout at
+  `/build/source` (Mix records absolute paths) and lays the cached
+  `ciInternal.mydiaTestBuild-sqlite` over it with every file dated to the
+  epoch, and the job runs Mix in `nix develop .#ci` (`nix/ci/README.md`,
+  "Outside the sandbox").
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests (above).
 - `Test / E2E Browser (run)` is still a devenv job
   (`.github/actions/setup-devenv`, which installs Nix, Cachix and devenv and
-  caches nothing): chromium and chromedriver come from `devenv.nix`. It
-  compiles from scratch.
+  caches nothing): chromium, chromedriver and node come from `devenv.nix`.
+  It restores the same test build with the same script and runs devenv from
+  `/build/source`, exporting the build's compile-time variables
+  (`MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1`,
+  `MYDIA_SKIP_CARDIGANN_FETCH=1`, no `DATABASE_TYPE`). devenv's Elixir and
+  OTP are the same store paths as the checks' (both resolve
+  `beam-version.nix` on flake.lock's nixpkgs), so `mix compile` touches only
+  a handful of files. What the test build does not carry, it builds itself:
+  `npm ci --prefix assets` and `mix assets.deploy`. It skips `mix deps.get`
+  (deps/ comes with the build), keeps the build out of Cachix
+  (`push-filter: mydia-test-build`), and runs even when the plan failed, so
+  the required check never skips; the restore then builds the test build
+  itself. Should devenv's BEAM ever drift from the checks', Mix recompiles
+  everything and the job is merely slow again.
 
 `ci-player.yml` has a `player_translations` fast path when only
 non-template `player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change
@@ -648,7 +671,8 @@ the Master ruleset, and they sit on three aggregator jobs (`test`,
 `Test / PostgreSQL` needs `Nix / Checks`; `Test / E2E Browser` needs the E2E
 job. A matrix leg's result is not addressable through `needs`, so both of the
 first two gate on the whole check matrix: a failing Rust check also reds
-`Test / PostgreSQL`. Each has `if: always()` and a step that fails unless
+`Test / PostgreSQL`. The NixOS VM tests are not in that matrix and gate
+neither. Each has `if: always()` and a step that fails unless
 every job it needs concluded `success` or `skipped`, so the aggregator itself
 concludes success or failure and never `skipped`. The real E2E job is named
 `Test / E2E Browser (run)` for that reason, and its screenshot artifact hangs
