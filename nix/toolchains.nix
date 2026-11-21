@@ -30,5 +30,16 @@ let
   rustToolchain = rustPkgs.rust-bin.stable.latest.minimal.override {
     targets = [ "wasm32-wasip2" ];
   };
+
+  # The CI checks' toolchain: the version rust-toolchain.toml pins (the one
+  # devenv, and so the pre-commit hooks and the old CI jobs, used), with fmt
+  # and clippy, and wasm32-unknown-unknown for the p2p core's browser build.
+  # Never name a Rust version here; the channel is read from the file.
+  rustChannel =
+    (builtins.fromTOML (builtins.readFile ../rust-toolchain.toml)).toolchain.channel;
+  rustToolchainCi = rustPkgs.rust-bin.stable.${rustChannel}.minimal.override {
+    extensions = [ "clippy" "rustfmt" ];
+    targets = [ "wasm32-wasip2" "wasm32-unknown-unknown" ];
+  };
 in
-{ inherit beamPin beamPackages rustToolchain; }
+{ inherit beamPin beamPackages rustToolchain rustToolchainCi; }

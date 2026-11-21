@@ -14,6 +14,11 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
 - `sources.nix`: the `lib.fileset` source sets (`elixirApp`, `elixirTest`,
   `gettext`, `patches`, `nativeCrate`, `plugins`, `server`, `relay`) and the
   `toSource` helper.
+- `rust.nix`: `rust-<crate>-{fmt,clippy,test}` for every crate under
+  `native/` (minus `cardigann_guest`), `player/rust/` and `server/`, plus
+  `rust-p2p-core-wasm` and `rust-plugins`; and the `ciInternal` NIFs
+  (`nifs-mydia_p2p`, `nifs-mydia_subsync`) and `pluginWasm`. Its crate list
+  mirrors `scripts/check-rust.sh`.
 - `../toolchains.nix`: `beamPackages` and `rustToolchain`, shared with
   `nix/packages` so the package and the checks use the same pins.
 

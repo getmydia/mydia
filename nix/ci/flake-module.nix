@@ -7,18 +7,40 @@
 #                                        builds, NIFs, plugin wasm), built
 #                                        with `nix build .#ciInternal.<name>`
 #   legacyPackages.<system>.ciRustAttrs  list of Rust check attribute names
-{ inputs, lib, ... }:
+#
+# The per-check files set the perSystem options `ciInternal` and
+# `ciRustAttrs`, which merge across modules (legacyPackages itself does not).
+{ inputs, lib, flake-parts-lib, ... }:
 
 {
-  perSystem = { pkgs, system, config, ... }:
+  imports = [ ./rust.nix ];
+
+  options.perSystem = flake-parts-lib.mkPerSystemOption {
+    options = {
+      ciInternal = lib.mkOption {
+        type = lib.types.lazyAttrsOf lib.types.package;
+        default = { };
+        description = "Internal CI derivations, exposed as legacyPackages.ciInternal.";
+      };
+      ciRustAttrs = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Names of the Rust checks, exposed as legacyPackages.ciRustAttrs.";
+      };
+    };
+  };
+
+  config.perSystem = { pkgs, system, config, ... }:
     let
       toolchains = import ../toolchains.nix { inherit inputs pkgs system; };
-      inherit (toolchains) beamPackages rustToolchain;
+      inherit (toolchains) beamPackages rustToolchain rustToolchainCi;
 
       root = ../..;
       sources = import ./sources.nix { inherit lib root; };
 
-      craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
+      # The checks lint and test on the rust-toolchain.toml version, with fmt
+      # and clippy, rather than on the package's toolchain (nix/toolchains.nix).
+      craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchainCi;
 
       # Directories whose tracked files must belong to a source file set.
       codeDirs = [ "lib" "config" "priv" "test" "native" "plugins" "server" "metadata-relay" ];
@@ -35,8 +57,7 @@
       _module.args.ci = { inherit sources rustToolchain beamPackages craneLib; };
 
       legacyPackages = {
-        ciInternal = { };
-        ciRustAttrs = [ ];
+        inherit (config) ciInternal ciRustAttrs;
       };
 
       checks.ci-fileset-coverage = pkgs.runCommand "ci-fileset-coverage"

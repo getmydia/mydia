@@ -12,9 +12,12 @@ let
   # Tolerates paths absent from a dirty checkout (build output, empty dirs).
   maybe = path: fs.maybeMissing (at path);
 
+  # clippy.toml is read by clippy for every crate (it walks up from the
+  # manifest), so a crate's set needs it for the lint run to match.
   toolchainFiles = fs.unions [
     (at "rust-toolchain.toml")
     (at "rust-lints.toml")
+    (at "clippy.toml")
   ];
 
   elixirApp = fs.difference
@@ -39,12 +42,29 @@ let
 
   patches = at "patches";
 
-  # A NIF or guest crate directory under native/. The p2p NIF also needs the
-  # shared core crate it path-depends on.
-  nativeCrate = name: fs.unions ([
-    (at "native/${name}")
+  # Crate directories each crate path-depends on (its Cargo.toml `path =`
+  # entries), so a crate's set holds everything cargo resolves.
+  cratePathDeps = {
+    "native/mydia_p2p" = [ "native/mydia_p2p_core" ];
+    "native/mydia_plugin_sdk" = [ "native/mydia_plugin_macros" ];
+    "player/rust/mydia_player_p2p" = [
+      "native/mydia_media_names"
+      "native/mydia_p2p_core"
+      "player/rust/mydia_smb"
+    ];
+  };
+
+  crateAt = dir: fs.unions ([
+    (at dir)
     toolchainFiles
-  ] ++ lib.optionals (name == "mydia_p2p") [ (at "native/mydia_p2p_core") ]);
+  ] ++ map at (cratePathDeps.${dir} or [ ]));
+
+  # A NIF or guest crate directory under native/, with its path deps.
+  nativeCrate = name: crateAt "native/${name}";
+
+  # A player crate under player/rust/ (outside the coverage check's code
+  # directories, but linted and tested by the Rust checks).
+  playerCrate = name: crateAt "player/rust/${name}";
 
   # Plugin guests path-depend on the plugin SDK and its proc-macro crate.
   plugins = fs.unions [
@@ -54,10 +74,18 @@ let
     toolchainFiles
   ];
 
-  # The server workspace path-depends on native/mydia_media_names.
+  # The out-of-tree plugins scripts/check-plugins.sh and scripts/test-plugins.sh
+  # also cover. Not bundled, so not part of `plugins`.
+  pluginsExtra = at "plugins-extra";
+
+  # The server workspace path-depends on native/mydia_media_names, and its
+  # contract tests read the player's GraphQL documents (schema.graphql there
+  # is a symlink to priv/graphql/schema.graphql).
   server = fs.unions [
     (at "server")
     (at "native/mydia_media_names")
+    (at "player/lib/graphql")
+    (at "priv/graphql/schema.graphql")
     toolchainFiles
   ];
 
@@ -73,8 +101,8 @@ let
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir (at "native")));
 in
 {
-  inherit elixirApp elixirTest gettext patches nativeCrate plugins server relay
-    toSource nativeCrateNames;
+  inherit elixirApp elixirTest gettext patches nativeCrate playerCrate plugins
+    pluginsExtra server relay toSource nativeCrateNames;
 
   # Union of everything above, for the coverage check.
   all = fs.unions ([

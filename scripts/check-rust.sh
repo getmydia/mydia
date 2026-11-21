@@ -5,7 +5,9 @@ set -uo pipefail
 # and cargo clippy --all-targets -D warnings.
 #
 # Crates are discovered by glob, so a new crate is gated by the pre-commit hook
-# and the CI Rust job (both run this script) without editing a list.
+# without editing a list. CI runs the same fmt/clippy/test commands as Nix
+# checks, and their crate list is mirrored in nix/ci/rust.nix: a new crate
+# needs an entry there too (the ci-crate-list check enforces it).
 #
 # Usage: scripts/check-rust.sh [--fix]
 #   (default) cargo fmt --check + cargo clippy -D warnings
