@@ -85,15 +85,10 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   (`ciInternal.relayDepsCompiled`), with the same freshness assertion as
   the app's, and it builds on the BEAM pair pinned by
   `metadata-relay/.elixir-version` and `.otp-version`.
-  Those pins (Elixir 1.18, OTP 27) lag the relay's `Dockerfile`, which
-  builds on Elixir 1.20 / OTP 29, on purpose for now. On 1.20/29 the check
-  ran all 553 tests green, but `mix test --warnings-as-errors` then
-  aborted on a warning 1.18 does not emit: a type warning at
-  `test/metadata_relay/pairing_test.exs:30` (`assert claim.expires_at !=
-  nil`, a `%DateTime{}` compared with `nil`). 1.20 also prints a
-  `:test_load_filters` warning for the `.ex` helpers in `test/support/`.
-  Fix those in `metadata-relay/`, then move both pin files to the
-  Dockerfile's pair (nixpkgs has it: the app builds on it).
+  Those pins name the relay `Dockerfile`'s pair (Elixir 1.20, OTP 29), so
+  the check tests what ships. Move them together with the Dockerfile's
+  base tag. They are outside `scripts/check-beam-pin.sh`'s scope, so
+  nothing enforces that.
 - `guards.nix`: `guards`, the repository guards that only read files (the
   Rust toolchain pin, the Rust lint tables, the Docker build-identity
   placement, the pre-migration backup task and devenv shell-entry purity),

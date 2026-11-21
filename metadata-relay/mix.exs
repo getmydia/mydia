@@ -10,7 +10,10 @@ defmodule MetadataRelay.MixProject do
       deps: deps(),
       aliases: aliases(),
       releases: releases(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      # The helpers test_helper.exs requires, not tests: Elixir 1.19+ warns
+      # about any .ex under test/ that no filter claims.
+      test_ignore_filters: [&String.starts_with?(&1, "test/support/")]
     ]
   end
 
