@@ -6248,5 +6248,123 @@
     "googleSignInBrowserStateMismatch": "Овај линк за пријаву није онај који је Mydia отворила.",
     "@googleSignInBrowserStateMismatch": {
         "description": "Shown in the system browser tab when a Google sign-in redirect does not match the active request."
+    },
+    "settingsAutoSkipCommercialsTitle": "Прескочи рекламе",
+    "@settingsAutoSkipCommercialsTitle": {
+        "description": "Switch that skips commercial breaks marked in a recording automatically during playback."
+    },
+    "settingsAutoSkipCommercialsSubtitle": "Уколико је искључено, приказује се дугме за прескакање",
+    "@settingsAutoSkipCommercialsSubtitle": {
+        "description": "Subtitle of the skip commercials switch: when it is off, the player shows a button to skip instead."
+    },
+    "settingsDiagnosticsLegacyVideoOutput": "Користи наслеђени видео излаз",
+    "@settingsDiagnosticsLegacyVideoOutput": {
+        "description": "Switch in Diagnostics, macOS only. Turns off the HDR-capable video output and plays through the older texture output instead."
+    },
+    "settingsDiagnosticsLegacyVideoOutputHint": "Укључи ако видео изгледа погрешно или се не покреће",
+    "@settingsDiagnosticsLegacyVideoOutputHint": {
+        "description": "Subtitle of the legacy video output switch."
+    },
+    "settingsDiagnosticsVideoOutput": "Видео излаз: {output}",
+    "@settingsDiagnosticsVideoOutput": {
+        "description": "Diagnostics line naming the video output macOS is using. The output is a technical name and is not translated.",
+        "placeholders": {
+            "output": {
+                "type": "String"
+            }
+        }
+    },
+    "settingsDiagnosticsVideoOutputFallback": "Видео излаз: {output} (забележена резервна опција)",
+    "@settingsDiagnosticsVideoOutputFallback": {
+        "description": "Video output line when the HDR-capable output failed to start on this version and the texture output is used instead. The output is a technical name.",
+        "placeholders": {
+            "output": {
+                "type": "String"
+            }
+        }
+    },
+    "statsRowHdr": "HDR",
+    "@statsRowHdr": {
+        "description": "Label of the stats panel row naming the source's HDR format and who maps it down to the display's range."
+    },
+    "statsHdrByPlayer": "{format}, мапирање тонова обавља плејер",
+    "@statsHdrByPlayer": {
+        "description": "Value of the stats panel HDR row when this app converts the HDR picture to the display's range. {format} is the format name, for example HDR10.",
+        "placeholders": {
+            "format": {
+                "type": "String"
+            }
+        }
+    },
+    "statsHdrByServer": "{format}, мапирање тонова обавља сервер",
+    "@statsHdrByServer": {
+        "description": "Value of the stats panel HDR row when the server converts the HDR picture before sending it. {format} is the format name, for example HDR10.",
+        "placeholders": {
+            "format": {
+                "type": "String"
+            }
+        }
+    },
+    "statsHdrByPlayerLibplacebo": "{format}, мапирање тонова обавља плејер (libplacebo)",
+    "@statsHdrByPlayerLibplacebo": {
+        "description": "Value of the stats panel HDR row on the macOS video surface when the player converts the HDR picture to SDR with libplacebo. {format} is the format name, for example HDR10; it may end in a note that the Dolby Vision metadata was applied.",
+        "placeholders": {
+            "format": {
+                "type": "String"
+            }
+        }
+    },
+    "statsHdrOutput": "HDR излаз, {transfer}, резерва осветљености {headroom}x",
+    "@statsHdrOutput": {
+        "description": "Value of the stats panel HDR row on the macOS video surface when the HDR picture is sent to the screen as HDR. {transfer} is PQ or HLG. {headroom} is how many times brighter than SDR white the screen can draw, to one decimal, for example 13.8.",
+        "placeholders": {
+            "transfer": {
+                "type": "String"
+            },
+            "headroom": {
+                "type": "String"
+            }
+        }
+    },
+    "statsHdrRpuApplied": "{format}, примењен RPU",
+    "@statsHdrRpuApplied": {
+        "description": "The source format in the stats panel HDR row when the Dolby Vision metadata (RPU) is being applied. {format} is the format name, for example Dolby Vision 8.",
+        "placeholders": {
+            "format": {
+                "type": "String"
+            }
+        }
+    },
+    "statsHdrSourceThenOutput": "{source}, {output}",
+    "@statsHdrSourceThenOutput": {
+        "description": "The stats panel HDR row joining the source format with how it is output. {source} is for example Dolby Vision 8, RPU applied; {output} is for example HDR output, PQ, headroom 13.8x.",
+        "placeholders": {
+            "source": {
+                "type": "String"
+            },
+            "output": {
+                "type": "String"
+            }
+        }
+    },
+    "segmentSkipCommercial": "Прескочи",
+    "@segmentSkipCommercial": {
+        "description": "Button over the video that jumps past a commercial break marked in the recording."
+    },
+    "sourcesAddSectionServers": "Медиа сервери",
+    "@sourcesAddSectionServers": {
+        "description": "Section label on the Add server screen above Plex, Jellyfin and Stash."
+    },
+    "sourcesAddSectionFiles": "Фајлови и складиште · Експериментално",
+    "@sourcesAddSectionFiles": {
+        "description": "Section label on the Add server screen above the local folder, WebDAV, SMB and S3 entries. Experimental warns that files libraries are an experimental feature, so the viewer expects rough edges."
+    },
+    "sourcesAddSectionBackup": "Резервна копија",
+    "@sourcesAddSectionBackup": {
+        "description": "Section label on the Add server screen above the entry that restores servers and watch history from an encrypted backup."
+    },
+    "statsWhyMacSurfaceFallback": "Користи се стандардни видео излаз: HDR рендерер није могао да се покрене на овом Mac-у",
+    "@statsWhyMacSurfaceFallback": {
+        "description": "Stats panel Why row, macOS only: the HDR video renderer failed to start on this app version, so the player fell back to the standard video output until the app is updated."
     }
 }
