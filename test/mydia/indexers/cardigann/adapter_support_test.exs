@@ -1,5 +1,7 @@
 defmodule Mydia.Indexers.Cardigann.AdapterSupportTest do
-  use ExUnit.Case, async: true
+  # async: false: setup mutates the VM-global module log level via
+  # Logger.put_module_level/2 and captures logs.
+  use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
 
@@ -83,7 +85,7 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupportTest do
           AdapterSupport.drop_invalid_releases([release([])], [], "Copper")
         end)
 
-      assert log == ""
+      refute log =~ "Copper"
     end
   end
 

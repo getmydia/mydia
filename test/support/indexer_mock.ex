@@ -135,7 +135,9 @@ defmodule Mydia.IndexerMock do
         end
       end
 
-      Plug.Conn.resp(conn, 200, "[]")
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, "[]")
     end)
   end
 

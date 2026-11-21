@@ -193,10 +193,11 @@ jobs:
               - 'metadata-relay/**'
 
       # A PR that changes only translation catalogs (every Weblate PR) skips
-      # this job. The player talks to the server in English, and ci.yml's
-      # `Translations` job compiles and tests the catalogs. This narrows the
-      # run decision only, not `relevant`, so the invariant above still holds.
-      # With `every`, `non_po` is true when any changed file is not a catalog.
+      # this job. The player talks to the server over its JSON/GraphQL API and
+      # `Translations` / `Test / Player` validate both `.po` and `.arb`
+      # catalogs. This narrows the run decision only, not `relevant`, so the
+      # invariant above still holds. With `every`, `non_translations` is true
+      # when any changed file is not a catalog.
       - name: Detect translation-only changes
         id: catalogs
         if: github.event_name == 'pull_request'
@@ -206,14 +207,17 @@ jobs:
           filters: |
             po:
               - 'priv/gettext/**/*.po'
-            non_po:
+            arb:
+              - 'player/lib/l10n/*.arb'
+            non_translations:
               - '**'
               - '!priv/gettext/**/*.po'
+              - '!player/lib/l10n/*.arb'
 
       - name: Decide whether to run
         id: should
         run: |
-          if [ "${{ steps.catalogs.outputs.po }}" = "true" ] && [ "${{ steps.catalogs.outputs.non_po }}" = "false" ]; then
+          if ( [ "${{ steps.catalogs.outputs.po }}" = "true" ] || [ "${{ steps.catalogs.outputs.arb }}" = "true" ] ) && [ "${{ steps.catalogs.outputs.non_translations }}" = "false" ]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Only translation catalogs changed; skipping E2E build."
           elif [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relevant }}" = "true" ]; then

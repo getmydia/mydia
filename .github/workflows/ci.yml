@@ -326,8 +326,7 @@ jobs:
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
           export MIX_ENV=test
-          mix local.hex --force --if-missing
-          mix local.rebar --force --if-missing
+          ./scripts/ci-mix-bootstrap.sh
           mix deps.get
           mix deps.unlock --check-unused
           mix compile --warnings-as-errors
@@ -364,7 +363,9 @@ jobs:
           mix credo --strict
           # Fails when a gettext call changed without regenerating priv/gettext/*.pot.
           # Translators never edit .po by hand here: Weblate merges them.
-          mix gettext.extract --check-up-to-date
+          # `gettext.extract` forces an Elixir recompile; MYDIA_PREBUILT_NIFS=1
+          # keeps Rustler from fetching crates and rebuilding iroh/subsync again.
+          MYDIA_PREBUILT_NIFS=1 mix gettext.extract --check-up-to-date
           # Blocks new complexity, nesting and module-size debt relative to the
           # merge base. See "Ratchets" in CONTRIBUTING.md.
           mix mydia.ratchet --from-git-merge-base origin/master
@@ -380,7 +381,7 @@ jobs:
           # this heredoc would evaluate the devenv environment a second time and
           # cost more than the 199s it saves.
           if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
-            UNUSED_CHECK=true mix compile --force || true
+            MYDIA_PREBUILT_NIFS=1 UNUSED_CHECK=true mix compile --force || true
           fi
           DEVENV
 
@@ -392,6 +393,7 @@ jobs:
           path: |
             _build
             priv/native
+            priv/plugins/*.wasm
           key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
   # The SQLite suite runs with max_cases: 1 (test/test_helper.exs), so one
@@ -449,8 +451,7 @@ jobs:
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
           export MIX_ENV=test
-          mix local.hex --force --if-missing
-          mix local.rebar --force --if-missing
+          ./scripts/ci-mix-bootstrap.sh
           mix deps.get
           mix compile --warnings-as-errors
           # Soft: downloads the published Cardigann wasm guest (or copies a local
@@ -470,6 +471,7 @@ jobs:
           path: |
             _build
             priv/native
+            priv/plugins/*.wasm
           key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
   dialyzer:
@@ -518,8 +520,7 @@ jobs:
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
           export MIX_ENV=test
-          mix local.hex --force --if-missing
-          mix local.rebar --force --if-missing
+          ./scripts/ci-mix-bootstrap.sh
           mix deps.get
           mix dialyzer --format github
           DEVENV
@@ -540,6 +541,7 @@ jobs:
           path: |
             _build
             priv/native
+            priv/plugins/*.wasm
           key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
   rust:
@@ -686,8 +688,7 @@ jobs:
           export DATABASE_USER=postgres
           export DATABASE_PASSWORD=postgres
           export DATABASE_NAME=mydia_test
-          mix local.hex --force --if-missing
-          mix local.rebar --force --if-missing
+          ./scripts/ci-mix-bootstrap.sh
           mix deps.get
           mix compile
           # Soft: downloads the published Cardigann wasm guest (or copies a local
@@ -708,6 +709,7 @@ jobs:
           path: |
             _build
             priv/native
+            priv/plugins/*.wasm
           key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
   test-e2e:
@@ -735,8 +737,7 @@ jobs:
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
           export MIX_ENV=test
-          mix local.hex --force --if-missing
-          mix local.rebar --force --if-missing
+          ./scripts/ci-mix-bootstrap.sh
           mix deps.get
           mix compile
           npm ci --prefix assets
@@ -752,6 +753,7 @@ jobs:
           path: |
             _build
             priv/native
+            priv/plugins/*.wasm
           key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
       - name: Upload screenshots on failure
@@ -791,8 +793,7 @@ jobs:
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
           export MIX_ENV=test
-          mix local.hex --force --if-missing
-          mix local.rebar --force --if-missing
+          ./scripts/ci-mix-bootstrap.sh
           mix deps.get
           mix compile --warnings-as-errors
           mix ecto.create
@@ -813,6 +814,7 @@ jobs:
           path: |
             _build
             priv/native
+            priv/plugins/*.wasm
           key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
   # Required contexts live on these aggregators, never on gated jobs: a job
@@ -892,3 +894,6 @@ jobs:
           prune "${RUNNER_OS}-build-v2-devenv-postgres-" ""
           prune "${RUNNER_OS}-build-v2-devenv-" "${RUNNER_OS}-build-v2-devenv-postgres-"
           prune "${RUNNER_OS}-plts-v3-" ""
+          prune "${RUNNER_OS}-deps-v2-devenv-" ""
+          prune "${RUNNER_OS}-cargo-v2-" ""
+          prune "${RUNNER_OS}-mix-archives-v1-" ""

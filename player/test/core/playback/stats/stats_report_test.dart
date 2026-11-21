@@ -546,4 +546,105 @@ void main() {
       );
     });
   });
+
+  group('color and display rows', () {
+    const hdrSource =
+        ColorParams(primaries: 'bt.2020', gamma: 'pq', peakNits: 4000);
+    const pqOutput =
+        ColorParams(primaries: 'bt.2020', gamma: 'pq', peakNits: 4000);
+    const sdrSource =
+        ColorParams(primaries: 'bt.709', gamma: 'bt.1886', peakNits: 203);
+
+    StatsSample sampleWith({ColorParams? source, ColorParams? output}) =>
+        StatsSample(
+          bufferedAhead: _sample.bufferedAhead,
+          position: _sample.position,
+          sourceColor: source,
+          outputColor: output,
+        );
+
+    const plain = StatsContext(
+      mode: PlaybackMode.direct,
+      qualityLabel: 'Original',
+      duration: Duration(minutes: 90),
+    );
+
+    test('HDR source to PQ output, with the peak on both ends', () {
+      final rows = statsRows(sampleWith(source: hdrSource, output: pqOutput),
+          plain, StatsDensity.full);
+      expect(valueFor(rows, 'Color'),
+          'bt.2020, pq, 4000 nits → bt.2020, pq, 4000 nits');
+    });
+
+    test('an SDR end has no peak: 203 is just SDR white', () {
+      final rows = statsRows(sampleWith(source: sdrSource, output: sdrSource),
+          plain, StatsDensity.full);
+      expect(valueFor(rows, 'Color'), 'bt.709, bt.1886 → bt.709, bt.1886');
+    });
+
+    test('one known end shows alone', () {
+      expect(
+        valueFor(
+            statsRows(sampleWith(source: sdrSource), plain, StatsDensity.full),
+            'Color'),
+        'bt.709, bt.1886',
+      );
+      expect(
+        valueFor(
+            statsRows(sampleWith(output: sdrSource), plain, StatsDensity.full),
+            'Color'),
+        '→ bt.709, bt.1886',
+      );
+    });
+
+    test('no colour readings, no row', () {
+      expect(labelsOf(statsRows(sampleWith(), plain, StatsDensity.full)),
+          isNot(contains('Color')));
+    });
+
+    test('Display shows the headroom only where the screen reports one', () {
+      expect(labelsOf(statsRows(sampleWith(), plain, StatsDensity.full)),
+          isNot(contains('Display')));
+
+      const surface = StatsContext(
+        mode: PlaybackMode.direct,
+        qualityLabel: 'Original',
+        duration: Duration(minutes: 90),
+        outputHeadroom: 3.48,
+        outputPotentialHeadroom: 16,
+      );
+      final rows = statsRows(sampleWith(), surface, StatsDensity.full);
+      expect(valueFor(rows, 'Display'), 'EDR headroom 3.5x of 16.0x');
+    });
+
+    test('the compact density leaves both out', () {
+      const surface = StatsContext(
+        mode: PlaybackMode.direct,
+        qualityLabel: 'Original',
+        duration: Duration(minutes: 90),
+        outputHeadroom: 3.5,
+      );
+      final labels = labelsOf(statsRows(
+          sampleWith(source: hdrSource, output: pqOutput),
+          surface,
+          StatsDensity.compact));
+      expect(labels, isNot(contains('Color')));
+      expect(labels, isNot(contains('Display')));
+    });
+
+    test('the clipboard carries both, in English', () {
+      const surface = StatsContext(
+        mode: PlaybackMode.direct,
+        qualityLabel: 'Original',
+        duration: Duration(minutes: 90),
+        outputHeadroom: 1.2,
+        outputPotentialHeadroom: 16,
+      );
+      final text = statsClipboardText(
+          sampleWith(source: sdrSource, output: sdrSource), surface,
+          appVersion: '1.0.0');
+      expect(text, contains('Color: bt.709, bt.1886 → bt.709, bt.1886'));
+      expect(text, contains('Display: EDR headroom 1.2x of 16.0x'));
+    });
+  });
 }

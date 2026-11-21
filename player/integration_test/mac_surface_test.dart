@@ -41,6 +41,7 @@ import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/player/mpv_surface_channel.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/core/settings/settings_service.dart';
+import 'package:player/core/playback/stats/stats_report.dart' show StatsRowId;
 import 'package:player/core/settings/stats_overlay_setting.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/window/window_controller_native.dart';
@@ -51,6 +52,7 @@ import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/player_screen_views.dart'
     show PlayerStatsPanel;
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
+import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
 import 'package:player/presentation/widgets/video_surface/mydia_subtitle_view.dart';
 import 'package:player/presentation/widgets/video_surface/player_video_surface.dart';
 import 'package:screen_retriever/screen_retriever.dart';
@@ -314,6 +316,14 @@ bool _playing(_Rig rig) {
       _log.contains('awaitVideoOutput ${p.handleValue} end');
 }
 
+/// Every text drawn in the stats panel's [id] row, or empty when it is
+/// absent.
+String _rowText(WidgetTester tester, StatsRowId id) => tester
+    .widgetList<Text>(find.descendant(
+        of: find.byKey(StatsPanel.rowKey(id)), matching: find.byType(Text)))
+    .map((t) => t.data ?? t.textSpan?.toPlainText() ?? '')
+    .join(' ');
+
 Future<String> _prop(_TracedPlayer p, String name) =>
     p.native.getProperty(name);
 
@@ -452,6 +462,15 @@ void main() {
         '${statsHeadroom()} (potential $potential, locked $locked, '
         'climb asserted: $assertClimb)');
 
+    // The panel's Color and Display rows, as the viewer reads them.
+    await tester.pump(const Duration(seconds: 1));
+    final color = _rowText(tester, StatsRowId.color);
+    final shown = _rowText(tester, StatsRowId.display);
+    debugPrint('[mac_surface_test] stats Color: $color | Display: $shown');
+    expect(color, contains('bt.2020'));
+    expect(color, contains('pq'));
+    expect(shown, contains('EDR headroom'));
+
     final took = await _close(tester, rig);
     debugPrint('[mac_surface_test] close took $took; log: $_log');
   });
@@ -464,6 +483,11 @@ void main() {
     final p = rig.last;
     expect(await _prop(p, 'current-vo'), 'gpu-next');
     expect(find.byType(Video), findsNothing);
+    // SDR stays on the sRGB swapchain: with the hint on, the BT.709 one
+    // makes macOS decode it with a 2.4 power, much darker than the texture.
+    expect(await _prop(p, 'target-colorspace-hint'), 'no');
+    expect(await _settledProp(tester, p, 'video-target-params/gamma'),
+        isNot(anyOf('pq', 'hlg')));
 
     final before = await _prop(p, 'panscan');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);

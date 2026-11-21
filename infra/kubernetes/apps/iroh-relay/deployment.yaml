@@ -29,15 +29,17 @@ spec:
           # Pinned by digest as well as tag: a re-published tag cannot swap the
           # binary underneath us.
           #
-          # v1.4.2 is the iroh-relay security release: the empty-datagram and
-          # oversized-frame disconnects of other clients, the WebSocket ping
-          # flood, and stuck client writes blocking shutdown. It also carries
-          # the rustls fixes (RUSTSEC-2026-0346 to 0349) that arrived in v1.4.0.
+          # v1.5.0 matches the iroh the server and player link. It closes a
+          # connection leak during the relay handshake, drops unencodable
+          # packets instead of disconnecting the receiver, and keeps proxy
+          # credentials out of the debug log. It carries everything from
+          # v1.4.2 (the relay security release) and the rustls fixes
+          # (RUSTSEC-2026-0346 to 0349) that arrived in v1.4.0.
           #
           # Before changing this line, run ./verify-image.sh <image>. A plain
           # boot test cannot catch a panic on received traffic (see README.md,
           # the v1.0.3 musl noq-udp incident).
-          image: n0computer/iroh-relay:v1.4.2@sha256:1de2c273ff3e2cf1261b16ef7e569f9b36ab858a54481ebeedf7d9da2e17a4df
+          image: n0computer/iroh-relay:v1.5.0@sha256:50a2f5697d8f69537037503c81b989be17eeb694dbb2d3fdfd5418c9a71c8ec6
           args: ["--config-path", "/config/config.toml"]
           ports:
             - name: http

@@ -324,6 +324,33 @@ gh api repos/getmydia/mydia/actions/jobs/<job-id> --jq '.steps[] | "\(.conclusio
 
 ## Elixir test flakes
 
+**Recently fixed (2026-11-20):**
+
+- `BuiltIn.Engine`, `FfmpegMp4Transcoder`, `FfmpegHlsTranscoder`, and
+  `FfmpegRemuxer` `Port.info(port, :os_pid) == nil` fast-exit race: a child
+  that exited right after `Port.open/2` returned `:spawn_failed` or
+  `:no_os_pid` instead of letting `{port, {:exit_status, _}}` proceed through
+  normal exit handling. Fixed to treat `nil` os_pid safely; `fake_rqbit.sh` and
+  `engine_test.exs` also now use atomic file writes and safe PID polling.
+- `Cardigann.Wasm.SlotsTest`: added `await_queued(slots, 1)` before
+  `refute Task.yield(third, 100)`.
+- `Cardigann.AdapterSupportTest`: switched to `async: false` (`setup` calls
+  global `Logger.put_module_level/2`) and scoped `"logs nothing"` to `"Copper"`.
+- `Cardigann.Wasm.HostHttpTest`: `"honours request_delay_ms"` now measures the
+  monotonic interval between request arrivals at the Bypass stub rather than
+  timing only the second `exchange/2` call.
+- `BuiltIn.VpnTest`: replaced the bare `Agent.start_link/1` in `"a later hash
+  match recovers after the timeout"` with supervised `start_state/1` so ExUnit
+  stops `Vpn` before tearing down the shared state agent.
+- `AdminMediaServersLive.PluginInstancesTest`: awaits `render_async/1` and the
+  `TaskSupervisor` sync task before the sandbox owner exits.
+- `DownloadServiceTest`: uses `BlockingTranscoder` and drains `JobManager` in
+  `describe "prepare/3"` so tests no longer leak background `ffmpeg` processes
+  (`Ecto.StaleEntryError` / `DBConnection.OwnershipError` noise).
+- `mix local.hex` / `mix local.rebar` transient `builds.hex.pm` failures:
+  wrapped in `scripts/ci-mix-bootstrap.sh` (3 attempts) backed by a small
+  `mix-archives-v1` cache.
+
 `Mydia.DataCase` forces `async: false` on SQLite but honours `async: true` on
 Postgres, so the Postgres job runs modules concurrently and is where order- and
 config-leak-sensitive tests surface. Any change that shifts suite timing, even one
@@ -831,6 +858,48 @@ Any E2E failure where a probe reports a missing element on a page you can see
 renders it is worth checking this way first: count the server renders for that
 test. Fixed by making `login/3` wait for its redirect and by moving the suite
 onto `visit_liveview/3`, which fails naming the page the browser is actually on.
+
+## Player (`Test / Player`)
+
+### A Hive test times out after 30 seconds, and only in CI
+
+`very_good test` runs the whole player suite in one isolate, so Hive's
+global state carries over from file to file. Hive keeps a table of boxes
+being opened, keyed by name and not by path, and any later `openBox` of
+that name waits on the pending entry. A `testWidgets` case that starts an
+`openBox` without overriding its provider starts it in the fake async zone.
+If an earlier file left Hive initialised on a real directory, the open waits
+for file IO that the fake zone never resumes, the entry never clears, and
+the next test to open that box hangs until its timeout. It passes locally,
+both alone and under `./dev player test`, because neither run has the earlier
+`Hive.init`.
+
+On 2026-11-20 that was `open_files_library_boxes_test.dart`, stuck on
+`playback_progress`, which the real `AppShell` opens through
+`sourceProgressFlushProvider` as soon as it mounts. It failed on master too.
+The fix is `noProgressFlushOverride` (`test/test_utils/no_downloads.dart`)
+in every test that mounts the real shell, the router tests and the `MyApp`
+ones alike. `sourceProgressFlushProvider` also skips its startup flush when
+`thirdPartySourcesProvider` is empty, avoiding unnecessary startup disk box opens.
+
+The same race produced an intermittent 10-minute hang, then a cascade of
+10-minute hangs: `player_screen_mac_surface_test.dart` opens `video_scaling`
+inside `tester.runAsync`, and an earlier PlayerScreen test had left that
+open pending through `VideoScalingPrefs`, which used to open its box lazily.
+A `runAsync` that never returns wedges the test binding, because every later
+test waits for it. It was intermittent because whether the earlier open's IO
+finishes before that test stops pumping is a real-time race.
+`VideoScalingPrefs` and `SubtitleLanguagePrefs` now use their box only once
+startup has opened it. To find which box is stuck, open
+each candidate name with `.timeout(const Duration(seconds: 3))` from the
+failing test and print the ones that time out. To see the run order, dispatch
+`ci-player.yml` on a throwaway branch.
+
+### `source_detail_controllers_test.dart`: "next up lands after the header"
+
+Throwing `Bad state: No element`. **Fixed 2026-11-20.** The test waited a fixed
+20ms `_settle()` instead of awaiting the `nextUpEpisodeId` state transition via
+a `Completer`.
 
 ## Getting the real output
 

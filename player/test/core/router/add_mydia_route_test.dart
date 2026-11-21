@@ -17,12 +17,14 @@ import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
+import '../../test_utils/no_downloads.dart';
 
 /// Mounts the app router at [location], with no server stored.
 Future<GoRouter> _pump(WidgetTester tester, String location) async {
   await tester.binding.setSurfaceSize(const Size(900, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final container = ProviderContainer(overrides: [
+    noProgressFlushOverride,
     sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
     authServiceProvider

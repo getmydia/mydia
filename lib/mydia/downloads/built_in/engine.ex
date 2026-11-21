@@ -278,9 +278,11 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
       {:os_pid, os_pid} ->
         {:ok, port, os_pid}
 
-      _ ->
-        close_quietly(port)
-        {:error, "no OS pid for the spawned process"}
+      nil ->
+        # The port opened, so `{port, {:exit_status, _}}` is already on its way;
+        # let `handle_info/2` classify the exit and schedule backoff as usual
+        # instead of aborting with `:spawn_failed` and zero retries.
+        {:ok, port, nil}
     end
   rescue
     e -> {:error, Exception.message(e)}
@@ -304,9 +306,11 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
         started_at: System.monotonic_time(:millisecond)
     }
 
-    case File.write(pid_file(state.config.state_dir), pid_file_contents(os_pid)) do
-      :ok -> :ok
-      {:error, reason} -> Logger.warning("could not write rqbit pid file: #{inspect(reason)}")
+    if is_integer(os_pid) do
+      case File.write(pid_file(state.config.state_dir), pid_file_contents(os_pid)) do
+        :ok -> :ok
+        {:error, reason} -> Logger.warning("could not write rqbit pid file: #{inspect(reason)}")
+      end
     end
 
     report(state, :running)
@@ -315,12 +319,7 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
   defp kill_child(%{port: nil} = state), do: state
 
   defp kill_child(state) do
-    try do
-      Port.close(state.port)
-    rescue
-      ArgumentError -> :ok
-    end
-
+    close_quietly(state.port)
     terminate_pid(state.os_pid)
     File.rm(pid_file(state.config.state_dir))
     %{state | port: nil, os_pid: nil}
@@ -363,6 +362,8 @@ defmodule Mydia.Downloads.BuiltIn.Engine do
   end
 
   # TERM, wait for the process to be gone, then KILL if it ignored us.
+  defp terminate_pid(nil), do: :ok
+
   defp terminate_pid(pid) do
     signal("TERM", pid)
 

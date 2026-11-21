@@ -18,6 +18,7 @@ import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/l10n.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
+import '../../test_utils/no_downloads.dart';
 
 SourceAccountRecord _record(String id) => SourceAccountRecord(
       account: ProviderAccount(
@@ -47,6 +48,7 @@ void main() {
     final store = InMemorySourceStore();
     var mediaBuilt = 0;
     final container = ProviderContainer(overrides: [
+      noProgressFlushOverride,
       sidebarLayoutStoreProvider
           .overrideWithValue(InMemorySidebarLayoutStore()),
       sourceStoreProvider.overrideWith((ref) async => store),

@@ -397,6 +397,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The surface screen's EDR headroom for the stats HDR row, kept only
   /// while the stats collector runs. Null until the plugin reports one.
   double? _edrHeadroom;
+  double? _edrPotentialHeadroom;
   StreamSubscription<DisplayInfo>? _displaySubscription;
   ProgressReporter? _progressService;
 
@@ -2788,7 +2789,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // The headroom is read from the plugin's own stream, so the panel's
     // cadence is the collector's and no timer is added.
     _displaySubscription = _surfaceBinding?.surface.display.listen(
-      (info) => _edrHeadroom = info.edrHeadroom,
+      (info) {
+        _edrHeadroom = info.edrHeadroom;
+        _edrPotentialHeadroom = info.potentialHeadroom;
+      },
       onError: (Object e) => debugPrint('[PlayerScreen] display stream: $e'),
     );
   }
@@ -2797,6 +2801,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     unawaited(_displaySubscription?.cancel());
     _displaySubscription = null;
     _edrHeadroom = null;
+    _edrPotentialHeadroom = null;
     unawaited(_statsCollector?.dispose());
     _statsCollector = null;
   }
@@ -6389,6 +6394,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Null until the plugin reports the screen: an unmeasured headroom is
       // not SDR, and the row keeps its plain wording until it is known.
       outputHeadroom: _surfaceBinding == null ? null : _edrHeadroom,
+      outputPotentialHeadroom:
+          _surfaceBinding == null ? null : _edrPotentialHeadroom,
     );
   }
 

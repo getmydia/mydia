@@ -557,7 +557,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
     test "a later hash match recovers after the timeout", ctx do
       gluetun(ctx.bypass, "running", 40_123)
-      {:ok, agent} = Agent.start_link(fn -> "old" end)
+      agent = start_state("old")
 
       ctx =
         Map.put(ctx, :vpn_opts,

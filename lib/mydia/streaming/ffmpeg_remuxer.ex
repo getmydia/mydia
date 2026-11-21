@@ -91,7 +91,8 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
       {:ok, port, os_pid} = FfmpegRemuxer.start_remux("/path/to/video.mkv", duration: 7200.5)
   """
-  @spec start_remux(String.t(), remux_opts()) :: {:ok, port(), integer()} | {:error, term()}
+  @spec start_remux(String.t(), remux_opts()) ::
+          {:ok, port(), integer() | nil} | {:error, term()}
   def start_remux(input_path, opts \\ []) do
     seek_seconds = Keyword.get(opts, :seek_seconds)
 
@@ -133,7 +134,7 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
   Returns the connection after streaming is complete (or on error).
   """
-  @spec stream_to_conn(Plug.Conn.t(), port(), integer(), Keyword.t()) :: Plug.Conn.t()
+  @spec stream_to_conn(Plug.Conn.t(), port(), integer() | nil, Keyword.t()) :: Plug.Conn.t()
   def stream_to_conn(conn, port, os_pid, opts \\ []) do
     chunk_size = Keyword.get(opts, :chunk_size, 64 * 1024)
     on_activity = Keyword.get(opts, :on_activity)
@@ -154,20 +155,22 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
   Closes the port and kills the FFmpeg process if it's still running.
   """
-  @spec stop_remux(port(), integer()) :: :ok
+  @spec stop_remux(port(), integer() | nil) :: :ok
   def stop_remux(port, os_pid) do
-    Logger.debug("Stopping fMP4 remux process #{os_pid}")
+    Logger.debug("Stopping fMP4 remux process #{inspect(os_pid)}")
 
     # Close the port (sends SIGPIPE to FFmpeg when it tries to write)
-    if Port.info(port) do
-      Port.close(port)
+    try do
+      if Port.info(port), do: Port.close(port)
+    rescue
+      ArgumentError -> :ok
     end
 
     # Give FFmpeg a moment to terminate gracefully
     Process.sleep(50)
 
     # Force kill if still running
-    if process_alive?(os_pid) do
+    if os_pid && process_alive?(os_pid) do
       Logger.debug("FFmpeg process #{os_pid} did not terminate, sending SIGKILL")
       System.cmd("kill", ["-9", to_string(os_pid)], stderr_to_stdout: true)
     end
@@ -283,8 +286,9 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
             {:ok, port, os_pid}
 
           nil ->
-            Port.close(port)
-            {:error, :no_os_pid}
+            # The port opened, so `{port, {:exit_status, _}}` is already queued
+            # and `stream_loop/6` will observe the exit status normally.
+            {:ok, port, nil}
         end
       rescue
         e ->

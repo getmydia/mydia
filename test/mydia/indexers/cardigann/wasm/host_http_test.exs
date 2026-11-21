@@ -332,12 +332,23 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
       ctx: ctx,
       base: base
     } do
-      Bypass.expect(bypass, "GET", "/x", fn conn -> Plug.Conn.resp(conn, 200, "") end)
-      ctx = %{ctx | request_delay_ms: 300}
+      test_pid = self()
 
-      HostHttp.exchange(ctx, req("GET", base <> "/x"))
-      {us, _} = :timer.tc(fn -> HostHttp.exchange(ctx, req("GET", base <> "/x")) end)
-      assert us >= 280_000
+      Bypass.expect(bypass, "GET", "/x", fn conn ->
+        send(test_pid, {:arrived, System.monotonic_time(:millisecond)})
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      ctx = %{ctx | request_delay_ms: 300}
+      started_ms = System.monotonic_time(:millisecond)
+
+      assert {:ok, _} = HostHttp.exchange(ctx, req("GET", base <> "/x"))
+      assert {:ok, _} = HostHttp.exchange(ctx, req("GET", base <> "/x"))
+
+      assert_receive {:arrived, t1}
+      assert_receive {:arrived, t2}
+      assert t2 >= t1
+      assert t2 - started_ms >= 280
     end
 
     test "adds the exchange's wall-clock microseconds to the network counter", %{

@@ -21,6 +21,7 @@ import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/offline_banner.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
+import '../../test_utils/no_downloads.dart';
 import '../../test_utils/toast_harness.dart';
 import '../screens/sources/fake_media_source.dart';
 
@@ -66,6 +67,7 @@ Future<void> _pumpShell(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      noProgressFlushOverride,
       sidebarLayoutStoreProvider
           .overrideWithValue(InMemorySidebarLayoutStore()),
       mediaSourceProvider(_idA).overrideWithValue(a),
@@ -117,6 +119,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
       overrides: [
+        noProgressFlushOverride,
         mediaSourceProvider(fakeSourceId).overrideWithValue(source),
         sourceCacheProvider.overrideWithValue(cache),
         fetchLogProvider.overrideWithValue(fetchLog),

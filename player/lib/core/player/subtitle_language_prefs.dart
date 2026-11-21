@@ -4,8 +4,6 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
-import '../storage/app_hive.dart';
-
 /// Remembers which languages the user last searched subtitles for.
 ///
 /// Local only, on purpose: subtitle acquisition is manual, so there is no
@@ -13,11 +11,12 @@ import '../storage/app_hive.dart';
 /// the store-plus-provider split `HiveSidebarLayoutStore` and
 /// `HiveWindowGeometryStore` use, because the subtitle sheet calls this
 /// directly from `initState` with no `ProviderScope` in reach (see its
-/// tests). Opens its own box lazily instead, the same shape
-/// `HiveFetchLog.open()` uses, and skips that open entirely when the box is
-/// already open under [boxName] -- which is what lets a test open the box
-/// itself with `Hive.init(tempDir)` and call [load]/[save] directly, with no
-/// `path_provider` plugin in reach either.
+/// tests). Startup opens the box ([open]) with the app's other boxes, and
+/// [load]/[save] only use it once it is open under [boxName]; a test opens
+/// the box itself with `Hive.init(tempDir)`. They never open it lazily: a
+/// widget test that mounts the subtitle sheet would start that open in its
+/// fake async zone, where it never finishes, and Hive would make every later
+/// open of the same name in CI's one-isolate bundle wait on it for good.
 ///
 /// Any failure to open or read the box falls back to [defaults] rather than
 /// throwing, the same trade `HiveWindowGeometryStore` and
@@ -87,9 +86,17 @@ class SubtitleLanguagePrefs {
     }
   }
 
+  /// Opens the box. Startup calls this after `initAppHive`; never throws.
+  static Future<void> open() async {
+    try {
+      await Hive.openBox<List<dynamic>>(boxName);
+    } catch (e) {
+      debugPrint('[SubtitleLanguagePrefs] Box did not open: $e');
+    }
+  }
+
   static Future<Box<List<dynamic>>> _box() async {
     if (Hive.isBoxOpen(boxName)) return Hive.box<List<dynamic>>(boxName);
-    await initAppHive();
-    return Hive.openBox<List<dynamic>>(boxName);
+    throw StateError('$boxName is not open');
   }
 }

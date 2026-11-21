@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'test_utils/mydia_test_source.dart';
+import 'test_utils/no_downloads.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/app.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -48,6 +49,7 @@ void main() {
         // binding) and would schedule Riverpod's retry timers past the test.
         retry: (_, __) => null,
         overrides: [
+          noProgressFlushOverride,
           sidebarLayoutStoreProvider
               .overrideWithValue(InMemorySidebarLayoutStore()),
           sourcesLoadingProvider.overrideWithValue(false),

@@ -50,6 +50,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SlotsTest do
     {a, b} = fill(slots)
 
     third = Task.async(fn -> Slots.run(slots, 5_000, fn -> :ran end) end)
+    await_queued(slots, 1)
     refute Task.yield(third, 100)
 
     send(a, :release)
