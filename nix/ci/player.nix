@@ -305,8 +305,8 @@
       # Test / Player: the VM suite, the television tier and the S3 tests.
       #
       # The S3 server s3_integration_test.dart runs against is ciTests.rustfs,
-      # the RustFS the Elixir shards use (and devenv's), on 127.0.0.1:9000
-      # with its data under $TMPDIR. CI is set, as on GitHub, so that test
+      # the same RustFS build as the backend test shards and devenv. It listens
+      # on 127.0.0.1:9000 with its data under $TMPDIR. CI is set, as on GitHub, so that test
       # fails on a dead server instead of skipping itself.
       #
       # very_good_cli is not used. It is a global tool with some sixty
