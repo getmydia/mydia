@@ -101,7 +101,9 @@ defmodule MydiaWeb.FeatureCase do
   - Feature tests use the Ecto sandbox with allowances for browser connections
   - The test server binds an ephemeral port; test_helper.exs resolves it and
     sets Wallaby's base_url
-  - Screenshots are automatically captured on test failure to tmp/wallaby_screenshots
+  - Screenshots are not captured on failure: Wallaby's `screenshot_on_failure`
+    applies only to its `feature` macro, and these tests use plain `test`. An
+    explicit `take_screenshot/2` writes one to tmp/wallaby_screenshots
   - Set `async: false` since SQLite doesn't handle concurrent writes well
   """
 

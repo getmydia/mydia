@@ -14,6 +14,9 @@
 #                  nix/packages/flake-module.nix
 #   devenv.lock    its nixpkgs node, copied from flake.lock's so the devenv
 #                  shell and the Nix build share one package set
+#   player/pubspec.lock.json
+#                  yq's JSON form of player/pubspec.lock, which nix/ci/player.nix
+#                  reads with lib.importJSON (Nix has no YAML parser)
 #
 # The flutter_rust_bridge bindings and the hand-pinned Nix hashes for fine,
 # wasmex, tailwind, heroicons and lexbor are not regenerated here;
@@ -42,7 +45,7 @@ nixpkgs_run() {
   nix run --inputs-from . "nixpkgs#$pkg" -- "$@"
 }
 
-trap 'rm -f deps.nix.tmp metadata-relay/deps.nix.tmp' EXIT
+trap 'rm -f deps.nix.tmp metadata-relay/deps.nix.tmp player/pubspec.lock.json.tmp' EXIT
 
 # The app's and metadata-relay's (its own Mix project; nix/ci/relay.nix).
 for d in . metadata-relay; do
@@ -56,6 +59,10 @@ for d in "${cargo_lock_dirs[@]}"; do
   echo "$d/Cargo.lock <- $d/Cargo.toml"
   (cd "$d" && cargo metadata --format-version 1 > /dev/null)
 done
+
+echo "player/pubspec.lock.json <- player/pubspec.lock"
+nixpkgs_run yq-go -o json player/pubspec.lock > player/pubspec.lock.json.tmp
+mv player/pubspec.lock.json.tmp player/pubspec.lock.json
 
 echo "npmDeps.hash <- assets/package-lock.json"
 npm_deps_hash_write "$(npm_deps_hash)"

@@ -1,0 +1,44 @@
+name: CI / Player AppImage
+
+# The AppImage dry run, split out of ci-player.yml when its `changes` job gave
+# way to a workflow-level path filter: this build is 25+ minutes of mpv
+# compile on a cold cache, so it runs only when the packaging itself changes,
+# which needs paths of its own. Release builds always run it (release.yml).
+# Not a required context, so a run the filter skips blocks nothing.
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'player/appimage/**'
+      - 'player/flatpak/dev.mydia.player.yml'
+      - 'player/flatpak/dev.mydia.player.desktop'
+      - '.github/workflows/player-appimage.yml'
+      - '.github/workflows/ci-player-appimage.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'player/appimage/**'
+      - 'player/flatpak/dev.mydia.player.yml'
+      - 'player/flatpak/dev.mydia.player.desktop'
+      - '.github/workflows/player-appimage.yml'
+      - '.github/workflows/ci-player-appimage.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  appimage-build:
+    name: AppImage / Build
+    uses: ./.github/workflows/player-appimage.yml
+    with:
+      sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      version: 0.0.0-ci
+      version_code: '1'
+      dry_run: true

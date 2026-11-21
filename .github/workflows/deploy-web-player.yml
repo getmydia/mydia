@@ -67,9 +67,8 @@ jobs:
       # wasm32-unknown-unknown in the rust-p2p-core-wasm flake check. This
       # build needs the same pinned Rust
       # toolchain, the same wasm32 target, and the same Flutter SDK devenv.nix
-      # resolves from player/.fvmrc, none of which ci-player.yml provides,
-      # since that workflow installs Flutter directly via subosito/flutter-action
-      # and never enters a devenv shell.
+      # resolves from player/.fvmrc. CI's player-web check builds the same
+      # bundle without the wasm module, so it never installs that toolchain.
       - name: Install Nix
         uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
         with:
@@ -83,8 +82,8 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           extraPullNames: devenv
 
-      # From the nixpkgs flake.lock pins, as in .github/actions/setup-devenv,
-      # so this workflow resolves the identical toolchain (Rust, Flutter,
+      # From the nixpkgs flake.lock pins (which check-generated-freshness.sh
+      # holds equal to devenv.lock's), so this workflow resolves the identical toolchain (Rust, Flutter,
       # wasm-pack, binaryen) that PRs already build and test against.
       - name: Install devenv
         run: nix profile install --inputs-from . nixpkgs#devenv
@@ -101,7 +100,7 @@ jobs:
 
       # The generated Dart files (*.g.dart, *.freezed.dart, *.graphql.dart) are
       # gitignored, so a fresh checkout has neither them nor .dart_tool/. Both
-      # steps below are how ci-player.yml gets a buildable tree; build_web.sh
+      # steps below produce a buildable tree, as player-codegen does in CI; build_web.sh
       # itself assumes they already exist (true on a developer's worktree,
       # false on a first-time runner checkout) and does not run them.
       - name: Install Flutter dependencies

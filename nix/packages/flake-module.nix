@@ -409,6 +409,14 @@
 
     in
     {
+      # The asset toolchain, shared with nix/ci/tests.nix (ciInternal.assets,
+      # for the e2e-browser check) so CI builds the assets from the same npm
+      # cache, Tailwind and esbuild as the package, with one npmDeps hash.
+      _module.args.mydiaAssetTools = {
+        inherit npmDeps tailwindcss_4 tailwindVersion platformSuffix;
+        inherit (pkgs) esbuild;
+      };
+
       packages = {
         default = mydia;
         postgres = mydia-postgres;

@@ -19,7 +19,7 @@
 { inputs, lib, flake-parts-lib, ... }:
 
 {
-  imports = [ ./rust.nix ./mix-deps.nix ./elixir.nix ./tests.nix ./relay.nix ./guards.nix ];
+  imports = [ ./rust.nix ./mix-deps.nix ./elixir.nix ./tests.nix ./relay.nix ./guards.nix ./player.nix ];
 
   options.perSystem = flake-parts-lib.mkPerSystemOption {
     options = {
@@ -57,7 +57,7 @@
       craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
 
       # Directories whose tracked files must belong to a source file set.
-      codeDirs = [ "lib" "config" "priv" "test" "native" "plugins" "server" "metadata-relay" ];
+      codeDirs = [ "lib" "config" "priv" "test" "native" "plugins" "server" "metadata-relay" "player" ];
 
       tracked = lib.fileset.intersection
         (lib.fileset.gitTracked root)

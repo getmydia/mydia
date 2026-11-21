@@ -49,6 +49,11 @@ let
 
   elixirTest = at "test";
 
+  # What ciInternal.assets builds from (nix/ci/tests.nix): package.json, the
+  # lock, js/, css/ and vendor/. node_modules is never tracked, but a dirty
+  # checkout has one.
+  assets = fs.difference (at "assets") (maybe "assets/node_modules");
+
   gettext = at "priv/gettext";
 
   patches = at "patches";
@@ -125,6 +130,62 @@ let
     (at "metadata-relay/test")
   ];
 
+  # The Flutter player's platform directories, which the Linux and web
+  # checks never read. Android has its own set (its build is a separate
+  # check); the rest are built outside Nix (ci-player.yml's Windows and
+  # macOS legs, the packaging workflows) and are listed only so coverage
+  # holds.
+  playerAndroid = at "player/android";
+
+  playerOtherPlatforms = fs.unions (map (d: at "player/${d}") [
+    "windows"
+    "macos"
+    "ios"
+    "flatpak"
+    "appimage"
+    "windows-vm-scripts"
+  ]);
+
+  # The player as the Linux and web checks see it: pub inputs (pubspec.*,
+  # the JSON form of the lock, the rust_builder and packages/ path deps),
+  # the Dart sources and their codegen config, linux/ and web/. Leaves out
+  # build output, the Rust crates under player/rust (playerCrate), the
+  # other platforms, and generated Dart, which is gitignored and produced
+  # by ciInternal.player-codegen.
+  playerApp = fs.difference (at "player") (fs.unions [
+    (maybe "player/build")
+    (maybe "player/.dart_tool")
+    (at "player/rust")
+    playerAndroid
+    playerOtherPlatforms
+    (fs.fileFilter
+      (file: lib.hasSuffix ".g.dart" file.name || lib.hasSuffix ".freezed.dart" file.name)
+      (at "player"))
+  ]);
+
+  # What ciInternal.player-codegen unpacks: playerApp plus the GraphQL
+  # schema that player/lib/graphql/schema.graphql symlinks to, which
+  # graphql_codegen reads through the symlink.
+  playerCodegen = fs.unions [
+    playerApp
+    (at "priv/graphql/schema.graphql")
+  ];
+
+  # The platform files player tests read from disk (the Android manifest,
+  # the iOS and macOS plists, the Xcode project), laid over playerCodegen by
+  # the player-test check. Apart from playerCodegen so that the files the
+  # other checks never read do not invalidate player-codegen.
+  playerTestReads = fs.unions (map at [
+    "player/android/app/src/main/AndroidManifest.xml"
+    "player/ios/Runner/Info.plist"
+    "player/ios/Runner.xcodeproj/project.pbxproj"
+    "player/macos/Runner/Info.plist"
+  ]);
+
+  # Every crate directory under player/rust/, for the coverage union.
+  playerCrateNames = builtins.attrNames
+    (lib.filterAttrs (_: type: type == "directory") (builtins.readDir (at "player/rust")));
+
   toSource = set: fs.toSource { inherit root; fileset = set; };
 
   # Every crate directory under native/, for the coverage union.
@@ -132,8 +193,9 @@ let
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir (at "native")));
 in
 {
-  inherit elixirApp mixProject elixirTest gettext patches nativeCrate playerCrate plugins
-    pluginsExtra server relay relayProject relayTest toSource nativeCrateNames;
+  inherit elixirApp mixProject elixirTest assets gettext patches nativeCrate playerCrate plugins
+    pluginsExtra server relay relayProject relayTest playerApp playerAndroid
+    playerOtherPlatforms playerCodegen playerTestReads toSource nativeCrateNames playerCrateNames;
 
   # Union of everything above, for the coverage check.
   all = fs.unions ([
@@ -144,5 +206,9 @@ in
     plugins
     server
     relay
-  ] ++ map nativeCrate nativeCrateNames);
+    playerApp
+    playerAndroid
+    playerOtherPlatforms
+  ] ++ map nativeCrate nativeCrateNames
+  ++ map playerCrate playerCrateNames);
 }

@@ -4,6 +4,8 @@
 #   test-postgres-{1..3}  `mix test --partitions 3`, PostgreSQL
 #   ci-cardigann-hash     the shards' Cardigann guest source hash equals
 #                         `mix mydia.cardigann_guest hash`
+#   e2e-browser           the Wallaby `:feature` suite in chromium, on top of
+#                         the SQLite test build and ciInternal.assets
 #
 # The shards carry the Cardigann guest pinned in
 # native/cardigann_guest/ARTIFACT_SHA256, so the :cardigann_wasm tests run
@@ -29,11 +31,12 @@
 { ... }:
 
 {
-  perSystem = { pkgs, lib, ci, ciElixir, config, ... }:
+  perSystem = { pkgs, lib, ci, ciElixir, mydiaAssetTools, config, ... }:
     let
       inherit (ci) sources;
-      inherit (ciElixir) buildSet copyBuild mkCheck;
+      inherit (ciElixir) buildSet copyBuild mkCheck heroiconsGitStub;
       inherit (config) ciInternal;
+      inherit (import ./mix-lib.nix { inherit pkgs lib; }) setupHome;
 
       # devenv.nix's RustFS, same override (so the same store path).
       rustfs = pkgs.rustfs.overrideAttrs (old: {
@@ -288,9 +291,118 @@
             value = mkShard { inherit databaseType partitions partition; };
           })
           (lib.range 1 partitions));
+
+      # priv/static/assets as `mix assets.deploy` leaves it (app.css, app.js,
+      # their digests), for e2e-browser: without it the LiveView socket never
+      # connects and every geometry assertion measures an unstyled page.
+      # Built the package's way (nix/packages/flake-module.nix, shared as
+      # mydiaAssetTools): npmConfigHook runs `npm ci` offline from the
+      # package's npmDeps, and the Tailwind and esbuild wrappers find the
+      # pinned binaries at the _build paths they would download to. It runs
+      # on top of the test build because package-lock.json resolves phoenix,
+      # phoenix_html and phoenix_live_view from ../deps, esbuild's NODE_PATH
+      # reads deps/, and Tailwind's heroicons plugin reads deps/heroicons.
+      assets = pkgs.stdenv.mkDerivation {
+        pname = "mydia-assets";
+        version = "0";
+        src = sources.toSource (lib.fileset.unions [ buildSet sources.assets ]);
+        env = ciElixir.env;
+        inherit (mydiaAssetTools) npmDeps;
+        npmRoot = "assets";
+        nativeBuildInputs = [
+          ci.beamPackages.erlang
+          ci.beamPackages.elixir
+          pkgs.nodejs
+          pkgs.npmHooks.npmConfigHook
+        ];
+        dontConfigure = true;
+        dontFixup = true;
+
+        # The implicit postPatch runs before postPatchHooks, so deps/ is in
+        # place when npmConfigHook runs `npm ci`.
+        postPatch = copyBuild ciInternal.mydiaTestBuild-sqlite;
+
+        buildPhase = ''
+          runHook preBuild
+          ${setupHome}
+          ln -sf ${mydiaAssetTools.esbuild}/bin/esbuild _build/esbuild-${mydiaAssetTools.platformSuffix}
+          ln -sf ${mydiaAssetTools.tailwindcss_4}/bin/tailwindcss \
+            _build/tailwind-${mydiaAssetTools.platformSuffix}-${mydiaAssetTools.tailwindVersion}
+          mix do loadpaths --no-deps-check + assets.deploy
+          runHook postBuild
+        '';
+
+        installPhase = ''
+          runHook preInstall
+          cp -r priv/static/assets $out
+          runHook postInstall
+        '';
+      };
+
+      # The Wallaby feature suite (`:feature`, excluded from the shards) in
+      # chromium, through scripts/run-feature-tests.sh as a developer runs it.
+      # Its compile-time MYDIA_* environment is ciElixir.env, the test
+      # build's own, so Mix compiles nothing. CI=true selects config/test.exs's
+      # CI capabilities (--no-sandbox: chromium's own sandbox cannot start in
+      # the build's). The fontconfig is devenv's, so text widths match
+      # `./dev feature-test`. The script's DB setup and `mix test` run
+      # without --no-deps-check, hence heroiconsGitStub. --seed 0 keeps a
+      # rerun in the same order.
+      #
+      # A failed build has no $out, so on failure the screenshots
+      # (config/test.exs :screenshot_dir) are copied to a fixed path in the
+      # build directory, which a local `nix build --keep-failed` keeps; CI
+      # does not collect them. Only an explicit take_screenshot writes one:
+      # Wallaby's screenshot_on_failure applies to its `feature` macro, and
+      # MydiaWeb.FeatureCase tests use plain `test`.
+      e2eBrowser = mkCheck {
+        name = "e2e-browser";
+        set = lib.fileset.unions [
+          buildSet
+          (lib.fileset.difference sources.elixirTest (lib.fileset.unions [
+            (lib.fileset.fileFilter (file: file.hasExt "md") sources.elixirTest)
+            workflowTriggersTest
+          ]))
+          testReads
+          (root + "/scripts/run-feature-tests.sh")
+        ];
+        inputs = [ pkgs.chromium pkgs.chromedriver pkgs.git ];
+        log = "test.log";
+        extraEnv = {
+          CI = "true";
+          CHROME_PATH = "${pkgs.chromium}/bin/chromium";
+          CHROMEDRIVER_PATH = "${pkgs.chromedriver}/bin/chromedriver";
+          MYDIA_FEATURE_TEST_FONTCONFIG = "${import ../feature-test-fontconfig.nix { inherit pkgs lib; }}";
+          SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+        };
+        script = ''
+          ${copyBuild ciInternal.mydiaTestBuild-sqlite}
+          ${heroiconsGitStub}
+          cp -r ${assets} priv/static/assets
+          chmod -R u+w priv/static/assets
+
+          # bash explicitly: the sandbox has no /usr/bin/env for the shebang.
+          if ! bash scripts/run-feature-tests.sh --only feature --seed 0; then
+            if [ -d tmp/wallaby_screenshots ]; then
+              cp -r tmp/wallaby_screenshots $TMPDIR/wallaby-screenshots
+              echo "Wallaby screenshots: $TMPDIR/wallaby-screenshots" \
+                "(in the build directory nix build --keep-failed keeps)"
+            else
+              echo "No Wallaby screenshots: no test wrote tmp/wallaby_screenshots"
+            fi
+            exit 1
+          fi
+        '';
+      };
     in
     {
+      # The RustFS the shards run against, for checks outside this file (the
+      # player's S3 tests). Same derivation, same store path.
+      _module.args.ciTests = { inherit rustfs; };
+
       ciChecks = shards "sqlite" 4 // shards "postgres" 3 // {
+        e2e-browser = e2eBrowser;
+
         # workflow_triggers_test.exs, taken out of the shards. It needs no
         # services: test_helper.exs excludes :s3 when no server answers
         # and MYDIA_TEST_S3_REQUIRED is unset.
@@ -336,8 +448,10 @@
       # Build-time inputs every shard shares. None is in a shard's output
       # closure, so pushing a shard never uploads them; exposed here, the CI
       # planner builds and pushes each once (rustfs is a full Rust build).
+      # assets is e2e-browser's alone, exposed so it is pinned and cached
+      # like the rest.
       ciInternal = {
-        inherit rustfs cardigannSourceHash;
+        inherit rustfs cardigannSourceHash assets;
       } // lib.optionalAttrs (cardigannGuest != null) { inherit cardigannGuest; };
     };
 }

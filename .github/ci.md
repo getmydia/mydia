@@ -94,8 +94,7 @@ since the build aborts before the Rust crate vendoring even starts.
 nothing else may name either. `beam-version.nix` resolves the pair from one
 nixpkgs beam set and throws when the pinned nixpkgs lacks the OTP set or the
 Elixir attribute under it. `devenv.nix` imports that resolver and is the
-toolchain for local development and for `ci.yml`'s E2E job, which runs inside
-`devenv shell`. `nix/toolchains.nix` imports it too, for the release build in
+toolchain for local development. `nix/toolchains.nix` imports it too, for the release build in
 `nix/packages/flake-module.nix`, the NixOS module VM tests and every flake
 check under `nix/ci/`.
 
@@ -309,7 +308,8 @@ Every check a nix bump needs runs on its pull request, because the gate's
 merge starts no workflows on master (the trap that left the Cardigann guest
 unpublished). `flake.lock` moving changes the toolchain under every flake
 check, so the whole `ci.yml` check matrix reruns, NixOS module tests
-included (they run on Dependabot's PRs for exactly this reason); `devenv.lock` moving reruns the E2E job; and the fixup touches nothing under
+included (they run on Dependabot's PRs for exactly this reason); and the
+fixup touches nothing under
 `.github/workflows/`, which the gate could not merge. `nixpkgs-android` is
 ignored: it moves by hand, with Flutter.
 
@@ -354,6 +354,9 @@ and `Test / Player` (both since 2026-08-31), and `Test / Player E2E` (since
 originally `paths:`-filtered, and `20f0db5e2` (2026-08-26) removed the filters
 precisely so they report on every PR. `ci-player.yml` got the same treatment
 differently: its filter moved into a `changes` job, so its jobs always report.
+Since phase 2 of Nix CI, `Test / Player` and `Build / Web` are aggregators in
+`ci.yml` and `ci-player.yml` holds no required context, so it is
+`paths:`-filtered again.
 
 A PR branched from a master older than that commit still carries the
 path-filtered workflow files, so those jobs never run and the required contexts
@@ -534,9 +537,12 @@ until the GitHub job timeout instead of failing fast.
 ## ci.yml: the flake-check graph
 
 The backend's checks are flake checks under `nix/ci/`: Elixir format, lint
-and Dialyzer, the SQLite and PostgreSQL shards, every Rust crate's fmt,
-clippy and tests, the plugins, the relay's suite, the NixOS module VM tests
-and the repository guards. Each is a derivation whose hash covers exactly the
+and Dialyzer, the SQLite and PostgreSQL shards, the Wallaby browser suite
+(`e2e-browser`), every Rust crate's fmt, clippy and tests, the plugins, the
+relay's suite, the NixOS module VM tests and the repository guards. The
+player's Linux, web and VM checks are flake checks too (`nix/ci/player.nix`:
+`player-analyze`, `player-l10n-test`, `player-icons`, `player-test`,
+`player-test-web`, `player-web`, `player-linux`). Each is a derivation whose hash covers exactly the
 files and toolchain it reads (every `src` is a `lib.fileset`), and every
 built output goes to the niks3 binary cache, `cache.mydia.dev`. A run builds
 what changed and substitutes the rest, so there is no path filter and no
@@ -549,7 +555,9 @@ workflow edit reruns only `ci-workflow-triggers` (plus, on master, the
 non-blocking NixOS tests, whose package takes the whole repo as source). A
 Weblate `.po`-only PR
 rebuilds the test build and runs every shard, because Gettext compiles the
-catalogs into the backend; the old `Translations` fast path is gone.
+catalogs into the backend; the old `Translations` fast path is gone. A
+player-only PR runs only the player checks, and a backend-only PR finds
+every player check cached.
 
 The jobs, in order:
 
@@ -646,31 +654,49 @@ the signing key and health checks are in
   file dated to the epoch, and the job runs Mix in `nix develop .#ci`
   (`nix/ci/README.md`, "Outside the sandbox").
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests (above).
-- `Test / E2E Browser (run)` is still a devenv job
-  (`.github/actions/setup-devenv`, which installs Nix, Cachix and devenv and
-  caches nothing): chromium, chromedriver and node come from `devenv.nix`.
-  It restores the same test build with the same script and runs devenv from
-  `/build/source`, exporting the build's compile-time variables
-  (`MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1`,
-  `MYDIA_SKIP_CARDIGANN_FETCH=1`, no `DATABASE_TYPE`). devenv's Elixir and
-  OTP are the same store paths as the checks' (both resolve
-  `beam-version.nix` on flake.lock's nixpkgs), so `mix compile` recompiles
-  only a handful of files (about 14). What the test build does not carry, it
-  builds itself: `npm ci --prefix assets` and `mix assets.deploy`. It skips
-  `mix deps.get` (deps/ comes with the build), only reads Cachix
-  (`skip-push: 'true'`, so nothing the restore builds lands there), and runs
-  even when the plan failed, so
-  the required check never skips; the restore then builds the test build
-  itself. Should devenv's BEAM ever drift from the checks', Mix recompiles
-  everything and the job is merely slow again.
+- `Build / Android` builds the release APK on every run (below).
 
-`ci-player.yml` has a `player_translations` fast path when only
-non-template `player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change
-(`app_en.arb` stays on the full `player` path because it defines the
-`AppLocalizations` Dart API): `Test / Player` runs `flutter gen-l10n`,
-`flutter pub run build_runner build`, `dart analyze --fatal-infos lib/l10n`,
-and `flutter test test/l10n`, while desktop and web builds skip their steps.
-`ci-player-e2e.yml` skips its run on `.po`-only and `.arb`-only translation PRs.
+The Wallaby browser suite is the `e2e-browser` check (`nix/ci/tests.nix`),
+not a job: nixpkgs chromium and chromedriver over the SQLite test build and
+`ciInternal.assets`. CI uploads no screenshots: tests write them only by an
+explicit `take_screenshot`, and a local
+`nix build .#checks.x86_64-linux.e2e-browser --keep-failed` keeps them under
+the path the failed check prints.
+
+### Build / Android runs on every PR
+
+`Build / Android` is the one player build that is not a derivation. Making it
+one needs a Gradle dependency lockfile for nixpkgs' `mitmCache` to fetch
+from, refreshed on every Android dependency bump, and Flutter's Android
+engine artifacts have never been proven inside the sandbox
+(`design/specs/2026-11-21-nix-ci-phase-2-design.md`, "Android"). So it is an
+ordinary job in `ci.yml` with no path filter: it runs on every PR, by design,
+including docs-only ones. Its toolchain is `nix develop .#android`, the shell
+`./dev player android build` uses, substituted through the `nix-ci` action
+with `push: 'false'`: a dev shell is not a check output, and the Android SDK
+packages are unfree, so cache.nixos.org does not carry them either and each
+run fetches the SDK, NDK and pub and Gradle dependencies afresh. There is no
+`actions/cache`. The steps are `flutter pub get --enforce-lockfile`,
+`flutter pub run build_runner build` and `flutter build apk --release
+--target-platform android-arm,android-arm64`, then
+`scripts/check-apk-abis.sh` and the `mydia-player-android-apk` artifact.
+
+### ci-player.yml: what Nix does not cover
+
+`ci-player.yml` keeps the Windows and macOS build legs and the Flatpak jobs
+(`Flatpak / Validate metadata`, `Flatpak / Build`). None of them is a
+required context, so it carries a workflow-level `paths:` filter on push and
+pull_request (player/, native/, the GraphQL schema, `rust-toolchain.toml`
+and the workflow itself) instead of the `changes` job it had while it held
+required checks. A PR that changes only translated ARB catalogs, not the
+`app_en.arb` template, does not trigger it; `player-l10n-test` covers those.
+The AppImage dry run is `ci-player-appimage.yml`, filtered on the packaging
+files alone. `ci-player-e2e.yml` skips its run on `.po`-only and `.arb`-only
+translation PRs.
+
+The Linux bundle CI builds (`player-linux`) is not uploaded: its runpath
+points into `/nix/store`, so it runs nowhere else. Release Linux bundles
+come from `player-linux.yml`.
 
 `ci-nix.yml` consolidates the non-VM pin, freshness, release-note, Apple-target,
 guard, and Dependabot-gate checks into two runners (`Check / Repo Contracts` and
@@ -694,35 +720,35 @@ do not run with `--cover`.
 
 ### Aggregators
 
-The names `Test`, `Test / PostgreSQL` and `Test / E2E Browser` are required by
-the Master ruleset, and they sit on three aggregator jobs (`test`,
-`test-postgres-result`, `test-e2e-result`). `Test` needs `Guards`,
-`Nix / Checks`, `Lint / Ratchet` and `Rust / SMB integration`;
-`Test / PostgreSQL` needs `Nix / Checks`; `Test / E2E Browser` needs the E2E
-job. A matrix leg's result is not addressable through `needs`, so both of the
-first two gate on the whole check matrix: a failing Rust check also reds
-`Test / PostgreSQL`. The NixOS VM tests are not in that matrix and gate
+The names `Test`, `Test / PostgreSQL`, `Test / E2E Browser`, `Test / Player`
+and `Build / Web` are required by the Master ruleset, and they sit on
+aggregator jobs (`test`, `test-postgres-result`, `test-e2e-result`,
+`test-player-result`, `build-web-result`), as do `Build / Linux` and
+`Check / Web icons` (`build-linux-result`, `icons-result`), which kept their
+names from `ci-player.yml`. `Test` needs `Guards`, `Nix / Checks`,
+`Lint / Ratchet` and `Rust / SMB integration`; the others need
+`Nix / Checks`. A matrix leg's result is not addressable through `needs`, so
+every aggregator gates on the whole check matrix: a failing Rust check also
+reds `Test / Player`, and a failing `player-test` reds `Test / PostgreSQL`.
+`Build / Android` is a plain job, not an aggregator: it has no `needs`, so
+nothing can skip it. The NixOS VM tests are not in that matrix and gate
 neither. Each has `if: always()` and a step that fails unless
 every job it needs concluded `success` or `skipped`, so the aggregator itself
-concludes success or failure and never `skipped`. The real E2E job is named
-`Test / E2E Browser (run)` for that reason, and its screenshot artifact hangs
-off it. The `Guard the required-check aggregators` step in `Guards` checks
+concludes success or failure and never `skipped`. The `Guard the required-check aggregators` step in `Guards` checks
 with `yq` that each required name sits on exactly one job whose `if` is
 `always()`. See `ci-flakes.md`, "Why the list was short".
 
 ### Compile-time config and the test build
 
 Every consumer of `ciInternal.mydiaTestBuild-*` (the shards, `elixir-lint`,
-`dialyzer`, `ci-workflow-triggers`, the ratchet, the E2E job) must run Mix
+`dialyzer`, `ci-workflow-triggers`, `e2e-browser`, the ratchet) must run Mix
 with the same compile-time configuration the build had, or Mix recompiles
 every file of the app: it stores each app's compile-time config in the
 manifest, and when the `:mydia` app's config differs it recompiles all of it.
 The build sets `MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1`,
 `MYDIA_SKIP_CARDIGANN_FETCH=1` and, for the PostgreSQL build,
 `DATABASE_TYPE=postgres` (the `env` in `nix/ci/elixir.nix`); the checks and
-`devShells.ci` take that same `env`. The E2E job does not: it exports the
-variables by hand in its devenv heredoc in ci.yml, so a change to that `env`
-must be copied there too, or the E2E job silently recompiles the whole app.
+`devShells.ci` take that same `env`.
 Anything that varies per shard or per run (partition numbers, database names,
 ports, temp paths, `CI`) belongs in `config/runtime.exs`, which Mix does not
 track, or in a different app's config, never under `:mydia` in
@@ -751,7 +777,10 @@ and cold about 20, so the cure was to get the big entries out of the budget:
 - No workflow caches the Flutter SDK (`subosito/flutter-action` without
   `cache: true`). Once the Docker blobs were gone, `ci-player.yml` took their
   place: about 2 GB per platform per player PR. The SDK download costs about a
-  minute. Pub caches are small and stay.
+  minute. Pub caches are small and stay on the Windows and macOS legs; the
+  Linux, web and Android player builds keep none (the Nix checks read pub
+  packages from the `player-pub-cache` derivation, and `Build / Android`
+  fetches on each run).
 - Docker layer caches no longer use `type=gha`. They are `type=registry` tags
   named `buildcache*` on the existing public GHCR packages, which do not count
   against the Actions cache: `:buildcache-sqlite` and `:buildcache-postgres`
@@ -765,8 +794,8 @@ and cold about 20, so the cure was to get the big entries out of the budget:
   Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
   which GHCR needs for cache manifests and which keeps a failed cache push from
   failing the build.
-- `ci-nix.yml` and `dependabot-fixup.yml` read Cachix, like the E2E job's
-  devenv, and none of them pushes to it; ci.yml's flake checks use niks3.
+- `ci-nix.yml` and `dependabot-fixup.yml` read Cachix, and neither pushes
+  to it; ci.yml's flake checks use niks3.
   magic-nix-cache stored every store path as its own Actions cache entry
   (2,226 entries, 1.1 GB on 2026-10-30).
 
@@ -778,11 +807,17 @@ gh api repos/getmydia/mydia/actions/cache/usage
 
 ## The player suite runs as one bundle
 
-`Test / Player` runs `very_good test --concurrency 1`, not `flutter test`.
+The `player-test` check runs the suite as one bundle, not file by file.
 Measured on 2026-10-15, 760 of the per-file run's 988 seconds were compiling
-666 test files one at a time; the bundle compiles once. Leak rules and the
-local repro command are in `player/docs/workflow.md`. The browser and
-television-tier steps still use plain `flutter test` on enumerated files.
+666 test files one at a time; the bundle compiles once. CI does not run
+`very_good` itself: `nix/ci/player.nix` reimplements, in bash, the part of
+very_good_cli 1.5.0's test optimizer the suite relies on (the generated
+`test/.test_optimizer.dart` and the separate run of files tagged
+`skip_very_good_optimization`), while developers run the real
+`very_good test` locally. Bumping very_good means re-reading that generator.
+Leak rules and the local repro command are in `player/docs/workflow.md`. The
+browser (`player-test-web`) and television-tier runs still use plain
+`flutter test` on enumerated files.
 
 `Test / Player E2E` rebuilds its toolbox image only when `player/.fvmrc`,
 `player/Dockerfile.test`, `player/pubspec.yaml`, `player/packages/` or

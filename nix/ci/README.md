@@ -74,6 +74,15 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   (the pinned guest fetch; absent when `ARTIFACT_SHA256` holds a value the
   app reads as no pin, such as `unpublished`, and then no shard carries the
   guest) and `ciInternal.cardigannSourceHash`.
+  `tests.nix` also holds `e2e-browser`, the Wallaby `:feature` suite in
+  nixpkgs chromium and chromedriver over `mydiaTestBuild-sqlite` and
+  `ciInternal.assets` (the digested esbuild and Tailwind output the
+  LiveView socket needs).
+- `player.nix`: the Flutter player (below, "The player checks"):
+  `ciInternal.player-pub-cache`, `ciInternal.player-codegen` and the checks
+  `player-analyze`, `player-l10n-test`, `player-icons`, `player-test`,
+  `player-test-web`, `player-web` and `player-linux`. `player-linux` takes
+  `ciInternal.player-p2p-so` from `rust.nix`.
 - `../checks/flake-module.nix`: the NixOS module VM tests `nixos-module` and
   `nixos-module-postgres`, and the packages they boot as
   `ciInternal.package-default` and `ciInternal.package-postgres`.
@@ -126,22 +135,86 @@ its inputs changes. The intermediate derivations are `ciInternal` entries.
     mydiaTestBuild-sqlite                 ─► elixir-lint, ci-cardigann-hash,
                                              ci-workflow-triggers
     mydiaTestBuild-sqlite, dialyzer-plt   ─► dialyzer
+    mydiaTestBuild-sqlite, assets,
+      chromium, chromedriver              ─► e2e-browser
     each crate                            ─► cargoDeps-<crate>
                                              ─► rust-<crate>-{clippy,test}
+    player/rust/mydia_player_p2p,
+      native/mydia_p2p_core               ─► player-p2p-so
+    player/pubspec.lock.json              ─► player-pub-cache
+    player/ (playerCodegen), the GraphQL
+      schema, player-pub-cache            ─► player-codegen
+    player-codegen                        ─► player-analyze, player-l10n-test,
+                                             player-icons, player-test-web,
+                                             player-web
+    player-codegen, platform files, rustfs ─► player-test
+    player-codegen, player-p2p-so         ─► player-linux
     metadata-relay/                       ─► relayDepsCompiled ─► relay-test
     package-{default,postgres}            ─► nixos-module{,-postgres}
     plain files                           ─► rust-<crate>-fmt, guards,
                                              ci-crate-list, ci-fileset-coverage
 
 So a `lib/` edit rebuilds `mydiaTestBuild` and everything under it, and
-leaves the dependency builds, the PLT, the NIFs and every Rust and relay
-check cached. A `test/` edit reruns the shards only; a workflow edit reruns
-`ci-workflow-triggers` only (plus, on master, the non-blocking NixOS tests,
-whose package takes the whole repo as source and so reruns on any edit).
+leaves the dependency builds, the PLT, the NIFs, the player and every Rust
+and relay check cached. A `test/` edit reruns the shards and `e2e-browser`;
+a workflow edit reruns `ci-workflow-triggers` only (plus, on master, the
+non-blocking NixOS tests, whose package takes the whole repo as source and
+so reruns on any edit). A player source edit rebuilds `player-codegen` and every player
+check from scratch: there is no incremental `.dart_tool`.
+
+## The player checks
+
+`nix/ci/player.nix` builds the player's Linux, web and VM checks in the
+sandbox. Android is not one of them (`.github/ci.md`, "Build / Android runs
+on every PR"), and Windows and macOS stay in `ci-player.yml`.
+
+- **Pub cache.** `player-pub-cache` is a `PUB_CACHE` holding every hosted
+  package in `player/pubspec.lock`, read from `player/pubspec.lock.json`
+  (Nix reads no YAML; `scripts/regenerate-derived.sh` writes the JSON and
+  `check-generated-freshness.sh` keeps it current). Each archive is fetched
+  by nixpkgs' `pub2nix`, fixed-output on the lock's sha256.
+- **Patched sources.** `pub2nix` applies nixpkgs' own package-source
+  builders, the ones `buildFlutterApplication` uses, so a few plugins come
+  in with nixpkgs' Linux patches rather than byte for byte from pub.dev:
+  `media_kit`, `media_kit_libs_linux`, `xdg_directories` and
+  `flutter_secure_storage_linux`. When one of those is bumped in
+  `pubspec.lock`, check that nixpkgs' builder still applies to the new
+  version (and still does what the player needs), or the checks build a
+  tree that differs from what developers and the release run.
+- **Writable `/build/pub-cache`.** Pub writes bookkeeping (`active_roots/`)
+  into `PUB_CACHE` even offline, so the cache every check sees is a writable
+  `/build/pub-cache` whose `hosted/` and `hosted-hashes/` link into the
+  store. The path is fixed in `player-codegen` and every check, because pub
+  writes it into `.dart_tool/package_config.json`.
+- **Codegen once.** `player-codegen` runs `flutter pub get --offline
+  --enforce-lockfile`, `flutter gen-l10n` and `flutter pub run build_runner
+  build` at `/build/source/player`, and every check copies that tree back to
+  `/build/source` (`mkPlayerCheck`), where the absolute paths build_runner
+  recorded under `.dart_tool` still hold.
+- **The `flutter` shim.** Each check's `flutter` is a PATH shim that adds
+  `--no-pub` to `test`, `analyze` and `build` (their implicit `pub get` is
+  not offline and hangs in the sandbox) and `--test-randomize-ordering-seed
+  0` to any `flutter test` that sets no seed. It matches only the first
+  argument: the subcommand must come first (`flutter test ...`, never
+  `flutter --suppress-analytics test ...`), or the call passes through
+  unchanged.
+- **The p2p library.** `player-linux` never runs cargokit: crane builds
+  `libmydia_player_p2p.so` as `ciInternal.player-p2p-so` (`rust.nix`), and
+  the check exports `MYDIA_PLAYER_P2P_PREBUILT` with its path.
+  `player/rust_builder/linux/CMakeLists.txt` bundles the file that variable
+  names and skips `apply_cargokit`. `cargo` and `rustup` on the check's PATH
+  refuse, so a fallback to cargokit fails loudly. The bundle's runpath points
+  into `/nix/store`, so CI does not upload it.
+- **very_good.** `player-test` does not run very_good_cli. It reproduces, in
+  bash, very_good_cli 1.5.0's test optimizer template and the `flutter test`
+  call very_good makes with it; developers run the real `very_good test`.
+  Bumping very_good_cli means re-reading its template and pre_gen hook.
 
 ## Outside the sandbox
 
-Two CI jobs cannot be checks and run as ordinary jobs in `devShells.ci`:
+Three CI jobs cannot be checks. Two run as ordinary jobs in `devShells.ci`,
+and `Build / Android` runs in `devShells.android` (`.github/ci.md`, "Build /
+Android runs on every PR"):
 
 - `Lint / Ratchet` runs `mix mydia.ratchet --from-git-merge-base
   origin/master`, which reads git history, and on master pushes the
@@ -155,11 +228,8 @@ Two CI jobs cannot be checks and run as ordinary jobs in `devShells.ci`:
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests, which need a
   root smbd; `rust-mydia_smb-test` skips them.
 
-`Test / E2E Browser (run)` restores the same build with the same script but
-runs in devenv, for chromium, chromedriver and node; devenv's Elixir and OTP
-are the same store paths as this shell's, and the job exports the build's
-`MYDIA_*` compile-time variables itself. It builds the assets the test build
-does not carry.
+The Wallaby browser suite is not one of them: it is the `e2e-browser` check
+in `tests.nix`, over the test build and `ciInternal.assets`.
 
 The NixOS module VM tests are checks, but `scripts/ci-plan.sh` lists them
 separately and ci.yml runs them outside the `Nix / Checks` verdict, on
@@ -223,5 +293,6 @@ caught by `ci-crate-list` instead, once it is under `native/*` or
 ## Building a check locally
 
     nix build .#checks.x86_64-linux.ci-fileset-coverage -L
+    nix build .#checks.x86_64-linux.player-test -L
 
 New files must be visible to git (`git add -N <path>`) before Nix sees them.

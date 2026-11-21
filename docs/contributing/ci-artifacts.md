@@ -1,10 +1,14 @@
 # Using CI builds
 
 Every push to `master` or `main`, and every pull request, that touches `player/`,
-`native/`, or `.github/workflows/ci-player.yml` produces downloadable player
-builds. Pushes and pull requests that do not touch those paths do not trigger a
-build, so there is nothing to download for them. These builds are the fastest
-way to try a change before it reaches a release.
+`native/`, `priv/graphql/schema.graphql`, `rust-toolchain.toml` or
+`.github/workflows/ci-player.yml` produces downloadable Windows and macOS player
+builds from the `ci-player.yml` workflow. A change that only edits translations
+(`player/lib/l10n/app_*.arb` other than `app_en.arb`) does not trigger it, and
+neither does anything outside those paths, so there is nothing to download for
+them. The Android APK comes from the main `ci.yml` workflow, which builds it
+on every push and pull request. These builds are the fastest way to try a change
+before it reaches a release.
 
 CI builds are not release builds. They are ad-hoc signed and never notarized, so
 Sparkle auto-update does not work on them. If you are testing the updater, use a
@@ -15,7 +19,8 @@ Artifacts are kept for 7 days.
 ## Finding a run
 
 ```bash
-gh run list --workflow=ci-player.yml -R getmydia/mydia --limit 10
+gh run list --workflow=ci-player.yml -R getmydia/mydia --limit 10   # Windows, macOS
+gh run list --workflow=ci.yml -R getmydia/mydia --limit 10          # Android
 ```
 
 Take the run ID from the leftmost column of the row you want.
@@ -47,23 +52,10 @@ ad-hoc signature rather than a notarized Developer ID one.
 
 ## Linux
 
-```bash
-gh run download <run-id> -R getmydia/mydia -n mydia-player-linux-bundle -D mydia-player
-chmod +x mydia-player/mydia-player
-./mydia-player/mydia-player
-```
-
-The artifact contains the contents of the build bundle, so pass `-D` to give it
-a directory of its own. The bundle links against libmpv and GTK 3 rather than
-shipping them, so both must already be installed. On Debian and Ubuntu the GTK
-package is `libgtk-3-0`; the libmpv runtime package is `libmpv2` on Ubuntu 24.04
-and later and `libmpv1` on older releases, so install whichever your release
-provides:
-
-```bash
-sudo apt-get install libgtk-3-0
-sudo apt-get install libmpv2 || sudo apt-get install libmpv1
-```
+CI publishes no Linux build. It still compiles the player for Linux on every
+change, but in a Nix build whose libraries live in the Nix store, so the result
+runs nowhere else. To try a change on Linux, build it from your checkout, or
+use the tarball, AppImage or Flatpak from a release.
 
 ## Windows
 
