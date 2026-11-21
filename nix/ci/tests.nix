@@ -347,14 +347,14 @@
       # the build's). The fontconfig is devenv's, so text widths match
       # `./dev feature-test`. The script's DB setup and `mix test` run
       # without --no-deps-check, hence heroiconsGitStub. --seed 0 keeps a
-      # rerun (ci.yml's --keep-failed pass) in the same order.
+      # rerun in the same order.
       #
       # A failed build has no $out, so on failure the screenshots
       # (config/test.exs :screenshot_dir) are copied to a fixed path in the
-      # build directory, which `nix build --keep-failed` keeps. Only an
-      # explicit take_screenshot writes one: Wallaby's screenshot_on_failure
-      # applies to its `feature` macro, and MydiaWeb.FeatureCase tests use
-      # plain `test`.
+      # build directory, which a local `nix build --keep-failed` keeps; CI
+      # does not collect them. Only an explicit take_screenshot writes one:
+      # Wallaby's screenshot_on_failure applies to its `feature` macro, and
+      # MydiaWeb.FeatureCase tests use plain `test`.
       e2eBrowser = mkCheck {
         name = "e2e-browser";
         set = lib.fileset.unions [

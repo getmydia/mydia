@@ -350,8 +350,8 @@ gh api repos/getmydia/mydia/actions/jobs/<job-id> --jq '.steps[] | "\(.conclusio
   `describe "prepare/3"` so tests no longer leak background `ffmpeg` processes
   (`Ecto.StaleEntryError` / `DBConnection.OwnershipError` noise).
 - `mix local.hex` / `mix local.rebar` transient `builds.hex.pm` failures:
-  wrapped in `scripts/ci-mix-bootstrap.sh` (3 attempts) backed by a small
-  `mix-archives-v1` cache.
+  were wrapped in a retrying `scripts/ci-mix-bootstrap.sh`, deleted once no CI
+  job ran Mix outside Nix with a fetched Hex (the checks load Hex from the store).
 
 `Mydia.DataCase` forces `async: false` on SQLite but honours `async: true` on
 Postgres, so the Postgres job runs modules concurrently and is where order- and

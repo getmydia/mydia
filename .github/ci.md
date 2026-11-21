@@ -633,9 +633,10 @@ the signing key and health checks are in
 
 The Wallaby browser suite is the `e2e-browser` check (`nix/ci/tests.nix`),
 not a job: nixpkgs chromium and chromedriver over the SQLite test build and
-`ciInternal.assets`. On failure the `checks` matrix leg rebuilds it with
-`--keep-failed` and uploads `wallaby-screenshots` from the kept build
-directory.
+`ciInternal.assets`. CI uploads no screenshots: tests write them only by an
+explicit `take_screenshot`, and a local
+`nix build .#checks.x86_64-linux.e2e-browser --keep-failed` keeps them under
+the path the failed check prints.
 
 `ci-player.yml` has a `player_translations` fast path when only
 non-template `player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change

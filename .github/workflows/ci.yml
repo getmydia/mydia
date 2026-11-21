@@ -216,37 +216,6 @@ jobs:
           mapfile -t paths < "$RUNNER_TEMP/out-paths"
           "$NIX_CI_PUSH" "${paths[@]}"
 
-      # A failed e2e-browser has no $out: it copies the Wallaby screenshots
-      # to wallaby-screenshots in its build directory (nix/ci/tests.nix), so
-      # rebuild it once with --keep-failed and upload them from there. The
-      # kept directory belongs to the build user, hence sudo.
-      - name: Collect the E2E screenshots
-        if: failure() && matrix.name == 'e2e-browser'
-        env:
-          ATTR: ${{ matrix.attr }}
-        run: |
-          shots="$RUNNER_TEMP/wallaby-screenshots"
-          mkdir -p "$shots"
-          nix build -L --keep-failed ".#$ATTR" 2>&1 | tee "$RUNNER_TEMP/e2e-rerun.log" || true
-          # Nix quotes the path with ' or ", depending on its version.
-          dir=$(grep -oE "keeping build directory ['\"][^'\"]+" "$RUNNER_TEMP/e2e-rerun.log" | tail -n 1 | sed -E "s/^keeping build directory ['\"]//" || true)
-          found=$([ -n "$dir" ] && sudo find "$dir" -type d -name wallaby-screenshots -print -quit || true)
-          if [ -n "$found" ]; then
-            sudo cp -r "$found/." "$shots/"
-            sudo chown -R "$(id -u):$(id -g)" "$shots"
-          else
-            echo "::warning::no wallaby-screenshots in the kept build directory (${dir:-none}); the rebuild may have passed"
-          fi
-
-      - name: Upload the E2E screenshots
-        if: failure() && matrix.name == 'e2e-browser'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wallaby-screenshots
-          path: ${{ runner.temp }}/wallaby-screenshots/
-          retention-days: 7
-          if-no-files-found: ignore
-
   # The NixOS module VM tests (nixos-module, nixos-module-postgres): same
   # build and push as `checks`, but outside the Nix / Checks verdict, so they
   # block nothing. The package they boot takes the whole repo as its source
