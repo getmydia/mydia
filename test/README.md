@@ -131,7 +131,18 @@ ways a test can trip over:
   non-loopback interface and no default route: a connect to anything else
   fails at once with `:enetunreach` rather than timing out. A test that
   genuinely needs the network or the host's interfaces is tagged
-  `@tag :external`, which `test_helper.exs` excludes.
+  `@tag :external`, which `test_helper.exs` excludes. These four were tagged
+  for the sandbox and no longer run in CI; `./dev mix test --include
+  external <file>` runs them on a machine with a network:
+  - `test/mydia/remote_access/direct_urls_test.exs`, DirectUrlsTest
+    "includes local URLs": needs a non-loopback IPv4 interface.
+  - `test/mydia/remote_access/direct_url_refresher_test.exs`,
+    DirectUrlRefresherTest "detects URLs and stores them in config": same.
+  - the same file, DirectUrlRefresherTest "complete refresh flow": same.
+  - `test/mydia/plugins/net/gate_test.exs`, Plugins.Net.GateTest "a host
+    that never answers hits the connect timeout": needs a default route for
+    the SYN to black-hole on; without one the connect fails with
+    `:enetunreach` instead of timing out.
 - **`--seed 0`.** Module and test order is fixed, so a cached result is
   reproducible. An order-dependent failure reproduces locally with
   `./dev mix test --seed 0` over the same files.
@@ -144,11 +155,15 @@ ways a test can trip over:
 - **`HOME` is an empty scratch directory** and there is no `/etc/ssl`:
   `test_helper.exs` loads `SSL_CERT_FILE` into OTP's trust store when the OS
   store is missing.
-- **Four schedulers.** `ERL_FLAGS="+S 4"` matches the GitHub runner, so the
-  PostgreSQL shards run `max_cases: 4` against the pool of 10 on any machine.
+- **Four schedulers.** `ERL_FLAGS="+S 4"` matches the GitHub runner, so every
+  machine runs the PostgreSQL shards with the same shape (`max_cases: 4`).
+  Independently, `test_helper.exs` caps PostgreSQL `max_cases` at 8, under
+  the Repo's `pool_size: 10`, so a large machine never queues past the pool
+  timeout.
 
-Every shard reads all of `test/`, so any test edit reruns all seven; an edit
-outside the shards' files is a cache hit.
+Every shard reads all of `test/` except its Markdown, so any test edit reruns
+all seven; a doc edit under `test/`, or any edit outside the shards' files, is
+a cache hit.
 
 ### Feature tests are excluded from every normal run
 

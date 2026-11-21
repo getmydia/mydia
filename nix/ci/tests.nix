@@ -117,7 +117,14 @@
         in
         mkCheck {
           name = "test-${databaseType}-${toString partition}";
-          set = lib.fileset.unions [ buildSet sources.elixirTest testReads ];
+          # test/ without its Markdown (no test reads a .md under test/), so a
+          # doc edit there does not rerun the shards.
+          set = lib.fileset.unions [
+            buildSet
+            (lib.fileset.difference sources.elixirTest
+              (lib.fileset.fileFilter (file: file.hasExt "md") sources.elixirTest))
+            testReads
+          ];
           # Tools untagged tests run, all in devenv.nix's packages: ffmpeg
           # and ffprobe (Mydia.Library.Ffmpeg, media fixtures), fpcalc
           # (chromaprint, segment detection), pkill (procps, the ffprobe
@@ -136,10 +143,9 @@
             # There is no /etc/ssl in the sandbox; test/test_helper.exs loads
             # this into OTP's trust store.
             SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-            # test_helper.exs runs PostgreSQL with max_cases equal to the
-            # schedulers, against a pool of 10 (config/test.exs). Pinned at
-            # the GitHub runner's 4 cores, so a large machine does not queue
-            # past the pool's timeout and every machine runs the same shape.
+            # A reproducible run shape: the GitHub runner's 4 cores on every
+            # machine, so PostgreSQL's max_cases (the schedulers, capped in
+            # test_helper.exs) and the async interleaving match CI's.
             ERL_FLAGS = "+S 4";
           } // lib.optionalAttrs postgres {
             DATABASE_TYPE = "postgres";
@@ -154,7 +160,8 @@
             # Mydia.Indexers.Cardigann.Wasm.SourceHash and its shell twin list
             # the guest's files with `git ls-files`. The sandbox holds exactly
             # the tracked files (a flake source is the git tree), so an index
-            # of them is the checkout's.
+            # of them is the checkout's. That makes artifact_test's walk-vs-git
+            # comparison vacuous here; `./dev test` in a real checkout exercises it.
             git init --quiet
             git add -- native/cardigann_guest
 

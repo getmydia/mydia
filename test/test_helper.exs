@@ -1,6 +1,9 @@
 # SQLite doesn't handle high concurrency well, even with WAL mode.
 # Use 1 concurrent case for SQLite to avoid "Database busy" errors.
-# PostgreSQL handles concurrency fine, so use all available schedulers.
+# PostgreSQL handles concurrency fine, so use the schedulers, capped at 8 to
+# stay under the Repo's pool_size: 10 (config/test.exs): each async case holds
+# a sandbox connection, and more cases than connections queue past the pool
+# timeout (47 failures at 16 schedulers).
 # Exclude external integration tests by default (require external services)
 # Exclude feature tests by default (require chromedriver)
 # Exclude relay tests by default (require connected relay service)
@@ -9,7 +12,7 @@
 # Run specific tests explicitly with: mix test --include <tag>
 max_cases =
   if System.get_env("DATABASE_TYPE") == "postgres" do
-    System.schedulers_online()
+    min(System.schedulers_online(), 8)
   else
     1
   end
