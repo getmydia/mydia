@@ -1,19 +1,18 @@
 #!/bin/sh
 # Seeds the E2E test environment: admin user, remote access, test media.
-# Runs inside the mydia container after the app reports healthy.
+# Runs on the server VM of the player-e2e NixOS test (nix/tests/player-e2e.nix),
+# from its mydia-e2e-seed unit, after the app reports healthy.
 #
-# Extracted from the former Dockerfile.e2e heredoc. Unlike that version this
-# script fails loudly: a seed that half-succeeds used to surface much later as
-# an unexplained Dart test failure.
+# Fails loudly: a seed that half-succeeds used to surface much later as an
+# unexplained Dart test failure.
 set -eu
 
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@test.local}"
 ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-testpassword123}"
 VIDEO_PATH="/media/movies/e2e-test-video.mp4"
 SCRIPT_DIR="$(dirname "$0")"
-# How to reach the running release: the Docker image's default, or the
-# player-e2e NixOS test's (nix/tests/player-e2e.nix). Word-split on purpose.
-MYDIA_CLI="${E2E_MYDIA_CLI:-su-exec mydia /app/bin/mydia}"
+# `bin/mydia rpc` against the running node, wrapped by player-e2e.nix.
+MYDIA_CLI=mydia-e2e-cli
 
 echo "E2E: creating admin user $ADMIN_EMAIL"
 $MYDIA_CLI rpc "
@@ -42,7 +41,7 @@ $MYDIA_CLI rpc "
       {:error, reason} -> raise \"initialize_config failed: #{inspect(reason)}\"
     end
 
-    # ENABLE_REMOTE_ACCESS in compose.player-e2e.yml switches remote access on
+    # ENABLE_REMOTE_ACCESS in nix/tests/player-e2e.nix switches remote access on
     # and locks the admin toggle, so there is nothing to turn on here.
     unless Mydia.Player.remote_access_enabled?() do
       raise \"remote access is off; check ENABLE_PLAYER and ENABLE_REMOTE_ACCESS\"

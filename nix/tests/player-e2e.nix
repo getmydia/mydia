@@ -1,8 +1,8 @@
 # Test / Player E2E: the Flutter player's integration tests against a real
 # server and metadata-relay, as three VMs on the test VLAN (no internet).
 #
-#   relay    packages.metadata-relay, with the environment
-#            compose.player-e2e.yml gave the relay container, on port 4001.
+#   relay    packages.metadata-relay, with a test-only environment, on
+#            port 4001.
 #   server   the NixOS module (nix/module.nix) on packages.default, in E2E
 #            configuration. mydia-e2e-seed, a oneshot after mydia.service,
 #            runs scripts/e2e/seed.sh and then writes /run/mydia-e2e-seeded.
@@ -11,7 +11,8 @@
 #            player-codegen with the crane-built p2p library.
 #
 # iroh: the player connects to the server directly over the VLAN (the
-# Task 3 spike in design/plans/2026-11-21-nix-ci-phase-2.md). Discovery and
+# "Spike 2, iroh between VM nodes" section of
+# design/plans/2026-11-21-nix-ci-phase-2.md). Discovery and
 # the default relays stay configured but unreachable, as for a real player
 # with no internet. The server binds iroh to a fixed UDP port so the
 # firewall can open it; without P2P_BIND_PORT iroh picks a random port and
@@ -74,9 +75,10 @@ let
     export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH:$XDG_DATA_DIRS"
     export HOME=/build/home TMPDIR=/build/tmp
     mkdir -p "$HOME" "$TMPDIR"
-    # The suite runs out of descriptors at the default soft limit of 1024 (a
-    # Docker container starts far higher), and GLib aborts the app on
-    # EMFILE mid-suite.
+    # The suite runs out of descriptors at the default soft limit of 1024,
+    # and GLib aborts the app on EMFILE mid-suite. Likely a descriptor leak
+    # across the suite's repeated app boots that the old Docker run's higher
+    # default limit hid, so read this as a workaround, not a requirement.
     ulimit -n "$(ulimit -Hn)"
 
     ${ciPlayer.setupPlayerTree { }}
@@ -87,7 +89,6 @@ let
     export E2E_ADMIN_EMAIL=${adminEmail}
     export E2E_ADMIN_PASSWORD=${adminPassword}
     export E2E_TEST_TARGET=integration_test/all_tests.dart
-    export E2E_CODEGEN_DONE=1
     exec bash ${e2eScripts}/run-tests.sh
   '';
 
@@ -136,7 +137,7 @@ pkgs.testers.nixosTest {
   nodes.server = { config, ... }:
     let
       # `bin/mydia rpc` against the running node, for seed.sh and
-      # assert-seeded.sh (E2E_MYDIA_CLI). The module's distribution is
+      # assert-seeded.sh, which call it by this name. The module's distribution is
       # switched on below so rpc can reach it.
       mydiaCli = pkgs.writeShellScriptBin "mydia-e2e-cli" ''
         export RELEASE_COOKIE=${config.systemd.services.mydia.environment.RELEASE_COOKIE}
@@ -157,7 +158,6 @@ pkgs.testers.nixosTest {
         guardianSecretKeyFile = pkgs.writeText "e2e-guardian-secret-key"
           "E2ETestGuardianSecretKey12345678901234567890123456789012345678";
         extraEnvironment = {
-          E2E_MODE = "true";
           ENABLE_REMOTE_ACCESS = "true";
           METADATA_RELAY_URL = "http://relay:4001";
           PUBLIC_IP_ENABLED = "false";
@@ -180,7 +180,6 @@ pkgs.testers.nixosTest {
         requires = [ "mydia.service" ];
         path = [ mydiaCli pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.curl pkgs.ffmpeg ];
         environment = {
-          E2E_MYDIA_CLI = "mydia-e2e-cli";
           E2E_ADMIN_EMAIL = adminEmail;
           E2E_ADMIN_PASSWORD = adminPassword;
         };
@@ -188,9 +187,8 @@ pkgs.testers.nixosTest {
           Type = "oneshot";
           RemainAfterExit = true;
         };
-        # As scripts/e2e/server-entrypoint.sh: wait for health, seed, and
-        # mark success only when seed.sh (which ends with
-        # assert-seeded.sh) returns 0.
+        # Wait for health, seed, and mark success only when seed.sh (which
+        # ends with assert-seeded.sh) returns 0.
         script = ''
           rm -f /run/mydia-e2e-seeded
           until curl -sf http://localhost:4000/health >/dev/null; do sleep 2; done
@@ -248,7 +246,7 @@ pkgs.testers.nixosTest {
             )
             server.succeed("test -f /run/mydia-e2e-seeded")
             server.succeed(
-                "E2E_MYDIA_CLI=mydia-e2e-cli E2E_ADMIN_EMAIL=${adminEmail} sh ${e2eScripts}/assert-seeded.sh"
+                "E2E_ADMIN_EMAIL=${adminEmail} sh ${e2eScripts}/assert-seeded.sh"
             )
         client.wait_for_unit("multi-user.target", timeout=left())
 

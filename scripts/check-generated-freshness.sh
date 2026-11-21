@@ -18,10 +18,11 @@
 # line carrying both that toolchain's name and a version literal, so versions
 # are described rather than written out.
 #
-# Neither pull request was mis-evaluated. The jobs that catch this class,
-# `CI / Nix` and `CI / Player E2E`, do not run on pull requests at all, so a
-# green rollup was true and meaningless. These checks are the cheap part of
-# those jobs, hoisted to where a pull request can see them.
+# Neither pull request was mis-evaluated. The jobs that caught this class at
+# the time, `CI / Nix` and the since-retired `CI / Player E2E`, did not run on
+# pull requests at all, so a green rollup was true and meaningless. These
+# checks are the cheap part of those jobs, hoisted to where a pull request can
+# see them.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

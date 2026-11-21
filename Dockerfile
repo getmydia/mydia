@@ -187,7 +187,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 # ── plugins: bundled WASM guests, built apart from lib/ ─────────────────────
 # Mirrors `nifs` above: `mix compile` used to build every `plugins/*/` guest
 # after `COPY lib`, so any Elixir change rebuilt all bundled crates from scratch
-# (~133s on every backend PR's Player E2E server image build). Built here from
+# (~133s on every backend change's server image build). Built here from
 # the SDK and `plugins/` alone, the layer stays cached in the registry until
 # `plugins/`, `native/mydia_plugin_sdk/`, `native/mydia_plugin_macros/`, or the
 # toolchain changes. Target dirs stay in BuildKit cache mounts so only the
@@ -323,7 +323,7 @@ COPY --from=flutter-builder /app/player/build/web ./priv/static/player
 # Higher is wrong. BuildKit folds a RUN's environment into its ExecOp cache key,
 # while a COPY is a FileOp that ignores it, so a commit-varying ENV above
 # `mix deps.get` and `mix deps.compile` leaves those two permanently uncacheable
-# in ci-docker.yml, release.yml and ci-player-e2e.yml at once. That asymmetry is
+# in both ci-docker.yml and release.yml. That asymmetry is
 # what hid the bug for so long: the build log showed `COPY mix.exs mix.lock` as
 # CACHED with every RUN beneath it missing, which reads as impossible. Here it
 # costs nothing, because the source COPYs above already vary per commit.

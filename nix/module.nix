@@ -449,9 +449,10 @@ in
         ProtectKernelModules = true;
         ProtectControlGroups = true;
         # AF_NETLINK: iroh (remote access) enumerates the host's interfaces
-        # over netlink. Without it the node advertises no direct addresses,
-        # and a player can only reach the server through a relay, or not at
-        # all with no relay reachable (the player-e2e VM test).
+        # over netlink. Without it the node advertises none of its interface
+        # (LAN) addresses and iroh's network-change detection breaks. With a
+        # reachable relay iroh still learns its public address; with none
+        # (the player-e2e VM test) the node has no address to offer at all.
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" "AF_NETLINK" ];
         RestrictNamespaces = true;
         RestrictRealtime = true;

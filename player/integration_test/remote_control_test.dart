@@ -3,13 +3,12 @@
 // HARNESS NOTE — this deviates from the plan's Task 18 in one deliberate way,
 // documented here rather than hidden:
 //
-// The plan proposed a second `test`-like compose service so "two player
-// instances run against one server". That shape does not fit: the `test`
-// service in `compose.player-e2e.yml` is the Flutter *test runner* — running
-// a second one starts a second, independent `flutter test` process with no
-// way to coordinate a single scenario across the two. There is no built-in
-// mechanism for one test file to drive two containers through one scripted
-// interaction.
+// The plan proposed a second test-runner service so "two player instances
+// run against one server". That shape does not fit: the E2E client is the
+// Flutter *test runner* — running a second one starts a second, independent
+// `flutter test` process with no way to coordinate a single scenario across
+// the two. There is no built-in mechanism for one test file to drive two
+// runners through one scripted interaction.
 //
 // It also cannot be done by mounting two `MyApp()` widget trees in one
 // process: `core/router/navigator_keys.dart` declares `rootNavigatorKey` as

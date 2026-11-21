@@ -51,8 +51,8 @@ void main() {
   // PlatformException(KeyringLocked, KeyringLocked, null, null) because there
   // is no session bus running to unlock a libsecret provider
   // (gnome-keyring/kwallet). To enable, run dbus-launch (or a real session
-  // bus) and a libsecret provider (gnome-keyring/kwallet) inside the
-  // player-e2e-toolbox image. These are the regression tests for the macOS
+  // bus) and a libsecret provider (gnome-keyring/kwallet) on the client VM of
+  // nix/tests/player-e2e.nix. These are the regression tests for the macOS
   // re-pair bug, so they must still run on macOS.
   testWidgets(
     'the real keychain accepts writes and reads them back',

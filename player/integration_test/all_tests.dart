@@ -22,8 +22,9 @@ import 'simple_test.dart' as simple;
 /// for the same reason: it mints its own codes for both of the players it
 /// pairs, so it never touches the single-use one either.
 ///
-/// Registering a file here is what makes CI run it — `ci-player-e2e.yml` sets
-/// `E2E_TEST_TARGET: integration_test/all_tests.dart`, so a file left out is
+/// Registering a file here is what makes CI run it —
+/// `nix/tests/player-e2e.nix` sets
+/// `E2E_TEST_TARGET=integration_test/all_tests.dart`, so a file left out is
 /// inert no matter how thorough it is.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
