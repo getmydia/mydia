@@ -29,13 +29,13 @@ dependencies:
     sdk: flutter
   # Message formatting for the generated AppLocalizations. The constraint stays
   # compatible with the version the Flutter SDK pins, so it never forces a solve.
-  intl: ^0.20.2
+  intl: ^0.20.3
   elliptic: ^0.4.0
   pointycastle: ^4.0.0
   convert: ^3.1.2
   flutter_riverpod: ^3.5.0
   riverpod_annotation: ^4.0.8
-  go_router: ^18.0.1
+  go_router: ^18.1.4
   collection: ^1.19.1
   # HCT colour space plus the quantizer and scorer the ambient tint uses.
   # Pinned to the version Flutter's SDK resolves, so it never forces a solve.
@@ -46,17 +46,17 @@ dependencies:
   # read the macOS option under the wrong key ("useDataProtectionKeyChain"), so
   # usesDataProtectionKeychain was ignored and every keychain call failed with
   # -34018 on an app signed without a keychain access group.
-  flutter_secure_storage: ^11.0.0
-  cached_network_image: ^4.0.0
+  flutter_secure_storage: ^11.2.0
+  cached_network_image: ^4.0.7
   # ImageRenderMethodForWeb lives here, not in cached_network_image's exports.
   # core/cache/artwork_decode.dart picks HttpGet so web decodes honour a size.
-  cached_network_image_platform_interface: ^5.0.0
+  cached_network_image_platform_interface: ^5.0.4
   # ArtworkImage builds on this directly; it is what CachedNetworkImage wraps.
-  octo_image: ^2.1.0
+  octo_image: ^2.1.5
   flutter_cache_manager: ^3.5.0
   # 1.5.0 added AbortableRequest, which the crash reporter uses to cancel a
   # send that timed out instead of leaving it running.
-  http: ^1.5.0
+  http: ^1.6.0
   # WebDAV multistatus responses (files library backend).
   xml: ^7.1.0
   shimmer: ^4.0.0
@@ -67,22 +67,22 @@ dependencies:
   # Talks to org.freedesktop.portal.Flatpak so the Flatpak build can update
   # itself. Plain Dart rather than a Flutter plugin, so it adds no platform
   # channel and no build step, and it is only constructed inside the sandbox.
-  dbus: ^0.8.0
-  path_provider: ^2.1.0
+  dbus: ^0.8.1
+  path_provider: ^2.1.6
   dart_cast: 0.7.4
   bonsoir: ^7.1.6
   web: ^1.1.2
   crypto: ^3.0.8
   cryptography: ^2.9.0
-  uuid: ^4.5.1
+  uuid: ^4.6.0
   connectivity_plus: ^7.3.2
   device_info_plus: ^13.3.0
-  local_auth: ^3.0.0
+  local_auth: ^3.0.2
   package_info_plus: ^10.2.2
   # Parses crash stack traces into frames for core/crash_reporting. Already
   # resolved transitively; declared so the import is not an undeclared
   # dependency.
-  stack_trace: ^1.12.1
+  stack_trace: ^1.12.2
   mobile_scanner: ^7.5.0
   url_launcher: ^6.3.3
   # Google Drive backup sign-in on Android phones and iOS
@@ -92,15 +92,22 @@ dependencies:
   mydia_player_p2p:
     path: rust_builder
   flutter_foreground_task: ^11.0.3
-  hive_ce: ^2.16.0
-  hive_ce_flutter: ^2.5.0
+  hive_ce: ^2.24.0
+  hive_ce_flutter: ^2.6.0
   freezed_annotation: ^3.1.0
+  # Held at 0.5.x, as is screen_retriever at 0.2.x. From window_manager 0.6
+  # and screen_retriever 0.3 both sit on nativeapi, whose cnativeapi build
+  # hook compiles a C++ core from source for every target, Android and iOS
+  # included, and needs pkg-config gtk+-3.0, x11 and xi in every Linux build
+  # environment (`flutter test` too). Moving takes those build inputs plus a
+  # port of lib/core/window/ off the deprecated legacy.dart API.
   window_manager: ^0.5.2
   # Direct, not transitive: window geometry restore needs the display work
   # areas to decide whether a saved rect is still reachable.
   screen_retriever: ^0.2.2
   # The folder picker of Add folder (files libraries, desktop).
   file_selector: ^1.1.0
+  # Keeps qr on 3.x: qr_flutter 4.1.0, the latest, requires qr ^3.0.1.
   qr_flutter: ^4.1.0
 
 # macOS ships getmydia's video-hdr libmpv (mpv 0.42, libplacebo, MoltenVK)
@@ -116,9 +123,13 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # build_runner, hive_ce_generator and analyzer are held at these minors by
+  # build 4: mockito 5.8 and graphql_codegen 3 both require it, and
+  # build_runner 2.17, hive_ce_generator 1.12.1 (which admits analyzer 14.5+)
+  # need build 5. They move once both publish a build 5 release.
   build_runner: ^2.16.2
   riverpod_generator: ^4.0.10
-  graphql_codegen: ^3.0.0
+  graphql_codegen: ^3.0.2
   # Parses Dart source for test/l10n/untranslated_text_test.dart. Already
   # resolved transitively through build_runner; declared so the import is not
   # an undeclared dependency.
@@ -130,7 +141,7 @@ dev_dependencies:
   # importer with depend_on_referenced_packages.
   fake_async: ^1.3.3
   file: ^7.0.1
-  flutter_launcher_icons: ^0.14.3
+  flutter_launcher_icons: ^0.14.4
   hive_ce_generator: ^1.12.0
   freezed: ^4.0.3
   yaml: ^3.1.4
