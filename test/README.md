@@ -160,6 +160,13 @@ ways a test can trip over:
   Independently, `test_helper.exs` caps PostgreSQL `max_cases` at 8, under
   the Repo's `pool_size: 10`, so a large machine never queues past the pool
   timeout.
+- **The Cardigann guest is pinned, not fetched.** The shards install the
+  guest from `nix/ci/cardigann-guest.json` only while its `source_hash` is
+  the hash of the guest sources in the tree. An edit under
+  `native/cardigann_guest/` (other than Markdown) changes that hash, so the
+  shards log `cardigann_wasm tests skipped` and exclude those tests until
+  the guest workflow publishes the new guest and its pin pull request
+  (`scripts/update-cardigann-guest-pin.sh`) merges.
 
 Every shard reads all of `test/` except its Markdown, so any test edit reruns
 all seven; a doc edit under `test/`, or any edit outside the shards' files, is

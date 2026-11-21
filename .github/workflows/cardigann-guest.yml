@@ -7,7 +7,8 @@ name: Cardigann guest
 # Pull requests build and test but never publish, and the build job holds a
 # read-only token because it runs PR-controlled build scripts. Only the publish
 # job (push to master) gets contents: write, and it runs no repository build
-# scripts. Never create the release or upload assets by hand.
+# scripts. The pin job (master only) proposes the Nix pin through a pull
+# request. Never create the release or upload assets by hand.
 #
 # Dependabot's nuget bumps change the guest's sources, and the auto-merge gate
 # merges them with GITHUB_TOKEN, whose push starts no workflows. Running on
@@ -155,3 +156,75 @@ jobs:
           echo "Pin for nix: $(cat "$name.sha256")"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # Points nix/ci/cardigann-guest.json at the published guest, so the
+  # sandboxed Nix test shards run the :cardigann_wasm tests again. Also runs
+  # when publish was skipped (already published), which repairs a pin that a
+  # failed run never proposed.
+  #
+  # The Master ruleset requires status checks, so the App cannot push to
+  # master: this opens a pull request instead, one branch per source hash. It
+  # goes through the GitHub App token (see "The GitHub App" in .github/ci.md),
+  # not GITHUB_TOKEN, because a pull request opened with GITHUB_TOKEN starts
+  # no workflows and its required checks would never report.
+  pin:
+    name: Pin for Nix
+    needs: [build, publish]
+    if: >-
+      always() &&
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/master' &&
+      needs.build.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: cardigann-guest-pin-${{ needs.build.outputs.hash }}
+      cancel-in-progress: false
+    steps:
+      - name: Mint a push token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DEPENDABOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # Credentials are not persisted: only the push below needs them.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Update the pin
+        run: scripts/update-cardigann-guest-pin.sh "${{ needs.build.outputs.hash }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Open a pull request
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          HASH: ${{ needs.build.outputs.hash }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "nix/ci/cardigann-guest.json already pins $HASH. Nothing to do."
+            exit 0
+          fi
+          branch="cardigann-guest-pin/$HASH"
+          if [ -n "$(GH_TOKEN="$TOKEN" gh pr list --head "$branch" --state open --json number -q '.[].number')" ]; then
+            echo "A pull request for $branch is already open."
+            exit 0
+          fi
+          user_id="$(GH_TOKEN="$TOKEN" gh api "users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "ci(nix): pin the Cardigann guest $HASH"
+          git push --force "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$branch"
+          GH_TOKEN="$TOKEN" gh pr create --base master --head "$branch" \
+            --title "ci(nix): pin the Cardigann guest $HASH" \
+            --body "Points \`nix/ci/cardigann-guest.json\` at the published \`cardigann-guest-$HASH\` release, so the sandboxed Nix test shards run the \`:cardigann_wasm\` tests. Opened by the Cardigann guest workflow (\`scripts/update-cardigann-guest-pin.sh\`)."

@@ -2,6 +2,11 @@
 #
 #   test-sqlite-{1..4}    `mix test --partitions 4`, SQLite (max_cases 1)
 #   test-postgres-{1..3}  `mix test --partitions 3`, PostgreSQL
+#   ci-cardigann-hash     the shards' Cardigann guest source hash equals
+#                         `mix mydia.cardigann_guest hash`
+#
+# The shards carry the pinned Cardigann guest (cardigann-guest.json), so the
+# :cardigann_wasm tests run while the pin matches the guest sources.
 #
 # Each shard starts its own RustFS (the :s3 tests, MYDIA_TEST_S3_REQUIRED=1
 # so a dead server fails the shard) and, for PostgreSQL, its own server, all
@@ -39,6 +44,58 @@
       postgresql = pkgs.postgresql_17;
 
       root = ../..;
+
+      # The Cardigann wasm guest, pinned by scripts/update-cardigann-guest-pin.sh
+      # (the cardigann-guest workflow runs it after each publish). The shards
+      # install it only while the pin's source_hash is the hash of the guest
+      # sources in this tree; otherwise it is absent and test_helper.exs
+      # excludes :cardigann_wasm, loudly.
+      #
+      # That hash is computed at build time, in cardigannSourceHash, not at
+      # eval time: it is SHA-256 over `path <> <<0>> <> contents` per file, and
+      # a Nix string cannot hold a NUL byte, so builtins.hashString cannot
+      # reproduce it. cardigannSourceHash runs the repo's own
+      # native/cardigann_guest/scripts/source-hash.sh instead, and the
+      # ci-cardigann-hash check proves it equals `mix mydia.cardigann_guest
+      # hash`, the value the compiled Artifact module names its file by.
+      cardigannPin = lib.importJSON ./cardigann-guest.json;
+
+      cardigannGuest = pkgs.fetchurl {
+        name = "cardigann-${cardigannPin.source_hash}.wasm";
+        inherit (cardigannPin) url sha256;
+      };
+
+      # The script lists files with `git ls-files`. A flake source holds
+      # exactly the tracked files, so an index of all of them is the
+      # checkout's; -f keeps a tracked file that .gitignore matches.
+      cardigannSourceHash = pkgs.runCommand "cardigann-source-hash"
+        {
+          src = sources.toSource (root + "/native/cardigann_guest");
+          nativeBuildInputs = [ pkgs.git ];
+        }
+        ''
+          cp -r $src source
+          chmod -R u+w source
+          cd source
+          git init --quiet
+          git add -f -- native/cardigann_guest
+          bash native/cardigann_guest/scripts/source-hash.sh > $out
+        '';
+
+      # Lays the guest where `mix mydia.cardigann_guest fetch` would
+      # (Artifact.path/0: _build/test/lib/mydia/priv, Mix's symlink to
+      # priv/), with the .sha256 sidecar Artifact.load/1 checks it against.
+      installCardigannGuest = ''
+        cardigann_hash=$(cat ${cardigannSourceHash})
+        if [ "$cardigann_hash" = ${cardigannPin.source_hash} ]; then
+          mkdir -p priv/cardigann
+          cp ${cardigannGuest} priv/cardigann/cardigann-$cardigann_hash.wasm
+          echo ${cardigannPin.sha256} > priv/cardigann/cardigann-$cardigann_hash.wasm.sha256
+          chmod u+w priv/cardigann/cardigann-$cardigann_hash.wasm*
+        else
+          echo "Cardigann guest pin is for ${cardigannPin.source_hash}, these sources hash to $cardigann_hash: not installing it (run scripts/update-cardigann-guest-pin.sh once the guest is published)"
+        fi
+      '';
 
       # Files outside the app and test/ that tests read: parity and guard
       # tests over CSS, workflows, scripts, the BEAM and gluetun pins, the
@@ -165,6 +222,8 @@
             git init --quiet
             git add -- native/cardigann_guest
 
+            ${installCardigannGuest}
+
             mix do loadpaths --no-deps-check + ecto.create + ecto.migrate
             ${lib.optionalString postgres "mix do loadpaths --no-deps-check + ecto.migrations"}
             mix do loadpaths --no-deps-check + test \
@@ -181,6 +240,26 @@
           (lib.range 1 partitions));
     in
     {
-      checks = shards "sqlite" 4 // shards "postgres" 3;
+      checks = shards "sqlite" 4 // shards "postgres" 3 // {
+        # The shards decide whether to install the pinned guest by
+        # cardigannSourceHash; the test build names the file it loads by
+        # Artifact.source_hash/0. They must agree, or a correct pin would
+        # sit unused under the wrong name.
+        ci-cardigann-hash = mkCheck {
+          name = "ci-cardigann-hash";
+          set = buildSet;
+          script = ''
+            ${copyBuild ciInternal.mydiaTestBuild-sqlite}
+            mix_hash=$(mix do loadpaths --no-deps-check + mydia.cardigann_guest hash | tail -n 1)
+            nix_hash=$(cat ${cardigannSourceHash})
+            echo "mix mydia.cardigann_guest hash: $mix_hash"
+            echo "cardigannSourceHash:            $nix_hash"
+            if [ "$mix_hash" != "$nix_hash" ]; then
+              echo "cardigannSourceHash disagrees with Mydia.Indexers.Cardigann.Wasm.SourceHash" >&2
+              exit 1
+            fi
+          '';
+        };
+      };
     };
 }
