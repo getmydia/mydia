@@ -63,8 +63,8 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   that tests read. `test/ci/workflow_triggers_test.exs`, the one test that
   reads `.github/workflows`, is left out of the shards and runs alone in
   `ci-workflow-triggers`, so a workflow edit reruns that check instead of
-  all seven shards (the non-blocking NixOS tests rerun too, as on any
-  edit: their package takes the whole repo as source). The shards carry the Cardigann guest pinned in
+  all seven shards (on master the non-blocking NixOS tests rerun too, as on
+  any edit: their package takes the whole repo as source). The shards carry the Cardigann guest pinned in
   `native/cardigann_guest/ARTIFACT_SHA256` (the app's own pin), installed
   only while its source hash matches the guest sources;
   `ci-cardigann-hash` proves the Nix-side hash equals
@@ -136,8 +136,8 @@ its inputs changes. The intermediate derivations are `ciInternal` entries.
 So a `lib/` edit rebuilds `mydiaTestBuild` and everything under it, and
 leaves the dependency builds, the PLT, the NIFs and every Rust and relay
 check cached. A `test/` edit reruns the shards only; a workflow edit reruns
-`ci-workflow-triggers` only (plus the non-blocking NixOS tests, whose
-package takes the whole repo as source and so reruns on any edit).
+`ci-workflow-triggers` only (plus, on master, the non-blocking NixOS tests,
+whose package takes the whole repo as source and so reruns on any edit).
 
 ## Outside the sandbox
 
@@ -162,9 +162,9 @@ are the same store paths as this shell's, and the job exports the build's
 does not carry.
 
 The NixOS module VM tests are checks, but `scripts/ci-plan.sh` lists them
-separately and ci.yml runs them outside the `Nix / Checks` verdict
-(`.github/ci.md`, "The NixOS module tests run on every PR but block
-nothing").
+separately and ci.yml runs them outside the `Nix / Checks` verdict, on
+master pushes, manual dispatches and Dependabot PRs only (`.github/ci.md`,
+"The NixOS module tests skip human PRs and block nothing").
 
 ## ciInternal and the CI planner
 

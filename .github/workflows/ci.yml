@@ -7,7 +7,8 @@ name: CI
 #   plan          nix-eval-jobs --check-cache-status: which checks the cache lacks
 #   inputs        ciInternal derivations two or more of those checks need, built once
 #   checks        one job per uncached check; inputs come from the cache by now
-#   nixos         the NixOS module VM tests, the same way but non-blocking
+#   nixos         the NixOS module VM tests, the same way but non-blocking;
+#                 master pushes, workflow_dispatch and Dependabot PRs only
 #   Nix / Checks  the aggregator of plan, inputs and checks
 #   pins          master only: refresh the master-<name> pin of every output
 #
@@ -116,6 +117,7 @@ jobs:
         id: plan
         env:
           CI_PLAN_WORKERS: '4'
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           plan="$RUNNER_TEMP/plan.json"
           scripts/ci-plan.sh > "$plan"
@@ -129,12 +131,16 @@ jobs:
           {
             echo "### Nix plan"
             echo
-            echo "$(jq '.inputs | length' "$plan") inputs, $(jq '.checks | length' "$plan") checks and $(jq '.nixos | length' "$plan") NixOS VM tests (non-blocking) to build; everything else is cached."
+            nixos_note="to build"
+            if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$PR_AUTHOR" != 'dependabot[bot]' ]; then
+              nixos_note="uncached, not built on non-Dependabot pull requests"
+            fi
+            echo "$(jq '.inputs | length' "$plan") inputs and $(jq '.checks | length' "$plan") checks to build, $(jq '.nixos | length' "$plan") NixOS VM tests (non-blocking) $nixos_note; everything else is cached."
             echo
-            jq -r '
+            jq -r --arg note "$nixos_note" '
               (.inputs | map("- input `\(.name)`")),
               (.checks | map("- `\(.name)` (\(.group))")),
-              (.nixos | map("- `\(.name)` (nixos, non-blocking)"))
+              (.nixos | map("- `\(.name)` (nixos, non-blocking, \($note))"))
               | .[]' "$plan"
           } >> "$GITHUB_STEP_SUMMARY"
           jq 'del(.all)' "$plan"
@@ -221,13 +227,23 @@ jobs:
   # build and push as `checks`, but outside the Nix / Checks verdict, so they
   # block nothing. The package they boot takes the whole repo as its source
   # (src = ../..), so they rerun on nearly every commit, and a QEMU boot on a
-  # shared runner is the slowest and flakiest build in the set. They still
-  # run on every PR and show their own result; a red one is worth a look
-  # before merge. Master pins include them.
+  # shared runner is the slowest and flakiest build in the set. That made them
+  # cost ~28 runner-minutes on every PR, a docs-only one included, so on
+  # pull_request they run only for Dependabot's PRs: the Dependabot gate
+  # merges with GITHUB_TOKEN, which starts no master run, so the PR run is
+  # the only one a dependency bump gets, and the gate requires it to pass.
+  # Otherwise they run on master pushes and manual dispatches. For pre-merge
+  # results on a .nix, flake.lock or packaging change, dispatch this workflow
+  # on the branch: gh workflow run ci.yml --ref <branch>. Master pins include
+  # them.
   nixos:
     name: Nix / NixOS (${{ matrix.name }})
     needs: [plan, inputs]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.nixos != '[]' }}
+    if: >-
+      ${{ !cancelled()
+      && (github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]')
+      && needs.plan.result == 'success'
+      && needs.plan.outputs.nixos != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
