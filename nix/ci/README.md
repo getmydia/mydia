@@ -180,6 +180,23 @@ output path), fetches those outputs with one `nix-store --realise
 records the pins. It only warns, never fails the run, and is not part of
 `Nix / Checks`. PR runs never pin.
 
+## Who can write to the cache
+
+A deliberate trust decision. niks3 signs whatever it is handed, and CI
+skips any check whose output path is already in the cache, so an uploaded
+path counts as a passed check on master. Uploads come from:
+
+- any workflow run in `getmydia/mydia` that obtains an OIDC token for the
+  niks3 audience, including a pull request from a branch of this repository
+  that edits a workflow in the same PR;
+- any holder of the niks3 admin token (`scripts/nix-cache-push.sh`).
+
+This is accepted because write access to the repository is a small,
+trusted set of maintainers. Pull requests from forks get no OIDC token and
+cannot write. The server side, and what to revisit before widening write
+access: `infra/kubernetes/apps/nix-cache/README.md`, "Who can write, and why
+that is accepted".
+
 ## The file-set rule
 
 Every derivation `src` is built from these sets with `sources.toSource`.

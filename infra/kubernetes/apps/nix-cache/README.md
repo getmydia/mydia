@@ -18,6 +18,29 @@ never touch can-1, so a can-1 outage stops pushes but not substitution.
 IngressRoute). Proxied, Cloudflare serves GitHub runners a managed challenge
 and pushes fail.
 
+## Who can write, and why that is accepted
+
+This is a deliberate decision, not an oversight. niks3 signs every path it
+is handed with `cache.mydia.dev-1`, and CI treats a check whose output is
+already in the cache as passed, so whoever can upload can make a check
+pass on master without running it. Two kinds of caller can upload:
+
+- any workflow run in `getmydia/mydia` that obtains a GitHub OIDC token for
+  the niks3 audience (the server accepts `repo:getmydia/mydia:*`). That
+  includes a pull request from a branch of this repository whose workflow
+  was edited in the same PR: its run gets `id-token: write` like any other
+  same-repo run;
+- any holder of the `niks3-token` admin token (GC, and manual pushes with
+  `scripts/nix-cache-push.sh`).
+
+This is acceptable because write access to the repository, which is what
+it takes to push a branch or read the admin token, is held by a small,
+trusted set of maintainers who could change the checks themselves anyway.
+Pull requests from forks cannot write: GitHub gives their runs no OIDC
+token, so they only read the cache. Widen write access to the repository
+only after revisiting this boundary. CI's side of it: `nix/ci/README.md`,
+"Who can write to the cache".
+
 ## Files
 
 - `niks3-values.yaml`: values for niks3's upstream Helm chart.
