@@ -87,7 +87,7 @@ Checks:
 | Check | Depends on | Replaces |
 | --- | --- | --- |
 | `elixir-format` | sources only | Lint: `mix format --check-formatted` |
-| `elixir-lint` | `mydia-test-build-sqlite` | Lint: warnings-as-errors compile, Credo, guard greps, gettext up-to-date, ratchet |
+| `elixir-lint` | `mydia-test-build-sqlite` | Lint: warnings-as-errors compile, Credo, guard greps, gettext up-to-date, `deps.unlock --check-unused` |
 | `dialyzer` | `mydia-test-build-sqlite`, `dialyzer-plt` | Dialyzer job |
 | `test-sqlite-{1..4}` | `mydia-test-build-sqlite`, `test/` | `Test (SQLite N/4)` |
 | `test-postgres-{1..3}` | `mydia-test-build-postgres`, `test/` | `Test / PostgreSQL (N/3)` |
@@ -96,8 +96,20 @@ Checks:
 | `server` | `server/` | `ci-server.yml` |
 | `relay-test` | `metadata-relay/` | `ci-relay.yml` test job |
 | `guards` | the files each guard reads | `Guards` job (non-Nix greps move in as one check) |
-| `repo-contracts`, `pins-freshness` | as today | `ci-nix.yml` non-VM checks |
 | `nixos-module[-postgres]` | `packages.default` / `.postgres` | unchanged, but now cached rather than PR-gated on `flake.lock` |
+
+Three things stay ordinary jobs in phase 1, because their input is not a
+file set:
+
+- `Lint / Ratchet` (`mix mydia.ratchet --from-git-merge-base origin/master`)
+  reads git history. It substitutes `mydia-test-build-sqlite` for a warm
+  `_build` and runs in `devShells.ci`. The advisory `mix_unused` report moves
+  here too, still master-push only.
+- `ci-nix.yml`'s `Check / Repo Contracts` and `Check / Pins & Freshness` call
+  GitHub APIs and compare against upstream versions. They are already cheap
+  and cache-free.
+- `Test / E2E Browser (run)` keeps its devenv job until phase 2, which moves
+  the browser tests with the player E2E.
 
 The `translations` fast path is removed. `Gettext` compiles `.po` catalogs
 into the backend module, so a `.po`-only PR genuinely changes the test build,
