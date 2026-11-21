@@ -47,21 +47,26 @@ check the command carried the flag. The full suite was about 7,600 tests as of
 ./dev flutter test --concurrency=1 [paths]
 ```
 
-CI does not run this command. `Test / Player` runs the suite as one bundle with
-`very_good test --concurrency 1`, which compiles every test file into a single
-entrypoint instead of compiling each separately, the cost that took 760 of the
-test step's 988 seconds. Bundled, every file shares one isolate, so a test
+CI does not run this command. The `player-test` Nix check (behind the
+`Test / Player` context) runs the suite as one bundle, the way
+`very_good test --concurrency 1` does: every test file compiled into a single
+entrypoint instead of each separately, the cost that took 760 of the old test
+step's 988 seconds. Bundled, every file shares one isolate, so a test
 that passes here and fails in CI has leaked global state into, or picked it up
 from, another file: `HttpOverrides.global` after a widget test initialised the
 binding, a Hive box left open, a singleton cache. very_good orders the bundled
-files by filesystem listing, which differs between machines, so a local green
-bundle can still fail in CI on a different order; a CI-only bundle failure is
-still a leak. Fix the leak. The
+files by filesystem listing, which differs between machines, while CI sorts
+them by path, so a local green bundle can still fail in CI on a different
+order; a CI-only bundle failure is still a leak. Fix the leak. The
 `skip_very_good_optimization` tag is only for files that cannot compile or run
 in a VM bundle at all (`@TestOn('browser')`, the macOS goldens). A new
-`@TestOn` file other than `@TestOn('vm')` needs the tag, and the `Test / Player`
-job checks this before running. Reproduce the
-CI run locally with:
+`@TestOn` file other than `@TestOn('vm')` needs the tag, and the
+`player-analyze` check enforces this.
+
+CI does not run very_good itself. `nix/ci/player.nix` reimplements, in bash,
+the part of very_good_cli 1.5.0 the suite relies on: the test optimizer
+template that writes `test/.test_optimizer.dart`, and the `flutter test` call
+that runs it beside the tagged files. Locally you run the real thing:
 
 ```
 ./dev flutter pub global activate very_good_cli 1.5.0   # once
@@ -70,7 +75,20 @@ CI run locally with:
 
 Its pass count should match the per-file run's; `--concurrency 1` is needed
 there too, because very_good runs opted-out files in
-the same `flutter test` call.
+the same `flutter test` call. Bumping very_good_cli means re-reading its
+optimizer template and pre_gen hook and bringing `player.nix` along, or the
+two bundles drift apart.
+
+To run exactly what CI runs, in the same sandbox, build the check (from the
+repo root; `nix/ci/README.md`, "Building a check locally"):
+
+```
+nix build .#checks.x86_64-linux.player-test -L
+```
+
+The other player checks are `player-analyze`, `player-l10n-test`,
+`player-icons`, `player-test-web`, `player-web` and `player-linux`. New files
+must be visible to git (`git add -N`) before Nix sees them.
 
 For the whole suite, `./dev player test` is faster than either:
 `scripts/player-test-sharded.sh` deals the files round-robin into one
@@ -92,7 +110,7 @@ named `player`, so test imports are `package:player/...`, never
 ## analyze is clean and stays clean
 
 `dart analyze` reports "No issues found!", and both gates hold it there: CI runs
-`dart analyze --fatal-infos` in the player test job, and so does the pre-commit
+`dart analyze --fatal-infos` in the `player-analyze` check, and so does the pre-commit
 hook. Any new diagnostic, infos included, fails both, so there is no baseline to
 compare against. Run the same check locally from the repo root and expect
 nothing:

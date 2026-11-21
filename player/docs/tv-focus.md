@@ -170,7 +170,7 @@ is a compile-time constant:
 ```
 
 CI runs every `test/**/*_tv_test.dart` file with that define in the
-"Run television-tier tests" step. Screen-level tests mount through
+`player-test` check, after the main bundle. Screen-level tests mount through
 `test/test_utils/tv_shell_harness.dart`, which lays out at a Chromecast's
 960x540 logical pixels (1920x1080 at device pixel ratio 2), so lazy lists drop
 rows where a real television does. Patterns to copy:

@@ -141,8 +141,8 @@ pbxproj, and the other files matter only for keeping Pods consistent.
 
 Verified against the SDK pinned by `player/.fvmrc` on 2026-08-07 while fixing
 ITMS-90068 (PR #367). No PR-level iOS build exists to catch a mistake here:
-`ci-player.yml` covers Windows, macOS, Linux and Android, and iOS builds only
-inside `release.yml`.
+`ci-player.yml` covers Windows and macOS, `ci.yml` covers Linux and Android,
+and iOS builds only inside `release.yml`.
 
 ## Beta and dev builds are branded by `tool/apply-channel.sh`
 
