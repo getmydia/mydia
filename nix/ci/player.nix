@@ -138,6 +138,10 @@
       #                                      against pub.dev and hangs in the
       #                                      sandbox. player-codegen already
       #                                      resolved the project.
+      #
+      # Only the FIRST argument is matched: the subcommand must come first
+      # (`flutter test ...`, never `flutter --suppress-analytics test ...`),
+      # or the shim passes the call through unchanged.
       flutterShim = pkgs.writeShellScriptBin "flutter" ''
         real=${flutter}/bin/flutter
         case "''${1-}" in
@@ -244,11 +248,62 @@
           cp -r "$bundle" $out/bundle
         '';
       }).overrideAttrs { dontFixup = true; };
+
+      # Analyze / Player: zero issues, infos included. The pre-commit hook
+      # enforces the same bar, but it only runs inside devenv.
+      #
+      # `find` stands in for ci-player.yml's `git ls-files`: the sandbox has
+      # no .git.
+      playerAnalyze = mkPlayerCheck {
+        name = "player-analyze";
+        script = ''
+          dart analyze --fatal-infos lib/l10n
+
+          dart analyze --fatal-infos
+
+          # Check @TestOn files are tagged out of the bundle. A bundle ignores
+          # per-file @TestOn, and the compile error it produces for an untagged
+          # browser test ("dart:js_interop is not available") does not name the
+          # cause. Fail here with the file instead.
+          bad=0
+          while IFS= read -r f; do
+            if grep -E '^@TestOn\(' "$f" | grep -qv "^@TestOn('vm')" \
+              && ! grep -qE "^@Tags\(\[.*['\"]skip_very_good_optimization['\"]" "$f"; then
+              echo "error: player/$f: @TestOn other than 'vm' needs @Tags(['skip_very_good_optimization']): the very_good bundle cannot compile it" >&2
+              bad=1
+            fi
+          done < <(find test -name '*_test.dart' | sort)
+          exit "$bad"
+        '';
+      };
+
+      playerL10nTest = mkPlayerCheck {
+        name = "player-l10n-test";
+        script = ''
+          flutter test test/l10n
+        '';
+      };
+
+      # Guards against the web icon set drifting from its SVG sources: a
+      # source SVG changed without regenerating, a generated file was
+      # hand-edited, or a generated file was deleted. --check needs only
+      # coreutils.
+      playerIcons = mkPlayerCheck {
+        name = "player-icons";
+        script = ''
+          # Through bash: the script's `#!/usr/bin/env bash` has no /usr/bin/env
+          # in the sandbox.
+          bash tool/gen-web-icons.sh --check
+        '';
+      };
     in
     {
       _module.args.ciPlayer = { inherit flutter pubCache codegen mkPlayerCheck; };
 
       ciChecks.player-linux = playerLinux;
+      ciChecks.player-analyze = playerAnalyze;
+      ciChecks.player-l10n-test = playerL10nTest;
+      ciChecks.player-icons = playerIcons;
 
       ciInternal = {
         player-pub-cache = pubCache;
