@@ -526,9 +526,11 @@ as errors, then the catalog, plural and locale tests, on one SQLite runner in a
 few minutes rather than the full suite's hour of runner time. `.pot` templates
 are not covered by this filter, because they change with the code.
 `ci-player.yml` has a matching `player_translations` fast path when only
-`player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change: `Test / Player`
-runs `flutter gen-l10n`, `dart analyze --fatal-infos lib/l10n`, and
-`flutter test test/l10n`, while desktop and web builds skip their steps.
+non-template `player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change
+(`app_en.arb` stays on the full `player` path because it defines the
+`AppLocalizations` Dart API): `Test / Player` runs `flutter gen-l10n`,
+`flutter pub run build_runner build`, `dart analyze --fatal-infos lib/l10n`,
+and `flutter test test/l10n`, while desktop and web builds skip their steps.
 `ci-player-e2e.yml` skips its run on `.po`-only and `.arb`-only translation PRs.
 
 `ci-nix.yml` consolidates the non-VM pin, freshness, release-note, Apple-target,

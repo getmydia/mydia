@@ -125,7 +125,8 @@ jobs:
 
           if [ "$EVENT" = "pull_request" ] \
              && ! printf '%s\n' "$changed" | grep -qvE '^(player/lib/l10n/[^/]+\.arb|priv/gettext/.+\.po)$' \
-             && printf '%s\n' "$changed" | grep -qE '^player/lib/l10n/[^/]+\.arb$'; then
+             && printf '%s\n' "$changed" | grep -qE '^player/lib/l10n/[^/]+\.arb$' \
+             && ! printf '%s\n' "$changed" | grep -qx 'player/lib/l10n/app_en.arb'; then
             echo "player=false" >> "$GITHUB_OUTPUT"
             echo "player_translations=true" >> "$GITHUB_OUTPUT"
             echo "appimage=false" >> "$GITHUB_OUTPUT"
@@ -212,6 +213,10 @@ jobs:
         if: needs.changes.outputs.player_translations == 'true'
         run: flutter gen-l10n
 
+      - name: Run code generation
+        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
+        run: flutter pub run build_runner build
+
       - name: Analyze localizations
         if: needs.changes.outputs.player_translations == 'true'
         run: dart analyze --fatal-infos lib/l10n
@@ -219,10 +224,6 @@ jobs:
       - name: Test localizations
         if: needs.changes.outputs.player_translations == 'true'
         run: flutter test test/l10n
-
-      - name: Run code generation
-        if: needs.changes.outputs.player == 'true'
-        run: flutter pub run build_runner build
 
       - name: Analyze
         # Zero issues, infos included. The pre-commit hook enforces the same
