@@ -42,28 +42,7 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
   # the test's lifetime removes that completion race entirely.
   defp pending_indexer_fixture(name) do
     bypass = Bypass.open()
-    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
-    test_pid = self()
-
-    Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
-      # Bypass.pass/1 first: the test ends (and its connection is torn down)
-      # long before the fallback timeout elapses, and waking on test_pid exit
-      # lets Bypass's on_exit finish without waiting out the sleep. Without
-      # marking the expectation passed, Bypass's on_exit verification would
-      # report the abandoned connection as a test crash.
-      Bypass.pass(bypass)
-      ref = Process.monitor(test_pid)
-
-      receive do
-        {:DOWN, ^ref, :process, ^test_pid, _reason} -> :ok
-      after
-        3_000 -> :ok
-      end
-
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, "[]")
-    end)
+    Mydia.IndexerMock.park_prowlarr_search(bypass)
 
     indexer_config_fixture(%{
       name: name,
@@ -214,7 +193,7 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
 
   # search_all/2's on_start callback fires before any HTTP request -- right
   # after the DB query for indexer configs -- so it is NOT delayed by the
-  # Bypass sleep above. handle_info({:indexer_search_started, ...}) does a
+  # parked Bypass above. handle_info({:indexer_search_started, ...}) does a
   # full assign REPLACE of indexer_progress, not a merge. If that real,
   # DB-backed message landed between two synthetic sends keyed by invented
   # ids, it would silently wipe them (a second, earlier race than the
@@ -251,8 +230,8 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
   # card -- so the user's first impression of every search is "0 results",
   # which is exactly the failure this branch set out to fix.
   #
-  # The indexer is parked behind a Bypass that sleeps past this test's
-  # lifetime, so neither on_indexer_result nor handle_async can land: the
+  # The indexer is parked behind a Bypass that answers only once this test
+  # has ended, so neither on_indexer_result nor handle_async can land: the
   # state under assertion is the fresh-search state and it stays put.
   test "a fresh search shows the spinner, not a zero-result card", %{conn: conn} do
     pending_indexer_fixture("slow-indexer")

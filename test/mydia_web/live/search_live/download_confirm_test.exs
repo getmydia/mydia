@@ -118,23 +118,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
 
   defp pending_indexer do
     bypass = Bypass.open()
-    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
-    test_pid = self()
-
-    Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
-      Bypass.pass(bypass)
-      ref = Process.monitor(test_pid)
-
-      receive do
-        {:DOWN, ^ref, :process, ^test_pid, _reason} -> :ok
-      after
-        3_000 -> :ok
-      end
-
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, "[]")
-    end)
+    Mydia.IndexerMock.park_prowlarr_search(bypass)
 
     indexer_config_fixture(%{
       name: "pending",
@@ -179,6 +163,15 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     view
   end
 
+  # render_async/2 waits for every async task, the parked search included, so
+  # the search is released first. It then answers [] behind the add, the same
+  # order these tests saw when the park was a 3s sleep that ended inside the
+  # wait.
+  defp settle(view) do
+    Mydia.IndexerMock.release_parked_searches()
+    render_async(view, 5_000)
+  end
+
   defp open_and_submit(view, r, params) do
     render_click(view, "show_download_modal", %{"ref" => SearchResultRef.ref(r)})
 
@@ -208,7 +201,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     })
 
     refute has_element?(view, "#download-modal")
-    render_async(view, 5_000)
+    settle(view)
 
     item = Repo.one!(MediaItem)
     assert item.type == "tv_show"
@@ -226,7 +219,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
       "config" => %{"library_path_id" => "", "monitored" => "true"}
     })
 
-    render_async(view, 5_000)
+    settle(view)
 
     assert Repo.one!(MediaItem).library_path_id == movies.id
   end
@@ -257,7 +250,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
       "config" => %{"library_path_id" => movies.id}
     })
 
-    render_async(view, 5_000)
+    settle(view)
 
     assert has_element?(view, "#disambiguation-dialog")
     refute has_element?(view, "#download-modal")
@@ -283,7 +276,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
     refute has_element?(view, ~s(button[phx-value-ref="#{SearchResultRef.ref(b)}"][disabled]))
 
     send(task_pid, :release)
-    render_async(view, 5_000)
+    settle(view)
 
     assert Repo.aggregate(MediaItem, :count) == 1
     assert Repo.one!(MediaItem).library_path_id == movies.id
@@ -304,7 +297,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
       "config" => %{"library_path_id" => movies.id}
     })
 
-    render_async(view, 5_000)
+    settle(view)
     assert has_element?(view, "#disambiguation-dialog")
 
     [match | _] = :sys.get_state(view.pid).socket.assigns.metadata_matches

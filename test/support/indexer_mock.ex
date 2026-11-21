@@ -7,6 +7,9 @@ defmodule Mydia.IndexerMock do
   """
 
   alias Mydia.BypassHelpers
+  alias Mydia.IndexerMock.ParkedSearch
+
+  @parked_key {__MODULE__, :parked_searches}
 
   @doc """
   Sets up a Bypass server to mock Prowlarr search endpoint.
@@ -73,6 +76,91 @@ defmodule Mydia.IndexerMock do
       status: status,
       fallback: &prowlarr_web_ui/1
     )
+  end
+
+  @doc """
+  Stands in for a Prowlarr indexer whose search never answers while the test
+  runs: stubs the indexer status route and parks every `GET /api/v1/search`
+  until the calling test process exits, then replies `[]`.
+
+  LiveView search tests use this to keep the real background search open so
+  that only the synthetic progress messages they inject can change the page.
+
+  Do not park with `Process.sleep/1` instead. Bypass's `on_exit` waits for
+  every in-flight handler to return, so a 3s sleep costs 3s after every test
+  even though the test itself took milliseconds; one module lost about two
+  minutes that way. Monitoring the test process releases the handler the
+  moment the test ends, which is before any `on_exit` callback runs. The 30s
+  `after` is only a backstop in case the monitor message never arrives.
+
+  Call it from the test process (a test body or `setup`), not `setup_all`:
+  the handler is released when the process that called it exits.
+
+  A test that needs the real search to finish, for example before
+  `render_async/2`, which waits for every async task including the search,
+  calls `release_parked_searches/0`.
+  """
+  def park_prowlarr_search(bypass) do
+    stub_prowlarr_indexer_status(bypass)
+    owner = self()
+    # Unlinked, so it is still alive when the handler checks in after the
+    # test has exited; stopped by the on_exit below.
+    {:ok, gate} = Agent.start(fn -> %ParkedSearch{} end)
+    Process.put(@parked_key, [gate | Process.get(@parked_key, [])])
+    ExUnit.Callbacks.on_exit(fn -> stop_gate(gate) end)
+
+    Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
+      # Bypass.pass/1 first: the handler can outlive the test, and Bypass's
+      # on_exit verification would otherwise report the abandoned connection
+      # as a test crash.
+      Bypass.pass(bypass)
+      ref = Process.monitor(owner)
+      handler = self()
+
+      released? =
+        try do
+          Agent.get_and_update(gate, fn %ParkedSearch{} = state ->
+            {state.released, %ParkedSearch{state | parked: [handler | state.parked]}}
+          end)
+        catch
+          :exit, _ -> true
+        end
+
+      unless released? do
+        receive do
+          :release -> :ok
+          {:DOWN, ^ref, :process, _pid, _reason} -> :ok
+        after
+          30_000 -> :ok
+        end
+      end
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, "[]")
+    end)
+  end
+
+  @doc """
+  Lets every search parked by `park_prowlarr_search/1` in this test answer
+  `[]` now, including requests that have not reached the handler yet.
+  """
+  def release_parked_searches do
+    for gate <- Process.get(@parked_key, []) do
+      gate
+      |> Agent.get_and_update(fn %ParkedSearch{} = state ->
+        {state.parked, %ParkedSearch{state | released: true}}
+      end)
+      |> Enum.each(&send(&1, :release))
+    end
+
+    :ok
+  end
+
+  defp stop_gate(gate) do
+    Agent.stop(gate)
+  catch
+    :exit, _ -> :ok
   end
 
   @doc """
