@@ -30,7 +30,8 @@ Fixed in #589 by copying the p2p crate's config verbatim.
 The trap is that no pre-merge gate is musl. All of these passed on the broken
 commit: the full Elixir suite locally and in CI, `cargo test`, `clippy` and `fmt`
 for the crate including a CI job added in that same PR, and
-`nix build .#checks.x86_64-linux.package` run locally to completion, which
+the Nix package build (then the `package` check, now
+`nix build .#packages.x86_64-linux.default`) run locally to completion, which
 produced a working `.so`. Nix and devenv are glibc. musl is exercised only by the
 two Docker image builds, and `CI / Docker` does not run on pull requests, so the
 first musl compile of a new crate happens on master after merge.

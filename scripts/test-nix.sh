@@ -17,8 +17,8 @@ run_all() {
 }
 
 run_package() {
-  echo "Building package check for ${SYSTEM}..."
-  nix build -L ".#checks.${SYSTEM}.package"
+  echo "Building package for ${SYSTEM}..."
+  nix build -L ".#packages.${SYSTEM}.default"
 }
 
 run_module() {
