@@ -78,10 +78,13 @@ async fn a_responder_does_not_keep_a_dropped_host_alive() {
 
 /// A host still waiting for its relay answers Shutdown at once instead of
 /// after the wait, which lasts up to 30 s when the relay cannot be reached.
-/// Online the wait is short, so this only catches a regression offline.
+/// `Host::new_without_relays` disables relays but keeps the full 30 s wait,
+/// so the loop is guaranteed to be in it, offline and deterministically.
+/// (`support::host` skips the wait, which would make this test vacuous.)
+#[cfg(feature = "test-introspection")]
 #[test]
 fn shutdown_during_the_relay_wait_returns_promptly() {
-    let (host, _node_id) = support::host(HostConfig::default());
+    let (host, _node_id) = Host::new_without_relays(HostConfig::default());
     let started = std::time::Instant::now();
 
     blocking::shutdown(&host);
