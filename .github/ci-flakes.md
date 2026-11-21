@@ -851,7 +851,18 @@ On 2026-11-20 that was `open_files_library_boxes_test.dart`, stuck on
 `playback_progress`, which the real `AppShell` opens through
 `sourceProgressFlushProvider` as soon as it mounts. It failed on master too.
 The fix is `noProgressFlushOverride` (`test/test_utils/no_downloads.dart`)
-in every test that mounts the real shell. To find which box is stuck, open
+in every test that mounts the real shell, the router tests and the `MyApp`
+ones alike.
+
+The same race produced an intermittent 10-minute hang, then a cascade of
+10-minute hangs: `player_screen_mac_surface_test.dart` opens `video_scaling`
+inside `tester.runAsync`, and an earlier PlayerScreen test had left that
+open pending through `VideoScalingPrefs`, which used to open its box lazily.
+A `runAsync` that never returns wedges the test binding, because every later
+test waits for it. It was intermittent because whether the earlier open's IO
+finishes before that test stops pumping is a real-time race.
+`VideoScalingPrefs` and `SubtitleLanguagePrefs` now use their box only once
+startup has opened it. To find which box is stuck, open
 each candidate name with `.timeout(const Duration(seconds: 3))` from the
 failing test and print the ones that time out. To see the run order, dispatch
 `ci-player.yml` on a throwaway branch.

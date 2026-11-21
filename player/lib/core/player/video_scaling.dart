@@ -2,8 +2,6 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/painting.dart' show BoxFit;
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
-import '../storage/app_hive.dart';
-
 /// How the video fills the player when its shape differs from the screen's.
 ///
 /// Two modes on purpose. Stretch distorts the picture and forced aspect
@@ -61,9 +59,19 @@ class VideoScalingPrefs {
     }
   }
 
+  /// Opens the box. Startup calls this after `initAppHive`; never throws.
+  static Future<void> open() async {
+    try {
+      await Hive.openBox<String>(boxName);
+    } catch (e) {
+      debugPrint('[VideoScalingPrefs] Box did not open: $e');
+    }
+  }
+
+  /// The box once [open] has run; [load] and [save] never open it lazily,
+  /// for the reason `SubtitleLanguagePrefs` gives.
   static Future<Box<String>> _box() async {
     if (Hive.isBoxOpen(boxName)) return Hive.box<String>(boxName);
-    await initAppHive();
-    return Hive.openBox<String>(boxName);
+    throw StateError('$boxName is not open');
   }
 }
