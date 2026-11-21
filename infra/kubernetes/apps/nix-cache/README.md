@@ -61,9 +61,20 @@ Apply with `kubectl --context k3s-can1 apply -k infra/kubernetes/apps/nix-cache`
 | `niks3-s3` | `access-key`, `secret-key` | Cloudflare account API token "niks3 mydia-nix-cache (can-1)", R2 bucket item write on `mydia-nix-cache` only. Access key is the token id, secret is the SHA-256 of the token value |
 | `niks3-signing` | `cache.mydia.dev-1` | `nix key generate-secret --key-name cache.mydia.dev-1` |
 
-The signing key exists only in the cluster. If it is lost, generate
-`cache.mydia.dev-2`, add its public key next to the old one in CI's
-`extra-trusted-public-keys`, and drop the old one once its paths have aged out.
+The signing key exists only in the cluster. If it is lost, rotate to
+`cache.mydia.dev-2` on both sides:
+
+1. Server: `nix key generate-secret --key-name cache.mydia.dev-2`, store it
+   in `niks3-signing` under the key `cache.mydia.dev-2`, set `signing.keys`
+   to `[cache.mydia.dev-2]` in `niks3-values.yaml`, re-render `niks3.yaml`
+   with `./render.sh` (the Deployment's `--sign-key-path` follows
+   `signing.keys`) and apply. Until then niks3 keeps signing with the
+   lost key's file, or fails to start without it.
+2. Clients: derive the public key (`nix key convert-secret-to-public`) and
+   add it next to the old one everywhere `cache.mydia.dev-1:` is trusted
+   (`grep -rn 'cache.mydia.dev-1:'`: the nix-ci action,
+   `scripts/nix-cache-push.sh`, `scripts/ci-restore-test-build.sh`,
+   `.github/ci.md`). Drop the old key once its paths have aged out.
 
 ## Checks
 
