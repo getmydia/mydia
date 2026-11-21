@@ -322,7 +322,52 @@ going:
 gh api repos/getmydia/mydia/actions/jobs/<job-id> --jq '.steps[] | "\(.conclusion // .status)\t\(.name)"'
 ```
 
+## Player test flakes
+
+**`open_files_library_boxes_test.dart`**, `"a copies box that will not open
+leaves the rest open"` timing out at 30s in `dart:isolate`. **Fixed 2026-11-20.**
+`AppShell` watched `sourceProgressFlushProvider`, which unconditionally started
+opening disk-backed Hive box `playback_progress` even with zero sources; inside
+a `testWidgets` fake-async zone that left `'playback_progress'` stuck in
+`HiveImpl._openingBoxes` and hung any later test in the shared `very_good`
+isolate calling `openFilesLibraryBoxes()`. `sourceProgressFlushProvider` now
+skips the startup flush when `thirdPartySourcesProvider` is empty, and
+`open_files_library_boxes_test.dart` carries `@Tags(['skip_very_good_optimization'])`
+because it tests production box names directly.
+
+**`source_detail_controllers_test.dart`**, `"next up lands after the header"`
+throwing `Bad state: No element`. **Fixed 2026-11-20.** The test waited a fixed
+20ms `_settle()` instead of awaiting the `nextUpEpisodeId` state transition via
+a `Completer`.
+
 ## Elixir test flakes
+
+**Recently fixed (2026-11-20):**
+
+- `BuiltIn.Engine`, `FfmpegMp4Transcoder`, `FfmpegHlsTranscoder`, and
+  `FfmpegRemuxer` `Port.info(port, :os_pid) == nil` fast-exit race: a child
+  that exited right after `Port.open/2` returned `:spawn_failed` or
+  `:no_os_pid` instead of letting `{port, {:exit_status, _}}` proceed through
+  normal exit handling. Fixed to treat `nil` os_pid safely; `fake_rqbit.sh` and
+  `engine_test.exs` also now use atomic file writes and safe PID polling.
+- `Cardigann.Wasm.SlotsTest`: added `await_queued(slots, 1)` before
+  `refute Task.yield(third, 100)`.
+- `Cardigann.AdapterSupportTest`: switched to `async: false` (`setup` calls
+  global `Logger.put_module_level/2`) and scoped `"logs nothing"` to `"Copper"`.
+- `Cardigann.Wasm.HostHttpTest`: `"honours request_delay_ms"` now measures the
+  monotonic interval between request arrivals at the Bypass stub rather than
+  timing only the second `exchange/2` call.
+- `BuiltIn.VpnTest`: `start_vpn/2` registers an `on_exit` shutdown of `Vpn`
+  before `Bypass` closes, preventing `** (exit) shutdown` from mid-flight
+  50ms polls.
+- `AdminMediaServersLive.PluginInstancesTest`: awaits `render_async/1` and the
+  `TaskSupervisor` sync task before the sandbox owner exits.
+- `DownloadServiceTest`: uses `BlockingTranscoder` and drains `JobManager` in
+  `describe "prepare/3"` so tests no longer leak background `ffmpeg` processes
+  (`Ecto.StaleEntryError` / `DBConnection.OwnershipError` noise).
+- `mix local.hex` / `mix local.rebar` transient `builds.hex.pm` failures:
+  wrapped in `scripts/ci-mix-bootstrap.sh` (3 attempts) backed by a small
+  `mix-archives-v1` cache.
 
 `Mydia.DataCase` forces `async: false` on SQLite but honours `async: true` on
 Postgres, so the Postgres job runs modules concurrently and is where order- and

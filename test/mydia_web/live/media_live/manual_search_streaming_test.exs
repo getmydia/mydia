@@ -108,11 +108,21 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   defp pending_indexer_fixture(name) do
     bypass = Bypass.open()
     Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
+    test_pid = self()
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       Bypass.pass(bypass)
-      Process.sleep(3_000)
-      Plug.Conn.resp(conn, 200, "[]")
+      ref = Process.monitor(test_pid)
+
+      receive do
+        {:DOWN, ^ref, :process, ^test_pid, _reason} -> :ok
+      after
+        3_000 -> :ok
+      end
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, "[]")
     end)
 
     indexer_config_fixture(%{

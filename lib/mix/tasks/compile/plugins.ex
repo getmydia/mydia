@@ -26,7 +26,9 @@ defmodule Mix.Tasks.Compile.Plugins do
   Guests are WebAssembly **components**, built for `wasm32-wasip2` against the
   canonical WIT contract (the SDK's `wit-bindgen` is a cargo dependency, so no
   system binding-generator is needed). When `cargo` or the `wasm32-wasip2` target
-  is unavailable the guests cannot be rebuilt. Rather than hard-failing — a
+  is unavailable the guests cannot be rebuilt. Setting `MYDIA_PREBUILT_PLUGINS=1`
+  skips building altogether (used in the Docker `builder` stage after copying
+  artifacts from its `plugins` stage). Rather than hard-failing — a
   toolchain-less contributor and
   the Nix package build legitimately lack the target — the compiler no-ops, but
   it **never skips silently**: it emits a loud `Mix.shell/0` warning that names
@@ -45,17 +47,21 @@ defmodule Mix.Tasks.Compile.Plugins do
 
   @impl Mix.Task.Compiler
   def run(_argv) do
-    crates = crates()
+    if System.get_env("MYDIA_PREBUILT_PLUGINS") == "1" do
+      {:noop, []}
+    else
+      crates = crates()
 
-    cond do
-      crates == [] ->
-        {:noop, []}
+      cond do
+        crates == [] ->
+          {:noop, []}
 
-      (reason = toolchain_gap()) != nil ->
-        on_toolchain_gap(reason, crates)
+        (reason = toolchain_gap()) != nil ->
+          on_toolchain_gap(reason, crates)
 
-      true ->
-        build_all(crates)
+        true ->
+          build_all(crates)
+      end
     end
   end
 

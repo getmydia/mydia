@@ -33,6 +33,7 @@ jobs:
       pull-requests: read
     outputs:
       player: ${{ steps.filter.outputs.player }}
+      player_translations: ${{ steps.filter.outputs.player_translations }}
       appimage: ${{ steps.filter.outputs.appimage }}
 
     steps:
@@ -86,6 +87,7 @@ jobs:
                            --paginate --jq '.[] | .filename, (.previous_filename // empty)' || echo "")"
               if [ -z "$changed" ]; then
                 echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "player_translations=false" >> "$GITHUB_OUTPUT"
                 echo "appimage=true" >> "$GITHUB_OUTPUT"
                 echo "Could not compute the change set; running everything."
                 exit 0
@@ -97,6 +99,7 @@ jobs:
               # silently skipping.
               if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
                 echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "player_translations=false" >> "$GITHUB_OUTPUT"
                 echo "appimage=true" >> "$GITHUB_OUTPUT"
                 echo "No usable base commit; running everything."
                 exit 0
@@ -105,6 +108,7 @@ jobs:
                            --jq '.files[].filename' || echo "")"
               if [ -z "$changed" ]; then
                 echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "player_translations=false" >> "$GITHUB_OUTPUT"
                 echo "appimage=true" >> "$GITHUB_OUTPUT"
                 echo "Could not compute the change set; running everything."
                 exit 0
@@ -112,11 +116,24 @@ jobs:
               ;;
             *)
               echo "player=true" >> "$GITHUB_OUTPUT"
+              echo "player_translations=false" >> "$GITHUB_OUTPUT"
               echo "appimage=true" >> "$GITHUB_OUTPUT"
               echo "Event $EVENT has no change set; running everything."
               exit 0
               ;;
           esac
+
+          if [ "$EVENT" = "pull_request" ] \
+             && ! printf '%s\n' "$changed" | grep -qvE '^(player/lib/l10n/[^/]+\.arb|priv/gettext/.+\.po)$' \
+             && printf '%s\n' "$changed" | grep -qE '^player/lib/l10n/[^/]+\.arb$'; then
+            echo "player=false" >> "$GITHUB_OUTPUT"
+            echo "player_translations=true" >> "$GITHUB_OUTPUT"
+            echo "appimage=false" >> "$GITHUB_OUTPUT"
+            echo "Player translation-only changes found."
+            exit 0
+          fi
+
+          echo "player_translations=false" >> "$GITHUB_OUTPUT"
 
           if printf '%s\n' "$changed" | grep -qE '^(player/|native/|priv/graphql/schema\.graphql$|rust-toolchain\.toml$|\.github/workflows/ci-player\.yml$)'; then
             echo "player=true" >> "$GITHUB_OUTPUT"
@@ -168,7 +185,7 @@ jobs:
 
     steps:
       - name: Checkout
-        if: needs.changes.outputs.player == 'true'
+        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
         uses: actions/checkout@v7
 
       # No `cache: true` on any Setup Flutter step in this file. Each SDK entry
@@ -176,7 +193,7 @@ jobs:
       # repo past GitHub's 10 GB Actions cache limit, evicting ci.yml's Mix and
       # cargo caches (2026-10-15). Downloading the SDK costs about a minute.
       - name: Setup Flutter
-        if: needs.changes.outputs.player == 'true'
+        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
@@ -188,8 +205,16 @@ jobs:
       # green here while every local `pub get` rewrote its lock. Every CI,
       # release and E2E `pub get` carries the flag.
       - name: Install dependencies
-        if: needs.changes.outputs.player == 'true'
+        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
         run: flutter pub get --enforce-lockfile
+
+      - name: Generate localizations
+        if: needs.changes.outputs.player_translations == 'true'
+        run: flutter gen-l10n
+
+      - name: Analyze localizations
+        if: needs.changes.outputs.player_translations == 'true'
+        run: dart analyze --fatal-infos lib/l10n
 
       - name: Run code generation
         if: needs.changes.outputs.player == 'true'

@@ -43,15 +43,26 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
   defp pending_indexer_fixture(name) do
     bypass = Bypass.open()
     Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
+    test_pid = self()
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       # Bypass.pass/1 first: the test ends (and its connection is torn down)
-      # long before the sleep elapses. Without marking the expectation
-      # passed, Bypass's on_exit verification would report the abandoned
-      # connection as a test crash.
+      # long before the fallback timeout elapses, and waking on test_pid exit
+      # lets Bypass's on_exit finish without waiting out the sleep. Without
+      # marking the expectation passed, Bypass's on_exit verification would
+      # report the abandoned connection as a test crash.
       Bypass.pass(bypass)
-      Process.sleep(3_000)
-      Plug.Conn.resp(conn, 200, "[]")
+      ref = Process.monitor(test_pid)
+
+      receive do
+        {:DOWN, ^ref, :process, ^test_pid, _reason} -> :ok
+      after
+        3_000 -> :ok
+      end
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, "[]")
     end)
 
     indexer_config_fixture(%{

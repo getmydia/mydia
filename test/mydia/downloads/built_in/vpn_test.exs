@@ -42,23 +42,36 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
         :ok
     end
 
-    start_supervised!(
-      {Vpn,
-       Keyword.merge(
-         [
-           name: :"vpn_#{System.unique_integer([:positive])}",
-           config: ctx.config,
-           status: ctx.status,
-           engine_fun: Map.get(ctx, :engine_fun, engine_fun),
-           tunnel_ip_fun: Map.get(ctx, :tunnel_ip_fun, fn _interface -> {:ok, "10.2.0.2"} end),
-           reverify_ms: Map.get(ctx, :reverify_ms, 60_000),
-           base_url: "http://localhost:#{ctx.bypass.port}",
-           interval_ms: 50,
-           leak_check: leak_fun
-         ],
-         Map.get(ctx, :vpn_opts, [])
-       )}
-    )
+    pid =
+      start_supervised!(
+        {Vpn,
+         Keyword.merge(
+           [
+             name: :"vpn_#{System.unique_integer([:positive])}",
+             config: ctx.config,
+             status: ctx.status,
+             engine_fun: Map.get(ctx, :engine_fun, engine_fun),
+             tunnel_ip_fun: Map.get(ctx, :tunnel_ip_fun, fn _interface -> {:ok, "10.2.0.2"} end),
+             reverify_ms: Map.get(ctx, :reverify_ms, 60_000),
+             base_url: "http://localhost:#{ctx.bypass.port}",
+             interval_ms: 50,
+             leak_check: leak_fun
+           ],
+           Map.get(ctx, :vpn_opts, [])
+         )}
+      )
+
+    # Stop Vpn cleanly before Bypass's on_exit tears down the HTTP stub, so an
+    # in-flight 50ms poll is not killed mid-request (`** (exit) shutdown`).
+    on_exit(fn ->
+      try do
+        if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5_000)
+      catch
+        :exit, _ -> :ok
+      end
+    end)
+
+    pid
   end
 
   defp gluetun(bypass, status, port) do
@@ -557,7 +570,7 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
 
     test "a later hash match recovers after the timeout", ctx do
       gluetun(ctx.bypass, "running", 40_123)
-      {:ok, agent} = Agent.start_link(fn -> "old" end)
+      agent = start_state("old")
 
       ctx =
         Map.put(ctx, :vpn_opts,

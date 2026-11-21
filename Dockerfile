@@ -184,6 +184,29 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
       cp "native/$crate/target/release/lib$crate.so" "/out/$crate.so"; \
     done
 
+# ── plugins: bundled WASM guests, built apart from lib/ ─────────────────────
+# Mirrors `nifs` above: `mix compile` used to build every `plugins/*/` guest
+# after `COPY lib`, so any Elixir change rebuilt all bundled crates from scratch
+# (~133s on every backend PR's Player E2E server image build). Built here from
+# the SDK and `plugins/` alone, the layer stays cached in the registry until
+# `plugins/`, `native/mydia_plugin_sdk/`, or the toolchain changes. Target dirs
+# stay in BuildKit cache mounts so only the compact `.wasm` outputs land in `/out`.
+FROM toolchain AS plugins
+COPY native/mydia_plugin_sdk ./native/mydia_plugin_sdk
+COPY plugins ./plugins
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/plugins/plex/target,sharing=locked \
+    --mount=type=cache,target=/app/plugins/simkl_sync/target,sharing=locked \
+    --mount=type=cache,target=/app/plugins/webhook_notifier/target,sharing=locked \
+    set -eu; mkdir -p /out; \
+    for manifest in plugins/*/Cargo.toml; do \
+      dir="$(dirname "$manifest")"; \
+      name="$(basename "$dir")"; \
+      (cd "$dir" && cargo build --release --target wasm32-wasip2); \
+      cp "$dir/target/wasm32-wasip2/release/$name.wasm" "/out/$name.wasm"; \
+    done
+
 # ── rqbit: the built-in torrent engine ───────────────────────────────────────
 FROM toolchain AS rqbit
 ARG RQBIT_VERSION=9.0.1
@@ -274,14 +297,14 @@ COPY priv ./priv
 COPY lib ./lib
 COPY assets ./assets
 COPY native ./native
-# Prebuilt in the `nifs` stage. MYDIA_PREBUILT_NIFS makes config/prod.exs set
-# Rustler's skip_compilation?, so `mix compile` loads these instead of
-# invoking cargo.
+# Prebuilt in the `nifs` and `plugins` stages. MYDIA_PREBUILT_NIFS and
+# MYDIA_PREBUILT_PLUGINS skip cargo during `mix compile`, so `mix compile` loads
+# the prebuilt .so and .wasm artifacts without rebuilding Rust crates on every
+# Elixir change. Keep `mix compile` on its own line (the ci.yml guard matches it).
 COPY --from=nifs /out/mydia_p2p.so /out/mydia_subsync.so ./priv/native/
 ENV MYDIA_PREBUILT_NIFS=1
-# Bundled plugin guest sources — the :plugins compiler builds them to
-# priv/plugins/*.wasm during `mix compile` below (the .wasm is gitignored).
-COPY plugins ./plugins
+COPY --from=plugins /out/*.wasm ./priv/plugins/
+ENV MYDIA_PREBUILT_PLUGINS=1
 
 # Copy Flutter build output from flutter-builder stage
 COPY --from=flutter-builder /app/player/build/web ./priv/static/player
@@ -312,10 +335,10 @@ ENV BUILD_VERSION=${BUILD_VERSION}
 ARG BUILD_COMMIT=""
 ENV BUILD_COMMIT=${BUILD_COMMIT}
 
-# Compile the application. The Rustler NIFs come from the `nifs` stage; cargo
-# still runs here for the wasm plugin guests (the :plugins compiler).
-RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
-    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+# Compile the application. The Rustler NIFs come from `nifs` and the bundled
+# plugin guests come from `plugins`; cargo no longer runs here. Keep `mix
+# compile` on its own line for the ci.yml build-identity guard.
+RUN \
     mix compile
 
 # Prove the prebuilt NIFs load. Rustler's on_load fails the module load when

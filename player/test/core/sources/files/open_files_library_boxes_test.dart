@@ -1,3 +1,10 @@
+// `openFilesLibraryBoxes()` opens production Hive box names on the global
+// singleton; an earlier testWidgets file leaving any of those names in
+// `HiveImpl._openingBoxes` under fake-async would hang this file in a shared
+// isolate.
+@Tags(['skip_very_good_optimization'])
+library;
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';

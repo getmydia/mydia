@@ -523,11 +523,18 @@ A third output, `translations`, is true on a PR whose every changed file is a
 `priv/gettext/**/*.po` catalog, which in practice means a Weblate PR. It forces
 `backend` false and runs the `Translations` job instead: compile with warnings
 as errors, then the catalog, plural and locale tests, on one SQLite runner in a
-few minutes rather than the full suite's hour of runner time. `Test` needs it,
-so a failure there blocks the merge. `.pot` templates are not covered by this
-filter, because they change with the code. `ci-player-e2e.yml` skips its run on
-the same condition: the player talks to the server in English, and a catalog
-that fails to compile is caught here first.
+few minutes rather than the full suite's hour of runner time. `.pot` templates
+are not covered by this filter, because they change with the code.
+`ci-player.yml` has a matching `player_translations` fast path when only
+`player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change: `Test / Player`
+runs `flutter gen-l10n` and `dart analyze --fatal-infos lib/l10n`, while desktop
+and web builds skip their steps. `ci-player-e2e.yml` skips its run on `.po`-only
+and `.arb`-only translation PRs.
+
+`ci-nix.yml` consolidates the non-VM pin, freshness, release-note, Apple-target,
+guard, and Dependabot-gate checks into two runners (`Check / Repo Contracts` and
+`Check / Pins & Freshness`) so non-VM PR checks share one Nix/Cachix setup
+instead of eight runners.
 
 `Guards` is outside the gate and runs on every PR. It checks Dockerfile,
 `devenv.nix`, flatpak and appimage files rather than Elixir, needs no Nix and
@@ -561,16 +568,22 @@ required-check aggregators` step in `Guards` checks with `yq` that each
 required name sits on exactly one job whose `if` is `always()`. See
 `ci-flakes.md`, "Why the list was short".
 
-`Lint`, the SQLite and PostgreSQL shards, `Dialyzer`, `Rust` and the E2E job
-start with the `.github/actions/setup-devenv` composite action, which installs
-Nix, Cachix and devenv. `Changes`, `Guards` and the aggregators do not use it.
-By default the action also restores `deps/`, `_build` plus `priv/native`, and
-`native/*/target`. `Rust` turns both the Elixir caches and the cargo cache off,
-since it builds no Mix project. The PostgreSQL shards keep their own `_build`
-key family, `build-v2-devenv-postgres`, because their compile differs from the
-SQLite one; every other job shares `build-v2-devenv`. The cargo target cache
-exists because a `_build` miss used to rebuild the iroh-based Rustler crates
-from scratch.
+The Mix jobs (`Lint`, the SQLite and PostgreSQL shards, `Dialyzer`, `Rust` and the
+E2E job) start with the `.github/actions/setup-devenv` composite action, which
+installs Nix, Cachix and devenv. `Changes`, `Guards` and the aggregators do not
+use it. By default the action also caches `~/.cache/mydia-devenv/mix`
+(`mix-archives-v1`) and `deps/` (`deps-v2-devenv`, excluding
+`deps/wasmex/native/wasmex/target` so a ~755 MB entry shrinks to ~25 MB because
+`_build` already holds the compiled NIF), restores `_build` plus `priv/native`
+and `priv/plugins/*.wasm`, and restores `native/*/target` plus
+`~/.cargo/registry/cache` (`cargo-v2`) only on pushes or `_build` misses.
+`Rust` turns both the Elixir caches and the cargo cache off, since it builds no
+Mix project. The PostgreSQL shards keep their own `_build` key family,
+`build-v2-devenv-postgres`, because their compile differs from the SQLite one;
+every other job shares `build-v2-devenv`. Caching `priv/plugins/*.wasm` stops
+every devenv job rebuilding bundled plugin crates from scratch, and `Lint` runs
+`mix gettext.extract --check-up-to-date` (and `UNUSED_CHECK=true`) with
+`MYDIA_PREBUILT_NIFS=1` so forced Elixir recompilation skips rebuilding NIFs.
 Pull requests only restore `_build`; they never save it. Master saves under a
 key ending in the commit SHA, so restore always takes master's newest tree and
 a PR recompiles only what it changed. The `Cache prune` job keeps the newest
@@ -678,21 +691,18 @@ crate's `Cargo.toml` on GitHub at the tag matching `mix.lock`, and
 `scripts/cardigann_precompile.exs` fails the build if that disagrees with the
 crate it actually compiled against.
 
-## The Docker image builds the NIFs in their own stage
+## The Docker image builds the NIFs and bundled plugins in their own stages
 
 `Dockerfile` builds `mydia_p2p` and `mydia_subsync` in a `nifs` stage that
-copies only those crates (plus `mydia_p2p_core`), then `builder` copies the two
-`.so` files into `priv/native/`. `ENV MYDIA_PREBUILT_NIFS=1` makes
-`config/prod.exs` set Rustler's `skip_compilation?`, so `mix compile` loads them
-rather than running cargo. Before this, Rustler built them after `COPY lib`, and
-every Elixir change rebuilt iroh from scratch: `mix compile` took 5m20s of
-`ci-player-e2e.yml`'s image build on 2026-10-30, and 425.6s against 98.3s in a
-local `builder` build before and after. The stage is cached through the same
-`:buildcache-*` registry tags as the rest of the image. `release.yml` writes
-those tags from amd64 only, so arm64 release builds compile the `nifs` stage
-cold, as they compiled the NIFs cold before. Its cargo target
-directories are BuildKit cache mounts, so the ~1 GB cargo target never enters
-the registry cache and only the ~23 MB of `.so` files land in the layer.
+copies only those crates (plus `mydia_p2p_core`), and the bundled WASM plugin
+guests (`plex`, `simkl_sync`, `webhook_notifier`) in a parallel `plugins` stage
+that copies only `native/mydia_plugin_sdk` and `plugins/`. `builder` copies the
+two `.so` files into `priv/native/` and the `.wasm` files into `priv/plugins/`,
+and sets `ENV MYDIA_PREBUILT_NIFS=1` and `ENV MYDIA_PREBUILT_PLUGINS=1` so
+`mix compile` loads them instead of running cargo when only Elixir/config
+changed. Before this, Rustler built the NIFs and `:plugins` built the WASM
+guests after `COPY lib`. Both stages are cached through the `:buildcache-*`
+registry tags, with cargo target dirs kept in BuildKit cache mounts.
 
 cargo runs from each crate directory, not through Rustler, because each crate's
 `.cargo/config.toml` already turns `crt-static` off on musl. A probe after

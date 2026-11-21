@@ -11,11 +11,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # True when a PR moves flake.lock, which gates the NixOS module tests below
-  # onto that PR. Without it a nixpkgs bump, Dependabot's monthly one included,
-  # is first built on master. On push it is forced true.
+  # Runs the cheap repo/workflow/release-script contract tests together with the
+  # `flake.lock` path filter that gates the NixOS module VM tests below, keeping
+  # the runner footprint small while still failing fast on contract breaks.
   changes:
-    name: Changes
+    name: Check / Repo Contracts
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -23,6 +23,13 @@ jobs:
     outputs:
       nix-inputs: ${{ github.event_name != 'pull_request' || steps.filter.outputs.nix-inputs == 'true' }}
     steps:
+      # fetch-depth: 0 because check-ios-refresh-due.sh's commit-log fallback
+      # resolves a previous tag and walks a commit range.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Detect a flake.lock change
         id: filter
         if: github.event_name == 'pull_request'
@@ -32,31 +39,60 @@ jobs:
             nix-inputs:
               - 'flake.lock'
 
-  flutter-pin:
-    name: Check / Flutter Pin
+      # The minimum OS version is duplicated across a Podfile, an Xcode project
+      # and a podspec on each Apple platform; assert agreement per platform.
+      - name: Assert every Apple deployment target agrees
+        run: ./scripts/check-apple-deployment-targets.sh
+
+      # TestFlight store release notes ("What to Test", capped at 4000 chars and
+      # non-empty) and refresh/build-number derivation scripts exercised before merge.
+      - name: Assert the store release notes hold their contract
+        run: ./scripts/check-testflight-notes.sh
+
+      - name: Assert the TestFlight refresh decision holds its contract
+        run: ./scripts/check-ios-refresh-due.sh
+
+      - name: Check / Build number formula
+        run: ./scripts/tests/build-number-test.sh
+
+      - name: Check / On-demand version
+        run: ./scripts/tests/ondemand-version-test.sh
+
+      - name: Check / Branch build number
+        run: ./scripts/tests/branch-build-number-test.sh
+
+      - name: Assert the iOS fastlane metadata helpers behave
+        run: ./scripts/check-ios-fastlane-metadata.sh
+
+      # Pre-commit hook contract tests: scratch-docs and Liquid Glass visual diff gates.
+      - name: Assert the scratch-docs guard holds its contract
+        run: ./scripts/check-no-scratch-docs-test.sh
+
+      - name: Assert the glass-diff guard holds its contract
+        run: ./scripts/check-glass-diff-test.sh
+
+      - name: Assert the Dependabot merge gate against its fixtures
+        run: ./scripts/tests/dependabot-gate-test.sh
+
+  # Combines Flutter pin checks, BEAM pin checks, and generated-artifact
+  # freshness onto one Nix/Cachix setup instead of provisioning three separate
+  # runners on every PR.
+  #
+  # Note for editors: this file is in scope for both the Flutter and BEAM pin
+  # scans below, so do not write a version literal near those names in comments
+  # or code here.
+  pins-and-freshness:
+    name: Check / Pins & Freshness
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      # The nix eval below only proves player/.fvmrc agrees with nixpkgs. It
-      # cannot see a stale `flutter-version:` literal re-added to a workflow --
-      # the exact regression this pin exists to prevent. So scan every file that
-      # can select an SDK (workflows, Dockerfiles, compose files, nix modules,
-      # scripts) for a version literal sitting in Flutter context. Dart package
-      # manifests are out of scope: their constraints pin packages, not the SDK
-      # this repo builds with. The one exception, environment.flutter in
-      # player/pubspec.yaml, is checked against .fvmrc by the next step. Needs
-      # only the checkout, so it runs first and fails in seconds.
-      #
-      # `uses:` lines are skipped because an action reference is not an SDK
-      # selection. Without that, SHA-pinning the setup action in the usual
-      # hardening idiom (a commit sha followed by a trailing version comment)
-      # would fail this check for doing the right thing.
-      #
-      # Note this file is in scope for its own scan, so do not write a version
-      # literal in these comments either -- the same rule the check enforces.
       - name: Assert no other build or CI file names a Flutter version
         run: |
           set -euo pipefail
@@ -82,23 +118,12 @@ jobs:
           fi
           echo "OK: player/.fvmrc is the only file naming a Flutter version."
 
-      # Dependabot never reads .fvmrc. It resolves player/pubspec.lock with the
-      # newest stable Flutter that pubspec.yaml's environment.flutter allows, and
-      # every Flutter release pins several packages exactly, so that range must
-      # name the pinned minor. Otherwise Dependabot and each local `pub get`
-      # rewrite the lock in opposite directions. Pub enforces only the lower
-      # bound, so nothing else notices when a bump leaves the range behind.
-      #
-      # The floor is the minor's .0 rather than the .fvmrc patch, because
-      # patches of one minor pin the same packages.
       - name: Assert pubspec.yaml bounds Dependabot to the pinned minor
         run: |
           set -euo pipefail
           pinned="$(jq -r .flutter player/.fvmrc)"
           IFS=. read -r major minor _ <<< "$pinned"
           expected=">=$major.$minor.0 <$major.$((minor + 1)).0"
-          # yq ships on the runner image and parses the scalar the way pub
-          # does, so quoting and a trailing comment cannot skew the comparison.
           actual="$(yq -r '.environment.flutter // ""' player/pubspec.yaml)"
           if [ "$actual" != "$expected" ]; then
             echo "::error::environment.flutter in player/pubspec.yaml does not match player/.fvmrc"
@@ -110,6 +135,14 @@ jobs:
             exit 1
           fi
           echo "OK: environment.flutter is '$expected'."
+
+      - name: Assert .elixir-version and .otp-version are the only pins
+        run: ./scripts/check-beam-pin.sh
+
+      # rustup reads rust-toolchain.toml, so `cargo metadata --locked` resolves
+      # with the same toolchain the Nix build uses.
+      - name: Install the pinned Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
 
       - name: Install Nix
         uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
@@ -127,60 +160,10 @@ jobs:
           extraPullNames: devenv
           skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
-      # The assertion lives in player/flutter-version.nix; this step only forces
-      # evaluation. It builds nothing -- no SDK, no Android tooling -- so it costs
-      # a nixpkgs fetch and nothing more. A mismatch between player/.fvmrc and
-      # the flake's nixpkgs fails here with the message that names the fix.
       - name: Assert the Android shell resolves the pinned Flutter
         run: nix eval --raw .#packages.x86_64-linux.flutter.version
 
-  check-beam-pin:
-    name: Check / BEAM Pin
-    runs-on: ubuntu-latest
-    # Reads the checkout and evaluates nix; it never pushes or calls the API.
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # The nix eval below only proves beam-version.nix agrees with nixpkgs. It
-      # cannot see a stale Elixir or OTP version literal re-added to a workflow,
-      # a nix module or a Dockerfile, which is the regression these pins exist
-      # to prevent: the app once compiled on three different Elixir versions at
-      # once, and the OTP major was written by hand in five places with nothing
-      # checking they agreed. The script scans every file that can select an
-      # SDK and checks the Dockerfile's builder and runtime bases directly; its
-      # header lists what it excludes and why. Needs only the checkout, so it
-      # runs first and fails in seconds.
-      #
-      # This file is in scope for that scan, so do not write a version literal
-      # in these comments either.
-      - name: Assert .elixir-version and .otp-version are the only pins
-        run: ./scripts/check-beam-pin.sh
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      # beam-version.nix throws when this nixpkgs has no beam set for the
-      # pinned OTP major, or no Elixir attribute for the pinned minor under it.
-      # This step only forces that evaluation against the flake's own pinned
-      # nixpkgs input and prints what it resolved; it builds nothing.
-      - name: Assert the resolver agrees with nixpkgs
+      - name: Assert the BEAM resolver agrees with nixpkgs
         run: |
           nix eval --raw --impure --expr '
             let
@@ -190,143 +173,8 @@ jobs:
             in
             "Elixir ${pin.elixir.version} on OTP ${pin.erlang.version}\n"'
 
-  apple-deployment-targets:
-    name: Check / Apple Deployment Targets
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # The minimum OS version is duplicated across a Podfile, an Xcode project
-      # and a podspec on each Apple platform. Nothing in the toolchain keeps
-      # them in step, and when they drift the app can ship declaring a lower
-      # minimum than the Pods it links, which is what earned an ITMS-90068
-      # warning from App Store Connect in August 2026.
-      #
-      # The script asserts agreement per platform rather than equality to a
-      # fixed number, so raising a minimum stays a player-side edit and no
-      # version literal lives in CI. Needs only the checkout, so it runs
-      # alongside the other cheap checks and fails in seconds.
-      - name: Assert every Apple deployment target agrees
-        run: ./scripts/check-apple-deployment-targets.sh
-
-  testflight-notes:
-    name: Check / TestFlight Notes
-    runs-on: ubuntu-latest
-
-    steps:
-      # fetch-depth: 0 because the commit-log fallback resolves a previous tag
-      # and walks a commit range. A shallow checkout has neither.
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # The notes this produces become TestFlight's "What to Test", which Apple
-      # caps at 4000 characters and rejects when empty. Both properties are
-      # invisible until a release is dispatched, so they are asserted here
-      # against every bundled changelog instead. Needs only the checkout.
-      - name: Assert the store release notes hold their contract
-        run: ./scripts/check-testflight-notes.sh
-
-      # The refresh workflow it feeds cannot be dispatched or scheduled until it
-      # is on the default branch, so this is the only place its decision is
-      # exercised before merge. Needs the same fetch-depth: 0 checkout, because
-      # it reads the tag list.
-      - name: Assert the TestFlight refresh decision holds its contract
-        run: ./scripts/check-ios-refresh-due.sh
-
-      - name: Check / Build number formula
-        run: ./scripts/tests/build-number-test.sh
-
-      # player-ondemand.yml can only be dispatched from the default branch, so
-      # this is where its version derivation is exercised before merge.
-      - name: Check / On-demand version
-        run: ./scripts/tests/ondemand-version-test.sh
-
-      # Same reason: a branch build's TestFlight number is only ever minted by
-      # a dispatched player-ios.yml run.
-      - name: Check / Branch build number
-        run: ./scripts/tests/branch-build-number-test.sh
-
-      # ci-fastlane.yml proves the Fastfile parses and that release_metadata.rb
-      # is reachable through require_relative. This proves what the helpers in
-      # it actually return, which a lane listing cannot see. It also pins
-      # notify_external_testers to true in the Fastfile.
-      - name: Assert the iOS fastlane metadata helpers behave
-        run: ./scripts/check-ios-fastlane-metadata.sh
-
-  generated-freshness:
-    name: Check / Generated Freshness
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # rustup reads rust-toolchain.toml, so `cargo metadata --locked` below
-      # resolves with the same toolchain the Nix build uses rather than
-      # whatever the runner image ships.
-      - name: Install the pinned Rust toolchain
-        run: rustup show active-toolchain || rustup toolchain install
-
-      # Nix runs prefetch-npm-deps from the flake's pinned nixpkgs, which the
-      # check uses to recompute npmDeps.hash from assets/package-lock.json.
-      # The cache only ever holds that tool, never the hash under test.
-      - name: Install Nix
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      # Guards the two ways a dependency bump ships a broken tree while every
-      # check stays green: generated frb bindings left behind by a version pin
-      # that moved, and a Cargo.lock left behind by a manifest that moved. Both
-      # happened on 2026-08-29, three minutes apart, and neither was catchable
-      # on a pull request, because the jobs that would have caught them
-      # (`CI / Nix`, `CI / Player E2E`) do not run on one. This does.
       - name: Assert generated artifacts match their manifests
         run: ./scripts/check-generated-freshness.sh
-
-  scratch-docs:
-    name: Check / No Scratch Docs
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # The pre-commit hook blocks staging these paths locally; this asserts
-      # the script itself keeps that contract on a clean checkout.
-      - name: Assert the scratch-docs guard holds its contract
-        run: ./scripts/check-no-scratch-docs-test.sh
-
-      # Same for the Liquid Glass visual diff gate.
-      - name: Assert the glass-diff guard holds its contract
-        run: ./scripts/check-glass-diff-test.sh
-
-  dependabot-gate:
-    name: Check / Dependabot Gate
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # The merge gate decides whether dependency bumps land on master
-      # unreviewed. Its verdict and re-run logic are pure functions of a
-      # rollup, tested from fixtures, so they can be held to that here.
-      - name: Assert the Dependabot merge gate against its fixtures
-        run: ./scripts/tests/dependabot-gate-test.sh
 
   # Both NixOS VM tests run on push, and on a PR only when it changes
   # flake.lock. They are the slowest and least reliable jobs in CI, combining a

@@ -1,9 +1,12 @@
 defmodule Mydia.Downloads.DownloadServiceTest do
-  use Mydia.DataCase
+  # async: false because prepare/3 configures the global JobManager transcoder.
+  use Mydia.DataCase, async: false
 
   alias Mydia.Accounts.Scope
-  alias Mydia.Downloads.DownloadService
   alias Mydia.Downloads
+  alias Mydia.Downloads.BlockingTranscoder
+  alias Mydia.Downloads.DownloadService
+  alias Mydia.Downloads.JobManager
 
   describe "get_options/2" do
     setup do
@@ -91,6 +94,19 @@ defmodule Mydia.Downloads.DownloadServiceTest do
 
   describe "prepare/3" do
     setup do
+      previous = Application.get_env(:mydia, :transcoder_module)
+      Application.put_env(:mydia, :transcoder_module, BlockingTranscoder)
+      cleanup_jobs()
+
+      on_exit(fn ->
+        cleanup_jobs()
+
+        case previous do
+          nil -> Application.delete_env(:mydia, :transcoder_module)
+          mod -> Application.put_env(:mydia, :transcoder_module, mod)
+        end
+      end)
+
       library = insert(:library_path, type: :movies, path: "/movies")
       media_item = insert(:media_item, type: "movie")
 
@@ -362,5 +378,39 @@ defmodule Mydia.Downloads.DownloadServiceTest do
       assert {:ok, _} = DownloadService.get_job(Scope.unrestricted(), job.id),
              "cancel must not have run for the restricted caller"
     end
+  end
+
+  defp cleanup_jobs do
+    %{active: active, queued: queued} = JobManager.list_active_jobs()
+
+    Enum.each(active ++ queued, fn job ->
+      JobManager.cancel_job(job.media_file_id, job.resolution)
+    end)
+
+    wait_for_registry_cleanup()
+  end
+
+  defp wait_for_registry_cleanup(attempts_left \\ 20)
+
+  defp wait_for_registry_cleanup(0) do
+    registry_entries()
+    |> Enum.each(fn [_key, pid, _value] ->
+      if Process.alive?(pid), do: GenServer.stop(pid, :normal)
+    end)
+  end
+
+  defp wait_for_registry_cleanup(attempts_left) do
+    case registry_entries() do
+      [] ->
+        :ok
+
+      _entries ->
+        Process.sleep(20)
+        wait_for_registry_cleanup(attempts_left - 1)
+    end
+  end
+
+  defp registry_entries do
+    Registry.select(Mydia.Downloads.TranscodeRegistry, [{{:"$1", :"$2", :"$3"}, [], [:"$$"]}])
   end
 end

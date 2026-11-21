@@ -10,7 +10,9 @@ defmodule Mydia.Subsync do
   ffmpeg is still required, but that is the caller's concern: it produces the
   PCM this module reads.
   """
-  use Rustler, otp_app: :mydia, crate: "mydia_subsync"
+  use Rustler,
+      [otp_app: :mydia, crate: "mydia_subsync"] ++
+        if(System.get_env("MYDIA_PREBUILT_NIFS") == "1", do: [skip_compilation?: true], else: [])
 
   @doc """
   Aligns a subtitle's cue spans against reference speech spans.

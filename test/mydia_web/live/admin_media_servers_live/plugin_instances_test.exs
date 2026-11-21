@@ -51,11 +51,13 @@ defmodule MydiaWeb.AdminMediaServersLive.PluginInstancesTest do
   test "adding a plugin server opens the setup modal", %{view: view} do
     view |> element("#add-server-plugin-#{@slug}") |> render_click()
     assert has_element?(view, "#plugin-setup-modal")
+    render_async(view)
   end
 
   test "reconnect and accounts open the setup modal", %{view: view, instance: i} do
     view |> element("#plugin-instance-reconnect-#{i.id}") |> render_click()
     assert has_element?(view, "#plugin-setup-modal")
+    render_async(view)
 
     send(
       view.pid,
@@ -67,10 +69,12 @@ defmodule MydiaWeb.AdminMediaServersLive.PluginInstancesTest do
 
     view |> element("#plugin-instance-accounts-#{i.id}") |> render_click()
     assert has_element?(view, "#plugin-setup-modal")
+    render_async(view)
   end
 
   test "a finished setup closes the modal and reloads the cards", %{view: view} do
     view |> element("#add-server-plugin-#{@slug}") |> render_click()
+    render_async(view)
     {:ok, other} = Instances.create(@slug, %{name: "Harbor Lights Server"})
 
     send(
@@ -158,7 +162,22 @@ defmodule MydiaWeb.AdminMediaServersLive.PluginInstancesTest do
   end
 
   test "sync now starts a run off the LiveView process", %{view: view, instance: i} do
+    before = MapSet.new(Task.Supervisor.children(Mydia.TaskSupervisor))
     html = view |> element("#plugin-instance-sync-#{i.id}") |> render_click()
     assert html =~ "Sync started for Glass Orchard Server"
+
+    # Wait for the unlinked TaskSupervisor child to exit before the sandbox owner shuts down.
+    spawned =
+      MapSet.difference(MapSet.new(Task.Supervisor.children(Mydia.TaskSupervisor)), before)
+
+    for pid <- spawned do
+      ref = Process.monitor(pid)
+
+      receive do
+        {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+      after
+        2_000 -> Process.demonitor(ref, [:flush])
+      end
+    end
   end
 end

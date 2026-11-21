@@ -600,7 +600,9 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
           {:ok, port, os_pid}
 
         nil ->
-          {:error, :no_os_pid}
+          # The port opened, so `{port, {:exit_status, _}}` is already queued;
+          # let `handle_info/2` handle fast failures and software retries.
+          {:ok, port, nil}
       end
     rescue
       e ->
