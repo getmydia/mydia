@@ -221,8 +221,8 @@ fi
 # --- devenv.lock nixpkgs: on flake.lock's revision --------------------------
 #
 # Dependabot's nix ecosystem bumps flake.lock only. Without this a nixpkgs bump
-# would leave the devenv shell, which every ci.yml job tests in, on the old
-# package set while the Nix build moved on.
+# would leave the devenv shell, which local development and ci.yml's E2E job
+# run in, on the old package set while the Nix build moved on.
 if ! scripts/sync-devenv-nixpkgs.sh --check; then
   fail "devenv.lock and flake.lock pin different nixpkgs revisions (see above)."
 fi

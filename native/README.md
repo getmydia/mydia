@@ -298,7 +298,9 @@ Every first-party crate (`server/`, `native/`, `player/rust/`, `plugins/`,
   That allow is for test crates only, never for production code.
 - Adding a crate: copy the tables from `rust-lints.toml` into its `Cargo.toml`.
   Crates under `native/`, `player/rust/`, `plugins/` and `plugins-extra/` are
-  linted automatically.
+  linted automatically by the pre-commit hooks. CI's checks for a new crate
+  under `native/` or `player/rust/` need an entry in `nix/ci/rust.nix`'s
+  crate list; the `ci-crate-list` check fails until it has one.
 
 Each group has its own gate, all running clippy with `-D warnings`:
 
@@ -306,6 +308,7 @@ Each group has its own gate, all running clippy with `-D warnings`:
   `--all-targets --all-features`. The p2p core also gets a wasm32 clippy step in CI.
 - `scripts/check-plugins.sh` covers the plugins against `wasm32-wasip2`, test
   code included, and reports every failing crate instead of stopping at the first.
-- `server/` is linted by `ci-server.yml` and its own hook.
+- `server/` is linted by its own hook and, in CI, the `rust-server-*` flake
+  checks (`nix/ci/rust.nix`, which also runs the other groups' commands).
 - `scripts/test-plugins.sh` runs the plugin tests on the host, which clippy only
   type-checks.

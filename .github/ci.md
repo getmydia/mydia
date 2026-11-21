@@ -10,27 +10,21 @@ here silently replaces the project's front page with this document. It did, from
 46cbdfdb0 until it was noticed. Any new doc in this directory needs a name other
 than `README.md`.
 
-## The Nix jobs run on pull requests only when flake.lock changes
+## The NixOS module tests are flake checks
 
-Both jobs in `ci-nix.yml` are gated on its `Changes` job, which is true on push
-and on a PR that changes `flake.lock`:
+`nixos-module` and `nixos-module-postgres` (`nix/checks/flake-module.nix`) boot
+the package in a QEMU VM. They are ordinary entries in ci.yml's check matrix
+(below), not gated on `flake.lock` any more, and they build
+`packages.default` and `packages.postgres` as inputs
+(`ciInternal.package-default`, `ciInternal.package-postgres`), which is why
+there is no separate `Build / Packages` job. The packages take `src = ../..`,
+so unlike the other checks these two rerun, package build included, on
+almost every commit.
 
-- `Test / NixOS Module (SQLite)`, running `nix build .#checks.x86_64-linux.nixos-module`
-- `Test / NixOS Module (PostgreSQL)`, running `nix build .#checks.x86_64-linux.nixos-module-postgres`
-
-They show as skipping on every other PR. The flake.lock exception exists for
-nixpkgs bumps, Dependabot's monthly one in particular, which are the change
-most likely to break the package. The comment in the file says skipping is
-deliberate: they are the slowest and least reliable jobs, and breaking the NixOS
-module is rare enough to be worth catching on master. The former
-`Build / Packages` job no longer exists, deleted as redundant because these two
-build `packages.default` and `packages.postgres` as inputs via
-`nix/checks/flake-module.nix`. So a green PR that leaves flake.lock alone says
-nothing about whether Nix builds.
-
-For any `.nix` or `assets/` change, verify locally before merge and then watch
-master's push-triggered `CI / Nix` run after. Do not report a nix fix as proven
-on PR green.
+A green PR therefore does say the package builds and the module boots. For a
+`.nix` change still build the affected checks locally before pushing
+(`nix build .#checks.x86_64-linux.<name> -L`), since the VM tests are the
+slowest legs of the matrix.
 
 ## npmDeps.hash must move with package-lock.json
 
@@ -69,9 +63,10 @@ downstream, since the build aborts before the Rust crate vendoring even starts.
 nothing else may name either. `beam-version.nix` resolves the pair from one
 nixpkgs beam set and throws when the pinned nixpkgs lacks the OTP set or the
 Elixir attribute under it. `devenv.nix` imports that resolver and is the
-toolchain for both local development and every devenv job in `ci.yml`, which
-run their steps inside `devenv shell`. `nix/packages/flake-module.nix`
-imports it too, for the release build and the NixOS module VM tests.
+toolchain for local development and for `ci.yml`'s E2E job, which runs inside
+`devenv shell`. `nix/toolchains.nix` imports it too, for the release build in
+`nix/packages/flake-module.nix`, the NixOS module VM tests and every flake
+check under `nix/ci/`.
 
 The Dockerfile's builder is digest-pinned and cannot read a file, so
 `ci-nix.yml`'s `Check / BEAM Pin` job (`scripts/check-beam-pin.sh`) parses its
@@ -88,8 +83,8 @@ by hand. That comment omitted `nix/packages/flake-module.nix`, which floated
 to whatever `beam.packages.erlang_28` defaulted to and drifted onto Elixir
 1.18.4 while `devenv.nix`/CI held 1.19.5 and the Dockerfile ran 1.19.x. The
 visible symptom was the `Test / NixOS Module (SQLite)` and `(PostgreSQL)`
-jobs (see above) going red on master with every other job green, unnoticed
-pre-merge because neither runs on pull requests.
+jobs going red on master with every other job green, unnoticed pre-merge
+because at the time neither ran on pull requests.
 
 The OTP major had the same problem in a different shape: it was written by
 hand as a nixpkgs attribute name in `devenv.nix` (twice), the Elixir resolver
@@ -281,15 +276,15 @@ moves too.
 
 Every check a nix bump needs runs on its pull request, because the gate's
 merge starts no workflows on master (the trap that left the Cardigann guest
-unpublished). `devenv.lock` moving gates in the full `ci.yml` suite, `flake.lock`
-moving gates in the NixOS module tests, and the fixup touches nothing under
+unpublished). `flake.lock` moving changes the toolchain under every flake
+check, so the whole `ci.yml` check matrix reruns, NixOS module tests
+included; `devenv.lock` moving reruns the E2E job; and the fixup touches nothing under
 `.github/workflows/`, which the gate could not merge. `nixpkgs-android` is
 ignored: it moves by hand, with Flutter.
 
 A bump can fail for reasons no fixup can repair: `beam-version.nix` aborts when
 the new nixpkgs no longer ships the OTP major in `.otp-version`, and the NixOS
-module tests (which run on flake.lock PRs, above) catch a package that no
-longer builds. Fix those by hand on the Dependabot branch.
+module checks catch a package that no longer builds. Fix those by hand on the Dependabot branch.
 
 If anything changed, the workflow pushes one commit,
 `chore(deps): regenerate derived files`, with the App token. A push made with
@@ -407,8 +402,8 @@ PR #186 (merged 2026-06-05) removed dead-code and duplicate-code grandfathering.
 
 Credo is a true hard gate. CI runs `mix credo --strict`, every check is either
 enabled and gating at zero or set to `false` with a rationale, and there is no
-`exit_status: 0` anywhere, enforced by a CI grep-guard step named "Forbid Credo
-grandfathering". The policy is documented in `CONTRIBUTING.md`.
+`exit_status: 0` anywhere, enforced by a grep guard in the `elixir-lint` flake
+check (`nix/ci/elixir.nix`). The policy is documented in `CONTRIBUTING.md`.
 `StructBracketAccess` was retired, since the type checker owns struct-access
 safety, and `Refactor.Apply` is `false` because its only sites are intentional
 `apply/3` behaviour dispatch in `library_item.ex` that the type checker rejects as
@@ -429,11 +424,9 @@ Four gotchas around it:
   to `Mix.env() in [:dev, :test]` and `UNUSED_CHECK=true`.
 - The report runs on master pushes only, not on pull requests. It recompiles all
   765 files a second time and cost 199s of every run, measured 2026-09-03, for
-  output nothing is gated on. `ci.yml` gates it on `GITHUB_EVENT_NAME` inside the
-  `devenv shell` heredoc rather than with a step-level `if:`, because splitting
-  the heredoc evaluates the devenv environment twice and costs more than it
-  saves. Run it yourself with
-  `UNUSED_CHECK=true ./dev mix compile --force`.
+  output nothing is gated on. It is the last step of ci.yml's `Lint / Ratchet`
+  job, behind `if: github.event_name == 'push'`, and its failure is ignored.
+  Run it yourself with `UNUSED_CHECK=true ./dev mix compile --force`.
 - Build-time helper modules referenced by `mix.exs` must be inlined in `mix.exs`
   rather than kept in a separate root file. The Docker build's
   `mix deps.get --only prod` layer copies only `mix.exs` and `mix.lock`, so a
@@ -444,34 +437,39 @@ Four gotchas around it:
   when a local dev-env compile is clean. Reproduce with
   `MIX_ENV=test mix compile --warnings-as-errors --force`.
 
-### The Dialyzer job
+### Dialyzer
 
-`ci.yml`'s `Dialyzer` job runs `mix dialyzer --format github` in `MIX_ENV=test`
-and fails on any finding. It shares the SQLite shards' `_build` cache family (the
-default `build-cache-prefix`; restored by `Restore build cache` on PRs, saved by
-`Cache build` on master), so it restores the same `_build/test` and
-`priv/native`. The PLTs live in `priv/plts` under their own cache. Restore matches on
-`.elixir-version`, `.otp-version`, `patches/**` and `mix.lock` (in that order),
-falling back to the toolchain and patches prefix so a lock change rebuilds
-incrementally. A patch change never restores an older PLT, since dialyxir
-compares dependency versions, not beam contents. Every run saves under a key
-ending in a hash of the PLT files, so only a changed PLT writes a new entry. A PLT
-dialyxir repaired on load is therefore saved as a new entry, and restore picks the newest. With an exact-match key, the
-repaired PLT was never re-saved and every run spent 3.7 minutes repairing the
-same stale file (2026-10-30).
-The `Lint` job greps `mix.exs` for `ignore_warnings`, `lib/` and `test/support/` for `@dialyzer`,
-and checks for a `.dialyzer_ignore.exs` file (Dialyxir loads it by default without any
-`mix.exs` setting). It fails if any of the three appears. The policy is in `CONTRIBUTING.md`.
+The `dialyzer` flake check runs `mix dialyzer --format github` in
+`MIX_ENV=test` on top of the SQLite test build and fails on any finding. The
+PLTs are their own derivation, `ciInternal.dialyzer-plt`, built from the
+compiled dependencies and the toolchain but not from `lib/`: an app edit
+reuses the cached PLT, and a `mix.lock`, `patches/` or BEAM pin change
+rebuilds it. A patch change therefore never meets a PLT built from other patch
+content, which the old version-keyed Actions cache had to arrange by hand
+(dialyxir compares dependency versions, not beam contents).
+The `elixir-lint` check greps `mix.exs` for `ignore_warnings`, `lib/` and
+`test/support/` for `@dialyzer`, and checks for a `.dialyzer_ignore.exs` file
+(Dialyxir loads it by default without any `mix.exs` setting). It fails if any
+of the three appears. The policy is in `CONTRIBUTING.md`.
 
 ### Rust lint and test-warning gates
 
-The `rust` job runs two lint steps before its tests: "Lint native crates (fmt +
-clippy)" (`scripts/check-rust.sh`) and "Lint wasm plugins (fmt + clippy)"
-(`scripts/check-plugins.sh`). Both run `cargo fmt --check` and
-`cargo clippy -D warnings`. The crate list is written once, in
-`scripts/check-rust.sh`; the `native-rust` pre-commit hook calls the same script,
-so a crate added there is gated locally and in CI at the same time. `server/` has
-its own workflow, `ci-server.yml`.
+Every crate under `native/` (minus `cardigann_guest`), `player/rust/` and
+`server/` has three flake checks, `rust-<crate>-fmt`, `-clippy` and `-test`,
+with the commands and flags `scripts/check-rust.sh` and the old per-crate
+`cargo test` steps used; `rust-plugins` runs `scripts/check-plugins.sh` and
+`scripts/test-plugins.sh`, and `rust-p2p-core-wasm` the p2p core's browser
+build and clippy (`nix/ci/rust.nix`). `scripts/check-rust.sh` finds crates by
+glob, so the `native-rust` pre-commit hook gates a new crate at once; the
+checks need an entry in `nix/ci/rust.nix`'s crate list, and the
+`ci-crate-list` check fails until the two agree.
+
+`mydia_smb`'s Samba integration tests need a root smbd, which the sandbox
+cannot provide, so `rust-mydia_smb-test` skips them. ci.yml's `Rust / SMB
+integration` job runs them against a real Samba
+(`player/rust/mydia_smb/tests/samba/run-samba.sh`) with
+`MYDIA_SMB_REQUIRE_HARNESS=1`, which turns a harness that failed to start
+into a failure.
 
 The SQLite and PostgreSQL shards run `mix test --warnings-as-errors`, which
 aborts the run after the tests finish when a test file emitted a compile warning. LiveViewTest
@@ -502,30 +500,118 @@ test timeout to `:infinity` (`mix help test`; ExUnit's `max_cases/1` checks
 silently serializes the whole suite, and on both jobs it means a hung test runs
 until the GitHub job timeout instead of failing fast.
 
-## ci.yml: path gate, shards and aggregators
+## ci.yml: the flake-check graph
 
-Measured 2026-10-15, before this layout: `ci.yml`'s PR median was 20 minutes,
-the SQLite suite took 642s on one runner (549s of it sync, `max_cases: 1`) and
-the PostgreSQL suite 560s (506.6s sync). The workflow is now a graph of a gate,
-parallel lanes and three aggregators.
+The backend's checks are flake checks under `nix/ci/`: Elixir format, lint
+and Dialyzer, the SQLite and PostgreSQL shards, every Rust crate's fmt,
+clippy and tests, the plugins, the relay's suite, the NixOS module VM tests
+and the repository guards. Each is a derivation whose hash covers exactly the
+files and toolchain it reads (every `src` is a `lib.fileset`), and every
+built output goes to the niks3 binary cache, `cache.mydia.dev`. A run builds
+what changed and substitutes the rest, so there is no path filter and no
+Actions cache in `ci.yml`: the derivation graph is the filter. The graph,
+with what each derivation reads, is in `nix/ci/README.md`, "The derivation
+graph". In short: a `lib/` edit rebuilds the two test builds and everything
+on top of them and leaves the dependency builds, the PLT, the NIFs and the
+Rust and relay checks cached; a `test/` edit reruns only the shards; a
+workflow edit reruns only `ci-workflow-triggers`. A Weblate `.po`-only PR
+rebuilds the test build and runs every shard, because Gettext compiles the
+catalogs into the backend; the old `Translations` fast path is gone.
 
-The `changes` job runs `dorny/paths-filter` on pull requests and emits two
-outputs, `backend` and `rust`. `Lint`, the SQLite and PostgreSQL shards,
-`Dialyzer` and the E2E job run only when `backend` is true; `Rust` runs when
-`rust` is true. On push and `workflow_dispatch` the filter step is skipped and
-both outputs are forced true, so master always runs everything. The filter is an
-allowlist: a PR touching only paths missing from the `backend` list skips the
-whole Elixir suite and still goes green. Any new top-level input to the build,
-such as a new directory the compile reads or a new version pin file, must be
-added to `backend` in the same PR.
+The jobs, in order:
 
-A third output, `translations`, is true on a PR whose every changed file is a
-`priv/gettext/**/*.po` catalog, which in practice means a Weblate PR. It forces
-`backend` false and runs the `Translations` job instead: compile with warnings
-as errors, then the catalog, plural and locale tests, on one SQLite runner in a
-few minutes rather than the full suite's hour of runner time. `.pot` templates
-are not covered by this filter, because they change with the code.
-`ci-player.yml` has a matching `player_translations` fast path when only
+- `Nix / Plan` runs `scripts/ci-plan.sh`: `nix-eval-jobs
+  --check-cache-status` over `checks.x86_64-linux`, which lists the checks
+  the cache lacks, and the `ciInternal` derivations (compiled deps, test
+  builds, NIFs, the PLT, rustfs) that two or more of them still need.
+- `Nix / Input (<name>)` builds each of those shared inputs once and pushes
+  it, so the check jobs substitute it instead of each building its own copy.
+  It is skipped when the run cannot push (a fork PR, Dependabot).
+- `Nix / <check>` is one job per uncached check: `scripts/ci-nix-build.sh`,
+  then a push of the output.
+- `Nix / Checks` aggregates the three: success when the plan succeeded and
+  each build job succeeded or was skipped (an empty matrix).
+- `Nix / Pins` runs on master only and pins every check and `ciInternal`
+  output as `master-<name>` (below). It never fails the run.
+
+### Reading the plan
+
+The `Plan` step's summary, "Nix plan", says how many inputs and checks this
+run builds and lists them with their group (`sqlite`, `postgres`, `lint`,
+`rust`, `server`, `relay`, `nixos`, `other`); everything else was already
+cached. The step log prints the same as JSON. A check missing from the matrix
+passed on an earlier run with identical inputs, and its log is in the cache:
+`nix build .#checks.x86_64-linux.<name>` substitutes the output and
+`result/test.log` (shards, Rust tests, relay) or `result/log` (the other
+Elixir checks) is the run that cached it. An evaluation error fails the plan
+with an `::error::` naming the attribute.
+
+### Reproducing a check locally
+
+    nix build .#checks.x86_64-linux.<name> -L
+
+builds exactly what CI builds, in the same sandbox. With `cache.mydia.dev`
+as a substituter (key
+`cache.mydia.dev-1:5zkoQR4Gcrx1EEQ1GvHRPQ7EoHm8gNrrVoeAqX3ioFg=`) the inputs
+come from the cache; devenv's shell does not set it, so pass
+`--option extra-substituters https://cache.mydia.dev --option
+extra-trusted-public-keys <key>` or add both to `nix.conf`. `nix log` on a
+failed derivation shows its output again. New files must be visible to git
+(`git add -N`) before Nix sees them. What the sandbox means for tests is in
+`test/README.md`, "Sandboxed CI runs": no network, `--seed 0`, only the files
+and tools the check lists. Four tests that need a real network interface or
+a default route are tagged `:external` there and no longer run in CI
+(`DirectUrlsTest` "includes local URLs", two `DirectUrlRefresherTest` cases
+and a `Plugins.Net.GateTest` connect timeout); run them with
+`./dev mix test --include external <file>`.
+
+### Pushing from a workstation
+
+The devenv pre-push hook `nix-cache-push` (`scripts/nix-cache-push-hook.sh`)
+builds the pushed commit's outputs in the background and pushes them with
+`scripts/nix-cache-push.sh`, so CI finds them already built. It never blocks
+or fails a push and is a silent no-op without the niks3 admin token in
+`~/.config/mydia/niks3-token`. `MYDIA_NIX_PUSH` selects what it builds:
+`builds` (the default, every `ciInternal` output, the expensive compile
+artifacts), `all` (the checks too, which runs the suites) or `off`. Its log is
+`.devenv/state/nix-cache-push.log`. `scripts/nix-cache-push.sh <attr>...`
+pushes chosen attributes by hand.
+
+### niks3
+
+CI pushes through niks3 at `niks3.mydia.dev` with a GitHub OIDC token, so
+only `Nix / Input`, `Nix / <check>` and `Nix / Pins` hold
+`id-token: write`. A push that fails three times warns and never fails the
+job. niks3 garbage-collects unpinned paths after 14 days; PR runs push
+without a pin, and `Nix / Pins` refreshes the `master-<name>` pins on every
+master run, so master's newest closure never ages out. Deployment, secrets,
+the signing key and health checks are in
+`infra/kubernetes/apps/nix-cache/README.md`. The pin count is
+
+    kubectl --context k3s-can1 -n nix-cache exec deploy/niks3-postgres -- \
+      psql -U niks3 -c 'select count(*) from pins'
+
+### Jobs outside the sandbox
+
+- `Guards` runs the one guard that reads the workflows with `yq` (below).
+  The file-only guards (Rust toolchain pin, Rust lint tables, Docker
+  build-identity placement, pre-migration backup task, devenv shell-entry
+  purity) are the `guards` check in `nix/ci/guards.nix`.
+- `Lint / Ratchet` runs `mix mydia.ratchet --from-git-merge-base
+  origin/master`, which reads git history, and on master pushes the advisory
+  `mix_unused` report. It compiles nothing:
+  `scripts/ci-test-build-workspace.sh` lays the cached
+  `ciInternal.mydiaTestBuild-sqlite` over the checkout, bind-mounted at
+  `/build/source` because Mix records absolute paths, with every file dated
+  to the epoch, and the job runs Mix in `nix develop .#ci`
+  (`nix/ci/README.md`, "Outside the sandbox").
+- `Rust / SMB integration` runs `mydia_smb`'s Samba tests (above).
+- `Test / E2E Browser (run)` is still a devenv job
+  (`.github/actions/setup-devenv`, which installs Nix, Cachix and devenv and
+  caches nothing): chromium and chromedriver come from `devenv.nix`. It
+  compiles from scratch.
+
+`ci-player.yml` has a `player_translations` fast path when only
 non-template `player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change
 (`app_en.arb` stays on the full `player` path because it defines the
 `AppLocalizations` Dart API): `Test / Player` runs `flutter gen-l10n`,
@@ -538,82 +624,64 @@ guard, and Dependabot-gate checks into two runners (`Check / Repo Contracts` and
 `Check / Pins & Freshness`) so non-VM PR checks share one Nix/Cachix setup
 instead of eight runners.
 
-`Guards` is outside the gate and runs on every PR. It checks Dockerfile,
-`devenv.nix`, flatpak and appimage files rather than Elixir, needs no Nix and
-takes seconds. `Lint` holds what used to precede the tests in the old `Test`
-job: compile with warnings as errors, format, the Credo, Dialyzer and
-DEPRECATED guard greps, `mix credo --strict` and the ratchet. The
-tests no longer run with `--cover`, which the old jobs passed to `mix test`.
+### Shards
 
-The SQLite suite runs as four shards (`Test (SQLite N/4)`) and the PostgreSQL
-suite as three (`Test / PostgreSQL (N/3)`), each a separate runner using
-`mix test --partitions`. SQLite stays at `max_cases: 1` inside every runner,
-since the suite shares one writer per database; each shard has its own
-`mydia_testN.db` (`config/test.exs` suffixes `MIX_TEST_PARTITION`, which lets
+The SQLite suite runs as four checks (`test-sqlite-{1..4}`) and the
+PostgreSQL suite as three (`test-postgres-{1..3}`), each its own job using
+`mix test --partitions` (`nix/ci/tests.nix`). SQLite stays at `max_cases: 1`
+inside every shard, since the suite shares one writer per database, and each
+shard has its own database in its own sandbox. `config/test.exs` suffixes
+`MIX_TEST_PARTITION` to the database name, which lets
 `scripts/test-partitioned.sh` run the same partitions side by side on one
-machine), and the constraint holds. `--partitions` sorts the test files and
-deals them out round-robin, not by duration, so adding a test file can shift
-later files to another shard. If one shard runs well over the others, raise the count
-in the matrix and in the `--partitions` argument rather than moving files by
-hand.
+machine. `--partitions` sorts the test files and deals them out round-robin,
+not by duration, so adding a test file can shift later files to another
+shard. If one shard runs well over the others, raise the count in
+`tests.nix` (`shards "sqlite" 4`) rather than moving files by hand. The tests
+do not run with `--cover`.
+
+### Aggregators
 
 The names `Test`, `Test / PostgreSQL` and `Test / E2E Browser` are required by
 the Master ruleset, and they sit on three aggregator jobs (`test`,
-`test-postgres-result`, `test-e2e-result`), not on the gated jobs. `Test`
-needs `Guards`, `Lint` and the SQLite shards, so it covers more than the suite.
-Each has
-`if: always()` and a step that fails unless every job it needs concluded
-`success` or `skipped`, so the aggregator itself concludes success or failure
-and never `skipped`. The real E2E job is named `Test / E2E Browser (run)` for
-that reason, and its screenshot artifact hangs off it. The `Guard the
-required-check aggregators` step in `Guards` checks with `yq` that each
-required name sits on exactly one job whose `if` is `always()`. See
-`ci-flakes.md`, "Why the list was short".
+`test-postgres-result`, `test-e2e-result`). `Test` needs `Guards`,
+`Nix / Checks`, `Lint / Ratchet` and `Rust / SMB integration`;
+`Test / PostgreSQL` needs `Nix / Checks`; `Test / E2E Browser` needs the E2E
+job. A matrix leg's result is not addressable through `needs`, so both of the
+first two gate on the whole check matrix: a failing Rust check also reds
+`Test / PostgreSQL`. Each has `if: always()` and a step that fails unless
+every job it needs concluded `success` or `skipped`, so the aggregator itself
+concludes success or failure and never `skipped`. The real E2E job is named
+`Test / E2E Browser (run)` for that reason, and its screenshot artifact hangs
+off it. The `Guard the required-check aggregators` step in `Guards` checks
+with `yq` that each required name sits on exactly one job whose `if` is
+`always()`. See `ci-flakes.md`, "Why the list was short".
 
-The Mix jobs (`Lint`, the SQLite and PostgreSQL shards, `Dialyzer`, `Rust` and the
-E2E job) start with the `.github/actions/setup-devenv` composite action, which
-installs Nix, Cachix and devenv. `Changes`, `Guards` and the aggregators do not
-use it. By default the action also caches `~/.cache/mydia-devenv/mix`
-(`mix-archives-v1`) and `deps/` (`deps-v2-devenv`, excluding
-`deps/wasmex/native/wasmex/target` so a ~755 MB entry shrinks to ~25 MB because
-`_build` already holds the compiled NIF), restores `_build` plus `priv/native`
-and `priv/plugins/*.wasm`, and restores `native/*/target` plus
-`~/.cargo/registry/cache` (`cargo-v2`) only on pushes or `_build` misses.
-`Rust` turns both the Elixir caches and the cargo cache off, since it builds no
-Mix project. The PostgreSQL shards keep their own `_build` key family,
-`build-v2-devenv-postgres`, because their compile differs from the SQLite one;
-every other job shares `build-v2-devenv`. Caching `priv/plugins/*.wasm` stops
-every devenv job rebuilding bundled plugin crates from scratch, and `Lint` runs
-`mix gettext.extract --check-up-to-date` (and `UNUSED_CHECK=true`) with
-`MYDIA_PREBUILT_NIFS=1` so forced Elixir recompilation skips rebuilding NIFs.
-Pull requests only restore `_build`; they never save it. Master saves under a
-key ending in the commit SHA, so restore always takes master's newest tree and
-a PR recompiles only what it changed. The `Cache prune` job keeps the newest
-two master entries per family. Before this, the key hashed `lib/` and `test/`,
-so every PR push saved a new ~75 MB entry: 103 of them (6.8 GB) on 2026-10-30,
-which evicted the deps, cargo and PLT caches and sent runs down the cold path.
-The one exception: a PR whose restore matched nothing (it changed `mix.lock`,
-`patches/` or `native/`, so it misses master's prefix) saves once, at the end of
-each job, under the same prefix plus `pr-<number>`, so its later pushes restore
-that instead of compiling cold. Those entries age out after 7 days.
+### Compile-time config and the test build
 
-A restored `_build` is only useful if this job's compile-time config matches
-the config of the job that saved it. Mix stores each app's compile-time config
-in the manifest, and when the `:mydia` app's config differs it recompiles every
-file, cache hit or not. `config/test.exs` used to put `MIX_TEST_PARTITION` in
-the Repo database name. Master's `_build` is saved by whichever SQLite shard
-finishes first, so Lint, Dialyzer, E2E and the other three shards all saw a
-config change and recompiled all ~1455 files: 3 to 4.5 minutes per job, on
-every run, until 2026-11-20. The partitioned name now lives in
-`config/runtime.exs`, which Mix does not track. Anything that varies per job or
-per run (partition numbers, ports, temp paths, `CI`) belongs in `runtime.exs`
-or in a different app's config, never under `:mydia` in `config/test.exs`.
-"Compiling 1455 files" in a job that restored `_build` is the symptom. To check
-a candidate locally, compile, `touch config/test.exs`, change the variable and
-compile again: a handful of files is fine, all of them is this bug.
+Every consumer of `ciInternal.mydiaTestBuild-*` (the shards, `elixir-lint`,
+`dialyzer`, `ci-workflow-triggers`, the ratchet) must run Mix with the same
+compile-time configuration the build had, or Mix recompiles every file of the
+app: it stores each app's compile-time config in the manifest, and when the
+`:mydia` app's config differs it recompiles all of it. The build sets
+`MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1` and, for the PostgreSQL
+build, `DATABASE_TYPE=postgres`; the checks and `devShells.ci` set the same.
+Anything that varies per shard or per run (partition numbers, database names,
+ports, temp paths, `CI`) belongs in `config/runtime.exs`, which Mix does not
+track, or in a different app's config, never under `:mydia` in
+`config/test.exs`. `config/test.exs` used to put `MIX_TEST_PARTITION` in the
+Repo database name, and under the old Actions cache every job that restored
+another job's `_build` recompiled all ~1455 files, 3 to 4.5 minutes per job,
+until 2026-11-20. "Compiling 1455 files" in a shard log is the symptom. To
+check a candidate locally, compile, `touch config/test.exs`, change the
+variable and compile again: a handful of files is fine, all of them is this
+bug.
 
-The Actions cache has a 10 GB limit per repository, and it is evicted least
-recently used first. On 2026-10-15 it held 10.6 GB, 3.8 GB of that two
+### The Actions cache budget
+
+`ci.yml` no longer uses the Actions cache. The rest of this is history that
+still shapes the other workflows. The Actions cache has a 10 GB limit per
+repository, and it is evicted least recently used first. On 2026-10-15 it
+held 10.6 GB, 3.8 GB of that two
 `flutter-windows` SDK entries, so eviction had been dropping the 155 MB `_build`
 cache and about 5 of 12 PR runs recompiled deps and NIFs from scratch. Dropping
 the Windows SDK cache was not enough. Later that day the cache held 10.79 GB:
@@ -639,9 +707,10 @@ and cold about 20, so the cure was to get the big entries out of the budget:
   Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
   which GHCR needs for cache manifests and which keeps a failed cache push from
   failing the build.
-- `ci-nix.yml` and `dependabot-fixup.yml` use Cachix, like the devenv jobs.
-  magic-nix-cache stored every store path as its own Actions cache entry
-  (2,226 entries, 1.1 GB on 2026-10-30).
+- `ci-nix.yml` and `dependabot-fixup.yml` use Cachix, like the E2E job's
+  devenv, and ci.yml's flake checks use niks3. magic-nix-cache stored every
+  store path as its own Actions cache entry (2,226 entries, 1.1 GB on
+  2026-10-30).
 
 Check the budget with:
 

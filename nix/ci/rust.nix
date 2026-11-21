@@ -2,7 +2,7 @@
 #
 # Replaces the old CI `Rust` job (scripts/check-rust.sh, check-plugins.sh,
 # test-plugins.sh, the per-crate `cargo test` steps and the p2p core's wasm
-# build) and ci-server.yml, with the same commands and flags.
+# build) and the former ci-server.yml, with the same commands and flags.
 #
 # Every crate gets three checks, `rust-<name>-fmt`, `-clippy` and `-test`,
 # sharing one dependency build (`buildDepsOnly`). They run cargo's default
@@ -150,7 +150,7 @@
           set = sources.playerCrate "mydia_player_p2p";
         }
         {
-          # ci-server.yml's commands: no --all-features on clippy, and the
+          # The former ci-server.yml's commands: no --all-features on clippy, and the
           # playback tests synthesize media with ffmpeg and probe with ffprobe.
           name = "server";
           dir = "server";
