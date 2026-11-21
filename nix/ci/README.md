@@ -68,7 +68,9 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `mix mydia.cardigann_guest hash`. What the sandbox means for tests: `test/README.md`,
   "Sandboxed CI runs". The inputs every shard shares are `ciInternal.rustfs`
   (devenv's RustFS override, a full Rust build), `ciInternal.cardigannGuest`
-  (the pinned guest fetch) and `ciInternal.cardigannSourceHash`.
+  (the pinned guest fetch; absent when `ARTIFACT_SHA256` holds a value the
+  app reads as no pin, such as `unpublished`, and then no shard carries the
+  guest) and `ciInternal.cardigannSourceHash`.
 - `../checks/flake-module.nix`: the NixOS module VM tests `nixos-module` and
   `nixos-module-postgres`, and the packages they boot as
   `ciInternal.package-default` and `ciInternal.package-postgres`.

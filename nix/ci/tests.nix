@@ -64,19 +64,30 @@
       # native/cardigann_guest/scripts/source-hash.sh instead, and the
       # ci-cardigann-hash check proves it equals `mix mydia.cardigann_guest
       # hash`, the value the compiled Artifact module names its file by.
+      #
+      # A pin the app reads as "no pin" (a word such as `unpublished`, as
+      # Artifact does for anything that is not "<hash> <64-hex sha>") means
+      # no guest here too: cardigannPin is null, nothing is fetched and the
+      # shards exclude :cardigann_wasm. Only a value made purely of hex
+      # tokens, an attempted pin that is malformed, fails evaluation.
       cardigannPinFile = builtins.readFile (root + "/native/cardigann_guest/ARTIFACT_SHA256");
-      cardigannPinMatch = builtins.match "([0-9a-f]{16})[[:space:]]+([0-9a-f]{64})[[:space:]]*" cardigannPinFile;
+      cardigannPinMatch = builtins.match "[[:space:]]*([0-9a-f]{16})[[:space:]]+([0-9a-f]{64})[[:space:]]*" cardigannPinFile;
+      cardigannPinLooksHex = builtins.match "[[:space:]]*[0-9a-fA-F]+([[:space:]]+[0-9a-fA-F]+)*[[:space:]]*" cardigannPinFile != null;
       cardigannPin =
-        assert lib.assertMsg (cardigannPinMatch != null)
-          "nix/ci/tests.nix: native/cardigann_guest/ARTIFACT_SHA256 is not \"<16-hex source hash> <64-hex sha256>\"";
-        {
-          sourceHash = builtins.elemAt cardigannPinMatch 0;
-          sha256 = builtins.elemAt cardigannPinMatch 1;
-        };
+        if cardigannPinMatch != null then
+          {
+            sourceHash = builtins.elemAt cardigannPinMatch 0;
+            sha256 = builtins.elemAt cardigannPinMatch 1;
+          }
+        else
+          assert lib.assertMsg (!cardigannPinLooksHex)
+            "nix/ci/tests.nix: native/cardigann_guest/ARTIFACT_SHA256 looks like a pin but is not \"<16-hex source hash> <64-hex sha256>\"";
+          null;
 
       # Artifact's @default_base_url and file_name/0: the release
       # cardigann-guest-<hash>, asset cardigann-<hash>.wasm.
-      cardigannGuest = pkgs.fetchurl {
+      # null when there is no pin, so nothing is fetched.
+      cardigannGuest = if cardigannPin == null then null else pkgs.fetchurl {
         name = "cardigann-${cardigannPin.sourceHash}.wasm";
         url = "https://github.com/getmydia/mydia/releases/download/cardigann-guest-${cardigannPin.sourceHash}/cardigann-${cardigannPin.sourceHash}.wasm";
         inherit (cardigannPin) sha256;
@@ -102,7 +113,9 @@
       # Lays the guest where `mix mydia.cardigann_guest fetch` would
       # (Artifact.path/0: _build/test/lib/mydia/priv, Mix's symlink to
       # priv/), with the .sha256 sidecar Artifact.load/1 checks it against.
-      installCardigannGuest = ''
+      installCardigannGuest = if cardigannPin == null then ''
+        echo "Cardigann guest: native/cardigann_guest/ARTIFACT_SHA256 holds no pin: not installing it"
+      '' else ''
         cardigann_hash=$(cat ${cardigannSourceHash})
         if [ "$cardigann_hash" = ${cardigannPin.sourceHash} ]; then
           mkdir -p priv/cardigann
@@ -312,7 +325,7 @@
       # closure, so pushing a shard never uploads them; exposed here, the CI
       # planner builds and pushes each once (rustfs is a full Rust build).
       ciInternal = {
-        inherit rustfs cardigannGuest cardigannSourceHash;
-      };
+        inherit rustfs cardigannSourceHash;
+      } // lib.optionalAttrs (cardigannGuest != null) { inherit cardigannGuest; };
     };
 }
