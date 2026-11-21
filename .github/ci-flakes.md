@@ -149,9 +149,10 @@ the PR's full check list rather than whether it merged green.
 
 ## CI / Docker used to cancel its own master runs
 
-**Fixed 2026-08-31.** `ci-docker.yml` now keys its concurrency group to
-`github.sha`, so every master commit gets its own run and nothing supersedes
-anything. Re-runs of the same SHA still dedupe. The cost is that a burst of
+**Fixed 2026-08-31.** `ci-docker.yml` now keys its push runs' concurrency
+group to `github.sha`, so every master commit gets its own run and nothing
+supersedes anything. (Its pull request runs, which build only the
+`flutter-builder` stage, key on the ref and cancel in progress.) Re-runs of the same SHA still dedupe. The cost is that a burst of
 merges runs concurrent image builds instead of serialising them, which is the
 point.
 

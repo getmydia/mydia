@@ -830,14 +830,18 @@ and a failure reruns on the next push. Run it locally with
 `nix build .#checks.x86_64-linux.player-e2e -L` (or `./dev player e2e`); it
 needs KVM. `nix/ci/README.md` covers the client's environment.
 
-It replaced a Docker-compose workflow that also built the release server
-image on pull requests touching the player inputs the `Dockerfile` copies one
-by one (`pubspec.yaml`, `build.yaml`, `l10n.yaml`, `packages/`, `assets/`,
-`shaders/`, `rust_builder/pubspec.yaml`), which is how #1444's missing path
-dependency was meant to be caught before merge. The VM test boots the Nix
-package, not that image, so no pull request builds the release `Dockerfile`
-now: `CI / Docker` on master pushes and `release.yml` are the only runs that
-do.
+The VM test boots the Nix package, not the release image, so it cannot catch
+a `Dockerfile` that fails to build. The Docker-compose workflow it replaced
+built that image on pull requests touching the player inputs the `Dockerfile`
+copies one by one, which is the guard #1444 called for: that PR added a path
+dependency the `flutter-builder` stage did not copy and broke every release
+build after merge. The guard now lives in `ci-docker.yml`. On a pull request
+that touches `Dockerfile`, `player/pubspec.yaml`, `build.yaml`, `l10n.yaml`,
+`packages/`, `assets/`, `shaders/`, `rust_builder/pubspec.yaml` or the
+workflow itself, `Docker / flutter-builder (PR)` builds that stage alone,
+with `push: false` and the `:buildcache-sqlite` registry cache read-only (no
+login, so fork PRs build too, and no cache export). It is not required.
+Push runs build and publish the full image as before.
 
 ## The precompiled Cardigann guest
 

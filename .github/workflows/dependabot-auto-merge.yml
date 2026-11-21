@@ -39,6 +39,7 @@ on:
       - Cardigann precompiled guest
       - CI
       - CI / Appcast
+      - CI / Docker
       - CI / Documentation
       - CI / Fastlane
       - CI / Nix
