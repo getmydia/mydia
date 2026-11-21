@@ -38,11 +38,17 @@ s3_exclude =
 # fixed paths under /etc. The Nix build sandbox (nix/ci/tests.nix) has no
 # /etc/ssl, so without this every test that starts a TLS handshake, even to a
 # Bypass or an unroutable address, raises "default CA trust store not
-# available". SSL_CERT_FILE is the fallback only: a machine with an OS store
-# keeps it.
-with {:error, _} <- :public_key.cacerts_load(),
-     path when is_binary(path) <- System.get_env("SSL_CERT_FILE") do
-  :ok = :public_key.cacerts_load(path)
+# available". SSL_CERT_FILE is the fallback only: cacerts_get/0 keeps a store
+# that is already cached and otherwise loads the OS one, and only when that
+# raises is the file loaded.
+try do
+  :public_key.cacerts_get()
+rescue
+  ErlangError ->
+    case System.get_env("SSL_CERT_FILE") do
+      nil -> :ok
+      path -> :ok = :public_key.cacerts_load(path)
+    end
 end
 
 # The Wasmex-hosted Cardigann engine tests need the prebuilt guest. Without it

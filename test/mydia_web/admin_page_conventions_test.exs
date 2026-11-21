@@ -189,19 +189,37 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     |> Enum.reject(&is_nil/1)
   end
 
+  # A dependency's LiveView mounted under /admin (the error tracker dashboard)
+  # is not ours to restyle. Told apart by application rather than by source
+  # path: a module compiled with ERL_COMPILER_OPTIONS [deterministic] (as the
+  # deps are in nix/ci/mix-deps.nix) records no source at all.
   defp page_files(module) do
     Code.ensure_loaded!(module)
-    source = module.module_info(:compile)[:source] |> to_string() |> Path.expand()
+
+    if module in Application.spec(:mydia, :modules) do
+      module |> source_file() |> source_page_files()
+    end
+  end
+
+  defp source_file(module) do
+    case module.module_info(:compile)[:source] do
+      nil ->
+        flunk(
+          "#{inspect(module)} is mounted under /admin but records no :source " <>
+            "(compiled with [deterministic]?), so its page cannot be scanned"
+        )
+
+      source ->
+        source |> to_string() |> Path.expand()
+    end
+  end
+
+  defp source_page_files(source) do
     dir = Path.dirname(source)
 
     cond do
-      # A dependency's LiveView mounted under /admin (the error tracker
-      # dashboard) is not ours to restyle. Matched as "outside lib/" rather
-      # than "under deps/": a dep compiled with ERL_COMPILER_OPTIONS
-      # [deterministic] (nix/ci/mix-deps.nix) records no source, which
-      # expands to the working directory.
       not String.starts_with?(source, @lib_root) ->
-        nil
+        flunk("#{source} is an app module outside #{@lib_root}")
 
       dir == @live_root ->
         base = Path.rootname(source)

@@ -64,6 +64,10 @@
       # native/cardigann_guest/scripts/source-hash.sh instead, and the
       # ci-cardigann-hash check proves it equals `mix mydia.cardigann_guest
       # hash`, the value the compiled Artifact module names its file by.
+      # Because the comparison happens at build time, the shards depend on
+      # cardigannGuest even when the pin is stale, so the pinned release must
+      # stay published. The app downloads the same asset for installs on
+      # that pin, so those releases are permanent anyway.
       #
       # A pin the app reads as "no pin" (a word such as `unpublished`, as
       # Artifact does for anything that is not "<hash> <64-hex sha>") means
@@ -170,11 +174,17 @@
           --secret-key "$MYDIA_TEST_S3_SECRET_ACCESS_KEY" \
           $TMPDIR/rustfs > $TMPDIR/rustfs.log 2>&1 &
         rustfs_pid=$!
+        # --max-time bounds a probe that connects but gets no response, so
+        # a hung RustFS reaches the log dump below, not the job timeout.
+        rustfs_ready=
         for _ in $(seq 1 60); do
-          curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && break
+          if curl -s --max-time 2 -o /dev/null "$MYDIA_TEST_S3_ENDPOINT"; then
+            rustfs_ready=1
+            break
+          fi
           sleep 1
         done
-        if ! curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT"; then
+        if [ -z "$rustfs_ready" ]; then
           echo "RustFS did not answer at $MYDIA_TEST_S3_ENDPOINT" >&2
           cat $TMPDIR/rustfs.log >&2
           exit 1
@@ -257,8 +267,10 @@
             # the tracked files (a flake source is the git tree), so an index
             # of them is the checkout's. That makes artifact_test's walk-vs-git
             # comparison vacuous here; `./dev test` in a real checkout exercises it.
+            # -f, as in cardigannSourceHash: a tracked file that .gitignore
+            # matches is still tracked.
             git init --quiet
-            git add -- native/cardigann_guest
+            git add -f -- native/cardigann_guest
 
             ${installCardigannGuest}
 
