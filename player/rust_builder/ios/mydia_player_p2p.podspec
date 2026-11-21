@@ -37,6 +37,7 @@ A new Flutter FFI plugin project.
     :output_files => ["${BUILT_PRODUCTS_DIR}/libmydia_player_p2p.a"],
   }
   s.frameworks = 'Network', 'SystemConfiguration'
+  s.libraries = 'resolv'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
