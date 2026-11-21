@@ -322,12 +322,12 @@ let
 
     dialyxir = buildMix rec {
       name = "dialyxir";
-      version = "1.4.8";
+      version = "1.4.9";
 
       src = fetchHex {
         pkg = "dialyxir";
         version = "${version}";
-        sha256 = "cbd5a851571e5dfeb32aaf2e840bfa98b7864cb3071bf2ef5d95d1276b12e072";
+        sha256 = "1c049c22b47680f4fff78ed0b0fe377073a762e96af153fdfe28bf00131de76d";
       };
 
       beamDeps = [ erlex ];
@@ -855,12 +855,12 @@ let
 
     peep = buildMix rec {
       name = "peep";
-      version = "5.0.1";
+      version = "5.1.0";
 
       src = fetchHex {
         pkg = "peep";
         version = "${version}";
-        sha256 = "21969af7920b0ad7f17a8532489768c87cc26b759de964e6f7538ff886e95331";
+        sha256 = "9e931d2887296a669a9afdeb112f913f46001bbe8016cf7fb757ad5fa7c70c72";
       };
 
       beamDeps = [ nimble_options plug telemetry telemetry_metrics ];
@@ -972,12 +972,12 @@ let
 
     plug = buildMix rec {
       name = "plug";
-      version = "1.20.3";
+      version = "1.20.4";
 
       src = fetchHex {
         pkg = "plug";
         version = "${version}";
-        sha256 = "be266aee1b8536ef6409d58cf39a3121319f0ec47cfa1b24024485aa0e76ad76";
+        sha256 = "96ee42c0b8b35bcb14e3e65afb85abe9bb7745a8576e8c602802bbb01e5acf72";
       };
 
       beamDeps = [ mime plug_crypto telemetry ];
@@ -1115,12 +1115,12 @@ let
 
     telemetry = buildRebar3 rec {
       name = "telemetry";
-      version = "1.4.2";
+      version = "1.4.3";
 
       src = fetchHex {
         pkg = "telemetry";
         version = "${version}";
-        sha256 = "928f6495066506077862c0d1646609eed891a4326bee3126ba54b60af61febb1";
+        sha256 = "17a63581cf2e832a238287f5fe6811e8ca1f333249f1376ad653164a3c4770d4";
       };
 
       beamDeps = [];
