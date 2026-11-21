@@ -146,7 +146,7 @@
     {
       # Evaluating `checks` trips the freshness assertion, as for the app's
       # deps.nix in nix/ci/mix-deps.nix.
-      checks = assertFresh {
+      ciChecks = assertFresh {
         relay-test = relayTestCheck;
       };
 

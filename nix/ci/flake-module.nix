@@ -8,8 +8,14 @@
 #                                        with `nix build .#ciInternal.<name>`
 #   legacyPackages.<system>.ciRustAttrs  list of Rust check attribute names
 #
-# The per-check files set the perSystem options `ciInternal` and
+# The per-check files set the perSystem options `ciChecks`, `ciInternal` and
 # `ciRustAttrs`, which merge across modules (legacyPackages itself does not).
+#
+# All of it is Linux only. The checks copy their build from /build/source,
+# the Linux sandbox's build directory, and CI runs on x86_64-linux, so on
+# the flake's Darwin systems `checks` holds none of them and the two
+# legacyPackages entries are absent, as for the NixOS tests in
+# nix/checks/flake-module.nix.
 { inputs, lib, flake-parts-lib, ... }:
 
 {
@@ -17,6 +23,11 @@
 
   options.perSystem = flake-parts-lib.mkPerSystemOption {
     options = {
+      ciChecks = lib.mkOption {
+        type = lib.types.lazyAttrsOf lib.types.package;
+        default = { };
+        description = "CI checks, exposed as checks on Linux systems.";
+      };
       ciInternal = lib.mkOption {
         type = lib.types.lazyAttrsOf lib.types.package;
         default = { };
@@ -59,7 +70,9 @@
     {
       _module.args.ci = { inherit sources rustToolchain beamPackages craneLib; };
 
-      legacyPackages = {
+      checks = lib.mkIf pkgs.stdenv.hostPlatform.isLinux config.ciChecks;
+
+      legacyPackages = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
         inherit (config) ciInternal ciRustAttrs;
       };
 
@@ -80,7 +93,7 @@
         env = ciElixir.env;
       };
 
-      checks.ci-fileset-coverage = pkgs.runCommand "ci-fileset-coverage"
+      ciChecks.ci-fileset-coverage = pkgs.runCommand "ci-fileset-coverage"
         {
           uncovered = lib.concatLines uncovered;
           # Too large for the environment when nothing is covered.

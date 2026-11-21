@@ -278,7 +278,7 @@
           (lib.range 1 partitions));
     in
     {
-      checks = shards "sqlite" 4 // shards "postgres" 3 // {
+      ciChecks = shards "sqlite" 4 // shards "postgres" 3 // {
         # workflow_triggers_test.exs, taken out of the shards. It needs no
         # services: test_helper.exs excludes :s3 when no server answers
         # and MYDIA_TEST_S3_REQUIRED is unset.

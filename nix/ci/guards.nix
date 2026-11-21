@@ -48,7 +48,7 @@
         ciRust.crateDirs));
     in
     {
-      checks.guards = check {
+      ciChecks.guards = check {
         name = "guards";
         set = fs.unions [
           (root + "/Dockerfile")
@@ -202,7 +202,7 @@
       # The two lists, one directory per line, compared as sorted text.
       # server/ is not in the script's glob and is left out of rust.nix's
       # side; it is a workspace with checks of its own.
-      checks.ci-crate-list = check {
+      ciChecks.ci-crate-list = check {
         name = "ci-crate-list";
         set = fs.unions [
           (root + "/scripts/check-rust.sh")

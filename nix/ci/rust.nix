@@ -295,7 +295,7 @@
       # For ci-crate-list (nix/ci/guards.nix).
       _module.args.ciRust.crateDirs = map (c: c.dir) crates;
 
-      checks = rustChecks;
+      ciChecks = rustChecks;
 
       ciRustAttrs = builtins.attrNames rustChecks;
 

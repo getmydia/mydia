@@ -268,7 +268,7 @@
       # over a copy of that build outside the sandbox.
       _module.args.ciElixir = { inherit buildSet copyBuild mkCheck env; };
 
-      checks = {
+      ciChecks = {
         # .formatter.exs covers config/, lib/, test/, priv/*/ and the root
         # *.exs files (.credo.ratchet.exs is the one elixirApp lacks); its
         # plugin (Phoenix.LiveView.HTMLFormatter) and import_deps need the

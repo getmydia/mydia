@@ -10,7 +10,10 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   dependencies and NIFs, built with `nix build .#ciInternal.<name>`) and
   `legacyPackages.<system>.ciRustAttrs` (the list of Rust check names), fed
   by the mergeable perSystem options `ciInternal` and `ciRustAttrs` that the
-  other `nix/ci/*.nix` modules set. It also passes
+  other `nix/ci/*.nix` modules set. Those modules put their checks in
+  `ciChecks`, which this module exposes as `checks` on Linux only: the
+  checks rely on the Linux sandbox's `/build/source`, so a Darwin
+  `nix flake check` sees none of them and no `ciInternal`. It also passes
   `ci = { sources, rustToolchain, beamPackages, craneLib }` to them through
   `_module.args`. `ci.rustToolchain` is the CI toolchain (the
   `rust-toolchain.toml` version with clippy, rustfmt and the wasm targets),

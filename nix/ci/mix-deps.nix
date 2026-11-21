@@ -214,7 +214,7 @@
     {
       # Evaluating `checks` (nix flake check, ci-plan's nix-eval-jobs) trips
       # the freshness assertion even before any check needs these deps.
-      checks = assertFresh { };
+      ciChecks = assertFresh { };
 
       ciInternal = {
         mixDepsCompiled-sqlite = mixDepsCompiled { };
