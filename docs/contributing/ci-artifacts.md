@@ -1,10 +1,12 @@
 # Using CI builds
 
 Every push to `master` or `main`, and every pull request, that touches `player/`,
-`native/`, or `.github/workflows/ci-player.yml` produces downloadable Windows and
-macOS player builds from the `ci-player.yml` workflow. Pushes and pull requests
-that do not touch those paths do not trigger it, so there is nothing to download
-for them. The Android APK comes from the main `ci.yml` workflow, which builds it
+`native/`, `priv/graphql/schema.graphql`, `rust-toolchain.toml` or
+`.github/workflows/ci-player.yml` produces downloadable Windows and macOS player
+builds from the `ci-player.yml` workflow. A change that only edits translations
+(`player/lib/l10n/app_*.arb` other than `app_en.arb`) does not trigger it, and
+neither does anything outside those paths, so there is nothing to download for
+them. The Android APK comes from the main `ci.yml` workflow, which builds it
 on every push and pull request. These builds are the fastest way to try a change
 before it reaches a release.
 
