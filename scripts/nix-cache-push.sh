@@ -10,11 +10,16 @@
 #           working tree. The pre-push hook passes the commit being pushed.
 #   --mode  builds (default): every ciInternal output, the expensive compile
 #           artifacts. all: every check too, which runs the test suites.
+#           CI then trusts each uploaded check result as passed and skips
+#           that check, so only use `all` with a sandboxed Nix
+#           (`sandbox = true`, the Linux default): an unsandboxed build can
+#           pass on what this machine happens to have.
 #   <attr>  explicit attributes, e.g. checks.x86_64-linux.rust-mydia_subsync-test
 #
 # Needs the niks3 admin token in ${XDG_CONFIG_HOME:-$HOME/.config}/mydia/niks3-token:
 #   kubectl --context k3s-can1 -n nix-cache get secret niks3-token \
-#     -o jsonpath='{.data.token}' | base64 -d > ~/.config/mydia/niks3-token
+#     -o jsonpath='{.data.token}' | base64 -d > ~/.config/mydia/niks3-token \
+#     && chmod 600 ~/.config/mydia/niks3-token
 #
 # Derivation hashes depend only on inputs, so a path built from a commit is
 # exactly the path CI looks up for that content.
