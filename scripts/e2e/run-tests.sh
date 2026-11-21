@@ -40,22 +40,29 @@ if [ ! -f "$TEST_TARGET" ]; then
     exit 1
 fi
 
-echo "Resolving Flutter dependencies..."
-# --enforce-lockfile like every other CI `pub get`: player/Dockerfile.test
-# installs the SDK from player/.fvmrc, so the lock resolves as committed.
-flutter pub get --enforce-lockfile >/tmp/flutter-pub-get.log 2>&1 || {
-    echo "ERROR: flutter pub get failed" >&2
-    cat /tmp/flutter-pub-get.log >&2
-    exit 1
-}
+# E2E_CODEGEN_DONE: the tree is already resolved and generated. The player-e2e
+# NixOS test (nix/tests/player-e2e.nix) runs on a copy of player-codegen and
+# has no network for `pub get`.
+if [ -n "${E2E_CODEGEN_DONE:-}" ]; then
+    echo "Dependencies and generated code already in place; skipping pub get and build_runner."
+else
+    echo "Resolving Flutter dependencies..."
+    # --enforce-lockfile like every other CI `pub get`: player/Dockerfile.test
+    # installs the SDK from player/.fvmrc, so the lock resolves as committed.
+    flutter pub get --enforce-lockfile >/tmp/flutter-pub-get.log 2>&1 || {
+        echo "ERROR: flutter pub get failed" >&2
+        cat /tmp/flutter-pub-get.log >&2
+        exit 1
+    }
 
-echo "Running code generation..."
-flutter pub run build_runner build --delete-conflicting-outputs \
-    >/tmp/build-runner.log 2>&1 || {
-    echo "ERROR: build_runner failed" >&2
-    cat /tmp/build-runner.log >&2
-    exit 1
-}
+    echo "Running code generation..."
+    flutter pub run build_runner build --delete-conflicting-outputs \
+        >/tmp/build-runner.log 2>&1 || {
+        echo "ERROR: build_runner failed" >&2
+        cat /tmp/build-runner.log >&2
+        exit 1
+    }
+fi
 
 echo "Logging in as test admin..."
 LOGIN_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \

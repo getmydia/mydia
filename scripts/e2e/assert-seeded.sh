@@ -7,6 +7,8 @@ set -eu
 
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@test.local}"
 VIDEO_PATH="/media/movies/e2e-test-video.mp4"
+# As in seed.sh: the Docker image's default, or the NixOS test's.
+MYDIA_CLI="${E2E_MYDIA_CLI:-su-exec mydia /app/bin/mydia}"
 
 fail() {
     echo "ASSERT FAILED: $1" >&2
@@ -15,7 +17,7 @@ fail() {
 
 [ -f "$VIDEO_PATH" ] || fail "test video missing at $VIDEO_PATH"
 
-RESULT=$(su-exec mydia /app/bin/mydia rpc "
+RESULT=$($MYDIA_CLI rpc "
     alias Mydia.{Accounts, Media, Repo, RemoteAccess}
     alias Mydia.Settings.LibraryPath
 

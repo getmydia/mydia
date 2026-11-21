@@ -84,8 +84,13 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `player-test-web`, `player-web` and `player-linux`. `player-linux` takes
   `ciInternal.player-p2p-so` from `rust.nix`.
 - `../checks/flake-module.nix`: the NixOS module VM tests `nixos-module` and
-  `nixos-module-postgres`, and the packages they boot as
-  `ciInternal.package-default` and `ciInternal.package-postgres`.
+  `nixos-module-postgres`, `player-e2e` (x86_64-linux only,
+  `../tests/player-e2e.nix`: relay, server and Flutter client VMs running
+  the player's integration tests), and the packages they boot as
+  `ciInternal.package-default`, `ciInternal.package-postgres` and
+  `ciInternal.package-metadata-relay` (`packages.metadata-relay`, a
+  `mixRelease` on the relay's BEAM pair and `deps.nix` from `relay.nix`'s
+  `_module.args.ciRelay`).
 - `relay.nix`: `relay-test`, the old `Relay / Test` job for
   `metadata-relay/` (its own Mix project): `deps.unlock --check-unused`,
   `compile --warnings-as-errors`, `format --check-formatted`, `ecto.create`
@@ -235,6 +240,14 @@ The NixOS module VM tests are checks, but `scripts/ci-plan.sh` lists them
 separately and ci.yml runs them outside the `Nix / Checks` verdict, on
 master pushes, manual dispatches and Dependabot PRs only (`.github/ci.md`,
 "The NixOS module tests skip human PRs and block nothing").
+
+`player-e2e` is a VM test too, but blocking (`Test / Player E2E` is
+required), so it is not `nixos-`-prefixed and builds in the `Nix / Checks`
+matrix, whose job enables KVM for it. Its client runs the Linux build
+outside the sandbox, so it sources an environment captured from a
+derivation with `player-linux`'s inputs (`clientEnv`) and recreates
+`/build/source` and `/build/pub-cache` through `ciPlayer.setupPlayerTree`,
+the helper `mkPlayerCheck` uses.
 
 ## ciInternal and the CI planner
 

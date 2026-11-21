@@ -159,10 +159,30 @@
         exec "$real" "$@"
       '';
 
-      # mixLib.mkLogCheck's shape, on a writable copy of player-codegen at
-      # /build/source, running `script` in player/ with PUB_CACHE and HOME
-      # set, and `flutter` resolving to flutterShim. The output is the log,
-      # $out/log.
+      # A writable copy of player-codegen at /build/source, with `extraSource`
+      # (a source tree, or null) copied over it, then PUB_CACHE set up and the
+      # shell in /build/source/player. HOME must already be writable. Shared
+      # by mkPlayerCheck and the player-e2e VM client (nix/tests/player-e2e.nix),
+      # which is outside the sandbox but recreates the same absolute paths,
+      # since .dart_tool/package_config.json names them.
+      #
+      # mkPlayerCheck splices this in so its script text, and so every player
+      # check's derivation, is byte for byte what it was before the helper
+      # existed: keep the lines as they are.
+      setupPlayerTree = { extraSource ? null }: ''
+        mkdir -p /build/source
+        cp -a ${codegen}/. /build/source/
+        chmod -R u+w /build/source
+        ${lib.optionalString (extraSource != null) "cp -a ${extraSource}/. /build/source/"}
+        chmod -R u+w /build/source
+        cd /build/source
+        ${flutterEnv}
+        ${enterPlayer}
+      '';
+
+      # mixLib.mkLogCheck's shape, on setupPlayerTree's tree, running `script`
+      # in player/ with PUB_CACHE and HOME set, and `flutter` resolving to
+      # flutterShim. The output is the log, $out/log.
       #
       # `extraSource`, a source tree (ci.sources.toSource), is copied over
       # the codegen tree for files only that check reads.
@@ -173,15 +193,7 @@
           env = { };
           nativeBuildInputs = [ flutterShim flutter ] ++ nativeBuildInputs;
           script = ''
-            mkdir -p /build/source
-            cp -a ${codegen}/. /build/source/
-            chmod -R u+w /build/source
-            ${lib.optionalString (extraSource != null) "cp -a ${extraSource}/. /build/source/"}
-            chmod -R u+w /build/source
-            cd /build/source
-            ${flutterEnv}
-            ${enterPlayer}
-            ${script}
+            ${setupPlayerTree { inherit extraSource; }}${script}
           '';
         }).overrideAttrs { dontUnpack = true; };
 
@@ -218,21 +230,27 @@
       # Flutter's name for the host architecture in build/linux/<arch>/.
       flutterLinuxArch = if pkgs.stdenv.hostPlatform.isAarch64 then "arm64" else "x64";
 
+      # What a Linux desktop build of the player needs on top of Flutter, with
+      # the p2p hand-off variable's value. player-linux and the player-e2e VM
+      # client (`flutter test -d linux` builds the app) both use these.
+      linuxBuildInputs = [
+        noRustInSandbox
+        pkgs.clang
+        pkgs.cmake
+        pkgs.ninja
+        pkgs.pkg-config
+        pkgs.gtk3
+        pkgs.xz
+        pkgs.mpv-unwrapped
+        pkgs.libsecret
+      ];
+      p2pPrebuilt = "${ciRust.playerP2pSo}/lib/libmydia_player_p2p.so";
+
       playerLinux = (mkPlayerCheck {
         name = "player-linux";
-        nativeBuildInputs = [
-          noRustInSandbox
-          pkgs.clang
-          pkgs.cmake
-          pkgs.ninja
-          pkgs.pkg-config
-          pkgs.gtk3
-          pkgs.xz
-          pkgs.mpv-unwrapped
-          pkgs.libsecret
-        ];
+        nativeBuildInputs = linuxBuildInputs;
         script = ''
-          export MYDIA_PLAYER_P2P_PREBUILT=${ciRust.playerP2pSo}/lib/libmydia_player_p2p.so
+          export MYDIA_PLAYER_P2P_PREBUILT=${p2pPrebuilt}
           flutter build linux --release
 
           bundle=build/linux/${flutterLinuxArch}/release/bundle
@@ -542,7 +560,11 @@
       }).overrideAttrs { dontFixup = true; };
     in
     {
-      _module.args.ciPlayer = { inherit flutter pubCache codegen mkPlayerCheck; };
+      _module.args.ciPlayer = {
+        inherit flutter pubCache codegen mkPlayerCheck;
+        # For the player-e2e VM client, outside mkPlayerCheck.
+        inherit flutterShim setupPlayerTree linuxBuildInputs p2pPrebuilt;
+      };
 
       ciChecks.player-linux = playerLinux;
       ciChecks.player-analyze = playerAnalyze;

@@ -11,9 +11,12 @@ ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@test.local}"
 ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-testpassword123}"
 VIDEO_PATH="/media/movies/e2e-test-video.mp4"
 SCRIPT_DIR="$(dirname "$0")"
+# How to reach the running release: the Docker image's default, or the
+# player-e2e NixOS test's (nix/tests/player-e2e.nix). Word-split on purpose.
+MYDIA_CLI="${E2E_MYDIA_CLI:-su-exec mydia /app/bin/mydia}"
 
 echo "E2E: creating admin user $ADMIN_EMAIL"
-su-exec mydia /app/bin/mydia rpc "
+$MYDIA_CLI rpc "
     case Mydia.Accounts.get_user_by_email(\"$ADMIN_EMAIL\") do
         nil ->
             case Mydia.Accounts.create_user(%{
@@ -31,7 +34,7 @@ su-exec mydia /app/bin/mydia rpc "
 "
 
 echo "E2E: initializing remote access"
-su-exec mydia /app/bin/mydia rpc "
+$MYDIA_CLI rpc "
     # Mydia.RemoteAccess.Provision creates this at boot; initialize_config/0
     # returns the existing row, so this only covers a boot that skipped it.
     case Mydia.RemoteAccess.initialize_config() do
@@ -72,7 +75,7 @@ chown mydia:mydia "$VIDEO_PATH"
 # this file IS the feature. The alternative, a clip longer than the 600 second
 # floor, would put a ten minute video in every E2E run.
 echo "E2E: seeding library entries"
-su-exec mydia /app/bin/mydia rpc "
+$MYDIA_CLI rpc "
     alias Mydia.{Settings, Media, Library, Repo}
     alias Mydia.Settings.LibraryPath
 
