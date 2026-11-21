@@ -29,6 +29,8 @@ enum StatsRowId {
   source,
   video,
   hdr,
+  color,
+  display,
   decoder,
   audio,
   frames,
@@ -91,6 +93,21 @@ class StatsHdrValue extends StatsValue {
 }
 
 /// The Why row: a reason the panel words.
+/// The Color row: the source's colour and what the output draws to, in
+/// mpv's own names. Either end may be unknown, not both.
+class StatsColorValue extends StatsValue {
+  const StatsColorValue({this.source, this.output});
+  final ColorParams? source;
+  final ColorParams? output;
+}
+
+/// The Display row: the screen's EDR headroom now, and the most it can give.
+class StatsDisplayValue extends StatsValue {
+  const StatsDisplayValue({required this.headroom, this.potential});
+  final double headroom;
+  final double? potential;
+}
+
 class StatsWhyValue extends StatsValue {
   const StatsWhyValue(this.why);
   final StatsWhy why;
@@ -161,6 +178,7 @@ List<StatsRow> statsRows(
   StatsDensity density,
 ) {
   final compact = density == StatsDensity.compact;
+  final full = density == StatsDensity.full;
   final pill = _pill(context.mode);
   final rows = <StatsRow>[
     StatsRow(
@@ -184,6 +202,12 @@ List<StatsRow> statsRows(
       StatsRow(id: StatsRowId.video, value: StatsText(context.videoLabel!)),
     if (statsHdrFor(sample, context) case final hdr?)
       StatsRow(id: StatsRowId.hdr, value: StatsHdrValue(hdr)),
+    // Diagnostics for the desktop panel only: the tv panel's minimum height
+    // is measured to fit its rows without scrolling.
+    if (_colorValue(sample) case final color? when full)
+      StatsRow(id: StatsRowId.color, value: color),
+    if (_displayValue(context) case final display? when full)
+      StatsRow(id: StatsRowId.display, value: display),
     if (!compact && context.decoderLabel != null)
       StatsRow(
         id: StatsRowId.decoder,
@@ -256,6 +280,10 @@ String statsClipboardText(
     if (context.videoLabel != null) 'Video: ${context.videoLabel}',
     if (statsHdrFor(sample, context) case final hdr?)
       'HDR: ${english.statsValue(StatsHdrValue(hdr))}',
+    if (_colorValue(sample) case final color?)
+      'Color: ${english.statsValue(color)}',
+    if (_displayValue(context) case final display?)
+      'Display: ${english.statsValue(display)}',
     if (context.decoderLabel != null) 'Decoder: ${_decoder(context)}',
     if (context.audioLabel != null) 'Audio: ${context.audioLabel}',
     if (sample.droppedFrames != null && sample.droppedFramesTotal != null)
@@ -271,6 +299,22 @@ String statsClipboardText(
         '${statsTimecode(context.duration)}',
   ];
   return lines.join('\n');
+}
+
+StatsColorValue? _colorValue(StatsSample sample) {
+  final source = sample.sourceColor, output = sample.outputColor;
+  if (source == null && output == null) return null;
+  return StatsColorValue(source: source, output: output);
+}
+
+/// Only where the screen reports a headroom: the macOS video surface.
+StatsDisplayValue? _displayValue(StatsContext context) {
+  final headroom = context.outputHeadroom;
+  if (headroom == null) return null;
+  return StatsDisplayValue(
+    headroom: headroom,
+    potential: context.outputPotentialHeadroom,
+  );
 }
 
 /// The mode that gets a badge. A local file is not a delivery decision, so it

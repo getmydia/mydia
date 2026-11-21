@@ -9,32 +9,8 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Downloads.Client.Registry
+  alias Mydia.Downloads.ListStatusAdapter, as: ListAdapter
   alias Mydia.Downloads.Structs.DownloadStatus
-
-  defmodule ListAdapter do
-    @behaviour Mydia.Downloads.Client
-
-    def put(statuses), do: :persistent_term.put({__MODULE__, :statuses}, statuses)
-
-    @impl true
-    def list_torrents(_config, _opts),
-      do: {:ok, :persistent_term.get({__MODULE__, :statuses}, [])}
-
-    @impl true
-    def supported_protocols, do: [:torrent]
-    @impl true
-    def test_connection(_config), do: {:error, :not_implemented}
-    @impl true
-    def add_torrent(_config, _torrent, _opts), do: {:error, :not_implemented}
-    @impl true
-    def get_status(_config, _client_id), do: {:error, :not_implemented}
-    @impl true
-    def pause_torrent(_config, _client_id), do: :ok
-    @impl true
-    def resume_torrent(_config, _client_id), do: :ok
-    @impl true
-    def remove_torrent(_config, _client_id, _opts), do: :ok
-  end
 
   @guarded_hash "1111111111111111111111111111111111111111"
   @met_hash "2222222222222222222222222222222222222222"
@@ -49,7 +25,7 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     Registry.register(:qbittorrent, ListAdapter)
 
     on_exit(fn ->
-      :persistent_term.erase({ListAdapter, :statuses})
+      ListAdapter.clear()
       if original, do: Registry.register(:qbittorrent, original)
     end)
 
@@ -129,19 +105,19 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     refute has_element?(view, "#download-seeding-#{plain.id}")
     assert has_element?(view, "#download-seeding-#{stopped.id}", "0.10 / 1.0 · 2d / 3d")
 
-    # In flight and under the goal: the cancel confirm names the tracker, the
+    # In flight and under the goal: the cancel dialog names the tracker, the
     # goal and the standing, and warns. Removal stays possible.
-    assert has_element?(
-             view,
-             "#row-cancel-#{guarded.id}[data-confirm*='Velvet Lantern requires a ratio of 1.0 or 3d of seeding']"
-           )
+    view |> element("#row-cancel-#{guarded.id}") |> render_click()
 
     assert has_element?(
              view,
-             "#row-cancel-#{guarded.id}[data-confirm*='at a ratio of 0.42 after 1d of seeding']"
+             "#remove-confirm-warning",
+             "Velvet Lantern requires a ratio of 1.0 or 3d of seeding"
            )
 
-    assert has_element?(view, "#row-cancel-#{guarded.id}[data-confirm*='hit-and-run']")
+    assert has_element?(view, "#remove-confirm-warning", "at a ratio of 0.42 after 1d of seeding")
+    assert has_element?(view, "#remove-confirm-warning", "hit-and-run")
+    view |> element("#remove-confirm-cancel") |> render_click()
 
     # Goal met, or no goal at all: the remove dialog has no warning.
     for download <- [met, plain] do
@@ -157,6 +133,7 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     refute has_element?(view, "#remove-confirm-modal")
 
     view |> element("#row-cancel-#{guarded.id}") |> render_click()
+    view |> element("#remove-confirm-form") |> render_submit(%{"delete_files" => "true"})
     assert Mydia.Downloads.get_download!(guarded.id).removal_requested_at
   end
 
@@ -195,5 +172,38 @@ defmodule MydiaWeb.DownloadsLive.SeedingGoalTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
 
     assert has_element?(view, "#download-upload-#{downloading.id}", "3.0 KB/s")
+  end
+
+  test "shows the uploaded amount on seeding and downloading rows", %{conn: conn, client: client} do
+    seeding =
+      download!(client, @unmet_hash,
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+    downloading = download!(client, @guarded_hash, [])
+
+    ListAdapter.put([
+      %{status(@unmet_hash, :seeding, 0.42, nil) | uploaded: 2048},
+      %{status(@guarded_hash, :downloading, 0.1, nil) | progress: 40.0, uploaded: 2048}
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
+    assert has_element?(view, "#download-uploaded-#{seeding.id}", "2.0 KB")
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    assert has_element?(view, "#download-uploaded-#{downloading.id}", "2.0 KB")
+  end
+
+  test "omits the uploaded amount for a row not in the client", %{conn: conn, client: client} do
+    gone =
+      download!(client, @stopped_hash,
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+
+    ListAdapter.put([])
+    {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
+
+    assert has_element?(view, "#download-upload-#{gone.id}")
+    refute has_element?(view, "#download-uploaded-#{gone.id}")
   end
 end

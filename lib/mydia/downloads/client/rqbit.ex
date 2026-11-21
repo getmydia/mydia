@@ -81,6 +81,10 @@ defmodule Mydia.Downloads.Client.Rqbit do
   # rqbit reports speeds in mebibytes per second (MiB/s).
   @bytes_per_mib 1_048_576
 
+  # A status read that took longer cannot be ordered against another read;
+  # see `ordered_read_at/2`. Well under ObservedUpload's 300-second window.
+  @max_ordered_read_ms 120_000
+
   @impl true
   def test_connection(config) do
     guarded(config, fn ->
@@ -203,10 +207,12 @@ defmodule Mydia.Downloads.Client.Rqbit do
   def get_status(config, client_id) do
     guarded(config, fn ->
       req = HTTP.new_request(config)
+      # Before the request: see `build_status/3`.
+      requested_at = request_clock()
 
       with {:ok, details} <- fetch_details(req, client_id),
            {:ok, stats} <- fetch_stats(req, client_id) do
-        {:ok, build_status(details, stats)}
+        {:ok, build_status(details, stats, ordered_read_at(config, requested_at))}
       end
     end)
   end
@@ -215,10 +221,11 @@ defmodule Mydia.Downloads.Client.Rqbit do
   def list_torrents(config, opts \\ []) do
     guarded(config, fn ->
       req = HTTP.new_request(config)
+      requested_at = request_clock()
 
       case HTTP.get(req, "/torrents", params: %{with_stats: true}) do
         {:ok, %{status: status, body: %{"torrents" => torrents}}} when status in 200..299 ->
-          {:ok, parse_torrent_list(torrents, opts)}
+          {:ok, parse_torrent_list(torrents, opts, ordered_read_at(config, requested_at))}
 
         {:ok, %{status: status}} when status in 200..299 ->
           {:ok, []}
@@ -232,10 +239,27 @@ defmodule Mydia.Downloads.Client.Rqbit do
     end)
   end
 
-  defp parse_torrent_list(torrents, opts) do
+  defp parse_torrent_list(torrents, opts, read_at) do
     torrents
-    |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}) end)
+    |> Enum.map(fn torrent -> build_status(torrent, torrent["stats"] || %{}, read_at) end)
     |> apply_filters(opts)
+  end
+
+  # When a status read was asked for: the wall clock to store, the monotonic
+  # clock to time it.
+  defp request_clock, do: {DateTime.utc_now(), System.monotonic_time(:millisecond)}
+
+  # The time the upload counter was asked for, or nil when the answer took
+  # longer than `@max_ordered_read_ms` (the `:max_ordered_read_ms` option can
+  # only lower it). `Mydia.Downloads.ObservedUpload` counts a lower counter as
+  # a reset only when asked for 300 seconds after the last one; a read that
+  # finished within this bound cannot be older than one asked for that much
+  # later, whatever the request timeout is set to. Timed on the monotonic
+  # clock, so a wall-clock change mid-request cannot pass a slow read.
+  defp ordered_read_at(config, {requested_at, started_ms}) do
+    override = get_in(config, [:options, :max_ordered_read_ms]) || @max_ordered_read_ms
+    bound = min(override, @max_ordered_read_ms)
+    if System.monotonic_time(:millisecond) - started_ms <= bound, do: requested_at
   end
 
   @impl true
@@ -437,7 +461,7 @@ defmodule Mydia.Downloads.Client.Rqbit do
   # single-file torrents; without an explicit file list MediaImport would
   # recurse that shared folder and import every neighboring torrent's files
   # into the wrong series library.
-  defp build_status(details, stats) do
+  defp build_status(details, stats, read_at) do
     finished = stats["finished"] == true
     total_bytes = stats["total_bytes"] || 0
     output_folder = details["output_folder"] || ""
@@ -454,6 +478,16 @@ defmodule Mydia.Downloads.Client.Rqbit do
       size: total_bytes,
       eta: parse_eta(stats),
       ratio: ratio(stats["uploaded_bytes"], total_bytes),
+      # rqbit 9.0.1 counts `uploaded_bytes` only while the torrent is live: 0
+      # once paused, and from 0 again after a restart. Mydia keeps the total
+      # (`Mydia.Downloads.ObservedUpload`). A read too slow to order
+      # (`ordered_read_at/2` gave nil) is left out of that total: it is shown
+      # as reported, which errs low, and never recorded.
+      uploaded_session_only?: not is_nil(read_at),
+      # Orders the counter across overlapping polls: a poll that started later
+      # can read the client earlier. Taken before the request, so a delayed
+      # response that is parsed late still dates from when it was asked for.
+      observed_at: read_at,
       save_path: output_folder,
       files: resolve_torrent_files(output_folder, details["files"]),
       file_progress:

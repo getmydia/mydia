@@ -675,7 +675,8 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
 
-      render_click(view, "cancel_download", %{"id" => download.id})
+      view |> element("#row-cancel-#{download.id}") |> render_click()
+      view |> element("#remove-confirm-form") |> render_submit(%{"delete_files" => "true"})
 
       assert has_element?(view, "#flash-info", "grab it again")
 
@@ -725,10 +726,11 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
 
-      cancel_button = "button[phx-click='cancel_download'][phx-value-id='#{download.id}']"
+      cancel_button = "#row-cancel-#{download.id}"
       assert has_element?(view, cancel_button)
 
-      render_click(view, "cancel_download", %{"id" => download.id})
+      view |> element(cancel_button) |> render_click()
+      view |> element("#remove-confirm-form") |> render_submit(%{"delete_files" => "true"})
 
       assert has_element?(view, "#removing-#{download.id}")
       refute has_element?(view, cancel_button)
@@ -782,7 +784,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
     end
 
     for event <- ~w(
-          cancel_download pause_download resume_download retry_download retry_import
+          pause_download resume_download retry_download retry_import
           delete_download open_match_files reject_release
           keep_waiting dismiss_download
         ) do
@@ -797,16 +799,20 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       end
     end
 
-    test "open_remove_confirm tells the operator instead of crashing the socket", %{
-      conn: conn,
-      stale_id: stale_id
-    } do
-      {:ok, view, _html} = live(conn, ~p"/downloads")
+    for kind <- ~w(download cancel) do
+      test "open_remove_confirm (#{kind}) tells the operator instead of crashing the socket", %{
+        conn: conn,
+        stale_id: stale_id
+      } do
+        {:ok, view, _html} = live(conn, ~p"/downloads")
 
-      assert render_click(view, "open_remove_confirm", %{"kind" => "download", "id" => stale_id}) =~
-               "That download no longer exists."
+        assert render_click(view, "open_remove_confirm", %{
+                 "kind" => unquote(kind),
+                 "id" => stale_id
+               }) =~ "That download no longer exists."
 
-      refute has_element?(view, "#remove-confirm-modal")
+        refute has_element?(view, "#remove-confirm-modal")
+      end
     end
 
     test "batch_delete counts an already-deleted row rather than failing it", %{
@@ -1158,9 +1164,9 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
 
-      assert view
-             |> element("#row-cancel-#{download.id}")
-             |> render() =~ ~s(data-confirm="Cancel Fictional Lantern Bay?")
+      view |> element("#row-cancel-#{download.id}") |> render_click()
+
+      assert has_element?(view, "#remove-confirm-modal", "Cancel Fictional Lantern Bay")
     end
 
     test "a row removed between refreshes disappears and the others stay", %{conn: conn} do

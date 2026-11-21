@@ -292,10 +292,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  def handle_event("cancel_download", %{"id" => id}, socket) do
-    start_removal(socket, id, fn _download -> {"cancel", [delete_files: false]} end)
-  end
-
   def handle_event("pause_download", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       with_download(socket, id, fn download ->
@@ -591,10 +587,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  # --- Remove-from-client confirm (one finished download, or a client torrent
-  # stranded in Issues). Opening is non-destructive; the submit is gated. ---
+  # --- Remove-from-client confirm (one download, finished or cancelled, or a
+  # client torrent stranded in Issues). Opening is non-destructive. ---
 
-  def handle_event("open_remove_confirm", %{"kind" => "download", "id" => id}, socket) do
+  def handle_event("open_remove_confirm", %{"kind" => kind, "id" => id}, socket)
+      when kind in ["download", "cancel"] do
     # The rendered row carries the client's ratio, which the seeding-goal
     # warning needs; the database row does not.
     case Map.get(socket.assigns.rows_by_id, id) || Downloads.get_download(id) do
@@ -602,7 +599,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         {:noreply, download_vanished(socket)}
 
       download ->
-        {:noreply, assign(socket, :remove_confirm, RemoveConfirm.for_download(download))}
+        {:noreply, assign(socket, :remove_confirm, RemoveConfirm.for_row(kind, download))}
     end
   end
 
@@ -631,7 +628,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     case confirm do
       nil -> {:noreply, socket}
-      %RemoveConfirm{target: target} -> confirm_remove(socket, target, delete_files?(params))
+      %RemoveConfirm{} -> confirm_remove(socket, confirm, delete_files?(params))
     end
   end
 
@@ -1359,11 +1356,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp confirm_remove(socket, {:download, id}, delete_files) do
-    start_removal(socket, id, fn _download -> {"clear", [delete_files: delete_files]} end)
+  defp confirm_remove(socket, %RemoveConfirm{target: {:download, id}, kind: kind}, delete_files) do
+    kind = Atom.to_string(kind)
+    start_removal(socket, id, fn _download -> {kind, [delete_files: delete_files]} end)
   end
 
-  defp confirm_remove(socket, {:torrent, id}, delete_files) do
+  defp confirm_remove(socket, %RemoveConfirm{target: {:torrent, id}}, delete_files) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       {level, message} = RemoveConfirm.remove_torrent(id, delete_files)
       {:noreply, socket |> put_flash(level, message) |> load_downloads()}

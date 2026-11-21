@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import QuartzCore
 import XCTest
 
 @testable import Mydia_Player
@@ -623,6 +624,51 @@ final class MpvSurfacePluginTests: XCTestCase {
     XCTAssertNil(call(h.plugin, "attach", ["handle": 0x2000, "viewId": 8, "options": []]))
     XCTAssertTrue(h.timer.running)
     XCTAssertEqual(h.timer.starts, 2)
+  }
+
+  /// Records every write to `wantsExtendedDynamicRangeContent`.
+  private final class RecordingMetalLayer: CAMetalLayer {
+    var edrWrites: [Bool] = []
+    override var wantsExtendedDynamicRangeContent: Bool {
+      didSet { edrWrites.append(wantsExtendedDynamicRangeContent) }
+    }
+  }
+
+  func testEdrStateIsRecommittedOnMainOncePerChange() {
+    let view = makeView(makePlugin(api: FakeMpvApi()))
+    let metal = RecordingMetalLayer()
+    view.layer?.addSublayer(metal)
+    // What MoltenVK does on the VO thread for a PQ swapchain.
+    let set = expectation(description: "set off main")
+    DispatchQueue.global().async {
+      metal.colorspace = CGColorSpace(name: CGColorSpace.itur_2100_PQ)
+      metal.wantsExtendedDynamicRangeContent = true
+      set.fulfill()
+    }
+    wait(for: [set], timeout: 2)
+    metal.edrWrites = []
+
+    view.commitEdrState()
+    XCTAssertEqual(metal.edrWrites, [false, true], "not toggled to force a commit")
+    XCTAssertTrue(metal.wantsExtendedDynamicRangeContent)
+
+    view.commitEdrState()
+    XCTAssertEqual(metal.edrWrites, [false, true], "an unchanged state was toggled again")
+
+    // A new swapchain (HLG) is a new state.
+    metal.colorspace = CGColorSpace(name: CGColorSpace.itur_2100_HLG)
+    view.commitEdrState()
+    XCTAssertEqual(metal.edrWrites, [false, true, false, true])
+  }
+
+  func testEdrStateLeavesAnSdrLayerAlone() {
+    let view = makeView(makePlugin(api: FakeMpvApi()))
+    let metal = RecordingMetalLayer()
+    metal.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+    view.layer?.addSublayer(metal)
+
+    view.commitEdrState()
+    XCTAssertEqual(metal.edrWrites, [])
   }
 
   func testHostViewIsLayerBackedAndBlack() {

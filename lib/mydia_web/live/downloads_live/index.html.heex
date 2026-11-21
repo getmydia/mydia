@@ -502,6 +502,7 @@
                       download.upload_speed
                     )}
                   </span>
+                  <ListComponents.uploaded_metric download={download} />
                   <span
                     class="inline-flex items-center gap-1 tabular-nums"
                     title={gettext("Size")}
@@ -534,6 +535,7 @@
                       download.upload_speed
                     )}
                   </span>
+                  <ListComponents.uploaded_metric download={download} />
                   <span class="inline-flex items-center gap-1" title={gettext("Share ratio")}>
                     <.icon name="hero-scale" class="size-3 opacity-70" />{format_ratio(
                       download.ratio

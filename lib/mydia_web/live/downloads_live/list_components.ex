@@ -11,7 +11,6 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   import MydiaWeb.Formatters
 
   alias MydiaWeb.DownloadsLive.{Filters, ListView, Summary, Tab}
-  alias MydiaWeb.SeedingComponents
   alias Phoenix.LiveView.JS
 
   attr :summary, Summary, required: true
@@ -326,6 +325,27 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
 
   def client_shortcut(assigns), do: ~H""
 
+  attr :download, :map, required: true
+
+  @doc """
+  The amount a torrent has uploaded. Omitted when the row is not in its
+  client, whose `uploaded` is then a placeholder 0, not a measurement.
+  """
+  def uploaded_metric(assigns) do
+    ~H"""
+    <span
+      :if={@download.in_client?}
+      id={"download-uploaded-#{@download.id}"}
+      class="inline-flex items-center gap-1 tabular-nums"
+      title={gettext("Uploaded")}
+    >
+      <.icon name="hero-arrow-up-circle" class="size-3 opacity-70" />{format_file_size(
+        @download.uploaded
+      )}
+    </span>
+    """
+  end
+
   attr :id, :string, required: true
   attr :name, :string, required: true
   attr :url, :string, default: nil
@@ -409,14 +429,9 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             icon="hero-x-mark"
             title={gettext("Cancel download")}
             destructive
-            phx-click="cancel_download"
+            phx-click="open_remove_confirm"
+            phx-value-kind="cancel"
             phx-value-id={@download.id}
-            data-confirm={
-              SeedingComponents.confirm_text(
-                @download,
-                gettext("Cancel %{title}?", title: ListView.display_title(@download))
-              )
-            }
           />
         <% else %>
           <.row_action

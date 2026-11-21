@@ -16,6 +16,7 @@ defmodule Mydia.Downloads.History do
   alias Mydia.Downloads.ClientStatusCache
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.ObservedUpload
   alias Mydia.Downloads.Seedbox
   alias Mydia.Downloads.StatusFilter
   alias Mydia.Downloads.Structs.{DownloadMetadata, EnrichedDownload}
@@ -650,7 +651,7 @@ defmodule Mydia.Downloads.History do
   end
 
   defp with_status_as_of(%EnrichedDownload{} = enriched, fetched_at) do
-    %{enriched | status_as_of: fetched_at}
+    ObservedUpload.overlay(%{enriched | status_as_of: fetched_at})
   end
 
   defp with_removal_state(%EnrichedDownload{} = enriched, %Download{} = download) do
@@ -709,8 +710,6 @@ defmodule Mydia.Downloads.History do
       eta: torrent_status.eta,
       size: torrent_status.size,
       downloaded: torrent_status.downloaded,
-      uploaded: torrent_status.uploaded,
-      ratio: torrent_status.ratio,
       seeding_time: Map.get(torrent_status, :seeding_time),
       seeders: if(metadata, do: metadata.seeders, else: nil),
       leechers: if(metadata, do: metadata.leechers, else: nil),
@@ -730,6 +729,7 @@ defmodule Mydia.Downloads.History do
       in_client?: true
     })
     |> struct!(EnrichedDownload.import_state(download))
+    |> ObservedUpload.put_upload(torrent_status)
   end
 
   defp enrich_download_with_unknown_status(download) do

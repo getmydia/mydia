@@ -44,6 +44,36 @@ class HealthSample {
       'kbps: $throughputKbps, fault: $fault, interrupted: $interrupted)';
 }
 
+/// One end of mpv's colour pipeline, as mpv names it: `video-params/*` for
+/// the decoded source, `video-target-params/*` for what the output draws.
+class ColorParams {
+  const ColorParams({this.primaries, this.gamma, this.peakNits});
+
+  /// `bt.709`, `bt.2020`, `display-p3`...
+  final String? primaries;
+
+  /// The transfer: `bt.1886`, `srgb`, `pq`, `hlg`...
+  final String? gamma;
+
+  /// `max-luma` in nits. mpv reports 203 (SDR white) for SDR, so only a PQ
+  /// or HLG end has a peak worth showing.
+  final double? peakNits;
+
+  bool get isHdr => gamma == 'pq' || gamma == 'hlg';
+
+  bool get isEmpty => primaries == null && gamma == null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ColorParams &&
+      other.primaries == primaries &&
+      other.gamma == gamma &&
+      other.peakNits == peakNits;
+
+  @override
+  int get hashCode => Object.hash(primaries, gamma, peakNits);
+}
+
 /// Cumulative counters read from the engine.
 class FrameStats {
   const FrameStats({
@@ -51,7 +81,15 @@ class FrameStats {
     this.throughputKbps,
     this.targetGamma,
     this.colormatrix,
+    this.sourceColor,
+    this.outputColor,
   });
+
+  /// The decoded source's colour, for the stats panel. Null when unset.
+  final ColorParams? sourceColor;
+
+  /// What the video output draws to, for the stats panel. Null when unset.
+  final ColorParams? outputColor;
 
   /// Total frames dropped since the source opened.
   final int droppedFrames;

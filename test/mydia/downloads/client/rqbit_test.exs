@@ -388,6 +388,27 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert status.progress == 50.0
     end
 
+    test "marks the upload counter as session-only", %{bypass: bypass, config: config} do
+      stub_details(bypass)
+
+      stub_stats(
+        bypass,
+        stats(state: "live", finished: true, progress_bytes: 1000, total_bytes: 1000)
+      )
+
+      assert {:ok, status} = Rqbit.get_status(config, @hash)
+      assert status.uploaded_session_only? == true
+    end
+
+    test "stamps when the status was read", %{bypass: bypass, config: config} do
+      stub_details(bypass)
+      stub_stats(bypass, stats(state: "live", finished: true, total_bytes: 1000))
+
+      before = DateTime.utc_now()
+      assert {:ok, status} = Rqbit.get_status(config, @hash)
+      assert DateTime.compare(status.observed_at, before) in [:gt, :eq]
+    end
+
     test "initializing maps to :checking", %{bypass: bypass, config: config} do
       stub_details(bypass)
       stub_stats(bypass, stats(state: "initializing", finished: false))
@@ -537,6 +558,52 @@ defmodule Mydia.Downloads.Client.RqbitTest do
       assert status.id == @hash
       assert status.state == :seeding
       assert status.save_path == "/downloads"
+    end
+
+    test "a read slower than the ordering bound is not counted as session-only", %{
+      bypass: bypass,
+      config: config
+    } do
+      config = put_in(config, [:options, :max_ordered_read_ms], 20)
+
+      Bypass.expect(bypass, "GET", "/torrents", fn conn ->
+        Process.sleep(60)
+
+        json_resp(conn, 200, %{
+          "torrents" => [
+            %{"id" => 0, "info_hash" => @hash, "name" => "Movie", "stats" => stats()}
+          ]
+        })
+      end)
+
+      # Too slow to order against another read: shown as reported, never recorded.
+      assert {:ok, [status]} = Rqbit.list_torrents(config, [])
+      assert status.uploaded_session_only? == false
+      assert status.observed_at == nil
+    end
+
+    # A delayed response must not get a later read time than a newer one
+    # parsed sooner, so the time is taken before the request, not after.
+    test "stamps the read time before the request, not after the response", %{
+      bypass: bypass,
+      config: config
+    } do
+      test_pid = self()
+
+      Bypass.expect(bypass, "GET", "/torrents", fn conn ->
+        send(test_pid, {:served_at, DateTime.utc_now()})
+        Process.sleep(50)
+
+        json_resp(conn, 200, %{
+          "torrents" => [
+            %{"id" => 0, "info_hash" => @hash, "name" => "Movie", "stats" => stats()}
+          ]
+        })
+      end)
+
+      assert {:ok, [status]} = Rqbit.list_torrents(config, [])
+      assert_received {:served_at, served_at}
+      assert DateTime.compare(status.observed_at, served_at) in [:lt, :eq]
     end
 
     test "category filter is a no-op — all torrents returned", %{bypass: bypass, config: config} do

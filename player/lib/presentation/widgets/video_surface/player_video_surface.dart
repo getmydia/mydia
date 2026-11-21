@@ -64,6 +64,13 @@ class MpvSurfaceBinding {
   VideoScaling? _scaling;
   Future<void>? _detaching;
 
+  /// The `target-colorspace-hint` mpv has: the attach options' until the
+  /// source's gamma is known.
+  String _colorspaceHint = surfaceAttachOptions()
+      .firstWhere((o) => o.$1 == 'target-colorspace-hint')
+      .$2;
+  StreamSubscription<VideoParams>? _videoParams;
+
   void _onViewCreated(int id) {
     if (!_viewId.isCompleted) _viewId.complete(id);
   }
@@ -106,7 +113,25 @@ class MpvSurfaceBinding {
     if (_cancelled.isCompleted) return false;
     final scaling = _scaling;
     if (scaling != null) await _sendScaling(handle, scaling);
+    if (_cancelled.isCompleted) return false;
+    _followColorspace(handle);
     return true;
+  }
+
+  /// Turns `target-colorspace-hint` on for an HDR source and off for SDR,
+  /// as the source's gamma becomes known or changes. See [colorspaceHintFor].
+  void _followColorspace(int handle) {
+    void apply(VideoParams params) {
+      final hint = colorspaceHintFor(params.gamma);
+      if (hint == null || hint == _colorspaceHint || _cancelled.isCompleted) {
+        return;
+      }
+      _colorspaceHint = hint;
+      unawaited(_sendOption(handle, 'target-colorspace-hint', hint));
+    }
+
+    _videoParams = player.stream.videoParams.listen(apply);
+    apply(player.state.videoParams);
   }
 
   /// [future]'s value, or null once [detach] has run.
@@ -138,11 +163,14 @@ class MpvSurfaceBinding {
     }
   }
 
-  Future<void> _sendScaling(int handle, VideoScaling scaling) async {
+  Future<void> _sendScaling(int handle, VideoScaling scaling) =>
+      _sendOption(handle, 'panscan', panscanFor(scaling));
+
+  Future<void> _sendOption(int handle, String name, String value) async {
     try {
-      await surface.setOption(handle, 'panscan', panscanFor(scaling));
+      await surface.setOption(handle, name, value);
     } on PlatformException catch (e) {
-      debugPrint('[MpvSurface] panscan failed: ${e.code} ${e.message}');
+      debugPrint('[MpvSurface] $name failed: ${e.code} ${e.message}');
     }
   }
 
@@ -152,6 +180,8 @@ class MpvSurfaceBinding {
 
   Future<void> _detach() async {
     if (!_cancelled.isCompleted) _cancelled.complete();
+    unawaited(_videoParams?.cancel());
+    _videoParams = null;
     final handle = _handle;
     if (handle == null) return;
     try {

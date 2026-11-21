@@ -75,6 +75,30 @@ polled rows with their new entry merged in, and `DownloadMonitor` hands those to
 seconds rather than the time since completion: a seed-time target set after a
 torrent finished counts from when Mydia started observing it.
 
+The ratio needs the same help for rqbit. rqbit 9.0.1 counts `uploaded_bytes`
+only while a torrent is live: it reads 0 once paused and starts again from 0
+after a restart, so its adapter sets `DownloadStatus.uploaded_session_only?`.
+For those rows `Mydia.Downloads.ObservedUpload.record/2`, called by
+`DownloadMonitor` right after the seed time, banks the counter in
+`Download.metadata["observed_upload"]` (`"bytes"` is the total, `"session"` the
+counter as last seen; a counter below `"session"` is a new session and counts in
+full; `"seen_at"` is when the counter that last changed them was asked for,
+rqbit's `DownloadStatus.observed_at`). Overlapping passes must not add an older,
+lower counter as a reset: a read no later than `"seen_at"` changes nothing, and a
+lower counter counts as a reset only when read 300 seconds or more after it. The
+rqbit adapter keeps the counter session-only (and stamps `observed_at`) only for a
+read that finished within 120 seconds, so no read that slow can land as a reset; a
+slower read is shown as rqbit reported it and is not recorded. `ObservedUpload.overlay/1` then replaces `uploaded` and `ratio` on every
+enriched row (`EnrichedDownload.live_uploaded` keeps the client's own counter),
+and `ClientRemoval.terms_met?/2` applies `overlay_status/2` to the status it
+reads, so a torrent paused at its goal keeps its ratio and ratio goals do not
+restart on each pause. On first sight the current session counts in full:
+uploaded bytes are a reported fact, unlike seed time. Uploads in a session that
+ended before Mydia saw it, or between the last poll and a manual pause or
+restart, are lost, and so is a reset seen inside the 300 seconds when the new
+session's counter passes the old one before the next pass: the total errs low,
+never high, and the torrent seeds longer.
+
 **Limits.** At grab, `Mydia.Downloads.SeedingLimits` sends the goal through the
 optional `set_share_limits/3` adapter callback, best effort. qBittorrent gets
 `ratioLimit` and `seedingTimeLimit` (minutes, rounded up), with `-1` rather than

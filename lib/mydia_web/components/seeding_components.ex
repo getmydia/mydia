@@ -52,18 +52,6 @@ defmodule MydiaWeb.SeedingComponents do
   end
 
   @doc """
-  A `data-confirm` message: `base`, followed by the hit-and-run warning when
-  the download has not met its tracker's seeding goal.
-  """
-  @spec confirm_text(map(), String.t()) :: String.t()
-  def confirm_text(download, base) do
-    case removal_warning_text(download) do
-      nil -> base
-      warning -> base <> "\n\n" <> warning
-    end
-  end
-
-  @doc """
   Names the tracker, its goal and where the download stands, and says that
   removing now risks a hit-and-run. Nil when no goal applies or it is met.
   """

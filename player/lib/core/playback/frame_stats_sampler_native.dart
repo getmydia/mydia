@@ -41,11 +41,24 @@ class NativeFrameStatsSampler implements FrameStatsSampler {
         throughputKbps: speed == null ? null : (speed * 8 / 1000).round(),
         targetGamma: hdr ? await _optional('video-target-params/gamma') : null,
         colormatrix: hdr ? await _optional('video-params/colormatrix') : null,
+        sourceColor: hdr ? await _color('video-params') : null,
+        outputColor: hdr ? await _color('video-target-params') : null,
       );
     } catch (e) {
       debugPrint('[FrameStats] mpv property read failed: $e');
       return null;
     }
+  }
+
+  /// `<prefix>/primaries`, `/gamma` and `/max-luma`; null when mpv reports
+  /// neither primaries nor gamma (no video yet).
+  Future<ColorParams?> _color(String prefix) async {
+    final color = ColorParams(
+      primaries: await _optional('$prefix/primaries'),
+      gamma: await _optional('$prefix/gamma'),
+      peakNits: double.tryParse(await _optional('$prefix/max-luma') ?? ''),
+    );
+    return color.isEmpty ? null : color;
   }
 
   /// A property that is allowed to be unset (no video yet, or a video

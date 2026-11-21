@@ -28,6 +28,9 @@ StatsSample sampleWithHistory() => StatsSample(
       droppedFrames: 0,
       droppedFramesTotal: 0,
       throughputKbps: 6200,
+      sourceColor:
+          const ColorParams(primaries: 'bt.2020', gamma: 'pq', peakNits: 1000),
+      outputColor: const ColorParams(primaries: 'bt.709', gamma: 'bt.1886'),
       history: List.generate(
         30,
         (i) => StatsPoint(bufferedMs: 18000 + i * 40, throughputKbps: 6200),
@@ -47,6 +50,8 @@ const _context = StatsContext(
   audioLabel: 'eac3 5.1 - 48 kHz - eng',
   linkLabel: 'direct p2p - 1 peer',
   hdr: StatsHdr(format: 'HDR10', by: HdrTonemapper.server),
+  outputHeadroom: 1.2,
+  outputPotentialHeadroom: 16,
 );
 
 Future<StatsMetrics> pumpPanel(

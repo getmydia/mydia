@@ -11,6 +11,7 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 
 import 'core/remote/ambient_targets_test.dart' hide main;
+import 'test_utils/no_downloads.dart';
 
 /// Proves the wiring gap this file exists to close: that a real OS
 /// background/foreground transition — not a Riverpod listener count
@@ -38,6 +39,7 @@ void main() {
     required AmbientTargets targets,
   }) async {
     final container = ProviderContainer(overrides: [
+      noProgressFlushOverride,
       sourcesLoadingProvider.overrideWithValue(false),
       hasMydiaProvider.overrideWithValue(true),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
