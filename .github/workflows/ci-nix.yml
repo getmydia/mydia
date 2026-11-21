@@ -74,6 +74,9 @@ jobs:
       - name: Assert the Dependabot merge gate against its fixtures
         run: ./scripts/tests/dependabot-gate-test.sh
 
+      - name: Assert the nix-ci niks3 push keeps its contract
+        run: ./.github/actions/nix-ci/push.test.sh
+
   # Combines Flutter pin checks, BEAM pin checks, and generated-artifact
   # freshness onto one Nix/Cachix setup instead of provisioning three separate
   # runners on every PR.

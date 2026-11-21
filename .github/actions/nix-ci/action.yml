@@ -1,0 +1,55 @@
+name: Nix CI
+description: >-
+  Free runner disk, install Nix pointed at cache.mydia.dev, and install niks3.
+  Push built outputs afterwards with push.sh in this directory.
+
+inputs:
+  push:
+    description: "'true' to install niks3 so the job can push to the cache."
+    default: 'true'
+  pin:
+    description: >-
+      Pin name exported to later steps as PIN (master pushes only). Empty means
+      no pin; PRs never pin.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Free disk space
+      shell: bash
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo apt-get clean
+        docker image prune --all --force || true
+
+        # x64 runners carry a second, otherwise unused disk at /mnt, so the
+        # store goes there. This must run before install-nix-action creates /nix.
+        if mountpoint -q /mnt; then
+          sudo mkdir -p /mnt/nix /nix
+          sudo mount --bind /mnt/nix /nix
+          df -h /nix
+        fi
+        df -h /
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+          extra-substituters = https://cache.mydia.dev https://devenv.cachix.org
+          extra-trusted-public-keys = cache.mydia.dev-1:5zkoQR4Gcrx1EEQ1GvHRPQ7EoHm8gNrrVoeAqX3ioFg= devenv.cachix.org-1:w1cLUi8dvvhaXAsEqJBf2jvG3lOivBMXrVa1V2iupGM=
+          max-jobs = auto
+
+    - name: Install niks3
+      if: inputs.push == 'true'
+      shell: bash
+      run: nix profile install github:Mic92/niks3/v1.19.0
+
+    - name: Export push settings
+      shell: bash
+      env:
+        PIN: ${{ inputs.pin }}
+      run: |
+        echo "PIN=$PIN" >> "$GITHUB_ENV"
+        echo "NIX_CI_PUSH=${{ github.action_path }}/push.sh" >> "$GITHUB_ENV"
