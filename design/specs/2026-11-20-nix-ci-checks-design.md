@@ -1,6 +1,6 @@
 # Nix-native CI: checks as derivations
 
-Status: approved in conversation 2026-11-20, pending spec review.
+Status: implemented (PR #1464). Approved in conversation 2026-11-20.
 
 ## Goal
 
@@ -187,7 +187,13 @@ job and all `actions/cache` steps in the migrated workflows are removed.
 
 ## Success criteria
 
-- A PR touching only docs or the player runs no Elixir or Rust work (all hits).
+- A PR touching only docs or the player runs no Nix check work in the
+  `Nix / Checks` verdict: every such check is a cache hit, so no check job
+  starts. The jobs that are not derivations
+  (`Lint / Ratchet`, `Rust / SMB integration`, `Test / E2E Browser`) still
+  run on every PR, by design: there are no path filters to skip them. So
+  do the non-blocking NixOS module VM tests, whose package takes the whole
+  repository as source (`nix/ci/README.md`, "The derivation graph").
 - No `hashFiles`, `actions/cache` or `paths-filter` remain in migrated
   workflows.
 - Warm-path wall clock for an Elixir PR is no worse than today's ~8 minutes
