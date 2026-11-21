@@ -77,6 +77,9 @@ jobs:
       - name: Assert the nix-ci niks3 push keeps its contract
         run: ./.github/actions/nix-ci/push.test.sh
 
+      - name: Assert the flake-check planner against its fixtures
+        run: ./scripts/tests/ci-plan-test.sh
+
   # Combines Flutter pin checks, BEAM pin checks, and generated-artifact
   # freshness onto one Nix/Cachix setup instead of provisioning three separate
   # runners on every PR.
