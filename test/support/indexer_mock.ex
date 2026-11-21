@@ -7,6 +7,7 @@ defmodule Mydia.IndexerMock do
   """
 
   alias Mydia.BypassHelpers
+  alias Mydia.IndexerMock.ParkedSearch
 
   @parked_key {__MODULE__, :parked_searches}
 
@@ -104,7 +105,7 @@ defmodule Mydia.IndexerMock do
     owner = self()
     # Unlinked, so it is still alive when the handler checks in after the
     # test has exited; stopped by the on_exit below.
-    {:ok, gate} = Agent.start(fn -> %{released: false, parked: []} end)
+    {:ok, gate} = Agent.start(fn -> %ParkedSearch{} end)
     Process.put(@parked_key, [gate | Process.get(@parked_key, [])])
     ExUnit.Callbacks.on_exit(fn -> stop_gate(gate) end)
 
@@ -118,8 +119,8 @@ defmodule Mydia.IndexerMock do
 
       released? =
         try do
-          Agent.get_and_update(gate, fn state ->
-            {state.released, %{state | parked: [handler | state.parked]}}
+          Agent.get_and_update(gate, fn %ParkedSearch{} = state ->
+            {state.released, %ParkedSearch{state | parked: [handler | state.parked]}}
           end)
         catch
           :exit, _ -> true
@@ -145,7 +146,9 @@ defmodule Mydia.IndexerMock do
   def release_parked_searches do
     for gate <- Process.get(@parked_key, []) do
       gate
-      |> Agent.get_and_update(fn state -> {state.parked, %{state | released: true}} end)
+      |> Agent.get_and_update(fn %ParkedSearch{} = state ->
+        {state.parked, %ParkedSearch{state | released: true}}
+      end)
       |> Enum.each(&send(&1, :release))
     end
 
