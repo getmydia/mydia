@@ -1,6 +1,14 @@
 # Nix-native CI, phase 2: the player and the E2E suites
 
-Status: approved in conversation 2026-11-21. Not yet implemented.
+Status: implemented (PR 1 in #1474; PR 2 moved `Test / Player E2E` onto the
+`player-e2e` VM test and deleted the Docker-compose workflow). Approved in
+conversation 2026-11-21.
+
+One consequence the design did not weigh: the deleted workflow also built the
+release `Dockerfile` on pull requests touching the player inputs it copies
+(the #1444 guard). The VM test boots the Nix package, so no pull request
+builds that image now (`.github/ci.md`, "The player E2E is a blocking VM
+test").
 
 Follows `design/specs/2026-11-20-nix-ci-checks-design.md` (phase 1, PR #1464),
 whose goal, binary cache (niks3 on can-1, reads from R2) and workflow shape

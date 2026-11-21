@@ -98,10 +98,9 @@ them. `Build / Android`, `Build / macOS`, `Build / Windows` and
 
 `Test / Player E2E` was promoted 2026-09-16. It had been green on 63 of 63 master
 pushes before PR #832 merged it red, and it stayed red for a day because nothing
-blocked on it. It reports on every PR for the same reason `ci-player.yml` used
-to: `ci-player-e2e.yml` has no workflow-level `paths:` filter, and its
-`dorny/paths-filter` result gates steps, never the job, so a PR with nothing
-relevant concludes green in seconds. Keep it that way.
+blocked on it. Since Nix CI phase 2 it is an aggregator in `ci.yml` over the
+`player-e2e` VM check, so it reports on every PR like the other aggregators,
+and the Docker-compose workflow it used to name is gone.
 
 ### Why the list was short, and what changed
 
@@ -117,8 +116,8 @@ conditions were step-level, never job-level: a job-level `if:` concludes the job
 `skipped`, and whether a ruleset counts a skipped required check as satisfied is
 configuration-dependent.
 
-Since Nix CI phase 2, `Test / Player` and `Build / Web` (and `Build / Linux`,
-`Check / Web icons`) are aggregators in `ci.yml`, and `Build / Android` is a
+Since Nix CI phase 2, `Test / Player`, `Test / Player E2E` and `Build / Web`
+(and `Build / Linux`, `Check / Web icons`) are aggregators in `ci.yml`, and `Build / Android` is a
 plain `ci.yml` job with no `needs` that runs on every PR. `ci.yml`'s build jobs
 carry non-required names and conclude `skipped` when every check is already
 cached (an empty matrix); the required names sit on aggregator jobs with

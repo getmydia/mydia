@@ -247,7 +247,13 @@ matrix, whose job enables KVM for it. Its client runs the Linux build
 outside the sandbox, so it sources an environment captured from a
 derivation with `player-linux`'s inputs (`clientEnv`) and recreates
 `/build/source` and `/build/pub-cache` through `ciPlayer.setupPlayerTree`,
-the helper `mkPlayerCheck` uses.
+the helper `mkPlayerCheck` uses. It replaced the Docker-compose player E2E
+workflow outright. Run it locally with
+`nix build .#checks.x86_64-linux.player-e2e -L` (or `./dev player e2e`); it
+needs KVM, and the VM run itself takes about three minutes (149 s on
+2026-11-21) once its inputs are built. On failure
+the build log carries the relay, server and seed journals; on success they
+and the client's log are in `$out`.
 
 ## ciInternal and the CI planner
 

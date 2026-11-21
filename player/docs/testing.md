@@ -106,17 +106,29 @@ before using it.
 
 ## E2E harness layout
 
-The E2E server runs the production image built from the root `Dockerfile`.
-`scripts/e2e/server-entrypoint.sh` wraps the stock production entrypoint and,
-once the server reports healthy, runs `scripts/e2e/seed.sh`, which seeds test
-data through `su-exec mydia /app/bin/mydia rpc "..."`, using `rpc` rather than
-`eval` for the same reason production access does. The test runner is the
-toolbox image from `player/Dockerfile.test`, which installs Flutter from
-`player/.fvmrc`.
+The player E2E is the `player-e2e` NixOS VM test (`nix/tests/player-e2e.nix`),
+which `Test / Player E2E` in CI aggregates. It boots three VMs with no
+internet: a metadata-relay, a server running the NixOS module on the Nix
+package, and a client. Once the server reports healthy, a oneshot unit runs
+`scripts/e2e/seed.sh`, which seeds test data through `bin/mydia rpc "..."`
+(wrapped as `mydia-e2e-cli`), using `rpc` rather than `eval` for the same
+reason production access does. The client runs `scripts/e2e/run-tests.sh` on
+a copy of `player-codegen` with the crane-built p2p library, under Xvfb, with
+the same Nix Flutter as the other player checks. The player reaches the server
+over iroh directly on the VM network.
+
+Run it locally (needs KVM; the VM run takes about three minutes once its
+inputs are built):
+
+```bash
+nix build .#checks.x86_64-linux.player-e2e -L   # or: ./dev player e2e
+```
+
+On failure the build log carries the relay, server and seed journals and the
+client's warnings; on success they are in the result's output.
 
 Player E2E tests live in `player/integration_test/`, with streaming helpers in
-`player/integration_test/helpers/streaming_helpers.dart`. The compose file is
-`compose.player-e2e.yml`.
+`player/integration_test/helpers/streaming_helpers.dart`.
 
 ### A failure named `simple` is usually not from `simple`
 
@@ -129,19 +141,7 @@ failing "after it had already completed", interleaved with progress lines from
 whichever test is actually running. Read the stack trace, not the label. On
 2026-09-16 that line was a `PlayerScreen` teardown inside `remote_control`.
 
-To reproduce one file on its own, where attribution is exact:
-
-```bash
-./dev player e2e --target integration_test/remote_control_test.dart
-```
-
-The test container runs as root and bind-mounts the checkout, so a local run
-leaves root-owned build output and generated files under `player/`, and the
-next `./dev player setup` fails with `Permission denied` on
-`.dart_tool/package_config.json`. Give them back without sudo:
-
-```bash
-docker run --rm -v "$PWD/player:/p" --entrypoint find \
-  ghcr.io/getmydia/mydia/player-e2e-toolbox:master \
-  /p -user root -exec chown -h "$(id -u):$(id -g)" {} +
-```
+To reproduce one file on its own, where attribution is exact, point
+`E2E_TEST_TARGET` in `nix/tests/player-e2e.nix` at it locally (for example
+`integration_test/remote_control_test.dart`) and run the check as above. Do
+not commit that change.
