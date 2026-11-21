@@ -1,8 +1,8 @@
 #!/bin/bash
-# Runs the player integration tests against an already-running E2E stack.
-#
-# Mounted into the toolbox image rather than baked in, so editing it does not
-# invalidate an image layer.
+# Runs the player integration tests against an already-running E2E stack, on
+# the client VM of the player-e2e NixOS test (nix/tests/player-e2e.nix). The
+# working directory is a copy of player-codegen, so dependencies are resolved
+# and code is generated already; the VM has no network for `pub get`.
 set -euo pipefail
 
 TEST_TARGET="${E2E_TEST_TARGET:-integration_test/all_tests.dart}"
@@ -13,7 +13,6 @@ echo "============================================"
 echo "  MYDIA_URL:       ${MYDIA_URL:-not set}"
 echo "  RELAY_URL:       ${RELAY_URL:-not set}"
 echo "  E2E_TEST_TARGET: ${TEST_TARGET}"
-echo "  E2E_TEST_ARGS:   ${E2E_TEST_ARGS:-<none>}"
 echo ""
 
 wait_for() {
@@ -40,22 +39,21 @@ if [ ! -f "$TEST_TARGET" ]; then
     exit 1
 fi
 
-echo "Resolving Flutter dependencies..."
-# --enforce-lockfile like every other CI `pub get`: player/Dockerfile.test
-# installs the SDK from player/.fvmrc, so the lock resolves as committed.
-flutter pub get --enforce-lockfile >/tmp/flutter-pub-get.log 2>&1 || {
-    echo "ERROR: flutter pub get failed" >&2
-    cat /tmp/flutter-pub-get.log >&2
-    exit 1
-}
+# The dart-defines every build below shares. The claim code is added only to
+# `flutter test`'s.
+dart_defines=(
+    "--dart-define=MYDIA_URL=${MYDIA_URL}"
+    "--dart-define=RELAY_URL=${RELAY_URL}"
+    --dart-define=E2E_MODE=true
+)
 
-echo "Running code generation..."
-flutter pub run build_runner build --delete-conflicting-outputs \
-    >/tmp/build-runner.log 2>&1 || {
-    echo "ERROR: build_runner failed" >&2
-    cat /tmp/build-runner.log >&2
-    exit 1
-}
+# Build the Linux debug app for the test target before minting the claim
+# code. The code is single-use and expires 300 s after it is minted, and a
+# cold build (CMake, the native plugins, the Dart kernel) is most of that on
+# a slow runner. `flutter test -d linux` then only recompiles the kernel for
+# the extra define.
+echo "Pre-building the Linux debug app..."
+flutter build linux --debug --target "$TEST_TARGET" "${dart_defines[@]}"
 
 echo "Logging in as test admin..."
 LOGIN_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \
@@ -110,17 +108,9 @@ flutter_cmd=(
     -d linux
     --concurrency=1
     --reporter expanded
-    --dart-define=MYDIA_URL=${MYDIA_URL}
-    --dart-define=RELAY_URL=${RELAY_URL}
-    --dart-define=E2E_MODE=true
-    --dart-define=E2E_CLAIM_CODE=${CLAIM_CODE}
+    "${dart_defines[@]}"
+    "--dart-define=E2E_CLAIM_CODE=${CLAIM_CODE}"
 )
-
-if [ -n "${E2E_TEST_ARGS:-}" ]; then
-    # shellcheck disable=SC2206
-    extra_args=(${E2E_TEST_ARGS})
-    flutter_cmd+=("${extra_args[@]}")
-fi
 
 test_exit=0
 xvfb-run -a "${flutter_cmd[@]}" || test_exit=$?

@@ -98,10 +98,9 @@ them. `Build / Android`, `Build / macOS`, `Build / Windows` and
 
 `Test / Player E2E` was promoted 2026-09-16. It had been green on 63 of 63 master
 pushes before PR #832 merged it red, and it stayed red for a day because nothing
-blocked on it. It reports on every PR for the same reason `ci-player.yml` used
-to: `ci-player-e2e.yml` has no workflow-level `paths:` filter, and its
-`dorny/paths-filter` result gates steps, never the job, so a PR with nothing
-relevant concludes green in seconds. Keep it that way.
+blocked on it. Since Nix CI phase 2 it is an aggregator in `ci.yml` over the
+`player-e2e` VM check, so it reports on every PR like the other aggregators,
+and the Docker-compose workflow it used to name is gone.
 
 ### Why the list was short, and what changed
 
@@ -117,8 +116,8 @@ conditions were step-level, never job-level: a job-level `if:` concludes the job
 `skipped`, and whether a ruleset counts a skipped required check as satisfied is
 configuration-dependent.
 
-Since Nix CI phase 2, `Test / Player` and `Build / Web` (and `Build / Linux`,
-`Check / Web icons`) are aggregators in `ci.yml`, and `Build / Android` is a
+Since Nix CI phase 2, `Test / Player`, `Test / Player E2E` and `Build / Web`
+(and `Build / Linux`, `Check / Web icons`) are aggregators in `ci.yml`, and `Build / Android` is a
 plain `ci.yml` job with no `needs` that runs on every PR. `ci.yml`'s build jobs
 carry non-required names and conclude `skipped` when every check is already
 cached (an empty matrix); the required names sit on aggregator jobs with
@@ -150,9 +149,10 @@ the PR's full check list rather than whether it merged green.
 
 ## CI / Docker used to cancel its own master runs
 
-**Fixed 2026-08-31.** `ci-docker.yml` now keys its concurrency group to
-`github.sha`, so every master commit gets its own run and nothing supersedes
-anything. Re-runs of the same SHA still dedupe. The cost is that a burst of
+**Fixed 2026-08-31.** `ci-docker.yml` now keys its push runs' concurrency
+group to `github.sha`, so every master commit gets its own run and nothing
+supersedes anything. (Its pull request runs, which build only the
+`flutter-builder` stage, key on the ref and cancel in progress.) Re-runs of the same SHA still dedupe. The cost is that a burst of
 merges runs concurrent image builds instead of serialising them, which is the
 point.
 
@@ -881,6 +881,24 @@ Any E2E failure where a probe reports a missing element on a page you can see
 renders it is worth checking this way first: count the server renders for that
 test. Fixed by making `login/3` wait for its redirect and by moving the suite
 onto `visit_liveview/3`, which fails naming the page the browser is actually on.
+
+## Player E2E (`Test / Player E2E`)
+
+The `player-e2e` VM test is a blocking check, so a flake in it reds every
+aggregator, not only its own context. Its build log carries the client's
+output as it runs, and on failure the relay, server and seed journals.
+
+**`Failed host lookup: 'server' (OS Error: ... errno = -11)`** from the app
+under test, inside the client VM. errno -11 is `EAI_AGAIN`, a temporary
+resolver failure: Dart's lookup goes through glibc to the guest's nscd, and
+a name in `/etc/hosts` should never need a retry. Seen twice in one local
+run on 2026-11-21 (the test retried and passed), never in the runs after.
+Mitigated rather than explained: the client's `MYDIA_URL` and `RELAY_URL`,
+and the server's `METADATA_RELAY_URL`, now use the nodes' VLAN addresses
+(`nodes.<name>.networking.primaryIPAddress` in `nix/tests/player-e2e.nix`),
+so nothing in the test resolves a host name. If a lookup failure comes back,
+something new is resolving a name: find it in the client log before
+rerunning.
 
 ## Player (`Test / Player`)
 

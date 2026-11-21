@@ -1,12 +1,14 @@
 #!/bin/sh
 # Asserts that E2E seeding produced every piece of state the integration tests
-# need. Runs inside the mydia container. Exits non-zero naming the first
-# missing item, so a broken seed fails here instead of surfacing later as a
-# confusing Dart test failure.
+# need. Runs on the server VM of the player-e2e NixOS test. Exits non-zero
+# naming the first missing item, so a broken seed fails here instead of
+# surfacing later as a confusing Dart test failure.
 set -eu
 
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@test.local}"
 VIDEO_PATH="/media/movies/e2e-test-video.mp4"
+# As in seed.sh.
+MYDIA_CLI=mydia-e2e-cli
 
 fail() {
     echo "ASSERT FAILED: $1" >&2
@@ -15,7 +17,7 @@ fail() {
 
 [ -f "$VIDEO_PATH" ] || fail "test video missing at $VIDEO_PATH"
 
-RESULT=$(su-exec mydia /app/bin/mydia rpc "
+RESULT=$($MYDIA_CLI rpc "
     alias Mydia.{Accounts, Media, Repo, RemoteAccess}
     alias Mydia.Settings.LibraryPath
 

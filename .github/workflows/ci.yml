@@ -20,8 +20,9 @@ name: CI
 # Ratchet (reads git history), Rust / SMB integration (needs a root smbd)
 # and Build / Android (Gradle has no lockfile Nix could fetch from). The
 # required checks Test, Test / PostgreSQL, Test / E2E Browser, Test / Player,
-# Build / Web, Build / Linux and Check / Web icons sit on aggregators at the
-# end; the player ones gate on the player-* checks through Nix / Checks.
+# Test / Player E2E, Build / Web, Build / Linux and Check / Web icons sit on
+# aggregators at the end; the player ones gate on the player-* checks
+# through Nix / Checks.
 
 on:
   push:
@@ -78,7 +79,7 @@ jobs:
           set -euo pipefail
           FAIL=0
           for name in "Test" "Test / PostgreSQL" "Test / E2E Browser" \
-                      "Test / Player" "Build / Web" "Build / Linux" "Check / Web icons"; do
+                      "Test / Player" "Test / Player E2E" "Build / Web" "Build / Linux" "Check / Web icons"; do
             count=$(yq -r "[.jobs[] | select(.name == \"$name\")] | length" .github/workflows/ci.yml)
             cond=$(yq -r ".jobs[] | select(.name == \"$name\") | .if" .github/workflows/ci.yml)
             if [ "$count" != "1" ] || [ "$cond" != "always()" ]; then
@@ -216,6 +217,15 @@ jobs:
         with:
           pin: master-${{ matrix.name }}
 
+      # player-e2e is a NixOS VM test that blocks (Test / Player E2E is
+      # required), so it builds here rather than in the nixos job below.
+      - name: Enable KVM access
+        if: matrix.name == 'player-e2e'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Build
         env:
           ATTR: ${{ matrix.attr }}
@@ -228,10 +238,12 @@ jobs:
 
   # The NixOS module VM tests (nixos-module, nixos-module-postgres): same
   # build and push as `checks`, but outside the Nix / Checks verdict, so they
-  # block nothing. The package they boot takes the whole repo as its source
-  # (src = ../..), so they rerun on nearly every commit, and a QEMU boot on a
-  # shared runner is the slowest and flakiest build in the set. That made them
-  # cost ~28 runner-minutes on every PR, a docs-only one included, so on
+  # block nothing. A QEMU boot on a shared runner is the slowest and flakiest
+  # build in the set. The package they boot used to take the whole repo as
+  # its source, so they reran on every commit and cost ~28 runner-minutes on
+  # every PR, a docs-only one included. It now takes the `mydiaPackage` file
+  # set (nix/ci/sources.nix), so a docs-only PR would find them cached, but
+  # the PR policy below predates that and is unchanged: on
   # pull_request they run only for Dependabot's PRs: the Dependabot gate
   # merges with GITHUB_TOKEN, which starts no master run, so the PR run is
   # the only one a dependency bump gets, and the gate requires it to pass.
@@ -292,8 +304,9 @@ jobs:
     timeout-minutes: 5
     steps:
       # A skipped build job means an empty matrix (everything was cached) or,
-      # for inputs, a run that cannot push. Pins and the NixOS VM tests are
-      # not part of the verdict.
+      # for inputs, a run that cannot push. Pins and the nixos-* module VM
+      # tests (the nixos job) are not part of the verdict; the player-e2e VM
+      # test builds in the checks matrix, so it is.
       - name: Assert every planned build succeeded
         env:
           PLAN: ${{ needs.plan.result }}
@@ -486,9 +499,9 @@ jobs:
   # enforces the always() condition. All of them gate on the whole Nix matrix
   # through Nix / Checks (Test / E2E Browser for the e2e-browser check, Test /
   # Player for player-test, player-test-web, player-analyze and
-  # player-l10n-test, Build / Web for player-web, Build / Linux for
-  # player-linux, Check / Web icons for player-icons): a matrix leg's result
-  # is not addressable through `needs`.
+  # player-l10n-test, Test / Player E2E for the player-e2e VM test, Build /
+  # Web for player-web, Build / Linux for player-linux, Check / Web icons for
+  # player-icons): a matrix leg's result is not addressable through `needs`.
   test:
     name: Test
     needs: [guards, nix-result, ratchet, smb]
@@ -533,6 +546,20 @@ jobs:
 
   test-player-result:
     name: Test / Player
+    needs: [nix-result]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  test-player-e2e-result:
+    name: Test / Player E2E
     needs: [nix-result]
     if: always()
     permissions: {}

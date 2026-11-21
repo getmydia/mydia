@@ -1,6 +1,16 @@
 # Nix-native CI, phase 2: the player and the E2E suites
 
-Status: approved in conversation 2026-11-21. Not yet implemented.
+Status: implemented (PR 1 in #1474; PR 2 moved `Test / Player E2E` onto the
+`player-e2e` VM test and deleted the Docker-compose workflow). Approved in
+conversation 2026-11-21.
+
+The deleted workflow also built the release `Dockerfile` on pull requests
+touching the player inputs it copies (the #1444 guard), which the VM test
+cannot replace since it boots the Nix package. PR 2 restored that guard in
+`ci-docker.yml`: a non-required `Docker / flutter-builder (PR)` job builds the
+`flutter-builder` stage, read-only against the registry cache, on pull
+requests that touch those inputs (`.github/ci.md`, "The player E2E is a
+blocking VM test").
 
 Follows `design/specs/2026-11-20-nix-ci-checks-design.md` (phase 1, PR #1464),
 whose goal, binary cache (niks3 on can-1, reads from R2) and workflow shape
@@ -73,7 +83,7 @@ Checks:
 | `player-linux` | `player-codegen`, `player-p2p-so` | Build / Linux, including the no-symlinks assertion |
 | `player-icons` | `player/web`, icon sources | Check / Web icons (`tool/gen-web-icons.sh --check`) |
 | `e2e-browser` | `mydia-test-build-sqlite`, `assets` | Test / E2E Browser (run) |
-| `player-e2e` | `packages.default`, `packages.metadata-relay`, `player-linux`, `player-codegen` | Test / Player E2E |
+| `player-e2e` | `packages.default`, `packages.metadata-relay`, `player-codegen`, `player-p2p-so` (the client builds its own debug app; it does not use `player-linux`'s bundle) | Test / Player E2E |
 
 The Flutter package comes from `player/flutter-version.nix`, so `.fvmrc` stays
 the single Flutter pin and `Check / Flutter Pin` keeps enforcing it.
@@ -181,7 +191,11 @@ migration and cost macOS/Windows minutes.
    from scratch (no incremental `.dart_tool`).
 2. Any change to server or player sources rebuilds the closure `player-e2e`
    needs. An unchanged closure is a cache hit, which today's pull path (about
-   10 minutes on every PR) never was.
+   10 minutes on every PR) never was. `packages.default` takes the
+   `mydiaPackage` file set of `nix/ci/sources.nix`, not the whole repository,
+   so "server sources" means what the release reads (the Elixir app, assets,
+   the NIF and plugin crates, the Cardigann guest directory); a docs, workflow,
+   test or `design/` change leaves the package and `player-e2e` cached.
 3. Android costs one full build on every PR, by design.
 4. As in phase 1, a flaky check that passes once is cached as passed.
 

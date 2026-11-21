@@ -1,7 +1,7 @@
 { inputs, ... }:
 
 {
-  perSystem = { pkgs, system, lib, ... }:
+  perSystem = { pkgs, system, lib, ciRelay, ... }:
     let
       # beamPackages (pinned Elixir/OTP) and rustToolchain (rust-overlay with
       # the wasm32-wasip2 std). Defined in nix/toolchains.nix, shared with
@@ -15,6 +15,9 @@
       # test-env dependency build uses the same sources.
       inherit (import ../beam-deps.nix { inherit pkgs beamPackages rustToolchain; })
         crateRegistries mixNixDeps heroicons;
+
+      # The source file sets nix/ci uses; mkMydia takes its src from one.
+      ciSources = import ../ci/sources.nix { inherit lib; root = ../..; };
 
       # Pre-fetch Rust/Cargo dependencies for the p2p NIF (required for sandbox build).
       #
@@ -194,7 +197,11 @@
         beamPackages.mixRelease ({
           pname = "mydia" + (if databaseType == "postgres" then "-postgres" else "");
           inherit version;
-          src = ../..;
+          # A file set of exactly what the build reads (sources.nix
+          # `mydiaPackage`), not the whole repository: with `../..` every
+          # tracked edit, docs included, changed the package's hash and
+          # rebuilt it, and with it every VM test that boots it.
+          src = ciSources.toSource ciSources.mydiaPackage;
 
           mixNixDeps = mixNixDeps;
 
@@ -407,6 +414,85 @@
         extraRuntimeDeps = [ pkgs.postgresql ];
       };
 
+      # metadata-relay, its own Mix project (metadata-relay/), on its own BEAM
+      # pair and deps.nix, both from nix/ci/relay.nix (ciRelay), so the
+      # package and relay-test build on the same pins. The player-e2e VM test
+      # (nix/tests/player-e2e.nix) runs it; production still ships the relay
+      # Dockerfile's image.
+      #
+      # The dashboard assets are built as the Dockerfile builds them
+      # (`mix assets.deploy`), with the same Tailwind binary as the app (both
+      # pin 4.3.3 in their config.exs) and nixpkgs' esbuild.
+      relayDir = ../../metadata-relay;
+
+      relayVersion =
+        let
+          matched = builtins.match ''.*version: "([^"]+)".*''
+            (builtins.replaceStrings [ "\n" ] [ " " ] (builtins.readFile (relayDir + "/mix.exs")));
+        in
+        if matched != null then builtins.head matched
+        else throw "mydia: no version found in metadata-relay/mix.exs";
+
+      relayNpmDeps = pkgs.fetchNpmDeps {
+        src = relayDir + "/assets";
+        hash = "sha256-iq742G5J4bF9SConMSczdYei1VlihwKobYhAQA47BlQ=";
+      };
+
+      metadataRelay = ciRelay.beamPackages.mixRelease {
+        pname = "metadata-relay";
+        version = relayVersion;
+        src = lib.fileset.toSource {
+          root = relayDir;
+          fileset = lib.fileset.unions (map (p: relayDir + "/${p}") [
+            "mix.exs"
+            "mix.lock"
+            "config"
+            "lib"
+            "priv/repo"
+            "assets"
+          ]);
+        };
+
+        inherit (ciRelay) mixNixDeps;
+
+        nativeBuildInputs = [ pkgs.nodejs pkgs.npmHooks.npmConfigHook ];
+        buildInputs = [ pkgs.sqlite ];
+        dontStrip = true;
+        env.HOME = "/tmp";
+
+        npmDeps = relayNpmDeps;
+        npmRoot = "assets";
+
+        preBuild = ''
+          # The tailwind wrapper looks for tailwind-<target>-<version> under
+          # _build (relay.tailwind_install then skips its download), esbuild
+          # for esbuild-<target>.
+          mkdir -p _build
+          ln -sf ${pkgs.esbuild}/bin/esbuild _build/esbuild-${platformSuffix}
+          ln -sf ${tailwindcss_4}/bin/tailwindcss _build/tailwind-${platformSuffix}-${tailwindVersion}
+
+          export MIX_ENV=prod
+          mix do compile --no-deps-check, assets.deploy
+        '';
+
+        # Boots the release far enough to load its runtime config, as the
+        # app's install check does, without starting it.
+        doInstallCheck = true;
+        installCheckPhase = ''
+          runHook preInstallCheck
+          export RELEASE_TMP=$(mktemp -d)
+          export RELEASE_DISTRIBUTION=none
+          # mixRelease removes the build's cookie; a runner sets its own.
+          export RELEASE_COOKIE=nix-install-check
+          export RENDEZVOUS_MASTER_PEPPER=nix-install-check
+          export DASHBOARD_USERNAME=nix-install-check
+          export DASHBOARD_PASSWORD=nix-install-check
+          export SQLITE_DB_PATH=$RELEASE_TMP/install-check.db
+          $out/bin/metadata_relay eval 'MetadataRelay.Release.migrate()'
+          runHook postInstallCheck
+        '';
+      };
+
     in
     {
       # The asset toolchain, shared with nix/ci/tests.nix (ciInternal.assets,
@@ -420,6 +506,7 @@
       packages = {
         default = mydia;
         postgres = mydia-postgres;
+        metadata-relay = metadataRelay;
         # Exposed so the pinned Tailwind binary can be built and version-checked
         # per platform (`nix build .#tailwindcss`) without building the whole
         # Elixir release. The hash table above was wrong on every platform and

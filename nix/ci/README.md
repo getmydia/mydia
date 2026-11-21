@@ -63,8 +63,7 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   that tests read. `test/ci/workflow_triggers_test.exs`, the one test that
   reads `.github/workflows`, is left out of the shards and runs alone in
   `ci-workflow-triggers`, so a workflow edit reruns that check instead of
-  all seven shards (on master the non-blocking NixOS tests rerun too, as on
-  any edit: their package takes the whole repo as source). The shards carry the Cardigann guest pinned in
+  all seven shards. The shards carry the Cardigann guest pinned in
   `native/cardigann_guest/ARTIFACT_SHA256` (the app's own pin), installed
   only while its source hash matches the guest sources;
   `ci-cardigann-hash` proves the Nix-side hash equals
@@ -84,8 +83,13 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `player-test-web`, `player-web` and `player-linux`. `player-linux` takes
   `ciInternal.player-p2p-so` from `rust.nix`.
 - `../checks/flake-module.nix`: the NixOS module VM tests `nixos-module` and
-  `nixos-module-postgres`, and the packages they boot as
-  `ciInternal.package-default` and `ciInternal.package-postgres`.
+  `nixos-module-postgres`, `player-e2e` (x86_64-linux only,
+  `../tests/player-e2e.nix`: relay, server and Flutter client VMs running
+  the player's integration tests), and the packages they boot as
+  `ciInternal.package-default`, `ciInternal.package-postgres` and
+  `ciInternal.package-metadata-relay` (`packages.metadata-relay`, a
+  `mixRelease` on the relay's BEAM pair and `deps.nix` from `relay.nix`'s
+  `_module.args.ciRelay`).
 - `relay.nix`: `relay-test`, the old `Relay / Test` job for
   `metadata-relay/` (its own Mix project): `deps.unlock --check-unused`,
   `compile --warnings-as-errors`, `format --check-formatted`, `ecto.create`
@@ -151,16 +155,27 @@ its inputs changes. The intermediate derivations are `ciInternal` entries.
     player-codegen, player-p2p-so         ─► player-linux
     metadata-relay/                       ─► relayDepsCompiled ─► relay-test
     package-{default,postgres}            ─► nixos-module{,-postgres}
+    package-default, metadata-relay,
+      player-codegen, player-p2p-so       ─► player-e2e
     plain files                           ─► rust-<crate>-fmt, guards,
                                              ci-crate-list, ci-fileset-coverage
 
 So a `lib/` edit rebuilds `mydiaTestBuild` and everything under it, and
 leaves the dependency builds, the PLT, the NIFs, the player and every Rust
 and relay check cached. A `test/` edit reruns the shards and `e2e-browser`;
-a workflow edit reruns `ci-workflow-triggers` only (plus, on master, the
-non-blocking NixOS tests, whose package takes the whole repo as source and
-so reruns on any edit). A player source edit rebuilds `player-codegen` and every player
-check from scratch: there is no incremental `.dart_tool`.
+a workflow edit reruns `ci-workflow-triggers` only. A player source edit
+rebuilds `player-codegen` and every player check from scratch: there is no
+incremental `.dart_tool`.
+
+`player-e2e` reruns when its closure changes: `packages.default` (the
+`mydiaPackage` file set: `lib/`, `config/`, `priv/`, `mix.exs`, `mix.lock`,
+`assets/`, the p2p and subsync NIF crates, `plugins/` with the plugin SDK,
+`native/cardigann_guest/`, the root `.cargo/config.toml`), the relay package
+(`metadata-relay/`'s app files), `player-codegen`, `player-p2p-so`, or the
+test itself (`nix/tests/player-e2e.nix`, `scripts/e2e/`). So a backend or
+player PR pays a cold package build plus the VM suite (about 20 to 25
+minutes), and a docs, `test/`, workflow or `design/` PR finds it cached. The
+NixOS module tests boot the same package and follow the same rule.
 
 ## The player checks
 
@@ -235,6 +250,21 @@ The NixOS module VM tests are checks, but `scripts/ci-plan.sh` lists them
 separately and ci.yml runs them outside the `Nix / Checks` verdict, on
 master pushes, manual dispatches and Dependabot PRs only (`.github/ci.md`,
 "The NixOS module tests skip human PRs and block nothing").
+
+`player-e2e` is a VM test too, but blocking (`Test / Player E2E` is
+required), so it is not `nixos-`-prefixed and builds in the `Nix / Checks`
+matrix, whose job enables KVM for it. Its client runs the Linux build
+outside the sandbox, so it sources an environment captured from a
+derivation with `player-linux`'s inputs (`clientEnv`) and recreates
+`/build/source` and `/build/pub-cache` through `ciPlayer.setupPlayerTree`,
+the helper `mkPlayerCheck` uses. It replaced the Docker-compose player E2E
+workflow outright. Run it locally with
+`nix build .#checks.x86_64-linux.player-e2e -L` (or `./dev player e2e`); it
+needs KVM, and the VM run itself takes about three minutes (149 s on
+2026-11-21) once its inputs are built. On failure
+the build log carries the relay, server and seed journals; on success they
+and the client's log are in `$out` (`./dev player e2e` links it as
+`result-player-e2e`).
 
 ## ciInternal and the CI planner
 

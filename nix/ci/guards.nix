@@ -108,9 +108,9 @@
           # a RUN's environment into its ExecOp cache key while a COPY is a
           # FileOp that ignores it. Declared above the dependency layers it
           # therefore leaves `mix deps.get` and `mix deps.compile`
-          # permanently uncacheable across commits, in ci-docker.yml,
-          # release.yml and ci-player-e2e.yml at once, while the build log
-          # still reports the COPY above them as CACHED.
+          # permanently uncacheable across commits, in both ci-docker.yml
+          # and release.yml, while the build log still reports the COPY
+          # above them as CACHED.
           #
           # Below `mix compile` is wrong for the opposite reason: Mydia.System
           # captures BUILD_COMMIT into a module attribute, `mix release`
@@ -144,7 +144,7 @@
               kind=''${pair%%:*}
               line=''${pair##*:}
               if [ "$line" -lt "$deps" ]; then
-                echo "::error file=Dockerfile,line=$line::$kind BUILD_COMMIT sits above 'mix deps.compile' (line $deps). Its value changes on every commit, so every RUN below it misses cache in ci-docker.yml, release.yml and ci-player-e2e.yml. Keep it beside BUILD_VERSION, just above 'mix compile'."
+                echo "::error file=Dockerfile,line=$line::$kind BUILD_COMMIT sits above 'mix deps.compile' (line $deps). Its value changes on every commit, so every RUN below it misses cache in ci-docker.yml and release.yml. Keep it beside BUILD_VERSION, just above 'mix compile'."
                 FAIL=1
               fi
               if [ "$line" -gt "$comp" ]; then

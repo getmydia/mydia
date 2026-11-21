@@ -70,8 +70,7 @@ services:
 
   # Real metadata-relay image, running locally so prod-image smoke tests get
   # real relay behavior (caching, TVDB/TMDB routing) without ever reaching
-  # the internet-facing production deployment. Mirrors the `relay` service in
-  # compose.player-e2e.yml.
+  # the internet-facing production deployment.
   relay:
     image: ${METADATA_RELAY_IMAGE:-ghcr.io/getmydia/mydia/metadata-relay:master}
     container_name: mydia_test_relay

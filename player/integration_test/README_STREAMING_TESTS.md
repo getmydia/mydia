@@ -207,28 +207,22 @@ Represents P2P connection state:
 
 ### Prerequisites
 
-1. Docker and Docker Compose installed
+1. Nix, and KVM (`/dev/kvm` writable)
 2. `./dev` script available
-
-### Build Test Environment
-
-```bash
-# Build all containers
-./dev player e2e-build
-```
 
 ### Run Integration Tests
 
+The integration tests run as the `player-e2e` NixOS VM test
+(`nix/tests/player-e2e.nix`): relay, server and player client VMs, running
+`integration_test/all_tests.dart`.
+
 ```bash
-# Run default E2E test (pairing flow)
 ./dev player e2e
-
-# Run a specific integration test file
-./dev player e2e --target integration_test/p2p_streaming_test.dart
-
-# Rebuild Docker images only when needed
-./dev player e2e --build
+# same as: nix build .#checks.x86_64-linux.player-e2e -L
 ```
+
+To run one file on its own, point `E2E_TEST_TARGET` in
+`nix/tests/player-e2e.nix` at it locally (see `player/docs/testing.md`).
 
 ### Run Unit Tests
 
@@ -246,7 +240,7 @@ Represents P2P connection state:
 
 1. **Test Setup**:
    ```
-   Docker Compose → Mydia Container → Test Video Generation → Library Seeding
+   NixOS test → Mydia server VM → Test Video Generation → Library Seeding
    ```
 
 2. **Integration Test Flow**:
@@ -288,16 +282,6 @@ Represents P2P connection state:
 
 ## Debugging Tests
 
-### Enable Debug Logging
-
-```bash
-# Run with verbose output
-./dev player e2e -- --verbose
-
-# Run streaming test file with verbose output
-./dev player e2e --target integration_test/p2p_streaming_test.dart -- --verbose
-```
-
 ### Common Issues
 
 1. **Test media not found**: Check ffmpeg generation in `scripts/e2e/seed.sh`
@@ -307,10 +291,11 @@ Represents P2P connection state:
 
 ### Test Artifacts
 
-Logs are available in:
-- `docker compose -f compose.player-e2e.yml logs -f test` - Test container logs
-- `compose.player-e2e.yml` - Service orchestration
-- `Dockerfile.test` - Test runner configuration
+The client's output streams into the build log as it runs. On failure the
+build log also carries the relay, server and seed journals; on success those
+journals and the client's log are copied into the check's output.
+`nix/tests/player-e2e.nix` is the orchestration and
+`scripts/e2e/run-tests.sh` the test runner.
 
 ## Future Enhancements
 

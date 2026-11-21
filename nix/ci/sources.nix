@@ -186,6 +186,29 @@ let
   playerCrateNames = builtins.attrNames
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir (at "player/rust")));
 
+  # What the production package (mkMydia in nix/packages/flake-module.nix)
+  # reads: the Elixir app without its lint configs, the assets the release
+  # bundles, the two Rustler NIF crates `mix compile` builds (lib/mydia/p2p.ex,
+  # lib/mydia/subsync.ex), the bundled plugin guests and their SDK (the
+  # `:plugins` compiler), and the Cardigann guest directory, whose tracked
+  # files Mydia.Indexers.Cardigann.Wasm.SourceHash hashes at compile time
+  # (with its ARTIFACT_SHA256 and PROWLARR_REF pins). The root
+  # .cargo/config.toml is the cargo config every crate build walks up to.
+  # Nothing else in the repository reaches the release, so a docs or player
+  # change leaves the package, and the VM tests built on it, cached.
+  mydiaPackage = fs.unions [
+    (fs.difference elixirApp (fs.unions [
+      (at ".formatter.exs")
+      (at ".credo.exs")
+    ]))
+    assets
+    (nativeCrate "mydia_p2p")
+    (nativeCrate "mydia_subsync")
+    (at "native/cardigann_guest")
+    plugins
+    (at ".cargo/config.toml")
+  ];
+
   toSource = set: fs.toSource { inherit root; fileset = set; };
 
   # Every crate directory under native/, for the coverage union.
@@ -195,7 +218,8 @@ in
 {
   inherit elixirApp mixProject elixirTest assets gettext patches nativeCrate playerCrate plugins
     pluginsExtra server relay relayProject relayTest playerApp playerAndroid
-    playerOtherPlatforms playerCodegen playerTestReads toSource nativeCrateNames playerCrateNames;
+    playerOtherPlatforms playerCodegen playerTestReads mydiaPackage toSource nativeCrateNames
+    playerCrateNames;
 
   # Union of everything above, for the coverage check.
   all = fs.unions ([

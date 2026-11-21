@@ -1,19 +1,21 @@
 #!/bin/sh
 # Seeds the E2E test environment: admin user, remote access, test media.
-# Runs inside the mydia container after the app reports healthy.
+# Runs on the server VM of the player-e2e NixOS test (nix/tests/player-e2e.nix),
+# from its mydia-e2e-seed unit, after the app reports healthy.
 #
-# Extracted from the former Dockerfile.e2e heredoc. Unlike that version this
-# script fails loudly: a seed that half-succeeds used to surface much later as
-# an unexplained Dart test failure.
+# Fails loudly: a seed that half-succeeds used to surface much later as an
+# unexplained Dart test failure.
 set -eu
 
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@test.local}"
 ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-testpassword123}"
 VIDEO_PATH="/media/movies/e2e-test-video.mp4"
 SCRIPT_DIR="$(dirname "$0")"
+# `bin/mydia rpc` against the running node, wrapped by player-e2e.nix.
+MYDIA_CLI=mydia-e2e-cli
 
 echo "E2E: creating admin user $ADMIN_EMAIL"
-su-exec mydia /app/bin/mydia rpc "
+$MYDIA_CLI rpc "
     case Mydia.Accounts.get_user_by_email(\"$ADMIN_EMAIL\") do
         nil ->
             case Mydia.Accounts.create_user(%{
@@ -31,7 +33,7 @@ su-exec mydia /app/bin/mydia rpc "
 "
 
 echo "E2E: initializing remote access"
-su-exec mydia /app/bin/mydia rpc "
+$MYDIA_CLI rpc "
     # Mydia.RemoteAccess.Provision creates this at boot; initialize_config/0
     # returns the existing row, so this only covers a boot that skipped it.
     case Mydia.RemoteAccess.initialize_config() do
@@ -39,7 +41,7 @@ su-exec mydia /app/bin/mydia rpc "
       {:error, reason} -> raise \"initialize_config failed: #{inspect(reason)}\"
     end
 
-    # ENABLE_REMOTE_ACCESS in compose.player-e2e.yml switches remote access on
+    # ENABLE_REMOTE_ACCESS in nix/tests/player-e2e.nix switches remote access on
     # and locks the admin toggle, so there is nothing to turn on here.
     unless Mydia.Player.remote_access_enabled?() do
       raise \"remote access is off; check ENABLE_PLAYER and ENABLE_REMOTE_ACCESS\"
@@ -72,7 +74,7 @@ chown mydia:mydia "$VIDEO_PATH"
 # this file IS the feature. The alternative, a clip longer than the 600 second
 # floor, would put a ten minute video in every E2E run.
 echo "E2E: seeding library entries"
-su-exec mydia /app/bin/mydia rpc "
+$MYDIA_CLI rpc "
     alias Mydia.{Settings, Media, Library, Repo}
     alias Mydia.Settings.LibraryPath
 

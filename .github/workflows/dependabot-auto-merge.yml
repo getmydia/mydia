@@ -39,12 +39,12 @@ on:
       - Cardigann precompiled guest
       - CI
       - CI / Appcast
+      - CI / Docker
       - CI / Documentation
       - CI / Fastlane
       - CI / Nix
       - CI / Player AppImage
       - CI / Player Desktop
-      - CI / Player E2E
       - CI / Relay
       - CI / Security
       - CI / Site

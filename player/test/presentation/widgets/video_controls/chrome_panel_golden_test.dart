@@ -2,7 +2,7 @@
 // at three widths, not full screenshots.
 //
 // DEVIATION FROM PLAN: the task brief called for `@TestOn('linux')`, generated
-// inside `player/Dockerfile.test`. That was not possible in the environment
+// inside the former Docker E2E toolbox image. That was not possible in the environment
 // these were produced in — no container runtime (docker/podman/colima/
 // nerdctl/lima/finch) was available, and there is no viable fallback: CI
 // (`.github/workflows/ci.yml`, `test-player` job) runs `flutter test` on

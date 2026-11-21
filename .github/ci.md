@@ -21,16 +21,18 @@ is why there is no separate `Build / Packages` job.
 `scripts/ci-plan.sh` lists them apart from the other checks, and ci.yml
 builds them in their own matrix job, `Nix / NixOS (<name>)`, which
 `Nix / Checks` does not include, so they are not part of `Test` or
-`Test / PostgreSQL`. Two reasons: the packages take `src = ../..`, so unlike
-every other check these two rerun, package build included, on almost every
-commit; and a QEMU boot on a shared runner is the slowest and flakiest build
-in the set. Gating every merge on them would make a VM hiccup a merge
-blocker.
+`Test / PostgreSQL`. A QEMU boot on a shared runner is the slowest and
+flakiest build in the set, and gating every merge on them would make a VM
+hiccup a merge blocker.
 
-They also skip most pull requests. Because the package reads the whole
-repository, a docs-only or translation-only PR rebuilt both, about 28
+They also skip most pull requests. When this was decided the packages took
+`src = ../..`, so a docs-only or translation-only PR rebuilt both, about 28
 runner-minutes and 16 minutes of wall clock per PR, for a result nobody had
-to read. The job runs on master pushes, on manual dispatches, and on
+to read. The packages now take the `mydiaPackage` file set
+(`nix/ci/sources.nix`: the Elixir app, assets, the NIF and plugin crates and
+the Cardigann guest directory), so an edit outside it leaves them, and these
+tests, cached; the PR policy has not been revisited since. The job runs on
+master pushes, on manual dispatches, and on
 pull requests opened by Dependabot; master pins include its outputs.
 Dependabot is the exception because the Dependabot gate merges with
 `GITHUB_TOKEN`, which starts no master run (see "Dependabot merges through
@@ -53,16 +55,21 @@ pushes their outputs, so master's own run then finds them cached.
 
 `npmDeps.hash` in `nix/packages/flake-module.nix` is a fixed-output derivation
 hash and must be bumped in the same commit as any `assets/package-lock.json`
-change. A stale value fails the Nix build as
+change. `relayNpmDeps.hash` in the same file is the same for
+`metadata-relay/assets/package-lock.json` (the `metadata-relay` package, which
+the player-e2e VM test runs). Everything below covers both: the pairs are
+listed once, in `npm_deps_targets` in `scripts/lib/npm-deps-hash.sh`. A stale
+value fails the Nix build as
 `error: hash mismatch in fixed-output derivation '...npm-deps.drv'`, with the
 correct value on the `got:` line.
 
 Two things keep it in step:
 
 - The devenv pre-commit hook `npm-deps-hash` runs
-  `scripts/update-npm-deps-hash.sh` whenever the lockfile is staged. It
+  `scripts/update-npm-deps-hash.sh` whenever either lockfile is staged. It
   rewrites the hash and stops the commit; stage `flake-module.nix` and commit
-  again.
+  again. `scripts/regenerate-derived.sh` (run by `dependabot-fixup.yml`)
+  rewrites both after a Dependabot bump.
 - `Check / Generated Freshness` recomputes the hash on every pull request and
   fails with the pinned and computed values side by side.
 
@@ -354,9 +361,9 @@ and `Test / Player` (both since 2026-08-31), and `Test / Player E2E` (since
 originally `paths:`-filtered, and `20f0db5e2` (2026-08-26) removed the filters
 precisely so they report on every PR. `ci-player.yml` got the same treatment
 differently: its filter moved into a `changes` job, so its jobs always report.
-Since phase 2 of Nix CI, `Test / Player` and `Build / Web` are aggregators in
-`ci.yml` and `ci-player.yml` holds no required context, so it is
-`paths:`-filtered again.
+Since phase 2 of Nix CI, `Test / Player`, `Test / Player E2E` and
+`Build / Web` are aggregators in `ci.yml` and `ci-player.yml` holds no
+required context, so it is `paths:`-filtered again.
 
 A PR branched from a master older than that commit still carries the
 path-filtered workflow files, so those jobs never run and the required contexts
@@ -424,11 +431,10 @@ Two checks now hold the line:
   Dependabot alone, and only that check notices when a `.fvmrc` bump leaves it
   behind. The floor is `.0` rather than the `.fvmrc` patch because patches of one
   minor pin the same packages.
-- Every CI, release and E2E `flutter pub get` passes `--enforce-lockfile`. A lock
+- Every CI and release `flutter pub get` passes `--enforce-lockfile`. A lock
   that does not resolve on the pinned SDK fails `Test / Player`, and the gate
-  reports `BLOCKED`. The E2E toolbox (`player/Dockerfile.test`) installs the SDK
-  from `.fvmrc` like every other build. Until September 2026 it built on
-  cirruslabs' floating `stable` image, which stopped following releases.
+  reports `BLOCKED`. The player E2E runs no `pub get` of its own: its client
+  works on a copy of `player-codegen`, like the other player checks.
 
 ## Quality gates
 
@@ -551,8 +557,7 @@ with what each derivation reads, is in `nix/ci/README.md`, "The derivation
 graph". In short: a `lib/` edit rebuilds the two test builds and everything
 on top of them and leaves the dependency builds, the PLT, the NIFs and the
 Rust and relay checks cached; a `test/` edit reruns only the shards; a
-workflow edit reruns only `ci-workflow-triggers` (plus, on master, the
-non-blocking NixOS tests, whose package takes the whole repo as source). A
+workflow edit reruns only `ci-workflow-triggers`. A
 Weblate `.po`-only PR
 rebuilds the test build and runs every shard, because Gettext compiles the
 catalogs into the backend; the old `Translations` fast path is gone. A
@@ -691,8 +696,7 @@ and the workflow itself) instead of the `changes` job it had while it held
 required checks. A PR that changes only translated ARB catalogs, not the
 `app_en.arb` template, does not trigger it; `player-l10n-test` covers those.
 The AppImage dry run is `ci-player-appimage.yml`, filtered on the packaging
-files alone. `ci-player-e2e.yml` skips its run on `.po`-only and `.arb`-only
-translation PRs.
+files alone.
 
 The Linux bundle CI builds (`player-linux`) is not uploaded: its runpath
 points into `/nix/store`, so it runs nowhere else. Release Linux bundles
@@ -720,10 +724,10 @@ do not run with `--cover`.
 
 ### Aggregators
 
-The names `Test`, `Test / PostgreSQL`, `Test / E2E Browser`, `Test / Player`
-and `Build / Web` are required by the Master ruleset, and they sit on
-aggregator jobs (`test`, `test-postgres-result`, `test-e2e-result`,
-`test-player-result`, `build-web-result`), as do `Build / Linux` and
+The names `Test`, `Test / PostgreSQL`, `Test / E2E Browser`, `Test / Player`,
+`Test / Player E2E` and `Build / Web` are required by the Master ruleset, and
+they sit on aggregator jobs (`test`, `test-postgres-result`, `test-e2e-result`,
+`test-player-result`, `test-player-e2e-result`, `build-web-result`), as do `Build / Linux` and
 `Check / Web icons` (`build-linux-result`, `icons-result`), which kept their
 names from `ci-player.yml`. `Test` needs `Guards`, `Nix / Checks`,
 `Lint / Ratchet` and `Rust / SMB integration`; the others need
@@ -786,9 +790,8 @@ and cold about 20, so the cure was to get the big entries out of the budget:
   against the Actions cache: `:buildcache-sqlite` and `:buildcache-postgres`
   (written by `ci-docker.yml` and, for amd64 only, `release.yml`) and
   `:buildcache-cwasm-<arch>` (`cardigann-cwasm.yml`, never on pull requests) on
-  the main image package, `metadata-relay:buildcache` (`ci-relay.yml` publish,
-  and `ci-player-e2e.yml` on push) and `player-e2e-toolbox:buildcache`
-  (`publish-toolbox`). `ci-player-e2e.yml` only reads the server tags. Tags on
+  the main image package, and `metadata-relay:buildcache` (`ci-relay.yml`
+  publish). Tags on
   existing packages rather than a new package, because a new package starts
   private and fork PRs and anonymous pulls must be able to read the cache.
   Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
@@ -819,18 +822,33 @@ Leak rules and the local repro command are in `player/docs/workflow.md`. The
 browser (`player-test-web`) and television-tier runs still use plain
 `flutter test` on enumerated files.
 
-`Test / Player E2E` rebuilds its toolbox image only when `player/.fvmrc`,
-`player/Dockerfile.test`, `player/pubspec.yaml`, `player/packages/` or
-`rust-toolchain.toml` change. A `pubspec.lock` change pulls the master image,
-and the run's own `pub get --enforce-lockfile` fetches the difference.
+## The player E2E is a blocking VM test
 
-It also builds the server image, instead of pulling it, when a PR touches the
-player inputs the release `Dockerfile` copies one by one: `pubspec.yaml`,
-`build.yaml`, `l10n.yaml`, `packages/`, `assets/`, `shaders/` and
-`rust_builder/pubspec.yaml`. `CI / Docker` runs only on push to master, so
-without this a player-only PR could break the release image unseen until after
-merge, which is what #1444 did with a path dependency the Dockerfile never
-copied.
+`Test / Player E2E` is the aggregator over the `player-e2e` check
+(`nix/tests/player-e2e.nix`): a `nixosTest` with a metadata-relay VM, a
+server VM running the NixOS module on `packages.default`, and a client VM
+that runs `integration_test/all_tests.dart` under Xvfb through
+`scripts/e2e/run-tests.sh`. Unlike the NixOS module tests it is not
+`nixos-`-prefixed, so it builds in the blocking `Nix / Checks` matrix, whose
+job enables KVM for it, and a red run reds every aggregator, not only
+`Test / Player E2E`. It has no retry: as with every check, a pass is cached
+and a failure reruns on the next push. Run it locally with
+`nix build .#checks.x86_64-linux.player-e2e -L` (or `./dev player e2e`); it
+needs KVM. `nix/ci/README.md` covers the client's environment.
+
+The VM test boots the Nix package, not the release image, so it cannot catch
+a `Dockerfile` that fails to build. The Docker-compose workflow it replaced
+built that image on pull requests touching the player inputs the `Dockerfile`
+copies one by one, which is the guard #1444 called for: that PR added a path
+dependency the `flutter-builder` stage did not copy and broke every release
+build after merge. The guard now lives in `ci-docker.yml`. On a pull request
+that touches the `Dockerfile`, the workflow itself, or anything that stage
+copies (its path filter mirrors the stage's COPY lines, minus `player/lib`
+and `player/web`, which `Build / Web` covers), `Docker / flutter-builder (PR)`
+builds that stage alone,
+with `push: false` and the `:buildcache-sqlite` registry cache read-only (no
+login, so fork PRs build too, and no cache export). It is not required.
+Push runs build and publish the full image as before.
 
 ## The precompiled Cardigann guest
 
@@ -924,8 +942,8 @@ tag describe one commit. If master moves past the pinned commit mid-preparation,
 the run refuses until you re-pin or pass `-f accept_drift=true`.
 
 The release workflow is independent of branch CI. `release.yml` runs its own
-Docker and player builds, so do not gate the dispatch on master's `CI`,
-`CI / Nix` or `CI / Player E2E` runs finishing. They are a separate signal and
+Docker and player builds, so do not gate the dispatch on master's `CI`
+or `CI / Nix` runs finishing. They are a separate signal and
 waiting on them just stalls the release.
 
 Prerelease versus stable is inferred from the tag (`-beta`, `-rc`, `-alpha`).

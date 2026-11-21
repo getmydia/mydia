@@ -17,8 +17,9 @@
 **/.nix-mix/
 **/.nix-hex/
 
-# Nix build result symlink
+# Nix build result symlinks (./dev player e2e links result-player-e2e)
 /result
+/result-*
 
 # Where 3rd-party dependencies like ExDoc output generated docs.
 /doc/

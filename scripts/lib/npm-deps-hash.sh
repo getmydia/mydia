@@ -1,8 +1,9 @@
-# npmDeps.hash in nix/packages/flake-module.nix: compute, read and write it.
+# The fetchNpmDeps hashes in nix/packages/flake-module.nix: compute, read and
+# write them.
 #
 # Sourced by check-generated-freshness.sh (compares computed with pinned),
 # update-npm-deps-hash.sh (the pre-commit hook) and regenerate-derived.sh, so
-# all three agree on how the hash is computed and where it lives.
+# all three agree on how each hash is computed and where it lives.
 #
 # The hash is computed, never checked by building `.#...npmDeps`. That
 # derivation is fixed-output, so its store path depends only on the declared
@@ -14,42 +15,65 @@
 # shellcheck shell=bash
 
 npm_deps_flake_module=nix/packages/flake-module.nix
-npm_deps_lockfile=assets/package-lock.json
 
-# The hash of assets/package-lock.json as fetchNpmDeps computes it.
+# One entry per fetchNpmDeps block, as "<lockfile> <binding>": the lockfile
+# the block hashes and the Nix binding it is assigned to. Every function below
+# takes one entry's fields. Dependabot bumps both lockfiles (the /assets and
+# /metadata-relay/assets entries in .github/dependabot.yml).
+# shellcheck disable=SC2034 # read by the scripts that source this file
+npm_deps_targets=(
+  "assets/package-lock.json npmDeps"
+  "metadata-relay/assets/package-lock.json relayNpmDeps"
+)
+
+# The hash of a lockfile as fetchNpmDeps computes it.
 # prefetch-npm-deps comes from this flake's pinned nixpkgs (--inputs-from .),
 # the same version fetchNpmDeps uses, so the two cannot disagree. It downloads
 # every tarball, so registry hiccups are retried.
 npm_deps_hash() {
-  local attempts=3 i out
+  local lockfile="$1" attempts=3 i out
   for ((i = 1; i <= attempts; i++)); do
-    if out="$(nix run --inputs-from . nixpkgs#prefetch-npm-deps -- "$npm_deps_lockfile" | tail -n 1)"; then
+    if out="$(nix run --inputs-from . nixpkgs#prefetch-npm-deps -- "$lockfile" | tail -n 1)"; then
       case "$out" in
         sha256-*)
           echo "$out"
           return 0
           ;;
       esac
-      echo "prefetch-npm-deps printed '$out', which is not a hash" >&2
+      echo "prefetch-npm-deps printed '$out' for $lockfile, which is not a hash" >&2
       return 1
     fi
     if [ "$i" -lt "$attempts" ]; then
-      echo "note: prefetch-npm-deps failed (attempt $i/$attempts), retrying..." >&2
+      echo "note: prefetch-npm-deps failed on $lockfile (attempt $i/$attempts), retrying..." >&2
       sleep "$((i * 10))"
     fi
   done
   return 1
 }
 
-# The hash currently pinned in the fetchNpmDeps block.
+# The sed address of a binding's fetchNpmDeps block. Anchored on the start of
+# the line (leading whitespace only), so `npmDeps` cannot match inside
+# `relayNpmDeps` or the reverse.
+_npm_deps_block() {
+  printf '/^[[:space:]]*%s = pkgs\\.fetchNpmDeps \\{/,/\\};/' "$1"
+}
+
+# The hash currently pinned in a binding's fetchNpmDeps block.
 npm_deps_hash_pinned() {
-  sed -n -E '/npmDeps = pkgs\.fetchNpmDeps \{/,/\};/ s|.*hash = "(sha256-[^"]+)";.*|\1|p' \
+  sed -n -E "$(_npm_deps_block "$1") s|.*hash = \"(sha256-[^\"]+)\";.*|\\1|p" \
     "$npm_deps_flake_module"
 }
 
-# Pin a new hash. Scoped to the fetchNpmDeps block so no other `hash =` in the
-# file can match.
+# Pin a new hash for a binding. Scoped to its fetchNpmDeps block so no other
+# `hash =` in the file can match.
 npm_deps_hash_write() {
-  sed -i -E "/npmDeps = pkgs\.fetchNpmDeps \{/,/\};/ s|hash = \"sha256-[^\"]+\";|hash = \"$1\";|" \
+  case "$2" in
+    sha256-?*) ;;
+    *)
+      echo "refusing to pin '$2' as $1's hash: not a sha256- SRI hash" >&2
+      return 1
+      ;;
+  esac
+  sed -i -E "$(_npm_deps_block "$1") s|hash = \"sha256-[^\"]+\";|hash = \"$2\";|" \
     "$npm_deps_flake_module"
 }

@@ -1,6 +1,7 @@
 # Nix-native CI: checks as derivations
 
-Status: implemented (PR #1464). Approved in conversation 2026-11-20.
+Status: implemented (PR #1464). Approved in conversation 2026-11-20. Phase 2
+(`design/specs/2026-11-21-nix-ci-phase-2-design.md`) is implemented too.
 
 ## Goal
 

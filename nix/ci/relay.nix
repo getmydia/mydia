@@ -10,6 +10,9 @@
 #                       `ecto.create && ecto.migrate`, `test
 #                       --warnings-as-errors`, with --seed 0. The log is
 #                       $out/test.log.
+#   ciRelay             _module.args: the BEAM package set and deps.nix
+#                       (prod: no lazy_html) for packages.metadata-relay's
+#                       mixRelease in nix/packages/flake-module.nix.
 #
 # The toolchain is the pair metadata-relay/.elixir-version and
 # metadata-relay/.otp-version pin (through beam-version.nix), the one
@@ -56,6 +59,28 @@
         depsFile = "metadata-relay/deps.nix";
         lockFile = "metadata-relay/mix.lock";
       };
+
+      # The same deps.nix for packages.metadata-relay's mixRelease
+      # (nix/packages/flake-module.nix), in prod: lazy_html is test-only and
+      # needs lexbor, so it is dropped, including from phoenix_live_view's
+      # beamDeps (an optional dependency there), and exqlite's elixir_make
+      # gets a writable cache, as the app's override in nix/beam-deps.nix.
+      releaseMixNixDeps = builtins.removeAttrs
+        (import (at "deps.nix") {
+          inherit lib beamPackages;
+          overrides = _final: prev: {
+            exqlite = prev.exqlite.override {
+              buildInputs = [ pkgs.sqlite ];
+              preBuild = ''
+                export HOME=/tmp
+                mkdir -p /tmp/.cache/elixir_make
+              '';
+            };
+            phoenix_live_view = prev.phoenix_live_view.override (old: {
+              beamDeps = lib.remove prev.lazy_html old.beamDeps;
+            });
+          };
+        }) [ "lazy_html" ];
 
       inherit (ci.sources) toSource relayProject relayTest;
 
@@ -144,6 +169,12 @@
       };
     in
     {
+      # The relay's BEAM pair and release deps, for packages.metadata-relay.
+      _module.args.ciRelay = {
+        inherit beamPackages;
+        mixNixDeps = assertFresh releaseMixNixDeps;
+      };
+
       # Evaluating `checks` trips the freshness assertion, as for the app's
       # deps.nix in nix/ci/mix-deps.nix.
       ciChecks = assertFresh {

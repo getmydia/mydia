@@ -448,7 +448,12 @@ in
         ProtectKernelTunables = true;
         ProtectKernelModules = true;
         ProtectControlGroups = true;
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+        # AF_NETLINK: iroh (remote access) enumerates the host's interfaces
+        # over netlink. Without it the node advertises none of its interface
+        # (LAN) addresses and iroh's network-change detection breaks. With a
+        # reachable relay iroh still learns its public address; with none
+        # (the player-e2e VM test) the node has no address to offer at all.
+        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" "AF_NETLINK" ];
         RestrictNamespaces = true;
         RestrictRealtime = true;
         RestrictSUIDSGID = true;

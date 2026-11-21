@@ -1,12 +1,36 @@
 name: CI / Docker
 
 on:
-  # Push only. PR runs already set `push: false` on the build-push action, so
-  # they only ever proved the image builds, at 25 minutes per PR. release.yml
-  # rebuilds from ./Dockerfile across its db and arch matrix rather than
-  # retagging :master, so release is an independent second net.
+  # Push builds and publishes the full image. release.yml rebuilds from
+  # ./Dockerfile across its db and arch matrix rather than retagging :master,
+  # so release is an independent second net.
   push:
     branches: [master, main]
+  # Pull requests build only the flutter-builder stage, and only when one of
+  # its inputs changes. Full-image PR builds were dropped for costing 25
+  # minutes per PR; nothing else builds this stage before merge (the player
+  # checks and the player-e2e VM test use the Nix player tree, not the
+  # Dockerfile), and #1444 merged a path dependency the stage did not copy,
+  # which broke every release build after it.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    # Mirrors the COPY lines of the Dockerfile's flutter-builder stage, one
+    # entry per source; keep the two in step. player/lib and player/web are
+    # copied too but stay out: Build / Web builds them and they change on
+    # nearly every player PR.
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/ci-docker.yml'
+      - 'player/.fvmrc'
+      - 'player/pubspec.yaml'
+      - 'player/pubspec.lock'
+      - 'player/build.yaml'
+      - 'player/l10n.yaml'
+      - 'player/rust_builder/**'
+      - 'player/packages/**'
+      - 'player/assets/**'
+      - 'player/shaders/**'
+      - 'priv/graphql/schema.graphql'
 
 # Keyed to the commit, not the ref. A concurrency group holds at most one
 # PENDING run and cancels the previous one when a new run enters, so a burst of
@@ -16,11 +40,11 @@ on:
 # and every commit gets a real verdict. Re-runs of the same SHA still dedupe,
 # which is the only thing the ref-keyed group was buying.
 #
-# cancel-in-progress stays as an expression rather than a literal false: it is
-# always false today (this workflow is push-only), but the expression keeps the
-# right behaviour if a pull_request trigger is ever added back.
+# Pull requests key on the ref instead (their github.sha is a fresh merge
+# commit on every push) and cancel in progress, so a newer push to the branch
+# supersedes the old build. Push runs never cancel.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -30,6 +54,7 @@ env:
 jobs:
   build:
     name: Build / ${{ matrix.db }}
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -73,3 +98,36 @@ jobs:
           # the 10 GB Actions cache it used to crowd out (see .github/ci.md).
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.db }}
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.db }},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true
+
+  # Not a required context, and named apart from the push matrix so it can
+  # never collide with one. Needs no secrets: the layer cache is a tag on the
+  # public GHCR package, which an anonymous pull reads, so a fork PR builds the
+  # same way. Read-only: no login, no push, no cache export, so a PR never
+  # overwrites the master cache that the push job and release.yml write.
+  flutter-builder-pr:
+    name: Docker / flutter-builder (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the flutter-builder stage
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: flutter-builder
+          platforms: linux/amd64
+          push: false
+          # The stage is shared by both databases; the sqlite cache is the one
+          # the amd64 release build also writes.
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-sqlite
