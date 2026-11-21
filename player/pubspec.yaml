@@ -35,7 +35,7 @@ dependencies:
   convert: ^3.1.2
   flutter_riverpod: ^3.5.0
   riverpod_annotation: ^4.0.8
-  go_router: ^18.0.1
+  go_router: ^18.1.4
   collection: ^1.19.1
   # HCT colour space plus the quantizer and scorer the ambient tint uses.
   # Pinned to the version Flutter's SDK resolves, so it never forces a solve.
@@ -47,10 +47,10 @@ dependencies:
   # usesDataProtectionKeychain was ignored and every keychain call failed with
   # -34018 on an app signed without a keychain access group.
   flutter_secure_storage: ^11.0.0
-  cached_network_image: ^4.0.0
+  cached_network_image: ^4.0.7
   # ImageRenderMethodForWeb lives here, not in cached_network_image's exports.
   # core/cache/artwork_decode.dart picks HttpGet so web decodes honour a size.
-  cached_network_image_platform_interface: ^5.0.0
+  cached_network_image_platform_interface: ^5.0.4
   # ArtworkImage builds on this directly; it is what CachedNetworkImage wraps.
   octo_image: ^2.1.0
   flutter_cache_manager: ^3.5.0
