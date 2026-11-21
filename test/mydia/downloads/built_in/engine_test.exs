@@ -62,9 +62,26 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     end
   end
 
+  defp parse_pid(file) do
+    with {:ok, raw} <- File.read(file),
+         {pid, ""} <- raw |> String.trim() |> Integer.parse() do
+      {:ok, pid}
+    else
+      _ -> :error
+    end
+  end
+
   defp read_pid(file) do
-    wait_until(fn -> match?({:ok, <<_, _::binary>>}, File.read(file)) end)
-    file |> File.read!() |> String.trim() |> String.to_integer()
+    wait_until(fn -> match?({:ok, _}, parse_pid(file)) end)
+    {:ok, pid} = parse_pid(file)
+    pid
+  end
+
+  defp read_args(file) do
+    case File.read(file) do
+      {:ok, raw} -> String.split(raw, "\n", trim: true)
+      {:error, _} -> []
+    end
   end
 
   defp gone?(pid), do: not File.exists?("/proc/#{pid}") or zombie?(pid)
@@ -146,7 +163,7 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     first_pid = read_pid(ctx.pid_file)
 
     wait_until(fn ->
-      "10.2.0.2" in (File.read!(ctx.args_file) |> String.split("\n", trim: true))
+      "10.2.0.2" in read_args(ctx.args_file)
     end)
 
     # Same port and ip is a no-op.
@@ -157,8 +174,8 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     assert gone?(first_pid)
 
     wait_until(fn ->
-      read_pid(ctx.pid_file) != first_pid and
-        "10.2.0.9" in (File.read!(ctx.args_file) |> String.split("\n", trim: true))
+      match?({:ok, pid} when pid != first_pid, parse_pid(ctx.pid_file)) and
+        "10.2.0.9" in read_args(ctx.args_file)
     end)
   end
 
@@ -223,8 +240,8 @@ defmodule Mydia.Downloads.BuiltIn.EngineTest do
     assert gone?(old_pid)
 
     wait_until(fn ->
-      File.read!(ctx.pid_file) |> String.trim() != Integer.to_string(old_pid) and
-        "6881" in (File.read!(ctx.args_file) |> String.split("\n", trim: true))
+      match?({:ok, pid} when pid != old_pid, parse_pid(ctx.pid_file)) and
+        "6881" in read_args(ctx.args_file)
     end)
   end
 

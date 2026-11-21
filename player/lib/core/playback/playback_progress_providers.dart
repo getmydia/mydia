@@ -58,7 +58,8 @@ final sourceProgressFlushProvider = Provider<void>((ref) {
   final lifecycle = AppLifecycleListener(onResume: () => unawaited(run()));
   ref.onDispose(lifecycle.dispose);
 
-  for (final source in ref.watch(thirdPartySourcesProvider)) {
+  final sources = ref.watch(thirdPartySourcesProvider);
+  for (final source in sources) {
     final media = ref.watch(mediaSourceProvider(source.id));
     if (media == null) continue;
     void onStatus() {
@@ -72,5 +73,7 @@ final sourceProgressFlushProvider = Provider<void>((ref) {
     media.statusListenable.addListener(onStatus);
     ref.onDispose(() => media.statusListenable.removeListener(onStatus));
   }
-  unawaited(run());
+  if (sources.isNotEmpty) {
+    unawaited(run());
+  }
 });

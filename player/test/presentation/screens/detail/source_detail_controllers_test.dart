@@ -147,12 +147,19 @@ void main() {
     final c = _container(source);
     final target = SourceTarget(fakeShow.ref);
     final seen = <String?>[];
+    final nextUpLoaded = Completer<void>();
     c.listen(
       showViewProvider(target),
-      (_, next) => seen.add(next.value?.nextUpEpisodeId),
+      (_, next) {
+        final id = next.value?.nextUpEpisodeId;
+        seen.add(id);
+        if (id != null && !nextUpLoaded.isCompleted) {
+          nextUpLoaded.complete();
+        }
+      },
       fireImmediately: true,
     );
-    await _settle();
+    await nextUpLoaded.future.timeout(const Duration(seconds: 5));
     expect(seen.whereType<String>().last, 'e2');
   });
 

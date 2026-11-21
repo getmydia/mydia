@@ -6,7 +6,9 @@ defmodule Mydia.P2p do
   functionality using iroh. The core networking is implemented in Rust for
   performance and protocol correctness.
   """
-  use Rustler, otp_app: :mydia, crate: "mydia_p2p"
+  use Rustler,
+      [otp_app: :mydia, crate: "mydia_p2p"] ++
+        if(System.get_env("MYDIA_PREBUILT_NIFS") == "1", do: [skip_compilation?: true], else: [])
 
   @doc """
   Start the p2p host with configuration.

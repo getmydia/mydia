@@ -61,22 +61,38 @@ runs:
       shell: bash
       run: nix profile install --inputs-from . nixpkgs#devenv
 
+    - name: Cache Mix archives
+      if: inputs.elixir-caches == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/mydia-devenv/mix
+        key: ${{ runner.os }}-mix-archives-v1-${{ hashFiles('.elixir-version', '.otp-version') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-archives-v1-
+
     # patches/** is in the deps and build keys because `mix deps.get`
     # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it
     # patched. Without it a pre-patch deps/ cache is restored and re-patched
     # on every run, and a pre-patch _build keeps the unpatched Exqlite NIF,
     # which test/mydia/repo/exqlite_patch_test.exs then fails on.
+    #
+    # deps/wasmex/native/wasmex/target is excluded: it adds ~1.5 GB uncompressed
+    # (~730 MB compressed) across every entry while `_build` already carries the
+    # compiled wasmex NIF `.so`. Keeping deps/ small keeps the repo within the
+    # 10 GB Actions cache budget.
     - name: Cache dependencies
       if: inputs.elixir-caches == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: deps
-        key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
+        path: |
+          deps
+          !deps/wasmex/native/wasmex/target
+        key: ${{ runner.os }}-deps-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
         restore-keys: |
-          ${{ runner.os }}-deps-devenv-
+          ${{ runner.os }}-deps-v2-devenv-
 
     # Jobs that share a build-cache-prefix share this key, so the Dialyzer job
-    # restores the _build/test and priv/native the Test job saved.
+    # restores the _build/test, priv/native and priv/plugins/*.wasm the Test job saved.
     #
     # PRs restore master's newest _build and never save, so a PR push no longer
     # writes a ~75 MB entry (103 of them, 6.8 GB, on 2026-10-30, which evicted
@@ -86,12 +102,12 @@ runs:
     # job keeps the newest two per family. The source hash left the key for the
     # same reason: a PR recompiles what it changed on top of master's tree.
     #
-    # priv/native travels with _build, not separately. Rustler writes the
-    # NIF to priv/native (gitignored) and records "built" in a manifest
-    # under _build. Caching only _build restores the manifest without the
-    # .so, so `mix compile` skips the crate and every caller then fails
-    # with "module Mydia.P2p is not available", which points nowhere near
-    # the cache.
+    # priv/native and priv/plugins/*.wasm travel with _build, not separately.
+    # Rustler writes the NIF to priv/native (gitignored) and records "built" in
+    # a manifest under _build; Mix.Tasks.Compile.Plugins hashes `plugins/` into
+    # `_build` alongside the `.wasm` SHA-256 (`*.wasm` only, never the
+    # git-tracked `priv/plugins/*.json` manifests). Without `priv/plugins/*.wasm`
+    # here, every CI job rebuilt all bundled plugin crates from scratch (~40s+).
     #
     # The native hash is part of the key AND the restore prefix. _build
     # holds the compiled Rustler NIF, so restoring a tree built from
@@ -114,6 +130,7 @@ runs:
         path: |
           _build
           priv/native
+          priv/plugins/*.wasm
         key: ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
@@ -125,25 +142,27 @@ runs:
         path: |
           _build
           priv/native
+          priv/plugins/*.wasm
         key: ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
+
     # Rustler builds native/mydia_p2p and native/mydia_subsync in release mode
     # during `mix compile`, into each crate's own target/. On a _build cache
-    # miss that took minutes from scratch (2026-10-15, iroh dominates). The key
-    # covers the dependency set only, so one entry is saved per dependency-set
-    # change and the workspace crates recompile on top of it. A lock bump
-    # restores the previous entry through the prefix. wasmex needs nothing
-    # here: its target/ sits under deps/, which the deps cache already carries
-    # whole.
+    # miss that took minutes from scratch (2026-10-15, iroh dominates). Warm
+    # PRs skip restoring/saving this ~310 MB archive altogether because `_build`
+    # already contains the compiled NIFs. When `_build` misses (or on push),
+    # `~/.cargo/registry/cache` avoids re-downloading 300+ crates from crates.io.
     - name: Cache cargo targets
-      if: inputs.cargo-cache == 'true'
+      if: inputs.cargo-cache == 'true' && (github.event_name == 'push' || steps.build-restore.outputs.cache-matched-key == '')
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: native/*/target
-        key: ${{ runner.os }}-cargo-v1-${{ hashFiles('native/**/Cargo.lock', 'native/**/Cargo.toml', 'rust-toolchain.toml') }}
+        path: |
+          native/*/target
+          ~/.cargo/registry/cache
+        key: ${{ runner.os }}-cargo-v2-${{ hashFiles('native/**/Cargo.lock', 'native/**/Cargo.toml', 'rust-toolchain.toml') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-v1-
+          ${{ runner.os }}-cargo-v2-
 
     # Materialize the devenv toolchain with a retry BEFORE the test step. Nix
     # evaluation can transiently fail with "path '…/test-timeout.patch' is not

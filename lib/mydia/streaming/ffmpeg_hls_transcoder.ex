@@ -853,11 +853,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
       # Get the OS process ID
       case Port.info(port, :os_pid) do
-        {:os_pid, os_pid} ->
-          {:ok, port, os_pid}
-
-        nil ->
-          {:error, :no_os_pid}
+        {:os_pid, os_pid} -> {:ok, port, os_pid}
+        # Port opened, so `{port, {:exit_status, _}}` is queued for handle_info/2.
+        nil -> {:ok, port, nil}
       end
     rescue
       e ->
