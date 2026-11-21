@@ -241,7 +241,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
         </:actions>
         <p class="text-xs text-base-content/60">
           {gettext(
-            "Use your own iroh relay instead of Mydia's. Separate several with commas. Leave empty for the default. iroh's public relays stay as a fallback."
+            "Use your own iroh relay instead of Mydia's. Separate several with commas. Leave empty for the default. iroh's public relays stay in the list, and the lowest-latency relay is used."
           )}
         </p>
         <.form for={%{}} id="relay-urls-form" phx-submit="save_relay_urls" class="flex gap-2">
@@ -255,9 +255,9 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
               autocomplete="off"
             />
           </div>
-          <.button :if={!@relay_locked} id="relay-urls-save" type="submit" variant="primary">
+          <button :if={!@relay_locked} id="relay-urls-save" type="submit" class="btn btn-primary">
             {gettext("Save")}
-          </.button>
+          </button>
         </.form>
         <p :if={@relay_locked} id="relay-urls-env-note" class="text-xs text-base-content/60">
           {gettext("Set by %{var}. Remove the variable to change it here.", var: "IROH_RELAY_URL")}

@@ -11030,7 +11030,7 @@ msgstr ""
 msgid "two seasons of %{counts}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:197
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:209
 #: lib/mydia_web/live/downloads_live/issue_list.ex:141
 #: lib/mydia_web/live/downloads_live/issue_list.ex:147
 #, elixir-autogen, elixir-format
@@ -14394,12 +14394,12 @@ msgstr ""
 msgid "Different lengths"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:145
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:157
 #, elixir-autogen, elixir-format
 msgid "Direct URL added successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:170
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:182
 #, elixir-autogen, elixir-format
 msgid "Direct URL removed successfully"
 msgstr ""
@@ -15003,7 +15003,7 @@ msgstr[1] ""
 msgid "Failed to add (reset to retry)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:152
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:164
 #, elixir-autogen, elixir-format
 msgid "Failed to add direct URL: %{reason}"
 msgstr ""
@@ -15098,7 +15098,7 @@ msgstr ""
 msgid "Failed to remove %{key}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:177
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:189
 #, elixir-autogen, elixir-format
 msgid "Failed to remove direct URL: %{reason}"
 msgstr ""
@@ -16731,7 +16731,7 @@ msgstr ""
 msgid "Nobody is watching. Last played %{elapsed} ago."
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:109
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:121
 #, elixir-autogen, elixir-format
 msgid "Node ID copied to clipboard"
 msgstr ""
@@ -18412,7 +18412,7 @@ msgstr ""
 msgid "Stats window"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:186
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:198
 #, elixir-autogen, elixir-format
 msgid "Status refreshed"
 msgstr ""
@@ -22463,7 +22463,7 @@ msgstr ""
 msgid "Uploaded"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:100
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:112
 #, elixir-autogen, elixir-format
 msgid "%{url} is not an https URL."
 msgstr ""
@@ -22473,7 +22473,7 @@ msgstr ""
 msgid "Custom relay"
 msgstr ""
 
-#: lib/mydia_web/live/admin_remote_access_live/index.ex:104
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:116
 #, elixir-autogen, elixir-format
 msgid "Failed to save the relay"
 msgstr ""
@@ -22488,7 +22488,12 @@ msgstr ""
 msgid "The relay is set by IROH_RELAY_URL and cannot be changed here."
 msgstr ""
 
+#: lib/mydia_web/live/admin_remote_access_live/index.ex:108
+#, elixir-autogen, elixir-format
+msgid "Relay saved, but the P2P node did not restart. Restart Mydia to apply it."
+msgstr ""
+
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:243
 #, elixir-autogen, elixir-format
-msgid "Use your own iroh relay instead of Mydia's. Separate several with commas. Leave empty for the default. iroh's public relays stay as a fallback."
+msgid "Use your own iroh relay instead of Mydia's. Separate several with commas. Leave empty for the default. iroh's public relays stay in the list, and the lowest-latency relay is used."
 msgstr ""

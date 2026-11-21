@@ -31,12 +31,14 @@ hole-punch a direct connection instead of falling back to a relay. See
 ### Custom Relay
 
 If you run your own [iroh relay](https://www.iroh.computer/docs/concepts/relay),
-enter its URL under **Admin › System › Remote Access › Custom relay**. The p2p
-node reconnects through it right away, and paired devices follow without being
-re-paired. Clear the field to go back to Mydia's relays.
+enter its URL under **Admin › System › Remote Access › Custom relay**. It
+replaces Mydia's relays, the p2p node reconnects right away, and paired devices
+follow without being re-paired. Clear the field to go back to Mydia's relays.
 
 `IROH_RELAY_URL` does the same from the environment and locks the field. Either
-way, iroh's public relays stay in the list as a fallback.
+way, iroh's public relays stay in the list as additional candidates. iroh uses
+the lowest-latency relay as its home relay, so a public relay can carry traffic
+when it is closer than yours.
 
 ### Direct URLs
 

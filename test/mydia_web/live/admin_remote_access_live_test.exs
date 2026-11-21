@@ -232,7 +232,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
         |> form("#relay-urls-form", %{relay_urls: "http://relay.example.test"})
         |> render_submit()
 
-      assert html =~ "https"
+      assert html =~ "http://relay.example.test is not an https URL."
       assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
     end
   end

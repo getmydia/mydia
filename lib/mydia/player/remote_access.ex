@@ -205,7 +205,12 @@ defmodule Mydia.Player.RemoteAccess do
   defp do_save_relays(urls, opts) do
     with :ok <- write_relays(urls, Keyword.get(opts, :updated_by_id)),
          {:ok, _config} <- Loader.reload() do
-      restart_if_running(Keyword.get(opts, :supervisor, Mydia.Player.Supervisor))
+      # Saved either way by now, so a failed restart is its own error: the
+      # caller must not report the relay as unsaved.
+      case restart_if_running(Keyword.get(opts, :supervisor, Mydia.Player.Supervisor)) do
+        :ok -> :ok
+        {:error, reason} -> {:error, {:restart_failed, reason}}
+      end
     end
   end
 

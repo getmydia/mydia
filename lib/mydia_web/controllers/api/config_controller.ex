@@ -510,6 +510,8 @@ defmodule MydiaWeb.Api.ConfigController do
   defp serialize_value(value) when is_number(value), do: value
   defp serialize_value(value) when is_boolean(value), do: value
   defp serialize_value(nil), do: nil
+  # Comma-joined, the format a stored row holds and Paths.cast_overlay parses.
+  defp serialize_value(value) when is_list(value), do: Enum.map_join(value, ",", &to_string/1)
   defp serialize_value(value), do: to_string(value)
 
   # Write-only settings (the built-in client's VPN credentials) are never sent

@@ -96,6 +96,18 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
            gettext("The relay is set by IROH_RELAY_URL and cannot be changed here.")
          )}
 
+      {:error, {:restart_failed, reason}} ->
+        Logger.error("Relay saved but the P2P node did not restart: #{inspect(reason)}")
+
+        {:noreply,
+         socket
+         |> load_remote_access_setting()
+         |> load_p2p_status()
+         |> put_flash(
+           :error,
+           gettext("Relay saved, but the P2P node did not restart. Restart Mydia to apply it.")
+         )}
+
       {:error, {:invalid_url, url}} ->
         {:noreply, put_flash(socket, :error, gettext("%{url} is not an https URL.", url: url))}
 
