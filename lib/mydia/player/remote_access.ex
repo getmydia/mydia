@@ -203,7 +203,7 @@ defmodule Mydia.Player.RemoteAccess do
   end
 
   defp do_save_relays(urls, opts) do
-    with :ok <- write_relays(urls, Keyword.get(opts, :updated_by_id)),
+    with :ok <- write_relays(urls, opts),
          {:ok, _config} <- Loader.reload() do
       # Saved either way by now, so a failed restart is its own error: the
       # caller must not report the relay as unsaved.
@@ -214,23 +214,29 @@ defmodule Mydia.Player.RemoteAccess do
     end
   end
 
-  defp write_relays([], _updated_by_id) do
+  defp write_relays([], _opts) do
     case Settings.get_config_setting_by_key(@relay_setting_key) do
       nil -> :ok
       setting -> setting |> Settings.delete_config_setting() |> ok()
     end
   end
 
-  defp write_relays(urls, updated_by_id) do
+  # A `:description` is written only when given, so a value-only save keeps
+  # whatever description the row already has.
+  defp write_relays(urls, opts) do
     %{
       key: @relay_setting_key,
       value: Enum.join(urls, ","),
       category: :remote_access,
-      updated_by_id: updated_by_id
+      updated_by_id: Keyword.get(opts, :updated_by_id)
     }
+    |> maybe_put_description(Keyword.get(opts, :description))
     |> Settings.upsert_config_setting()
     |> ok()
   end
+
+  defp maybe_put_description(attrs, nil), do: attrs
+  defp maybe_put_description(attrs, description), do: Map.put(attrs, :description, description)
 
   defp ok({:ok, _}), do: :ok
   defp ok({:error, _} = error), do: error

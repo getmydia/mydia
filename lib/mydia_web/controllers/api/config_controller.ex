@@ -128,7 +128,11 @@ defmodule MydiaWeb.Api.ConfigController do
             update_cardigann_engine(conn, validated_data.value)
 
           key == RemoteAccessSwitch.relay_setting_key() ->
-            apply_relay_urls(conn, String.split(validated_data.value, ","))
+            apply_relay_urls(
+              conn,
+              String.split(validated_data.value, ","),
+              Map.get(validated_data, :description)
+            )
 
           true ->
             perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
@@ -292,10 +296,11 @@ defmodule MydiaWeb.Api.ConfigController do
   # Through Mydia.Player.RemoteAccess rather than a plain row write, so a
   # non-https URL is refused before it can fail the next config reload, and
   # a running p2p node restarts onto the new relays. An empty list clears.
-  defp apply_relay_urls(conn, urls) do
+  defp apply_relay_urls(conn, urls, description \\ nil) do
     user = Guardian.Plug.current_resource(conn)
+    opts = [updated_by_id: user && user.id, description: description]
 
-    case RemoteAccessSwitch.set_relay_urls(urls, updated_by_id: user && user.id) do
+    case RemoteAccessSwitch.set_relay_urls(urls, opts) do
       :ok ->
         relay_saved(conn, nil)
 
@@ -326,14 +331,19 @@ defmodule MydiaWeb.Api.ConfigController do
     end
   end
 
+  # Read back after the save: a cleared override falls through to YAML or the
+  # default, and the response says so the way delete_config_override/2 does.
   defp relay_saved(conn, warning) do
+    key = RemoteAccessSwitch.relay_setting_key()
+    source = if Settings.get_config_setting_by_key(key), do: "database", else: "yaml_or_default"
+
     json(conn, %{
       message: warning || "Relay URLs saved",
       data: %{
-        key: RemoteAccessSwitch.relay_setting_key(),
+        key: key,
         value: serialize_value(RemoteAccessSwitch.relay_urls()),
         category: :remote_access,
-        source: "database"
+        source: source
       }
     })
   end

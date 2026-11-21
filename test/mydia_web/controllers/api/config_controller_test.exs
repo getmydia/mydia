@@ -219,21 +219,32 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
 
     setup %{conn: conn, token: token} do
       runtime = Application.get_env(:mydia, :runtime_config)
+      original_env = System.get_env("IROH_RELAY_URL")
+      System.delete_env("IROH_RELAY_URL")
 
       on_exit(fn ->
         Application.put_env(:mydia, :runtime_config, runtime)
-        System.delete_env("IROH_RELAY_URL")
+
+        case original_env do
+          nil -> System.delete_env("IROH_RELAY_URL")
+          value -> System.put_env("IROH_RELAY_URL", value)
+        end
       end)
 
       %{conn: put_req_header(conn, "authorization", "Bearer #{token}")}
     end
 
     test "PUT saves a list of https relays", %{conn: conn} do
-      conn = put(conn, "/api/v1/config/#{@key}", %{"value" => "https://a.test, https://b.test"})
+      conn =
+        put(conn, "/api/v1/config/#{@key}", %{
+          "value" => "https://a.test, https://b.test",
+          "description" => "home relay"
+        })
 
-      assert %{"data" => %{"value" => "https://a.test,https://b.test"}} = json_response(conn, 200)
+      assert %{"data" => %{"value" => "https://a.test,https://b.test", "source" => "database"}} =
+               json_response(conn, 200)
 
-      assert %{value: "https://a.test,https://b.test"} =
+      assert %{value: "https://a.test,https://b.test", description: "home relay"} =
                Mydia.Settings.get_config_setting_by_key(@key)
 
       assert Mydia.Player.RemoteAccess.relay_urls() == ["https://a.test", "https://b.test"]
@@ -256,7 +267,7 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
       put(conn, "/api/v1/config/#{@key}", %{"value" => "https://a.test"})
 
       conn = delete(conn, "/api/v1/config/#{@key}")
-      assert json_response(conn, 200)
+      assert %{"data" => %{"source" => "yaml_or_default"}} = json_response(conn, 200)
       assert Mydia.Settings.get_config_setting_by_key(@key) == nil
       assert Mydia.Player.RemoteAccess.relay_urls() == []
     end
