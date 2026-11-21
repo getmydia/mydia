@@ -541,7 +541,9 @@ The jobs, in order:
   builds, NIFs, the PLT, rustfs) that two or more of them still need.
 - `Nix / Input (<name>)` builds each of those shared inputs once and pushes
   it, so the check jobs substitute it instead of each building its own copy.
-  It is skipped when the run cannot push (a fork PR, Dependabot).
+  It is skipped for fork PRs, which cannot push, and for Dependabot runs,
+  which may not get an OIDC token: inputs built where a push may fail only
+  duplicate what each check job then builds for itself.
 - `Nix / <check>` is one job per uncached check: `scripts/ci-nix-build.sh`,
   then a push of the output.
 - `Nix / NixOS (<name>)` builds the uncached NixOS module VM tests the same

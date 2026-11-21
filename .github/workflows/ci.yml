@@ -31,7 +31,9 @@ on:
       - "**"
   workflow_dispatch:
 
-# Master runs are not cancelled, so each one finishes and refreshes the pins.
+# In-progress master runs are not cancelled, so a started run finishes and
+# refreshes the pins. GitHub still replaces a pending (queued) master run when
+# a newer one joins the group; the newer run then pins the newer closure.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -137,9 +139,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           jq 'del(.all)' "$plan"
 
-  # Skipped when the job could not push (a fork PR or Dependabot gets no OIDC
-  # token): building inputs nobody can fetch only duplicates what each check
-  # job then builds for itself.
+  # Skipped for fork PRs (no OIDC token) and Dependabot runs (which may not get
+  # one): building inputs nobody may be able to fetch only duplicates what each
+  # check job then builds for itself.
   inputs:
     name: Nix / Input (${{ matrix.name }})
     needs: plan
