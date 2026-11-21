@@ -27,6 +27,7 @@ void main() {
       Future<String?> Function()? legacyId,
     }) =>
         [
+          noProgressFlushOverride,
           sourcesLoadingProvider.overrideWithValue(false),
           hasMydiaProvider.overrideWithValue(bound),
           legacyInstanceIdProvider
