@@ -67,7 +67,7 @@
 - [ ] **Step 1:** Implement `mkRustChecks` and the crate list.
 - [ ] **Step 2:** `nix build .#checks.x86_64-linux.rust-mydia_subsync-test -L`. Expected: PASS, test count equal to `cargo test` in devenv.
 - [ ] **Step 3:** Insert a stray space in `native/mydia_media_names/src/lib.rs`; `nix build .#checks.x86_64-linux.rust-mydia_media_names-fmt`. Expected: FAIL naming the file. Revert.
-- [ ] **Step 4:** Build every `rust-*` check and `server-*` with `nix build $(nix eval --raw .#ciRustAttrs)` (expose a helper list). Expected: all PASS.
+- [ ] **Step 4:** Build every `rust-*` check and `server-*` with `nix build $(nix eval --json .#ciRustAttrs | jq -r '.[] | ".#checks.x86_64-linux.\(.)"')` (expose a helper list; `ciRustAttrs` is a list of check names, so `--raw` would fail). Expected: all PASS.
 - [ ] **Step 5:** Commit `ci(nix): Rust crates, NIFs and plugin wasm as crane checks`.
 
 ### Task 3: Mix deps for the test env

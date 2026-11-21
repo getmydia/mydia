@@ -25,8 +25,12 @@ builds them in their own matrix job, `Nix / NixOS (<name>)`, which
 every other check these two rerun, package build included, on almost every
 commit; and a QEMU boot on a shared runner is the slowest and flakiest build
 in the set. Gating every merge on them would make a VM hiccup a merge
-blocker. They still run on every PR and report their own result, and master
-pins include them.
+blocker. They still run on every PR whose change reaches them and report
+their own result, and master pins include them. When both are already in
+the cache (a passed result for exactly this input), the planner leaves the
+NixOS matrix empty and the job is skipped, so the PR shows no
+`Nix / NixOS` result at all; the `Nix / Plan` job summary lists what was
+built and says everything else was cached.
 
 So a red `Nix / NixOS` is a real signal nobody is forced to read. Look at it
 before merging any `.nix`, `flake.lock` or packaging change, and for such a
