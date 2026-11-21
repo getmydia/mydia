@@ -9,6 +9,8 @@ import 'package:player/core/router/legacy_routes.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
+import 'test_utils/no_downloads.dart';
+
 void main() {
   /// Restoring a cast session needs a Mydia instance to sync progress to, so
   /// it is meaningless before one exists. A manager built earlier would also
@@ -25,6 +27,7 @@ void main() {
       Future<String?> Function()? legacyId,
     }) =>
         [
+          noProgressFlushOverride,
           sourcesLoadingProvider.overrideWithValue(false),
           hasMydiaProvider.overrideWithValue(bound),
           legacyInstanceIdProvider
@@ -111,6 +114,7 @@ void main() {
 
       await tester.pumpWidget(ProviderScope(
         overrides: [
+          noProgressFlushOverride,
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
           hasMydiaProvider.overrideWithValue(false),
@@ -159,6 +163,7 @@ void main() {
 
       await tester.pumpWidget(ProviderScope(
         overrides: [
+          noProgressFlushOverride,
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
           hasMydiaProvider.overrideWithValue(true),

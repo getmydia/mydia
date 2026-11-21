@@ -9,7 +9,10 @@
 library;
 
 import '../../../domain/models/quality_rung.dart';
+import '../health_sample.dart' show ColorParams;
 import '../playback_memory.dart' show FailureReason;
+
+export '../health_sample.dart' show ColorParams;
 
 /// How the current source is reaching the decoder.
 enum PlaybackMode {
@@ -47,8 +50,18 @@ class StatsSample {
     this.throughputKbps,
     this.targetGamma,
     this.colormatrix,
+    this.sourceColor,
+    this.outputColor,
     this.history = const [],
   });
+
+  /// The decoded source's colour (`video-params`). Null off native or
+  /// before the first frame.
+  final ColorParams? sourceColor;
+
+  /// What the video output draws to (`video-target-params`). Null off
+  /// native or before the output is up.
+  final ColorParams? outputColor;
 
   /// mpv's `video-target-params/gamma` (`pq`, `hlg`, `srgb`...): the
   /// transfer mpv is drawing to. Null off native or when unset.
@@ -232,6 +245,7 @@ class StatsContext {
     this.videoLabel,
     this.hdr,
     this.outputHeadroom,
+    this.outputPotentialHeadroom,
     this.decoderLabel,
     this.hardwareDecode,
     this.audioLabel,
@@ -273,6 +287,10 @@ class StatsContext {
   /// texture path, and on the surface until the plugin reports the screen;
   /// either way the row keeps spec 1's HDR wording.
   final double? outputHeadroom;
+
+  /// The most headroom the screen can ever offer, beside [outputHeadroom]
+  /// in the Display row. Null wherever [outputHeadroom] is.
+  final double? outputPotentialHeadroom;
 
   /// mpv's `decoder-desc`. Null on web.
   final String? decoderLabel;

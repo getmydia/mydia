@@ -49,6 +49,7 @@ StatsContext buildStatsContext({
   DateTime? now,
   bool videoOutputFellBack = false,
   double? outputHeadroom,
+  double? outputPotentialHeadroom,
 }) {
   final mode = _mode(plan, isDownloadedSource);
   // A fallback only explains the *active* plan when the active plan is
@@ -112,6 +113,7 @@ StatsContext buildStatsContext({
             },
           ),
     outputHeadroom: outputHeadroom,
+    outputPotentialHeadroom: outputPotentialHeadroom,
     decoderLabel: videoTrack?.decoder,
     hardwareDecode: _hardwareDecode(videoTrack?.decoder),
     audioLabel: _audioLabel(audioTrack),

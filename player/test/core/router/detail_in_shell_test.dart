@@ -33,6 +33,7 @@ import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../presentation/screens/sources/fake_capable_source.dart';
+import '../../test_utils/no_downloads.dart';
 import '../../presentation/screens/sources/fake_media_source.dart';
 import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/toast_harness.dart';
@@ -156,6 +157,7 @@ Future<GoRouter> _pumpShellRouter(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      noProgressFlushOverride,
       mediaSourceProvider(fakeSourceId)
           .overrideWithValue(source ?? FakeMediaSource()),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
@@ -182,6 +184,7 @@ Set<String> _names(List<RouteBase> routes) => {
 void main() {
   test('the real router registers the detail routes inside its ShellRoute', () {
     final container = ProviderContainer(overrides: [
+      noProgressFlushOverride,
       sidebarLayoutStoreProvider
           .overrideWithValue(InMemorySidebarLayoutStore()),
       sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),

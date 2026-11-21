@@ -10,6 +10,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'test_utils/no_downloads.dart';
 import 'package:player/app.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -35,6 +37,7 @@ Future<(ProviderContainer, GoRouter)> _pumpApp(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final container = ProviderContainer(overrides: [
+    noProgressFlushOverride,
     sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
     sourcesLoadingProvider.overrideWithValue(false),
     hasMydiaProvider.overrideWithValue(false),

@@ -176,7 +176,7 @@ defmodule MydiaWeb.AdminMediaServersLive.PluginInstancesTest do
       receive do
         {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
       after
-        2_000 -> Process.demonitor(ref, [:flush])
+        2_000 -> flunk("sync task #{inspect(pid)} was still running after 2 seconds")
       end
     end
   end

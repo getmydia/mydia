@@ -216,6 +216,10 @@ jobs:
         if: needs.changes.outputs.player_translations == 'true'
         run: dart analyze --fatal-infos lib/l10n
 
+      - name: Test localizations
+        if: needs.changes.outputs.player_translations == 'true'
+        run: flutter test test/l10n
+
       - name: Run code generation
         if: needs.changes.outputs.player == 'true'
         run: flutter pub run build_runner build

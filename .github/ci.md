@@ -527,9 +527,9 @@ few minutes rather than the full suite's hour of runner time. `.pot` templates
 are not covered by this filter, because they change with the code.
 `ci-player.yml` has a matching `player_translations` fast path when only
 `player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change: `Test / Player`
-runs `flutter gen-l10n` and `dart analyze --fatal-infos lib/l10n`, while desktop
-and web builds skip their steps. `ci-player-e2e.yml` skips its run on `.po`-only
-and `.arb`-only translation PRs.
+runs `flutter gen-l10n`, `dart analyze --fatal-infos lib/l10n`, and
+`flutter test test/l10n`, while desktop and web builds skip their steps.
+`ci-player-e2e.yml` skips its run on `.po`-only and `.arb`-only translation PRs.
 
 `ci-nix.yml` consolidates the non-VM pin, freshness, release-note, Apple-target,
 guard, and Dependabot-gate checks into two runners (`Check / Repo Contracts` and
@@ -696,7 +696,8 @@ crate it actually compiled against.
 `Dockerfile` builds `mydia_p2p` and `mydia_subsync` in a `nifs` stage that
 copies only those crates (plus `mydia_p2p_core`), and the bundled WASM plugin
 guests (`plex`, `simkl_sync`, `webhook_notifier`) in a parallel `plugins` stage
-that copies only `native/mydia_plugin_sdk` and `plugins/`. `builder` copies the
+that copies only `native/mydia_plugin_sdk/`, `native/mydia_plugin_macros/`,
+and `plugins/`. `builder` copies the
 two `.so` files into `priv/native/` and the `.wasm` files into `priv/plugins/`,
 and sets `ENV MYDIA_PREBUILT_NIFS=1` and `ENV MYDIA_PREBUILT_PLUGINS=1` so
 `mix compile` loads them instead of running cargo when only Elixir/config

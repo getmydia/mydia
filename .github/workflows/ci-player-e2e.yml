@@ -205,8 +205,9 @@ jobs:
         with:
           predicate-quantifier: every
           filters: |
-            translations:
+            po:
               - 'priv/gettext/**/*.po'
+            arb:
               - 'player/lib/l10n/*.arb'
             non_translations:
               - '**'
@@ -216,7 +217,7 @@ jobs:
       - name: Decide whether to run
         id: should
         run: |
-          if [ "${{ steps.catalogs.outputs.translations }}" = "true" ] && [ "${{ steps.catalogs.outputs.non_translations }}" = "false" ]; then
+          if ( [ "${{ steps.catalogs.outputs.po }}" = "true" ] || [ "${{ steps.catalogs.outputs.arb }}" = "true" ] ) && [ "${{ steps.catalogs.outputs.non_translations }}" = "false" ]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Only translation catalogs changed; skipping E2E build."
           elif [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relevant }}" = "true" ]; then
