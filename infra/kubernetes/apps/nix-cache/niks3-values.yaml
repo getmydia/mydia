@@ -1,0 +1,47 @@
+# Values for niks3's upstream Helm chart (github.com/Mic92/niks3, deploy/helm/niks3).
+# niks3.yaml is rendered from this file; regenerate it with ./render.sh after
+# editing. Secrets are created out of band, see README.md.
+image:
+  tag: v1.19.0
+database:
+  existingSecret: niks3-db
+  secretKey: uri
+s3:
+  endpoint: 67a60cd5057ea97341c77d16f7cd3100.r2.cloudflarestorage.com
+  bucket: mydia-nix-cache
+  # R2 needs "auto"; left empty, the client signs for us-east-1 and every
+  # request fails signature verification.
+  region: auto
+  existingSecret: niks3-s3
+auth:
+  existingSecret: niks3-token
+  # CI pushes with a short-lived GitHub OIDC token. Fork PRs cannot mint a
+  # token for this repository, so they read from cache.mydia.dev but never
+  # write.
+  oidcProviders:
+    github:
+      issuer: https://token.actions.githubusercontent.com
+      audience: https://niks3.mydia.dev
+      rules:
+        - bound_claims:
+            repository_owner: ["getmydia"]
+          bound_subject: ["repo:getmydia/mydia:*"]
+          scopes: ["write"]
+signing:
+  existingSecret: niks3-signing
+  keys: [cache.mydia.dev-1]
+cacheURL: https://cache.mydia.dev
+# The bucket has an R2 lifecycle rule aborting incomplete multipart uploads
+# after a day (set through the Cloudflare API). niks3 cannot read R2's
+# lifecycle API and would warn on every start without this.
+extraArgs: ["--abort-incomplete-uploads-days=0"]
+resources:
+  requests: {cpu: 20m, memory: 32Mi}
+  limits: {memory: 256Mi}
+gc:
+  enabled: true
+  schedule: "0 4 * * *"
+  # 14 days. Master pins its newest closures, so PRs always have a warm base;
+  # everything else ages out.
+  olderThan: 336h
+  failedUploadsOlderThan: 6h

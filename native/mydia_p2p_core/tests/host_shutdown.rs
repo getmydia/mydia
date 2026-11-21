@@ -10,6 +10,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{blocking, HlsResponseHeader, Host, HostConfig};
 use std::time::Duration;
 
@@ -28,7 +30,7 @@ fn wait_for_addr(host: &Host) -> String {
 
 #[test]
 fn shutdown_closes_the_endpoint_and_ends_the_loop() {
-    let (host, _node_id) = Host::new(HostConfig::default());
+    let (host, _node_id) = support::host(HostConfig::default());
     wait_for_addr(&host);
 
     blocking::shutdown(&host);
@@ -38,7 +40,7 @@ fn shutdown_closes_the_endpoint_and_ends_the_loop() {
 
 #[test]
 fn a_second_shutdown_returns_instead_of_hanging() {
-    let (host, _node_id) = Host::new(HostConfig::default());
+    let (host, _node_id) = support::host(HostConfig::default());
     wait_for_addr(&host);
 
     blocking::shutdown(&host);
@@ -54,7 +56,7 @@ fn a_second_shutdown_returns_instead_of_hanging() {
 /// itself; with the weak one the call fails before it is ever sent.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_responder_does_not_keep_a_dropped_host_alive() {
-    let (host, _node_id) = Host::new(HostConfig::default());
+    let (host, _node_id) = support::host(HostConfig::default());
     let responder = host.hls_responder();
     drop(host);
 
@@ -76,10 +78,13 @@ async fn a_responder_does_not_keep_a_dropped_host_alive() {
 
 /// A host still waiting for its relay answers Shutdown at once instead of
 /// after the wait, which lasts up to 30 s when the relay cannot be reached.
-/// Online the wait is short, so this only catches a regression offline.
+/// `Host::new_without_relays` disables relays but keeps the full 30 s wait,
+/// so the loop is guaranteed to be in it, offline and deterministically.
+/// (`support::host` skips the wait, which would make this test vacuous.)
+#[cfg(feature = "test-introspection")]
 #[test]
 fn shutdown_during_the_relay_wait_returns_promptly() {
-    let (host, _node_id) = Host::new(HostConfig::default());
+    let (host, _node_id) = Host::new_without_relays(HostConfig::default());
     let started = std::time::Instant::now();
 
     blocking::shutdown(&host);

@@ -106,10 +106,10 @@ job `skipped`, and whether a ruleset counts a skipped required check as satisfie
 is configuration-dependent. `grep -n "^    if:" .github/workflows/ci-player.yml`
 must return nothing; that is the whole safety net.
 
-`ci.yml` uses a second pattern that meets the same rule. Its gated jobs carry
-non-required names and conclude `skipped` when nothing relevant changed; the
-required names sit on aggregator jobs with `if: always()` that conclude success
-or failure. The `Guard the required-check aggregators` step in `ci.yml` is that
+`ci.yml` uses a second pattern that meets the same rule. Its build jobs carry
+non-required names and conclude `skipped` when every check is already cached
+(an empty matrix); the required names sit on aggregator jobs with
+`if: always()` that conclude success or failure. The `Guard the required-check aggregators` step in `ci.yml` is that
 file's safety net.
 
 Measured behaviour on real PRs: on one touching `native/`, `Build / Web` ran
@@ -301,9 +301,11 @@ and stopped at 2m43s, before a single test ran. There is no `error:`, no
 `cannot download`, no crate name, and grepping the log for any failure keyword
 returns nothing but unrelated `::error::` strings from the guard steps' own `echo`
 lines. The only tell is the runtime: a healthy `Test` job then took about 20
-minutes, so a sub-3-minute red meant it died in setup. Today the same step runs
-in each `Test (SQLite N/4)` shard and a healthy shard takes a few minutes, so
-compare a red shard against its siblings. Re-running cleared it and the
+minutes, so a sub-3-minute red meant it died in setup. Since the move to flake
+checks the bundled plugins build once, in `ciInternal.pluginWasm`, and the
+shards load the prebuilt wasm, so this mode now shows as a red
+`Nix / Input (pluginWasm)` or as a test build failing on its `pluginWasm`
+input. Re-running cleared it and the
 same SHA then compiled both plugins fine. Check the diff for `native/`, `*.rs`,
 `Cargo*`, `priv/plugins/` or `*.nix` first; if it touches none of them, it cannot
 have affected the wasip2 component build.
@@ -605,7 +607,7 @@ same latent dependency. Seen on PR #515.
 `MediaLive.Show.RecommendationsRailTest` and `MediaLive.Show.FranchiseSectionTest`
 fail as `** (RuntimeError) expected async processes to finish within 5000ms`. The
 tell is that a different test in the pair fails on each run while the SQLite
-shards (`Test (SQLite N/4)`) pass the whole suite on the same commit. These tests warm some caches but the
+shards (`Nix / test-sqlite-N`) pass the whole suite on the same commit. These tests warm some caches but the
 detail page still makes un-warmed lookups that escape to the live relay, so a slow
 relay round trip under CI load blows the budget. SQLite hides it by serializing
 (`max_cases: 1`). Observed on PR #536: Postgres passed, then failed twice on

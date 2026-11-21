@@ -1,0 +1,32 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: niks3-tls
+spec:
+  dnsNames: [niks3.mydia.dev]
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  secretName: niks3-tls-secret
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: niks3
+  annotations:
+    external-dns.alpha.kubernetes.io/target: 149.56.129.39
+    # Must stay grey-cloud. A proxied record serves GitHub-hosted runners a
+    # managed challenge, which silently breaks every CI push. No NAR bytes
+    # pass through this host (clients upload to R2 with presigned URLs), so
+    # Cloudflare's 100 MB body limit is not a reason to proxy either.
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`niks3.mydia.dev`)
+      services:
+        - name: niks3
+          port: 80
+  tls:
+    secretName: niks3-tls-secret

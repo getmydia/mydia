@@ -559,7 +559,7 @@ in
       if ! git rev-parse --git-dir &> /dev/null; then
         exit 0
       fi
-      ${pkgs.prek}/bin/prek install -t pre-commit
+      ${pkgs.prek}/bin/prek install -t pre-commit -t pre-push
     '';
 
     # Keep the full hook suite off shell entry. devenv 2.3.1 added a third
@@ -656,6 +656,18 @@ in
       enable = true;
       name = "no scratch docs";
       entry = "scripts/check-no-scratch-docs.sh";
+      pass_filenames = false;
+      always_run = true;
+    };
+    # Builds the pushed commit's CI outputs in the background and pushes them
+    # to the CI binary cache, so CI substitutes instead of compiling. A silent
+    # no-op without ~/.config/mydia/niks3-token; never blocks or fails a push.
+    # MYDIA_NIX_PUSH=builds (default), all, or off. See scripts/nix-cache-push.sh.
+    nix-cache-push = {
+      enable = true;
+      name = "push CI build outputs to cache.mydia.dev";
+      entry = "scripts/nix-cache-push-hook.sh";
+      stages = [ "pre-push" ];
       pass_filenames = false;
       always_run = true;
     };

@@ -14,6 +14,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{blocking, Host, HostConfig, MydiaRequest, MydiaResponse, ReadMediaRequest};
 use std::time::Duration;
 
@@ -42,8 +44,8 @@ fn read_media_is_refused_without_reading_the_file() {
     let secret = b"this content must never reach a peer";
     std::fs::write(&probe, secret).expect("write probe file");
 
-    let (server, server_id) = Host::new(HostConfig::default());
-    let (client, _client_id) = Host::new(HostConfig::default());
+    let (server, server_id) = support::host(HostConfig::default());
+    let (client, _client_id) = support::host(HostConfig::default());
 
     let server_addr = wait_for_addr(&server);
     blocking::dial(&client, server_addr).expect("dial should succeed");

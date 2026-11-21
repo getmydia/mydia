@@ -56,9 +56,11 @@ normalise='
   ]
 '
 
-# SKIPPED and NEUTRAL are normal, not failures. PR #610 carries four SKIPPED
-# (CodeQL, the fork lockfile scan, both NixOS Module jobs) and PR #613 carries
-# three plus one NEUTRAL. Rejecting them would mean never merging anything.
+# SKIPPED and NEUTRAL are normal, not failures. The fork lockfile scan skips on
+# every same-repo PR, `Nix / Pins` skips off master, and in the `CI` workflow
+# the `Nix / Input`, `Nix / <check>` and `Nix / NixOS` jobs skip whenever the
+# plan finds everything cached. CodeQL can conclude NEUTRAL (PR #613). Rejecting
+# them would mean never merging anything.
 acceptable='["SUCCESS", "SKIPPED", "NEUTRAL"]'
 pending='["PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "EXPECTED", "REQUESTED"]'
 

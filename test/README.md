@@ -109,6 +109,69 @@ comes up; keep them as separate commands. And a full `/run/user/1000` tmpfs
 blocks the Postgres start while presenting as a Postgres or devenv fault, so
 check `df -h /run/user/1000` before debugging the database.
 
+### Sandboxed CI runs
+
+CI runs the suite as Nix flake checks (`nix/ci/tests.nix`):
+`test-sqlite-{1..4}` and `test-postgres-{1..3}`, each one partition of
+`mix test --partitions N --warnings-as-errors --seed 0` on top of the
+compiled test build. Reproduce a shard exactly with
+
+    nix build .#checks.x86_64-linux.test-sqlite-2 -L
+
+(`nix log` on the derivation shows a failed shard's output again; a passing
+one keeps it in `result/test.log`). New files must be visible to git
+(`git add -N`) before Nix sees them.
+
+A shard runs in the Nix build sandbox, which differs from `./dev test` in
+ways a test can trip over:
+
+- **No network.** Loopback works, so Bypass, the shard's own RustFS
+  (`127.0.0.1:9000`, `MYDIA_TEST_S3_REQUIRED=1`) and PostgreSQL
+  (`localhost:5433`, the `config/test.exs` defaults) do too. There is no
+  non-loopback interface and no default route: a connect to anything else
+  fails at once with `:enetunreach` rather than timing out. A test that
+  genuinely needs the network or the host's interfaces is tagged
+  `@tag :external`, which `test_helper.exs` excludes. These four were tagged
+  for the sandbox and no longer run in CI; `./dev mix test --include
+  external <file>` runs them on a machine with a network:
+  - `test/mydia/remote_access/direct_urls_test.exs`, DirectUrlsTest
+    "includes local URLs": needs a non-loopback IPv4 interface.
+  - `test/mydia/remote_access/direct_url_refresher_test.exs`,
+    DirectUrlRefresherTest "detects URLs and stores them in config": same.
+  - the same file, DirectUrlRefresherTest "complete refresh flow": same.
+  - `test/mydia/plugins/net/gate_test.exs`, Plugins.Net.GateTest "a host
+    that never answers hits the connect timeout": needs a default route for
+    the SYN to black-hole on; without one the connect fails with
+    `:enetunreach` instead of timing out.
+- **`--seed 0`.** Module and test order is fixed, so a cached result is
+  reproducible. An order-dependent failure reproduces locally with
+  `./dev mix test --seed 0` over the same files.
+- **Only the files the check lists.** The source is `lib/`, `config/`,
+  `priv/`, `test/` and the extra files tests read (`testReads` in
+  `nix/ci/tests.nix`). A test that reads a new repo file outside those fails
+  with `:enoent` until the file is added there.
+- **Only the tools the check lists.** ffmpeg, chromaprint, procps, git, curl;
+  anything else a test shells out to has to be added to the shard's inputs.
+- **`HOME` is an empty scratch directory** and there is no `/etc/ssl`:
+  `test_helper.exs` loads `SSL_CERT_FILE` into OTP's trust store when the OS
+  store is missing.
+- **Four schedulers.** `ERL_FLAGS="+S 4"` matches the GitHub runner, so every
+  machine runs the PostgreSQL shards with the same shape (`max_cases: 4`).
+  Independently, `test_helper.exs` caps PostgreSQL `max_cases` at 8, under
+  the Repo's `pool_size: 10`, so a large machine never queues past the pool
+  timeout.
+- **The Cardigann guest is pinned, not fetched.** The shards install the
+  guest pinned in `native/cardigann_guest/ARTIFACT_SHA256` only while its
+  source hash is the hash of the guest sources in the tree. An edit under
+  `native/cardigann_guest/` (other than Markdown) changes that hash, so the
+  shards log `cardigann_wasm tests skipped` and exclude those tests until
+  the new guest is published and `ARTIFACT_SHA256` is bumped to
+  `<mix mydia.cardigann_guest hash> <its .sha256>`.
+
+Every shard reads all of `test/` except its Markdown, so any test edit reruns
+all seven; a doc edit under `test/`, or any edit outside the shards' files, is
+a cache hit.
+
 ### Feature tests are excluded from every normal run
 
 `test/test_helper.exs` runs

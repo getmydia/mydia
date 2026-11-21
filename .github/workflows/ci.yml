@@ -1,5 +1,25 @@
 name: CI
 
+# The backend's checks are flake checks (nix/ci/), built as derivations and
+# cached in niks3 (cache.mydia.dev); design/specs/2026-11-20-nix-ci-checks-design.md
+# and .github/ci.md, "ci.yml: the flake-check graph".
+#
+#   plan          nix-eval-jobs --check-cache-status: which checks the cache lacks
+#   inputs        ciInternal derivations two or more of those checks need, built once
+#   checks        one job per uncached check; inputs come from the cache by now
+#   nixos         the NixOS module VM tests, the same way but non-blocking
+#   Nix / Checks  the aggregator of plan, inputs and checks
+#   pins          master only: refresh the master-<name> pin of every output
+#
+# A run where nothing changed what the checks read plans two empty matrices,
+# skips both build jobs and finishes in the time it takes to evaluate. There
+# is no path filter: the derivation graph is the filter.
+#
+# Four jobs stay outside the sandbox: Guards (yq over this file), Lint /
+# Ratchet (reads git history), Rust / SMB integration (needs a root smbd) and
+# the E2E browser tests (devenv). The required checks Test, Test /
+# PostgreSQL and Test / E2E Browser sit on aggregators at the end.
+
 on:
   push:
     branches:
@@ -11,277 +31,41 @@ on:
       - "**"
   workflow_dispatch:
 
+# In-progress master runs are not cancelled, so a started run finishes and
+# refreshes the pins. GitHub still replaces a pending (queued) master run when
+# a newer one joins the group; the newer run then pins the newer closure.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Every job reads the repository and nothing more. Jobs that need less or more
-# say so themselves.
+# Every job reads the repository and nothing more. id-token: write (the niks3
+# OIDC token) is granted per job, only to the jobs that push.
 permissions:
   contents: read
 
 env:
-  MIX_ENV: test
-  # Wasmex carries a local patch in its Rust half (patches/wasmex), so it is
-  # built from source instead of downloading its precompiled NIF. The cached
-  # deps/ and _build/ keys include patches/**.
-  WASMEX_BUILD: "1"
-  # Harden Rust crate fetches against transient crates.io flakiness. The Rustler
-  # NIF (native/mydia_p2p) is built during `mix compile`; CI intermittently hit
-  # "download of … failed / curl failed / [16] Error in the HTTP2 framing layer".
-  # Forcing HTTP/1.1 (no multiplexing) sidesteps that libcurl HTTP/2 bug and a
-  # generous retry count rides out brief network blips. Inherited into the
-  # `devenv shell` subshells below (cargo reads these from the environment).
+  # Harden Rust crate fetches against transient crates.io flakiness (the E2E
+  # job's `mix compile` builds the Rustler NIFs, the SMB job builds its
+  # crate). CI intermittently hit "download of … failed / curl failed / [16]
+  # Error in the HTTP2 framing layer". Forcing HTTP/1.1 (no multiplexing)
+  # sidesteps that libcurl HTTP/2 bug and a generous retry count rides out
+  # brief network blips.
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"
 
-# The devenv jobs below (lint, test-sqlite, dialyzer, test-postgres, e2e) run
-# their steps inside a single `devenv shell -- bash` heredoc so the environment
-# evaluates once and `_build` stays warm across
-# steps (mirrors `./dev mix precommit`, dev:159-211). The toolchain (Elixir, OTP,
-# Rust + wasm32-wasip2, Node, ffmpeg, chromium/chromedriver) comes from
-# devenv.nix. GitHub sets CI=true, which makes devenv.nix skip its enterShell
-# setup tasks (KTD7) — each job runs the equivalent setup (hex/rebar/deps/ecto)
-# explicitly. Their shared setup lives in .github/actions/setup-devenv.
-
 jobs:
-  # Decides which areas a PR touches. Jobs gated on these outputs conclude
-  # `skipped` when nothing relevant changed; none of them carries a required
-  # check name (see the aggregators at the end of this file). On push and
-  # workflow_dispatch both outputs are forced true, so master runs everything.
-  changes:
-    name: Changes
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      # A PR that changes only translation catalogs (in practice, every Weblate
-      # PR) runs the `translations` job instead of the backend suite.
-      backend: ${{ github.event_name != 'pull_request' || (steps.filter.outputs.backend == 'true' && !(steps.catalogs.outputs.po == 'true' && steps.catalogs.outputs.non_po == 'false')) }}
-      rust: ${{ github.event_name != 'pull_request' || steps.filter.outputs.rust == 'true' }}
-      translations: ${{ github.event_name == 'pull_request' && steps.catalogs.outputs.po == 'true' && steps.catalogs.outputs.non_po == 'false' }}
-    steps:
-      - name: Detect relevant changes
-        id: filter
-        if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        with:
-          filters: |
-            backend:
-              - 'lib/**'
-              - 'test/**'
-              - 'config/**'
-              - 'priv/**'
-              - 'native/**'
-              - 'nix/**'
-              - 'plugins/**'
-              - 'plugins-extra/**'
-              - 'patches/**'
-              - 'assets/**'
-              - 'mix.exs'
-              - 'mix.lock'
-              - '.credo.exs'
-              - '.credo.ratchet.exs'
-              - '.dialyzer_ignore.exs'
-              - '.formatter.exs'
-              - '.elixir-version'
-              - '.otp-version'
-              - 'beam-version.nix'
-              - 'devenv.nix'
-              - 'devenv.lock'
-              - 'devenv.yaml'
-              - 'rust-toolchain.toml'
-              - 'scripts/**'
-              - 'player/flutter-version.nix'
-              - 'player/lib/graphql/**'
-              - 'player/lib/core/language/language_equivalents.dart'
-              - '.github/workflows/**'
-              - '.github/actions/setup-devenv/**'
-            rust:
-              - 'native/**'
-              - 'plugins/**'
-              - 'player/rust/**'
-              - 'plugins-extra/**'
-              - 'rust-toolchain.toml'
-              - 'rust-lints.toml'
-              - 'clippy.toml'
-              - 'scripts/check-rust.sh'
-              - 'scripts/check-plugins.sh'
-              - 'scripts/test-plugins.sh'
-              - 'scripts/check-rust-lints.sh'
-              - 'scripts/check_rust_lints.py'
-              - 'scripts/test-check-rust-lints.sh'
-              - 'devenv.nix'
-              - 'devenv.lock'
-              - '.github/workflows/ci.yml'
-              - '.github/actions/setup-devenv/**'
-
-      # With `every`, a file counts toward a filter only when it matches all of
-      # the filter's patterns, so `non_po` is true when any changed file is not
-      # a translation catalog. The default `some` quantifier cannot express
-      # that, hence a second filter step.
-      - name: Detect translation-only changes
-        id: catalogs
-        if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        with:
-          predicate-quantifier: every
-          filters: |
-            po:
-              - 'priv/gettext/**/*.po'
-            non_po:
-              - '**'
-              - '!priv/gettext/**/*.po'
-
-  # Shell-only guards over files outside the Elixir tree (Dockerfile,
-  # devenv.nix, player/flatpak, player/appimage). They need no Nix and take
-  # seconds, so they run on every PR whatever it touches.
+  # The repository's file-only guards are the `guards` flake check
+  # (nix/ci/guards.nix). This one reads the workflows with yq, and as a
+  # check it would rerun on every workflow edit, so it stays a job: it needs
+  # no Nix and takes seconds.
   guards:
     name: Guards
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      # Guard the single source: the Rust version lives in rust-toolchain.toml
-      # alone. Each pattern matches one mechanism that used to hold a hand-copied
-      # pin. Keep them narrow; these files are full of unrelated Elixir, NDK and
-      # build-tools versions. See issue #252.
-      - name: Guard the Rust toolchain pin
-        run: |
-          set -euo pipefail
-          FAIL=0
-          if grep -nE -- '--default-toolchain[[:space:]]+[0-9]' Dockerfile; then
-            echo "::error::Dockerfile pins a Rust version; it must come from rust-toolchain.toml"
-            FAIL=1
-          fi
-          # Matches a quoted literal (rust-bin.stable."1.96.0") but not an
-          # interpolated channel (rust-bin.stable.${rustChannel}), which is how
-          # the Android shell reads the pin.
-          if grep -nE 'rust-bin\.[a-z]+\."' nix/devShells/flake-module.nix; then
-            echo "::error::the Android shell names a Rust version; read it from rust-toolchain.toml"
-            FAIL=1
-          fi
-          if grep -nE '^[[:space:]]*version[[:space:]]*=[[:space:]]*"[0-9]' devenv.nix; then
-            echo "::error::devenv.nix names a version literal; read it from rust-toolchain.toml"
-            FAIL=1
-          fi
-          # The Flatpak build installs rustup with --default-toolchain none and
-          # lets it resolve rust-toolchain.toml, so nothing under player/flatpak
-          # may name a channel.
-          if grep -rnE -- '--default-toolchain[[:space:]]+[0-9]|^[[:space:]]*channel[[:space:]]*=' player/flatpak/ player/appimage/; then
-            echo "::error::player/flatpak or player/appimage pins a Rust version; rustup resolves rust-toolchain.toml on its own"
-            FAIL=1
-          fi
-          exit "$FAIL"
-
-      # Every first-party crate carries a copy of rust-lints.toml's tables.
-      - name: Guard the Rust lint tables
-        run: |
-          scripts/check-rust-lints.sh
-          scripts/test-check-rust-lints.sh
-
-      # BUILD_COMMIT's value changes on every commit, and BuildKit folds a RUN's
-      # environment into its ExecOp cache key while a COPY is a FileOp that
-      # ignores it. Declared above the dependency layers it therefore leaves
-      # `mix deps.get` and `mix deps.compile` permanently uncacheable across
-      # commits, in ci-docker.yml, release.yml and ci-player-e2e.yml at once,
-      # while the build log still reports the COPY above them as CACHED. That
-      # asymmetry hid the bug from the day it was introduced.
-      #
-      # Below `mix compile` is wrong for the opposite reason: Mydia.System
-      # captures BUILD_COMMIT into a module attribute, `mix release` recompiles
-      # nothing, and the commit suffix would disappear from the version and from
-      # crash reports with no build or test failure. Both bounds are checked.
-      #
-      # Comments are blanked rather than deleted, so line numbers survive,
-      # before matching. The Dockerfile comment explaining this rule quotes
-      # every string the guard searches for, which is the same trap the two
-      # guards below already document.
-      - name: Guard the Docker build-identity placement
-        run: |
-          set -euo pipefail
-          scrub="$(mktemp)"
-          sed 's/^[[:space:]]*#.*//' Dockerfile > "$scrub"
-
-          find_line() { grep -nE "$1" "$scrub" | head -1 | cut -d: -f1 || true; }
-
-          deps=$(find_line '^[[:space:]]*mix deps\.compile$')
-          comp=$(find_line '^[[:space:]]*mix compile$')
-          argline=$(find_line '^ARG BUILD_COMMIT')
-          envline=$(find_line '^ENV BUILD_COMMIT')
-
-          FAIL=0
-          for a in "mix deps.compile:$deps" "mix compile:$comp" \
-                   "ARG BUILD_COMMIT:$argline" "ENV BUILD_COMMIT:$envline"; do
-            if [ -z "${a##*:}" ]; then
-              echo "::error::Docker build-identity guard lost its anchor (${a%%:*}); update this step in ci.yml"
-              FAIL=1
-            fi
-          done
-          [ "$FAIL" = 0 ] || exit 1
-
-          for pair in "ARG:$argline" "ENV:$envline"; do
-            kind=${pair%%:*}
-            line=${pair##*:}
-            if [ "$line" -lt "$deps" ]; then
-              echo "::error file=Dockerfile,line=$line::$kind BUILD_COMMIT sits above 'mix deps.compile' (line $deps). Its value changes on every commit, so every RUN below it misses cache in ci-docker.yml, release.yml and ci-player-e2e.yml. Keep it beside BUILD_VERSION, just above 'mix compile'."
-              FAIL=1
-            fi
-            if [ "$line" -gt "$comp" ]; then
-              echo "::error file=Dockerfile,line=$line::$kind BUILD_COMMIT sits below 'mix compile' (line $comp). Mydia.System captures it into a module attribute at compile time and 'mix release' recompiles nothing, so the commit suffix would silently vanish from the version and from crash reports."
-              FAIL=1
-            fi
-          done
-          exit "$FAIL"
-
-      # This task runs from devenv's mydia:ecto against a database that may have
-      # no tables yet. Booting the supervision tree there is fatal, because
-      # ClientHealth.init/1 queries download_client_configs synchronously, and
-      # the failure leaves fresh worktrees unmigrated forever rather than
-      # retrying. It needs the repo and nothing else.
-      # Both guards below strip full-line comments before matching. Matching the
-      # raw source has already caused two defects during this branch's
-      # implementation: a guard regex that matched the explanatory comment
-      # sitting next to the code it described, and a guard search string that
-      # appeared verbatim in a comment inside the block it scans. Both would
-      # have made CI permanently red, and the workaround each time — contorting
-      # the prose to dodge the guard — is backwards, and narrowing a guard's
-      # regex to avoid a comment also opens an evasion gap in the code match.
-      - name: Guard the pre-migration backup task
-        run: |
-          set -euo pipefail
-          if grep -vE '^[[:space:]]*#' lib/mix/tasks/mydia.backup_before_migrate.ex | grep -nE 'app\.start'; then
-            echo "::error::mydia.backup_before_migrate must not start the application; use Ecto.Migrator.with_repo/2"
-            exit 1
-          fi
-
-      # Shell entry must not boot the app or start a service. mydia:ecto does
-      # both: it runs the backup task and, under Postgres, needs a live server.
-      # Attaching it to enterShell is what made every fresh worktree fail on
-      # entry and what spawned a second postmaster beside `./dev up -d`. It
-      # belongs to processes.phoenix.after and `./dev db.setup` — and nothing
-      # else stops someone deleting that `after`, which would silently restore
-      # the original crash (phoenix booting against an unmigrated database)
-      # with CI green, so the positive invariant is guarded too.
-      - name: Guard shell-entry purity
-        run: |
-          set -euo pipefail
-          BLOCK=$(awk '/"mydia:ecto" = \{/,/^    \};/' devenv.nix | grep -vE '^[[:space:]]*#')
-          [ -n "$BLOCK" ] || { echo "::error::guard could not locate the mydia:ecto block in devenv.nix"; exit 1; }
-          if echo "$BLOCK" | grep -n 'before = onEnterShell'; then
-            echo "::error::mydia:ecto must not run on shell entry; it belongs to processes.phoenix.after"
-            exit 1
-          fi
-          if echo "$BLOCK" | grep -n 'devenv:processes:postgres'; then
-            echo "::error::mydia:ecto must not depend on the postgres process; a task dependency starts a second postmaster"
-            exit 1
-          fi
-          grep -q 'processes\.phoenix\.after = \[ "mydia:ecto@succeeded" \]' devenv.nix || {
-            echo "::error::phoenix must wait for mydia:ecto@succeeded, or it boots against an unmigrated database"; exit 1; }
 
       # The three required contexts in the Master ruleset must never conclude
       # `skipped` (.github/ci-flakes.md, "Why the list was short"). Each lives on
@@ -300,305 +84,314 @@ jobs:
           done
           exit "$FAIL"
 
-  lint:
-    name: Lint
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
+  plan:
+    name: Nix / Plan
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
+    outputs:
+      inputs: ${{ steps.plan.outputs.inputs }}
+      checks: ${{ steps.plan.outputs.checks }}
+      nixos: ${{ steps.plan.outputs.nixos }}
+      all: ${{ steps.plan.outputs.all }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Evaluation only: no disk to free, nothing to push.
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+        with:
+          push: 'false'
+          free-disk: 'false'
+
+      # From the flake's own nixpkgs pin, so the planner moves with flake.lock.
+      - name: Install nix-eval-jobs
+        run: |
+          out="$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#nix-eval-jobs)"
+          echo "$out/bin" >> "$GITHUB_PATH"
+
+      - name: Plan
+        id: plan
+        env:
+          CI_PLAN_WORKERS: '4'
+        run: |
+          plan="$RUNNER_TEMP/plan.json"
+          scripts/ci-plan.sh > "$plan"
+          {
+            echo "inputs=$(jq -c .inputs "$plan")"
+            echo "checks=$(jq -c .checks "$plan")"
+            echo "nixos=$(jq -c .nixos "$plan")"
+            echo "all=$(jq -c .all "$plan")"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Nix plan"
+            echo
+            echo "$(jq '.inputs | length' "$plan") inputs, $(jq '.checks | length' "$plan") checks and $(jq '.nixos | length' "$plan") NixOS VM tests (non-blocking) to build; everything else is cached."
+            echo
+            jq -r '
+              (.inputs | map("- input `\(.name)`")),
+              (.checks | map("- `\(.name)` (\(.group))")),
+              (.nixos | map("- `\(.name)` (nixos, non-blocking)"))
+              | .[]' "$plan"
+          } >> "$GITHUB_STEP_SUMMARY"
+          jq 'del(.all)' "$plan"
+
+  # Skipped for fork PRs (no OIDC token) and Dependabot runs (which may not get
+  # one): building inputs nobody may be able to fetch only duplicates what each
+  # check job then builds for itself.
+  inputs:
+    name: Nix / Input (${{ matrix.name }})
+    needs: plan
+    if: >-
+      needs.plan.outputs.inputs != '[]'
+      && github.actor != 'dependabot[bot]'
+      && (github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.inputs) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The action drops the pin on every ref but master.
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+        with:
+          pin: master-${{ matrix.name }}
+
+      - name: Build
+        env:
+          ATTR: ${{ matrix.attr }}
+        run: ./scripts/ci-nix-build.sh "$ATTR" "$RUNNER_TEMP/out-paths"
+
+      - name: Push to the cache
+        run: |
+          mapfile -t paths < "$RUNNER_TEMP/out-paths"
+          "$NIX_CI_PUSH" "${paths[@]}"
+
+  checks:
+    name: Nix / ${{ matrix.name }}
+    needs: [plan, inputs]
+    # Runs when the inputs wave was skipped (no shared inputs) or failed: a
+    # check whose input failed fails on its own, with its own log.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.checks != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.checks) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+        with:
+          pin: master-${{ matrix.name }}
+
+      - name: Build
+        env:
+          ATTR: ${{ matrix.attr }}
+        run: ./scripts/ci-nix-build.sh "$ATTR" "$RUNNER_TEMP/out-paths"
+
+      - name: Push to the cache
+        run: |
+          mapfile -t paths < "$RUNNER_TEMP/out-paths"
+          "$NIX_CI_PUSH" "${paths[@]}"
+
+  # The NixOS module VM tests (nixos-module, nixos-module-postgres): same
+  # build and push as `checks`, but outside the Nix / Checks verdict, so they
+  # block nothing. The package they boot takes the whole repo as its source
+  # (src = ../..), so they rerun on nearly every commit, and a QEMU boot on a
+  # shared runner is the slowest and flakiest build in the set. They still
+  # run on every PR and show their own result; a red one is worth a look
+  # before merge. Master pins include them.
+  nixos:
+    name: Nix / NixOS (${{ matrix.name }})
+    needs: [plan, inputs]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.nixos != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.nixos) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+        with:
+          pin: master-${{ matrix.name }}
+
+      # The NixOS module tests boot a QEMU VM.
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build
+        env:
+          ATTR: ${{ matrix.attr }}
+        run: ./scripts/ci-nix-build.sh "$ATTR" "$RUNNER_TEMP/out-paths"
+
+      - name: Push to the cache
+        run: |
+          mapfile -t paths < "$RUNNER_TEMP/out-paths"
+          "$NIX_CI_PUSH" "${paths[@]}"
+
+  nix-result:
+    name: Nix / Checks
+    needs: [plan, inputs, checks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A skipped build job means an empty matrix (everything was cached) or,
+      # for inputs, a run that cannot push. Pins and the NixOS VM tests are
+      # not part of the verdict.
+      - name: Assert every planned build succeeded
+        env:
+          PLAN: ${{ needs.plan.result }}
+          INPUTS: ${{ needs.inputs.result }}
+          CHECKS: ${{ needs.checks.result }}
+        run: |
+          echo "plan=$PLAN inputs=$INPUTS checks=$CHECKS"
+          if [ "$PLAN" != success ]; then
+            echo "::error::Nix / Plan did not succeed ($PLAN)"
+            exit 1
+          fi
+          for result in "$INPUTS" "$CHECKS"; do
+            case "$result" in
+              success | skipped) ;;
+              *)
+                echo "::error::a Nix build job ended $result"
+                exit 1
+                ;;
+            esac
+          done
+
+  # niks3 keeps unpinned paths for 14 days. PR runs push everything before it
+  # merges, so master's own run usually plans nothing and its build jobs never
+  # pass a pin; this job pins every check and ciInternal output as
+  # master-<name> regardless, from the cache. Upkeep, not a verdict: it only
+  # warns, never fails the run, and the aggregators ignore it.
+  pins:
+    name: Nix / Pins
+    needs: [plan, inputs, checks, nixos]
+    if: always() && needs.plan.result == 'success' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+
+      - name: Refresh the master pins
+        env:
+          ALL: ${{ needs.plan.outputs.all }}
+        run: |
+          printf '%s' "$ALL" > "$RUNNER_TEMP/all.json"
+          ./scripts/ci-nix-pin.sh "$RUNNER_TEMP/all.json"
+
+  # Blocks new complexity, nesting and module-size debt relative to the merge
+  # base (see "Ratchets" in CONTRIBUTING.md). It reads git history, so it is
+  # a job rather than a check, but it does not compile the app: it lays the
+  # cached test build over the checkout (scripts/ci-restore-test-build.sh,
+  # which needs the checkout at /build/source), and Mix recompiles only a
+  # handful of files (about 14). It waits for the inputs wave,
+  # which builds and pushes that test build when the run changed it.
+  ratchet:
+    name: Lint / Ratchet
+    needs: [plan, inputs]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # mix mydia.ratchet compares against the merge base with origin/master.
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up devenv
-        id: devenv
-        uses: ./.github/actions/setup-devenv
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
         with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          push: 'false'
+          free-disk: 'false'
 
-      - name: Lint under devenv
-        run: |
-          devenv shell -- bash <<'DEVENV'
-          set -euo pipefail
-          export MIX_ENV=test
-          ./scripts/ci-mix-bootstrap.sh
-          mix deps.get
-          mix deps.unlock --check-unused
-          mix compile --warnings-as-errors
-          mix format --check-formatted
-          # Guard against re-grandfathering: a Credo check must be enabled-and-
-          # gating or `false`, never `exit_status: 0`. See CONTRIBUTING.md.
-          if grep -n "exit_status: 0" .credo.exs; then
-            echo "::error::exit_status: 0 found in .credo.exs - fix the finding or disable the check with false (see CONTRIBUTING.md)"
-            exit 1
-          fi
-          # Dialyzer findings are fixed, never listed. See "Dialyzer" in
-          # CONTRIBUTING.md.
-          if grep -n "ignore_warnings" mix.exs; then
-            echo "::error::ignore_warnings found in mix.exs - fix the Dialyzer finding instead (see CONTRIBUTING.md)"
-            exit 1
-          fi
-          # Dialyxir reads .dialyzer_ignore.exs by default when it exists, even
-          # without ignore_warnings in mix.exs.
-          if [ -e .dialyzer_ignore.exs ]; then
-            echo "::error::.dialyzer_ignore.exs exists - fix the Dialyzer finding instead (see CONTRIBUTING.md)"
-            exit 1
-          fi
-          if grep -rn "@dialyzer" lib test/support --include='*.ex'; then
-            echo "::error::@dialyzer attributes are not allowed in lib/ or test/support - fix the finding instead (see CONTRIBUTING.md)"
-            exit 1
-          fi
-          # Guard against DEPRECATED markers surviving in lib/: deprecated
-          # code must be deleted, not left behind under a marker. See
-          # CONTRIBUTING.md.
-          if grep -rn "DEPRECATED" lib --include='*.ex' --include='*.heex'; then
-            echo "::error::DEPRECATED: is not allowed in lib/. Delete the code, or mark it COMPAT: if it is load-bearing backward compatibility. See CONTRIBUTING.md."
-            exit 1
-          fi
-          mix credo --strict
-          # Fails when a gettext call changed without regenerating priv/gettext/*.pot.
-          # Translators never edit .po by hand here: Weblate merges them.
-          # `gettext.extract` forces an Elixir recompile; MYDIA_PREBUILT_NIFS=1
-          # keeps Rustler from fetching crates and rebuilding iroh/subsync again.
-          MYDIA_PREBUILT_NIFS=1 mix gettext.extract --check-up-to-date
-          # Blocks new complexity, nesting and module-size debt relative to the
-          # merge base. See "Ratchets" in CONTRIBUTING.md.
-          mix mydia.ratchet --from-git-merge-base origin/master
-          # Advisory dead-code report (non-blocking; see CONTRIBUTING.md "Quality gates").
-          #
-          # This recompiles all 765 files a second time and cost 199s of every
-          # run, measured 2026-09-03. Nothing is ever gated on its output --
-          # .github/ci.md records that mix_unused is advisory by design and
-          # must not be promoted to blocking -- so pull requests skip it and
-          # master pushes still produce the report.
-          #
-          # The gate is here rather than a step-level `if:` because splitting
-          # this heredoc would evaluate the devenv environment a second time and
-          # cost more than the 199s it saves.
-          if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
-            MYDIA_PREBUILT_NIFS=1 UNUSED_CHECK=true mix compile --force || true
-          fi
-          DEVENV
+      # Bind-mounts the checkout at /build/source; later steps run there.
+      - name: Restore the cached test build
+        run: scripts/ci-restore-test-build.sh --mount
 
-      - name: Save build cache (PR, cold prefix)
-        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            _build
-            priv/native
-            priv/plugins/*.wasm
-          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
+      - name: Ratchet
+        working-directory: /build/source
+        run: nix develop .#ci -c mix mydia.ratchet --from-git-merge-base origin/master
 
-  # The SQLite suite runs with max_cases: 1 (test/test_helper.exs), so one
-  # runner took 642s for it (549s of that sync, 2026-10-15). Each shard is its
-  # own runner with its own mydia_testN.db, so SQLite still sees one writer.
-  # --partitions sorts the test files and deals them out round-robin, not by
-  # duration, so adding a file can shift later files to another shard; if one
-  # shard runs much longer than the others, raise the count rather than
-  # hand-balancing.
-  test-sqlite:
-    name: Test (SQLite ${{ matrix.partition }}/4)
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
+      # Advisory dead-code report (non-blocking; see CONTRIBUTING.md "Quality
+      # gates"). It recompiles every file a second time for output nothing is
+      # gated on (.github/ci.md: mix_unused is advisory by design and must
+      # not be promoted to blocking), so pull requests skip it and master
+      # pushes still produce the report.
+      - name: Unused-code report (advisory)
+        if: github.event_name == 'push'
+        working-directory: /build/source
+        run: nix develop .#ci -c env UNUSED_CHECK=true mix compile --force || true
+
+  # mydia_smb's Samba integration tests need a root smbd, which the Nix
+  # sandbox cannot provide: rust-mydia_smb-test runs the crate's tests with
+  # the integration tests skipped, and this job runs them all against a real
+  # Samba. MYDIA_SMB_REQUIRE_HARNESS=1 turns a harness that failed to start
+  # into a failure rather than a skip.
+  smb:
+    name: Rust / SMB integration
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        partition: [1, 2, 3, 4]
-
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up devenv
-        id: devenv
-        uses: ./.github/actions/setup-devenv
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
         with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      # RustFS is the S3 server for the :s3 storage tests. It runs the same
-      # `mydia-s3` script as local dev, so port and credentials come from
-      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
-      # failed to start fails the job instead of silently skipping those tests.
-      - name: Start RustFS
-        run: |
-          # One devenv shell starts the server and polls it. Two shells started
-          # together race to replace devenv's GC-root symlink and the loser
-          # exits 1 with "Failed to remove existing GC root". devenv shell also
-          # prints its banner on stdout, so capturing `printenv` through it
-          # yields the banner too, which is why the poll runs inside.
-          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
-            exit 0
-          fi
-          cat rustfs.log
-          exit 1
-
-      - name: Test (SQLite) under devenv
-        env:
-          MYDIA_TEST_S3_REQUIRED: "1"
-          MIX_TEST_PARTITION: ${{ matrix.partition }}
-        run: |
-          devenv shell -- bash <<'DEVENV'
-          set -euo pipefail
-          export MIX_ENV=test
-          ./scripts/ci-mix-bootstrap.sh
-          mix deps.get
-          mix compile --warnings-as-errors
-          # Soft: downloads the published Cardigann wasm guest (or copies a local
-          # build); exits 0 when the asset is not published yet (a PR that changes
-          # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
-          mix mydia.cardigann_guest fetch
-          mix ecto.create
-          mix ecto.migrate
-          mix test --partitions 4 --warnings-as-errors
-          DEVENV
-
-      - name: Save build cache (PR, cold prefix)
-        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            _build
-            priv/native
-            priv/plugins/*.wasm
-          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
-
-  dialyzer:
-    name: Dialyzer
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          persist-credentials: false
-
-      - name: Set up devenv
-        id: devenv
-        uses: ./.github/actions/setup-devenv
-        with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      # Keyed on the toolchain, dependency patches and lock, in that order. A lock
-      # change may restore the previous PLT and rebuild incrementally. A patch
-      # change must never restore a PLT built from other patch content: dialyxir
-      # compares dependency versions, not beam contents, so it would report "PLT
-      # is up to date!" against the unpatched Wasmex and fail on functions the
-      # patch adds. Hence the patches hash sits in the restore-keys prefix too.
-      # v3 ensures no entry from the older key layouts can match.
-      # The key that matched exactly never re-saved, so a PLT that dialyxir
-      # repaired on load (1 module removed, 149 added, 3.7 minutes, every run
-      # on 2026-10-30) was thrown away and repaired again next time. The save
-      # key now ends in a hash of the PLT itself: a repaired PLT is saved under
-      # a new key, an unchanged one is a no-op, and restore takes the newest.
-      # Every run saves, but only a changed PLT writes a new entry; PR-scoped entries are small (about 18 MB) and age out after 7 days.
-      - name: Restore Dialyzer PLTs
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: priv/plts
-          key: ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}-restore
-          restore-keys: |
-            ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}-
-            ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-
-
-      - name: Dialyzer under devenv
-        run: |
-          devenv shell -- bash <<'DEVENV'
-          set -euo pipefail
-          export MIX_ENV=test
-          ./scripts/ci-mix-bootstrap.sh
-          mix deps.get
-          mix dialyzer --format github
-          DEVENV
-
-      - name: Save Dialyzer PLTs
-        if: success()
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: priv/plts
-          key: ${{ runner.os }}-plts-v3-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('patches/**') }}-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('priv/plts/*.plt') }}
-
-      - name: Save build cache (PR, cold prefix)
-        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            _build
-            priv/native
-            priv/plugins/*.wasm
-          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
-
-  rust:
-    name: Rust
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Set up devenv
-        uses: ./.github/actions/setup-devenv
-        with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-          elixir-caches: 'false'
-          cargo-cache: 'false'
-
-      # Same script as the native-rust pre-commit hook, so a commit made
-      # outside devenv (which skips the hook) is still gated here.
-      - name: Lint native and player crates (fmt + clippy)
-        run: devenv shell -- scripts/check-rust.sh
-
-      - name: Lint wasm plugins (fmt + clippy)
-        run: devenv shell -- scripts/check-plugins.sh
-
-      # plugins-publish.yml only tests plugins-extra/ on release; this covers
-      # the bundled plugins/ too, on every change.
-      - name: Test wasm plugins
-        run: devenv shell -- scripts/test-plugins.sh
-
-      # `test-introspection` is off in every real build and exposes only a
-      # counter. Without it here, `two_sends_to_one_unconnected_peer_share_a_dial`
-      # is compiled out and the guarantee that concurrent requests to one peer
-      # share a single dial goes unchecked.
-      - name: Core tests
-        run: devenv shell -- cargo test --manifest-path native/mydia_p2p_core/Cargo.toml --features test-introspection
-
-      # The browser build. `--no-default-features` drops the `host` feature,
-      # which is what makes the server role (inbound accept, HLS responses,
-      # file reads) compile out. wasm32-unknown-unknown comes from devenv.nix,
-      # so there is no target install step.
-      - name: wasm build
-        run: devenv shell -- cargo build --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features
-
-      # The wasm build compiles out the `host` feature, so the host-target
-      # clippy in check-rust.sh never sees that cfg path.
-      - name: wasm lint
-        run: devenv shell -- cargo clippy --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features -- -D warnings
-
-      - name: Subsync tests
-        run: devenv shell -- cargo test --manifest-path native/mydia_subsync/Cargo.toml
-
-      - name: Media names tests
-        run: devenv shell -- cargo test --manifest-path native/mydia_media_names/Cargo.toml
+          push: 'false'
+          free-disk: 'false'
 
       - name: SMB tests
         env:
@@ -609,152 +402,71 @@ jobs:
           exports="$(player/rust/mydia_smb/tests/samba/run-samba.sh)"
           eval "$exports"
           test -n "${MYDIA_SMB_TEST_HOST:-}"
-          devenv shell -- cargo test --features test-introspection --manifest-path player/rust/mydia_smb/Cargo.toml
+          nix develop .#ci -c cargo test --features test-introspection --manifest-path player/rust/mydia_smb/Cargo.toml
 
-  test-postgres:
-    name: Test / PostgreSQL (${{ matrix.partition }}/3)
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        partition: [1, 2, 3]
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: mydia_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Set up devenv
-        id: devenv
-        uses: ./.github/actions/setup-devenv
-        with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-          build-cache-prefix: build-v2-devenv-postgres
-
-      # RustFS is the S3 server for the :s3 storage tests. It runs the same
-      # `mydia-s3` script as local dev, so port and credentials come from
-      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
-      # failed to start fails the job instead of silently skipping those tests.
-      - name: Start RustFS
-        run: |
-          # One devenv shell starts the server and polls it. Two shells started
-          # together race to replace devenv's GC-root symlink and the loser
-          # exits 1 with "Failed to remove existing GC root". devenv shell also
-          # prints its banner on stdout, so capturing `printenv` through it
-          # yields the banner too, which is why the poll runs inside.
-          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
-            exit 0
-          fi
-          cat rustfs.log
-          exit 1
-
-      # DATABASE_* is exported INSIDE the shell so it overrides devenv.nix's
-      # per-worktree defaults (DATABASE_HOST/PORT/USER) and points at the GitHub
-      # `services: postgres` container. DATABASE_TYPE is set here (not at job/eval
-      # level) so the compile-time adapter is Postgres without devenv defining an
-      # unused devenv-managed Postgres service at eval time (KTD4).
-      #
-      # DATABASE_NAME is set explicitly, so config/test.exs's MIX_TEST_PARTITION
-      # suffix does not apply. Each shard has its own Postgres container, so they
-      # do not collide.
-      - name: Test (PostgreSQL) under devenv
-        env:
-          MYDIA_TEST_S3_REQUIRED: "1"
-          MIX_TEST_PARTITION: ${{ matrix.partition }}
-        run: |
-          devenv shell -- bash <<'DEVENV'
-          set -euo pipefail
-          export MIX_ENV=test
-          export DATABASE_TYPE=postgres
-          export DATABASE_HOST=localhost
-          export DATABASE_PORT=5432
-          export DATABASE_USER=postgres
-          export DATABASE_PASSWORD=postgres
-          export DATABASE_NAME=mydia_test
-          ./scripts/ci-mix-bootstrap.sh
-          mix deps.get
-          mix compile
-          # Soft: downloads the published Cardigann wasm guest (or copies a local
-          # build); exits 0 when the asset is not published yet (a PR that changes
-          # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
-          mix mydia.cardigann_guest fetch
-          mix ecto.create
-          mix ecto.migrate
-          mix ecto.migrations
-          mix test --partitions 3 --warnings-as-errors
-          DEVENV
-
-      - name: Save build cache (PR, cold prefix)
-        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            _build
-            priv/native
-            priv/plugins/*.wasm
-          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
-
+  # The browser tests stay a devenv job: chromium and chromedriver come from
+  # devenv.nix (CHROME_PATH / CHROMEDRIVER_PATH), and so do node and the
+  # asset tooling. The compiled app is not built here: like the ratchet, the
+  # job restores the cached SQLite test build (scripts/ci-restore-test-build.sh)
+  # and runs devenv from /build/source. devenv's Elixir and OTP are the
+  # checks' own (both resolve beam-version.nix on flake.lock's nixpkgs), so
+  # with the build's compile-time variables exported Mix finds nothing to
+  # compile. What the test build lacks, assets and node_modules, is built
+  # here. It waits for the inputs wave, which pushes that test build when
+  # the run changed it, and runs even when the plan failed (the restore then
+  # builds the test build itself), so this required check never skips.
   test-e2e:
     name: Test / E2E Browser (run)
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    needs: [plan, inputs]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+      # Only used if Mix does recompile the deps (a toolchain mismatch):
+      # Wasmex carries a local patch in its Rust half (patches/wasmex), so it
+      # is built from source instead of downloading its precompiled NIF.
+      WASMEX_BUILD: "1"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Set up devenv
-        id: devenv
-        uses: ./.github/actions/setup-devenv
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          persist-credentials: false
 
-      # chromium + chromedriver come from devenv (devenv.nix sets CHROME_PATH /
-      # CHROMEDRIVER_PATH); run-feature-tests.sh finds chromium on PATH and honors
-      # CHROMEDRIVER_PATH, so no separate Chrome action is needed.
+      # Read-only, so no Cachix token: everything the restore may build here
+      # (the test build and, on a cache miss, mixDepsCompiled, wasmexNif, the
+      # NIFs, pluginWasm) belongs in niks3, not Cachix. The devenv environment
+      # comes from Cachix and cache.nixos.org as before.
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+
+      # Bind-mounts the checkout at /build/source; later steps run there.
+      - name: Restore the cached test build
+        run: scripts/ci-restore-test-build.sh --mount
+
+      # GitHub sets CI=true, which makes devenv.nix skip its enterShell setup
+      # tasks, so the heredoc runs the equivalent setup (hex/rebar) itself, in
+      # one `devenv shell` so the environment evaluates once. No
+      # `mix deps.get`: deps/ came with the test build. The MYDIA_* variables
+      # are the test build's compile-time config, copied from `env` in
+      # nix/ci/elixir.nix: keep the two in sync, or a different value
+      # recompiles the whole app. run-feature-tests.sh finds
+      # chromium on PATH and honors CHROMEDRIVER_PATH, so no separate Chrome
+      # action is needed.
       - name: Feature tests (E2E) under devenv
+        working-directory: /build/source
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
           export MIX_ENV=test
+          export MYDIA_PREBUILT_NIFS=1 MYDIA_PREBUILT_PLUGINS=1 MYDIA_SKIP_CARDIGANN_FETCH=1
+          unset DATABASE_TYPE
           ./scripts/ci-mix-bootstrap.sh
-          mix deps.get
           mix compile
           npm ci --prefix assets
           mix assets.deploy
           ./scripts/run-feature-tests.sh
           DEVENV
-
-      - name: Save build cache (PR, cold prefix)
-        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            _build
-            priv/native
-            priv/plugins/*.wasm
-          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
 
       - name: Upload screenshots on failure
         if: failure()
@@ -764,66 +476,16 @@ jobs:
           path: tmp/wallaby_screenshots/
           retention-days: 7
 
-  # A `.po` change can break only what these cover: a catalog that fails to
-  # compile, a translation that drops or renames a placeholder, a bad
-  # Plural-Forms header, and locale resolution. None of it depends on the
-  # database adapter, so one SQLite runner checks it in place of the backend
-  # suite. `.pot` changes come from code changes and still run everything.
-  translations:
-    name: Translations
-    needs: changes
-    if: needs.changes.outputs.translations == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          persist-credentials: false
-
-      - name: Set up devenv
-        id: devenv
-        uses: ./.github/actions/setup-devenv
-        with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      - name: Catalog tests under devenv
-        run: |
-          devenv shell -- bash <<'DEVENV'
-          set -euo pipefail
-          export MIX_ENV=test
-          ./scripts/ci-mix-bootstrap.sh
-          mix deps.get
-          mix compile --warnings-as-errors
-          mix ecto.create
-          mix ecto.migrate
-          mix test --warnings-as-errors \
-            test/mydia_web/gettext_po_test.exs \
-            test/mydia_web/gettext_plural_test.exs \
-            test/mydia/locale_test.exs \
-            test/mydia/locale/catalog_test.exs \
-            test/mydia_web/locale_integration_test.exs
-          DEVENV
-
-      - name: Save build cache (PR, cold prefix)
-        if: success() && github.event_name != 'push' && steps.devenv.outputs.build-cache-matched-key == ''
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            _build
-            priv/native
-            priv/plugins/*.wasm
-          key: ${{ steps.devenv.outputs.build-cache-key-prefix }}pr-${{ github.event.pull_request.number }}
-
-  # Required contexts live on these aggregators, never on gated jobs: a job
-  # skipped by `if:` concludes `skipped`, and whether the ruleset counts that as
-  # passing is configuration-dependent (.github/ci-flakes.md). These always run
-  # and conclude success or failure. `Guards` enforces the always() condition.
+  # Required contexts live on these aggregators: each always runs and
+  # concludes success or failure, never `skipped` (whether the ruleset counts
+  # `skipped` as passing is configuration-dependent, .github/ci-flakes.md).
+  # Each accepts `success` or `skipped` from what it needs. `Guards`
+  # enforces the always() condition. Test and Test / PostgreSQL both gate on
+  # the whole Nix matrix through Nix / Checks: a matrix leg's result is not
+  # addressable through `needs`.
   test:
     name: Test
-    needs: [changes, guards, lint, test-sqlite, translations]
+    needs: [guards, nix-result, ratchet, smb]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest
@@ -837,7 +499,7 @@ jobs:
 
   test-postgres-result:
     name: Test / PostgreSQL
-    needs: [changes, test-postgres]
+    needs: [nix-result]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest
@@ -851,7 +513,7 @@ jobs:
 
   test-e2e-result:
     name: Test / E2E Browser
-    needs: [changes, test-e2e]
+    needs: [test-e2e]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest
@@ -862,38 +524,3 @@ jobs:
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
-
-  # Master saves _build under a key ending in the commit SHA (see
-  # .github/actions/setup-devenv) and the PLT under a content hash. Without
-  # this job those entries pile up until the 10 GB budget evicts the deps and
-  # cargo caches. Keeps the newest two per family; restore always takes the
-  # newest, the second covers a run that started before this one finished.
-  cache-prune:
-    name: Cache prune
-    needs: [lint, test-sqlite, test-postgres, dialyzer, test-e2e]
-    if: ${{ !cancelled() && github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Delete all but the newest two entries per family
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # $1: key prefix. $2: a longer prefix to exclude ("" for none), so
-          # the build-v2-devenv- family does not also match -postgres-.
-          prune() {
-            gh cache list --ref refs/heads/master --key "$1" --sort created_at --order desc --limit 100 --json id,key \
-              | jq -r --arg x "$2" '[.[] | select($x == "" or (.key | startswith($x) | not))] | .[2:][] | .id' \
-              | while read -r id; do
-                  gh cache delete "$id" || echo "::warning::could not delete cache $id"
-                done
-          }
-          prune "${RUNNER_OS}-build-v2-devenv-postgres-" ""
-          prune "${RUNNER_OS}-build-v2-devenv-" "${RUNNER_OS}-build-v2-devenv-postgres-"
-          prune "${RUNNER_OS}-plts-v3-" ""
-          prune "${RUNNER_OS}-deps-v2-devenv-" ""
-          prune "${RUNNER_OS}-cargo-v2-" ""
-          prune "${RUNNER_OS}-mix-archives-v1-" ""

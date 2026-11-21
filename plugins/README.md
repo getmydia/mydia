@@ -97,12 +97,13 @@ was vendored, and `Build / Packages` (the `CI / Nix` workflow's
 simkl guest. The failure is silent: the plugins Mix compiler captures cargo
 stderr, and the sandbox dies after `[plugins] compiling <name>` with no error text
 in `nix log`. It builds fine standalone, because the host has network and a cargo
-cache, so it only reproduces via `nix build .#checks.x86_64-linux.package` or in
-CI. Docker builders are unaffected.
+cache, so it only reproduces via `nix build .#packages.x86_64-linux.default` or
+in CI (where the package is now built as `ciInternal.package-default`, the
+input of the `Nix / NixOS` jobs). Docker builders are unaffected.
 
 When adding a guest, mirror the webhook_notifier vendoring block in
 `flake-module.nix`, both the `importCargoLock` and the `.cargo/config.toml` write.
-Verify with `nix build .#checks.x86_64-linux.package -L` before pushing; a green
+Verify with `nix build .#packages.x86_64-linux.default -L` before pushing; a green
 local `./dev` will not catch it.
 
 ## Plugins that are not bundled

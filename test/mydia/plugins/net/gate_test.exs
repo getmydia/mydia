@@ -161,6 +161,9 @@ defmodule Mydia.Plugins.Net.GateTest do
   end
 
   describe "timeout" do
+    # Needs a default route for the SYN to black-hole on. Without one (the
+    # Nix build sandbox) the connect fails at once with :enetunreach.
+    @tag :external
     test "a host that never answers hits the connect timeout" do
       # 203.0.113.0/24 is TEST-NET-3 (RFC5737): guaranteed non-routable, so the
       # connection black-holes and the gate's deadline fires cleanly.

@@ -1,6 +1,9 @@
 # SQLite doesn't handle high concurrency well, even with WAL mode.
 # Use 1 concurrent case for SQLite to avoid "Database busy" errors.
-# PostgreSQL handles concurrency fine, so use all available schedulers.
+# PostgreSQL handles concurrency fine, so use the schedulers, capped at 8 to
+# stay under the Repo's pool_size: 10 (config/test.exs): each async case holds
+# a sandbox connection, and more cases than connections queue past the pool
+# timeout (47 failures at 16 schedulers).
 # Exclude external integration tests by default (require external services)
 # Exclude feature tests by default (require chromedriver)
 # Exclude relay tests by default (require connected relay service)
@@ -9,7 +12,7 @@
 # Run specific tests explicitly with: mix test --include <tag>
 max_cases =
   if System.get_env("DATABASE_TYPE") == "postgres" do
-    System.schedulers_online()
+    min(System.schedulers_online(), 8)
   else
     1
   end
@@ -30,6 +33,23 @@ s3_exclude =
     true ->
       [:s3]
   end
+
+# Mint verifies TLS against :public_key.cacerts_get/0, which OTP fills from
+# fixed paths under /etc. The Nix build sandbox (nix/ci/tests.nix) has no
+# /etc/ssl, so without this every test that starts a TLS handshake, even to a
+# Bypass or an unroutable address, raises "default CA trust store not
+# available". SSL_CERT_FILE is the fallback only: cacerts_get/0 keeps a store
+# that is already cached and otherwise loads the OS one, and only when that
+# raises is the file loaded.
+try do
+  :public_key.cacerts_get()
+rescue
+  ErlangError ->
+    case System.get_env("SSL_CERT_FILE") do
+      nil -> :ok
+      path -> :ok = :public_key.cacerts_load(path)
+    end
+end
 
 # The Wasmex-hosted Cardigann engine tests need the prebuilt guest. Without it
 # they are excluded, loudly: a green run must never read as "the engine works"

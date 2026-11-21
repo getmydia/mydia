@@ -21,6 +21,7 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    crane.url = "github:ipetkov/crane";
   };
 
   outputs = inputs@{ flake-parts, ... }:
@@ -35,6 +36,7 @@
       imports = [
         ./nix/packages/flake-module.nix
         ./nix/checks/flake-module.nix
+        ./nix/ci/flake-module.nix
         ./nix/modules/flake-module.nix
         ./nix/devShells/flake-module.nix
       ];

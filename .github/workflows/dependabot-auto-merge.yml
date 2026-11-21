@@ -47,7 +47,6 @@ on:
       - CI / Relay
       - CI / Security
       - CI / Site
-      - CI Server
       # Regenerates derived files on Dependabot branches. Listed so a fixup
       # that fails, which is then the last workflow to finish, still wakes
       # the gate.

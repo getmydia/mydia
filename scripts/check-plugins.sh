@@ -3,6 +3,11 @@ set -uo pipefail
 
 # Lint every WASM plugin crate under plugins/ and plugins-extra/.
 #
+# CI runs this script (and scripts/test-plugins.sh) inside the `rust-plugins`
+# Nix check in nix/ci/rust.nix, which vendors every plugin's Cargo.lock. The
+# bundled guests' release wasm the app loads is a separate derivation in the
+# same file (ciInternal.pluginWasm). Keep the two in step.
+#
 # Plugins compile to wasm32-wasip2 component-model guests (built against the WIT
 # contract via the SDK's wit-bindgen), so we check them against that target
 # rather than the host. This keeps plugin commits off the native NIF toolchain

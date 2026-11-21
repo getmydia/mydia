@@ -331,8 +331,8 @@ jobs:
   # the wasm module. The Rust half needs nix, wasm-pack and a
   # flutter_rust_bridge codegen install (player/tool/build_web.sh), which is
   # roughly twelve minutes and too much for every player PR. The split is
-  # deliberate rather than lazy: ci.yml already compiles
-  # native/mydia_p2p_core for wasm32-unknown-unknown, so the crate reaching
+  # deliberate rather than lazy: ci.yml's rust-p2p-core-wasm flake check
+  # already compiles native/mydia_p2p_core for wasm32-unknown-unknown, so the crate reaching
   # wasm is covered, and what stays uncovered here is wasm-pack's packaging
   # step, whose inputs are pinned toolchain versions that move only on a
   # deliberate bump. Dart source, which every PR touches, is what this catches.

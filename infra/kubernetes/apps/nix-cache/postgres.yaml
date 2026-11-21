@@ -1,0 +1,84 @@
+# niks3's reference database: closures, pins and object references for GC.
+# No NAR bytes live here, so it stays small. Losing it loses GC bookkeeping
+# and pins, not cached data; niks3 re-registers closures on the next push.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: niks3-db-data
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: niks3-postgres
+  labels:
+    app.kubernetes.io/name: niks3-postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: niks3-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: niks3-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: niks3
+            - name: POSTGRES_USER
+              value: niks3
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: niks3-db
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, niks3]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, niks3]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 20m
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: niks3-db-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: niks3-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: niks3-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

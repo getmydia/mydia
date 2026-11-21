@@ -2,7 +2,8 @@ name: Dependabot fixup
 
 # Dependabot edits manifests and lockfiles and nothing else, so a bump that
 # moves anything derived from them fails `Check / Generated Freshness`:
-# deps.nix behind mix.lock, a Cargo.lock behind a shared path crate,
+# deps.nix behind mix.lock (the app's or metadata-relay/'s, both regenerated
+# here), a Cargo.lock behind a shared path crate,
 # npmDeps.hash behind assets/package-lock.json, devenv.lock behind flake.lock.
 # This job regenerates them with
 # scripts/regenerate-derived.sh and pushes the result onto the Dependabot

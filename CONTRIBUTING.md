@@ -84,7 +84,8 @@ write translatable UI code.
 
 ### Dialyzer
 
-`./dev dialyzer` (and the `Dialyzer` CI job) must report zero findings. There is
+`./dev dialyzer` (and the `dialyzer` flake check, shown in CI as
+`Nix / dialyzer`) must report zero findings. There is
 no ignore list: no `ignore_warnings`, no `.dialyzer_ignore.exs`, no `@dialyzer`
 attributes. CI fails if any appear.
 

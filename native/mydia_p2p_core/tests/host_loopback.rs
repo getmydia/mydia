@@ -12,6 +12,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{blocking, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::time::Duration;
 
@@ -32,8 +34,8 @@ fn wait_for_addr(host: &Host) -> String {
 fn two_hosts_exchange_ping() {
     let rt = tokio::runtime::Runtime::new().expect("test runtime");
 
-    let (server, server_id) = Host::new(HostConfig::default());
-    let (client, _client_id) = Host::new(HostConfig::default());
+    let (server, server_id) = support::host(HostConfig::default());
+    let (client, _client_id) = support::host(HostConfig::default());
 
     let server_addr = wait_for_addr(&server);
     blocking::dial(&client, server_addr).expect("dial should succeed");
@@ -62,8 +64,8 @@ fn two_hosts_exchange_ping_from_async() {
     let rt = tokio::runtime::Runtime::new().expect("test runtime");
 
     rt.block_on(async {
-        let (server, server_id) = Host::new(HostConfig::default());
-        let (client, _client_id) = Host::new(HostConfig::default());
+        let (server, server_id) = support::host(HostConfig::default());
+        let (client, _client_id) = support::host(HostConfig::default());
 
         let mut server_addr = String::new();
         for _ in 0..100 {

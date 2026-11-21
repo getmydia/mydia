@@ -27,7 +27,7 @@ defmodule MetadataRelay.PairingTest do
       assert {:ok, claim} = Pairing.create_claim(@valid_node_addr)
       assert String.length(claim.code) == 6
       assert claim.node_addr == @valid_node_addr
-      assert claim.expires_at != nil
+      assert %DateTime{} = claim.expires_at
     end
 
     test "respects custom TTL" do

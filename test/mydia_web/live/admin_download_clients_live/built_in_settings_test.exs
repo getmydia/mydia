@@ -364,8 +364,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       run_built_in(%Config{enabled?: true, vpn?: true, vpn_provider: "mullvad"})
       view = open_settings(conn)
 
+      # `enabled` stays on explicitly. Left at "automatic", it resolves
+      # against the PATH, and without rqbit there the save reads as turning
+      # the client off rather than the VPN.
       render_submit(element(view, "#built-in-settings-form"), %{
-        "built_in" => %{"vpn_enabled" => "false"}
+        "built_in" => %{"enabled" => "true", "vpn_enabled" => "false"}
       })
 
       assert has_element?(view, "#built-in-confirm-vpn-off")
@@ -465,11 +468,14 @@ defmodule MydiaWeb.AdminDownloadClientsLive.BuiltInSettingsTest do
       assert has_element?(view, "#built-in-field-vpn_enabled")
       refute has_element?(view, "#built-in-field-vpn_enabled[disabled]")
 
+      # `enabled` explicit, as in "turning the VPN off while the engine runs
+      # asks first": "automatic" depends on rqbit being on the PATH.
       form = element(view, "#built-in-settings-form")
-      render_submit(form, %{"built_in" => %{"vpn_enabled" => "false"}})
+      vpn_off = %{"built_in" => %{"enabled" => "true", "vpn_enabled" => "false"}}
+      render_submit(form, vpn_off)
       assert has_element?(view, "#built-in-confirm-vpn-off")
 
-      render_submit(form, %{"built_in" => %{"vpn_enabled" => "false"}})
+      render_submit(form, vpn_off)
       refute has_element?(view, "#built-in-settings-modal")
 
       assert %{value: "false"} =

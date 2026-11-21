@@ -12,6 +12,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -89,7 +91,7 @@ async fn a_host_waiting_for_its_relay_still_dials_and_sends() {
 }
 
 async fn a_host_waiting_for_its_relay_still_dials_and_sends_body() {
-    let (responder, responder_id) = Host::new(test_config());
+    let (responder, responder_id) = support::host(test_config());
     let responder_addr = wait_for_ready(&responder).await;
     let responder = Arc::new(responder);
     spawn_echo_responder(responder.clone());

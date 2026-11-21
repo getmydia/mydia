@@ -11,6 +11,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::time::Duration;
 
@@ -72,8 +74,8 @@ async fn a_hinted_peer_is_dialable_by_node_id_alone() {
 }
 
 async fn a_hinted_peer_is_dialable_by_node_id_alone_body() {
-    let (responder, responder_id) = Host::new(test_config());
-    let (dialer, _dialer_id) = Host::new(test_config());
+    let (responder, responder_id) = support::host(test_config());
+    let (dialer, _dialer_id) = support::host(test_config());
 
     let responder_addr = wait_for_ready(&responder).await;
     let _ = wait_for_ready(&dialer).await;
@@ -117,7 +119,7 @@ async fn an_unreachable_dial_does_not_block_other_commands() {
 }
 
 async fn an_unreachable_dial_does_not_block_other_commands_body() {
-    let (dialer, _dialer_id) = Host::new(test_config());
+    let (dialer, _dialer_id) = support::host(test_config());
     let _ = wait_for_ready(&dialer).await;
 
     // TEST-NET-1 (RFC 5737), reserved for documentation. Packets to it are
@@ -192,8 +194,8 @@ async fn a_send_to_an_unconnected_peer_dials_it() {
 }
 
 async fn a_send_to_an_unconnected_peer_dials_it_body() {
-    let (responder, responder_id) = Host::new(test_config());
-    let (sender, _sender_id) = Host::new(test_config());
+    let (responder, responder_id) = support::host(test_config());
+    let (sender, _sender_id) = support::host(test_config());
 
     let responder_addr = wait_for_ready(&responder).await;
     let _ = wait_for_ready(&sender).await;
@@ -228,8 +230,8 @@ async fn two_sends_to_one_unconnected_peer_share_a_dial() {
 
 #[cfg(feature = "test-introspection")]
 async fn two_sends_to_one_unconnected_peer_share_a_dial_body() {
-    let (responder, responder_id) = Host::new(test_config());
-    let (sender, _sender_id) = Host::new(test_config());
+    let (responder, responder_id) = support::host(test_config());
+    let (sender, _sender_id) = support::host(test_config());
 
     let responder_addr = wait_for_ready(&responder).await;
     let _ = wait_for_ready(&sender).await;
@@ -262,7 +264,7 @@ async fn a_send_to_an_unreachable_peer_reports_the_dial_failure() {
 }
 
 async fn a_send_to_an_unreachable_peer_reports_the_dial_failure_body() {
-    let (sender, _sender_id) = Host::new(test_config());
+    let (sender, _sender_id) = support::host(test_config());
     let _ = wait_for_ready(&sender).await;
 
     // No hint for it either, so discovery has nothing to answer with and the

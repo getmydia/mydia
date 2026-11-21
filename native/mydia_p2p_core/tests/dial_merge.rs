@@ -11,6 +11,8 @@
     reason = "integration test crate: helpers outside #[test] fns are test code too"
 )]
 
+mod support;
+
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::sync::Arc;
 use std::time::Duration;
@@ -77,8 +79,8 @@ fn spawn_echo_responder(host: Arc<Host>) {
 
 /// A responder echoing `Custom` requests, and a dialer, both ready.
 async fn ready_pair() -> (Arc<Host>, String, String, Host) {
-    let (responder, responder_id) = Host::new(test_config());
-    let (dialer, _dialer_id) = Host::new(test_config());
+    let (responder, responder_id) = support::host(test_config());
+    let (dialer, _dialer_id) = support::host(test_config());
     let responder_addr = wait_for_ready(&responder).await;
     let _ = wait_for_ready(&dialer).await;
     spawn_event_drain(&dialer);
@@ -162,7 +164,7 @@ async fn a_dial_and_a_send_to_one_peer_share_a_connect() {
 #[tokio::test]
 async fn a_failed_dial_fails_every_waiter() {
     within_timeout(async {
-        let (dialer, _id) = Host::new(test_config());
+        let (dialer, _id) = support::host(test_config());
         let _ = wait_for_ready(&dialer).await;
         spawn_event_drain(&dialer);
 

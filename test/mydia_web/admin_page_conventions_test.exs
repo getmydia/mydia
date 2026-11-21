@@ -15,6 +15,7 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   use ExUnit.Case, async: true
 
   @live_root Path.expand("../../lib/mydia_web/live", __DIR__)
+  @lib_root Path.expand("../../lib", __DIR__) <> "/"
   @max_template_lines 60
 
   # Single files outside a page directory that hold migrated admin markup,
@@ -188,16 +189,37 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     |> Enum.reject(&is_nil/1)
   end
 
+  # A dependency's LiveView mounted under /admin (the error tracker dashboard)
+  # is not ours to restyle. Told apart by application rather than by source
+  # path: a module compiled with ERL_COMPILER_OPTIONS [deterministic] (as the
+  # deps are in nix/ci/mix-deps.nix) records no source at all.
   defp page_files(module) do
     Code.ensure_loaded!(module)
-    source = module.module_info(:compile)[:source] |> to_string() |> Path.expand()
+
+    if module in Application.spec(:mydia, :modules) do
+      module |> source_file() |> source_page_files()
+    end
+  end
+
+  defp source_file(module) do
+    case module.module_info(:compile)[:source] do
+      nil ->
+        flunk(
+          "#{inspect(module)} is mounted under /admin but records no :source " <>
+            "(compiled with [deterministic]?), so its page cannot be scanned"
+        )
+
+      source ->
+        source |> to_string() |> Path.expand()
+    end
+  end
+
+  defp source_page_files(source) do
     dir = Path.dirname(source)
 
     cond do
-      # A dependency's LiveView mounted under /admin (the error tracker
-      # dashboard) is not ours to restyle.
-      String.contains?(source, "/deps/") ->
-        nil
+      not String.starts_with?(source, @lib_root) ->
+        flunk("#{source} is an app module outside #{@lib_root}")
 
       dir == @live_root ->
         base = Path.rootname(source)
