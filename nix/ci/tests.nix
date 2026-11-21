@@ -22,7 +22,10 @@
 # DATABASE_HOST/PORT/USER anywhere else would throw away mydiaTestBuild.
 # DATABASE_NAME is read by config/runtime.exs only.
 #
-# Every shard reads all of test/, so any test edit reruns all seven.
+# Every shard reads all of test/, so any test edit reruns all seven. The one
+# exception is test/ci/workflow_triggers_test.exs, the only test that reads
+# .github/workflows: it runs alone in ci-workflow-triggers, so a workflow
+# edit reruns that check and not the shards.
 { ... }:
 
 {
@@ -112,16 +115,16 @@
       '';
 
       # Files outside the app and test/ that tests read: parity and guard
-      # tests over CSS, workflows, scripts, the BEAM and gluetun pins, the
-      # player's tables and GraphQL documents, and the Nix Wasmex lock. A test
-      # that reads a repo file missing here fails with :enoent, not a skip;
+      # tests over CSS, scripts, the BEAM and gluetun pins, the player's
+      # tables and GraphQL documents, and the Nix Wasmex lock. A test that
+      # reads a repo file missing here fails with :enoent, not a skip;
       # plugins-extra is also globbed at compile time, one test per manifest.
+      # .github/workflows is not here: see workflowTriggersTest.
       testReads = lib.fileset.unions [
         sources.pluginsExtra
         (root + "/.elixir-version")
         (root + "/.otp-version")
         (root + "/vendor/gluetun/VERSION")
-        (root + "/.github/workflows")
         (root + "/assets/css")
         (root + "/docker/vpn-preflight.sh")
         (root + "/scripts/build_plugin_index.exs")
@@ -130,6 +133,11 @@
         (root + "/player/lib/graphql")
         (root + "/nix/wasmex-Cargo.lock")
       ];
+
+      # The only test that reads .github/workflows. Every workflow edit
+      # changes its input, so it runs on its own (ci-workflow-triggers)
+      # rather than in a shard, where the same edit would rerun all seven.
+      workflowTriggersTest = root + "/test/ci/workflow_triggers_test.exs";
 
       # devenv.nix's MYDIA_TEST_S3_* (on a fixed port: the sandbox has its
       # own loopback).
@@ -189,11 +197,14 @@
         mkCheck {
           name = "test-${databaseType}-${toString partition}";
           # test/ without its Markdown (no test reads a .md under test/), so a
-          # doc edit there does not rerun the shards.
+          # doc edit there does not rerun the shards, and without the
+          # workflow test, which ci-workflow-triggers runs.
           set = lib.fileset.unions [
             buildSet
-            (lib.fileset.difference sources.elixirTest
-              (lib.fileset.fileFilter (file: file.hasExt "md") sources.elixirTest))
+            (lib.fileset.difference sources.elixirTest (lib.fileset.unions [
+              (lib.fileset.fileFilter (file: file.hasExt "md") sources.elixirTest)
+              workflowTriggersTest
+            ]))
             testReads
           ];
           # Tools untagged tests run, all in devenv.nix's packages: ffmpeg
@@ -255,6 +266,27 @@
     in
     {
       checks = shards "sqlite" 4 // shards "postgres" 3 // {
+        # workflow_triggers_test.exs, taken out of the shards. It needs no
+        # services: test_helper.exs excludes :s3 when no server answers
+        # and MYDIA_TEST_S3_REQUIRED is unset.
+        ci-workflow-triggers = mkCheck {
+          name = "ci-workflow-triggers";
+          set = lib.fileset.unions [
+            buildSet
+            (root + "/test/test_helper.exs")
+            workflowTriggersTest
+            (root + "/.github/workflows")
+          ];
+          log = "test.log";
+          extraEnv.SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+          script = ''
+            ${copyBuild ciInternal.mydiaTestBuild-sqlite}
+            mix do loadpaths --no-deps-check + ecto.create + ecto.migrate
+            mix do loadpaths --no-deps-check + test \
+              test/ci/workflow_triggers_test.exs --warnings-as-errors --seed 0
+          '';
+        };
+
         # The shards decide whether to install the pinned guest by
         # cardigannSourceHash; the test build names the file it loads by
         # Artifact.source_hash/0. They must agree, or a correct pin would

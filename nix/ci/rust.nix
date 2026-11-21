@@ -12,7 +12,8 @@
 #
 # The crate list below mirrors the manifest globs in scripts/check-rust.sh
 # (native/* minus cardigann_guest, plus player/rust/*); a new crate needs an
-# entry here.
+# entry here, and the ci-crate-list check (nix/ci/guards.nix) fails until it
+# has one.
 { ... }:
 
 {
@@ -291,6 +292,9 @@
       };
     in
     {
+      # For ci-crate-list (nix/ci/guards.nix).
+      _module.args.ciRust.crateDirs = map (c: c.dir) crates;
+
       checks = rustChecks;
 
       ciRustAttrs = builtins.attrNames rustChecks;

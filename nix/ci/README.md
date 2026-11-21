@@ -14,7 +14,9 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `ci = { sources, rustToolchain, beamPackages, craneLib }` to them through
   `_module.args`. `ci.rustToolchain` is the CI toolchain (the
   `rust-toolchain.toml` version with clippy, rustfmt and the wasm targets),
-  and `ci.craneLib` is crane on that toolchain.
+  and `ci.craneLib` is crane on that toolchain. It also defines
+  `devShells.ci`, the shell of the two CI jobs that run outside the
+  sandbox (below).
 - `sources.nix`: the `lib.fileset` source sets (`elixirApp`, `mixProject`, `elixirTest`,
   `gettext`, `patches`, `nativeCrate`, `playerCrate`, `plugins`,
   `pluginsExtra`, `server`, `relay`) and the `toSource` helper.
@@ -48,14 +50,17 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `MYDIA_PREBUILT_*` variables too: Rustler reads its config with
   `Application.compile_env`, so a different value makes Mix recompile the
   NIF modules, with cargo. The ratchet and the `mix_unused` report read git
-  history and stay ordinary jobs.
+  history and stay an ordinary job (`Lint / Ratchet`, below).
 - `tests.nix`: the ExUnit shards `test-sqlite-{1..4}` and
   `test-postgres-{1..3}`, on top of `mydiaTestBuild` (through
   `elixir.nix`'s `_module.args.ciElixir` helpers). Each starts its own
   RustFS and, for PostgreSQL, its own server on loopback, then runs
   `mix test --partitions N --warnings-as-errors --seed 0`; the output is
   `test.log`. `testReads` lists the repo files outside the app and `test/`
-  that tests read. The shards carry the Cardigann guest pinned in
+  that tests read. `test/ci/workflow_triggers_test.exs`, the one test that
+  reads `.github/workflows`, is left out of the shards and runs alone in
+  `ci-workflow-triggers`, so a workflow edit reruns that check instead of
+  all seven shards. The shards carry the Cardigann guest pinned in
   `native/cardigann_guest/ARTIFACT_SHA256` (the app's own pin), installed
   only while its source hash matches the guest sources;
   `ci-cardigann-hash` proves the Nix-side hash equals
@@ -74,6 +79,13 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   (`ciInternal.relayDepsCompiled`), with the same freshness assertion as
   the app's, and it builds on the BEAM pair pinned by
   `metadata-relay/.elixir-version` and `.otp-version`.
+- `guards.nix`: `guards`, the repository guards that only read files (the
+  Rust toolchain pin, the Rust lint tables, the Docker build-identity
+  placement, the pre-migration backup task and devenv shell-entry purity),
+  and `ci-crate-list`, which fails when `scripts/check-rust.sh --list` (its
+  manifest glob) and the crate list in `rust.nix` name different crates.
+  The guard that runs `yq` over the workflows stays in ci.yml's `Guards`
+  job.
 - `mix-lib.nix`: helpers both Mix projects share (lock parsing, the
   freshness assertion, the offline Mix env, the NIF source edits, the
   log-writing check).
@@ -84,9 +96,57 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `rustToolchain`; and `rustToolchainCi`, which is what `ci.rustToolchain`
   is.
 
+## The derivation graph
+
+Every check is a derivation, cached in niks3 and skipped by CI until one of
+its inputs changes. The intermediate derivations are `ciInternal` entries.
+`A ─► B` reads "B is built from A":
+
+    deps.nix, mix.lock, patches/          ─► mixDepsSrc
+    Wasmex crates, nix/wasmex-Cargo.lock  ─► wasmexNif
+    mixDepsSrc, wasmexNif                 ─► mixDepsCompiled-{sqlite,postgres}
+    mixDepsCompiled                       ─► dialyzer-plt, elixir-format
+    native/mydia_p2p, native/mydia_subsync ─► nifs-mydia_p2p, nifs-mydia_subsync
+    plugins/                              ─► pluginWasm
+    mixDepsCompiled, NIFs, pluginWasm,
+      lib/, config/, priv/, test/support  ─► mydiaTestBuild-{sqlite,postgres}
+    mydiaTestBuild-sqlite, test/, rustfs,
+      cardigannGuest                      ─► test-sqlite-{1..4}
+    mydiaTestBuild-postgres, test/, ...   ─► test-postgres-{1..3}
+    mydiaTestBuild-sqlite                 ─► elixir-lint, ci-cardigann-hash,
+                                             ci-workflow-triggers
+    mydiaTestBuild-sqlite, dialyzer-plt   ─► dialyzer
+    each crate                            ─► cargoDeps-<crate>
+                                             ─► rust-<crate>-{clippy,test}
+    metadata-relay/                       ─► relayDepsCompiled ─► relay-test
+    package-{default,postgres}            ─► nixos-module{,-postgres}
+    plain files                           ─► rust-<crate>-fmt, guards,
+                                             ci-crate-list, ci-fileset-coverage
+
+So a `lib/` edit rebuilds `mydiaTestBuild` and everything under it, and
+leaves the dependency builds, the PLT, the NIFs and every Rust and relay
+check cached. A `test/` edit reruns the shards only; a workflow edit reruns
+`ci-workflow-triggers` only.
+
+## Outside the sandbox
+
+Two CI jobs cannot be checks and run as ordinary jobs in `devShells.ci`:
+
+- `Lint / Ratchet` runs `mix mydia.ratchet --from-git-merge-base
+  origin/master`, which reads git history, and on master pushes the
+  advisory `mix_unused` report. It substitutes
+  `ciInternal.mydiaTestBuild-sqlite` instead of compiling:
+  `scripts/ci-test-build-workspace.sh` copies the build into the checkout
+  bind-mounted at `/build/source` (Mix records absolute paths), dates every
+  file to the epoch as the store does (so Mix sees nothing stale) and gives
+  `deps/heroicons` the `.git` the deps check reads. Mix then recompiles only
+  a handful of files.
+- `Rust / SMB integration` runs `mydia_smb`'s Samba tests, which need a
+  root smbd; `rust-mydia_smb-test` skips them.
+
 ## ciInternal and the CI planner
 
-`scripts/ci-plan.sh` (run by `.github/workflows/ci-nix-checks.yml`) builds
+`scripts/ci-plan.sh` (run by the `Nix / Plan` job in `.github/workflows/ci.yml`) builds
 a `ciInternal` derivation in its own job, before the checks, when two or
 more uncached checks still need it. Anything else a check needs is built
 inside that check's job and is never pushed unless it is in the check's
@@ -113,9 +173,13 @@ Every derivation `src` is built from these sets with `sources.toSource`.
 Never use `src = ../..`: one edit anywhere would rebuild every check.
 
 `checks.ci-fileset-coverage` enforces this. It fails, listing the paths, when
-a git-tracked file under `lib/ config/ priv/ test/ native/ plugins/ server/
+a git-tracked file under `lib/ config/ priv/ test/ plugins/ server/
 metadata-relay/` belongs to none of the sets (Markdown files are exempt). A
-new directory or file type therefore has to be added to `sources.nix`.
+new directory or file type there has to be added to `sources.nix`. `native/`
+is in the list too, but its coverage set includes every directory under it
+as a crate, so the check cannot flag a new crate there. A new Rust crate is
+caught by `ci-crate-list` instead, once it is under `native/*` or
+`player/rust/*`.
 
 ## Building a check locally
 

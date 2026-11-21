@@ -261,8 +261,10 @@
       ];
     in
     {
-      # For the checks that run on top of the test build (nix/ci/tests.nix).
-      _module.args.ciElixir = { inherit buildSet copyBuild mkCheck; };
+      # For the checks that run on top of the test build (nix/ci/tests.nix),
+      # and `env` for devShells.ci (nix/ci/flake-module.nix), which runs Mix
+      # over a copy of that build outside the sandbox.
+      _module.args.ciElixir = { inherit buildSet copyBuild mkCheck env; };
 
       checks = {
         # .formatter.exs covers config/, lib/, test/, priv/*/ and the root

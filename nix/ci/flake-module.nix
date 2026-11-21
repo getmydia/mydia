@@ -13,7 +13,7 @@
 { inputs, lib, flake-parts-lib, ... }:
 
 {
-  imports = [ ./rust.nix ./mix-deps.nix ./elixir.nix ./tests.nix ./relay.nix ];
+  imports = [ ./rust.nix ./mix-deps.nix ./elixir.nix ./tests.nix ./relay.nix ./guards.nix ];
 
   options.perSystem = flake-parts-lib.mkPerSystemOption {
     options = {
@@ -30,7 +30,7 @@
     };
   };
 
-  config.perSystem = { pkgs, system, config, ... }:
+  config.perSystem = { pkgs, system, config, ciElixir, ... }:
     let
       toolchains = import ../toolchains.nix { inherit inputs pkgs system; };
       inherit (toolchains) beamPackages;
@@ -61,6 +61,23 @@
 
       legacyPackages = {
         inherit (config) ciInternal ciRustAttrs;
+      };
+
+      # The shell of the CI jobs that stay outside the sandbox: `Lint /
+      # Ratchet`, which reads git history, and `Rust / SMB integration`,
+      # which needs a root smbd. The checks' BEAM pair and Rust toolchain,
+      # and the checks' Mix environment (MIX_ENV=test, Hex offline from the
+      # store, MYDIA_PREBUILT_NIFS/PLUGINS), so Mix accepts a copy of
+      # ciInternal.mydiaTestBuild-sqlite as up to date. See
+      # scripts/ci-test-build-workspace.sh.
+      devShells.ci = pkgs.mkShell {
+        packages = [
+          beamPackages.erlang
+          beamPackages.elixir
+          rustToolchain
+          pkgs.git
+        ];
+        env = ciElixir.env;
       };
 
       checks.ci-fileset-coverage = pkgs.runCommand "ci-fileset-coverage"
