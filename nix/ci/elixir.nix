@@ -49,8 +49,6 @@
       mixLib = import ./mix-lib.nix { inherit pkgs lib; };
       inherit (mixLib) setupHome;
 
-      # ci.yml's E2E job exports the MYDIA_* variables below by hand in its
-      # devenv heredoc; keep it in sync.
       env = mixLib.mixEnv beamPackages // {
         # The Docker image's switches: load the NIFs from priv/native and the
         # plugin guests from priv/plugins rather than running cargo. Both are
@@ -266,7 +264,9 @@
       # For the checks that run on top of the test build (nix/ci/tests.nix),
       # and `env` for devShells.ci (nix/ci/flake-module.nix), which runs Mix
       # over a copy of that build outside the sandbox.
-      _module.args.ciElixir = { inherit buildSet copyBuild mkCheck env; };
+      # heroiconsGitStub for checks that run Mix tasks without
+      # --no-deps-check (e2e-browser runs scripts/run-feature-tests.sh as is).
+      _module.args.ciElixir = { inherit buildSet copyBuild mkCheck env heroiconsGitStub; };
 
       ciChecks = {
         # .formatter.exs covers config/, lib/, test/, priv/*/ and the root

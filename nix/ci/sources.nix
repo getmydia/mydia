@@ -49,6 +49,11 @@ let
 
   elixirTest = at "test";
 
+  # What ciInternal.assets builds from (nix/ci/tests.nix): package.json, the
+  # lock, js/, css/ and vendor/. node_modules is never tracked, but a dirty
+  # checkout has one.
+  assets = fs.difference (at "assets") (maybe "assets/node_modules");
+
   gettext = at "priv/gettext";
 
   patches = at "patches";
@@ -188,7 +193,7 @@ let
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir (at "native")));
 in
 {
-  inherit elixirApp mixProject elixirTest gettext patches nativeCrate playerCrate plugins
+  inherit elixirApp mixProject elixirTest assets gettext patches nativeCrate playerCrate plugins
     pluginsExtra server relay relayProject relayTest playerApp playerAndroid
     playerOtherPlatforms playerCodegen playerTestReads toSource nativeCrateNames playerCrateNames;
 

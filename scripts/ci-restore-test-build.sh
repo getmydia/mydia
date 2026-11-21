@@ -2,9 +2,8 @@
 #
 # Restore the cached test build (ciInternal.mydiaTestBuild-sqlite) into this
 # checkout, so Mix sees the app and its deps as compiled and up to date. For
-# the ci.yml jobs that run Mix outside the Nix sandbox: `Lint / Ratchet` (in
-# `nix develop .#ci`) and `Test / E2E Browser (run)` (in devenv). See
-# nix/ci/README.md, "Outside the sandbox".
+# the ci.yml job that runs Mix outside the Nix sandbox, `Lint / Ratchet` (in
+# `nix develop .#ci`). See nix/ci/README.md, "Outside the sandbox".
 #
 # Usage: scripts/ci-restore-test-build.sh            (from /build/source)
 #        scripts/ci-restore-test-build.sh --mount    (from the checkout, CI)
@@ -51,8 +50,8 @@ if [ "$(pwd -P)" != /build/source ]; then
   exit 1
 fi
 
-# The niks3 cache, for jobs whose Nix was installed without it (the E2E job's
-# setup-devenv). Harmless where it is already configured.
+# The niks3 cache, for a Nix installed without it (a local run). Harmless
+# where it is already configured.
 build="$(nix build .#ciInternal.mydiaTestBuild-sqlite --no-link --print-out-paths \
   --option extra-substituters https://cache.mydia.dev \
   --option extra-trusted-public-keys 'cache.mydia.dev-1:5zkoQR4Gcrx1EEQ1GvHRPQ7EoHm8gNrrVoeAqX3ioFg=')"

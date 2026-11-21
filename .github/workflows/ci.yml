@@ -15,10 +15,10 @@ name: CI
 # skips both build jobs and finishes in the time it takes to evaluate. There
 # is no path filter: the derivation graph is the filter.
 #
-# Four jobs stay outside the sandbox: Guards (yq over this file), Lint /
-# Ratchet (reads git history), Rust / SMB integration (needs a root smbd) and
-# the E2E browser tests (devenv). The required checks Test, Test /
-# PostgreSQL and Test / E2E Browser sit on aggregators at the end.
+# Three jobs stay outside the sandbox: Guards (yq over this file), Lint /
+# Ratchet (reads git history) and Rust / SMB integration (needs a root
+# smbd). The required checks Test, Test / PostgreSQL and Test / E2E Browser
+# sit on aggregators at the end.
 
 on:
   push:
@@ -44,9 +44,8 @@ permissions:
   contents: read
 
 env:
-  # Harden Rust crate fetches against transient crates.io flakiness (the E2E
-  # job's `mix compile` builds the Rustler NIFs, the SMB job builds its
-  # crate). CI intermittently hit "download of … failed / curl failed / [16]
+  # Harden Rust crate fetches against transient crates.io flakiness (the SMB
+  # job builds its crate outside the sandbox). CI intermittently hit "download of … failed / curl failed / [16]
   # Error in the HTTP2 framing layer". Forcing HTTP/1.1 (no multiplexing)
   # sidesteps that libcurl HTTP/2 bug and a generous retry count rides out
   # brief network blips.
@@ -216,6 +215,37 @@ jobs:
         run: |
           mapfile -t paths < "$RUNNER_TEMP/out-paths"
           "$NIX_CI_PUSH" "${paths[@]}"
+
+      # A failed e2e-browser has no $out: it copies the Wallaby screenshots
+      # to wallaby-screenshots in its build directory (nix/ci/tests.nix), so
+      # rebuild it once with --keep-failed and upload them from there. The
+      # kept directory belongs to the build user, hence sudo.
+      - name: Collect the E2E screenshots
+        if: failure() && matrix.name == 'e2e-browser'
+        env:
+          ATTR: ${{ matrix.attr }}
+        run: |
+          shots="$RUNNER_TEMP/wallaby-screenshots"
+          mkdir -p "$shots"
+          nix build -L --keep-failed ".#$ATTR" 2>&1 | tee "$RUNNER_TEMP/e2e-rerun.log" || true
+          # Nix quotes the path with ' or ", depending on its version.
+          dir=$(grep -oE "keeping build directory ['\"][^'\"]+" "$RUNNER_TEMP/e2e-rerun.log" | tail -n 1 | sed -E "s/^keeping build directory ['\"]//" || true)
+          found=$([ -n "$dir" ] && sudo find "$dir" -type d -name wallaby-screenshots -print -quit || true)
+          if [ -n "$found" ]; then
+            sudo cp -r "$found/." "$shots/"
+            sudo chown -R "$(id -u):$(id -g)" "$shots"
+          else
+            echo "::warning::no wallaby-screenshots in the kept build directory (${dir:-none}); the rebuild may have passed"
+          fi
+
+      - name: Upload the E2E screenshots
+        if: failure() && matrix.name == 'e2e-browser'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wallaby-screenshots
+          path: ${{ runner.temp }}/wallaby-screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # The NixOS module VM tests (nixos-module, nixos-module-postgres): same
   # build and push as `checks`, but outside the Nix / Checks verdict, so they
@@ -404,85 +434,13 @@ jobs:
           test -n "${MYDIA_SMB_TEST_HOST:-}"
           nix develop .#ci -c cargo test --features test-introspection --manifest-path player/rust/mydia_smb/Cargo.toml
 
-  # The browser tests stay a devenv job: chromium and chromedriver come from
-  # devenv.nix (CHROME_PATH / CHROMEDRIVER_PATH), and so do node and the
-  # asset tooling. The compiled app is not built here: like the ratchet, the
-  # job restores the cached SQLite test build (scripts/ci-restore-test-build.sh)
-  # and runs devenv from /build/source. devenv's Elixir and OTP are the
-  # checks' own (both resolve beam-version.nix on flake.lock's nixpkgs), so
-  # with the build's compile-time variables exported Mix finds nothing to
-  # compile. What the test build lacks, assets and node_modules, is built
-  # here. It waits for the inputs wave, which pushes that test build when
-  # the run changed it, and runs even when the plan failed (the restore then
-  # builds the test build itself), so this required check never skips.
-  test-e2e:
-    name: Test / E2E Browser (run)
-    needs: [plan, inputs]
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    env:
-      MIX_ENV: test
-      # Only used if Mix does recompile the deps (a toolchain mismatch):
-      # Wasmex carries a local patch in its Rust half (patches/wasmex), so it
-      # is built from source instead of downloading its precompiled NIF.
-      WASMEX_BUILD: "1"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # Read-only, so no Cachix token: everything the restore may build here
-      # (the test build and, on a cache miss, mixDepsCompiled, wasmexNif, the
-      # NIFs, pluginWasm) belongs in niks3, not Cachix. The devenv environment
-      # comes from Cachix and cache.nixos.org as before.
-      - name: Set up devenv
-        uses: ./.github/actions/setup-devenv
-
-      # Bind-mounts the checkout at /build/source; later steps run there.
-      - name: Restore the cached test build
-        run: scripts/ci-restore-test-build.sh --mount
-
-      # GitHub sets CI=true, which makes devenv.nix skip its enterShell setup
-      # tasks, so the heredoc runs the equivalent setup (hex/rebar) itself, in
-      # one `devenv shell` so the environment evaluates once. No
-      # `mix deps.get`: deps/ came with the test build. The MYDIA_* variables
-      # are the test build's compile-time config, copied from `env` in
-      # nix/ci/elixir.nix: keep the two in sync, or a different value
-      # recompiles the whole app. run-feature-tests.sh finds
-      # chromium on PATH and honors CHROMEDRIVER_PATH, so no separate Chrome
-      # action is needed.
-      - name: Feature tests (E2E) under devenv
-        working-directory: /build/source
-        run: |
-          devenv shell -- bash <<'DEVENV'
-          set -euo pipefail
-          export MIX_ENV=test
-          export MYDIA_PREBUILT_NIFS=1 MYDIA_PREBUILT_PLUGINS=1 MYDIA_SKIP_CARDIGANN_FETCH=1
-          unset DATABASE_TYPE
-          ./scripts/ci-mix-bootstrap.sh
-          mix compile
-          npm ci --prefix assets
-          mix assets.deploy
-          ./scripts/run-feature-tests.sh
-          DEVENV
-
-      - name: Upload screenshots on failure
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wallaby-screenshots
-          path: tmp/wallaby_screenshots/
-          retention-days: 7
-
   # Required contexts live on these aggregators: each always runs and
   # concludes success or failure, never `skipped` (whether the ruleset counts
   # `skipped` as passing is configuration-dependent, .github/ci-flakes.md).
   # Each accepts `success` or `skipped` from what it needs. `Guards`
-  # enforces the always() condition. Test and Test / PostgreSQL both gate on
-  # the whole Nix matrix through Nix / Checks: a matrix leg's result is not
-  # addressable through `needs`.
+  # enforces the always() condition. All three gate on the whole Nix matrix
+  # through Nix / Checks (Test / E2E Browser for the e2e-browser check): a
+  # matrix leg's result is not addressable through `needs`.
   test:
     name: Test
     needs: [guards, nix-result, ratchet, smb]
@@ -513,7 +471,7 @@ jobs:
 
   test-e2e-result:
     name: Test / E2E Browser
-    needs: [test-e2e]
+    needs: [nix-result]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest

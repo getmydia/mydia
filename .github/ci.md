@@ -80,8 +80,7 @@ since the build aborts before the Rust crate vendoring even starts.
 nothing else may name either. `beam-version.nix` resolves the pair from one
 nixpkgs beam set and throws when the pinned nixpkgs lacks the OTP set or the
 Elixir attribute under it. `devenv.nix` imports that resolver and is the
-toolchain for local development and for `ci.yml`'s E2E job, which runs inside
-`devenv shell`. `nix/toolchains.nix` imports it too, for the release build in
+toolchain for local development. `nix/toolchains.nix` imports it too, for the release build in
 `nix/packages/flake-module.nix`, the NixOS module VM tests and every flake
 check under `nix/ci/`.
 
@@ -295,7 +294,7 @@ Every check a nix bump needs runs on its pull request, because the gate's
 merge starts no workflows on master (the trap that left the Cardigann guest
 unpublished). `flake.lock` moving changes the toolchain under every flake
 check, so the whole `ci.yml` check matrix reruns, NixOS module tests
-included; `devenv.lock` moving reruns the E2E job; and the fixup touches nothing under
+included; and the fixup touches nothing under
 `.github/workflows/`, which the gate could not merge. `nixpkgs-android` is
 ignored: it moves by hand, with Flutter.
 
@@ -631,23 +630,12 @@ the signing key and health checks are in
   file dated to the epoch, and the job runs Mix in `nix develop .#ci`
   (`nix/ci/README.md`, "Outside the sandbox").
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests (above).
-- `Test / E2E Browser (run)` is still a devenv job
-  (`.github/actions/setup-devenv`, which installs Nix, Cachix and devenv and
-  caches nothing): chromium, chromedriver and node come from `devenv.nix`.
-  It restores the same test build with the same script and runs devenv from
-  `/build/source`, exporting the build's compile-time variables
-  (`MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1`,
-  `MYDIA_SKIP_CARDIGANN_FETCH=1`, no `DATABASE_TYPE`). devenv's Elixir and
-  OTP are the same store paths as the checks' (both resolve
-  `beam-version.nix` on flake.lock's nixpkgs), so `mix compile` recompiles
-  only a handful of files (about 14). What the test build does not carry, it
-  builds itself: `npm ci --prefix assets` and `mix assets.deploy`. It skips
-  `mix deps.get` (deps/ comes with the build), only reads Cachix
-  (`skip-push: 'true'`, so nothing the restore builds lands there), and runs
-  even when the plan failed, so
-  the required check never skips; the restore then builds the test build
-  itself. Should devenv's BEAM ever drift from the checks', Mix recompiles
-  everything and the job is merely slow again.
+
+The Wallaby browser suite is the `e2e-browser` check (`nix/ci/tests.nix`),
+not a job: nixpkgs chromium and chromedriver over the SQLite test build and
+`ciInternal.assets`. On failure the `checks` matrix leg rebuilds it with
+`--keep-failed` and uploads `wallaby-screenshots` from the kept build
+directory.
 
 `ci-player.yml` has a `player_translations` fast path when only
 non-template `player/lib/l10n/*.arb` (or `.arb` + `.po`) catalogs change
@@ -683,31 +671,27 @@ The names `Test`, `Test / PostgreSQL` and `Test / E2E Browser` are required by
 the Master ruleset, and they sit on three aggregator jobs (`test`,
 `test-postgres-result`, `test-e2e-result`). `Test` needs `Guards`,
 `Nix / Checks`, `Lint / Ratchet` and `Rust / SMB integration`;
-`Test / PostgreSQL` needs `Nix / Checks`; `Test / E2E Browser` needs the E2E
-job. A matrix leg's result is not addressable through `needs`, so both of the
-first two gate on the whole check matrix: a failing Rust check also reds
-`Test / PostgreSQL`. The NixOS VM tests are not in that matrix and gate
+`Test / PostgreSQL` and `Test / E2E Browser` need `Nix / Checks`. A matrix
+leg's result is not addressable through `needs`, so all three gate on the
+whole check matrix: a failing Rust check also reds `Test / PostgreSQL` and
+`Test / E2E Browser`. The NixOS VM tests are not in that matrix and gate
 neither. Each has `if: always()` and a step that fails unless
 every job it needs concluded `success` or `skipped`, so the aggregator itself
-concludes success or failure and never `skipped`. The real E2E job is named
-`Test / E2E Browser (run)` for that reason, and its screenshot artifact hangs
-off it. The `Guard the required-check aggregators` step in `Guards` checks
+concludes success or failure and never `skipped`. The `Guard the required-check aggregators` step in `Guards` checks
 with `yq` that each required name sits on exactly one job whose `if` is
 `always()`. See `ci-flakes.md`, "Why the list was short".
 
 ### Compile-time config and the test build
 
 Every consumer of `ciInternal.mydiaTestBuild-*` (the shards, `elixir-lint`,
-`dialyzer`, `ci-workflow-triggers`, the ratchet, the E2E job) must run Mix
+`dialyzer`, `ci-workflow-triggers`, `e2e-browser`, the ratchet) must run Mix
 with the same compile-time configuration the build had, or Mix recompiles
 every file of the app: it stores each app's compile-time config in the
 manifest, and when the `:mydia` app's config differs it recompiles all of it.
 The build sets `MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1`,
 `MYDIA_SKIP_CARDIGANN_FETCH=1` and, for the PostgreSQL build,
 `DATABASE_TYPE=postgres` (the `env` in `nix/ci/elixir.nix`); the checks and
-`devShells.ci` take that same `env`. The E2E job does not: it exports the
-variables by hand in its devenv heredoc in ci.yml, so a change to that `env`
-must be copied there too, or the E2E job silently recompiles the whole app.
+`devShells.ci` take that same `env`.
 Anything that varies per shard or per run (partition numbers, database names,
 ports, temp paths, `CI`) belongs in `config/runtime.exs`, which Mix does not
 track, or in a different app's config, never under `:mydia` in
@@ -750,8 +734,8 @@ and cold about 20, so the cure was to get the big entries out of the budget:
   Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
   which GHCR needs for cache manifests and which keeps a failed cache push from
   failing the build.
-- `ci-nix.yml` and `dependabot-fixup.yml` read Cachix, like the E2E job's
-  devenv, and none of them pushes to it; ci.yml's flake checks use niks3.
+- `ci-nix.yml` and `dependabot-fixup.yml` read Cachix, and neither pushes
+  to it; ci.yml's flake checks use niks3.
   magic-nix-cache stored every store path as its own Actions cache entry
   (2,226 entries, 1.1 GB on 2026-10-30).
 
