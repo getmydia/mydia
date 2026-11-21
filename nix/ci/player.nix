@@ -13,6 +13,10 @@
 #                      `flutter gen-l10n` and `flutter pub run build_runner build`
 #                      in player/: the project with .dart_tool and every
 #                      generated Dart file. ciInternal.player-codegen.
+#   player-linux       `flutter build linux --release` with the crane-built
+#                      p2p library (ciInternal.player-p2p-so, nix/ci/rust.nix)
+#                      in place of cargokit's build. Outputs bundle/ and log.
+#                      checks.player-linux.
 #
 # The checks themselves (Tasks 2 onward) are built with
 # `ciPlayer.mkPlayerCheck`, which copies player-codegen to /build/source and
@@ -24,7 +28,7 @@
 { ... }:
 
 {
-  perSystem = { pkgs, lib, ci, ... }:
+  perSystem = { pkgs, lib, ci, ciRust, ... }:
     let
       mixLib = import ./mix-lib.nix { inherit pkgs lib; };
 
@@ -171,9 +175,80 @@
             ${script}
           '';
         }).overrideAttrs { dontUnpack = true; };
+
+      # `cargo` and `rustup` on player-linux's PATH: both refuse, so a build
+      # that falls back to cargokit fails loudly instead of compiling Rust (or
+      # trying to download a toolchain) in the sandbox.
+      noRustInSandbox = pkgs.runCommand "no-rust-in-sandbox" { } ''
+        mkdir -p $out/bin
+        for tool in cargo rustup; do
+          cat > $out/bin/$tool <<'EOF'
+        #!${pkgs.runtimeShell}
+        echo "cargokit tried to build Rust in the sandbox ($0 $*)" >&2
+        exit 1
+        EOF
+          chmod +x $out/bin/$tool
+        done
+      '';
+
+      # Build / Linux: `flutter build linux --release`, with the bundle as
+      # $out/bundle and the log as $out/log.
+      #
+      # The p2p library is ciInternal.player-p2p-so, built by crane
+      # (nix/ci/rust.nix), never by cargokit. Handing it over: the plugin's
+      # CMake glue, player/rust_builder/linux/CMakeLists.txt, bundles the file
+      # MYDIA_PLAYER_P2P_PREBUILT names and skips apply_cargokit. cargokit's
+      # own precompiled-binaries path was not usable: it lives inside the
+      # build tool, which run_build_tool.sh starts with a `dart pub get` for
+      # packages the player's lockfile does not have (github, toml,
+      # ed25519_edwards, ...), so it needs the network before it ever looks
+      # for a binary, and it would also need a signed binary host in
+      # cargokit.yaml. flutter_rust_bridge loads the library by the fixed name
+      # libmydia_player_p2p.so through the runner's $ORIGIN/lib rpath, so the
+      # bundle carries the file byte for byte (no fixup).
+      playerLinux = (mkPlayerCheck {
+        name = "player-linux";
+        nativeBuildInputs = [
+          noRustInSandbox
+          pkgs.clang
+          pkgs.cmake
+          pkgs.ninja
+          pkgs.pkg-config
+          pkgs.gtk3
+          pkgs.xz
+          pkgs.mpv-unwrapped
+          pkgs.libsecret
+        ];
+        script = ''
+          export MYDIA_PLAYER_P2P_PREBUILT=${ciRust.playerP2pSo}/lib/libmydia_player_p2p.so
+          flutter build linux --release
+
+          bundle=build/linux/x64/release/bundle
+          if [ ! -f "$bundle/lib/libmydia_player_p2p.so" ]; then
+            echo "$bundle/lib/libmydia_player_p2p.so is missing" >&2
+            exit 1
+          fi
+
+          # ci-player.yml's "Assert Linux bundle has no symlinks": the
+          # workflow uploads the bundle with upload-artifact, which replaces
+          # every symlink with a copy of its target. Assigned first, so a
+          # failing find fails the check rather than reading as "none".
+          first_link=$(find "$bundle" -type l -print -quit)
+          if [ -n "$first_link" ]; then
+            echo "Linux bundle contains symlinks; upload-artifact flattens them into copies." >&2
+            find "$bundle" -type l >&2
+            exit 1
+          fi
+          echo "Linux bundle has no symlinks."
+
+          cp -r "$bundle" $out/bundle
+        '';
+      }).overrideAttrs { dontFixup = true; };
     in
     {
       _module.args.ciPlayer = { inherit flutter pubCache codegen mkPlayerCheck; };
+
+      ciChecks.player-linux = playerLinux;
 
       ciInternal = {
         player-pub-cache = pubCache;
