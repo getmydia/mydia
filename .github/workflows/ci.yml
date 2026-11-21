@@ -20,8 +20,9 @@ name: CI
 # Ratchet (reads git history), Rust / SMB integration (needs a root smbd)
 # and Build / Android (Gradle has no lockfile Nix could fetch from). The
 # required checks Test, Test / PostgreSQL, Test / E2E Browser, Test / Player,
-# Build / Web, Build / Linux and Check / Web icons sit on aggregators at the
-# end; the player ones gate on the player-* checks through Nix / Checks.
+# Test / Player E2E, Build / Web, Build / Linux and Check / Web icons sit on
+# aggregators at the end; the player ones gate on the player-* checks
+# through Nix / Checks.
 
 on:
   push:
@@ -301,8 +302,9 @@ jobs:
     timeout-minutes: 5
     steps:
       # A skipped build job means an empty matrix (everything was cached) or,
-      # for inputs, a run that cannot push. Pins and the NixOS VM tests are
-      # not part of the verdict.
+      # for inputs, a run that cannot push. Pins and the nixos-* module VM
+      # tests (the nixos job) are not part of the verdict; the player-e2e VM
+      # test builds in the checks matrix, so it is.
       - name: Assert every planned build succeeded
         env:
           PLAN: ${{ needs.plan.result }}
