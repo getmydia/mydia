@@ -836,9 +836,10 @@ built that image on pull requests touching the player inputs the `Dockerfile`
 copies one by one, which is the guard #1444 called for: that PR added a path
 dependency the `flutter-builder` stage did not copy and broke every release
 build after merge. The guard now lives in `ci-docker.yml`. On a pull request
-that touches `Dockerfile`, `player/pubspec.yaml`, `build.yaml`, `l10n.yaml`,
-`packages/`, `assets/`, `shaders/`, `rust_builder/pubspec.yaml` or the
-workflow itself, `Docker / flutter-builder (PR)` builds that stage alone,
+that touches the `Dockerfile`, the workflow itself, or anything that stage
+copies (its path filter mirrors the stage's COPY lines, minus `player/lib`
+and `player/web`, which `Build / Web` covers), `Docker / flutter-builder (PR)`
+builds that stage alone,
 with `push: false` and the `:buildcache-sqlite` registry cache read-only (no
 login, so fork PRs build too, and no cache export). It is not required.
 Push runs build and publish the full image as before.

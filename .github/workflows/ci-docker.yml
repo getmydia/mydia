@@ -7,25 +7,30 @@ on:
   push:
     branches: [master, main]
   # Pull requests build only the flutter-builder stage, and only when one of
-  # the player inputs the Dockerfile copies one by one changes. Full-image PR
-  # builds were dropped for costing 25 minutes per PR; nothing else builds
-  # this stage before merge (the player checks and the player-e2e VM test use
-  # the Nix player tree, not the Dockerfile), and #1444 merged a path
-  # dependency the stage did not copy, which broke every release build after
-  # it. player/lib and player/web stay out: Build / Web builds them and they
-  # change on nearly every player PR.
+  # its inputs changes. Full-image PR builds were dropped for costing 25
+  # minutes per PR; nothing else builds this stage before merge (the player
+  # checks and the player-e2e VM test use the Nix player tree, not the
+  # Dockerfile), and #1444 merged a path dependency the stage did not copy,
+  # which broke every release build after it.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    # Mirrors the COPY lines of the Dockerfile's flutter-builder stage, one
+    # entry per source; keep the two in step. player/lib and player/web are
+    # copied too but stay out: Build / Web builds them and they change on
+    # nearly every player PR.
     paths:
       - 'Dockerfile'
+      - '.github/workflows/ci-docker.yml'
+      - 'player/.fvmrc'
       - 'player/pubspec.yaml'
+      - 'player/pubspec.lock'
       - 'player/build.yaml'
       - 'player/l10n.yaml'
+      - 'player/rust_builder/**'
       - 'player/packages/**'
       - 'player/assets/**'
       - 'player/shaders/**'
-      - 'player/rust_builder/pubspec.yaml'
-      - '.github/workflows/ci-docker.yml'
+      - 'priv/graphql/schema.graphql'
 
 # Keyed to the commit, not the ref. A concurrency group holds at most one
 # PENDING run and cancels the previous one when a new run enters, so a burst of
