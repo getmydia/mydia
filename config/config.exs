@@ -560,6 +560,16 @@ config :mydia, :downloads,
   transcode_cache_dir: "priv/data/transcodes",
   max_concurrent_transcodes: 2
 
+# MYDIA_PREBUILT_NIFS=1 makes `mix compile` load the Rustler NIFs from
+# priv/native/ instead of running cargo. The Docker image builds them in its
+# `nifs` stage (see Dockerfile) and the Nix CI checks in nix/ci/rust.nix, so it
+# applies in every env. Unset (dev, test, the Nix package), Rustler builds them
+# as usual.
+if System.get_env("MYDIA_PREBUILT_NIFS") == "1" do
+  config :mydia, Mydia.P2p, skip_compilation?: true
+  config :mydia, Mydia.Subsync, skip_compilation?: true
+end
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

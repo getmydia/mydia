@@ -33,6 +33,21 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   every NIF built from source). Evaluating
   `checks` fails with `deps.nix is stale: run mix2nix > deps.nix` when a
   `mix.lock` Hex entry has no `deps.nix` entry of the same version.
+- `elixir.nix`: `ciInternal.mydiaTestBuild-{sqlite,postgres}` (the app's
+  `MIX_ENV=test mix compile --warnings-as-errors` on top of
+  `mixDepsCompiled`, with the NIFs and plugin wasm from `rust.nix` in
+  `priv/native` and `priv/plugins` and `MYDIA_PREBUILT_NIFS=1`,
+  `MYDIA_PREBUILT_PLUGINS=1`, so no cargo runs; the output is `deps/`,
+  `_build/test`, `priv/native` and `priv/plugins/*.wasm`, to lay over the
+  source at `/build/source`), `ciInternal.dialyzer-plt` (keyed on the
+  compiled deps and the toolchain, not on `lib/`), and the checks
+  `elixir-format`, `elixir-lint` (the Lint job's guard greps,
+  `deps.unlock --check-unused`, Credo, `gettext.extract
+  --check-up-to-date`) and `dialyzer`. Consumers of the test build set both
+  `MYDIA_PREBUILT_*` variables too: Rustler reads its config with
+  `Application.compile_env`, so a different value makes Mix recompile the
+  NIF modules, with cargo. The ratchet and the `mix_unused` report read git
+  history and stay ordinary jobs.
 - `../beam-deps.nix`: `deps.nix` with its sandbox overrides, heroicons,
   lexbor and the vendored Wasmex crates, shared with `nix/packages`.
 - `../toolchains.nix`: `beamPackages`, shared with `nix/packages` so the
