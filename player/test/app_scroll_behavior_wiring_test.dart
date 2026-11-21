@@ -15,12 +15,15 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/scroll/app_scroll_behavior.dart';
 
+import 'test_utils/no_downloads.dart';
+
 void main() {
   Future<void> pumpApp(
     WidgetTester tester, {
     required bool sourcesLoading,
   }) async {
     final container = ProviderContainer(overrides: [
+      noProgressFlushOverride,
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
       sourcesLoadingProvider.overrideWithValue(sourcesLoading),
       castSessionProvider.overrideWith((ref) => Stream.value(null)),

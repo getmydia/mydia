@@ -29,7 +29,9 @@ import FlutterMacOS
 /// sent on listen, on a screen change, and, while any host view is
 /// attached, whenever a once-a-second re-read finds it changed. macOS moves
 /// the current headroom on its own (it rises once EDR content is on screen
-/// and follows brightness) without posting any notification.
+/// and follows brightness) without posting any notification. The same tick
+/// re-commits each attached view's EDR layer state from the main thread
+/// (`MpvHostView.commitEdrState`), without which macOS never sees it.
 final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStreamHandler {
   static let channelName = "mydia/mpv-surface"
   static let displayChannelName = "mydia/mpv-surface/display"
@@ -460,6 +462,11 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
         // (views is weak) stops the timer here instead of at a detach.
         self.updateDisplayRefresh()
         guard self.stopDisplayRefresh != nil else { return }
+        // Before the report, so a headroom the commit raises is read next tick.
+        for case let view as MpvHostView in self.views.objectEnumerator()?.allObjects ?? []
+        where view.attachedHandle != nil {
+          view.commitEdrState()
+        }
         self.reportDisplay(onlyIfChanged: true)
       }
     } else if !attached, let stop = stopDisplayRefresh {

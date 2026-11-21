@@ -119,6 +119,8 @@ class PlaybackStatsCollector {
         throughputKbps: throughput,
         targetGamma: stats?.targetGamma,
         colormatrix: stats?.colormatrix,
+        sourceColor: stats?.sourceColor,
+        outputColor: stats?.outputColor,
         history: List.unmodifiable(_history),
       );
     } finally {

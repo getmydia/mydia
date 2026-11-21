@@ -37,6 +37,8 @@ import 'core/platform/native_tab_bar_support.dart';
 import 'core/focus/focus_memory.dart';
 import 'core/player/input_capabilities.dart';
 import 'core/player/platform_features.dart';
+import 'core/player/subtitle_language_prefs.dart';
+import 'core/player/video_scaling.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/relay/relay_api_client.dart' show metadataRelayBaseUrl;
 import 'core/sources/cache/source_cache.dart';
@@ -241,6 +243,10 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
         // `initHiveForFlutter` hard-wires it to the user's Documents folder.
         // See `core/storage/app_hive.dart`.
         await initAppHive();
+        // The player's two static preference facades only use these once
+        // open. Neither throws; a failure costs the feature its memory.
+        await VideoScalingPrefs.open();
+        await SubtitleLanguagePrefs.open();
         // Files sources build synchronously over these. A failure leaves
         // files libraries unusable, never the rest of the app.
         if (!kIsWeb) {

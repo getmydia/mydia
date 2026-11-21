@@ -650,12 +650,36 @@ path.
   also covers a `vid=no` write stuck behind a blocked mpv core, then disposes
   anyway. A host view leaving its window without a detach (hot restart, an
   error path) detaches from `viewWillMove(toWindow: nil)`.
+- `target-colorspace-hint` starts off and `MpvSurfaceBinding` turns it on
+  once `videoParams` reports a PQ or HLG source (`colorspaceHintFor`), so
+  only HDR gets the PQ or HLG swapchain that macOS composites with EDR. SDR
+  must keep it off. With it on, libplacebo picks MoltenVK's BT.709
+  swapchain, which tags the layer `kCGColorSpaceITUR_709`, and ColorSync
+  decodes that with a pure 2.4 power: mid grey 11% and shadows 60% darker
+  than the sRGB swapchain, where mpv renders SDR as-is, like the texture
+  path. The switch reconfigures the output while the first frame is still
+  paused.
+- MoltenVK sets the layer's PQ colorspace, EDR metadata and
+  `wantsExtendedDynamicRangeContent` on mpv's VO thread, which has no run
+  loop, so Core Animation does not reliably send them to the window server:
+  the layer reads back as EDR in-process while macOS never raises the
+  screen's headroom, and PQ highlights clip at SDR white. The plugin's
+  once-a-second tick calls `MpvHostView.commitEdrState`, which turns the
+  flag off and on again from the main thread whenever a layer's EDR state
+  changed. Setting the same value again does nothing; Core Animation only
+  sends a change. Without it the headroom stayed at 1.2 in three runs out of
+  three on an M2 Pro XDR panel; with it, it rose past 5.
 - Fit and fill are mpv's `panscan` (0.0 and 1.0), sent through the plugin.
 - An event channel reports the window's screen and its EDR headroom
   (`edrHeadroom`, `potentialHeadroom`) for the stats HDR row, which reads
   `HDR output, PQ, headroom Nx` when mpv's target is PQ or HLG and the
   headroom is above 1, and adds `RPU applied` when mpv reports the
-  `dolbyvision` color matrix.
+  `dolbyvision` color matrix. The full panel (not compact, not tv) also
+  has a Color row, the source's `video-params` and the output's
+  `video-target-params` in mpv's own names (`bt.709, bt.1886 → bt.709,
+  bt.1886`, with a peak in nits on a PQ or HLG end), for every video, and
+  a Display row with the current and potential headroom (`EDR headroom
+  9.7x of 16.0x`) on the surface. Both go into the copied stats.
 
 `core/player/mac_video_output.dart` decides the path for each playback, and the
 device profile uses the same resolution, so the HDR formats the player claims

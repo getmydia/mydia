@@ -21,6 +21,7 @@ import 'package:player/presentation/screens/connections/connections_overview.dar
 import 'package:player/presentation/screens/settings/settings_nav.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/no_downloads.dart';
 import '../connections/fake_peer_sync_service.dart';
 
 GoRouter _router(String initial) => GoRouter(
@@ -77,6 +78,7 @@ Future<GoRouter> _pumpApp(WidgetTester tester) async {
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final peers = InMemoryPeerSyncStore();
   final container = ProviderContainer(overrides: [
+    noProgressFlushOverride,
     sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
     sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),

@@ -11,6 +11,8 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/domain/models/cast_device.dart';
 
+import 'test_utils/no_downloads.dart';
+
 const _device = CastDevice(
   id: 'd1',
   name: 'Cottage Chromecast',
@@ -41,6 +43,7 @@ void main() {
     CastSession? session,
   }) async {
     final container = ProviderContainer(overrides: [
+      noProgressFlushOverride,
       sourcesLoadingProvider.overrideWithValue(false),
       hasMydiaProvider.overrideWithValue(true),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
