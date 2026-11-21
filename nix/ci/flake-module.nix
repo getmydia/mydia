@@ -13,7 +13,7 @@
 { inputs, lib, flake-parts-lib, ... }:
 
 {
-  imports = [ ./rust.nix ];
+  imports = [ ./rust.nix ./mix-deps.nix ];
 
   options.perSystem = flake-parts-lib.mkPerSystemOption {
     options = {

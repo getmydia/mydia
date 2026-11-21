@@ -36,6 +36,17 @@ let
       (fs.fileFilter (file: file.hasExt "wasm") (at "priv/plugins"))
     ]);
 
+  # What `MIX_ENV=test mix deps.compile` reads: the project and the config
+  # it loads in the test env (deps compile against the app's compile-time
+  # config). A subset of elixirApp, kept narrow so app edits do not rebuild
+  # the dependencies.
+  mixProject = fs.unions [
+    (at "mix.exs")
+    (at "mix.lock")
+    (at "config/config.exs")
+    (at "config/test.exs")
+  ];
+
   elixirTest = at "test";
 
   gettext = at "priv/gettext";
@@ -101,7 +112,7 @@ let
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir (at "native")));
 in
 {
-  inherit elixirApp elixirTest gettext patches nativeCrate playerCrate plugins
+  inherit elixirApp mixProject elixirTest gettext patches nativeCrate playerCrate plugins
     pluginsExtra server relay toSource nativeCrateNames;
 
   # Union of everything above, for the coverage check.
