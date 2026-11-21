@@ -1,20 +1,56 @@
 name: CI / Player Desktop
 
-# No path filters here, deliberately. `Build / Web` and `Test / Player` are
-# required contexts on the Master ruleset, and a required check that never
-# reports leaves a pull request pending forever. The filter lives in the
-# `changes` job below instead, so every job always reports -- concluding in a
-# few seconds with its steps skipped when nothing relevant changed.
+# The player jobs Nix CI does not cover: the Windows and macOS builds and the
+# Flatpak checks. Test / Player, Build / Web, Build / Linux, Check / Web icons
+# and Build / Android live in ci.yml (.github/ci.md, "ci.yml: the flake-check
+# graph"), so nothing here is a required context and a path filter is safe:
+# a workflow the filter skips reports nothing, which would leave a required
+# check pending forever, and none of these is required.
 #
-# The push filter is gone for the same reason the pull_request one is: it keeps
-# exactly one copy of the path list, in `changes`.
+# The paths are what these builds read:
+#
+#   player/**                      the app itself
+#   native/**                      cargokit compiles player/rust/mydia_player_p2p,
+#                                  which depends on ../../native/mydia_p2p_core
+#                                  by relative path
+#   priv/graphql/schema.graphql    build_runner runs graphql_codegen against it;
+#                                  player/lib/graphql/schema.graphql is a
+#                                  symlink to it, so filtering on the symlink's
+#                                  own path would never fire
+#   rust-toolchain.toml            cargokit pins its Rust toolchain from it
+#
+# A pull request that changes only translated ARB files (not the app_en.arb
+# template) runs none of this: translations cannot break a desktop build that
+# the template does not. ci.yml's player-l10n-test covers them.
+#
+# push and pull_request carry the same list; keep them identical. The
+# negation must follow player/** and precede app_en.arb: the last pattern a
+# file matches decides.
+#
+# The AppImage dry run is ci-player-appimage.yml, with its own narrower paths.
 on:
   push:
     branches:
       - master
       - main
+    paths:
+      - 'player/**'
+      - '!player/lib/l10n/app_*.arb'
+      - 'player/lib/l10n/app_en.arb'
+      - 'native/**'
+      - 'priv/graphql/schema.graphql'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/ci-player.yml'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'player/**'
+      - '!player/lib/l10n/app_*.arb'
+      - 'player/lib/l10n/app_en.arb'
+      - 'native/**'
+      - 'priv/graphql/schema.graphql'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/ci-player.yml'
   workflow_dispatch:
 
 concurrency:
@@ -25,402 +61,8 @@ env:
   PLAYER_PATH: 'player'
 
 jobs:
-  changes:
-    name: Check / Player paths
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      player: ${{ steps.filter.outputs.player }}
-      player_translations: ${{ steps.filter.outputs.player_translations }}
-      appimage: ${{ steps.filter.outputs.appimage }}
-
-    steps:
-      # The single source of truth for what this workflow cares about:
-      #
-      #   player/**                      the app itself
-      #   native/**                      build-android cross-compiles
-      #                                  player/rust/mydia_player_p2p, which
-      #                                  depends on ../../native/mydia_p2p_core
-      #                                  by relative path
-      #   priv/graphql/schema.graphql    test-player's build_runner step runs
-      #                                  graphql_codegen against this schema.
-      #                                  player/lib/graphql/schema.graphql is a
-      #                                  symlink to it, so filtering on the
-      #                                  symlink's own path would never fire
-      #   rust-toolchain.toml            build-android's cargokit step pins its
-      #                                  Rust toolchain from this file at the
-      #                                  repo root (see the Build APK comment
-      #                                  below), not from whatever the runner
-      #                                  image calls stable. This gap predates
-      #                                  this job -- the workflow-level
-      #                                  `paths:` filter it replaced didn't
-      #                                  watch this file either.
-      #   .github/workflows/ci-player.yml
-      #   player/appimage/
-      #   player/flatpak/dev.mydia.player.yml
-      #   .github/workflows/player-appimage.yml
-      - name: Decide whether player code changed
-        id: filter
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVENT: ${{ github.event_name }}
-          PR: ${{ github.event.pull_request.number }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          changed=""
-          case "$EVENT" in
-            pull_request)
-              # A failed `changes` job reports every dependent job as skipped,
-              # not failed -- exactly the ambiguous state this job exists to
-              # avoid on `Build / Web` and `Test / Player`. A transient API
-              # failure here must run everything rather than abort the step.
-              #
-              # `previous_filename` is only set for renames, where `filename`
-              # is the new path. Emitting both means renaming a file out of
-              # player/ (or into it) still shows up in the change set.
-              changed="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" \
-                           --paginate --jq '.[] | .filename, (.previous_filename // empty)' || echo "")"
-              if [ -z "$changed" ]; then
-                echo "player=true" >> "$GITHUB_OUTPUT"
-                echo "player_translations=false" >> "$GITHUB_OUTPUT"
-                echo "appimage=true" >> "$GITHUB_OUTPUT"
-                echo "Could not compute the change set; running everything."
-                exit 0
-              fi
-              ;;
-            push)
-              # `before` is all-zeros on a branch's first push and unreliable
-              # after a force-push. Either way, run everything rather than
-              # silently skipping.
-              if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-                echo "player=true" >> "$GITHUB_OUTPUT"
-                echo "player_translations=false" >> "$GITHUB_OUTPUT"
-                echo "appimage=true" >> "$GITHUB_OUTPUT"
-                echo "No usable base commit; running everything."
-                exit 0
-              fi
-              changed="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BEFORE}...${AFTER}" \
-                           --jq '.files[].filename' || echo "")"
-              if [ -z "$changed" ]; then
-                echo "player=true" >> "$GITHUB_OUTPUT"
-                echo "player_translations=false" >> "$GITHUB_OUTPUT"
-                echo "appimage=true" >> "$GITHUB_OUTPUT"
-                echo "Could not compute the change set; running everything."
-                exit 0
-              fi
-              ;;
-            *)
-              echo "player=true" >> "$GITHUB_OUTPUT"
-              echo "player_translations=false" >> "$GITHUB_OUTPUT"
-              echo "appimage=true" >> "$GITHUB_OUTPUT"
-              echo "Event $EVENT has no change set; running everything."
-              exit 0
-              ;;
-          esac
-
-          if [ "$EVENT" = "pull_request" ] \
-             && ! printf '%s\n' "$changed" | grep -qvE '^(player/lib/l10n/[^/]+\.arb|priv/gettext/.+\.po)$' \
-             && printf '%s\n' "$changed" | grep -qE '^player/lib/l10n/[^/]+\.arb$' \
-             && ! printf '%s\n' "$changed" | grep -qx 'player/lib/l10n/app_en.arb'; then
-            echo "player=false" >> "$GITHUB_OUTPUT"
-            echo "player_translations=true" >> "$GITHUB_OUTPUT"
-            echo "appimage=false" >> "$GITHUB_OUTPUT"
-            echo "Player translation-only changes found."
-            exit 0
-          fi
-
-          echo "player_translations=false" >> "$GITHUB_OUTPUT"
-
-          if printf '%s\n' "$changed" | grep -qE '^(player/|native/|priv/graphql/schema\.graphql$|rust-toolchain\.toml$|\.github/workflows/ci-player\.yml$)'; then
-            echo "player=true" >> "$GITHUB_OUTPUT"
-            echo "Player-relevant changes found."
-          else
-            echo "player=false" >> "$GITHUB_OUTPUT"
-            echo "No player-relevant changes."
-          fi
-
-          if printf '%s\n' "$changed" | grep -qE '^(player/appimage/|player/flatpak/dev\.mydia\.player\.yml$|\.github/workflows/player-appimage\.yml$)'; then
-            echo "appimage=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "appimage=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  # Moved here from ci.yml, which has no path filter and therefore ran the
-  # whole Flutter suite on every Elixir-only PR. This workflow already filters
-  # on player/** and native/**, which is the correct trigger surface for it.
-  # The job name is unchanged so the check context stays `Test / Player`.
-  test-player:
-    # Old / while ci.yml's Test / Player aggregator runs beside it.
-    name: Old / Test / Player
-    runs-on: ubuntu-latest
-    needs: changes
-
-    # The S3 server s3_integration_test.dart runs against. The image is the
-    # release devenv's `rustfs` packages (1.0.0-rc.6), so local runs and CI
-    # test the same server; its default command serves /data on port 9000.
-    # The credentials are devenv.nix's MYDIA_TEST_S3_* values. Services take
-    # no `if:`, so the image is empty, which starts nothing, when the
-    # steps below are skipped. GitHub documents that for services:
-    # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idservicesservice_idimage
-    services:
-      rustfs:
-        image: ${{ needs.changes.outputs.player == 'true' && 'rustfs/rustfs:1.0.0-rc.6' || '' }}
-        ports:
-          - 9000:9000
-        env:
-          RUSTFS_ACCESS_KEY: mydia
-          RUSTFS_SECRET_KEY: mydia-dev-secret
-        options: >-
-          --health-cmd "curl -s -o /dev/null http://127.0.0.1:9000"
-          --health-interval 2s
-          --health-timeout 5s
-          --health-retries 30
-
-    defaults:
-      run:
-        working-directory: player
-
-    steps:
-      - name: Checkout
-        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
-        uses: actions/checkout@v7
-
-      # No `cache: true` on any Setup Flutter step in this file. Each SDK entry
-      # is about 2 GB per platform per PR, and a few open player PRs pushed the
-      # repo past GitHub's 10 GB Actions cache limit, evicting ci.yml's Mix and
-      # cargo caches (2026-10-15). Downloading the SDK costs about a minute.
-      - name: Setup Flutter
-        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: stable
-
-      # --enforce-lockfile fails the job when pubspec.lock does not resolve on
-      # the .fvmrc SDK, instead of quietly re-resolving and testing a different
-      # tree. That is how a Dependabot PR resolved against a newer Flutter went
-      # green here while every local `pub get` rewrote its lock. Every CI,
-      # release and E2E `pub get` carries the flag.
-      - name: Install dependencies
-        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
-        run: flutter pub get --enforce-lockfile
-
-      - name: Generate localizations
-        if: needs.changes.outputs.player_translations == 'true'
-        run: flutter gen-l10n
-
-      - name: Run code generation
-        if: needs.changes.outputs.player == 'true' || needs.changes.outputs.player_translations == 'true'
-        run: flutter pub run build_runner build
-
-      - name: Analyze localizations
-        if: needs.changes.outputs.player_translations == 'true'
-        run: dart analyze --fatal-infos lib/l10n
-
-      - name: Test localizations
-        if: needs.changes.outputs.player_translations == 'true'
-        run: flutter test test/l10n
-
-      - name: Analyze
-        # Zero issues, infos included. The pre-commit hook enforces the same
-        # bar, but it only runs inside devenv.
-        if: needs.changes.outputs.player == 'true'
-        run: dart analyze --fatal-infos
-
-      - name: Check @TestOn files are tagged out of the bundle
-        # A bundle ignores per-file @TestOn, and the compile error it produces
-        # for an untagged browser test ("dart:js_interop is not available")
-        # does not name the cause. Fail here with the file instead.
-        if: needs.changes.outputs.player == 'true'
-        run: |
-          set -euo pipefail
-          bad=0
-          for f in $(git ls-files 'test/*_test.dart'); do
-            if grep -E '^@TestOn\(' "$f" | grep -qv "^@TestOn('vm')" \
-              && ! grep -qE "^@Tags\(\[.*['\"]skip_very_good_optimization['\"]" "$f"; then
-              echo "::error file=player/$f::@TestOn other than 'vm' needs @Tags(['skip_very_good_optimization']): the very_good bundle cannot compile it"
-              bad=1
-            fi
-          done
-          exit "$bad"
-
-      - name: Install very_good_cli
-        if: needs.changes.outputs.player == 'true'
-        run: dart pub global activate very_good_cli 1.5.0
-
-      - name: Run tests
-        # Compiles the suite once instead of once per file, which was 760 of
-        # this step's 988 seconds. very_good generates test/.test_optimizer.dart
-        # importing every *_test.dart, so all files share one isolate: a test
-        # that fails only here has leaked global state, and the fix is the
-        # leak, not an opt-out. Files tagged skip_very_good_optimization run
-        # separately in the same flutter test call.
-        #
-        # --concurrency 1 is still load-bearing: very_good passes -j 4 by
-        # default, and at default concurrency flutter test silently drops
-        # 2-4 files while exiting 0.
-        #
-        # The MYDIA_TEST_S3_* variables point s3_integration_test.dart at the
-        # rustfs service above; without them that file skips itself.
-        if: needs.changes.outputs.player == 'true'
-        env:
-          MYDIA_TEST_S3_ENDPOINT: http://127.0.0.1:9000
-          MYDIA_TEST_S3_ACCESS_KEY_ID: mydia
-          MYDIA_TEST_S3_SECRET_ACCESS_KEY: mydia-dev-secret
-        run: dart pub global run very_good_cli:very_good test --concurrency 1
-
-      - name: Run television-tier tests
-        # `directionalPrimary` is compile-time influenced, so the VM run above
-        # only ever exercises the non-directional branch. Without this step the
-        # whole Android TV code path has no coverage in CI at all.
-        #
-        # Files are enumerated rather than running the full suite under the
-        # define, which would roughly double this job for no extra signal.
-        # Empty means the naming convention broke, which must fail rather than
-        # silently cover nothing.
-        if: needs.changes.outputs.player == 'true'
-        run: |
-          set -euo pipefail
-          # Read into an array rather than a bare string: an unquoted expansion
-          # would word-split a path containing whitespace into several invalid
-          # arguments, and `flutter test` would report a missing file instead
-          # of the real cause.
-          mapfile -t files < <(git ls-files 'test/**/*_tv_test.dart')
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No test/**/*_tv_test.dart files matched; expected at least one." >&2
-            exit 1
-          fi
-          echo "Television-tier tests: ${files[*]}"
-          flutter test --concurrency=1 --dart-define=MYDIA_FORCE_TV=true "${files[@]}"
-
-      - name: Run browser tests
-        # The run above is a VM run, which skips every @TestOn('browser') file.
-        # Without this step the IndexedDB keystore has no coverage in CI at all.
-        #
-        # The files are enumerated rather than passing a bare `--platform
-        # chrome`, because that would try to run the whole suite in a browser
-        # and most of it needs dart:io. Empty means the naming convention broke,
-        # which must fail rather than silently cover nothing.
-        #
-        # No --concurrency here, unlike the VM run above: flutter parses it and
-        # then ignores it for web runs, printing a warning that reads like a
-        # mistake.
-        if: needs.changes.outputs.player == 'true'
-        run: |
-          set -euo pipefail
-          files=$(git ls-files 'test/**/*_web_test.dart')
-          if [ -z "$files" ]; then
-            echo "No test/**/*_web_test.dart files matched; expected at least one." >&2
-            exit 1
-          fi
-          echo "Browser tests: $files"
-          flutter test --platform chrome $files
-
-  # Nothing compiled the player for the web until this job existed. The matrix
-  # below covers Windows, macOS, Linux and Android, and `icons` only diffs the
-  # generated SVG set, so 183 commits landed on player/ between the public web
-  # player merging and its first deploy without one of them being checked
-  # against the web target. That gap is only visible at deploy time, where it
-  # would now break a release: deploy-web-player.yml runs from release.yml.
-  #
-  # This builds the same bundle the deploy builds, with the same flags, minus
-  # the wasm module. The Rust half needs nix, wasm-pack and a
-  # flutter_rust_bridge codegen install (player/tool/build_web.sh), which is
-  # roughly twelve minutes and too much for every player PR. The split is
-  # deliberate rather than lazy: ci.yml's rust-p2p-core-wasm flake check
-  # already compiles native/mydia_p2p_core for wasm32-unknown-unknown, so the crate reaching
-  # wasm is covered, and what stays uncovered here is wasm-pack's packaging
-  # step, whose inputs are pinned toolchain versions that move only on a
-  # deliberate bump. Dart source, which every PR touches, is what this catches.
-  #
-  # MYDIA_WEB_P2P=true matters even without the module present: it selects the
-  # public-web branch in main.dart, so this compiles the code path the deploy
-  # actually ships rather than the instance-hosted one.
-  build-web:
-    # Old / while ci.yml's Build / Web aggregator runs beside it.
-    name: Old / Build / Web
-    runs-on: ubuntu-latest
-    needs: changes
-
-    # Reading the tree is all this job does. Scoped to this job rather than
-    # added file-wide, which would be its own sweep: the steps below run
-    # third-party code (pub packages, via `flutter pub get` and build_runner),
-    # so it is the one job here where least privilege has something to bite on.
-    permissions:
-      contents: read
-
-    defaults:
-      run:
-        working-directory: player
-
-    steps:
-      - name: Checkout
-        if: needs.changes.outputs.player == 'true'
-        uses: actions/checkout@v7
-        with:
-          # Nothing in this job runs a git command, so the token has no reason
-          # to stay in .git/config where a package's build hook could read it.
-          persist-credentials: false
-
-      - name: Setup Flutter
-        if: needs.changes.outputs.player == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: stable
-
-      - name: Install dependencies
-        if: needs.changes.outputs.player == 'true'
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run code generation
-        if: needs.changes.outputs.player == 'true'
-        run: flutter pub run build_runner build
-
-      - name: Build the web bundle
-        if: needs.changes.outputs.player == 'true'
-        run: |
-          flutter build web --release --base-href / \
-            --no-web-resources-cdn \
-            --pwa-strategy=none \
-            --dart-define=MYDIA_WEB_P2P=true
-
-      # build_web.sh asserts this file reached build/web; this also asserts it
-      # still says what it has to say. Both directives are load-bearing:
-      # without them the deployed page is not cross-origin isolated, there is
-      # no SharedArrayBuffer, and RustLib.init() throws in every browser.
-      # Checking only for the file's presence would wave through a _headers
-      # whose directives had been edited away, which breaks identically and is
-      # the likelier edit of the two.
-      - name: Check _headers survived the build
-        if: needs.changes.outputs.player == 'true'
-        run: |
-          set -euo pipefail
-          headers=build/web/_headers
-          if [ ! -f "$headers" ]; then
-            echo "::error::_headers did not make it into build/web." >&2
-            exit 1
-          fi
-          for directive in \
-            "Cross-Origin-Opener-Policy: same-origin" \
-            "Cross-Origin-Embedder-Policy: require-corp"; do
-            if ! grep -qF "$directive" "$headers"; then
-              echo "::error::$headers no longer sets '$directive'. The deployed page" >&2
-              echo "         would not be cross-origin isolated, so the p2p wasm module" >&2
-              echo "         could not instantiate in any browser." >&2
-              exit 1
-            fi
-          done
-
   build:
-    # The Linux leg is Old / while ci.yml's Build / Linux aggregator runs
-    # beside it.
-    name: ${{ matrix.platform == 'Linux' && 'Old / Build / Linux' || format('Build / {0}', matrix.platform) }}
+    name: Build / ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
@@ -440,15 +82,8 @@ jobs:
             # macOS app" and "Verify packaged macOS app" below both enforce this.
             artifact_path: player/build/macos/Build/Products/Release/mydia-player-macos.zip
             shell: bash
-          - platform: Linux
-            os: ubuntu-latest
-            platform_dir: linux
-            artifact_name: mydia-player-linux-bundle
-            artifact_path: player/build/linux/x64/release/bundle
-            shell: bash
 
     runs-on: ${{ matrix.os }}
-    needs: changes
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -460,29 +95,12 @@ jobs:
       - name: Check platform support
         id: check_platform
         run: |
-          if [ "${{ needs.changes.outputs.player }}" != "true" ]; then
-            echo "enabled=false" >> $GITHUB_OUTPUT
-            echo "No player-relevant changes. Skipping build."
-          elif [ -d "${{ env.PLAYER_PATH }}/${{ matrix.platform_dir }}" ]; then
+          if [ -d "${{ env.PLAYER_PATH }}/${{ matrix.platform_dir }}" ]; then
             echo "enabled=true" >> $GITHUB_OUTPUT
           else
             echo "enabled=false" >> $GITHUB_OUTPUT
             echo "::warning::${{ matrix.platform }} platform not configured yet. Skipping build."
           fi
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'Linux' && steps.check_platform.outputs.enabled == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libgtk-3-dev \
-            liblzma-dev \
-            libmpv-dev \
-            libsecret-1-dev
 
       - name: Setup Flutter
         if: steps.check_platform.outputs.enabled == 'true'
@@ -502,6 +120,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
+      # --enforce-lockfile fails the job when pubspec.lock does not resolve on
+      # the .fvmrc SDK, instead of quietly re-resolving and building a
+      # different tree. Every CI, release and E2E `pub get` carries the flag.
       - name: Install dependencies
         if: steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
@@ -595,32 +216,6 @@ jobs:
           echo "Packaged bundle OK ($LINKS symlinks, signature valid)"
           rm -rf verify
 
-      # upload-artifact archives a directory path as a plain zip, and its zip
-      # implementation replaces every symlink with a copy of the symlink's
-      # target. That is what broke the macOS artifact (see the packaging step
-      # above). The Linux bundle has no symlinks today: CMake's
-      # install(FILES ...) at player/linux/CMakeLists.txt:111 dereferences them,
-      # and media_kit links the system libmpv rather than bundling a versioned
-      # .so chain. Assert that rather than assume it, so the day a dependency
-      # starts shipping lib/foo.so.1 -> foo.so.1.2 this fails here instead of
-      # producing a silently broken bundle.
-      - name: Assert Linux bundle has no symlinks
-        if: matrix.platform == 'Linux' && steps.check_platform.outputs.enabled == 'true'
-        run: |
-          BUNDLE="${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle"
-          # Assign first, rather than testing `if [ -n "$(find ...)" ]` directly:
-          # set -e is suppressed inside an if condition, so a find failure on a
-          # missing bundle would read as "no symlinks" and pass. A standalone
-          # assignment keeps the step fail-closed. -print -quit stops at the
-          # first hit; the full list is only worth computing when we fail.
-          FIRST_LINK=$(find "$BUNDLE" -type l -print -quit)
-          if [ -n "$FIRST_LINK" ]; then
-            echo "::error::Linux bundle contains symlinks; upload-artifact flattens them into copies. Archive the bundle before uploading."
-            find "$BUNDLE" -type l
-            exit 1
-          fi
-          echo "Linux bundle has no symlinks; direct directory upload is safe."
-
       - name: Upload artifact
         if: steps.check_platform.outputs.enabled == 'true'
         uses: actions/upload-artifact@v7
@@ -629,107 +224,12 @@ jobs:
           path: ${{ matrix.artifact_path }}
           retention-days: 7
 
-  build-android:
-    # Old / while ci.yml's Build / Android runs beside it.
-    name: Old / Build / Android
-    runs-on: ubuntu-latest
-    needs: changes
-
-    steps:
-      - name: Checkout
-        if: needs.changes.outputs.player == 'true'
-        uses: actions/checkout@v7
-
-      - name: Setup Flutter
-        if: needs.changes.outputs.player == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-
-      - name: Setup Java
-        if: needs.changes.outputs.player == 'true'
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Cache pub dependencies
-        if: needs.changes.outputs.player == 'true'
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.pub-cache
-            player/.dart_tool
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Install dependencies
-        if: needs.changes.outputs.player == 'true'
-        working-directory: player
-        run: flutter pub get --enforce-lockfile
-
-      # Not optional: the generated Dart files are gitignored, so without this a
-      # clean checkout fails the build with hundreds of errors pointing nowhere
-      # near codegen. No --delete-conflicting-outputs; it was removed in
-      # build_runner 2.15 and is now warned about and ignored.
-      - name: Run code generation
-        if: needs.changes.outputs.player == 'true'
-        working-directory: player
-        run: flutter pub run build_runner build
-
-      # Drives cargokit, which cross-compiles player/rust_builder against the
-      # NDK. This is what puts the Rust/Dart FFI boundary under PR coverage;
-      # before this job it was only exercised by release.yml. Uses the runner's
-      # preinstalled rustup, but the toolchain it runs comes from
-      # rust-toolchain.toml, not from whatever the runner image calls stable;
-      # cargokit installs the pinned toolchain on demand.
-      - name: Build APK
-        if: needs.changes.outputs.player == 'true'
-        working-directory: player
-        run: flutter build apk --release --target-platform android-arm,android-arm64
-
-      - name: Check APK ABIs
-        if: needs.changes.outputs.player == 'true'
-        run: ./scripts/check-apk-abis.sh player/build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Upload artifact
-        if: needs.changes.outputs.player == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-android-apk
-          path: player/build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7
-
-  icons:
-    # Old / while ci.yml's Check / Web icons aggregator runs beside it.
-    name: Old / Check / Web icons
-    runs-on: ubuntu-latest
-    needs: changes
-
-    steps:
-      - name: Checkout
-        if: needs.changes.outputs.player == 'true'
-        uses: actions/checkout@v7
-
-      # Guards against the web icon set drifting from its SVG sources: a
-      # source SVG changed without regenerating, a generated file was
-      # hand-edited, or a generated file was deleted. --check needs only
-      # coreutils, hence no Flutter, no nix and no matrix here.
-      - name: Check web icons are current
-        if: needs.changes.outputs.player == 'true'
-        working-directory: player
-        run: tool/gen-web-icons.sh --check
-
   flatpak-validate:
     name: Flatpak / Validate metadata
     runs-on: ubuntu-latest
-    needs: changes
 
     steps:
       - name: Checkout
-        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
       # player/flatpak/test/ holds four script tests and nothing ran any of
@@ -737,51 +237,41 @@ jobs:
       # needs no packages beyond bash, so it runs first. The other three want
       # ostree, rclone, flatpak and gpg and are still manual.
       - name: Test the ostree skeleton repair
-        if: needs.changes.outputs.player == 'true'
         run: ./player/flatpak/test/ensure-skeleton-test.sh
       - name: Test channel branding
-        if: needs.changes.outputs.player == 'true'
         run: ./player/tool/test/apply-channel-test.sh
 
       - name: Test the AppImage pins
-        if: needs.changes.outputs.player == 'true'
         run: ./player/appimage/test/pins-test.sh
 
       # Seconds, not minutes. Catches most manifest metadata mistakes long
       # before the full flatpak-build job below finishes compiling mpv.
       - name: Install validators
-        if: needs.changes.outputs.player == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y desktop-file-utils appstream
 
       - name: Validate desktop entry
-        if: needs.changes.outputs.player == 'true'
         run: desktop-file-validate player/flatpak/dev.mydia.player.desktop
 
       - name: Validate AppStream metainfo
-        if: needs.changes.outputs.player == 'true'
         run: appstreamcli validate --explain player/flatpak/dev.mydia.player.metainfo.xml
 
       - name: Validate finish-args
-        if: needs.changes.outputs.player == 'true'
         run: player/flatpak/test/finish-args-test.sh
 
   flatpak-build:
     name: Flatpak / Build
     runs-on: ubuntu-latest
-    needs: changes
     # mpv, libplacebo and libass account for roughly a third of this; the
     # Flutter build and its Rust cdylib account for the rest.
     timeout-minutes: 90
 
     steps:
       - name: Checkout
-        if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
       - name: Install flatpak-builder
-        if: needs.changes.outputs.player == 'true'
         run: |
           sudo apt-get update
           # appstream provides appstreamcli, which flatpak-builder shells out to
@@ -792,11 +282,9 @@ jobs:
       - name: Allow unprivileged user namespaces
         # Ubuntu 24.04 restricts these through AppArmor, which breaks the
         # bubblewrap sandbox flatpak-builder needs.
-        if: needs.changes.outputs.player == 'true'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Add Flathub and install the runtime
-        if: needs.changes.outputs.player == 'true'
         run: |
           flatpak remote-add --user --if-not-exists flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -805,32 +293,14 @@ jobs:
             org.freedesktop.Sdk.Extension.llvm21//25.08
 
       - name: Build
-        if: needs.changes.outputs.player == 'true'
         run: |
           flatpak-builder --user --force-clean --disable-rofiles-fuse \
             --repo=staged-repo --default-branch=stable \
             build-dir player/flatpak/dev.mydia.player.yml
 
       - name: Install and smoke test
-        if: needs.changes.outputs.player == 'true'
         run: |
           flatpak remote-add --user --no-gpg-verify --if-not-exists \
             staged "$PWD/staged-repo"
           flatpak install --user -y --reinstall staged dev.mydia.player
           ./player/flatpak/smoke-test.sh stable
-
-  appimage-build:
-    name: AppImage / Build
-    needs: changes
-    # 25+ minutes of mpv compile on a cold cache, so only when the packaging
-    # itself changed. Release builds always run it.
-    if: needs.changes.outputs.appimage == 'true'
-    permissions:
-      contents: read
-    uses: ./.github/workflows/player-appimage.yml
-    with:
-      sha: ${{ github.event.pull_request.head.sha || github.sha }}
-      version: 0.0.0-ci
-      version_code: '1'
-      dry_run: true
-
