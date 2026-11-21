@@ -39,6 +39,22 @@ if [ ! -f "$TEST_TARGET" ]; then
     exit 1
 fi
 
+# The dart-defines every build below shares. The claim code is added only to
+# `flutter test`'s.
+dart_defines=(
+    "--dart-define=MYDIA_URL=${MYDIA_URL}"
+    "--dart-define=RELAY_URL=${RELAY_URL}"
+    --dart-define=E2E_MODE=true
+)
+
+# Build the Linux debug app for the test target before minting the claim
+# code. The code is single-use and expires 300 s after it is minted, and a
+# cold build (CMake, the native plugins, the Dart kernel) is most of that on
+# a slow runner. `flutter test -d linux` then only recompiles the kernel for
+# the extra define.
+echo "Pre-building the Linux debug app..."
+flutter build linux --debug --target "$TEST_TARGET" "${dart_defines[@]}"
+
 echo "Logging in as test admin..."
 LOGIN_RESPONSE=$(curl -sf "${MYDIA_URL}/api/graphql" \
     -H "Content-Type: application/json" \
@@ -92,10 +108,8 @@ flutter_cmd=(
     -d linux
     --concurrency=1
     --reporter expanded
-    --dart-define=MYDIA_URL=${MYDIA_URL}
-    --dart-define=RELAY_URL=${RELAY_URL}
-    --dart-define=E2E_MODE=true
-    --dart-define=E2E_CLAIM_CODE=${CLAIM_CODE}
+    "${dart_defines[@]}"
+    "--dart-define=E2E_CLAIM_CODE=${CLAIM_CODE}"
 )
 
 test_exit=0
