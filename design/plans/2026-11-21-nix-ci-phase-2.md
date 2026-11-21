@@ -131,8 +131,8 @@
 
 - [ ] **Step 1:** `ciInternal.assets`: `npm ci --offline` from the existing `npmDeps`, then `mix assets.deploy` against the copied test build.
 - [ ] **Step 2:** `e2e-browser`: copy the test build, install assets, run `./scripts/run-feature-tests.sh` with `chromium` and `CHROMEDRIVER_PATH=${pkgs.chromedriver}/bin/chromedriver`, env from `ciElixir.env` only. On failure copy `tmp/wallaby_screenshots/` to `$TMPDIR/wallaby-screenshots` and print the path.
-- [ ] **Step 3:** Build. Expected: PASS. Break one feature-test assertion in a throwaway commit. Expected: FAIL with the screenshot path printed. Drop it.
-- [ ] **Step 4:** In the build matrix job, on failure of `e2e-browser`, re-run it with `--keep-failed` and upload `wallaby-screenshots` from the kept build dir. Delete the devenv job and `setup-devenv`.
+- [ ] **Step 3:** Build. Expected: PASS. Break one feature-test assertion in a throwaway commit. Expected: FAIL (a screenshot path is printed only when the test called `take_screenshot/2`). Drop it.
+- [ ] **Step 4:** Delete the devenv job and `setup-devenv`. CI does not re-run or upload screenshots (dropped during execution: feature tests write none on failure); locally, `nix build .#checks.x86_64-linux.e2e-browser --keep-failed` keeps them.
 - [ ] **Step 5:** Commit `ci(nix): E2E Browser as a sandboxed check; drop setup-devenv`.
 
 ### Task 8: Workflow cut-over for PR 1
