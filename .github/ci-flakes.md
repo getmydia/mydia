@@ -84,6 +84,18 @@ catalogued hang and network-block modes -- `Build / Linux` and `Flatpak / Build`
 -- were deliberately left out. Requiring either would trade a merge hole for a
 merge deadlock.
 
+Under Nix CI that list understates what blocks. `Test` and `Test / PostgreSQL`
+gate on `Nix / Checks`, which fails when any leg of the check matrix fails,
+because a matrix leg's result is not addressable through `needs`. So every
+flake check blocks merge through `Test`, whatever its own context name says:
+the Rust checks, `guards`, `player-linux` and `player-icons` included. That is
+deliberate. The hang and network-block modes that kept `Build / Linux` out of
+the list belonged to the runner job; `player-linux` builds offline in the
+sandbox, and a check that passes once is cached. `Build / Linux` and
+`Check / Web icons` stay out of the ruleset because `Test` already carries
+them. `Build / Android`, `Build / macOS`, `Build / Windows` and
+`Flatpak / Build` are not flake checks and remain advisory.
+
 `Test / Player E2E` was promoted 2026-09-16. It had been green on 63 of 63 master
 pushes before PR #832 merged it red, and it stayed red for a day because nothing
 blocked on it. It reports on every PR for the same reason `ci-player.yml` used

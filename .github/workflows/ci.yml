@@ -455,7 +455,11 @@ jobs:
 
       # --enforce-lockfile fails the job when pubspec.lock does not resolve on
       # the .fvmrc SDK, instead of quietly testing a re-resolved tree.
+      # The APK build never regenerates the Rust/Dart bindings, so the dev
+      # shell's flutter_rust_bridge_codegen install is skipped.
       - name: Build APK
+        env:
+          MYDIA_SKIP_FRB_CODEGEN_INSTALL: "1"
         run: |
           nix develop .#android --command bash -c '
             set -euo pipefail
