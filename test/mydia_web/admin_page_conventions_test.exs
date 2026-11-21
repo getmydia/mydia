@@ -15,6 +15,7 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   use ExUnit.Case, async: true
 
   @live_root Path.expand("../../lib/mydia_web/live", __DIR__)
+  @lib_root Path.expand("../../lib", __DIR__) <> "/"
   @max_template_lines 60
 
   # Single files outside a page directory that hold migrated admin markup,
@@ -195,8 +196,11 @@ defmodule MydiaWeb.AdminPageConventionsTest do
 
     cond do
       # A dependency's LiveView mounted under /admin (the error tracker
-      # dashboard) is not ours to restyle.
-      String.contains?(source, "/deps/") ->
+      # dashboard) is not ours to restyle. Matched as "outside lib/" rather
+      # than "under deps/": a dep compiled with ERL_COMPILER_OPTIONS
+      # [deterministic] (nix/ci/mix-deps.nix) records no source, which
+      # expands to the working directory.
+      not String.starts_with?(source, @lib_root) ->
         nil
 
       dir == @live_root ->

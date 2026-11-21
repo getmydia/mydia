@@ -87,6 +87,8 @@ defmodule Mydia.RemoteAccess.DirectUrlsTest do
     # real — none of them assert anything about the public-IP-derived URL
     # detect_all/0 would otherwise prepend (#530).
 
+    # Needs a non-loopback IPv4 interface, which the Nix build sandbox lacks.
+    @tag :external
     test "includes local URLs" do
       Application.put_env(:mydia, :direct_urls, external_port: 4000, public_ip_enabled: false)
 

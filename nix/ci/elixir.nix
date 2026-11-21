@@ -121,10 +121,13 @@
           echo ${builtins.elemAt heroiconsLock 1} > deps/heroicons/.git/HEAD
         '';
 
-      # A check whose output is its log, so a cached result stays readable.
-      mkCheck = { name, set, script, inputs ? [ ] }:
+      # A check whose output is its log ($out/<log>), so a cached result stays
+      # readable. `extraEnv` adds to env; a variable the app's compile-time
+      # config reads (DATABASE_TYPE) must match the test build it copies.
+      mkCheck = { name, set, script, inputs ? [ ], extraEnv ? { }, log ? "log" }:
         pkgs.stdenv.mkDerivation {
-          inherit name env;
+          inherit name;
+          env = env // extraEnv;
           src = sources.toSource set;
           nativeBuildInputs = nativeBuildInputs ++ inputs;
           dontConfigure = true;
@@ -136,7 +139,7 @@
             (
               set -euo pipefail
               ${script}
-            ) 2>&1 | tee $out/log
+            ) 2>&1 | tee $out/${log}
             test "''${PIPESTATUS[0]}" = 0
             runHook postBuild
           '';
@@ -283,6 +286,9 @@
       ];
     in
     {
+      # For the checks that run on top of the test build (nix/ci/tests.nix).
+      _module.args.ciElixir = { inherit buildSet copyBuild mkCheck; };
+
       checks = {
         # .formatter.exs covers config/, lib/, test/, priv/*/ and the root
         # *.exs files (.credo.ratchet.exs is the one elixirApp lacks); its

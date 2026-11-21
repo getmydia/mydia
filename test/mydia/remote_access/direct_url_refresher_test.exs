@@ -35,6 +35,9 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
   end
 
   describe "refresh_direct_urls/0" do
+    # This and "complete refresh flow" detect the host's interfaces and need
+    # a non-loopback IPv4 one, which the Nix build sandbox lacks.
+    @tag :external
     test "detects URLs and stores them in config" do
       # Initialize remote access config
       {:ok, _config} = RemoteAccess.initialize_config()
@@ -183,6 +186,7 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
       assert "https://vpn.mydia.local:4000" in direct_urls
     end
 
+    @tag :external
     test "complete refresh flow" do
       # Initialize remote access config
       {:ok, _config} = RemoteAccess.initialize_config()

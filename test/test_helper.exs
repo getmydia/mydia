@@ -31,6 +31,17 @@ s3_exclude =
       [:s3]
   end
 
+# Mint verifies TLS against :public_key.cacerts_get/0, which OTP fills from
+# fixed paths under /etc. The Nix build sandbox (nix/ci/tests.nix) has no
+# /etc/ssl, so without this every test that starts a TLS handshake, even to a
+# Bypass or an unroutable address, raises "default CA trust store not
+# available". SSL_CERT_FILE is the fallback only: a machine with an OS store
+# keeps it.
+with {:error, _} <- :public_key.cacerts_load(),
+     path when is_binary(path) <- System.get_env("SSL_CERT_FILE") do
+  :ok = :public_key.cacerts_load(path)
+end
+
 # The Wasmex-hosted Cardigann engine tests need the prebuilt guest. Without it
 # they are excluded, loudly: a green run must never read as "the engine works"
 # when it was not exercised (native/cardigann_guest/README.md, "CI gap"). Naming

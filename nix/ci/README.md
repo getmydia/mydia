@@ -48,6 +48,14 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `Application.compile_env`, so a different value makes Mix recompile the
   NIF modules, with cargo. The ratchet and the `mix_unused` report read git
   history and stay ordinary jobs.
+- `tests.nix`: the ExUnit shards `test-sqlite-{1..4}` and
+  `test-postgres-{1..3}`, on top of `mydiaTestBuild` (through
+  `elixir.nix`'s `_module.args.ciElixir` helpers). Each starts its own
+  RustFS and, for PostgreSQL, its own server on loopback, then runs
+  `mix test --partitions N --warnings-as-errors --seed 0`; the output is
+  `test.log`. `testReads` lists the repo files outside the app and `test/`
+  that tests read. What the sandbox means for tests: `test/README.md`,
+  "Sandboxed CI runs".
 - `../beam-deps.nix`: `deps.nix` with its sandbox overrides, heroicons,
   lexbor and the vendored Wasmex crates, shared with `nix/packages`.
 - `../toolchains.nix`: `beamPackages`, shared with `nix/packages` so the
