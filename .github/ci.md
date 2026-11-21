@@ -746,10 +746,10 @@ and cold about 20, so the cure was to get the big entries out of the budget:
   Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
   which GHCR needs for cache manifests and which keeps a failed cache push from
   failing the build.
-- `ci-nix.yml` and `dependabot-fixup.yml` use Cachix, like the E2E job's
-  devenv, and ci.yml's flake checks use niks3. magic-nix-cache stored every
-  store path as its own Actions cache entry (2,226 entries, 1.1 GB on
-  2026-10-30).
+- `ci-nix.yml` and `dependabot-fixup.yml` read Cachix, like the E2E job's
+  devenv, and none of them pushes to it; ci.yml's flake checks use niks3.
+  magic-nix-cache stored every store path as its own Actions cache entry
+  (2,226 entries, 1.1 GB on 2026-10-30).
 
 Check the budget with:
 

@@ -150,13 +150,14 @@ jobs:
 
       # Cachix, not magic-nix-cache: the latter wrote ~2,200 .nar entries
       # (1.1 GB) into the 10 GB Actions cache and pushed the Mix build caches out.
+      # Read-only, with no token: CI no longer pushes to Cachix (CI's own
+      # cache is niks3, .github/ci.md "niks3").
       - name: Setup Cachix
         uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          skipPush: true
 
       - name: Assert the Android shell resolves the pinned Flutter
         run: nix eval --raw .#packages.x86_64-linux.flutter.version

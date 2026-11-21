@@ -7,33 +7,24 @@ description: >-
 # flake checks cached in niks3 (.github/ci.md, "ci.yml: the flake-check
 # graph"), and the E2E job restores the cached test build from there
 # (scripts/ci-restore-test-build.sh).
-inputs:
-  cachix-auth-token:
-    description: CACHIX_AUTH_TOKEN. Composite actions cannot read secrets, so callers pass it.
-    default: ''
-  skip-push:
-    description: "'true' to only read from Cachix (fork PRs)."
-    default: 'true'
-
 runs:
   using: composite
   steps:
     - name: Install Nix
-      uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+      uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
       with:
         extra_nix_config: |
           experimental-features = nix-command flakes
 
-    # Reads devenv's public cache (pre-built common packages, no auth) plus the
-    # project cache; pushes the project's own derivations only on same-repo
-    # events, so fork PRs never receive or use the token (KTD1).
+    # Read-only, with no token: devenv's public cache (pre-built common
+    # packages) plus the project cache. CI no longer pushes to Cachix; what
+    # it builds belongs in niks3 (.github/ci.md, "niks3").
     - name: Setup Cachix
       uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
       with:
         name: mydia
-        authToken: ${{ inputs.cachix-auth-token }}
         extraPullNames: devenv
-        skipPush: ${{ inputs.skip-push }}
+        skipPush: true
 
     # The devenv CLI comes from the nixpkgs flake.lock pins, which
     # check-generated-freshness.sh holds equal to devenv.lock's, so a

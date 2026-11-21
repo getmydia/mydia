@@ -433,15 +433,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # Read-only: everything the restore may build here (the test build and,
-      # on a cache miss, mixDepsCompiled, wasmexNif, the NIFs, pluginWasm)
-      # belongs in niks3, not Cachix. The devenv environment comes from
-      # Cachix and cache.nixos.org as before.
+      # Read-only, so no Cachix token: everything the restore may build here
+      # (the test build and, on a cache miss, mixDepsCompiled, wasmexNif, the
+      # NIFs, pluginWasm) belongs in niks3, not Cachix. The devenv environment
+      # comes from Cachix and cache.nixos.org as before.
       - name: Set up devenv
         uses: ./.github/actions/setup-devenv
-        with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: 'true'
 
       # Bind-mounts the checkout at /build/source; later steps run there.
       - name: Restore the cached test build
