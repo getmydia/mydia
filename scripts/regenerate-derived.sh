@@ -10,8 +10,9 @@
 #   */Cargo.lock   path crates are shared between workspaces, so a bump in one
 #                  crate's manifest leaves every other lock that includes it
 #                  unsatisfied
-#   npmDeps.hash   fixed-output hash of assets/package-lock.json, in
-#                  nix/packages/flake-module.nix
+#   npmDeps.hash   fixed-output hashes of assets/package-lock.json and
+#                  metadata-relay/assets/package-lock.json (npmDeps and
+#                  relayNpmDeps), in nix/packages/flake-module.nix
 #   devenv.lock    its nixpkgs node, copied from flake.lock's so the devenv
 #                  shell and the Nix build share one package set
 #   player/pubspec.lock.json
@@ -64,8 +65,11 @@ echo "player/pubspec.lock.json <- player/pubspec.lock"
 nixpkgs_run yq-go -o json player/pubspec.lock > player/pubspec.lock.json.tmp
 mv player/pubspec.lock.json.tmp player/pubspec.lock.json
 
-echo "npmDeps.hash <- assets/package-lock.json"
-npm_deps_hash_write "$(npm_deps_hash)"
+for target in "${npm_deps_targets[@]}"; do
+  read -r lockfile binding <<<"$target"
+  echo "$binding.hash <- $lockfile"
+  npm_deps_hash_write "$binding" "$(npm_deps_hash "$lockfile")"
+done
 
 echo "devenv.lock nixpkgs <- flake.lock nixpkgs"
 scripts/sync-devenv-nixpkgs.sh

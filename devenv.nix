@@ -577,13 +577,14 @@ in
       excludes = [ "\\.(g|freezed)\\.dart$" ];
       pass_filenames = false;
     };
-    # Recomputes npmDeps.hash in nix/packages/flake-module.nix whenever the
-    # lockfile is committed, and stops the commit if it had to rewrite it.
+    # Recomputes the fetchNpmDeps hashes in nix/packages/flake-module.nix
+    # whenever either lockfile is committed, and stops the commit if it had
+    # to rewrite one.
     npm-deps-hash = {
       enable = true;
-      name = "npmDeps.hash matches assets/package-lock.json";
+      name = "fetchNpmDeps hashes match their package-lock.json";
       entry = "scripts/update-npm-deps-hash.sh";
-      files = "^assets/package-lock\\.json$";
+      files = "^(metadata-relay/)?assets/package-lock\\.json$";
       pass_filenames = false;
     };
     no-scratch-docs = {

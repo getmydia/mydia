@@ -53,16 +53,21 @@ pushes their outputs, so master's own run then finds them cached.
 
 `npmDeps.hash` in `nix/packages/flake-module.nix` is a fixed-output derivation
 hash and must be bumped in the same commit as any `assets/package-lock.json`
-change. A stale value fails the Nix build as
+change. `relayNpmDeps.hash` in the same file is the same for
+`metadata-relay/assets/package-lock.json` (the `metadata-relay` package, which
+the player-e2e VM test runs). Everything below covers both: the pairs are
+listed once, in `npm_deps_targets` in `scripts/lib/npm-deps-hash.sh`. A stale
+value fails the Nix build as
 `error: hash mismatch in fixed-output derivation '...npm-deps.drv'`, with the
 correct value on the `got:` line.
 
 Two things keep it in step:
 
 - The devenv pre-commit hook `npm-deps-hash` runs
-  `scripts/update-npm-deps-hash.sh` whenever the lockfile is staged. It
+  `scripts/update-npm-deps-hash.sh` whenever either lockfile is staged. It
   rewrites the hash and stops the commit; stage `flake-module.nix` and commit
-  again.
+  again. `scripts/regenerate-derived.sh` (run by `dependabot-fixup.yml`)
+  rewrites both after a Dependabot bump.
 - `Check / Generated Freshness` recomputes the hash on every pull request and
   fails with the pinned and computed values side by side.
 

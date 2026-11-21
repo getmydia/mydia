@@ -256,16 +256,20 @@ fi
 if command -v nix >/dev/null 2>&1; then
   # shellcheck source=scripts/lib/npm-deps-hash.sh
   source "$root/scripts/lib/npm-deps-hash.sh"
-  if ! npm_computed="$(npm_deps_hash)"; then
-    fail "could not compute the npmDeps hash of $npm_deps_lockfile (see above)."
-  elif [ "$npm_computed" != "$(npm_deps_hash_pinned)" ]; then
-    fail "npmDeps.hash in $npm_deps_flake_module is stale for $npm_deps_lockfile:
-    pinned:   $(npm_deps_hash_pinned)
+  for npm_target in "${npm_deps_targets[@]}"; do
+    read -r npm_lockfile npm_binding <<<"$npm_target"
+    npm_pinned="$(npm_deps_hash_pinned "$npm_binding")"
+    if ! npm_computed="$(npm_deps_hash "$npm_lockfile")"; then
+      fail "could not compute the $npm_binding hash of $npm_lockfile (see above)."
+    elif [ "$npm_computed" != "$npm_pinned" ]; then
+      fail "$npm_binding.hash in $npm_deps_flake_module is stale for $npm_lockfile:
+    pinned:   $npm_pinned
     computed: $npm_computed
   Run ./scripts/update-npm-deps-hash.sh and commit the result."
-  else
-    echo "npmDeps.hash matches $npm_deps_lockfile ($npm_computed)."
-  fi
+    else
+      echo "$npm_binding.hash matches $npm_lockfile ($npm_computed)."
+    fi
+  done
 else
   echo "note: nix not on PATH, skipping the npmDeps.hash half of this check" >&2
 fi
