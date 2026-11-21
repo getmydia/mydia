@@ -224,7 +224,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/components.ex:123
 #: lib/mydia_web/live/downloads_live/components.ex:297
 #: lib/mydia_web/live/downloads_live/index.html.heex:35
-#: lib/mydia_web/live/downloads_live/index.html.heex:777
+#: lib/mydia_web/live/downloads_live/index.html.heex:779
 #: lib/mydia_web/live/downloads_live/remove_confirm.ex:167
 #: lib/mydia_web/live/import_media_live/components.ex:673
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:128
@@ -2852,7 +2852,7 @@ msgid_plural "Also deletes %{count} files outside these folders."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:763
+#: lib/mydia_web/live/downloads_live/index.html.heex:765
 #, elixir-autogen, elixir-format
 msgid "Also permanently delete the downloaded files from disk"
 msgstr ""
@@ -3215,7 +3215,7 @@ msgstr ""
 msgid "Cancel Download?"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/list_components.ex:409
+#: lib/mydia_web/live/downloads_live/list_components.ex:430
 #: lib/mydia_web/live/downloads_live/remove_confirm.ex:139
 #: lib/mydia_web/live/downloads_live/remove_confirm.ex:170
 #, elixir-autogen, elixir-format
@@ -3332,7 +3332,7 @@ msgid "Change Category"
 msgstr ""
 
 #: lib/mydia_web/live/downloads_live/components.ex:168
-#: lib/mydia_web/live/downloads_live/list_components.ex:456
+#: lib/mydia_web/live/downloads_live/list_components.ex:477
 #: lib/mydia_web/live/import_media_live/components.ex:446
 #: lib/mydia_web/live/import_media_live/match_search_modal.ex:27
 #, elixir-autogen, elixir-format
@@ -3424,7 +3424,7 @@ msgstr[1] ""
 msgid "Clear All"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:786
+#: lib/mydia_web/live/downloads_live/index.html.heex:788
 #, elixir-autogen, elixir-format
 msgid "Clear Completed"
 msgstr ""
@@ -3439,17 +3439,17 @@ msgstr ""
 msgid "Clear all unresolved scan results for this library? Dismissed decisions and imported media will not be removed."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:785
+#: lib/mydia_web/live/downloads_live/index.html.heex:787
 #, elixir-autogen, elixir-format
 msgid "Clear and Delete Files"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/list_components.ex:428
+#: lib/mydia_web/live/downloads_live/list_components.ex:449
 #, elixir-autogen, elixir-format
 msgid "Clear completed download"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:741
+#: lib/mydia_web/live/downloads_live/index.html.heex:743
 #, elixir-autogen, elixir-format
 msgid "Clear completed downloads"
 msgstr ""
@@ -3905,7 +3905,7 @@ msgstr ""
 msgid "Could not queue the delete: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:668
+#: lib/mydia_web/live/downloads_live/index.html.heex:670
 #, elixir-autogen, elixir-format
 msgid "Could not read %{clients}. This list may be incomplete."
 msgstr ""
@@ -4432,7 +4432,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_requests_live/components.ex:140
 #: lib/mydia_web/live/downloads_live/issue_components.ex:120
 #: lib/mydia_web/live/downloads_live/issue_components.ex:374
-#: lib/mydia_web/live/downloads_live/list_components.ex:384
+#: lib/mydia_web/live/downloads_live/list_components.ex:405
 #: lib/mydia_web/live/jobs_live/components.ex:192
 #, elixir-autogen, elixir-format
 msgid "Details"
@@ -6300,7 +6300,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/index.html.heex:58
 #: lib/mydia_web/live/downloads_live/issue_components.ex:354
 #: lib/mydia_web/live/downloads_live/issue_components.ex:355
-#: lib/mydia_web/live/downloads_live/list_components.ex:442
+#: lib/mydia_web/live/downloads_live/list_components.ex:463
 #, elixir-autogen, elixir-format
 msgid "More actions"
 msgstr ""
@@ -6843,7 +6843,7 @@ msgstr ""
 msgid "Not Set"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:702
+#: lib/mydia_web/live/downloads_live/index.html.heex:704
 #, elixir-autogen, elixir-format
 msgid "Not adopted by client setting"
 msgstr ""
@@ -7059,7 +7059,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/list_components.ex:282
 #: lib/mydia_web/live/downloads_live/list_components.ex:283
 #: lib/mydia_web/live/downloads_live/list_components.ex:286
-#: lib/mydia_web/live/downloads_live/list_components.ex:336
+#: lib/mydia_web/live/downloads_live/list_components.ex:357
 #, elixir-autogen, elixir-format
 msgid "Open %{name}"
 msgstr ""
@@ -7206,7 +7206,7 @@ msgstr[1] ""
 msgid "Path"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/list_components.ex:401
+#: lib/mydia_web/live/downloads_live/list_components.ex:422
 #, elixir-autogen, elixir-format
 msgid "Pause download"
 msgstr ""
@@ -7690,7 +7690,7 @@ msgstr ""
 msgid "Re-match queued — the file will be moved and relinked."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/list_components.ex:420
+#: lib/mydia_web/live/downloads_live/list_components.ex:441
 #, elixir-autogen, elixir-format
 msgid "Re-match to the correct title"
 msgstr ""
@@ -8147,7 +8147,7 @@ msgstr ""
 msgid "Requesting..."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:660
+#: lib/mydia_web/live/downloads_live/index.html.heex:662
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:100
 #, elixir-autogen, elixir-format
 msgid "Rescan"
@@ -8226,7 +8226,7 @@ msgstr ""
 msgid "Results:"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/list_components.ex:393
+#: lib/mydia_web/live/downloads_live/list_components.ex:414
 #, elixir-autogen, elixir-format
 msgid "Resume download"
 msgstr ""
@@ -8601,7 +8601,7 @@ msgstr ""
 msgid "Search for movies, TV shows, or specific releases..."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:722
+#: lib/mydia_web/live/downloads_live/index.html.heex:724
 #, elixir-autogen, elixir-format
 msgid "Search library to match"
 msgstr ""
@@ -8775,7 +8775,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:474
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:152
-#: lib/mydia_web/live/downloads_live/index.html.heex:519
+#: lib/mydia_web/live/downloads_live/index.html.heex:520
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:263
 #: lib/mydia_web/live/search_live/index.html.heex:557
 #, elixir-autogen, elixir-format
@@ -8967,7 +8967,7 @@ msgstr ""
 msgid "Setup stopped unexpectedly. Try again."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:537
+#: lib/mydia_web/live/downloads_live/index.html.heex:539
 #, elixir-autogen, elixir-format
 msgid "Share ratio"
 msgstr ""
@@ -9047,8 +9047,8 @@ msgstr ""
 #: lib/mydia_web/live/admin_system_live/components.ex:120
 #: lib/mydia_web/live/admin_system_live/components.ex:135
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:149
-#: lib/mydia_web/live/downloads_live/index.html.heex:507
-#: lib/mydia_web/live/downloads_live/index.html.heex:544
+#: lib/mydia_web/live/downloads_live/index.html.heex:508
+#: lib/mydia_web/live/downloads_live/index.html.heex:546
 #: lib/mydia_web/live/media_live/index.html.heex:456
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:66
 #: lib/mydia_web/live/media_live/show/modals.ex:471
@@ -9750,14 +9750,14 @@ msgstr ""
 msgid "These servers still work, but they are declared through %{env} or %{yaml}, which will stop being read for Plex in a future release:"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:748
+#: lib/mydia_web/live/downloads_live/index.html.heex:750
 #, elixir-autogen, elixir-format
 msgid "This clears %{count} completed download from the queue and removes it from the download client."
 msgid_plural "This clears %{count} completed downloads from the queue and removes them from the download client."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:698
+#: lib/mydia_web/live/downloads_live/index.html.heex:700
 #, elixir-autogen, elixir-format
 msgid "This client's External torrents setting tells Mydia not to adopt it"
 msgstr ""
@@ -9837,7 +9837,7 @@ msgstr ""
 msgid "This may take a few seconds"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:768
+#: lib/mydia_web/live/downloads_live/index.html.heex:770
 #, elixir-autogen, elixir-format
 msgid "This permanently deletes files for %{count} download from disk. This cannot be undone."
 msgid_plural "This permanently deletes files for %{count} downloads from disk. This cannot be undone."
@@ -9898,7 +9898,7 @@ msgstr ""
 msgid "Time period"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:513
+#: lib/mydia_web/live/downloads_live/index.html.heex:514
 #, elixir-autogen, elixir-format
 msgid "Time remaining"
 msgstr ""
@@ -9991,7 +9991,7 @@ msgstr ""
 msgid "Torrents in your clients that Mydia does not manage will appear here"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/index.html.heex:650
+#: lib/mydia_web/live/downloads_live/index.html.heex:652
 #, elixir-autogen, elixir-format
 msgid "Torrents in your download clients that Mydia does not manage. They are not tracked and nothing is imported from them."
 msgstr ""
@@ -10249,7 +10249,7 @@ msgid "Upload one file at a time"
 msgstr ""
 
 #: lib/mydia_web/live/downloads_live/index.html.heex:499
-#: lib/mydia_web/live/downloads_live/index.html.heex:531
+#: lib/mydia_web/live/downloads_live/index.html.heex:532
 #: lib/mydia_web/live/downloads_live/sorting.ex:37
 #, elixir-autogen, elixir-format
 msgid "Upload speed"
@@ -11136,7 +11136,7 @@ msgstr ""
 
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:370
 #: lib/mydia_web/live/downloads_live/index.html.heex:103
-#: lib/mydia_web/live/downloads_live/index.html.heex:553
+#: lib/mydia_web/live/downloads_live/index.html.heex:555
 #: lib/mydia_web/live/downloads_live/list_view.ex:38
 #, elixir-autogen, elixir-format
 msgctxt "download"
@@ -22454,4 +22454,9 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/remove_confirm.ex:159
 #, elixir-autogen, elixir-format
 msgid "The partial files stay in the download folder until you remove them. Grabbing this release again can fail while they are there."
+msgstr ""
+
+#: lib/mydia_web/live/downloads_live/list_components.ex:340
+#, elixir-autogen, elixir-format
+msgid "Uploaded"
 msgstr ""

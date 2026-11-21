@@ -312,6 +312,26 @@ defmodule Mydia.Downloads.ClientRemovalTest do
       refute ClientRemoval.terms_met?(private_no_terms, nil)
     end
 
+    test "a paused rqbit torrent is judged on its banked ratio" do
+      download = %Mydia.Downloads.Download{
+        metadata: %{
+          "tracker_terms" => %{"minimum_ratio" => 1.0},
+          "observed_upload" => %{"bytes" => 2000, "session" => 2000}
+        }
+      }
+
+      paused = %{
+        status(:paused, "x")
+        | uploaded: 0,
+          ratio: 0.0,
+          size: 1000,
+          uploaded_session_only?: true
+      }
+
+      assert ClientRemoval.terms_met?(download, paused)
+      refute ClientRemoval.terms_met?(download, %{paused | uploaded_session_only?: false})
+    end
+
     test "the operator target guards built-in removal" do
       alias Mydia.Downloads.BuiltIn
 

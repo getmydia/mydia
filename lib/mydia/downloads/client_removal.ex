@@ -27,6 +27,7 @@ defmodule Mydia.Downloads.ClientRemoval do
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.ObservedSeedTime
+  alias Mydia.Downloads.ObservedUpload
   alias Mydia.Downloads.SeedingGoal
   alias Mydia.Downloads.Structs.DownloadStatus
   alias Mydia.Repo
@@ -143,6 +144,8 @@ defmodule Mydia.Downloads.ClientRemoval do
   def terms_met?(%Download{} = download, status) do
     case status do
       %DownloadStatus{} ->
+        # rqbit's own counter restarts at 0 on a pause: judge Mydia's total.
+        status = ObservedUpload.overlay_status(status, download.metadata)
         counted = status.seeding_time || ObservedSeedTime.seconds(download)
 
         seeding_time =
