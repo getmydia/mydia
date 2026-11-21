@@ -107,9 +107,11 @@ the workflow. `scripts/ci-restore-test-build.sh --mount` is deleted if nothing
 else calls it.
 
 A failed build has no `$out`, so on failure the check copies
-`tmp/wallaby_screenshots/` to a path it prints, and the build job re-runs the
-failing check with `--keep-failed` to upload the screenshots as
-`wallaby-screenshots`.
+`tmp/wallaby_screenshots/` to a path it prints; running the check locally
+with `--keep-failed` keeps that directory. CI uploads no screenshots: the
+feature tests use plain `test`, not Wallaby's `feature`, so a failing
+assertion writes none, and only an explicit `take_screenshot/2` produces one.
+A re-run on failure to collect them was planned and dropped for that reason.
 
 ### `player-e2e`
 
@@ -205,7 +207,9 @@ migration and cost macOS/Windows minutes.
 - No `paths-filter`, `actions/cache`, `hashFiles`, `setup-devenv` or
   `subosito/flutter-action` in `ci.yml`, and none in what `ci-player.yml` keeps
   for Linux, web or Android (it keeps none of those jobs).
-- A docs-only or backend-only PR runs no player check: each is a cache hit.
+- A docs-only PR runs no player check, and a backend-only PR runs none
+  except `player-e2e`, whose closure includes `packages.default`: each other
+  player check is a cache hit.
   `Build / Android` runs anyway, by design.
 - A player-only PR runs no Elixir check.
 - `Test / Player E2E` wall clock is no worse than today's roughly 19 minutes on

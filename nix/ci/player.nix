@@ -215,6 +215,9 @@
       # cargokit.yaml. flutter_rust_bridge loads the library by the fixed name
       # libmydia_player_p2p.so through the runner's $ORIGIN/lib rpath, so the
       # bundle carries the file byte for byte (no fixup).
+      # Flutter's name for the host architecture in build/linux/<arch>/.
+      flutterLinuxArch = if pkgs.stdenv.hostPlatform.isAarch64 then "arm64" else "x64";
+
       playerLinux = (mkPlayerCheck {
         name = "player-linux";
         nativeBuildInputs = [
@@ -232,16 +235,18 @@
           export MYDIA_PLAYER_P2P_PREBUILT=${ciRust.playerP2pSo}/lib/libmydia_player_p2p.so
           flutter build linux --release
 
-          bundle=build/linux/x64/release/bundle
+          bundle=build/linux/${flutterLinuxArch}/release/bundle
           if [ ! -f "$bundle/lib/libmydia_player_p2p.so" ]; then
             echo "$bundle/lib/libmydia_player_p2p.so is missing" >&2
             exit 1
           fi
 
-          # ci-player.yml's "Assert Linux bundle has no symlinks": the
-          # workflow uploads the bundle with upload-artifact, which replaces
-          # every symlink with a copy of its target. Assigned first, so a
-          # failing find fails the check rather than reading as "none".
+          # The bundle must hold no symlinks: player-linux.yml builds the
+          # release bundle from the same CMake files and uploads it with
+          # upload-artifact, which replaces every symlink with a copy of its
+          # target. A symlink here is one the release would ship flattened.
+          # Assigned first, so a failing find fails the check rather than
+          # reading as "none".
           first_link=$(find "$bundle" -type l -print -quit)
           if [ -n "$first_link" ]; then
             echo "Linux bundle contains symlinks; upload-artifact flattens them into copies." >&2
