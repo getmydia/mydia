@@ -39,7 +39,20 @@ Mydia's own crates are not affected, since all three `Cargo.lock` files already
 resolve `noq-udp 1.4.0`. This is purely a property of the prebuilt relay image,
 so do not change anything in `native/` or `player/rust/` in response to it.
 
-## v1.4.2 is live (2026-11-18)
+## v1.5.0 is live (2026-11-20)
+
+Both relays moved from v1.4.2 to v1.5.0 on 2026-11-20, alongside the iroh 1.5.0
+bump in `native/mydia_p2p_core`, after `verify-image.sh` passed against the
+multi-platform digest. cae1-1 is this directory's deployment on can-1; cae1-2
+runs on basestar from the NixOS config (`modules/hosts/basestar/services/iroh-relay.nix`
+in the nixos repo), which carries the same pin and must move with this one.
+Each had its pre-rollout connected-node count back within a few minutes.
+
+v1.5.0 closes a connection leak during the relay handshake, drops packets that
+cannot be encoded instead of disconnecting the receiver, and keeps proxy
+credentials out of the debug log.
+
+## v1.4.2 (2026-11-18)
 
 cae1-1 went from v1.0.0 straight to v1.4.2 on 2026-11-18, after
 `verify-image.sh` passed. v1.4.2 is iroh's relay security release: a client
