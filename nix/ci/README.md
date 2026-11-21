@@ -263,7 +263,8 @@ workflow outright. Run it locally with
 needs KVM, and the VM run itself takes about three minutes (149 s on
 2026-11-21) once its inputs are built. On failure
 the build log carries the relay, server and seed journals; on success they
-and the client's log are in `$out`.
+and the client's log are in `$out` (`./dev player e2e` links it as
+`result-player-e2e`).
 
 ## ciInternal and the CI planner
 

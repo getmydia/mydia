@@ -20,6 +20,7 @@ npm_deps_flake_module=nix/packages/flake-module.nix
 # the block hashes and the Nix binding it is assigned to. Every function below
 # takes one entry's fields. Dependabot bumps both lockfiles (the /assets and
 # /metadata-relay/assets entries in .github/dependabot.yml).
+# shellcheck disable=SC2034 # read by the scripts that source this file
 npm_deps_targets=(
   "assets/package-lock.json npmDeps"
   "metadata-relay/assets/package-lock.json relayNpmDeps"

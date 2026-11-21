@@ -882,6 +882,24 @@ renders it is worth checking this way first: count the server renders for that
 test. Fixed by making `login/3` wait for its redirect and by moving the suite
 onto `visit_liveview/3`, which fails naming the page the browser is actually on.
 
+## Player E2E (`Test / Player E2E`)
+
+The `player-e2e` VM test is a blocking check, so a flake in it reds every
+aggregator, not only its own context. Its build log carries the client's
+output as it runs, and on failure the relay, server and seed journals.
+
+**`Failed host lookup: 'server' (OS Error: ... errno = -11)`** from the app
+under test, inside the client VM. errno -11 is `EAI_AGAIN`, a temporary
+resolver failure: Dart's lookup goes through glibc to the guest's nscd, and
+a name in `/etc/hosts` should never need a retry. Seen twice in one local
+run on 2026-11-21 (the test retried and passed), never in the runs after.
+Mitigated rather than explained: the client's `MYDIA_URL` and `RELAY_URL`,
+and the server's `METADATA_RELAY_URL`, now use the nodes' VLAN addresses
+(`nodes.<name>.networking.primaryIPAddress` in `nix/tests/player-e2e.nix`),
+so nothing in the test resolves a host name. If a lookup failure comes back,
+something new is resolving a name: find it in the client log before
+rerunning.
+
 ## Player (`Test / Player`)
 
 ### A Hive test times out after 30 seconds, and only in CI

@@ -64,7 +64,10 @@ let
     '';
   };
 
-  clientRun = pkgs.writeShellScript "player-e2e-client" ''
+  # The server and relay by VLAN address, not host name: the app under test
+  # resolves MYDIA_URL's host through glibc and the guest's nscd, which once
+  # answered `server` with EAI_AGAIN mid-suite (.github/ci-flakes.md).
+  mkClientRun = { serverIp, relayIp }: pkgs.writeShellScript "player-e2e-client" ''
     set -euo pipefail
     source ${clientEnv}
     # The VM's own tools (sh, coreutils) after the captured ones.
@@ -84,8 +87,8 @@ let
     ${ciPlayer.setupPlayerTree { }}
     export MYDIA_PLAYER_P2P_PREBUILT=${ciPlayer.p2pPrebuilt}
 
-    export MYDIA_URL=http://server:4000
-    export RELAY_URL=http://relay:4001
+    export MYDIA_URL=http://${serverIp}:4000
+    export RELAY_URL=http://${relayIp}:4001
     export E2E_ADMIN_EMAIL=${adminEmail}
     export E2E_ADMIN_PASSWORD=${adminPassword}
     export E2E_TEST_TARGET=integration_test/all_tests.dart
@@ -97,9 +100,9 @@ let
   # flutter tool switches terminal echo on the tty it is given, which is the
   # test driver's shell, and the driver then reads its own echoed commands
   # back as the exit status.
-  clientRunLogged = pkgs.writeShellScript "player-e2e-client-logged" ''
+  mkClientRunLogged = ips: pkgs.writeShellScript "player-e2e-client-logged" ''
     set -o pipefail
-    ${clientRun} < /dev/null 2>&1 | tee /tmp/player-e2e.log > /dev/ttyS0
+    ${mkClientRun ips} < /dev/null 2>&1 | tee /tmp/player-e2e.log > /dev/ttyS0
   '';
 in
 pkgs.testers.nixosTest {
@@ -134,7 +137,7 @@ pkgs.testers.nixosTest {
     virtualisation.memorySize = 1024;
   };
 
-  nodes.server = { config, ... }:
+  nodes.server = { config, nodes, ... }:
     let
       # `bin/mydia rpc` against the running node, for seed.sh and
       # assert-seeded.sh, which call it by this name. The module's distribution is
@@ -159,7 +162,8 @@ pkgs.testers.nixosTest {
           "E2ETestGuardianSecretKey12345678901234567890123456789012345678";
         extraEnvironment = {
           ENABLE_REMOTE_ACCESS = "true";
-          METADATA_RELAY_URL = "http://relay:4001";
+          # By address, as the client's URLs (mkClientRun).
+          METADATA_RELAY_URL = "http://${nodes.relay.networking.primaryIPAddress}:4001";
           PUBLIC_IP_ENABLED = "false";
           DIRECT_URLS_USE_HTTP = "true";
           EXTERNAL_PORT = "4000";
@@ -213,7 +217,14 @@ pkgs.testers.nixosTest {
     virtualisation.diskSize = 8192;
   };
 
-  testScript = ''
+  testScript = { nodes, ... }:
+    let
+      clientRunLogged = mkClientRunLogged {
+        serverIp = nodes.server.networking.primaryIPAddress;
+        relayIp = nodes.relay.networking.primaryIPAddress;
+      };
+    in
+    ''
     import time
 
     def dump_journals():
@@ -251,7 +262,9 @@ pkgs.testers.nixosTest {
         client.wait_for_unit("multi-user.target", timeout=left())
 
         with subtest("player integration tests"):
-            rc, _ = client.execute("${clientRunLogged}", timeout=3600)
+            # The suite takes about 150 s after a few minutes of app build;
+            # a hang costs 20 minutes, not an hour.
+            rc, _ = client.execute("${clientRunLogged}", timeout=1200)
             assert rc == 0, f"player integration tests failed (exit {rc})"
     except Exception:
         dump_journals()

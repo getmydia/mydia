@@ -125,7 +125,9 @@ nix build .#checks.x86_64-linux.player-e2e -L   # or: ./dev player e2e
 ```
 
 On failure the build log carries the relay, server and seed journals and the
-client's warnings; on success they are in the result's output.
+client's warnings; on success they are in the result's output (`./result` for
+the `nix build` above, `./result-player-e2e` for `./dev player e2e`):
+`player-e2e.log`, `mydia.log` and `metadata-relay.log`.
 
 Player E2E tests live in `player/integration_test/`, with streaming helpers in
 `player/integration_test/helpers/streaming_helpers.dart`.

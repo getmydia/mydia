@@ -582,7 +582,16 @@ case "$COMMAND" in
                     echo -e "${YELLOW}Warning: /dev/kvm is not writable; the VM test will be very slow or fail${NC}"
                 fi
                 echo -e "${GREEN}Running the player-e2e VM test...${NC}"
-                nix build .#checks.x86_64-linux.player-e2e -L --no-link
+                # Linked as ./result-player-e2e: on success it holds the
+                # relay, server and client logs. On failure they are in the
+                # build log above.
+                e2e_exit=0
+                nix build .#checks.x86_64-linux.player-e2e -L \
+                    --out-link result-player-e2e || e2e_exit=$?
+                if [ "$e2e_exit" -eq 0 ]; then
+                    echo -e "${GREEN}Passed. Logs: result-player-e2e/{player-e2e,mydia,metadata-relay}.log${NC}"
+                fi
+                exit "$e2e_exit"
                 ;;
             android)
                 # Android builds use the player's flake.nix (native, not devenv)
