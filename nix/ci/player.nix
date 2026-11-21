@@ -449,6 +449,92 @@
           flutter test --concurrency=1 --dart-define=MYDIA_FORCE_TV=true "''${files[@]}"
         '';
       };
+
+      # Run browser tests. The VM run in player-test skips every
+      # @TestOn('browser') file. Without this check the IndexedDB keystore has
+      # no coverage in CI at all.
+      #
+      # The files are enumerated rather than passing a bare `--platform
+      # chrome`, because that would try to run the whole suite in a browser
+      # and most of it needs dart:io. Empty means the naming convention broke,
+      # which must fail rather than silently cover nothing.
+      #
+      # No --concurrency here, unlike the VM run: flutter parses it and then
+      # ignores it for web runs, printing a warning that reads like a mistake.
+      #
+      playerTestWeb = mkPlayerCheck {
+        name = "player-test-web";
+        nativeBuildInputs = [ pkgs.chromium ];
+        script = ''
+          export CHROME_EXECUTABLE=${pkgs.chromium}/bin/chromium
+          mapfile -t files < <(find test -name '*_web_test.dart' | sort)
+          if [ "''${#files[@]}" -eq 0 ]; then
+            echo "No test/**/*_web_test.dart files matched; expected at least one." >&2
+            exit 1
+          fi
+          echo "Browser tests: ''${files[*]}"
+          flutter test --platform chrome "''${files[@]}"
+        '';
+      };
+
+      # Build / Web: nothing compiled the player for the web until this
+      # existed. The platform builds cover Windows, macOS, Linux and Android,
+      # and `icons` only diffs the generated SVG set, so 183 commits landed on
+      # player/ between the public web player merging and its first deploy
+      # without one of them being checked against the web target. That gap is
+      # only visible at deploy time, where it would now break a release:
+      # deploy-web-player.yml runs from release.yml.
+      #
+      # This builds the same bundle the deploy builds, with the same flags,
+      # minus the wasm module. The Rust half needs wasm-pack and a
+      # flutter_rust_bridge codegen install (player/tool/build_web.sh), which
+      # is too much for every player PR. The split is deliberate rather than
+      # lazy: the rust-p2p-core-wasm check already compiles
+      # native/mydia_p2p_core for wasm32-unknown-unknown, so the crate
+      # reaching wasm is covered, and what stays uncovered here is wasm-pack's
+      # packaging step, whose inputs are pinned toolchain versions that move
+      # only on a deliberate bump. Dart source, which every PR touches, is
+      # what this catches.
+      #
+      # MYDIA_WEB_P2P=true matters even without the module present: it
+      # selects the public-web branch in main.dart, so this compiles the code
+      # path the deploy actually ships rather than the instance-hosted one.
+      #
+      # The bundle is $out/web, next to the log.
+      playerWeb = (mkPlayerCheck {
+        name = "player-web";
+        script = ''
+          flutter build web --release --base-href / \
+            --no-web-resources-cdn \
+            --pwa-strategy=none \
+            --dart-define=MYDIA_WEB_P2P=true
+
+          # build_web.sh asserts this file reached build/web; this also
+          # asserts it still says what it has to say. Both directives are
+          # load-bearing: without them the deployed page is not cross-origin
+          # isolated, there is no SharedArrayBuffer, and RustLib.init() throws
+          # in every browser. Checking only for the file's presence would wave
+          # through a _headers whose directives had been edited away, which
+          # breaks identically and is the likelier edit of the two.
+          headers=build/web/_headers
+          if [ ! -f "$headers" ]; then
+            echo "error: _headers did not make it into build/web." >&2
+            exit 1
+          fi
+          for directive in \
+            "Cross-Origin-Opener-Policy: same-origin" \
+            "Cross-Origin-Embedder-Policy: require-corp"; do
+            if ! grep -qF "$directive" "$headers"; then
+              echo "error: $headers no longer sets '$directive'. The deployed page" >&2
+              echo "       would not be cross-origin isolated, so the p2p wasm module" >&2
+              echo "       could not instantiate in any browser." >&2
+              exit 1
+            fi
+          done
+
+          cp -r build/web $out/web
+        '';
+      }).overrideAttrs { dontFixup = true; };
     in
     {
       _module.args.ciPlayer = { inherit flutter pubCache codegen mkPlayerCheck; };
@@ -458,6 +544,8 @@
       ciChecks.player-l10n-test = playerL10nTest;
       ciChecks.player-icons = playerIcons;
       ciChecks.player-test = playerTest;
+      ciChecks.player-test-web = playerTestWeb;
+      ciChecks.player-web = playerWeb;
 
       ciInternal = {
         player-pub-cache = pubCache;
