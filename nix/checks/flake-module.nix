@@ -2,11 +2,9 @@
 
 {
   perSystem = { pkgs, self', ... }: {
-    checks = {
-      # Verify both package variants build successfully
-      package = self'.packages.default;
-      package-postgres = self'.packages.postgres;
-    } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+    # The VM tests below build both package variants, so they are not
+    # repeated here as checks of their own.
+    checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
       # NixOS module VM tests (Linux only — requires QEMU)
       nixos-module = import ../tests/module.nix {
         inherit pkgs;
