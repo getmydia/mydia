@@ -3655,9 +3655,9 @@ Nix-based, declarative dev environment) and auto-loaded per git worktree via
 Each worktree derives its own non-colliding ports and isolated state, so several
 worktrees can run their full stacks at once.</p>
 <blockquote>
-<p>Docker is still used for the production image (<code>Dockerfile</code>), the player E2E
-stack (<code>compose.player-e2e.yml</code>), and the metadata-relay deploy, but <strong>not</strong>
-for day-to-day development.</p>
+<p>Docker is still used for the production image (<code>Dockerfile</code>) and the
+metadata-relay deploy, but <strong>not</strong> for day-to-day development. The player E2E
+suite is a NixOS VM test (<code>./dev player e2e</code>, which needs KVM).</p>
 </blockquote>
 <h2 id="prerequisites">Prerequisites</h2>
 <ul>
