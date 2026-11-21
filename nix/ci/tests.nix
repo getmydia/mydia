@@ -290,6 +290,10 @@
           (lib.range 1 partitions));
     in
     {
+      # The RustFS the shards run against, for checks outside this file (the
+      # player's S3 tests). Same derivation, same store path.
+      _module.args.ciTests = { inherit rustfs; };
+
       ciChecks = shards "sqlite" 4 // shards "postgres" 3 // {
         # workflow_triggers_test.exs, taken out of the shards. It needs no
         # services: test_helper.exs excludes :s3 when no server answers

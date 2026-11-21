@@ -166,6 +166,17 @@ let
     (at "priv/graphql/schema.graphql")
   ];
 
+  # The platform files player tests read from disk (the Android manifest,
+  # the iOS and macOS plists, the Xcode project), laid over playerCodegen by
+  # the player-test check. Apart from playerCodegen so that the files the
+  # other checks never read do not invalidate player-codegen.
+  playerTestReads = fs.unions (map at [
+    "player/android/app/src/main/AndroidManifest.xml"
+    "player/ios/Runner/Info.plist"
+    "player/ios/Runner.xcodeproj/project.pbxproj"
+    "player/macos/Runner/Info.plist"
+  ]);
+
   # Every crate directory under player/rust/, for the coverage union.
   playerCrateNames = builtins.attrNames
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir (at "player/rust")));
@@ -179,7 +190,7 @@ in
 {
   inherit elixirApp mixProject elixirTest gettext patches nativeCrate playerCrate plugins
     pluginsExtra server relay relayProject relayTest playerApp playerAndroid
-    playerOtherPlatforms playerCodegen toSource nativeCrateNames playerCrateNames;
+    playerOtherPlatforms playerCodegen playerTestReads toSource nativeCrateNames playerCrateNames;
 
   # Union of everything above, for the coverage check.
   all = fs.unions ([
