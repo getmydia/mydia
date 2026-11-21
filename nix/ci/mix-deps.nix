@@ -3,13 +3,14 @@
 #   mixDepsSrc        the deps/ tree: every deps.nix package's Hex source at
 #                     deps/<name>, deps/heroicons/optimized, and the
 #                     mix.exs @dep_patches applied with `patch -p1`.
+#   wasmexNif         the patched Wasmex NIF, built on its own so only a
+#                     Wasmex, lock or toolchain change recompiles wasmtime.
 #   mixDepsCompiled   deps/ plus _build/test/lib/<dep> from
-#                     `MIX_ENV=test mix deps.compile`, offline. Exposed as
-#                     ciInternal.mixDepsCompiled-{sqlite,postgres}, because
-#                     config/config.exs and config/test.exs read
-#                     DATABASE_TYPE at compile time.
+#                     `MIX_ENV=test mix deps.compile`, offline. One build,
+#                     exposed as ciInternal.mixDepsCompiled-{sqlite,postgres}
+#                     (see mixDepsCompiled below for why one serves both).
 #
-# Both are built at /build/source (the unpacked mixProject file set), and
+# mixDepsCompiled is built at /build/source (the unpacked mixProject file set), and
 # Mix records absolute paths in the deps' build manifests, so consumers copy
 # the output into the same layout and compile with --no-deps-check.
 #
@@ -77,34 +78,89 @@
       # those are harmless in deps/, but the lock is the list Mix resolves.
       hexNames = builtins.attrNames lockHex;
 
-      mixDepsSrc = assertFresh (pkgs.runCommand "mix-deps-src"
-        { nativeBuildInputs = [ pkgs.patch ]; }
-        ''
+      # One package's Hex source with its @dep_patches applied (the plain
+      # source when it has none). Per package, so the Wasmex NIF below is
+      # keyed on Wasmex's source alone.
+      patchedDep = name:
+        let patches = lib.filter (p: p.app == name) depPatches;
+        in
+        if patches == [ ] then mixNixDeps.${name}.src
+        else
+          pkgs.runCommand "${name}-${mixNixDeps.${name}.version}-patched"
+            { nativeBuildInputs = [ pkgs.patch ]; }
+            ''
+              cp -r ${mixNixDeps.${name}.src} $out
+              chmod -R u+w $out
+              ${lib.concatMapStrings (p: ''
+                echo "patching ${p.app} with ${p.patch}"
+                patch -p1 --force -d $out -i ${patchesSrc}/${p.patch}
+              '') patches}
+            '';
+
+      mixDepsSrc = assertFresh (pkgs.runCommand "mix-deps-src" { } ''
+        mkdir -p $out
+        ${lib.concatMapStrings (name: ''
+          cp -r ${patchedDep name} $out/${name}
+        '') hexNames}
+        chmod -R u+w $out
+
+        mkdir -p $out/heroicons
+        cp -r ${heroicons}/optimized $out/heroicons/
+      '');
+
+      # The patched Wasmex NIF (wasmtime), built once from Wasmex's patched
+      # source, the vendored crates of nix/wasmex-Cargo.lock and the CI Rust
+      # toolchain, so a config or lock edit elsewhere does not recompile it.
+      # Same cargo invocation Rustler uses (`cargo rustc -p <crate>
+      # --release`). Erlang is here for rustler_sys's build script, which
+      # asks `erl` for the NIF version.
+      wasmexNif = pkgs.stdenv.mkDerivation {
+        pname = "wasmex-nif";
+        inherit (mixNixDeps.wasmex) version;
+        src = patchedDep "wasmex";
+        nativeBuildInputs = [ rustToolchain beamPackages.erlang ];
+        dontConfigure = true;
+        dontStrip = true;
+        buildPhase = ''
+          runHook preBuild
+          export HOME=$TMPDIR
+          ${wasmexPrepare}
+          (cd native/wasmex && cargo rustc -p wasmex --release)
+          runHook postBuild
+        '';
+        # Rustler installs the cdylib as priv/native/<crate>.so on every
+        # unix, macOS included.
+        installPhase = ''
+          runHook preInstall
           mkdir -p $out
-          ${lib.concatMapStrings (name: ''
-            cp -r ${mixNixDeps.${name}.src} $out/${name}
-          '') hexNames}
-          chmod -R u+w $out
+          for lib in native/wasmex/target/release/libwasmex.so native/wasmex/target/release/libwasmex.dylib; do
+            if [ -f "$lib" ]; then cp "$lib" $out/wasmex.so; fi
+          done
+          test -f $out/wasmex.so
+          runHook postInstall
+        '';
+      };
 
-          mkdir -p $out/heroicons
-          cp -r ${heroicons}/optimized $out/heroicons/
+      # `databaseType` is accepted and ignored: DATABASE_TYPE only selects
+      # :mydia's own config (the Repo adapter) in config/config.exs and
+      # config/test.exs, which no dependency reads, so both variants compile
+      # the same deps. Built with each value, the outputs differed only in
+      # the kind of files that also differ between two builds of one variant
+      # (Mix and rebar3 manifests, a few .beam files, the C NIFs): the build
+      # is not bit-reproducible, and DATABASE_TYPE adds nothing to that. The
+      # app build passes it anyway, so its callers stay explicit about the
+      # adapter.
+      mixDepsCompiled = { databaseType ? null }: mixDepsCompiledDrv;
 
-          ${lib.concatMapStrings (p: ''
-            echo "patching ${p.app} with ${p.patch}"
-            patch -p1 --force -d $out/${p.app} -i ${patchesSrc}/${p.patch}
-          '') depPatches}
-        '');
-
-      mixDepsCompiled = { databaseType ? null }:
+      mixDepsCompiledDrv =
         assertFresh (pkgs.stdenv.mkDerivation {
-          pname = "mix-deps-compiled-${if databaseType == null then "sqlite" else databaseType}";
+          pname = "mix-deps-compiled";
           version = "0";
           src = sources.toSource sources.mixProject;
 
           nativeBuildInputs = [
             beamPackages.erlang
             beamPackages.elixir
-            rustToolchain
             pkgs.cmake
             pkgs.gnumake
           ];
@@ -125,8 +181,6 @@
             ERL_COMPILER_OPTIONS = "[deterministic]";
             LANG = "C.UTF-8";
             LC_CTYPE = "C.UTF-8";
-          } // lib.optionalAttrs (databaseType != null) {
-            DATABASE_TYPE = databaseType;
           };
 
           buildPhase = ''
@@ -139,19 +193,33 @@
             cp -r ${mixDepsSrc} deps
             chmod -R u+w deps
 
-            # lazy_html would `git clone` lexbor; exqlite, argon2 and bcrypt
-            # fall back to compiling from source when the precompiled
-            # download fails (elixir_make), lazy_html too.
+            # Sandbox-only edits to the dependency sources. Each is
+            # --replace-fail, so a dependency bump that moves the line stops
+            # here rather than silently trying the network.
+
+            # Build the elixir_make NIFs from source instead of trying their
+            # precompiled downloads. exqlite reads this from its app env and
+            # lazy_html has no switch, so set the elixir_make option directly.
+            # lazy_html's Makefile would also `git clone` lexbor.
+            substituteInPlace deps/exqlite/mix.exs --replace-fail \
+              'make_force_build: Application.get_env(:exqlite, :force_build, false),' \
+              'make_force_build: true,'
+            substituteInPlace deps/lazy_html/mix.exs --replace-fail \
+              'make_precompiler: {:nif, CCPrecompiler},' \
+              'make_force_build: true, make_precompiler: {:nif, CCPrecompiler},'
             pushd deps/lazy_html >/dev/null
             ${lexborPrepare}
             popd >/dev/null
 
-            # Wasmex: vendored crates, the patched crate's lock, and
-            # WASMEX_BUILD so RustlerPrecompiled compiles instead of
-            # downloading.
-            pushd deps/wasmex >/dev/null
-            ${wasmexPrepare}
-            popd >/dev/null
+            # Wasmex: take the Rustler path (force_build) but skip cargo, and
+            # load the prebuilt wasmexNif from where Rustler would have put it
+            # (load_from {:wasmex, "priv/native/wasmex"}).
+            substituteInPlace deps/wasmex/lib/wasmex/native.ex --replace-fail \
+              'force_build: System.get_env("WASMEX_BUILD") in ["1", "true"]' \
+              'force_build: true, skip_compilation?: true'
+            mkdir -p deps/wasmex/priv/native
+            cp ${wasmexNif}/wasmex.so deps/wasmex/priv/native/wasmex.so
+            chmod u+w deps/wasmex/priv/native/wasmex.so
 
             mix deps.compile
 
@@ -161,11 +229,9 @@
           installPhase = ''
             runHook preInstall
 
-            # Build intermediates: Wasmex's cargo target dir (1.3G; the NIF is
-            # already in deps/wasmex/priv/native) and lazy_html's lexbor
-            # tree. `mydia` holds only the compile lock deps.compile left.
-            rm -rf deps/wasmex/native/wasmex/target deps/lazy_html/_build \
-              _build/test/lib/mydia
+            # Build intermediates: lazy_html's lexbor tree. `mydia` holds
+            # only the compile lock deps.compile left.
+            rm -rf deps/lazy_html/_build _build/test/lib/mydia
 
             mkdir -p $out/_build/test
             cp -r deps $out/deps
@@ -183,7 +249,7 @@
       ciInternal = {
         mixDepsCompiled-sqlite = mixDepsCompiled { };
         mixDepsCompiled-postgres = mixDepsCompiled { databaseType = "postgres"; };
-        inherit mixDepsSrc;
+        inherit mixDepsSrc wasmexNif;
       };
     };
 }

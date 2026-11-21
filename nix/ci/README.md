@@ -25,9 +25,12 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   mirrors `scripts/check-rust.sh`.
 - `mix-deps.nix`: the test-env Mix dependencies from `deps.nix`:
   `ciInternal.mixDepsSrc` (the `deps/` tree, with the `mix.exs`
-  `@dep_patches` applied) and `ciInternal.mixDepsCompiled-{sqlite,postgres}`
-  (`deps/` plus `_build/test/lib` from an offline
-  `MIX_ENV=test mix deps.compile`, built at `/build/source`). Evaluating
+  `@dep_patches` applied), `ciInternal.wasmexNif` (the patched Wasmex NIF,
+  built on its own so wasmtime only recompiles when Wasmex, its lock or the
+  toolchain changes) and `ciInternal.mixDepsCompiled-{sqlite,postgres}`
+  (one derivation under both names: `deps/` plus `_build/test/lib` from an
+  offline `MIX_ENV=test mix deps.compile`, built at `/build/source`, with
+  every NIF built from source). Evaluating
   `checks` fails with `deps.nix is stale: run mix2nix > deps.nix` when a
   `mix.lock` Hex entry has no `deps.nix` entry of the same version.
 - `../beam-deps.nix`: `deps.nix` with its sandbox overrides, heroicons,
