@@ -31,7 +31,7 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   (one derivation under both names: `deps/` plus `_build/test/lib` from an
   offline `MIX_ENV=test mix deps.compile`, built at `/build/source`, with
   every NIF built from source). Evaluating
-  `checks` fails with `deps.nix is stale: run mix2nix > deps.nix` when a
+  `checks` fails with `deps.nix is stale: run mix2nix mix.lock > deps.nix` when a
   `mix.lock` Hex entry has no `deps.nix` entry of the same version.
 - `elixir.nix`: `ciInternal.mydiaTestBuild-{sqlite,postgres}` (the app's
   `MIX_ENV=test mix compile --warnings-as-errors` on top of
@@ -60,6 +60,17 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `ci-cardigann-hash` proves the Nix-side hash equals
   `mix mydia.cardigann_guest hash`. What the sandbox means for tests: `test/README.md`,
   "Sandboxed CI runs".
+- `relay.nix`: `relay-test`, the old `Relay / Test` job for
+  `metadata-relay/` (its own Mix project): `deps.unlock --check-unused`,
+  `compile --warnings-as-errors`, `format --check-formatted`, `ecto.create`
+  and `ecto.migrate` (SQLite), `test --warnings-as-errors --seed 0`; the
+  output is `test.log`. Its deps come from `metadata-relay/deps.nix`
+  (`ciInternal.relayDepsCompiled`), with the same freshness assertion as
+  the app's, and it builds on the BEAM pair pinned by
+  `metadata-relay/.elixir-version` and `.otp-version`.
+- `mix-lib.nix`: helpers both Mix projects share (lock parsing, the
+  freshness assertion, the offline Mix env, the NIF source edits, the
+  log-writing check).
 - `../beam-deps.nix`: `deps.nix` with its sandbox overrides, heroicons,
   lexbor and the vendored Wasmex crates, shared with `nix/packages`.
 - `../toolchains.nix`: `beamPackages`, shared with `nix/packages` so the

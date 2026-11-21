@@ -25,29 +25,20 @@
       inherit (ci) sources beamPackages rustToolchain;
       root = ../..;
 
+      mixLib = import ./mix-lib.nix { inherit pkgs lib; };
+
       beamDeps = import ../beam-deps.nix { inherit pkgs beamPackages rustToolchain; };
       inherit (beamDeps) mixNixDeps heroicons lexborPrepare wasmexPrepare;
 
-      # Freshness: every Hex package in mix.lock needs a deps.nix entry of the
-      # same version. Same pattern as scripts/check-generated-freshness.sh
-      # (one lock entry per line); git deps (heroicons) are not Hex entries
-      # and mix2nix skips them.
-      lockHex = lib.listToAttrs (lib.concatMap
-        (line:
-          let
-            m = builtins.match
-              ''[[:space:]]*"([a-zA-Z0-9_]+)": \{:hex, :[a-zA-Z0-9_]+, "([^"]+)",.*"hexpm", "([^"]+)"}.*''
-              line;
-          in
-          lib.optional (m != null) { name = builtins.elemAt m 0; value = builtins.elemAt m 1; })
-        (lib.splitString "\n" (builtins.readFile (root + "/mix.lock"))));
+      # Git deps (heroicons) are not Hex entries and mix2nix skips them.
+      lockHex = mixLib.lockHex (root + "/mix.lock");
 
-      staleDeps = lib.filter
-        (name: !(mixNixDeps ? ${name}) || mixNixDeps.${name}.version != lockHex.${name})
-        (builtins.attrNames lockHex);
-
-      assertFresh = lib.throwIf (staleDeps != [ ])
-        "deps.nix is stale: run mix2nix > deps.nix (missing: ${lib.concatStringsSep ", " staleDeps})";
+      assertFresh = mixLib.assertFresh {
+        lock = lockHex;
+        inherit mixNixDeps;
+        depsFile = "deps.nix";
+        lockFile = "mix.lock";
+      };
 
       # mix.exs @dep_patches: [{app, version, patch}], the same list
       # `mix deps.patch` applies. A version that no longer matches deps.nix
@@ -171,16 +162,8 @@
           # NIFs keep their symbols, as in the package.
           dontStrip = true;
 
-          env = {
-            MIX_ENV = "test";
-            HEX_OFFLINE = "1";
-            MIX_REBAR3 = "${beamPackages.rebar3}/bin/rebar3";
-            # Mix needs Hex loaded to resolve the :hex deps; never fetches with
-            # HEX_OFFLINE.
-            ERL_LIBS = "${beamPackages.hex}/lib/erlang/lib";
+          env = mixLib.mixEnv beamPackages // {
             ERL_COMPILER_OPTIONS = "[deterministic]";
-            LANG = "C.UTF-8";
-            LC_CTYPE = "C.UTF-8";
           };
 
           buildPhase = ''
@@ -197,20 +180,7 @@
             # --replace-fail, so a dependency bump that moves the line stops
             # here rather than silently trying the network.
 
-            # Build the elixir_make NIFs from source instead of trying their
-            # precompiled downloads. exqlite reads this from its app env and
-            # lazy_html has no switch, so set the elixir_make option directly.
-            # lazy_html's Makefile would also `git clone` lexbor.
-            substituteInPlace deps/exqlite/mix.exs --replace-fail \
-              'make_force_build: Application.get_env(:exqlite, :force_build, false),' \
-              'make_force_build: true,'
-            substituteInPlace deps/lazy_html/mix.exs --replace-fail \
-              'make_precompiler: {:nif, CCPrecompiler},' \
-              'make_force_build: true, make_precompiler: {:nif, CCPrecompiler},'
-            pushd deps/lazy_html >/dev/null
-            ${lexborPrepare}
-            popd >/dev/null
-
+            ${mixLib.nifSourceEdits lexborPrepare}
             # Wasmex: take the Rustler path (force_build) but skip cargo, and
             # load the prebuilt wasmexNif from where Rustler would have put it
             # (load_from {:wasmex, "priv/native/wasmex"}).

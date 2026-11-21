@@ -105,6 +105,26 @@ let
     (maybe "metadata-relay/deps")
   ]);
 
+  # metadata-relay's `MIX_ENV=test mix deps.compile` inputs (nix/ci/relay.nix),
+  # and what its test check reads: subsets of `relay`, leaving out
+  # priv/native (an unused tracked NIF from the libp2p era) and the
+  # packaging files.
+  relayProject = fs.unions [
+    (at "metadata-relay/mix.exs")
+    (at "metadata-relay/mix.lock")
+    (at "metadata-relay/config/config.exs")
+    (at "metadata-relay/config/test.exs")
+  ];
+
+  relayTest = fs.unions [
+    relayProject
+    (at "metadata-relay/.formatter.exs")
+    (at "metadata-relay/config")
+    (at "metadata-relay/lib")
+    (at "metadata-relay/priv/repo")
+    (at "metadata-relay/test")
+  ];
+
   toSource = set: fs.toSource { inherit root; fileset = set; };
 
   # Every crate directory under native/, for the coverage union.
@@ -113,7 +133,7 @@ let
 in
 {
   inherit elixirApp mixProject elixirTest gettext patches nativeCrate playerCrate plugins
-    pluginsExtra server relay toSource nativeCrateNames;
+    pluginsExtra server relay relayProject relayTest toSource nativeCrateNames;
 
   # Union of everything above, for the coverage check.
   all = fs.unions ([

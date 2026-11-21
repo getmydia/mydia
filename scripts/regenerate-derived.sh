@@ -5,7 +5,8 @@
 # Dependabot edits manifests and their own lockfiles and nothing else, so
 # three derived artifacts go stale behind it. Each is mechanical:
 #
-#   deps.nix       mix2nix output of mix.lock, byte for byte
+#   deps.nix       mix2nix output of mix.lock, byte for byte, for the app and
+#                  for metadata-relay/
 #   */Cargo.lock   path crates are shared between workspaces, so a bump in one
 #                  crate's manifest leaves every other lock that includes it
 #                  unsatisfied
@@ -41,11 +42,14 @@ nixpkgs_run() {
   nix run --inputs-from . "nixpkgs#$pkg" -- "$@"
 }
 
-trap 'rm -f deps.nix.tmp' EXIT
+trap 'rm -f deps.nix.tmp metadata-relay/deps.nix.tmp' EXIT
 
-echo "deps.nix <- mix.lock"
-nixpkgs_run mix2nix mix.lock > deps.nix.tmp
-mv deps.nix.tmp deps.nix
+# The app's and metadata-relay's (its own Mix project; nix/ci/relay.nix).
+for d in . metadata-relay; do
+  echo "$d/deps.nix <- $d/mix.lock"
+  nixpkgs_run mix2nix "$d/mix.lock" > "$d/deps.nix.tmp"
+  mv "$d/deps.nix.tmp" "$d/deps.nix"
+done
 
 for d in "${cargo_lock_dirs[@]}"; do
   [ -f "$d/Cargo.lock" ] || continue

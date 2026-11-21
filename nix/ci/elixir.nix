@@ -46,13 +46,10 @@
         (root + "/native/cardigann_guest")
       ];
 
-      env = {
-        MIX_ENV = "test";
-        HEX_OFFLINE = "1";
-        MIX_REBAR3 = "${beamPackages.rebar3}/bin/rebar3";
-        # Mix needs Hex loaded to resolve the :hex deps; HEX_OFFLINE keeps it
-        # from fetching.
-        ERL_LIBS = "${beamPackages.hex}/lib/erlang/lib";
+      mixLib = import ./mix-lib.nix { inherit pkgs lib; };
+      inherit (mixLib) setupHome;
+
+      env = mixLib.mixEnv beamPackages // {
         # The Docker image's switches: load the NIFs from priv/native and the
         # plugin guests from priv/plugins rather than running cargo. Both are
         # set in every derivation that compiles or checks the app, so the
@@ -63,18 +60,9 @@
         # The :cardigann_guest compiler only downloads in the dev env
         # already; this makes the skip explicit, as in the package.
         MYDIA_SKIP_CARDIGANN_FETCH = "1";
-        LANG = "C.UTF-8";
-        LC_CTYPE = "C.UTF-8";
       };
 
       nativeBuildInputs = [ beamPackages.erlang beamPackages.elixir ];
-
-      # HOME for Mix and Hex, writable, in the sandbox.
-      setupHome = ''
-        export HOME=$TMPDIR/home
-        export MIX_HOME=$HOME/.mix HEX_HOME=$HOME/.hex
-        mkdir -p $HOME
-      '';
 
       # deps/ and _build/test/lib/<dep> from mixDepsCompiled, writable.
       copyDeps = deps: ''
@@ -125,24 +113,11 @@
       # readable. `extraEnv` adds to env; a variable the app's compile-time
       # config reads (DATABASE_TYPE) must match the test build it copies.
       mkCheck = { name, set, script, inputs ? [ ], extraEnv ? { }, log ? "log" }:
-        pkgs.stdenv.mkDerivation {
-          inherit name;
+        mixLib.mkLogCheck {
+          inherit name script log;
           env = env // extraEnv;
           src = sources.toSource set;
           nativeBuildInputs = nativeBuildInputs ++ inputs;
-          dontConfigure = true;
-          dontInstall = true;
-          buildPhase = ''
-            runHook preBuild
-            ${setupHome}
-            mkdir -p $out
-            (
-              set -euo pipefail
-              ${script}
-            ) 2>&1 | tee $out/${log}
-            test "''${PIPESTATUS[0]}" = 0
-            runHook postBuild
-          '';
         };
 
       # `databaseType` matters here, unlike for mixDepsCompiled: DATABASE_TYPE

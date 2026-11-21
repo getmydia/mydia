@@ -18,13 +18,17 @@
 # `pkgs` is a parameter rather than an import so this module can be evaluated
 # against a fake attrset with no nixpkgs fetch, which is how its failure modes
 # are exercised.
-{ pkgs }:
+#
+# `dir` is the directory holding the two pin files: this one for everything
+# above, metadata-relay/ for the relay's own pair (a separately deployed Mix
+# project, outside scripts/check-beam-pin.sh's scope; nix/ci/relay.nix).
+{ pkgs, dir ? ./. }:
 
 let
   readPin = file: builtins.replaceStrings [ "\n" ] [ "" ] (builtins.readFile file);
 
-  elixirVersion = readPin ./.elixir-version;
-  otpVersion = readPin ./.otp-version;
+  elixirVersion = readPin (dir + "/.elixir-version");
+  otpVersion = readPin (dir + "/.otp-version");
 
   parts = builtins.splitVersion elixirVersion;
   elixirAttr = "elixir_" + builtins.elemAt parts 0 + "_" + builtins.elemAt parts 1;

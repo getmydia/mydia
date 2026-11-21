@@ -164,12 +164,22 @@ if tailwind_pin and tailwind_pkg and tailwind_pin.group(1) != tailwind_pkg.group
     status = 1
 
 import os
-if os.path.exists("deps.nix"):
-    with open("deps.nix") as f:
+
+# deps.nix beside each mix.lock it was generated from: the app's, and
+# metadata-relay's (its own Mix project, built by nix/ci/relay.nix).
+for project in [".", "metadata-relay"]:
+    lock_path = os.path.normpath(os.path.join(project, "mix.lock"))
+    deps_path = os.path.normpath(os.path.join(project, "deps.nix"))
+    if not os.path.exists(deps_path):
+        continue
+
+    with open(lock_path) as f:
+        lock_text = f.read()
+    with open(deps_path) as f:
         deps_nix = f.read()
 
     mix_deps = {}
-    for m in re.finditer(r'"([a-zA-Z0-9_]+)":\s*\{:hex,\s*:[a-zA-Z0-9_]+,\s*"([^"]+)",.*?\"hexpm\",\s*"([^"]+)"\}', mix_lock):
+    for m in re.finditer(r'"([a-zA-Z0-9_]+)":\s*\{:hex,\s*:[a-zA-Z0-9_]+,\s*"([^"]+)",.*?\"hexpm\",\s*"([^"]+)"\}', lock_text):
         mix_deps[m.group(1)] = (m.group(2), m.group(3))
 
     nix_deps = {}
@@ -185,7 +195,7 @@ if os.path.exists("deps.nix"):
 
     missing = set(mix_deps.keys()) - set(nix_deps.keys())
     if missing:
-        print(f"deps.nix is missing dependencies from mix.lock: {', '.join(sorted(missing))}")
+        print(f"{deps_path} is missing dependencies from {lock_path}: {', '.join(sorted(missing))}")
         status = 1
 
     mismatches = []
@@ -193,9 +203,9 @@ if os.path.exists("deps.nix"):
         if k in nix_deps:
             n_ver, n_sha = nix_deps[k]
             if m_ver != n_ver or m_sha != n_sha:
-                mismatches.append(f"{k} (mix.lock {m_ver} vs deps.nix {n_ver})")
+                mismatches.append(f"{k} ({lock_path} {m_ver} vs {deps_path} {n_ver})")
     if mismatches:
-        print(f"deps.nix version/hash mismatch with mix.lock: {', '.join(mismatches)}")
+        print(f"{deps_path} version/hash mismatch with {lock_path}: {', '.join(mismatches)}")
         status = 1
 
 sys.exit(status)
@@ -203,7 +213,7 @@ PYEOF
 )"; then
       fail "Nix dependency pins do not match manifests:
 $(echo "$err" | sed 's/^/    /')
-  Update nix/packages/flake-module.nix or deps.nix to match mix.lock / assets/package.json."
+  Run ./scripts/regenerate-derived.sh for a deps.nix, or update nix/packages/flake-module.nix to match mix.lock / assets/package.json."
     fi
   fi
 fi
