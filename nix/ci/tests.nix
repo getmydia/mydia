@@ -275,5 +275,12 @@
           '';
         };
       };
+
+      # Build-time inputs every shard shares. None is in a shard's output
+      # closure, so pushing a shard never uploads them; exposed here, the CI
+      # planner builds and pushes each once (rustfs is a full Rust build).
+      ciInternal = {
+        inherit rustfs cardigannGuest cardigannSourceHash;
+      };
     };
 }

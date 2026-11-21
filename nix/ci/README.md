@@ -21,8 +21,9 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
 - `rust.nix`: `rust-<crate>-{fmt,clippy,test}` for every crate under
   `native/` (minus `cardigann_guest`), `player/rust/` and `server/`, plus
   `rust-p2p-core-wasm` and `rust-plugins`; and the `ciInternal` NIFs
-  (`nifs-mydia_p2p`, `nifs-mydia_subsync`) and `pluginWasm`. Its crate list
-  mirrors `scripts/check-rust.sh`.
+  (`nifs-mydia_p2p`, `nifs-mydia_subsync`), `pluginWasm`, and
+  `cargoDeps-<crate>` per crate (the crane `buildDepsOnly` its clippy and
+  test checks share). Its crate list mirrors `scripts/check-rust.sh`.
 - `mix-deps.nix`: the test-env Mix dependencies from `deps.nix`:
   `ciInternal.mixDepsSrc` (the `deps/` tree, with the `mix.exs`
   `@dep_patches` applied), `ciInternal.wasmexNif` (the patched Wasmex NIF,
@@ -59,7 +60,12 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   only while its source hash matches the guest sources;
   `ci-cardigann-hash` proves the Nix-side hash equals
   `mix mydia.cardigann_guest hash`. What the sandbox means for tests: `test/README.md`,
-  "Sandboxed CI runs".
+  "Sandboxed CI runs". The inputs every shard shares are `ciInternal.rustfs`
+  (devenv's RustFS override, a full Rust build), `ciInternal.cardigannGuest`
+  (the pinned guest fetch) and `ciInternal.cardigannSourceHash`.
+- `../checks/flake-module.nix`: the NixOS module VM tests `nixos-module` and
+  `nixos-module-postgres`, and the packages they boot as
+  `ciInternal.package-default` and `ciInternal.package-postgres`.
 - `relay.nix`: `relay-test`, the old `Relay / Test` job for
   `metadata-relay/` (its own Mix project): `deps.unlock --check-unused`,
   `compile --warnings-as-errors`, `format --check-formatted`, `ecto.create`
@@ -77,6 +83,16 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   package and the checks build on the same BEAM pins; the package's
   `rustToolchain`; and `rustToolchainCi`, which is what `ci.rustToolchain`
   is.
+
+## ciInternal and the CI planner
+
+`scripts/ci-plan.sh` (run by `.github/workflows/ci-nix-checks.yml`) builds
+a `ciInternal` derivation in its own job, before the checks, when two or
+more uncached checks still need it. Anything else a check needs is built
+inside that check's job and is never pushed unless it is in the check's
+output closure, which build-time inputs are not. So an expensive build-time
+input that several checks share belongs in `ciInternal`; exposing an
+existing derivation there does not change any check's derivation path.
 
 ## The file-set rule
 

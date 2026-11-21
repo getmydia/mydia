@@ -41,8 +41,11 @@
         CARGO_PROFILE = profile;
       };
 
-      # fmt, clippy and test for one crate. `testArgs` and `clippyArgs` are the
-      # flags the old CI passed after `cargo test` / `cargo clippy`.
+      # fmt, clippy and test for one crate, as `checks`, and the crate's
+      # dependency build they share, as `cargoDeps` (exposed in ciInternal so
+      # the CI planner builds and pushes it once instead of once per check).
+      # `testArgs` and `clippyArgs` are the flags the old CI passed after
+      # `cargo test` / `cargo clippy`.
       mkRustChecks =
         { name
         , dir
@@ -59,36 +62,39 @@
           cargoArtifacts = craneLib.buildDepsOnly common;
         in
         {
-          "rust-${name}-fmt" = craneLib.cargoFmt (common // {
-            cargoExtraArgs = fmtArgs;
-          });
+          cargoDeps = cargoArtifacts;
+          checks = {
+            "rust-${name}-fmt" = craneLib.cargoFmt (common // {
+              cargoExtraArgs = fmtArgs;
+            });
 
-          "rust-${name}-clippy" = craneLib.cargoClippy (common // {
-            inherit cargoArtifacts;
-            cargoClippyExtraArgs = clippyArgs;
-            doInstallCargoArtifacts = false;
-          });
+            "rust-${name}-clippy" = craneLib.cargoClippy (common // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = clippyArgs;
+              doInstallCargoArtifacts = false;
+            });
 
-          # The test log is the output, so a cached result is still readable.
-          # mkCargoDerivation rather than cargoTest, which would override the
-          # command below.
-          "rust-${name}-test" = craneLib.mkCargoDerivation (common // testEnv // {
-            inherit cargoArtifacts;
-            pnameSuffix = "-test";
-            nativeBuildInputs = (common.nativeBuildInputs or [ ]) ++ testInputs;
-            buildPhaseCargoCommand = "";
-            doCheck = true;
-            checkPhaseCargoCommand = ''
-              set -o pipefail
-              export HOME="$TMPDIR"
-              cargoWithProfile test --locked ${testArgs} 2>&1 | tee "$TMPDIR/test.log"
-            '';
-            doInstallCargoArtifacts = false;
-            installPhaseCommand = ''
-              mkdir -p $out
-              cp "$TMPDIR/test.log" $out/test.log
-            '';
-          });
+            # The test log is the output, so a cached result is still readable.
+            # mkCargoDerivation rather than cargoTest, which would override the
+            # command below.
+            "rust-${name}-test" = craneLib.mkCargoDerivation (common // testEnv // {
+              inherit cargoArtifacts;
+              pnameSuffix = "-test";
+              nativeBuildInputs = (common.nativeBuildInputs or [ ]) ++ testInputs;
+              buildPhaseCargoCommand = "";
+              doCheck = true;
+              checkPhaseCargoCommand = ''
+                set -o pipefail
+                export HOME="$TMPDIR"
+                cargoWithProfile test --locked ${testArgs} 2>&1 | tee "$TMPDIR/test.log"
+              '';
+              doInstallCargoArtifacts = false;
+              installPhaseCommand = ''
+                mkdir -p $out
+                cp "$TMPDIR/test.log" $out/test.log
+              '';
+            });
+          };
         };
 
       crates = [
@@ -154,7 +160,9 @@
         }
       ];
 
-      crateChecks = lib.foldl' (acc: c: acc // mkRustChecks c) { } crates;
+      crateBuilds = map (c: { inherit (c) name; } // mkRustChecks c) crates;
+      crateChecks = lib.foldl' (acc: b: acc // b.checks) { } crateBuilds;
+      crateDeps = lib.listToAttrs (map (b: lib.nameValuePair "cargoDeps-${b.name}" b.cargoDeps) crateBuilds);
 
       # The p2p core's browser build. `--no-default-features` drops `host`, so
       # the host-target clippy above never sees this cfg path. ring compiles C
@@ -287,7 +295,7 @@
 
       ciRustAttrs = builtins.attrNames rustChecks;
 
-      ciInternal = {
+      ciInternal = crateDeps // {
         nifs-mydia_p2p = mkNif "mydia_p2p";
         nifs-mydia_subsync = mkNif "mydia_subsync";
         inherit pluginWasm;
