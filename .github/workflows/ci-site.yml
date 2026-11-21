@@ -21,8 +21,8 @@ permissions:
 
 jobs:
   build:
-    # The check context is the job name, and ci-player.yml already publishes
-    # Build / Android, Build / Linux, Build / Web, Build / Windows and
+    # The check context is the job name, and ci.yml and ci-player.yml already
+    # publish Build / Android, Build / Linux, Build / Web, Build / Windows and
     # Build / macOS. A bare "Build" would be ambiguous in the checks list and
     # worse as a required status check.
     name: Site build
