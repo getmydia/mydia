@@ -155,7 +155,8 @@ jobs:
   # on player/** and native/**, which is the correct trigger surface for it.
   # The job name is unchanged so the check context stays `Test / Player`.
   test-player:
-    name: Test / Player
+    # Old / while ci.yml's Test / Player aggregator runs beside it.
+    name: Old / Test / Player
     runs-on: ubuntu-latest
     needs: changes
 
@@ -341,7 +342,8 @@ jobs:
   # public-web branch in main.dart, so this compiles the code path the deploy
   # actually ships rather than the instance-hosted one.
   build-web:
-    name: Build / Web
+    # Old / while ci.yml's Build / Web aggregator runs beside it.
+    name: Old / Build / Web
     runs-on: ubuntu-latest
     needs: changes
 
@@ -416,7 +418,9 @@ jobs:
           done
 
   build:
-    name: Build / ${{ matrix.platform }}
+    # The Linux leg is Old / while ci.yml's Build / Linux aggregator runs
+    # beside it.
+    name: ${{ matrix.platform == 'Linux' && 'Old / Build / Linux' || format('Build / {0}', matrix.platform) }}
     strategy:
       fail-fast: false
       matrix:
@@ -626,7 +630,8 @@ jobs:
           retention-days: 7
 
   build-android:
-    name: Build / Android
+    # Old / while ci.yml's Build / Android runs beside it.
+    name: Old / Build / Android
     runs-on: ubuntu-latest
     needs: changes
 
@@ -698,7 +703,8 @@ jobs:
           retention-days: 7
 
   icons:
-    name: Check / Web icons
+    # Old / while ci.yml's Check / Web icons aggregator runs beside it.
+    name: Old / Check / Web icons
     runs-on: ubuntu-latest
     needs: changes
 
