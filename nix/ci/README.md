@@ -94,6 +94,19 @@ output closure, which build-time inputs are not. So an expensive build-time
 input that several checks share belongs in `ciInternal`; exposing an
 existing derivation there does not change any check's derivation path.
 
+## Master pins
+
+niks3 garbage-collects unpinned paths after 14 days. A PR's run pushes its
+outputs before it merges, so the run on master usually finds everything
+cached, skips both build jobs and would pin nothing. The `Nix / Pins` job
+(master only, after the build jobs, whatever their result) therefore takes
+ci-plan.sh's `all` list (every check and `ciInternal` attribute with its
+output path), fetches those outputs with one `nix-store --realise
+--keep-going` and pushes each with the pin `master-<name>`
+(`scripts/ci-nix-pin.sh`). niks3 skips NARs it already has, so this mostly
+records the pins. It only warns, never fails the run, and is not part of
+`Nix / Checks`. PR runs never pin.
+
 ## The file-set rule
 
 Every derivation `src` is built from these sets with `sources.toSource`.

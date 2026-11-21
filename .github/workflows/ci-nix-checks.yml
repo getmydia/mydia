@@ -8,6 +8,7 @@ name: CI / Nix Checks
 #   inputs  ciInternal derivations two or more of those checks need, built once
 #   checks  one job per uncached check; inputs come from the cache by now
 #   Nix / Checks  the aggregator
+#   pins    master only: refresh the master-<name> pin of every output
 #
 # A run where nothing changed what the checks read plans two empty matrices,
 # skips both build jobs and finishes in the time it takes to evaluate.
@@ -19,9 +20,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
+# id-token: write (the niks3 OIDC token) is granted per job, only to the jobs
+# that push.
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,6 +37,7 @@ jobs:
     outputs:
       inputs: ${{ steps.plan.outputs.inputs }}
       checks: ${{ steps.plan.outputs.checks }}
+      all: ${{ steps.plan.outputs.all }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -64,6 +67,7 @@ jobs:
           {
             echo "inputs=$(jq -c .inputs "$plan")"
             echo "checks=$(jq -c .checks "$plan")"
+            echo "all=$(jq -c .all "$plan")"
           } >> "$GITHUB_OUTPUT"
 
           {
@@ -76,14 +80,24 @@ jobs:
               (.checks | map("- `\(.name)` (\(.group))"))
               | .[]' "$plan"
           } >> "$GITHUB_STEP_SUMMARY"
-          jq . "$plan"
+          jq 'del(.all)' "$plan"
 
+  # Skipped when the job could not push (a fork PR or Dependabot gets no OIDC
+  # token): building inputs nobody can fetch only duplicates what each check
+  # job then builds for itself.
   inputs:
     name: Nix / Input (${{ matrix.name }})
     needs: plan
-    if: needs.plan.outputs.inputs != '[]'
+    if: >-
+      needs.plan.outputs.inputs != '[]'
+      && github.actor != 'dependabot[bot]'
+      && (github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -118,6 +132,9 @@ jobs:
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.checks != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -158,7 +175,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # Skipped build jobs mean an empty matrix: everything was cached.
+      # A skipped build job means an empty matrix (everything was cached) or,
+      # for inputs, a run that cannot push. Pins are not part of the verdict.
       - name: Assert every planned build succeeded
         env:
           PLAN: ${{ needs.plan.result }}
@@ -179,3 +197,34 @@ jobs:
                 ;;
             esac
           done
+
+  # niks3 keeps unpinned paths for 14 days. PR runs push everything before it
+  # merges, so master's own run usually plans nothing and its build jobs never
+  # pass a pin; this job pins every check and ciInternal output as
+  # master-<name> regardless, from the cache. Upkeep, not a verdict: it only
+  # warns, never fails the run, and the aggregator ignores it.
+  pins:
+    name: Nix / Pins
+    needs: [plan, inputs, checks]
+    if: always() && needs.plan.result == 'success' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-ci
+
+      - name: Refresh the master pins
+        env:
+          ALL: ${{ needs.plan.outputs.all }}
+        run: |
+          printf '%s' "$ALL" > "$RUNNER_TEMP/all.json"
+          ./scripts/ci-nix-pin.sh "$RUNNER_TEMP/all.json"

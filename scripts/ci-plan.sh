@@ -8,9 +8,15 @@
 #
 # Output (stdout, one compact line):
 #
-#   {"inputs":[{"name","attr","group"}...],"checks":[{"name","attr","group"}...]}
+#   {"inputs":[{"name","attr","group"}...],"checks":[{"name","attr","group"}...],
+#    "all":[{"name","out"}...]}
 #
 # `attr` is what the workflow passes to `nix build .#<attr>`.
+#
+# all: every check and every ciInternal attribute (aliases included), cached
+#   or not, with its output path ("out", or the first output), for the
+#   master-only pins job, which refreshes the `master-<name>` pins without
+#   evaluating again.
 #
 # checks: every `checks.<system>.*` attribute whose cacheStatus, from
 #   `nix-eval-jobs --check-cache-status`, is not "cached". nix-eval-jobs
@@ -32,7 +38,8 @@
 #   comes from a second nix-eval-jobs pass over
 #   `legacyPackages.<system>.ciInternal`; a derivation exposed under two names
 #   (mixDepsCompiled-sqlite and -postgres are one derivation) is listed once,
-#   under the alphabetically first.
+#   under the alphabetically first. A ciInternal entry without a drvPath is
+#   ignored rather than allowed to break the map.
 #
 # group: the check family, from the name prefix (sqlite, postgres, lint,
 #   rust, relay, server, nixos, other), for aggregators that filter results.
@@ -80,8 +87,11 @@ jq -c -n --arg system "$system" \
     elif test("^(elixir-|dialyzer$|ci-)") then "lint"
     else "other" end;
 
+  def out_path: .outputs.out // ((.outputs // {}) | to_entries | first | .value?);
+
   ($checks | map(select(.cacheStatus != "cached"))) as $uncached
   | ($internal
+      | map(select(.drvPath))
       | group_by(.drvPath)
       | map({key: .[0].drvPath, value: (map(.attr) | sort | first)})
       | from_entries) as $nameOf
@@ -94,5 +104,8 @@ jq -c -n --arg system "$system" \
   | {
       inputs: ($inputs | map({name: ., attr: "ciInternal.\(.)", group: group})),
       checks: ($uncached | map(.attr) | sort
-                | map({name: ., attr: "checks.\($system).\(.)", group: group}))
+                | map({name: ., attr: "checks.\($system).\(.)", group: group})),
+      all: ($checks + $internal
+              | map({name: .attr, out: out_path} | select(.out))
+              | sort_by(.name))
     }'

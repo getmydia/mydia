@@ -80,6 +80,9 @@ jobs:
       - name: Assert the flake-check planner against its fixtures
         run: ./scripts/tests/ci-plan-test.sh
 
+      - name: Assert the master pin refresh against its stubs
+        run: ./scripts/tests/ci-nix-pin-test.sh
+
   # Combines Flutter pin checks, BEAM pin checks, and generated-artifact
   # freshness onto one Nix/Cachix setup instead of provisioning three separate
   # runners on every PR.

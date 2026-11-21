@@ -40,8 +40,12 @@ expect_json() {
   [ "$want" = "$got" ] || note_failure "$label:"$'\n'"  got    $got"$'\n'"  wanted $want"
 }
 
+# The build matrices alone; `all` has its own case.
+matrices() { jq -c '{inputs, checks}' <<<"$1" 2>/dev/null || printf '%s' "$1"; }
+
 # Store paths are fixture names, never real outputs.
 drv() { printf '/nix/store/%032d-%s.drv' 0 "$1"; }
+outp() { printf '/nix/store/%032d-%s' 1 "$1"; }
 
 # One nix-eval-jobs line: job <attr> <cacheStatus> [neededBuild drv names...]
 job() {
@@ -50,14 +54,16 @@ job() {
   local needed=()
   for n in "$@"; do needed+=("$(drv "$n")"); done
   jq -cn --arg attr "$attr" --arg status "$status" --arg drv "$(drv "$attr")" \
+    --arg out "$(outp "$attr")" \
     --args '{attr: $attr, attrPath: [$attr], cacheStatus: $status,
-             isCached: ($status != "notBuilt"), drvPath: $drv,
+             isCached: ($status != "notBuilt"), drvPath: $drv, outputs: {out: $out},
              neededBuilds: $ARGS.positional, neededSubstitutes: []}' "${needed[@]}"
 }
 
 # One ciInternal line: internal <attr> <drv name>
 internal() {
-  jq -cn --arg attr "$1" --arg drv "$(drv "$2")" '{attr: $attr, attrPath: [$attr], drvPath: $drv}'
+  jq -cn --arg attr "$1" --arg drv "$(drv "$2")" --arg out "$(outp "$2")" \
+    '{attr: $attr, attrPath: [$attr], drvPath: $drv, outputs: {out: $out}}'
 }
 
 write_internal() {
@@ -82,7 +88,7 @@ write_internal
 out="$("$SCRIPT")" || note_failure "one uncached check: exited non-zero"
 expect_json "one uncached check" \
   '{"inputs":[],"checks":[{"name":"elixir-format","attr":"checks.x86_64-linux.elixir-format","group":"lint"}]}' \
-  "$out"
+  "$(matrices "$out")"
 grep -q -- '--flake \.#checks\.x86_64-linux ' "$STUB_LOG" || note_failure "checks not evaluated from .#checks.x86_64-linux"
 grep -q -- '--check-cache-status' "$STUB_LOG" || note_failure "--check-cache-status not passed"
 grep -q -- '--force-recurse' "$STUB_LOG" || note_failure "--force-recurse not passed"
@@ -117,16 +123,44 @@ expect_json "shared inputs" '{
     {"name":"test-sqlite-2","attr":"checks.x86_64-linux.test-sqlite-2","group":"sqlite"},
     {"name":"zz-unknown","attr":"checks.x86_64-linux.zz-unknown","group":"other"}
   ]
-}' "$out"
+}' "$(matrices "$out")"
 
 # 3. Everything cached: both matrices empty, printed as [] so the workflow's
-#    empty-matrix guards match.
+#    empty-matrix guards match; `all` still lists every check and every
+#    ciInternal attribute (aliases included) with its output path, for pins.
 {
   job elixir-format cached
   job test-sqlite-1 cached
 } > "$FIXTURES/checks.jsonl"
 out="$("$SCRIPT")" || note_failure "all cached: exited non-zero"
-[ "$out" = '{"inputs":[],"checks":[]}' ] || note_failure "all cached: got '$out', wanted compact empty matrices"
+grep -q '"inputs":\[\],"checks":\[\],' <<<"$out" || note_failure "all cached: got '$out', wanted compact empty matrices"
+expect_json "all for pins" "$(jq -cn --arg o "$(outp '')" '[
+  {name: "dialyzer-plt", out: "\($o)dialyzer-plt"},
+  {name: "elixir-format", out: "\($o)elixir-format"},
+  {name: "mixDepsCompiled-postgres", out: "\($o)mix-deps-compiled"},
+  {name: "mixDepsCompiled-sqlite", out: "\($o)mix-deps-compiled"},
+  {name: "mydiaTestBuild-postgres", out: "\($o)mydia-test-build-postgres"},
+  {name: "mydiaTestBuild-sqlite", out: "\($o)mydia-test-build-sqlite"},
+  {name: "nifs-mydia_subsync", out: "\($o)ci-nif-mydia_subsync"},
+  {name: "test-sqlite-1", out: "\($o)test-sqlite-1"}
+]')" "$(jq -c .all <<<"$out")"
+
+# 3b. A ciInternal entry without a drvPath is ignored, not fatal.
+{
+  cat "$FIXTURES/internal.jsonl"
+  jq -cn '{attr: "noDrv", attrPath: ["noDrv"]}'
+} > "$FIXTURES/internal.jsonl.new"
+mv "$FIXTURES/internal.jsonl.new" "$FIXTURES/internal.jsonl"
+{
+  job test-sqlite-1 notBuilt test-sqlite-1 mydia-test-build-sqlite
+  job test-sqlite-2 notBuilt test-sqlite-2 mydia-test-build-sqlite
+} > "$FIXTURES/checks.jsonl"
+out="$("$SCRIPT")" || note_failure "entry without drvPath: exited non-zero"
+expect_json "entry without drvPath" '["mydiaTestBuild-sqlite"]' "$(jq -c '.inputs | map(.name)' <<<"$out")"
+if jq -e '.all | any(.name == "noDrv")' <<<"$out" >/dev/null; then
+  note_failure "entry without drvPath or outputs listed for pins"
+fi
+write_internal
 
 # 4. Group classification of the real check name prefixes.
 {
