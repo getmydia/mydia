@@ -4,6 +4,7 @@
 #
 # Usage: scripts/ci-nix-pin.sh <all.json>
 # Env:   NIX_CI_PUSH  push.sh, as exported by .github/actions/nix-ci
+#        GITHUB_REF   must be refs/heads/master, or nothing is pushed
 #
 # <all.json> is ci-plan.sh's `all` list: [{"name", "out"}...], every check
 # and ciInternal attribute with its output path. By the time the pins job
@@ -17,6 +18,12 @@
 set -uo pipefail
 
 all="$1"
+
+# PRs never pin, whatever the calling job's `if` says.
+if [ "${GITHUB_REF:-}" != "refs/heads/master" ]; then
+  echo "::notice::pins skipped: ${GITHUB_REF:-<unset GITHUB_REF>} is not refs/heads/master"
+  exit 0
+fi
 
 mapfile -t outs < <(jq -r '.[].out' "$all" | sort -u)
 if [ "${#outs[@]}" -eq 0 ]; then

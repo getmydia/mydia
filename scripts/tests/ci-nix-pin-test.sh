@@ -35,6 +35,7 @@ exit "${PUSH_EXIT:-0}"
 STUB
 chmod +x "$tmp/bin/nix-store" "$tmp/bin/push"
 export PATH="$tmp/bin:$PATH" STUB_LOG="$tmp/calls" PUSH_LOG="$tmp/pushes" NIX_CI_PUSH="$tmp/bin/push"
+export GITHUB_REF=refs/heads/master
 
 fail=0
 note_failure() { echo "FAIL: $*" >&2; fail=1; }
@@ -82,6 +83,17 @@ echo '[]' > "$tmp/empty.json"
 out="$("$SCRIPT" "$tmp/empty.json" 2>&1)" || note_failure "empty list: exited non-zero"
 grep -q '^::notice::nothing to pin' <<<"$out" || note_failure "no notice on an empty list"
 [ ! -s "$STUB_LOG" ] || note_failure "nix-store called for an empty list"
+
+# 5. Off master (a PR ref, another branch, or unset): a notice, exit 0, and
+#    nothing fetched or pushed, whatever the calling job's `if` says.
+for ref in refs/pull/1/merge refs/heads/feature ""; do
+  reset
+  out="$(GITHUB_REF="$ref" STUB_AVAILABLE="$s/a-test-sqlite-1"$'\n'"$s/b-deps" \
+    "$SCRIPT" "$tmp/all.json" 2>&1)" || note_failure "ref '$ref': exited non-zero"
+  grep -q '^::notice::pins skipped' <<<"$out" || note_failure "ref '$ref': no notice"
+  [ ! -s "$STUB_LOG" ] || note_failure "ref '$ref': nix-store called"
+  [ ! -s "$PUSH_LOG" ] || note_failure "ref '$ref': pushed $(cat "$PUSH_LOG")"
+done
 
 if [ "$fail" -ne 0 ]; then
   exit 1
