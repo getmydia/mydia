@@ -227,6 +227,26 @@ if ! scripts/sync-devenv-nixpkgs.sh --check; then
   fail "devenv.lock and flake.lock pin different nixpkgs revisions (see above)."
 fi
 
+# --- player/pubspec.lock.json: the JSON form of player/pubspec.lock ----------
+#
+# nix/ci/player.nix builds the player's pub cache from this file, since Nix
+# cannot read YAML. A lock bump without it would build the old cache, and
+# `pub get --enforce-lockfile` would then fail offline in the sandbox. yq-go
+# comes from the flake's nixpkgs, as in regenerate-derived.sh, so the bytes
+# match.
+if command -v nix >/dev/null 2>&1; then
+  if ! pub_json="$(nix run --inputs-from . nixpkgs#yq-go -- -o json player/pubspec.lock)"; then
+    fail "could not convert player/pubspec.lock to JSON (see above)."
+  elif [ "$pub_json" != "$(cat player/pubspec.lock.json 2>/dev/null)" ]; then
+    fail "player/pubspec.lock.json is stale for player/pubspec.lock.
+  Run ./scripts/regenerate-derived.sh and commit the result."
+  else
+    echo "player/pubspec.lock.json matches player/pubspec.lock."
+  fi
+else
+  echo "note: nix not on PATH, skipping the player/pubspec.lock.json half of this check" >&2
+fi
+
 # --- Nix npm dependencies: lockfile matches the pinned hash -----------------
 #
 # Recomputes the hash and compares strings. Building `.#...npmDeps` instead
