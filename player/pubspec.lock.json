@@ -204,21 +204,21 @@
       "dependency": "direct main",
       "description": {
         "name": "cached_network_image",
-        "sha256": "03d9cff3f68ded9e7c5588ebe7fc8650a669192685e59d2d2413d7813b286d6b",
+        "sha256": "0cb71977516a1354434893163d74bf5f79b3055d1a7e936fb75095aef0d8a3a9",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "4.0.0"
+      "version": "4.0.7"
     },
     "cached_network_image_platform_interface": {
       "dependency": "direct main",
       "description": {
         "name": "cached_network_image_platform_interface",
-        "sha256": "ff60d021d5a013490368cd9efdcbe35df4227fdb6c5971d15b4bc6e3d0172fe0",
+        "sha256": "fc48eb93237498afdb88fb2273867e32ec27b01c365e5a19ccc0de5bb11dbccb",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "5.0.0"
+      "version": "5.0.4"
     },
     "cached_network_image_web": {
       "dependency": "transitive",
@@ -780,11 +780,11 @@
       "dependency": "direct main",
       "description": {
         "name": "go_router",
-        "sha256": "008ab21d89d0de8ccd79586838f7533f126c2d894f50bf25f2947888d3c225b5",
+        "sha256": "d4105f50c438c37d0d1372b1fbf1617fe9be398b559fa29d2067756ebbd42b69",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "18.0.1"
+      "version": "18.1.4"
     },
     "google_identity_services_web": {
       "dependency": "transitive",
@@ -1374,11 +1374,11 @@
       "dependency": "direct main",
       "description": {
         "name": "octo_image",
-        "sha256": "34faa6639a78c7e3cbe79be6f9f96535867e879748ade7d17c9b1ae7536293bd",
+        "sha256": "1eabd04ba4371863a91a063feba8069f0f15c4ad9d9a72fbcd3cab1ecd86ea6c",
         "url": "https://pub.dev"
       },
       "source": "hosted",
-      "version": "2.1.0"
+      "version": "2.1.5"
     },
     "package_config": {
       "dependency": "transitive",
