@@ -1,0 +1,246 @@
+---
+# Source: niks3/templates/service.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: niks3
+  labels:
+    helm.sh/chart: niks3-1.19.0
+    app.kubernetes.io/name: niks3
+    app.kubernetes.io/instance: niks3
+    app.kubernetes.io/version: "v1.19.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: niks3/templates/secrets.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: niks3-oidc
+  labels:
+    helm.sh/chart: niks3-1.19.0
+    app.kubernetes.io/name: niks3
+    app.kubernetes.io/instance: niks3
+    app.kubernetes.io/version: "v1.19.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  oidc.json: "{\"providers\":{\"github\":{\"audience\":\"https://niks3.mydia.dev\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"rules\":[{\"bound_claims\":{\"repository_owner\":[\"getmydia\"]},\"bound_subject\":[\"repo:getmydia/mydia:*\"],\"scopes\":[\"write\"]}]}}}"
+
+---
+# Source: niks3/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: niks3
+  labels:
+    helm.sh/chart: niks3-1.19.0
+    app.kubernetes.io/name: niks3
+    app.kubernetes.io/instance: niks3
+    app.kubernetes.io/version: "v1.19.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: niks3
+    app.kubernetes.io/instance: niks3
+    app.kubernetes.io/component: server
+
+---
+# Source: niks3/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: niks3
+  labels:
+    helm.sh/chart: niks3-1.19.0
+    app.kubernetes.io/name: niks3
+    app.kubernetes.io/instance: niks3
+    app.kubernetes.io/version: "v1.19.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: niks3
+      app.kubernetes.io/instance: niks3
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      annotations:
+        checksum/secrets: 11dc0dcab45758d687ed8314cf20f7f2d056f636b3b79b77f53c8479a32c6803
+      labels:
+        app.kubernetes.io/name: niks3
+        app.kubernetes.io/instance: niks3
+        app.kubernetes.io/component: server
+    spec:
+      serviceAccountName: niks3
+      automountServiceAccountToken: false
+      securityContext:
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: niks3
+          image: ghcr.io/mic92/niks3:v1.19.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --sign-key-path=/secrets/signing/cache.mydia.dev-1
+            - --abort-incomplete-uploads-days=0
+          env:
+            - name: NIKS3_HTTP_ADDR
+              value: ":5751"
+            - name: NIKS3_DB_FILE
+              value: /secrets/db/uri
+            - name: NIKS3_API_TOKEN_PATH
+              value: /secrets/token/token
+            - name: NIKS3_S3_ENDPOINT
+              value: "67a60cd5057ea97341c77d16f7cd3100.r2.cloudflarestorage.com"
+            - name: NIKS3_S3_BUCKET
+              value: "mydia-nix-cache"
+            - name: NIKS3_S3_USE_SSL
+              value: "true"
+            - name: NIKS3_S3_BUCKET_LOOKUP
+              value: "auto"
+            - name: NIKS3_S3_REGION
+              value: "auto"
+            - name: NIKS3_S3_ACCESS_KEY_PATH
+              value: /secrets/s3/access-key
+            - name: NIKS3_S3_SECRET_KEY_PATH
+              value: /secrets/s3/secret-key
+            - name: NIKS3_CACHE_URL
+              value: "https://cache.mydia.dev"
+            - name: NIKS3_OIDC_CONFIG
+              value: /etc/niks3/oidc.json
+          ports:
+            - name: http
+              containerPort: 5751
+          # The listener only opens after DB migrations. Give those time
+          # before liveness starts killing the pod.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            timeoutSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            limits:
+              memory: 256Mi
+            requests:
+              cpu: 20m
+              memory: 32Mi
+          volumeMounts:
+            - name: db
+              mountPath: /secrets/db
+              readOnly: true
+            - name: token
+              mountPath: /secrets/token
+              readOnly: true
+            - name: s3
+              mountPath: /secrets/s3
+              readOnly: true
+            - name: signing
+              mountPath: /secrets/signing
+              readOnly: true
+            - name: oidc
+              mountPath: /etc/niks3
+              readOnly: true
+      volumes:
+        - name: db
+          secret:
+            secretName: niks3-db
+        - name: token
+          secret:
+            secretName: niks3-token
+        - name: s3
+          secret:
+            secretName: niks3-s3
+        - name: signing
+          secret:
+            secretName: niks3-signing
+        - name: oidc
+          configMap:
+            name: niks3-oidc
+
+---
+# Source: niks3/templates/gc-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: niks3-gc
+  labels:
+    helm.sh/chart: niks3-1.19.0
+    app.kubernetes.io/name: niks3
+    app.kubernetes.io/instance: niks3
+    app.kubernetes.io/version: "v1.19.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  schedule: "0 4 * * *"
+  startingDeadlineSeconds: 3600
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: niks3
+            app.kubernetes.io/instance: niks3
+            app.kubernetes.io/component: gc
+        spec:
+          restartPolicy: Never
+          serviceAccountName: niks3
+          automountServiceAccountToken: false
+          securityContext:
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: gc
+              image: ghcr.io/mic92/niks3:v1.19.0
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/niks3"]
+              args:
+                - gc
+                - --server-url=http://niks3:80
+                - --auth-token-path=/secrets/token/token
+                - --older-than=336h
+                - --failed-uploads-older-than=6h
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                  - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: token
+                  mountPath: /secrets/token
+                  readOnly: true
+          volumes:
+            - name: token
+              secret:
+                secretName: niks3-token
