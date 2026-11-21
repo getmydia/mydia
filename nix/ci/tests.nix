@@ -5,8 +5,9 @@
 #   ci-cardigann-hash     the shards' Cardigann guest source hash equals
 #                         `mix mydia.cardigann_guest hash`
 #
-# The shards carry the pinned Cardigann guest (cardigann-guest.json), so the
-# :cardigann_wasm tests run while the pin matches the guest sources.
+# The shards carry the Cardigann guest pinned in
+# native/cardigann_guest/ARTIFACT_SHA256, so the :cardigann_wasm tests run
+# while that pin matches the guest sources.
 #
 # Each shard starts its own RustFS (the :s3 tests, MYDIA_TEST_S3_REQUIRED=1
 # so a dead server fails the shard) and, for PostgreSQL, its own server, all
@@ -45,24 +46,37 @@
 
       root = ../..;
 
-      # The Cardigann wasm guest, pinned by scripts/update-cardigann-guest-pin.sh
-      # (the cardigann-guest workflow runs it after each publish). The shards
-      # install it only while the pin's source_hash is the hash of the guest
-      # sources in this tree; otherwise it is absent and test_helper.exs
-      # excludes :cardigann_wasm, loudly.
+      # The Cardigann wasm guest, pinned by native/cardigann_guest/ARTIFACT_SHA256
+      # ("<source hash> <sha256>"), the same pin the app compiles in to verify
+      # the guest it downloads (Mydia.Indexers.Cardigann.Wasm.Artifact). The
+      # shards install it only while the pin's source hash is the hash of the
+      # guest sources in this tree; otherwise it is absent and test_helper.exs
+      # excludes :cardigann_wasm, loudly. Bumping ARTIFACT_SHA256 to a
+      # published guest is what turns those tests on.
       #
-      # That hash is computed at build time, in cardigannSourceHash, not at
-      # eval time: it is SHA-256 over `path <> <<0>> <> contents` per file, and
-      # a Nix string cannot hold a NUL byte, so builtins.hashString cannot
-      # reproduce it. cardigannSourceHash runs the repo's own
+      # The sources' hash is computed at build time, in cardigannSourceHash,
+      # not at eval time: it is SHA-256 over `path <> <<0>> <> contents` per
+      # file, and a Nix string cannot hold a NUL byte, so builtins.hashString
+      # cannot reproduce it. cardigannSourceHash runs the repo's own
       # native/cardigann_guest/scripts/source-hash.sh instead, and the
       # ci-cardigann-hash check proves it equals `mix mydia.cardigann_guest
       # hash`, the value the compiled Artifact module names its file by.
-      cardigannPin = lib.importJSON ./cardigann-guest.json;
+      cardigannPinFile = builtins.readFile (root + "/native/cardigann_guest/ARTIFACT_SHA256");
+      cardigannPinMatch = builtins.match "([0-9a-f]{16})[[:space:]]+([0-9a-f]{64})[[:space:]]*" cardigannPinFile;
+      cardigannPin =
+        assert lib.assertMsg (cardigannPinMatch != null)
+          "nix/ci/tests.nix: native/cardigann_guest/ARTIFACT_SHA256 is not \"<16-hex source hash> <64-hex sha256>\"";
+        {
+          sourceHash = builtins.elemAt cardigannPinMatch 0;
+          sha256 = builtins.elemAt cardigannPinMatch 1;
+        };
 
+      # Artifact's @default_base_url and file_name/0: the release
+      # cardigann-guest-<hash>, asset cardigann-<hash>.wasm.
       cardigannGuest = pkgs.fetchurl {
-        name = "cardigann-${cardigannPin.source_hash}.wasm";
-        inherit (cardigannPin) url sha256;
+        name = "cardigann-${cardigannPin.sourceHash}.wasm";
+        url = "https://github.com/getmydia/mydia/releases/download/cardigann-guest-${cardigannPin.sourceHash}/cardigann-${cardigannPin.sourceHash}.wasm";
+        inherit (cardigannPin) sha256;
       };
 
       # The script lists files with `git ls-files`. A flake source holds
@@ -87,13 +101,13 @@
       # priv/), with the .sha256 sidecar Artifact.load/1 checks it against.
       installCardigannGuest = ''
         cardigann_hash=$(cat ${cardigannSourceHash})
-        if [ "$cardigann_hash" = ${cardigannPin.source_hash} ]; then
+        if [ "$cardigann_hash" = ${cardigannPin.sourceHash} ]; then
           mkdir -p priv/cardigann
           cp ${cardigannGuest} priv/cardigann/cardigann-$cardigann_hash.wasm
           echo ${cardigannPin.sha256} > priv/cardigann/cardigann-$cardigann_hash.wasm.sha256
           chmod u+w priv/cardigann/cardigann-$cardigann_hash.wasm*
         else
-          echo "Cardigann guest pin is for ${cardigannPin.source_hash}, these sources hash to $cardigann_hash: not installing it (run scripts/update-cardigann-guest-pin.sh once the guest is published)"
+          echo "Cardigann guest pin (native/cardigann_guest/ARTIFACT_SHA256) is for ${cardigannPin.sourceHash}, these sources hash to $cardigann_hash: not installing it"
         fi
       '';
 

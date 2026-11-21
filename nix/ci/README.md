@@ -55,10 +55,9 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   `mix test --partitions N --warnings-as-errors --seed 0`; the output is
   `test.log`. `testReads` lists the repo files outside the app and `test/`
   that tests read. The shards carry the Cardigann guest pinned in
-  `cardigann-guest.json` (written by `scripts/update-cardigann-guest-pin.sh`,
-  which the `cardigann-guest` workflow runs after publishing and proposes in
-  a pull request), installed only while its `source_hash` matches the guest
-  sources; `ci-cardigann-hash` proves the Nix-side hash equals
+  `native/cardigann_guest/ARTIFACT_SHA256` (the app's own pin), installed
+  only while its source hash matches the guest sources;
+  `ci-cardigann-hash` proves the Nix-side hash equals
   `mix mydia.cardigann_guest hash`. What the sandbox means for tests: `test/README.md`,
   "Sandboxed CI runs".
 - `../beam-deps.nix`: `deps.nix` with its sandbox overrides, heroicons,

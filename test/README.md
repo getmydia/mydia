@@ -161,12 +161,12 @@ ways a test can trip over:
   the Repo's `pool_size: 10`, so a large machine never queues past the pool
   timeout.
 - **The Cardigann guest is pinned, not fetched.** The shards install the
-  guest from `nix/ci/cardigann-guest.json` only while its `source_hash` is
-  the hash of the guest sources in the tree. An edit under
+  guest pinned in `native/cardigann_guest/ARTIFACT_SHA256` only while its
+  source hash is the hash of the guest sources in the tree. An edit under
   `native/cardigann_guest/` (other than Markdown) changes that hash, so the
   shards log `cardigann_wasm tests skipped` and exclude those tests until
-  the guest workflow publishes the new guest and its pin pull request
-  (`scripts/update-cardigann-guest-pin.sh`) merges.
+  the new guest is published and `ARTIFACT_SHA256` is bumped to
+  `<mix mydia.cardigann_guest hash> <its .sha256>`.
 
 Every shard reads all of `test/` except its Markdown, so any test edit reruns
 all seven; a doc edit under `test/`, or any edit outside the shards' files, is
