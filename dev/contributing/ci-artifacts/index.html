@@ -3426,16 +3426,21 @@
 
 <h1 id="using-ci-builds">Using CI builds</h1>
 <p>Every push to <code>master</code> or <code>main</code>, and every pull request, that touches <code>player/</code>,
-<code>native/</code>, or <code>.github/workflows/ci-player.yml</code> produces downloadable player
-builds. Pushes and pull requests that do not touch those paths do not trigger a
-build, so there is nothing to download for them. These builds are the fastest
-way to try a change before it reaches a release.</p>
+<code>native/</code>, <code>priv/graphql/schema.graphql</code>, <code>rust-toolchain.toml</code> or
+<code>.github/workflows/ci-player.yml</code> produces downloadable Windows and macOS player
+builds from the <code>ci-player.yml</code> workflow. A change that only edits translations
+(<code>player/lib/l10n/app_*.arb</code> other than <code>app_en.arb</code>) does not trigger it, and
+neither does anything outside those paths, so there is nothing to download for
+them. The Android APK comes from the main <code>ci.yml</code> workflow, which builds it
+on every push and pull request. These builds are the fastest way to try a change
+before it reaches a release.</p>
 <p>CI builds are not release builds. They are ad-hoc signed and never notarized, so
 Sparkle auto-update does not work on them. If you are testing the updater, use a
 release DMG instead.</p>
 <p>Artifacts are kept for 7 days.</p>
 <h2 id="finding-a-run">Finding a run</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--workflow<span class="o">=</span>ci-player.yml<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--workflow<span class="o">=</span>ci-player.yml<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span><span class="w">   </span><span class="c1"># Windows, macOS</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>gh<span class="w"> </span>run<span class="w"> </span>list<span class="w"> </span>--workflow<span class="o">=</span>ci.yml<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span><span class="w">          </span><span class="c1"># Android</span>
 </code></pre></div>
 <p>Take the run ID from the leftmost column of the row you want.</p>
 <h2 id="macos">macOS</h2>
@@ -3459,27 +3464,18 @@ download the artifact through the Actions UI in a browser. Without it,
 Gatekeeper refuses to launch a quarantined app, because a CI build carries an
 ad-hoc signature rather than a notarized Developer ID one.</p>
 <h2 id="linux">Linux</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-linux-bundle<span class="w"> </span>-D<span class="w"> </span>mydia-player
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>chmod<span class="w"> </span>+x<span class="w"> </span>mydia-player/mydia-player
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>./mydia-player/mydia-player
-</code></pre></div>
-<p>The artifact contains the contents of the build bundle, so pass <code>-D</code> to give it
-a directory of its own. The bundle links against libmpv and GTK 3 rather than
-shipping them, so both must already be installed. On Debian and Ubuntu the GTK
-package is <code>libgtk-3-0</code>; the libmpv runtime package is <code>libmpv2</code> on Ubuntu 24.04
-and later and <code>libmpv1</code> on older releases, so install whichever your release
-provides:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libgtk-3-0
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libmpv2<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>libmpv1
-</code></pre></div>
+<p>CI publishes no Linux build. It still compiles the player for Linux on every
+change, but in a Nix build whose libraries live in the Nix store, so the result
+runs nowhere else. To try a change on Linux, build it from your checkout, or
+use the tarball, AppImage or Flatpak from a release.</p>
 <h2 id="windows">Windows</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-windows-release<span class="w"> </span>-D<span class="w"> </span>mydia-player
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-windows-release<span class="w"> </span>-D<span class="w"> </span>mydia-player
 </code></pre></div>
 <p>Run <code>mydia-player\mydia-player.exe</code> from the extracted directory. The build is
 unsigned, so SmartScreen shows a warning; choose "More info" then "Run anyway".</p>
 <h2 id="android">Android</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-android-apk
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>adb<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>app-release.apk
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>gh<span class="w"> </span>run<span class="w"> </span>download<span class="w"> </span>&lt;run-id&gt;<span class="w"> </span>-R<span class="w"> </span>getmydia/mydia<span class="w"> </span>-n<span class="w"> </span>mydia-player-android-apk
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>adb<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>app-release.apk
 </code></pre></div>
 <p>The APK is signed with a debug key, so it will not upgrade over a Play Store or
 release install. Uninstall the release build first if <code>adb install</code> reports a
