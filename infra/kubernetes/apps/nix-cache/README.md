@@ -22,7 +22,7 @@ and pushes fail.
 
 - `niks3-values.yaml`: values for niks3's upstream Helm chart.
 - `niks3.yaml`: rendered from the chart by `./render.sh`. Do not hand-edit; change
-  the values (or the pinned tag in `render.sh`) and re-render.
+  the values (or the pinned niks3 commit in `render.sh`) and re-render.
 - `postgres.yaml`: the reference database. It holds GC bookkeeping and pins
   only, no NAR data.
 - `ingress.yaml`: certificate, IngressRoute and the DNS record (via external-dns).

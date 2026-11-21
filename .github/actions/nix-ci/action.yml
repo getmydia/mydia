@@ -51,7 +51,8 @@ runs:
     - name: Install niks3
       if: inputs.push == 'true'
       shell: bash
-      run: nix profile install github:Mic92/niks3/v1.19.0
+      # niks3 v1.19.0, pinned to its commit (tags can move).
+      run: nix profile install github:Mic92/niks3/3a0b84e4f909726de179b9f210e1ed1e56767b2e
 
     - name: Export push settings
       shell: bash

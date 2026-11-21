@@ -23,7 +23,8 @@ set -euo pipefail
 system=x86_64-linux
 token="${NIKS3_TOKEN_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/mydia/niks3-token}"
 server="${NIKS3_URL:-https://niks3.mydia.dev}"
-niks3=(nix run github:Mic92/niks3/v1.19.0 --)
+# niks3 v1.19.0, pinned to its commit (tags can move).
+niks3=(nix run github:Mic92/niks3/3a0b84e4f909726de179b9f210e1ed1e56767b2e --)
 substituter_opts=(
   --option extra-substituters https://cache.mydia.dev
   --option extra-trusted-public-keys 'cache.mydia.dev-1:5zkoQR4Gcrx1EEQ1GvHRPQ7EoHm8gNrrVoeAqX3ioFg='
