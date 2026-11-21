@@ -190,7 +190,9 @@
               FAIL=1
             fi
           fi
-          if ! grep -q 'processes\.phoenix\.after = \[ "mydia:ecto@succeeded" \]' devenv.nix; then
+          # Full-line comments dropped, so a commented-out `after` fails.
+          if ! grep -vE '^[[:space:]]*#' devenv.nix \
+            | grep -q 'processes\.phoenix\.after = \[ "mydia:ecto@succeeded" \]'; then
             echo "::error::phoenix must wait for mydia:ecto@succeeded, or it boots against an unmigrated database"
             FAIL=1
           fi
