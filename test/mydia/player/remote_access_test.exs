@@ -256,6 +256,15 @@ defmodule Mydia.Player.RemoteAccessTest do
       assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
     end
 
+    test "rejects a URL containing a comma, which would not reload as entered" do
+      url = "https://relay.example.test/path,extra"
+
+      assert {:error, {:invalid_url, ^url}} =
+               RemoteAccess.set_relay_urls([url], getenv: fn _ -> nil end)
+
+      assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
+    end
+
     test "saves the list and restarts a running subtree so the node picks it up" do
       %{parent: parent} = start_stub_tree()
       before = subtree_pid(parent)
