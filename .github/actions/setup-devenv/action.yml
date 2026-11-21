@@ -14,11 +14,6 @@ inputs:
   skip-push:
     description: "'true' to only read from Cachix (fork PRs)."
     default: 'true'
-  push-filter:
-    description: >-
-      Regular expression of store paths never to push to Cachix, for paths
-      that came from elsewhere (the E2E job's test build, from niks3).
-    default: ''
 
 runs:
   using: composite
@@ -39,7 +34,6 @@ runs:
         authToken: ${{ inputs.cachix-auth-token }}
         extraPullNames: devenv
         skipPush: ${{ inputs.skip-push }}
-        pushFilter: ${{ inputs.push-filter }}
 
     # The devenv CLI comes from the nixpkgs flake.lock pins, which
     # check-generated-freshness.sh holds equal to devenv.lock's, so a

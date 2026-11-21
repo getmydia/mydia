@@ -58,11 +58,17 @@ master already built, the binary cache substitutes it, nothing is fetched, and
 the build passes. `Check / Flutter Pin` ran exactly that step. It passed on #967,
 which changed the lockfile and left the hash, and master's `CI / Nix` went red
 on the merge. The hash had drifted twice before (`d1109d65c`, `f00681d22`, 15
-red master runs, fixed in #584), both times behind the push-only rule above.
+red master runs, fixed in #584), both times while the NixOS module tests still
+ran on master pushes only.
 
-When triaging a red `CI / Nix`, grep the job log for `hash mismatch` first. It is
-a one-line fix (`./scripts/update-npm-deps-hash.sh`) and it masks everything
-downstream, since the build aborts before the Rust crate vendoring even starts.
+The package now builds in ci.yml's NixOS module jobs, so a stale hash that gets
+past the freshness check shows as a red `Nix / NixOS (<name>)` (the package
+builds inside that job; the blocking `Nix / Input` wave never builds what only
+the NixOS tests need). Those jobs do not block merging (see "The
+NixOS module tests run on every PR but block nothing"), so look at them. When
+one is red, grep its log for `hash mismatch` first. It is a one-line fix
+(`./scripts/update-npm-deps-hash.sh`) and it masks everything downstream,
+since the build aborts before the Rust crate vendoring even starts.
 
 ## The Elixir and OTP pins each live in one file
 
@@ -521,7 +527,9 @@ with what each derivation reads, is in `nix/ci/README.md`, "The derivation
 graph". In short: a `lib/` edit rebuilds the two test builds and everything
 on top of them and leaves the dependency builds, the PLT, the NIFs and the
 Rust and relay checks cached; a `test/` edit reruns only the shards; a
-workflow edit reruns only `ci-workflow-triggers`. A Weblate `.po`-only PR
+workflow edit reruns only `ci-workflow-triggers` (plus the non-blocking NixOS
+tests, whose package takes the whole repo as source, as on any edit). A
+Weblate `.po`-only PR
 rebuilds the test build and runs every shard, because Gettext compiles the
 catalogs into the backend; the old `Translations` fast path is gone.
 
@@ -610,12 +618,12 @@ the signing key and health checks are in
   purity) are the `guards` check in `nix/ci/guards.nix`.
 - `Lint / Ratchet` runs `mix mydia.ratchet --from-git-merge-base
   origin/master`, which reads git history, and on master pushes the advisory
-  `mix_unused` report. It compiles nothing:
-  `scripts/ci-restore-test-build.sh --mount` bind-mounts the checkout at
-  `/build/source` (Mix records absolute paths) and lays the cached
-  `ciInternal.mydiaTestBuild-sqlite` over it with every file dated to the
-  epoch, and the job runs Mix in `nix develop .#ci` (`nix/ci/README.md`,
-  "Outside the sandbox").
+  `mix_unused` report. It does not compile the app: Mix recompiles only a
+  handful of files (about 14). `scripts/ci-restore-test-build.sh --mount`
+  bind-mounts the checkout at `/build/source` (Mix records absolute paths)
+  and lays the cached `ciInternal.mydiaTestBuild-sqlite` over it with every
+  file dated to the epoch, and the job runs Mix in `nix develop .#ci`
+  (`nix/ci/README.md`, "Outside the sandbox").
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests (above).
 - `Test / E2E Browser (run)` is still a devenv job
   (`.github/actions/setup-devenv`, which installs Nix, Cachix and devenv and
@@ -625,11 +633,12 @@ the signing key and health checks are in
   (`MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1`,
   `MYDIA_SKIP_CARDIGANN_FETCH=1`, no `DATABASE_TYPE`). devenv's Elixir and
   OTP are the same store paths as the checks' (both resolve
-  `beam-version.nix` on flake.lock's nixpkgs), so `mix compile` touches only
-  a handful of files. What the test build does not carry, it builds itself:
-  `npm ci --prefix assets` and `mix assets.deploy`. It skips `mix deps.get`
-  (deps/ comes with the build), keeps the build out of Cachix
-  (`push-filter: mydia-test-build`), and runs even when the plan failed, so
+  `beam-version.nix` on flake.lock's nixpkgs), so `mix compile` recompiles
+  only a handful of files (about 14). What the test build does not carry, it
+  builds itself: `npm ci --prefix assets` and `mix assets.deploy`. It skips
+  `mix deps.get` (deps/ comes with the build), only reads Cachix
+  (`skip-push: 'true'`, so nothing the restore builds lands there), and runs
+  even when the plan failed, so
   the required check never skips; the restore then builds the test build
   itself. Should devenv's BEAM ever drift from the checks', Mix recompiles
   everything and the job is merely slow again.
@@ -683,12 +692,16 @@ with `yq` that each required name sits on exactly one job whose `if` is
 ### Compile-time config and the test build
 
 Every consumer of `ciInternal.mydiaTestBuild-*` (the shards, `elixir-lint`,
-`dialyzer`, `ci-workflow-triggers`, the ratchet) must run Mix with the same
-compile-time configuration the build had, or Mix recompiles every file of the
-app: it stores each app's compile-time config in the manifest, and when the
-`:mydia` app's config differs it recompiles all of it. The build sets
-`MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1` and, for the PostgreSQL
-build, `DATABASE_TYPE=postgres`; the checks and `devShells.ci` set the same.
+`dialyzer`, `ci-workflow-triggers`, the ratchet, the E2E job) must run Mix
+with the same compile-time configuration the build had, or Mix recompiles
+every file of the app: it stores each app's compile-time config in the
+manifest, and when the `:mydia` app's config differs it recompiles all of it.
+The build sets `MYDIA_PREBUILT_NIFS=1`, `MYDIA_PREBUILT_PLUGINS=1`,
+`MYDIA_SKIP_CARDIGANN_FETCH=1` and, for the PostgreSQL build,
+`DATABASE_TYPE=postgres` (the `env` in `nix/ci/elixir.nix`); the checks and
+`devShells.ci` take that same `env`. The E2E job does not: it exports the
+variables by hand in its devenv heredoc in ci.yml, so a change to that `env`
+must be copied there too, or the E2E job silently recompiles the whole app.
 Anything that varies per shard or per run (partition numbers, database names,
 ports, temp paths, `CI`) belongs in `config/runtime.exs`, which Mix does not
 track, or in a different app's config, never under `:mydia` in

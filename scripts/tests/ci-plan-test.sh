@@ -97,7 +97,9 @@ grep -q -- '--force-recurse' "$STUB_LOG" || note_failure "--force-recurse not pa
 #    is an input, named by its first alias; one needed by a single check, or a
 #    shared derivation outside ciInternal, is not. "local" is not "cached".
 #    The nixos group goes to its own list (outside the Nix / Checks verdict),
-#    and its needs still count toward inputs (dialyzer-plt here).
+#    and its needs do not count toward inputs: dialyzer-plt is needed by
+#    dialyzer and nixos-module, two checks, yet is no input, because the
+#    blocking inputs wave must never build what only the NixOS tests need.
 {
   job test-sqlite-1 notBuilt test-sqlite-1 mydia-test-build-sqlite mix-deps-compiled some-shared-tool
   job test-sqlite-2 notBuilt test-sqlite-2 mydia-test-build-sqlite mix-deps-compiled some-shared-tool
@@ -113,7 +115,6 @@ grep -q -- '--force-recurse' "$STUB_LOG" || note_failure "--force-recurse not pa
 out="$("$SCRIPT")" || note_failure "shared inputs: exited non-zero"
 expect_json "shared inputs" '{
   "inputs": [
-    {"name":"dialyzer-plt","attr":"ciInternal.dialyzer-plt","group":"other"},
     {"name":"mixDepsCompiled-postgres","attr":"ciInternal.mixDepsCompiled-postgres","group":"other"},
     {"name":"mydiaTestBuild-sqlite","attr":"ciInternal.mydiaTestBuild-sqlite","group":"other"}
   ],
@@ -128,6 +129,24 @@ expect_json "shared inputs" '{
   ],
   "nixos": [
     {"name":"nixos-module","attr":"checks.x86_64-linux.nixos-module","group":"nixos"}
+  ]
+}' "$(matrices "$out")"
+
+# 2b. A ciInternal derivation both NixOS checks need, and nothing else, is
+#     still no input: it builds inside the NixOS jobs, never in the wave in
+#     front of the blocking checks.
+{
+  job nixos-module notBuilt nixos-module mydia-test-build-postgres
+  job nixos-module-postgres notBuilt nixos-module-postgres mydia-test-build-postgres
+  job elixir-format notBuilt elixir-format
+} > "$FIXTURES/checks.jsonl"
+out="$("$SCRIPT")" || note_failure "nixos-only input: exited non-zero"
+expect_json "nixos-only input" '{
+  "inputs": [],
+  "checks": [{"name":"elixir-format","attr":"checks.x86_64-linux.elixir-format","group":"lint"}],
+  "nixos": [
+    {"name":"nixos-module","attr":"checks.x86_64-linux.nixos-module","group":"nixos"},
+    {"name":"nixos-module-postgres","attr":"checks.x86_64-linux.nixos-module-postgres","group":"nixos"}
   ]
 }' "$(matrices "$out")"
 

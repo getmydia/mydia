@@ -60,7 +60,8 @@ niks3 binary cache. Design: `design/specs/2026-11-20-nix-ci-checks-design.md`.
   that tests read. `test/ci/workflow_triggers_test.exs`, the one test that
   reads `.github/workflows`, is left out of the shards and runs alone in
   `ci-workflow-triggers`, so a workflow edit reruns that check instead of
-  all seven shards. The shards carry the Cardigann guest pinned in
+  all seven shards (the non-blocking NixOS tests rerun too, as on any
+  edit: their package takes the whole repo as source). The shards carry the Cardigann guest pinned in
   `native/cardigann_guest/ARTIFACT_SHA256` (the app's own pin), installed
   only while its source hash matches the guest sources;
   `ci-cardigann-hash` proves the Nix-side hash equals
@@ -126,7 +127,8 @@ its inputs changes. The intermediate derivations are `ciInternal` entries.
 So a `lib/` edit rebuilds `mydiaTestBuild` and everything under it, and
 leaves the dependency builds, the PLT, the NIFs and every Rust and relay
 check cached. A `test/` edit reruns the shards only; a workflow edit reruns
-`ci-workflow-triggers` only.
+`ci-workflow-triggers` only (plus the non-blocking NixOS tests, whose
+package takes the whole repo as source and so reruns on any edit).
 
 ## Outside the sandbox
 
@@ -140,7 +142,7 @@ Two CI jobs cannot be checks and run as ordinary jobs in `devShells.ci`:
   `/build/source` (Mix records absolute paths), copies the build into it,
   dates every file to the epoch as the store does (so Mix sees nothing
   stale) and gives `deps/heroicons` the `.git` the deps check reads. Mix
-  then recompiles only a handful of files.
+  then recompiles only a handful of files (about 14), not the app.
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests, which need a
   root smbd; `rust-mydia_smb-test` skips them.
 

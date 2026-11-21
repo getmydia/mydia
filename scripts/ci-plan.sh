@@ -30,8 +30,10 @@
 #   The workflow builds them in their own matrix, which the `Nix / Checks`
 #   verdict does not include: the package they boot is built from the whole
 #   repo (src = ../..), so they rerun on nearly every commit, and a QEMU boot
-#   is the slowest and flakiest build in the set. Their needs still count
-#   toward `inputs`.
+#   is the slowest and flakiest build in the set. Their needs do not count
+#   toward `inputs`: the inputs wave sits in front of the blocking checks,
+#   so a derivation only the NixOS tests need (the packages) must never
+#   build or fail there. The NixOS jobs build it themselves.
 #
 # inputs: the `ciInternal` derivations (compiled deps, test builds, the
 #   Dialyzer PLT, NIFs, plugin wasm, ...) that two or more of those checks
@@ -104,6 +106,7 @@ jq -c -n --arg system "$system" \
       | map({key: .[0].drvPath, value: (map(.attr) | sort | first)})
       | from_entries) as $nameOf
   | ($uncached
+      | map(select(.attr | group != "nixos"))
       | map(.neededBuilds // [] | map(select($nameOf[.] != null)) | unique)
       | add // []
       | group_by(.)

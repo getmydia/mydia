@@ -49,6 +49,8 @@
       mixLib = import ./mix-lib.nix { inherit pkgs lib; };
       inherit (mixLib) setupHome;
 
+      # ci.yml's E2E job exports the MYDIA_* variables below by hand in its
+      # devenv heredoc; keep it in sync.
       env = mixLib.mixEnv beamPackages // {
         # The Docker image's switches: load the NIFs from priv/native and the
         # plugin guests from priv/plugins rather than running cargo. Both are

@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -93,7 +93,7 @@ jobs:
       all: ${{ steps.plan.outputs.all }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -159,7 +159,7 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.inputs) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -196,7 +196,7 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.checks) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -237,7 +237,7 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.nixos) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -311,7 +311,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -327,9 +327,10 @@ jobs:
 
   # Blocks new complexity, nesting and module-size debt relative to the merge
   # base (see "Ratchets" in CONTRIBUTING.md). It reads git history, so it is
-  # a job rather than a check, but it compiles nothing: it lays the cached
-  # test build over the checkout (scripts/ci-restore-test-build.sh, which
-  # needs the checkout at /build/source). It waits for the inputs wave,
+  # a job rather than a check, but it does not compile the app: it lays the
+  # cached test build over the checkout (scripts/ci-restore-test-build.sh,
+  # which needs the checkout at /build/source), and Mix recompiles only a
+  # handful of files (about 14). It waits for the inputs wave,
   # which builds and pushes that test build when the run changed it.
   ratchet:
     name: Lint / Ratchet
@@ -339,7 +340,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # mix mydia.ratchet compares against the merge base with origin/master.
           fetch-depth: 0
@@ -380,7 +381,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -426,17 +427,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # The restored test build comes from niks3; keep it out of Cachix.
+      # Read-only: everything the restore may build here (the test build and,
+      # on a cache miss, mixDepsCompiled, wasmexNif, the NIFs, pluginWasm)
+      # belongs in niks3, not Cachix. The devenv environment comes from
+      # Cachix and cache.nixos.org as before.
       - name: Set up devenv
         uses: ./.github/actions/setup-devenv
         with:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-          push-filter: mydia-test-build
+          skip-push: 'true'
 
       # Bind-mounts the checkout at /build/source; later steps run there.
       - name: Restore the cached test build
@@ -446,8 +449,9 @@ jobs:
       # tasks, so the heredoc runs the equivalent setup (hex/rebar) itself, in
       # one `devenv shell` so the environment evaluates once. No
       # `mix deps.get`: deps/ came with the test build. The MYDIA_* variables
-      # are the test build's compile-time config (nix/ci/elixir.nix); a
-      # different value would recompile the app. run-feature-tests.sh finds
+      # are the test build's compile-time config, copied from `env` in
+      # nix/ci/elixir.nix: keep the two in sync, or a different value
+      # recompiles the whole app. run-feature-tests.sh finds
       # chromium on PATH and honors CHROMEDRIVER_PATH, so no separate Chrome
       # action is needed.
       - name: Feature tests (E2E) under devenv
