@@ -7,7 +7,8 @@ name: CI
 #   plan          nix-eval-jobs --check-cache-status: which checks the cache lacks
 #   inputs        ciInternal derivations two or more of those checks need, built once
 #   checks        one job per uncached check; inputs come from the cache by now
-#   nixos         the NixOS module VM tests, the same way but non-blocking
+#   nixos         the NixOS module VM tests, the same way but non-blocking;
+#                 master pushes and workflow_dispatch only, never PRs
 #   Nix / Checks  the aggregator of plan, inputs and checks
 #   pins          master only: refresh the master-<name> pin of every output
 #
@@ -129,12 +130,16 @@ jobs:
           {
             echo "### Nix plan"
             echo
-            echo "$(jq '.inputs | length' "$plan") inputs, $(jq '.checks | length' "$plan") checks and $(jq '.nixos | length' "$plan") NixOS VM tests (non-blocking) to build; everything else is cached."
+            nixos_note="to build"
+            if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+              nixos_note="uncached, not built on pull requests"
+            fi
+            echo "$(jq '.inputs | length' "$plan") inputs and $(jq '.checks | length' "$plan") checks to build, $(jq '.nixos | length' "$plan") NixOS VM tests (non-blocking) $nixos_note; everything else is cached."
             echo
-            jq -r '
+            jq -r --arg note "$nixos_note" '
               (.inputs | map("- input `\(.name)`")),
               (.checks | map("- `\(.name)` (\(.group))")),
-              (.nixos | map("- `\(.name)` (nixos, non-blocking)"))
+              (.nixos | map("- `\(.name)` (nixos, non-blocking, \($note))"))
               | .[]' "$plan"
           } >> "$GITHUB_STEP_SUMMARY"
           jq 'del(.all)' "$plan"
@@ -221,13 +226,16 @@ jobs:
   # build and push as `checks`, but outside the Nix / Checks verdict, so they
   # block nothing. The package they boot takes the whole repo as its source
   # (src = ../..), so they rerun on nearly every commit, and a QEMU boot on a
-  # shared runner is the slowest and flakiest build in the set. They still
-  # run on every PR and show their own result; a red one is worth a look
-  # before merge. Master pins include them.
+  # shared runner is the slowest and flakiest build in the set. That made them
+  # cost ~28 runner-minutes on every PR, a docs-only one included, so they
+  # run on master pushes and manual dispatches only, never on pull_request.
+  # For pre-merge results on a .nix, flake.lock or packaging change, dispatch
+  # this workflow on the branch: gh workflow run ci.yml --ref <branch>.
+  # Master pins include them.
   nixos:
     name: Nix / NixOS (${{ matrix.name }})
     needs: [plan, inputs]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.nixos != '[]' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.plan.outputs.nixos != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:

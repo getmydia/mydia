@@ -10,7 +10,7 @@ here silently replaces the project's front page with this document. It did, from
 46cbdfdb0 until it was noticed. Any new doc in this directory needs a name other
 than `README.md`.
 
-## The NixOS module tests run on every PR but block nothing
+## The NixOS module tests run on master only and block nothing
 
 `nixos-module` and `nixos-module-postgres` (`nix/checks/flake-module.nix`) boot
 the package in a QEMU VM. They are flake checks, no longer gated on
@@ -25,17 +25,24 @@ builds them in their own matrix job, `Nix / NixOS (<name>)`, which
 every other check these two rerun, package build included, on almost every
 commit; and a QEMU boot on a shared runner is the slowest and flakiest build
 in the set. Gating every merge on them would make a VM hiccup a merge
-blocker. They still run on every PR whose change reaches them and report
-their own result, and master pins include them. When both are already in
-the cache (a passed result for exactly this input), the planner leaves the
-NixOS matrix empty and the job is skipped, so the PR shows no
-`Nix / NixOS` result at all; the `Nix / Plan` job summary lists what was
-built and says everything else was cached.
+blocker.
 
-So a red `Nix / NixOS` is a real signal nobody is forced to read. Look at it
-before merging any `.nix`, `flake.lock` or packaging change, and for such a
-change build the affected checks locally first
-(`nix build .#checks.x86_64-linux.<name> -L`).
+They also do not run on pull requests. Because the package reads the whole
+repository, a docs-only or translation-only PR rebuilt both, about 28
+runner-minutes and 16 minutes of wall clock per PR, for a result nobody had
+to read. The job's condition excludes `pull_request`, so it runs on master
+pushes and on manual dispatches, and master pins include its outputs. On a
+PR the `Nix / Plan` summary still lists the NixOS tests the cache lacks,
+marked as not built, and no `Nix / NixOS` job appears. On master, when both
+are already in the cache (a passed result for exactly this input), the
+planner leaves the matrix empty and the job is skipped.
+
+So a red `Nix / NixOS` on master is a real signal nobody is forced to read.
+For any `.nix`, `flake.lock` or packaging change, get the result before
+merging: build the affected checks locally
+(`nix build .#checks.x86_64-linux.<name> -L`), or dispatch CI on the branch
+(`gh workflow run ci.yml --ref <branch>`), which runs the NixOS jobs and
+pushes their outputs, so master's own run then finds them cached.
 
 ## npmDeps.hash must move with package-lock.json
 
@@ -68,9 +75,11 @@ ran on master pushes only.
 The package now builds in ci.yml's NixOS module jobs, so a stale hash that gets
 past the freshness check shows as a red `Nix / NixOS (<name>)` (the package
 builds inside that job; the blocking `Nix / Input` wave never builds what only
-the NixOS tests need). Those jobs do not block merging (see "The
-NixOS module tests run on every PR but block nothing"), so look at them. When
-one is red, grep its log for `hash mismatch` first. It is a one-line fix
+the NixOS tests need). Those jobs block nothing and run only on master and
+manual dispatches (see "The NixOS module tests run on master only and block
+nothing"), so the freshness check is the only pre-merge guard: after a
+`package-lock.json` change, dispatch CI on the branch or build
+`.#packages.x86_64-linux.default` locally before merging. When one is red, grep its log for `hash mismatch` first. It is a one-line fix
 (`./scripts/update-npm-deps-hash.sh`) and it masks everything downstream,
 since the build aborts before the Rust crate vendoring even starts.
 
@@ -294,8 +303,8 @@ moves too.
 Every check a nix bump needs runs on its pull request, because the gate's
 merge starts no workflows on master (the trap that left the Cardigann guest
 unpublished). `flake.lock` moving changes the toolchain under every flake
-check, so the whole `ci.yml` check matrix reruns, NixOS module tests
-included; `devenv.lock` moving reruns the E2E job; and the fixup touches nothing under
+check, so the whole `ci.yml` check matrix reruns (the NixOS module tests
+run only once the bump reaches master); `devenv.lock` moving reruns the E2E job; and the fixup touches nothing under
 `.github/workflows/`, which the gate could not merge. `nixpkgs-android` is
 ignored: it moves by hand, with Flutter.
 
@@ -531,8 +540,8 @@ with what each derivation reads, is in `nix/ci/README.md`, "The derivation
 graph". In short: a `lib/` edit rebuilds the two test builds and everything
 on top of them and leaves the dependency builds, the PLT, the NIFs and the
 Rust and relay checks cached; a `test/` edit reruns only the shards; a
-workflow edit reruns only `ci-workflow-triggers` (plus the non-blocking NixOS
-tests, whose package takes the whole repo as source, as on any edit). A
+workflow edit reruns only `ci-workflow-triggers` (plus, on master, the
+non-blocking NixOS tests, whose package takes the whole repo as source). A
 Weblate `.po`-only PR
 rebuilds the test build and runs every shard, because Gettext compiles the
 catalogs into the backend; the old `Translations` fast path is gone.
@@ -551,8 +560,8 @@ The jobs, in order:
 - `Nix / <check>` is one job per uncached check: `scripts/ci-nix-build.sh`,
   then a push of the output.
 - `Nix / NixOS (<name>)` builds the uncached NixOS module VM tests the same
-  way, outside the verdict (see "The NixOS module tests run on every PR but
-  block nothing").
+  way, outside the verdict, on master pushes and manual dispatches only (see
+  "The NixOS module tests run on master only and block nothing").
 - `Nix / Checks` aggregates plan, inputs and checks: success when the plan
   succeeded and each of the two build jobs succeeded or was skipped (an
   empty matrix).
