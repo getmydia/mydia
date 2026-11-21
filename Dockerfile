@@ -189,10 +189,12 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 # after `COPY lib`, so any Elixir change rebuilt all bundled crates from scratch
 # (~133s on every backend PR's Player E2E server image build). Built here from
 # the SDK and `plugins/` alone, the layer stays cached in the registry until
-# `plugins/`, `native/mydia_plugin_sdk/`, or the toolchain changes. Target dirs
-# stay in BuildKit cache mounts so only the compact `.wasm` outputs land in `/out`.
+# `plugins/`, `native/mydia_plugin_sdk/`, `native/mydia_plugin_macros/`, or the
+# toolchain changes. Target dirs stay in BuildKit cache mounts so only the
+# compact `.wasm` outputs land in `/out`.
 FROM toolchain AS plugins
 COPY native/mydia_plugin_sdk ./native/mydia_plugin_sdk
+COPY native/mydia_plugin_macros ./native/mydia_plugin_macros
 COPY plugins ./plugins
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
