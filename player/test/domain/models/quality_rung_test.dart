@@ -14,10 +14,11 @@ void main() {
     });
 
     test('a 720p source starts at 720p', () {
-      expect(
-        deriveAdaptiveLadder(sourceHeight: 720).map((r) => r.label),
-        ['720p', '480p', '360p'],
-      );
+      expect(deriveAdaptiveLadder(sourceHeight: 720).map((r) => r.label), [
+        '720p',
+        '480p',
+        '360p',
+      ]);
     });
 
     test('a source below every rung, or unknown, yields nothing', () {
@@ -39,10 +40,13 @@ void main() {
     test('offers every rung below a 4K source', () {
       final ladder = deriveQualityLadder(sourceHeight: 2160);
 
-      expect(
-        ladder.map((r) => r.label),
-        ['Original', '1080p', '720p', '480p', '360p'],
-      );
+      expect(ladder.map((r) => r.label), [
+        'Original',
+        '1080p',
+        '720p',
+        '480p',
+        '360p',
+      ]);
     });
 
     test('never offers a rung at or above the source height', () {
@@ -103,8 +107,11 @@ void main() {
     });
 
     test('round-trips a capped rung', () {
-      const rung =
-          QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+      const rung = QualityRung(
+        label: '720p',
+        height: 720,
+        maxBitrateKbps: 4000,
+      );
 
       expect(rung.storageKey, '720p');
       expect(QualityRung.fromStorageKey('720p'), rung);
@@ -140,8 +147,10 @@ void main() {
     });
 
     test('is not on the manual ladder', () {
-      expect(deriveQualityLadder(sourceHeight: 1080),
-          isNot(contains(QualityRung.auto)));
+      expect(
+        deriveQualityLadder(sourceHeight: 1080),
+        isNot(contains(QualityRung.auto)),
+      );
       expect(deriveQualityLadder(), [QualityRung.original]);
     });
   });
@@ -162,19 +171,18 @@ void main() {
     });
 
     test(
-        'falls back to the height when the server clamped to an off-ladder pair',
-        () {
-      // A relay clamps to 2000kbps and 720p, which is not a ladder pair. The
-      // viewer still needs an honest label, so height wins.
-      expect(
-        effectiveRungLabel(maxHeight: 720, maxBitrateKbps: 2000)?.label,
-        '720p',
-      );
-    });
+      'falls back to the height when the server clamped to an off-ladder pair',
+      () {
+        // A relay clamps to 2000kbps and 720p, which is not a ladder pair. The
+        // viewer still needs an honest label, so height wins.
+        expect(
+          effectiveRungLabel(maxHeight: 720, maxBitrateKbps: 2000)?.label,
+          '720p',
+        );
+      },
+    );
 
-    test(
-        'returns null when only a bitrate cap is reported, pinning current behaviour',
-        () {
+    test('returns null when only a bitrate cap is reported, pinning current behaviour', () {
       // This pins the current null return as intended, not as a gap: with no
       // height there is no honest rung to name. The caller (the player
       // screen, Task 11) does `(_effectiveQuality ?? _selectedQuality).label`,
@@ -191,14 +199,20 @@ void main() {
       // *asked* for, which is the one thing labelling from the applied value
       // exists to prevent. A server free to clamp anywhere is not obliged to
       // land on one of the four ladder heights.
-      final effective =
-          effectiveRungLabel(maxHeight: 540, maxBitrateKbps: 1800);
+      final effective = effectiveRungLabel(
+        maxHeight: 540,
+        maxBitrateKbps: 1800,
+      );
 
       expect(effective?.label, '540p');
       expect(effective?.height, 540);
-      expect(effective?.maxBitrateKbps, 1800,
-          reason: 'the synthesised rung describes what the server applied, '
-              'not a ladder entry');
+      expect(
+        effective?.maxBitrateKbps,
+        1800,
+        reason:
+            'the synthesised rung describes what the server applied, '
+            'not a ladder entry',
+      );
     });
 
     test('names an off-ladder height even with no bitrate reported', () {
@@ -214,11 +228,16 @@ void main() {
       // from the echoed bitrate. Equality against `_selectedQuality` is what
       // decides whether the clamp note appears, and two rungs that differ
       // only in bitrate are not equal.
-      const ladderRung =
-          QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+      const ladderRung = QualityRung(
+        label: '720p',
+        height: 720,
+        maxBitrateKbps: 4000,
+      );
 
       expect(
-          effectiveRungLabel(maxHeight: 720, maxBitrateKbps: 2000), ladderRung);
+        effectiveRungLabel(maxHeight: 720, maxBitrateKbps: 2000),
+        ladderRung,
+      );
     });
 
     test('treats a non-positive height as unnameable', () {
@@ -230,27 +249,32 @@ void main() {
   });
 
   group('equality', () {
-    test('compares by field, not just identity, for non-identical instances',
-        () {
-      // Two `const QualityRung(...)` literals with equal fields get
-      // canonicalized into the same object by Dart, so comparing them only
-      // exercises the `identical(this, other)` fast path in `==` and never
-      // proves the field-by-field branch works. Deriving the height from a
-      // runtime value (not a literal) forces a genuinely distinct instance,
-      // the same situation Task 11 hits when it rebuilds a rung from
-      // GraphQL response fields at runtime instead of a compile-time const.
-      final runtimeHeight = int.parse('720');
-      final rebuilt = QualityRung(
-        label: '720p',
-        height: runtimeHeight,
-        maxBitrateKbps: 4000,
-      );
-      const literal =
-          QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+    test(
+      'compares by field, not just identity, for non-identical instances',
+      () {
+        // Two `const QualityRung(...)` literals with equal fields get
+        // canonicalized into the same object by Dart, so comparing them only
+        // exercises the `identical(this, other)` fast path in `==` and never
+        // proves the field-by-field branch works. Deriving the height from a
+        // runtime value (not a literal) forces a genuinely distinct instance,
+        // the same situation Task 11 hits when it rebuilds a rung from
+        // GraphQL response fields at runtime instead of a compile-time const.
+        final runtimeHeight = int.parse('720');
+        final rebuilt = QualityRung(
+          label: '720p',
+          height: runtimeHeight,
+          maxBitrateKbps: 4000,
+        );
+        const literal = QualityRung(
+          label: '720p',
+          height: 720,
+          maxBitrateKbps: 4000,
+        );
 
-      expect(identical(rebuilt, literal), isFalse);
-      expect(rebuilt, literal);
-      expect(rebuilt.hashCode, literal.hashCode);
-    });
+        expect(identical(rebuilt, literal), isFalse);
+        expect(rebuilt, literal);
+        expect(rebuilt.hashCode, literal.hashCode);
+      },
+    );
   });
 }

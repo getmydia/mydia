@@ -12,13 +12,13 @@ class _Signals {
   }
 
   Future<void> close() => Future.wait([
-        position.close(),
-        buffer.close(),
-        buffering.close(),
-        playing.close(),
-        error.close(),
-        track.close(),
-      ]);
+    position.close(),
+    buffer.close(),
+    buffering.close(),
+    playing.close(),
+    error.close(),
+    track.close(),
+  ]);
 
   final position = StreamController<Duration>.broadcast();
   final buffer = StreamController<Duration>.broadcast();
@@ -28,13 +28,13 @@ class _Signals {
   final track = StreamController<Object>.broadcast();
 
   PlayerSignals get signals => PlayerSignals(
-        position: position.stream,
-        buffer: buffer.stream,
-        buffering: buffering.stream,
-        playing: playing.stream,
-        error: error.stream,
-        track: track.stream,
-      );
+    position: position.stream,
+    buffer: buffer.stream,
+    buffering: buffering.stream,
+    playing: playing.stream,
+    error: error.stream,
+    track: track.stream,
+  );
 }
 
 class _ScriptedSampler implements FrameStatsSampler {
@@ -63,8 +63,9 @@ class _DelayedFirstSampler implements FrameStatsSampler {
   Future<FrameStats?> sample() {
     calls++;
     activeCalls++;
-    peakActiveCalls =
-        activeCalls > peakActiveCalls ? activeCalls : peakActiveCalls;
+    peakActiveCalls = activeCalls > peakActiveCalls
+        ? activeCalls
+        : peakActiveCalls;
 
     final result = calls == 1
         ? _first.future

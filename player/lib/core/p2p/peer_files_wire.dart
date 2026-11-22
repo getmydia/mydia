@@ -24,17 +24,15 @@ const _recordOverhead = 9;
 List<Uint8List> encodeJsonRecords<T>(
   Iterable<T> records,
   Map<String, dynamic> Function(T) toMap,
-) =>
-    [for (final r in records) _encode(toMap(r))];
+) => [for (final r in records) _encode(toMap(r))];
 
 List<T> decodeJsonRecords<T>(
   List<Uint8List> blobs,
   T Function(Map<dynamic, dynamic>) fromMap,
-) =>
-    [
-      for (final b in blobs)
-        fromMap(jsonDecode(utf8.decode(b)) as Map<dynamic, dynamic>),
-    ];
+) => [
+  for (final b in blobs)
+    fromMap(jsonDecode(utf8.decode(b)) as Map<dynamic, dynamic>),
+];
 
 Uint8List _encode(Map<String, dynamic> map) =>
     Uint8List.fromList(utf8.encode(jsonEncode(map)));

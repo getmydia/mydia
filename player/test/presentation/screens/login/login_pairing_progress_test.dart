@@ -50,25 +50,26 @@ void main() {
   final en = AppLocalizationsEn();
 
   ProviderContainer containerFor(PairingService pairing) {
-    final c = ProviderContainer(overrides: [
-      ...noHiveOverrides,
-      loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),
-      pairingServiceProvider.overrideWithValue(pairing),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        ...noHiveOverrides,
+        loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),
+        pairingServiceProvider.overrideWithValue(pairing),
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
 
   test('a claim code walks the steps and maps each to a status', () async {
-    final c = containerFor(_FailingPairing(
-      const [
+    final c = containerFor(
+      _FailingPairing(const [
         PairingStep.resolvingCode,
         PairingStep.initializing,
         PairingStep.connecting,
         PairingStep.submitting,
-      ],
-      const PairingFailure(PairingFailureKind.invalidCode),
-    ));
+      ], const PairingFailure(PairingFailureKind.invalidCode)),
+    );
     final seen = <(PairingStep?, ClaimCodeStatus)>[];
     c.listen(loginControllerProvider, (_, s) {
       seen.add((s.pairingStep, s.claimCodeStatus));
@@ -87,14 +88,18 @@ void main() {
   });
 
   test('a QR code starts at validating', () async {
-    final c = containerFor(_FailingPairing(
-      const [],
-      const PairingFailure(PairingFailureKind.cannotConnect),
-    ));
+    final c = containerFor(
+      _FailingPairing(
+        const [],
+        const PairingFailure(PairingFailureKind.cannotConnect),
+      ),
+    );
     final steps = <PairingStep?>[];
     c.listen(loginControllerProvider, (_, s) => steps.add(s.pairingStep));
 
-    await c.read(loginControllerProvider.notifier).pairWithQrCode(
+    await c
+        .read(loginControllerProvider.notifier)
+        .pairWithQrCode(
           const QrPairingData(nodeAddr: '{}', claimCode: 'ABC123'),
         );
 
@@ -102,11 +107,13 @@ void main() {
   });
 
   test('a failed pairing carries its kind, worded by the screen', () async {
-    final c = containerFor(_FailingPairing(
-      const [],
-      const PairingFailure(PairingFailureKind.invalidCode),
-    ));
-    c.listen(loginControllerProvider, (_, __) {});
+    final c = containerFor(
+      _FailingPairing(
+        const [],
+        const PairingFailure(PairingFailureKind.invalidCode),
+      ),
+    );
+    c.listen(loginControllerProvider, (_, _) {});
 
     await c.read(loginControllerProvider.notifier).pairWithClaimCode('ABC123');
 
@@ -119,13 +126,17 @@ void main() {
 
   test('an unexpected failure keeps its technical detail verbatim', () {
     expect(
-      en.loginFailure(const LoginFailureOfPairing(
-          PairingFailure(PairingFailureKind.other, detail: 'Bad state: x'))),
+      en.loginFailure(
+        const LoginFailureOfPairing(
+          PairingFailure(PairingFailureKind.other, detail: 'Bad state: x'),
+        ),
+      ),
       'Pairing failed: Bad state: x',
     );
     expect(
-      en.loginFailure(const LoginFailureOfPairing(
-          PairingFailure(PairingFailureKind.other))),
+      en.loginFailure(
+        const LoginFailureOfPairing(PairingFailure(PairingFailureKind.other)),
+      ),
       'Pairing failed',
     );
   });

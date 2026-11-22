@@ -37,17 +37,19 @@ void contract(String name, Future<SourceCache> Function() make) {
       expect(cache.read(_a2), isNotNull);
     });
 
-    test('deleteAccount removes that account only, not a prefix twin',
-        () async {
-      final cache = await make();
-      await cache.write(_a1, 1, _at);
-      await cache.write(_a2, 2, _at);
-      await cache.write(_b1, 3, _at);
-      await cache.deleteAccount('acc1');
-      expect(cache.read(_a1), isNull);
-      expect(cache.read(_a2), isNull);
-      expect(cache.read(_b1), isNotNull);
-    });
+    test(
+      'deleteAccount removes that account only, not a prefix twin',
+      () async {
+        final cache = await make();
+        await cache.write(_a1, 1, _at);
+        await cache.write(_a2, 2, _at);
+        await cache.write(_b1, 3, _at);
+        await cache.deleteAccount('acc1');
+        expect(cache.read(_a1), isNull);
+        expect(cache.read(_a2), isNull);
+        expect(cache.read(_b1), isNotNull);
+      },
+    );
   });
 }
 
@@ -70,15 +72,19 @@ void main() {
     Future<Box<String>> box() => Hive.openBox<String>(HiveSourceCache.boxName);
 
     contract(
-        'contract', () async => HiveSourceCache.fromBox(await box(), now: _at));
+      'contract',
+      () async => HiveSourceCache.fromBox(await box(), now: _at),
+    );
 
     test('opening drops entries older than the retention', () async {
       final b = await box();
       final first = await HiveSourceCache.fromBox(b, now: _at);
       await first.write(_a1, 1, _at);
       await first.write(_a2, 2, _at.add(const Duration(days: 20)));
-      final later = await HiveSourceCache.fromBox(b,
-          now: _at.add(const Duration(days: 31)));
+      final later = await HiveSourceCache.fromBox(
+        b,
+        now: _at.add(const Duration(days: 31)),
+      );
       expect(later.read(_a1), isNull);
       expect(later.read(_a2), isNotNull);
     });
@@ -93,8 +99,11 @@ void main() {
           _at.add(Duration(hours: i)),
         );
       }
-      final capped = await HiveSourceCache.fromBox(b,
-          now: _at.add(const Duration(days: 1)), maxEntries: 3);
+      final capped = await HiveSourceCache.fromBox(
+        b,
+        now: _at.add(const Duration(days: 1)),
+        maxEntries: 3,
+      );
       QueryKey k(int i) => QueryKey('acc1:owner:srv1/item', {'id': '$i'});
       expect(capped.read(k(0)), isNull);
       expect(capped.read(k(1)), isNull);
@@ -105,8 +114,10 @@ void main() {
 
     test('an entry from another schema version reads as absent', () async {
       final b = await box();
-      await b.put(_a1.canonical,
-          jsonEncode({'v': 999, 'at': _at.millisecondsSinceEpoch, 'd': 1}));
+      await b.put(
+        _a1.canonical,
+        jsonEncode({'v': 999, 'at': _at.millisecondsSinceEpoch, 'd': 1}),
+      );
       final cache = await HiveSourceCache.fromBox(b, now: _at);
       expect(cache.read(_a1), isNull);
     });

@@ -46,8 +46,10 @@ final orphanDownloadSweepProvider = Provider<void>((ref) {
       final removed = await manager.deleteDownloadsOfUnknownAccounts(known);
       sweptWith = known;
       if (removed > 0) {
-        debugPrint('[downloads] Removed $removed download(s) of '
-            'accounts that no longer exist');
+        debugPrint(
+          '[downloads] Removed $removed download(s) of '
+          'accounts that no longer exist',
+        );
       }
     } catch (e) {
       // Best effort: the next change of the accounts tries again.

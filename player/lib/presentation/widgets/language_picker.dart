@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/palette.dart';
 import '../../l10n/l10n.dart';
@@ -41,22 +41,20 @@ Future<LanguageChoice?> showLanguagePicker(
         required String label,
         required bool selected,
         required LanguageChoice choice,
-      }) =>
-          ListTile(
-            key: key,
-            autofocus: selected,
-            selected: selected,
-            title: Text(
-              label,
-              style: TextStyle(
-                color: palette.textPrimary,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-            trailing:
-                selected ? Icon(Icons.check, color: palette.primary) : null,
-            onTap: () => Navigator.of(context).pop(choice),
-          );
+      }) => ListTile(
+        key: key,
+        autofocus: selected,
+        selected: selected,
+        title: Text(
+          label,
+          style: TextStyle(
+            color: palette.textPrimary,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        trailing: selected ? Icon(Icons.check, color: palette.primary) : null,
+        onTap: () => Navigator.of(context).pop(choice),
+      );
 
       return OsdDialog(
         title: Text(context.l10n.settingsLanguageTitle),

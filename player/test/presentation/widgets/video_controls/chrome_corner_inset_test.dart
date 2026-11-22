@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
@@ -73,8 +73,7 @@ void main() {
       }
     });
 
-    testWidgets(
-        'leaves at least a 12px gap above the panel\'s real, measured '
+    testWidgets('leaves at least a 12px gap above the panel\'s real, measured '
         'height at every tier — not a second copy of `_panelHeight`\'s own '
         'arithmetic, which would drift in lockstep with a production bug '
         'and never catch it', (tester) async {
@@ -97,7 +96,8 @@ void main() {
         expect(
           clearance,
           greaterThanOrEqualTo(measuredHeight + 12),
-          reason: 'insufficient clearance at ${width}px: the panel measured '
+          reason:
+              'insufficient clearance at ${width}px: the panel measured '
               '${measuredHeight}px tall but the corner inset only left '
               '${clearance}px above it',
         );

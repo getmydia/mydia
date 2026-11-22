@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../../../widgets/artwork_image.dart';
@@ -31,11 +31,7 @@ class DownloadArtwork extends StatelessWidget {
     final empty = placeholder?.call(context) ?? const SizedBox.shrink();
     final path = localPath;
     if (path != null && File(path).existsSync()) {
-      return Image.file(
-        File(path),
-        fit: fit,
-        errorBuilder: (_, __, ___) => empty,
-      );
+      return Image.file(File(path), fit: fit, errorBuilder: (_, _, _) => empty);
     }
     final url = fallbackUrl;
     if (url != null &&

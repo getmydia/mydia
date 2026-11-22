@@ -241,7 +241,9 @@ void main() {
       expect(mediaContextLocation(MediaContextAction.play, target), isNull);
       expect(
         mediaContextLocation(
-            MediaContextAction.removeFromContinueWatching, target),
+          MediaContextAction.removeFromContinueWatching,
+          target,
+        ),
         isNull,
       );
     });

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/theme/colors.dart';
@@ -61,8 +61,9 @@ class CastBarRow extends StatelessWidget {
                       Flexible(
                         child: Text(
                           status,
-                          style: text.bodySmall
-                              ?.copyWith(color: palette.textSecondary),
+                          style: text.bodySmall?.copyWith(
+                            color: palette.textSecondary,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

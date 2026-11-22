@@ -45,8 +45,9 @@ class SessionSourceCastBinding implements SourceCastBinding {
       final (detail, version) = await _session.pickedVersion();
       if (version == null) {
         throw CastBackendException(
-          currentAppLocalizations()
-              .playbackIssueText(PlaybackIssue.noPlayableFile),
+          currentAppLocalizations().playbackIssueText(
+            PlaybackIssue.noPlayableFile,
+          ),
           CastFailureKind.mediaLoadFailed,
         );
       }
@@ -60,7 +61,8 @@ class SessionSourceCastBinding implements SourceCastBinding {
           .where((t) => t.burnedIn && t.trackId == subtitleTrackId)
           .firstOrNull
           ?.trackId;
-      final transcode = forceTranscode ||
+      final transcode =
+          forceTranscode ||
           burn != null ||
           !receiverCanCopyVideo(version.videoCodec);
 
@@ -75,13 +77,20 @@ class SessionSourceCastBinding implements SourceCastBinding {
                   : PlanReason.copyAccepted,
             );
 
-      final resolver = _session.createReceiverResolver(detail, version,
-          // Plex burns the part's selected stream; '0' clears a previous
-          // choice when subtitles are off.
-          burnSubtitleStreamId:
-              subtitles.any((t) => t.burnedIn) ? (burn ?? '0') : null);
-      final stream = await resolver.resolve(plan,
-          fileId: version.id, startAt: startPosition);
+      final resolver = _session.createReceiverResolver(
+        detail,
+        version,
+        // Plex burns the part's selected stream; '0' clears a previous
+        // choice when subtitles are off.
+        burnSubtitleStreamId: subtitles.any((t) => t.burnedIn)
+            ? (burn ?? '0')
+            : null,
+      );
+      final stream = await resolver.resolve(
+        plan,
+        fileId: version.id,
+        startAt: startPosition,
+      );
       final sessionId = stream.sessionId;
       if (sessionId != null) _resolvers[sessionId] = resolver;
 
@@ -111,13 +120,11 @@ class SessionSourceCastBinding implements SourceCastBinding {
         transcoded: !isDlna && !isProgressiveBridge && transcode,
       );
     } on SourceException catch (e) {
-      throw CastBackendException(
-          e.logText,
-          switch (e.kind) {
-            SourceErrorKind.unreachable => CastFailureKind.unreachable,
-            SourceErrorKind.unauthorized => CastFailureKind.notAuthorized,
-            _ => CastFailureKind.mediaLoadFailed,
-          });
+      throw CastBackendException(e.logText, switch (e.kind) {
+        SourceErrorKind.unreachable => CastFailureKind.unreachable,
+        SourceErrorKind.unauthorized => CastFailureKind.notAuthorized,
+        _ => CastFailureKind.mediaLoadFailed,
+      });
     }
   }
 
@@ -134,12 +141,15 @@ class SessionSourceCastBinding implements SourceCastBinding {
 
   @override
   CastProgressSink openProgress() => ReporterCastProgressSink(
-      _session.createProgress() as PeriodicProgressReporter);
+    _session.createProgress() as PeriodicProgressReporter,
+  );
 }
 
 /// The [SourceCastBinder] the cast session manager is given.
 Future<SourceCastBinding> bindSourceCast(
-    Ref ref, SourceCastContent content) async {
+  Ref ref,
+  SourceCastContent content,
+) async {
   final id = content.item.sourceId;
   final media = ref.read(mediaSourceProvider(id));
   if (media == null) {

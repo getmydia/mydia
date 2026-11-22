@@ -52,8 +52,11 @@ MediaSource buildThirdPartySource(Ref ref, Source source) =>
       SourceKind.stash => _stash(ref, source),
       SourceKind.jellyfin => _jellyfin(ref, source),
       SourceKind.mydia => buildMydiaSource(ref, source),
-      SourceKind.files => buildFilesSource(ref, source,
-          onReauthNeeded: () => _flagReauth(ref, source)),
+      SourceKind.files => buildFilesSource(
+        ref,
+        source,
+        onReauthNeeded: () => _flagReauth(ref, source),
+      ),
     };
 
 /// A credential read once from secure storage and held until the server
@@ -65,23 +68,25 @@ class _CachedSecret {
 
   /// A failed read is not cached: the next request reads again.
   Future<String?> call() => _value ??= _read().then<String?>(
-        (v) => v,
-        onError: (Object e, StackTrace st) {
-          _value = null;
-          Error.throwWithStackTrace(e, st);
-        },
-      );
+    (v) => v,
+    onError: (Object e, StackTrace st) {
+      _value = null;
+      Error.throwWithStackTrace(e, st);
+    },
+  );
   void forget() => _value = null;
 }
 
 void _flagReauth(Ref ref, Source source) {
   if (!ref.mounted) return;
-  unawaited(ref
-      .read(sourceRecordsProvider.notifier)
-      .markNeedsReauth(source.account.id, true)
-      .catchError((Object e) {
-    debugPrint('[Sources] Could not flag the account for sign-in: $e');
-  }));
+  unawaited(
+    ref
+        .read(sourceRecordsProvider.notifier)
+        .markNeedsReauth(source.account.id, true)
+        .catchError((Object e) {
+          debugPrint('[Sources] Could not flag the account for sign-in: $e');
+        }),
+  );
 }
 
 PlexMediaSource _plex(Ref ref, Source source) {
@@ -95,8 +100,10 @@ PlexMediaSource _plex(Ref ref, Source source) {
   final connection = RacingConnection(
     expectedId: source.server.machineIdentifier ?? source.server.id,
     candidates: source.server.connections,
-    rank: (all) => rankPlexConnections(all,
-        allowInsecureLocal: !source.server.httpsRequired),
+    rank: (all) => rankPlexConnections(
+      all,
+      allowInsecureLocal: !source.server.httpsRequired,
+    ),
     probe: (base, timeout) => plexIdentityProbe(http, base, timeout),
     refetch: () =>
         _rediscoverPlex(ref, source, http, secrets, identity, rediscoveries),
@@ -139,12 +146,13 @@ Future<List<ServerConnection>> _rediscoverPlex(
 ) async {
   final key = '${source.account.id}/${source.profile.id}';
   final resources = await (inFlight[key] ??=
-      _fetchPlexResources(ref, source, http, secrets, identity)
-          .whenComplete(() {
-    // A block body: `remove` returns this very future, and a returned
-    // future would be awaited by itself.
-    inFlight.remove(key);
-  }));
+      _fetchPlexResources(ref, source, http, secrets, identity).whenComplete(
+        () {
+          // A block body: `remove` returns this very future, and a returned
+          // future would be awaited by itself.
+          inFlight.remove(key);
+        },
+      ));
   return resources
           ?.where((r) => r.clientIdentifier == source.server.id)
           .firstOrNull
@@ -175,11 +183,14 @@ Future<List<PlexResource>?> _fetchPlexResources(
   if (!ref.mounted) return null;
   // Only while this source's profile is still the active one: after a switch
   // these resources describe the old user's view, not the new profile's.
-  await ref.read(sourceRecordsProvider.notifier).updateRecord(
+  await ref
+      .read(sourceRecordsProvider.notifier)
+      .updateRecord(
         source.account.id,
         (current) async => current.account.activeProfileId == source.profile.id
             ? current.copyWith(
-                servers: reconcilePlexServers(current.servers, resources))
+                servers: reconcilePlexServers(current.servers, resources),
+              )
             : null,
       );
   return resources;
@@ -261,7 +272,9 @@ Future<List<ServerConnection>> _rediscoverJellyfin(
   if (info.id != source.server.id) return source.server.connections;
   final fresh = jellyfinConnections(entered, info.localAddress);
   if (ref.mounted && !listEquals(fresh, source.server.connections)) {
-    await ref.read(sourceRecordsProvider.notifier).updateServers(
+    await ref
+        .read(sourceRecordsProvider.notifier)
+        .updateServers(
           source.account.id,
           (servers) => [
             for (final s in servers)
@@ -316,9 +329,13 @@ MydiaSource buildMydiaSource(Ref ref, Source source) {
 /// How [c]'s server is reached: p2p to its node, else HTTP to its URL.
 MydiaGqlTransport mydiaTransportFor(Ref ref, MydiaCredentials c) => c.isP2p
     ? P2pMydiaTransport(
-        p2p: ref.read(p2pServiceProvider), nodeAddr: c.nodeAddr!)
+        p2p: ref.read(p2pServiceProvider),
+        nodeAddr: c.nodeAddr!,
+      )
     : HttpMydiaTransport(
-        serverUrl: c.serverUrl!, http: ref.read(sourceHttpProvider));
+        serverUrl: c.serverUrl!,
+        http: ref.read(sourceHttpProvider),
+      );
 
 /// Builds the real transport from the stored credentials on first use and
 /// keeps it. A failed load is not kept: the next request tries again.
@@ -331,12 +348,12 @@ class _LazyMydiaTransport implements MydiaGqlTransport {
 
   /// One build for concurrent first requests; a failure clears it.
   Future<MydiaGqlTransport> _resolve() => _transport ??= _build().then(
-        (t) => t,
-        onError: (Object e, StackTrace st) {
-          _transport = null;
-          Error.throwWithStackTrace(e, st);
-        },
-      );
+    (t) => t,
+    onError: (Object e, StackTrace st) {
+      _transport = null;
+      Error.throwWithStackTrace(e, st);
+    },
+  );
 
   Future<MydiaGqlTransport> _build() async {
     return mydiaTransportFor(_ref, await _load());
@@ -352,7 +369,11 @@ class _LazyMydiaTransport implements MydiaGqlTransport {
     String? token,
     String? deviceProfile,
     Duration? timeout,
-  }) async =>
-      (await _resolve()).send(query, variables,
-          token: token, deviceProfile: deviceProfile, timeout: timeout);
+  }) async => (await _resolve()).send(
+    query,
+    variables,
+    token: token,
+    deviceProfile: deviceProfile,
+    timeout: timeout,
+  );
 }

@@ -10,9 +10,15 @@ import '../sources/mydia/mydia_account_harness.dart';
 import '../sources/source_factories_test.dart' show atticRecord;
 
 const _ma = MydiaCredentials(
-    instanceId: 'a', accessToken: 'ta', serverUrl: 'https://a.example.test');
+  instanceId: 'a',
+  accessToken: 'ta',
+  serverUrl: 'https://a.example.test',
+);
 const _mb = MydiaCredentials(
-    instanceId: 'b', accessToken: 'tb', serverUrl: 'https://b.example.test');
+  instanceId: 'b',
+  accessToken: 'tb',
+  serverUrl: 'https://b.example.test',
+);
 
 void main() {
   Future<void> settle(ProviderContainer container) async {
@@ -35,38 +41,42 @@ void main() {
     addTearDown(h.container.dispose);
     await h.store.setLegacyInstanceId('ma');
     await settle(h.container);
-    h.container.listen(legacyMydiaSourceIdProvider, (_, __) {});
+    h.container.listen(legacyMydiaSourceIdProvider, (_, _) {});
     expect(h.container.read(legacyMydiaSourceIdProvider), idOf('a'));
 
     await h.container.read(sourceRecordsProvider.notifier).removeAccount('ma');
     expect(h.container.read(legacyMydiaSourceIdProvider), idOf('b'));
   });
 
-  test('an unusable legacy id with two accounts left resolves to nothing',
-      () async {
-    final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
-    addTearDown(h.container.dispose);
-    await h.store.setLegacyInstanceId('mz');
-    await settle(h.container);
-    expect(h.container.read(legacyMydiaSourceIdProvider), isNull);
-  });
+  test(
+    'an unusable legacy id with two accounts left resolves to nothing',
+    () async {
+      final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
+      addTearDown(h.container.dispose);
+      await h.store.setLegacyInstanceId('mz');
+      await settle(h.container);
+      expect(h.container.read(legacyMydiaSourceIdProvider), isNull);
+    },
+  );
 
-  test('never resolves another account while the legacy marker loads',
-      () async {
-    final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
-    addTearDown(h.container.dispose);
-    await h.store.setLegacyInstanceId('mb');
-    final seen = <SourceId?>[];
-    h.container.listen(
-      legacyMydiaSourceIdProvider,
-      (_, next) => seen.add(next),
-      fireImmediately: true,
-    );
-    await settle(h.container);
-    await Future<void>.delayed(Duration.zero);
-    expect(seen, isNot(contains(idOf('a'))));
-    expect(h.container.read(legacyMydiaSourceIdProvider), idOf('b'));
-  });
+  test(
+    'never resolves another account while the legacy marker loads',
+    () async {
+      final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
+      addTearDown(h.container.dispose);
+      await h.store.setLegacyInstanceId('mb');
+      final seen = <SourceId?>[];
+      h.container.listen(
+        legacyMydiaSourceIdProvider,
+        (_, next) => seen.add(next),
+        fireImmediately: true,
+      );
+      await settle(h.container);
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, isNot(contains(idOf('a'))));
+      expect(h.container.read(legacyMydiaSourceIdProvider), idOf('b'));
+    },
+  );
 
   test('no legacy id: the only Mydia instance', () async {
     final h = await mydiaAccountHarness({'a': _ma});

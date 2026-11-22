@@ -42,19 +42,18 @@ class LogUploadMeta {
     required String kind,
     String? report,
     String? note,
-  }) =>
-      {
-        'type': 'meta',
-        'kind': kind,
-        'device_id': deviceId,
-        'device_name': deviceName,
-        'platform': platform,
-        'os_version': osVersion,
-        'app_version': appVersion,
-        'build': build,
-        'report': report,
-        'note': note,
-      };
+  }) => {
+    'type': 'meta',
+    'kind': kind,
+    'device_id': deviceId,
+    'device_name': deviceName,
+    'platform': platform,
+    'os_version': osVersion,
+    'app_version': appVersion,
+    'build': build,
+    'report': report,
+    'note': note,
+  };
 }
 
 /// Why sending logs failed. The Send logs dialog words it
@@ -110,22 +109,16 @@ final class _Shrink extends _Outcome {
 
 class LogUploader {
   LogUploader({
-    required http.Client client,
-    required Uri endpoint,
-    required LogStore store,
-    required String sessionId,
-    required Future<LogUploadMeta> Function() loadMeta,
-    required List<int> Function(List<int> bytes) compress,
+    required this._client,
+    required this._endpoint,
+    required this._store,
+    required this._sessionId,
+    required this._loadMeta,
+    required this._compress,
     DateTime Function()? now,
     this.interval = const Duration(seconds: 60),
     this.maxBatchBytes = 2 * 1024 * 1024,
-  })  : _client = client,
-        _endpoint = endpoint,
-        _store = store,
-        _sessionId = sessionId,
-        _loadMeta = loadMeta,
-        _compress = compress,
-        _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   static const sizeTrigger = 256 * 1024;
   static const minBackoff = Duration(seconds: 30);
@@ -223,7 +216,8 @@ class LogUploader {
       if (_backoff > maxBackoff) _backoff = maxBackoff;
       _notBefore = _now().add(_backoff);
       debugPrint(
-          '[LogUploader] Upload failed, retrying in ${_backoff.inSeconds}s: $e');
+        '[LogUploader] Upload failed, retrying in ${_backoff.inSeconds}s: $e',
+      );
     } finally {
       _busy = false;
     }
@@ -242,12 +236,18 @@ class LogUploader {
       LogCursor? from;
       var budget = maxBatchBytes;
       while (true) {
-        final batch =
-            await _store.read(from: from, maxBytes: budget, untilMs: untilMs);
+        final batch = await _store.read(
+          from: from,
+          maxBytes: budget,
+          untilMs: untilMs,
+        );
         if (batch.lines.isEmpty) break;
         final outcome = await _send(
           meta.toJson(
-              kind: 'report', report: code, note: code == null ? note : null),
+            kind: 'report',
+            report: code,
+            note: code == null ? note : null,
+          ),
           batch.lines,
           budget: budget,
         );
@@ -256,9 +256,11 @@ class LogUploader {
           continue;
         }
         if (outcome is! _Sent) {
-          throw LogUploadException(outcome is _Wait
-              ? LogUploadFailure.relayBusy
-              : LogUploadFailure.relayRejected);
+          throw LogUploadException(
+            outcome is _Wait
+                ? LogUploadFailure.relayBusy
+                : LogUploadFailure.relayRejected,
+          );
         }
         budget = maxBatchBytes;
         code ??= outcome.code;
@@ -339,14 +341,15 @@ class LogUploader {
     }
   }
 
-  String _gapLine() => jsonEncode(LogRecord(
-        time: _now().toUtc(),
-        level: LogLevel.warn,
-        tag: 'LogUploader',
-        message:
-            'gap: local logs were rotated away before upload', // l10n-ignore: log text
-        sessionId: _sessionId,
-      ).toJson());
+  String _gapLine() => jsonEncode(
+    LogRecord(
+      time: _now().toUtc(),
+      level: LogLevel.warn,
+      tag: 'LogUploader',
+      message: 'gap: local logs were rotated away before upload', // l10n-ignore: log text
+      sessionId: _sessionId,
+    ).toJson(),
+  );
 
   Future<_Outcome> _send(
     Map<String, Object?> meta,

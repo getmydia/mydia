@@ -26,24 +26,30 @@ const List<String> googleOAuthScopes = <String>[
   googleDriveAppDataScope,
 ];
 
-final Uri googleAuthEndpoint =
-    Uri.parse('https://accounts.google.com/o/oauth2/v2/auth');
-final Uri googleTokenEndpoint =
-    Uri.parse('https://oauth2.googleapis.com/token');
-final Uri googleDeviceCodeEndpoint =
-    Uri.parse('https://oauth2.googleapis.com/device/code');
-final Uri googleRevokeEndpoint =
-    Uri.parse('https://oauth2.googleapis.com/revoke');
+final Uri googleAuthEndpoint = Uri.parse(
+  'https://accounts.google.com/o/oauth2/v2/auth',
+);
+final Uri googleTokenEndpoint = Uri.parse(
+  'https://oauth2.googleapis.com/token',
+);
+final Uri googleDeviceCodeEndpoint = Uri.parse(
+  'https://oauth2.googleapis.com/device/code',
+);
+final Uri googleRevokeEndpoint = Uri.parse(
+  'https://oauth2.googleapis.com/revoke',
+);
 
 /// Where [GoogleSignInAuth] reads the account email, since the plugin's
 /// authorization result carries only an access token.
-final Uri googleUserInfoEndpoint =
-    Uri.parse('https://openidconnect.googleapis.com/v1/userinfo');
+final Uri googleUserInfoEndpoint = Uri.parse(
+  'https://openidconnect.googleapis.com/v1/userinfo',
+);
 
 /// Where [GoogleSignInAuth] reads the scopes a token was granted, since the
 /// plugin's authorization result does not say.
-final Uri googleTokenInfoEndpoint =
-    Uri.parse('https://oauth2.googleapis.com/tokeninfo');
+final Uri googleTokenInfoEndpoint = Uri.parse(
+  'https://oauth2.googleapis.com/tokeninfo',
+);
 
 /// The [BackupRelayException.code] of a grant without
 /// [googleDriveAppDataScope]: Google's granular consent screen lets the
@@ -64,8 +70,11 @@ bool _grantsDriveAppData(String scope) =>
 /// GETs [url] and decodes its JSON body (null when not JSON). Transport
 /// failures are [BackupRelayError.network], HTTP errors server or
 /// unauthorized.
-Future<Object?> _getJson(http.Client client, Uri url,
-    {Map<String, String>? headers}) async {
+Future<Object?> _getJson(
+  http.Client client,
+  Uri url, {
+  Map<String, String>? headers,
+}) async {
   final http.Response res;
   try {
     res = await client
@@ -92,9 +101,14 @@ Future<Object?> _getJson(http.Client client, Uri url,
 
 /// Fetches the signed-in user's email address from Google's userinfo endpoint.
 Future<String> _fetchUserInfoEmail(
-    http.Client client, String accessToken) async {
-  final body = await _getJson(client, googleUserInfoEndpoint,
-      headers: {'authorization': 'Bearer $accessToken'});
+  http.Client client,
+  String accessToken,
+) async {
+  final body = await _getJson(
+    client,
+    googleUserInfoEndpoint,
+    headers: {'authorization': 'Bearer $accessToken'},
+  );
   final email = body is Map ? body['email'] : null;
   if (email is! String) {
     throw const BackupRelayException(
@@ -139,15 +153,13 @@ class GoogleOAuthResponse {
 /// then on this refreshes access tokens from the stored refresh token.
 class GoogleTokenAuth implements GoogleAuth {
   GoogleTokenAuth({
-    required AuthStorage storage,
-    required http.Client client,
+    required this._storage,
+    required this._client,
     required this.clientId,
     required this.clientSecret,
     this.clientKind = 'desktop',
     DateTime Function()? now,
-  })  : _storage = storage,
-        _client = client,
-        _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   final AuthStorage _storage;
   final http.Client _client;
@@ -177,8 +189,7 @@ class GoogleTokenAuth implements GoogleAuth {
 
   Future<T> _serialiseStorage<T>(Future<T> Function() op) {
     final next = _storageOps.then((_) => op());
-    _storageOps =
-        next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _storageOps = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return next;
   }
 
@@ -222,10 +233,11 @@ class GoogleTokenAuth implements GoogleAuth {
   }
 
   Future<String> _refresh({bool forceRefresh = false}) async {
-    final (refreshGeneration, refreshSession, grant) =
-        await _serialiseStorage(() async {
-      return (_signInGeneration, _committedSession, await _readGrant());
-    });
+    final (refreshGeneration, refreshSession, grant) = await _serialiseStorage(
+      () async {
+        return (_signInGeneration, _committedSession, await _readGrant());
+      },
+    );
     final refreshToken = grant?['refreshToken'];
     if (refreshToken == null || grant?['clientKind'] != clientKind) {
       throw const BackupRelayException(BackupRelayError.signedOut);
@@ -512,8 +524,9 @@ class PluginGoogleSignInBackend implements GoogleSignInBackend {
   GoogleSignInAccount? _account;
 
   Future<GoogleSignIn> _ready() async {
-    await (_initialized ??=
-        GoogleSignIn.instance.initialize(clientId: clientId));
+    await (_initialized ??= GoogleSignIn.instance.initialize(
+      clientId: clientId,
+    ));
     return GoogleSignIn.instance;
   }
 
@@ -555,13 +568,11 @@ class PluginGoogleSignInBackend implements GoogleSignInBackend {
 /// only `email`, for [currentEmail] to answer without the plugin.
 class GoogleSignInAuth implements GoogleAuth {
   GoogleSignInAuth({
-    required AuthStorage storage,
-    required http.Client client,
+    required this._storage,
+    required this._client,
     String? clientId,
     GoogleSignInBackend? backend,
-  })  : _storage = storage,
-        _client = client,
-        _backend = backend ?? PluginGoogleSignInBackend(clientId: clientId);
+  }) : _backend = backend ?? PluginGoogleSignInBackend(clientId: clientId);
 
   final AuthStorage _storage;
   final http.Client _client;
@@ -665,9 +676,11 @@ class GoogleSignInAuth implements GoogleAuth {
   /// tokeninfo endpoint.
   Future<String> _fetchGrantedScope(String accessToken) async {
     final body = await _getJson(
-        _client,
-        googleTokenInfoEndpoint
-            .replace(queryParameters: {'access_token': accessToken}));
+      _client,
+      googleTokenInfoEndpoint.replace(
+        queryParameters: {'access_token': accessToken},
+      ),
+    );
     final scope = body is Map ? body['scope'] : null;
     if (scope is! String) {
       throw const BackupRelayException(
@@ -685,14 +698,11 @@ class GoogleSignInAuth implements GoogleAuth {
   /// interrupted call is transient, anything else a platform failure. None
   /// of them clears the stored account.
   BackupRelayException _mapException(GoogleSignInException e) =>
-      BackupRelayException(
-        switch (e.code) {
-          GoogleSignInExceptionCode.canceled => BackupRelayError.signedOut,
-          GoogleSignInExceptionCode.interrupted => BackupRelayError.network,
-          _ => BackupRelayError.server,
-        },
-        code: e.code.name,
-      );
+      BackupRelayException(switch (e.code) {
+        GoogleSignInExceptionCode.canceled => BackupRelayError.signedOut,
+        GoogleSignInExceptionCode.interrupted => BackupRelayError.network,
+        _ => BackupRelayError.server,
+      }, code: e.code.name);
 }
 
 /// The platforms [googleFlowFor] distinguishes.
@@ -792,22 +802,22 @@ GoogleAuth? googleAuthForPlatform(AuthStorage s, {http.Client? client}) {
   return switch (kind) {
     null => null,
     GoogleFlowKind.signIn => GoogleSignInAuth(
-        storage: s,
-        client: c,
-        clientId: platform == GoogleTargetPlatform.ios ? defines.ios : null,
-      ),
+      storage: s,
+      client: c,
+      clientId: platform == GoogleTargetPlatform.ios ? defines.ios : null,
+    ),
     GoogleFlowKind.loopback => GoogleTokenAuth(
-        storage: s,
-        client: c,
-        clientId: defines.desktop,
-        clientSecret: defines.desktopSecret,
-      ),
+      storage: s,
+      client: c,
+      clientId: defines.desktop,
+      clientSecret: defines.desktopSecret,
+    ),
     GoogleFlowKind.deviceCode => GoogleTokenAuth(
-        storage: s,
-        client: c,
-        clientId: defines.tv,
-        clientSecret: defines.tvSecret,
-        clientKind: 'tv',
-      ),
+      storage: s,
+      client: c,
+      clientId: defines.tv,
+      clientSecret: defines.tvSecret,
+      clientKind: 'tv',
+    ),
   };
 }

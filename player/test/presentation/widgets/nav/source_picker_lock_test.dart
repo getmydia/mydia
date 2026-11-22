@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -17,36 +17,46 @@ Future<String> _pump(WidgetTester tester, SourceLock lock) async {
   final record = plexRecord().copyWith(serverLocks: {'abc123': lock});
   await store.putAccount(testMydiaRecord());
   await store.putAccount(record);
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-    ],
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SourcePickerList(currentId: testMydiaSourceId)),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(
+          SourceSecrets(MockAuthStorage()),
+        ),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: SourcePickerList(currentId: testMydiaSourceId)),
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return record.sources.single.id.value;
 }
 
 void main() {
-  testWidgets('a locked server shows a lock while the app is locked',
-      (tester) async {
+  testWidgets('a locked server shows a lock while the app is locked', (
+    tester,
+  ) async {
     final id = await _pump(tester, SourceLock.locked);
     expect(find.byKey(ValueKey('source-switcher-$id')), findsOneWidget);
     expect(find.byKey(ValueKey('source-switcher-lock-$id')), findsOneWidget);
     expect(
-        find.byKey(const ValueKey('source-switcher-hidden')), findsOneWidget);
+      find.byKey(const ValueKey('source-switcher-hidden')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('a hidden server is left out while the app is locked',
-      (tester) async {
+  testWidgets('a hidden server is left out while the app is locked', (
+    tester,
+  ) async {
     final id = await _pump(tester, SourceLock.hidden);
     expect(find.byKey(ValueKey('source-switcher-$id')), findsNothing);
     expect(
-        find.byKey(const ValueKey('source-switcher-hidden')), findsOneWidget);
+      find.byKey(const ValueKey('source-switcher-hidden')),
+      findsOneWidget,
+    );
   });
 }

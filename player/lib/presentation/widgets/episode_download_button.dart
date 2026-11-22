@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../domain/detail/detail_views.dart';
 import '../../domain/sources/item.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
@@ -43,7 +44,10 @@ class EpisodeDownloadButton extends ConsumerWidget {
   }
 
   Future<void> _handleDownload(
-      BuildContext context, WidgetRef ref, ItemRef item) {
+    BuildContext context,
+    WidgetRef ref,
+    ItemRef item,
+  ) {
     return startItemDownload(
       context,
       ref,
@@ -91,11 +95,7 @@ class _ActionButtonState extends State<_ActionButton> {
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              widget.icon,
-              color: widget.color,
-              size: 22,
-            ),
+            child: Icon(widget.icon, color: widget.color, size: 22),
           ),
         ),
       ),

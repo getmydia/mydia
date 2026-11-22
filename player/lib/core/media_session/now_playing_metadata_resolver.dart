@@ -14,7 +14,10 @@ import 'media_session_state.dart';
 /// Runs one GraphQL query against the instance [id] and returns its `data`,
 /// or null.
 typedef NowPlayingFetch = Future<Map<String, dynamic>?> Function(
-    SourceId id, DocumentNode document, Map<String, dynamic> variables);
+  SourceId id,
+  DocumentNode document,
+  Map<String, dynamic> variables,
+);
 
 /// Thrown by a [NowPlayingFetch] when there is currently no way to reach the
 /// server (the instance is not loaded yet, e.g. playback started during
@@ -34,16 +37,25 @@ class NowPlayingMetadataResolver {
   final NowPlayingFetch _fetch;
   final _cache = <String, Future<NowPlayingMetadata?>>{};
 
-  Future<NowPlayingMetadata?> resolve(
-      {required SourceId sourceId, String? mediaItemId, String? episodeId}) {
+  Future<NowPlayingMetadata?> resolve({
+    required SourceId sourceId,
+    String? mediaItemId,
+    String? episodeId,
+  }) {
     if (mediaItemId == null && episodeId == null) return Future.value(null);
     final key = '${sourceId.value}|$mediaItemId|$episodeId';
     return _cache.putIfAbsent(
-        key, () => _load(sourceId, mediaItemId, episodeId, key));
+      key,
+      () => _load(sourceId, mediaItemId, episodeId, key),
+    );
   }
 
-  Future<NowPlayingMetadata?> _load(SourceId sourceId, String? mediaItemId,
-      String? episodeId, String key) async {
+  Future<NowPlayingMetadata?> _load(
+    SourceId sourceId,
+    String? mediaItemId,
+    String? episodeId,
+    String key,
+  ) async {
     try {
       if (episodeId != null) {
         final data = await _fetch(
@@ -89,25 +101,26 @@ class NowPlayingMetadataResolver {
   }
 
   NowPlayingMetadata _movie(Map<String, dynamic> movie) => NowPlayingMetadata(
-        subtitle: (movie['year'] as int?)?.toString(),
-        posterUrl: _posterOf(movie['artwork']),
-      );
+    subtitle: (movie['year'] as int?)?.toString(),
+    posterUrl: _posterOf(movie['artwork']),
+  );
 
   String? _posterOf(Object? artwork) =>
       artwork is Map<String, dynamic> ? artwork['posterUrl'] as String? : null;
 }
 
-final nowPlayingMetadataResolverProvider =
-    Provider<NowPlayingMetadataResolver>((ref) {
-  return NowPlayingMetadataResolver((id, document, variables) async {
-    // Read per call, not captured: the client is rebuilt on reconnect and
-    // token refresh.
-    final source = ref.read(mediaSourceProvider(id));
-    if (source is! MydiaSource) throw NowPlayingFetchUnavailable();
-    try {
-      return await source.client.request(document, variables);
-    } on SourceException {
-      return null;
-    }
-  });
-});
+final nowPlayingMetadataResolverProvider = Provider<NowPlayingMetadataResolver>(
+  (ref) {
+    return NowPlayingMetadataResolver((id, document, variables) async {
+      // Read per call, not captured: the client is rebuilt on reconnect and
+      // token refresh.
+      final source = ref.read(mediaSourceProvider(id));
+      if (source is! MydiaSource) throw NowPlayingFetchUnavailable();
+      try {
+        return await source.client.request(document, variables);
+      } on SourceException {
+        return null;
+      }
+    });
+  },
+);

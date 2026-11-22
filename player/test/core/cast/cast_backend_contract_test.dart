@@ -22,17 +22,18 @@ void main() {
     });
 
     test(
-        'leaves the content reference null for a Chromecast, which needs a URL',
-        () {
-      const request = CastMediaRequest(
-        url: 'https://example.test/index.m3u8',
-        kind: CastMediaKind.hls,
-        title: 'Blade Runner',
-      );
+      'leaves the content reference null for a Chromecast, which needs a URL',
+      () {
+        const request = CastMediaRequest(
+          url: 'https://example.test/index.m3u8',
+          kind: CastMediaKind.hls,
+          title: 'Blade Runner',
+        );
 
-      expect(request.contentRef, isNull);
-      expect(request.url, isNotEmpty);
-    });
+        expect(request.contentRef, isNull);
+        expect(request.url, isNotEmpty);
+      },
+    );
   });
 
   group('CastProtocolKind', () {

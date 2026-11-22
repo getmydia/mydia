@@ -37,8 +37,7 @@ void main() {
       expect(harness.core.ready.value, isTrue);
     });
 
-    test(
-        'the video route is not ready until a player is attached, so the '
+    test('the video route is not ready until a player is attached, so the '
         'button is absent rather than inert', () {
       final harness = _Harness(documentFullscreenEnabled: false);
       addTearDown(harness.dispose);
@@ -96,8 +95,7 @@ void main() {
       expect(harness.platform.boundPlayers, [player]);
     });
 
-    test(
-        'a second player rebinds, which is the episode change, quality switch '
+    test('a second player rebinds, which is the episode change, quality switch '
         'and Retry case', () {
       final harness = _Harness(documentFullscreenEnabled: false);
       addTearDown(harness.dispose);
@@ -225,29 +223,30 @@ void main() {
       expect(harness.platform.stopListeningCalls, 1);
     });
 
-    test('with no video route left, the control is withdrawn and announced',
-        () {
-      final harness = _Harness(
-        videoElementFullscreenSupported: false,
-        documentRequestError: 'NotAllowedError',
-      );
-      addTearDown(harness.dispose);
-      harness.core.attach(Object());
+    test(
+      'with no video route left, the control is withdrawn and announced',
+      () {
+        final harness = _Harness(
+          videoElementFullscreenSupported: false,
+          documentRequestError: 'NotAllowedError',
+        );
+        addTearDown(harness.dispose);
+        harness.core.attach(Object());
 
-      harness.core.enter();
+        harness.core.enter();
 
-      expect(harness.core.mode, FullscreenMode.unsupported);
-      expect(harness.core.ready.value, isFalse);
-      expect(harness.failures, hasLength(1));
-      expect(
-        harness.failures.single.cause,
-        FullscreenFailureCause.documentRequestRejected,
-      );
-      expect(harness.failures.single.requestInitiated, isTrue);
-    });
+        expect(harness.core.mode, FullscreenMode.unsupported);
+        expect(harness.core.ready.value, isFalse);
+        expect(harness.failures, hasLength(1));
+        expect(
+          harness.failures.single.cause,
+          FullscreenFailureCause.documentRequestRejected,
+        );
+        expect(harness.failures.single.requestInitiated, isTrue);
+      },
+    );
 
-    test('a video route that then refuses a real tap withdraws the control',
-        () {
+    test('a video route that then refuses a real tap withdraws the control', () {
       final harness = _Harness(
         documentRequestError: 'NotAllowedError',
         videoEnterError: 'InvalidStateError',
@@ -334,20 +333,22 @@ void main() {
   });
 
   group('state comes from the platform', () {
-    test('the document route reports through its listener, not the request',
-        () {
-      final harness = _Harness();
-      addTearDown(harness.dispose);
+    test(
+      'the document route reports through its listener, not the request',
+      () {
+        final harness = _Harness();
+        addTearDown(harness.dispose);
 
-      harness.core.enter();
-      expect(harness.changes, isEmpty);
+        harness.core.enter();
+        expect(harness.changes, isEmpty);
 
-      harness.platform.emitDocumentFullscreen(true);
-      expect(harness.changes, [true]);
+        harness.platform.emitDocumentFullscreen(true);
+        expect(harness.changes, [true]);
 
-      harness.platform.emitDocumentFullscreen(false);
-      expect(harness.changes, [true, false]);
-    });
+        harness.platform.emitDocumentFullscreen(false);
+        expect(harness.changes, [true, false]);
+      },
+    );
 
     test('the video route reports through the element it bound', () {
       final harness = _Harness(documentFullscreenEnabled: false);
@@ -399,14 +400,14 @@ class _Harness {
     Object? documentExitError,
     Object? videoEnterError,
   }) : platform = _FakePlatform(
-          documentFullscreenEnabled: documentFullscreenEnabled,
-          videoElementFullscreenSupported: videoElementFullscreenSupported,
-          probeFailures: probeFailures,
-          bindResult: bindResult,
-          documentRequestError: documentRequestError,
-          documentExitError: documentExitError,
-          videoEnterError: videoEnterError,
-        ) {
+         documentFullscreenEnabled: documentFullscreenEnabled,
+         videoElementFullscreenSupported: videoElementFullscreenSupported,
+         probeFailures: probeFailures,
+         bindResult: bindResult,
+         documentRequestError: documentRequestError,
+         documentExitError: documentExitError,
+         videoEnterError: videoEnterError,
+       ) {
     core = WebFullscreenCore(
       platform: platform,
       onChange: changes.add,

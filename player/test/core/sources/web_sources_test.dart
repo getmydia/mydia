@@ -25,14 +25,13 @@ MydiaWebConfig _config({
   String url = 'https://hosted.example.test',
   String? username = 'ada',
   bool authenticated = true,
-}) =>
-    MydiaWebConfig(
-      authenticated: authenticated,
-      token: token,
-      userId: 'u1',
-      username: username,
-      serverUrl: url,
-    );
+}) => MydiaWebConfig(
+  authenticated: authenticated,
+  token: token,
+  userId: 'u1',
+  username: username,
+  serverUrl: url,
+);
 
 const _basement = MydiaCredentials(
   instanceId: 'srv1',
@@ -54,19 +53,23 @@ ProviderContainer _container(
   MockAuthStorage storage, {
   required bool isWeb,
 }) {
-  final c = ProviderContainer(overrides: [
-    sourceCacheProvider.overrideWithValue(InMemorySourceCache()),
-    ...noHiveOverrides,
-    isWebProvider.overrideWithValue(isWeb),
-    sourceStoreProvider.overrideWith((ref) async => store),
-    sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-  ]);
+  final c = ProviderContainer(
+    overrides: [
+      sourceCacheProvider.overrideWithValue(InMemorySourceCache()),
+      ...noHiveOverrides,
+      isWebProvider.overrideWithValue(isWeb),
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+    ],
+  );
   addTearDown(c.dispose);
   return c;
 }
 
 Future<MydiaCredentials?> _creds(
-    InMemorySourceStore store, SourceSecrets secrets) async {
+  InMemorySourceStore store,
+  SourceSecrets secrets,
+) async {
   final snapshot = await store.load();
   return readMydiaCredentials(secrets, snapshot.accounts.single.account);
 }
@@ -96,8 +99,9 @@ void main() {
   });
 
   test('web keeps Mydia accounts and drops third-party ones', () async {
-    await store.putAccount(buildMydiaAccountRecord(_other,
-        instanceId: 'abc', now: DateTime(2026)));
+    await store.putAccount(
+      buildMydiaAccountRecord(_other, instanceId: 'abc', now: DateTime(2026)),
+    );
     await store.putAccount(plexRecord());
 
     final c = _container(store, storage, isWeb: true);
@@ -120,15 +124,19 @@ void main() {
     await notifier.putAccount(plexRecord());
     expect((await store.load()).accounts, isEmpty);
 
-    await notifier.putAccount(buildMydiaAccountRecord(_other,
-        instanceId: 'abc', now: DateTime(2026)));
+    await notifier.putAccount(
+      buildMydiaAccountRecord(_other, instanceId: 'abc', now: DateTime(2026)),
+    );
     expect((await store.load()).accounts, hasLength(1));
     expect(c.read(thirdPartySourcesProvider), hasLength(1));
   });
 
   test('web remembers the active Mydia source', () async {
-    final mydia =
-        buildMydiaAccountRecord(_other, instanceId: 'abc', now: DateTime(2026));
+    final mydia = buildMydiaAccountRecord(
+      _other,
+      instanceId: 'abc',
+      now: DateTime(2026),
+    );
     await store.putAccount(mydia);
     final c = _container(store, storage, isWeb: true);
     await c.read(sourceRecordsProvider.future);
@@ -149,13 +157,19 @@ void main() {
     });
 
     test('merges into an existing account for the same URL', () async {
-      final existing = buildMydiaAccountRecord(_basement,
-          instanceId: 'srv1', now: DateTime(2026));
+      final existing = buildMydiaAccountRecord(
+        _basement,
+        instanceId: 'srv1',
+        now: DateTime(2026),
+      );
       await writeMydiaCredentials(secrets, existing.account, _basement);
       await store.putAccount(existing);
 
-      await upsertWebConfigAccount(store, secrets,
-          _config(token: 'fresh', url: 'https://HOSTED.example.test/'));
+      await upsertWebConfigAccount(
+        store,
+        secrets,
+        _config(token: 'fresh', url: 'https://HOSTED.example.test/'),
+      );
 
       expect((await store.load()).accounts, hasLength(1));
       final creds = (await _creds(store, secrets))!;
@@ -165,29 +179,36 @@ void main() {
       expect(creds.instanceId, 'srv1');
     });
 
-    test('refreshes the secret of an account whose credentials are unreadable',
-        () async {
-      final record = buildMydiaAccountRecord(
+    test(
+      'refreshes the secret of an account whose credentials are unreadable',
+      () async {
+        final record = buildMydiaAccountRecord(
           const MydiaCredentials(
-              instanceId: 'x',
-              accessToken: 'y',
-              serverUrl: 'https://hosted.example.test'),
+            instanceId: 'x',
+            accessToken: 'y',
+            serverUrl: 'https://hosted.example.test',
+          ),
           instanceId: urlInstanceId('https://hosted.example.test'),
-          now: DateTime(2026));
-      await secrets.writeAccountToken(record.account, 'not json');
-      await store.putAccount(record);
+          now: DateTime(2026),
+        );
+        await secrets.writeAccountToken(record.account, 'not json');
+        await store.putAccount(record);
 
-      await upsertWebConfigAccount(store, secrets, _config(token: 'fresh'));
+        await upsertWebConfigAccount(store, secrets, _config(token: 'fresh'));
 
-      final accounts = (await store.load()).accounts;
-      expect(accounts, hasLength(1));
-      expect(accounts.single.addedAtMs, record.addedAtMs);
-      expect((await _creds(store, secrets))!.accessToken, 'fresh');
-    });
+        final accounts = (await store.load()).accounts;
+        expect(accounts, hasLength(1));
+        expect(accounts.single.addedAtMs, record.addedAtMs);
+        expect((await _creds(store, secrets))!.accessToken, 'fresh');
+      },
+    );
 
     test('does nothing without valid auth', () async {
       await upsertWebConfigAccount(
-          store, secrets, _config(authenticated: false));
+        store,
+        secrets,
+        _config(authenticated: false),
+      );
       await upsertWebConfigAccount(store, secrets, _config(token: ''));
       expect((await store.load()).accounts, isEmpty);
       expect(storage.keys, isEmpty);
@@ -197,15 +218,21 @@ void main() {
   test('a failing migration does not stop the account seed', () async {
     var seeded = false;
     await migrateThenSeed(
-        () async => throw StateError('idb'), () async => seeded = true);
+      () async => throw StateError('idb'),
+      () async => seeded = true,
+    );
     expect(seeded, isTrue);
   });
 
   test('instance-hosted web hides add Mydia; public web allows it', () {
     expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: true), '/');
-    expect(addMydiaRouteRedirect(hasMydia: false, instanceHostedWeb: true),
-        isNull);
-    expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: false),
-        isNull);
+    expect(
+      addMydiaRouteRedirect(hasMydia: false, instanceHostedWeb: true),
+      isNull,
+    );
+    expect(
+      addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: false),
+      isNull,
+    );
   });
 }

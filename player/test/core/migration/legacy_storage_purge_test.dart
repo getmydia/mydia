@@ -12,27 +12,30 @@ void main() {
   }
 
   group('purgeLegacyMydiaStorage', () {
-    test('deletes every legacy key and the GraphQL cache box after migration',
-        () async {
-      final storage = MockAuthStorage()
-        ..seedData({
-          for (final k in kLegacyMydiaKeys) k: 'x',
-          'relay_url': 'r',
-          'unrelated': 'u',
-        });
-      final store = await storeWithLegacyInstanceId('macct');
-      final deleted = <String>[];
-      await purgeLegacyMydiaStorage(
+    test(
+      'deletes every legacy key and the GraphQL cache box after migration',
+      () async {
+        final storage = MockAuthStorage()
+          ..seedData({
+            for (final k in kLegacyMydiaKeys) k: 'x',
+            'relay_url': 'r',
+            'unrelated': 'u',
+          });
+        final store = await storeWithLegacyInstanceId('macct');
+        final deleted = <String>[];
+        await purgeLegacyMydiaStorage(
           storage: storage,
           store: store,
-          deleteBox: (b) async => deleted.add(b));
-      for (final k in kLegacyMydiaKeys) {
-        expect(await storage.read(k), isNull, reason: k);
-      }
-      expect(await storage.read('relay_url'), 'r');
-      expect(await storage.read('unrelated'), 'u');
-      expect(deleted, ['graphqlClientStore']);
-    });
+          deleteBox: (b) async => deleted.add(b),
+        );
+        for (final k in kLegacyMydiaKeys) {
+          expect(await storage.read(k), isNull, reason: k);
+        }
+        expect(await storage.read('relay_url'), 'r');
+        expect(await storage.read('unrelated'), 'u');
+        expect(deleted, ['graphqlClientStore']);
+      },
+    );
 
     test('keeps the keys while a legacy sign-in is still unmigrated', () async {
       final storage = MockAuthStorage()
@@ -40,26 +43,30 @@ void main() {
       final store = await storeWithLegacyInstanceId(null);
       final deleted = <String>[];
       await purgeLegacyMydiaStorage(
-          storage: storage,
-          store: store,
-          deleteBox: (b) async => deleted.add(b));
+        storage: storage,
+        store: store,
+        deleteBox: (b) async => deleted.add(b),
+      );
       expect(await storage.read('auth_token'), 't');
       expect(await storage.read('server_url'), 'http://a');
       expect(deleted, isEmpty);
     });
 
-    test('a fresh install with nothing stored deletes the stray cache box',
-        () async {
-      final storage = MockAuthStorage()..seedData({'relay_url': 'r'});
-      final store = await storeWithLegacyInstanceId(null);
-      final deleted = <String>[];
-      await purgeLegacyMydiaStorage(
+    test(
+      'a fresh install with nothing stored deletes the stray cache box',
+      () async {
+        final storage = MockAuthStorage()..seedData({'relay_url': 'r'});
+        final store = await storeWithLegacyInstanceId(null);
+        final deleted = <String>[];
+        await purgeLegacyMydiaStorage(
           storage: storage,
           store: store,
-          deleteBox: (b) async => deleted.add(b));
-      expect(storage.keys, ['relay_url']);
-      expect(deleted, ['graphqlClientStore']);
-    });
+          deleteBox: (b) async => deleted.add(b),
+        );
+        expect(storage.keys, ['relay_url']);
+        expect(deleted, ['graphqlClientStore']);
+      },
+    );
 
     test('a failing delete is swallowed and the other keys still go', () async {
       final storage = MockAuthStorage()
@@ -67,34 +74,39 @@ void main() {
         ..failDeleteKeys.add('auth_token');
       final store = await storeWithLegacyInstanceId('macct');
       await purgeLegacyMydiaStorage(
-          storage: storage,
-          store: store,
-          deleteBox: (_) async => throw Exception('disk'));
+        storage: storage,
+        store: store,
+        deleteBox: (_) async => throw Exception('disk'),
+      );
       expect(await storage.read('user_id'), isNull);
     });
 
-    test('degraded storage deletes nothing, even when the sign-in reads absent',
-        () async {
-      // The keyring cannot be read, so auth_token looks absent although an
-      // unmigrated sign-in is there.
-      final storage = MockAuthStorage()
-        ..seedData({'server_url': 'http://a', 'relay_url': 'r'})
-        ..degradedValue = true;
-      final store = await storeWithLegacyInstanceId(null);
-      await purgeLegacyMydiaStorage(
+    test(
+      'degraded storage deletes nothing, even when the sign-in reads absent',
+      () async {
+        // The keyring cannot be read, so auth_token looks absent although an
+        // unmigrated sign-in is there.
+        final storage = MockAuthStorage()
+          ..seedData({'server_url': 'http://a', 'relay_url': 'r'})
+          ..degradedValue = true;
+        final store = await storeWithLegacyInstanceId(null);
+        await purgeLegacyMydiaStorage(
           storage: storage,
           store: store,
-          deleteBox: (_) async => fail('must not delete'));
-      expect(await storage.read('server_url'), 'http://a');
-      expect(await storage.read('relay_url'), 'r');
-    });
+          deleteBox: (_) async => fail('must not delete'),
+        );
+        expect(await storage.read('server_url'), 'http://a');
+        expect(await storage.read('relay_url'), 'r');
+      },
+    );
 
     test('a failing store read is swallowed and deletes nothing', () async {
       final storage = MockAuthStorage()..seedData({'auth_token': 't'});
       await purgeLegacyMydiaStorage(
-          storage: storage,
-          store: _ThrowingStore(),
-          deleteBox: (_) async => fail('must not delete'));
+        storage: storage,
+        store: _ThrowingStore(),
+        deleteBox: (_) async => fail('must not delete'),
+      );
       expect(await storage.read('auth_token'), 't');
     });
   });

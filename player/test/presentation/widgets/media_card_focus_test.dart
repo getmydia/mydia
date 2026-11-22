@@ -3,7 +3,7 @@
 // wrapping a GestureDetector, with no focus node, no keyboard activation and
 // no ring, so a remote could neither reach it nor show where it was.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,10 +13,10 @@ import 'package:player/presentation/widgets/media_card.dart';
 // ProviderScope is required: PosterFrame, which MediaCard composes, is a
 // ConsumerStatefulWidget and reads a provider in initState.
 Widget _host(Widget child) => ProviderScope(
-      child: MaterialApp(
-        home: Scaffold(body: Center(child: child)),
-      ),
-    );
+  child: MaterialApp(
+    home: Scaffold(body: Center(child: child)),
+  ),
+);
 
 void main() {
   // FocusHighlight's ring is gated on FocusManager.highlightMode, which

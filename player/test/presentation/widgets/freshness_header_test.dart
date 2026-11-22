@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
@@ -16,7 +16,9 @@ import 'package:player/core/cache/freshness.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/cache/watcher_registry.dart';
+
 import '../../test_utils/query_keys.dart';
+
 import 'package:player/presentation/widgets/freshness_header.dart';
 
 class _StubFreshnessRegistry extends FreshnessRegistry {
@@ -57,14 +59,15 @@ Future<void> pumpHeader(
   return tester.pumpWidget(
     ProviderScope(
       overrides: [
-        freshnessRegistryProvider
-            .overrideWith(() => _StubFreshnessRegistry(freshness)),
+        freshnessRegistryProvider.overrideWith(
+          () => _StubFreshnessRegistry(freshness),
+        ),
         currentSourceStatusProvider.overrideWithValue(status),
         ...extraOverrides,
       ],
       child: MaterialApp(
         locale: locale,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: FreshnessHeader(queryKeys: keys ?? [QueryKeys.home]),
@@ -78,53 +81,67 @@ void main() {
   final now = DateTime.now();
 
   testWidgets('shows nothing when the data is fresh and idle', (tester) async {
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: Freshness(fetchedAt: now, isStale: false),
-    });
+    await pumpHeader(
+      tester,
+      freshness: {QueryKeys.home: Freshness(fetchedAt: now, isStale: false)},
+    );
 
     expect(find.byKey(const Key('freshness-inflight')), findsNothing);
     expect(find.byKey(const Key('freshness-banner')), findsNothing);
   });
 
   testWidgets('shows the in-flight line while refreshing', (tester) async {
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: Freshness(fetchedAt: now, isRefreshing: true),
-    });
+    await pumpHeader(
+      tester,
+      freshness: {
+        QueryKeys.home: Freshness(fetchedAt: now, isRefreshing: true),
+      },
+    );
 
     expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
     expect(find.byKey(const Key('freshness-banner')), findsNothing);
   });
 
-  testWidgets('suppresses the stale banner while a refresh is already running',
-      (tester) async {
-    // Tier 1 already covers a running refresh; showing both at once for the
-    // same underlying condition is exactly what tier 2 exists to avoid.
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: Freshness(
-        fetchedAt: now.subtract(const Duration(hours: 2)),
-        isStale: true,
-        isRefreshing: true,
-      ),
-    });
+  testWidgets(
+    'suppresses the stale banner while a refresh is already running',
+    (tester) async {
+      // Tier 1 already covers a running refresh; showing both at once for the
+      // same underlying condition is exactly what tier 2 exists to avoid.
+      await pumpHeader(
+        tester,
+        freshness: {
+          QueryKeys.home: Freshness(
+            fetchedAt: now.subtract(const Duration(hours: 2)),
+            isStale: true,
+            isRefreshing: true,
+          ),
+        },
+      );
 
-    expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
-    expect(find.byKey(const Key('freshness-banner')), findsNothing);
-  });
+      expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
+      expect(find.byKey(const Key('freshness-banner')), findsNothing);
+    },
+  );
 
   testWidgets('shows the failure banner with a retry action', (tester) async {
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: Freshness(
-        fetchedAt: now.subtract(const Duration(hours: 2)),
-        refreshFailed: true,
-        isStale: true,
-        hasData: true,
-      ),
-    });
+    await pumpHeader(
+      tester,
+      freshness: {
+        QueryKeys.home: Freshness(
+          fetchedAt: now.subtract(const Duration(hours: 2)),
+          refreshFailed: true,
+          isStale: true,
+          hasData: true,
+        ),
+      },
+    );
 
     expect(find.byKey(const Key('freshness-banner')), findsOneWidget);
     expect(
-      find.text("Couldn't reach your server. Showing your library from "
-          '2 hours ago.'),
+      find.text(
+        "Couldn't reach your server. Showing your library from "
+        '2 hours ago.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Retry'), findsOneWidget);
@@ -156,63 +173,74 @@ void main() {
   });
 
   testWidgets('shows the stale banner with a refresh action', (tester) async {
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: Freshness(
-        fetchedAt: now.subtract(const Duration(hours: 3)),
-        isStale: true,
-        hasData: true,
-      ),
-    });
-
-    expect(
-      find.text('Showing your library from 3 hours ago.'),
-      findsOneWidget,
+    await pumpHeader(
+      tester,
+      freshness: {
+        QueryKeys.home: Freshness(
+          fetchedAt: now.subtract(const Duration(hours: 3)),
+          isStale: true,
+          hasData: true,
+        ),
+      },
     );
+
+    expect(find.text('Showing your library from 3 hours ago.'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
   });
 
-  testWidgets('shows no banner when there is no timestamp to describe',
-      (tester) async {
+  testWidgets('shows no banner when there is no timestamp to describe', (
+    tester,
+  ) async {
     // Cold start: stale by definition, but there is nothing on screen yet.
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: const Freshness(isStale: true),
-    });
+    await pumpHeader(
+      tester,
+      freshness: {QueryKeys.home: const Freshness(isStale: true)},
+    );
 
     expect(find.byKey(const Key('freshness-banner')), findsNothing);
   });
 
   testWidgets(
-      'shows no banner for a stale key with a real fetchedAt but nothing on '
-      'screen (a cold fetch still in flight)', (tester) async {
-    // This is the case a bare `fetchedAt != null` gate got wrong: the age
-    // gate picked `networkOnly` for a 20-minute-old log entry, so the first
-    // result is `QueryResult.loading` with `data == null`. `fetchedAt` is
-    // real (from the log) and `isStale` is true, but there is nothing on
-    // screen yet, so the banner must not claim there is.
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: Freshness(
-        fetchedAt: now.subtract(const Duration(minutes: 20)),
-        isStale: true,
-        hasData: false,
-      ),
-    });
+    'shows no banner for a stale key with a real fetchedAt but nothing on '
+    'screen (a cold fetch still in flight)',
+    (tester) async {
+      // This is the case a bare `fetchedAt != null` gate got wrong: the age
+      // gate picked `networkOnly` for a 20-minute-old log entry, so the first
+      // result is `QueryResult.loading` with `data == null`. `fetchedAt` is
+      // real (from the log) and `isStale` is true, but there is nothing on
+      // screen yet, so the banner must not claim there is.
+      await pumpHeader(
+        tester,
+        freshness: {
+          QueryKeys.home: Freshness(
+            fetchedAt: now.subtract(const Duration(minutes: 20)),
+            isStale: true,
+            hasData: false,
+          ),
+        },
+      );
 
-    expect(find.byKey(const Key('freshness-banner')), findsNothing);
-  });
+      expect(find.byKey(const Key('freshness-banner')), findsNothing);
+    },
+  );
 
   testWidgets(
-      'shows the stale banner for the same fetchedAt once data is on screen',
-      (tester) async {
-    await pumpHeader(tester, freshness: {
-      QueryKeys.home: Freshness(
-        fetchedAt: now.subtract(const Duration(minutes: 20)),
-        isStale: true,
-        hasData: true,
-      ),
-    });
+    'shows the stale banner for the same fetchedAt once data is on screen',
+    (tester) async {
+      await pumpHeader(
+        tester,
+        freshness: {
+          QueryKeys.home: Freshness(
+            fetchedAt: now.subtract(const Duration(minutes: 20)),
+            isStale: true,
+            hasData: true,
+          ),
+        },
+      );
 
-    expect(find.byKey(const Key('freshness-banner')), findsOneWidget);
-  });
+      expect(find.byKey(const Key('freshness-banner')), findsOneWidget);
+    },
+  );
 
   testWidgets('renders nothing in offline mode', (tester) async {
     // OfflineBanner is already showing and explains the situation better.
@@ -232,8 +260,9 @@ void main() {
     expect(find.byKey(const Key('freshness-inflight')), findsNothing);
   });
 
-  testWidgets('combines the state of several keys on one screen',
-      (tester) async {
+  testWidgets('combines the state of several keys on one screen', (
+    tester,
+  ) async {
     await pumpHeader(
       tester,
       keys: [QueryKeys.home, QueryKeys.unwatched],
@@ -246,81 +275,87 @@ void main() {
     expect(find.byKey(const Key('freshness-inflight')), findsOneWidget);
   });
 
-  testWidgets("tapping the action invalidates exactly this header's query keys",
-      (tester) async {
-    final recorder = _RecordingInvalidator();
-    final keys = [QueryKeys.home, QueryKeys.unwatched];
+  testWidgets(
+    "tapping the action invalidates exactly this header's query keys",
+    (tester) async {
+      final recorder = _RecordingInvalidator();
+      final keys = [QueryKeys.home, QueryKeys.unwatched];
 
-    await pumpHeader(
-      tester,
-      keys: keys,
-      freshness: {
-        QueryKeys.home: Freshness(
-          fetchedAt: now.subtract(const Duration(hours: 2)),
-          refreshFailed: true,
-          isStale: true,
-          hasData: true,
-        ),
-        QueryKeys.unwatched: Freshness(
-          fetchedAt: now.subtract(const Duration(hours: 2)),
-          refreshFailed: true,
-          isStale: true,
-          hasData: true,
-        ),
-      },
-      extraOverrides: [
-        invalidatorProvider.overrideWithValue(recorder),
-      ],
-    );
+      await pumpHeader(
+        tester,
+        keys: keys,
+        freshness: {
+          QueryKeys.home: Freshness(
+            fetchedAt: now.subtract(const Duration(hours: 2)),
+            refreshFailed: true,
+            isStale: true,
+            hasData: true,
+          ),
+          QueryKeys.unwatched: Freshness(
+            fetchedAt: now.subtract(const Duration(hours: 2)),
+            refreshFailed: true,
+            isStale: true,
+            hasData: true,
+          ),
+        },
+        extraOverrides: [invalidatorProvider.overrideWithValue(recorder)],
+      );
 
-    await tester.tap(find.byKey(const Key('freshness-action')));
-    await tester.pump();
+      await tester.tap(find.byKey(const Key('freshness-action')));
+      await tester.pump();
 
-    expect(
-      recorder.invalidatedTargets,
-      equals(keys.map((key) => key.target)),
-    );
-  });
+      expect(
+        recorder.invalidatedTargets,
+        equals(keys.map((key) => key.target)),
+      );
+    },
+  );
 
   testWidgets(
-      'follows the source on screen: active A offline, viewing B shows the '
-      'warning', (tester) async {
-    const idA = SourceId('acc1:owner:aa11');
-    const idB = SourceId('acc2:owner:bb22');
-    final router = GoRouter(
-      initialLocation: '/s/${idB.value}',
-      routes: [
-        GoRoute(
-          path: '/s/:id',
-          builder: (_, __) => Scaffold(
-            body: FreshnessHeader(queryKeys: [QueryKeys.home]),
+    'follows the source on screen: active A offline, viewing B shows the '
+    'warning',
+    (tester) async {
+      const idA = SourceId('acc1:owner:aa11');
+      const idB = SourceId('acc2:owner:bb22');
+      final router = GoRouter(
+        initialLocation: '/s/${idB.value}',
+        routes: [
+          GoRoute(
+            path: '/s/:id',
+            builder: (_, _) =>
+                Scaffold(body: FreshnessHeader(queryKeys: [QueryKeys.home])),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            freshnessRegistryProvider.overrideWith(
+              () => _StubFreshnessRegistry({
+                QueryKeys.home: Freshness(
+                  fetchedAt: now.subtract(const Duration(hours: 2)),
+                  refreshFailed: true,
+                  isStale: true,
+                  hasData: true,
+                ),
+              }),
+            ),
+            activeSourceIdProvider.overrideWithValue(idA),
+            sourceStatusProvider(idA)
+                .overrideWithValue(SourceConnectionStatus.unreachable),
+            sourceStatusProvider(idB)
+                .overrideWithValue(SourceConnectionStatus.remote),
+          ],
+          child: MaterialApp.router(
+            localizationsDelegates: appLocalizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            routerConfig: router,
           ),
         ),
-      ],
-    );
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        freshnessRegistryProvider.overrideWith(() => _StubFreshnessRegistry({
-              QueryKeys.home: Freshness(
-                fetchedAt: now.subtract(const Duration(hours: 2)),
-                refreshFailed: true,
-                isStale: true,
-                hasData: true,
-              ),
-            })),
-        activeSourceIdProvider.overrideWithValue(idA),
-        sourceStatusProvider(idA)
-            .overrideWithValue(SourceConnectionStatus.unreachable),
-        sourceStatusProvider(idB)
-            .overrideWithValue(SourceConnectionStatus.remote),
-      ],
-      child: MaterialApp.router(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          routerConfig: router),
-    ));
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('freshness-banner')), findsOneWidget);
-  });
+      expect(find.byKey(const Key('freshness-banner')), findsOneWidget);
+    },
+  );
 }

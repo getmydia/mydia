@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
 // Riverpod 3.x; it lives in the `misc.dart` sub-library alongside other
@@ -25,19 +25,19 @@ void main() {
     VoidCallback? onPressed,
     List<Override> overrides = const [],
   }) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        castCapabilitiesProvider.overrideWithValue(capabilities),
-        ...overrides,
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: CastButton(onPressed: onPressed ?? () {}),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          castCapabilitiesProvider.overrideWithValue(capabilities),
+          ...overrides,
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: CastButton(onPressed: onPressed ?? () {})),
         ),
       ),
-    ));
+    );
     await tester.pump();
   }
 
@@ -47,8 +47,9 @@ void main() {
     expect(find.byKey(const Key('cast-button')), findsOneWidget);
   });
 
-  testWidgets('is absent when the build has no cast capability at all',
-      (tester) async {
+  testWidgets('is absent when the build has no cast capability at all', (
+    tester,
+  ) async {
     await pumpButton(tester, capabilities: const CastCapabilities.web());
 
     expect(find.byKey(const Key('cast-button')), findsNothing);
@@ -60,8 +61,9 @@ void main() {
     expect(find.byKey(const Key('cast-button')), findsNothing);
   });
 
-  testWidgets('still renders with only one protocol capable (iOS)',
-      (tester) async {
+  testWidgets('still renders with only one protocol capable (iOS)', (
+    tester,
+  ) async {
     await pumpButton(tester, capabilities: const CastCapabilities.iOS());
 
     expect(find.byKey(const Key('cast-button')), findsOneWidget);
@@ -84,19 +86,23 @@ void main() {
   testWidgets('draws no fill behind the glyph', (tester) async {
     await pumpButton(tester, capabilities: const CastCapabilities.full());
 
-    final button =
-        tester.widget<IconButton>(find.byKey(const Key('cast-button')));
+    final button = tester.widget<IconButton>(
+      find.byKey(const Key('cast-button')),
+    );
     expect(button.style?.backgroundColor, isNull);
   });
 
-  testWidgets('shows the idle icon and neutral tooltip with no target',
-      (tester) async {
+  testWidgets('shows the idle icon and neutral tooltip with no target', (
+    tester,
+  ) async {
     await pumpButton(tester, capabilities: const CastCapabilities.full());
 
-    final icon = tester.widget<Icon>(find.descendant(
-      of: find.byKey(const Key('cast-button')),
-      matching: find.byType(Icon),
-    ));
+    final icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('cast-button')),
+        matching: find.byType(Icon),
+      ),
+    );
     expect(icon.icon, Icons.cast);
     expect(icon.color, Colors.white);
 
@@ -109,30 +115,35 @@ void main() {
   /// Reads the single Icon inside the button. The connecting state nests its
   /// icon in a Stack alongside a progress ring, so this deliberately finds a
   /// descendant rather than the button's direct child.
-  Icon iconOf(WidgetTester tester) => tester.widget<Icon>(find.descendant(
-        of: find.byKey(const Key('cast-button')),
-        matching: find.byType(Icon),
-      ));
+  Icon iconOf(WidgetTester tester) => tester.widget<Icon>(
+    find.descendant(
+      of: find.byKey(const Key('cast-button')),
+      matching: find.byType(Icon),
+    ),
+  );
 
   String? tooltipOf(WidgetTester tester) =>
       tester.widget<IconButton>(find.byKey(const Key('cast-button'))).tooltip;
 
-  testWidgets('a remembered device with no connection is not "connected"',
-      (tester) async {
+  testWidgets('a remembered device with no connection is not "connected"', (
+    tester,
+  ) async {
     await pumpButton(
       tester,
       capabilities: const CastCapabilities.full(),
       overrides: [
-        castConnectionProvider.overrideWithValue(
-          CastConnection.chosenOffline,
-        ),
+        castConnectionProvider.overrideWithValue(CastConnection.chosenOffline),
         castDisplayDeviceProvider.overrideWithValue(_device),
       ],
     );
 
-    expect(iconOf(tester).icon, Icons.cast,
-        reason: 'cast_connected is the platform glyph for owning a receiver; '
-            'a device nothing is connected to has not earned it');
+    expect(
+      iconOf(tester).icon,
+      Icons.cast,
+      reason:
+          'cast_connected is the platform glyph for owning a receiver; '
+          'a device nothing is connected to has not earned it',
+    );
     expect(iconOf(tester).color, Colors.blue);
     expect(tooltipOf(tester), '${_device.name} (not connected)');
   });
@@ -158,15 +169,14 @@ void main() {
     expect(tooltipOf(tester), 'Connecting to ${_device.name}…');
   });
 
-  testWidgets('a live connection with no media shows cast_connected',
-      (tester) async {
+  testWidgets('a live connection with no media shows cast_connected', (
+    tester,
+  ) async {
     await pumpButton(
       tester,
       capabilities: const CastCapabilities.full(),
       overrides: [
-        castConnectionProvider.overrideWithValue(
-          CastConnection.connectedIdle,
-        ),
+        castConnectionProvider.overrideWithValue(CastConnection.connectedIdle),
         castDisplayDeviceProvider.overrideWithValue(_device),
       ],
     );
@@ -176,8 +186,9 @@ void main() {
     expect(tooltipOf(tester), 'Connected to ${_device.name}');
   });
 
-  testWidgets('an active cast shows cast_connected and a casting tooltip',
-      (tester) async {
+  testWidgets('an active cast shows cast_connected and a casting tooltip', (
+    tester,
+  ) async {
     await pumpButton(
       tester,
       capabilities: const CastCapabilities.full(),
@@ -192,8 +203,9 @@ void main() {
     expect(tooltipOf(tester), 'Casting to ${_device.name}');
   });
 
-  testWidgets('cast_connected never appears without a live connection',
-      (tester) async {
+  testWidgets('cast_connected never appears without a live connection', (
+    tester,
+  ) async {
     for (final state in [
       CastConnection.none,
       CastConnection.connecting,
@@ -208,33 +220,42 @@ void main() {
         ],
       );
 
-      expect(iconOf(tester).icon, isNot(Icons.cast_connected),
-          reason: '$state must not render the connected glyph');
+      expect(
+        iconOf(tester).icon,
+        isNot(Icons.cast_connected),
+        reason: '$state must not render the connected glyph',
+      );
     }
   });
 
   group('hidden Playing on banner', () {
     for (final glass in [false, true]) {
-      testWidgets('shows a dot while one is hidden (glass: $glass)',
-          (tester) async {
-        await tester.pumpWidget(ProviderScope(
-          overrides: [
-            castCapabilitiesProvider
-                .overrideWithValue(const CastCapabilities.full()),
-            castBarAmbientHiddenProvider.overrideWithValue(true),
-          ],
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(
-              body: CastButton(onPressed: () {}, glass: glass),
+      testWidgets('shows a dot while one is hidden (glass: $glass)', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              castCapabilitiesProvider.overrideWithValue(
+                const CastCapabilities.full(),
+              ),
+              castBarAmbientHiddenProvider.overrideWithValue(true),
+            ],
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: CastButton(onPressed: () {}, glass: glass),
+              ),
             ),
           ),
-        ));
+        );
         await tester.pump();
 
         expect(
-            find.byKey(const Key('cast-button-ambient-dot')), findsOneWidget);
+          find.byKey(const Key('cast-button-ambient-dot')),
+          findsOneWidget,
+        );
       });
     }
 

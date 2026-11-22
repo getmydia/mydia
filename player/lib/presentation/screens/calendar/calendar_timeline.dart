@@ -61,9 +61,9 @@ List<TimelineItem> buildTimeline(List<ItemSummary> entries, DateTime today) {
 /// Day to whether anything on it is playable. A day with no entries is
 /// absent. Feeds the month sheet's dots.
 Map<DateTime, bool> daySummaries(List<ItemSummary> entries) => {
-      for (final MapEntry(:key, :value) in groupByDay(entries))
-        key: value.any((entry) => entry.isPlayable),
-    };
+  for (final MapEntry(:key, :value) in groupByDay(entries))
+    key: value.any((entry) => entry.isPlayable),
+};
 
 /// The fixed height of every timeline row, for one width and text scale.
 ///
@@ -74,7 +74,7 @@ Map<DateTime, bool> daySummaries(List<ItemSummary> entries) => {
 /// `height` to match.
 class TimelineLayout {
   TimelineLayout({required double width, this.textScale = 1.0})
-      : contentWidth = math.min(width, maxContentWidth);
+    : contentWidth = math.min(width, maxContentWidth);
 
   /// The list is centred at this width on wider screens.
   static const double maxContentWidth = 720;
@@ -106,9 +106,9 @@ class TimelineLayout {
   final double textScale;
 
   double get entryWidth => math.max(
-        0,
-        contentWidth - leftPad - gutterWidth - gutterGap - railPad - rightPad,
-      );
+    0,
+    contentWidth - leftPad - gutterWidth - gutterGap - railPad - rightPad,
+  );
 
   /// The card's picture is twice as wide as it is tall.
   double get cardImageHeight => entryWidth / 2;
@@ -138,11 +138,12 @@ class TimelineLayout {
       entry.isPlayable ? cardHeight : rowHeight;
 
   double heightOf(TimelineItem item) => switch (item) {
-        MonthDivider() => monthDividerHeight,
-        TimelineDay(:final entries) => dayPadTop +
-            dayPadBottom +
-            math.max(gutterHeight, _entriesHeight(entries)),
-      };
+    MonthDivider() => monthDividerHeight,
+    TimelineDay(:final entries) =>
+      dayPadTop +
+          dayPadBottom +
+          math.max(gutterHeight, _entriesHeight(entries)),
+  };
 
   double _entriesHeight(List<ItemSummary> entries) {
     if (entries.isEmpty) return rowHeight;

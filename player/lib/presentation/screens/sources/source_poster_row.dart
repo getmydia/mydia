@@ -2,7 +2,7 @@
 /// Continue Watching.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../domain/sources/item.dart';
@@ -82,7 +82,8 @@ class SourcePosterRow extends StatelessWidget {
               final item = items[index];
               return SizedBox(
                 width: itemWidth ?? posterWidth,
-                child: posterFor?.call(context, item) ??
+                child:
+                    posterFor?.call(context, item) ??
                     SourcePoster(
                       key: ValueKey('source-poster-${item.ref.externalId}'),
                       item: item,

@@ -29,7 +29,7 @@ void main() {
       file: file,
       from: partial,
       cancelToken: CancelToken(),
-      onProgress: (_, __) async {},
+      onProgress: (_, _) async {},
     );
     return (result, adapter);
   }
@@ -69,8 +69,11 @@ void main() {
         },
       ),
       throwsA(
-        isA<DioException>()
-            .having((e) => e.type, 'type', DioExceptionType.cancel),
+        isA<DioException>().having(
+          (e) => e.type,
+          'type',
+          DioExceptionType.cancel,
+        ),
       ),
     );
     expect(await file.readAsBytes(), body.sublist(0, 30));

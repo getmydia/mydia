@@ -62,16 +62,15 @@ class FullscreenReport {
     bool? mediaElementBound,
     bool? demoted,
     FullscreenFailure? lastFailure,
-  }) =>
-      FullscreenReport(
-        mode: mode ?? this.mode,
-        ready: ready ?? this.ready,
-        mediaElementBound: mediaElementBound ?? this.mediaElementBound,
-        demoted: demoted ?? this.demoted,
-        lastFailure: lastFailure ?? this.lastFailure,
-        documentFullscreenEnabled: documentFullscreenEnabled,
-        videoElementFullscreenSupported: videoElementFullscreenSupported,
-      );
+  }) => FullscreenReport(
+    mode: mode ?? this.mode,
+    ready: ready ?? this.ready,
+    mediaElementBound: mediaElementBound ?? this.mediaElementBound,
+    demoted: demoted ?? this.demoted,
+    lastFailure: lastFailure ?? this.lastFailure,
+    documentFullscreenEnabled: documentFullscreenEnabled,
+    videoElementFullscreenSupported: videoElementFullscreenSupported,
+  );
 
   /// The one row whose value is free-form platform text rather than a short
   /// token. A WebKit rejection reason has no length bound, so the screen wraps
@@ -85,20 +84,21 @@ class FullscreenReport {
   /// apart, which is the failure mode of every hand-maintained "copy
   /// diagnostics" that lists fewer fields than the screen above it.
   List<(String label, String value)> get rows => [
-        ('Route', mode.name),
-        ('Ready', ready ? 'yes' : 'no'),
-        if (mode == FullscreenMode.nativeVideoElement)
-          ('Media element', mediaElementBound ? 'bound' : 'not bound'),
-        if (demoted) ('Fell back', 'yes'),
-        if (documentFullscreenEnabled != null)
-          ('document.fullscreenEnabled', '$documentFullscreenEnabled'),
-        if (videoElementFullscreenSupported != null)
-          ('Video element fullscreen', '$videoElementFullscreenSupported'),
-        if (lastFailure != null) (lastFailureLabel, '$lastFailure'),
-      ];
+    ('Route', mode.name),
+    ('Ready', ready ? 'yes' : 'no'),
+    if (mode == FullscreenMode.nativeVideoElement)
+      ('Media element', mediaElementBound ? 'bound' : 'not bound'),
+    if (demoted) ('Fell back', 'yes'),
+    if (documentFullscreenEnabled != null)
+      ('document.fullscreenEnabled', '$documentFullscreenEnabled'),
+    if (videoElementFullscreenSupported != null)
+      ('Video element fullscreen', '$videoElementFullscreenSupported'),
+    if (lastFailure != null) (lastFailureLabel, '$lastFailure'),
+  ];
 
   @override
-  String toString() => 'FullscreenReport(mode: ${mode.name}, ready: $ready, '
+  String toString() =>
+      'FullscreenReport(mode: ${mode.name}, ready: $ready, '
       'mediaElementBound: $mediaElementBound, demoted: $demoted, '
       'lastFailure: $lastFailure, '
       'documentFullscreenEnabled: $documentFullscreenEnabled, '

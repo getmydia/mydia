@@ -1,7 +1,7 @@
 /// Every included server's collections, each captioned with its server.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/sources/collection.dart';
@@ -23,7 +23,7 @@ class AllServersCollectionsScreen extends ConsumerWidget {
     final merged = result.value;
     final collections = [
       for (final c in merged?.value ?? const <SourceCollection>[])
-        if (names.containsKey(c.sourceId)) c
+        if (names.containsKey(c.sourceId)) c,
     ];
     void retry() => ref.invalidate(allServersCollectionsProvider);
 
@@ -38,25 +38,28 @@ class AllServersCollectionsScreen extends ConsumerWidget {
             AllServersBanner(unavailable: merged.unavailable, onRetry: retry),
           Expanded(
             child: switch (result) {
-              AsyncError(:final error) when merged == null =>
-                SourceErrorView(error: error, onRetry: retry),
-              _ when merged == null =>
-                const Center(child: CircularProgressIndicator()),
+              AsyncError(:final error) when merged == null => SourceErrorView(
+                error: error,
+                onRetry: retry,
+              ),
+              _ when merged == null => const Center(
+                child: CircularProgressIndicator(),
+              ),
               _ when collections.isEmpty => SourceEmptyState(
-                  key: const Key('all-collections-empty'),
-                  title: context.l10n.allServersNothingHere,
-                ),
+                key: const Key('all-collections-empty'),
+                title: context.l10n.allServersNothingHere,
+              ),
               _ => RefreshIndicator(
-                  onRefresh: () async {
-                    ref.invalidate(allServersCollectionsProvider);
-                    await ref.read(allServersCollectionsProvider.future);
-                  },
-                  child: CollectionsGrid(
-                    collections: collections,
-                    scrollTopPadding: 8,
-                    captionFor: (c) => names[c.sourceId],
-                  ),
+                onRefresh: () async {
+                  ref.invalidate(allServersCollectionsProvider);
+                  await ref.read(allServersCollectionsProvider.future);
+                },
+                child: CollectionsGrid(
+                  collections: collections,
+                  scrollTopPadding: 8,
+                  captionFor: (c) => names[c.sourceId],
                 ),
+              ),
             },
           ),
         ],

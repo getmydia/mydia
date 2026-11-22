@@ -1,9 +1,10 @@
 import 'dart:async' show StreamSubscription, unawaited;
 
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import 'l10n/l10n.dart';
 import 'core/build_channel.dart';
 import 'core/app_menu/app_menu_channel.dart';
@@ -57,6 +58,7 @@ import 'presentation/screens/detail/load_content_fetchers.dart';
 import 'presentation/screens/settings/dialog/open_settings.dart'
     show routeMenuNavigation, settingsDialogEnabledProvider;
 import 'presentation/widgets/cast_mini_controller.dart';
+
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/p2p/peer_files_client.dart'
     show peerFilesClientProvider;
@@ -209,9 +211,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
       ref.listenManual(
         paletteProvider,
-        (_, palette) => unawaited(ref
-            .read(nativeTabBarChannelProvider)
-            .setWindowBackground(palette.background)),
+        (_, palette) => unawaited(
+          ref
+              .read(nativeTabBarChannelProvider)
+              .setWindowBackground(palette.background),
+        ),
         fireImmediately: true,
       );
     }
@@ -245,7 +249,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     }
     // Applies the Diagnostics choice for the app's lifetime, so continuous log
     // upload runs without the Diagnostics screen being open.
-    ref.listenManual(diagnosticsProvider, (_, __) {}, fireImmediately: true);
+    ref.listenManual(diagnosticsProvider, (_, _) {}, fireImmediately: true);
     // Initialize P2P services
     Future.microtask(() async {
       try {
@@ -271,15 +275,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // `nodeRegistrationsProvider`, not here. Started once at launch, and
     // retried by the listeners below.
     unawaited(_initRemoteControlIfEnabled());
-    ref.listenManual<bool>(
-      hasMydiaProvider,
-      (previous, next) {
-        if (!next) return;
-        _restoreCastSession();
-        unawaited(_initRemoteControlIfEnabled());
-      },
-      fireImmediately: true,
-    );
+    ref.listenManual<bool>(hasMydiaProvider, (previous, next) {
+      if (!next) return;
+      _restoreCastSession();
+      unawaited(_initRemoteControlIfEnabled());
+    }, fireImmediately: true);
 
     // Enabling the setting after a launch that started opted out — or after
     // a launch where startup itself failed (no reachable server yet, a
@@ -288,13 +288,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // wired (see `RemoteControlInitGate`), so re-invoking it here on every
     // change is safe, and is what makes the settings switch take effect for
     // the rest of this launch instead of only the next one.
-    ref.listenManual<AsyncValue<bool>>(
-      remoteControlEnabledProvider,
-      (previous, next) {
-        if (next.value != true) return;
-        unawaited(_initRemoteControlIfEnabled());
-      },
-    );
+    ref.listenManual<AsyncValue<bool>>(remoteControlEnabledProvider, (
+      previous,
+      next,
+    ) {
+      if (next.value != true) return;
+      unawaited(_initRemoteControlIfEnabled());
+    });
 
     // The receiver still needs a GraphQL client and a live host, and the first
     // attempt above can run before either exists. Registration succeeding is
@@ -326,8 +326,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // those failed to open there is nowhere to keep them.
       if (Hive.isBoxOpen(PeerFilesStore.boxName)) {
         final peerFilesClient = ref.read(peerFilesClientProvider);
-        unawaited(peerSync.then<void>((_) => peerFilesClient.start(),
-            onError: (Object _) {}));
+        unawaited(
+          peerSync.then<void>(
+            (_) => peerFilesClient.start(),
+            onError: (Object _) {},
+          ),
+        );
       }
       // The backup polls after p2p syncs, so its active store starts after
       // them. Its start never throws: failures land in the store's status.
@@ -417,12 +421,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         roster: CurrentDeviceRoster(() => ref.read(mergedRosterProvider)),
         targetName: await DeviceInfoService().getDeviceName(),
         snapshotSource: targetController.snapshot,
-        onIntent: (intent, peer) => unawaited(routeRemoteIntent(
-          intent,
-          peer,
-          instancesOf: ref.read(mergedRosterProvider).instancesOf,
-          submit: targetController.submit,
-        )),
+        onIntent: (intent, peer) => unawaited(
+          routeRemoteIntent(
+            intent,
+            peer,
+            instancesOf: ref.read(mergedRosterProvider).instancesOf,
+            submit: targetController.submit,
+          ),
+        ),
         respond: p2pService.respondToControl,
       );
 
@@ -471,7 +477,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final context = rootNavigatorKey.currentContext;
     if (context == null) {
       debugPrint(
-          '[MyApp] Remote LoadContent arrived before the router mounted');
+        '[MyApp] Remote LoadContent arrived before the router mounted',
+      );
       return;
     }
 
@@ -533,19 +540,34 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // media proxy refusing every request while believing it still serves.
       // A proxy that cannot bind at all throws; the player's own reopen path
       // surfaces that, so here it is only logged.
-      ref.read(mediaProxyProvider).healListener().then<void>((_) {},
-          onError: (Object e) =>
-              debugPrint('[MyApp] Media proxy heal failed: $e'));
+      ref
+          .read(mediaProxyProvider)
+          .healListener()
+          .then<void>(
+            (_) {},
+            onError: (Object e) =>
+                debugPrint('[MyApp] Media proxy heal failed: $e'),
+          );
       // The SMB loopback listener is reclaimed the same way. Its heals reach
       // the player through `SmbNative.heals`. Web has no SMB native.
       if (!kIsWeb) {
-        ref.read(smbNativeProvider).healListener().then<void>((_) {},
-            onError: (Object e) =>
-                debugPrint('[MyApp] SMB listener heal failed: $e'));
+        ref
+            .read(smbNativeProvider)
+            .healListener()
+            .then<void>(
+              (_) {},
+              onError: (Object e) =>
+                  debugPrint('[MyApp] SMB listener heal failed: $e'),
+            );
       }
-      ref.read(filesCastBridgeProvider).healListener().then<void>((_) {},
-          onError: (Object e) =>
-              debugPrint('[MyApp] Files cast bridge heal failed: $e'));
+      ref
+          .read(filesCastBridgeProvider)
+          .healListener()
+          .then<void>(
+            (_) {},
+            onError: (Object e) =>
+                debugPrint('[MyApp] Files cast bridge heal failed: $e'),
+          );
     }
     _ambientLifecycle.handle(state);
     // Send what is waiting before the OS suspends the app.

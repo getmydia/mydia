@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
@@ -31,8 +31,9 @@ Future<T?> showGlassSheet<T>({
       useRootNavigator: useRootNavigator,
     );
   }
-  final alignment =
-      origin == null ? Alignment.bottomCenter : glassEmergenceAlignment(origin);
+  final alignment = origin == null
+      ? Alignment.bottomCenter
+      : glassEmergenceAlignment(origin);
   return showModalBottomSheet<T>(
     context: context,
     backgroundColor: Colors.transparent,

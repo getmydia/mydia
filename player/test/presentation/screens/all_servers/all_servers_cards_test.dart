@@ -9,26 +9,38 @@ import '../../../test_utils/mydia_test_source.dart';
 void main() {
   test('every server, Mydia included, opens its source route', () {
     expect(
-        allServersItemLocation(const ItemRef(
-            sourceId: testMydiaSourceId,
-            kind: ItemKind.movie,
-            externalId: '42')),
-        '/s/macct:owner:inst-1/movie/42');
+      allServersItemLocation(
+        const ItemRef(
+          sourceId: testMydiaSourceId,
+          kind: ItemKind.movie,
+          externalId: '42',
+        ),
+      ),
+      '/s/macct:owner:inst-1/movie/42',
+    );
     expect(
-        allServersItemLocation(const ItemRef(
-            sourceId: SourceId('acc1:owner:aa11'),
-            kind: ItemKind.movie,
-            externalId: '7')),
-        '/s/acc1:owner:aa11/movie/7');
+      allServersItemLocation(
+        const ItemRef(
+          sourceId: SourceId('acc1:owner:aa11'),
+          kind: ItemKind.movie,
+          externalId: '7',
+        ),
+      ),
+      '/s/acc1:owner:aa11/movie/7',
+    );
   });
 
   test('a kind without a detail screen falls back to the item route', () {
     expect(
-        allServersItemLocation(const ItemRef(
-            sourceId: testMydiaSourceId,
-            kind: ItemKind.video,
-            externalId: '9')),
-        '/s/macct:owner:inst-1/item/video/9');
+      allServersItemLocation(
+        const ItemRef(
+          sourceId: testMydiaSourceId,
+          kind: ItemKind.video,
+          externalId: '9',
+        ),
+      ),
+      '/s/macct:owner:inst-1/item/video/9',
+    );
   });
 
   test('library locations', () {

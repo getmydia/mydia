@@ -13,7 +13,7 @@
 // watches the collection's paged provider, expensive to satisfy just to
 // check where the first grid row lands.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -71,8 +71,8 @@ Future<void> _pumpHarness(
                     ),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 1,
-                    ),
+                          crossAxisCount: 1,
+                        ),
                     itemCount: 1,
                     itemBuilder: (context, index) =>
                         const SizedBox(key: _markerKey, height: 10),
@@ -89,39 +89,43 @@ Future<void> _pumpHarness(
 
 void main() {
   testWidgets(
-      'the first grid item starts at the header bottom plus the grid gap, '
-      'under macOS insets', (tester) async {
-    const macOS = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
-    await _pumpHarness(tester, insets: macOS, statusBar: 0);
+    'the first grid item starts at the header bottom plus the grid gap, '
+    'under macOS insets',
+    (tester) async {
+      const macOS = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
+      await _pumpHarness(tester, insets: macOS, statusBar: 0);
 
-    final headerBottom = tester.getRect(find.byType(WindowTitleRow)).bottom;
-    final markerTop = tester.getRect(find.byKey(_markerKey)).top;
+      final headerBottom = tester.getRect(find.byType(WindowTitleRow)).bottom;
+      final markerTop = tester.getRect(find.byKey(_markerKey)).top;
 
-    // The header itself must be exactly the band height (40) with no status
-    // bar folded in twice, otherwise the padding offset below would be right
-    // for the wrong reason.
-    expect(headerBottom, 40);
-    expect(markerTop, headerBottom + CollectionDetailScreen.gridTopGap);
-  });
+      // The header itself must be exactly the band height (40) with no status
+      // bar folded in twice, otherwise the padding offset below would be right
+      // for the wrong reason.
+      expect(headerBottom, 40);
+      expect(markerTop, headerBottom + CollectionDetailScreen.gridTopGap);
+    },
+  );
 
   testWidgets(
-      'the first grid item starts at the header bottom plus the grid gap, '
-      'with a 24px status bar and no window chrome', (tester) async {
-    await _pumpHarness(
-      tester,
-      insets: WindowChromeInsets.zero,
-      statusBar: 24,
-    );
+    'the first grid item starts at the header bottom plus the grid gap, '
+    'with a 24px status bar and no window chrome',
+    (tester) async {
+      await _pumpHarness(
+        tester,
+        insets: WindowChromeInsets.zero,
+        statusBar: 24,
+      );
 
-    final headerBottom = tester.getRect(find.byType(WindowTitleRow)).bottom;
-    final markerTop = tester.getRect(find.byKey(_markerKey)).top;
+      final headerBottom = tester.getRect(find.byType(WindowTitleRow)).bottom;
+      final markerTop = tester.getRect(find.byKey(_markerKey)).top;
 
-    // Before the header drew into the band, its true rendered height (its
-    // own SafeArea plus kToolbarHeight) was 24 + 56 = 80, and the grid's
-    // padding was a flat 100 -- a 44px gap that only matched by coincidence
-    // when the status bar was 0. `gridTopPadding` now adds the real status
-    // bar instead of ignoring it.
-    expect(headerBottom, 24 + kToolbarHeight);
-    expect(markerTop, headerBottom + CollectionDetailScreen.gridTopGap);
-  });
+      // Before the header drew into the band, its true rendered height (its
+      // own SafeArea plus kToolbarHeight) was 24 + 56 = 80, and the grid's
+      // padding was a flat 100 -- a 44px gap that only matched by coincidence
+      // when the status bar was 0. `gridTopPadding` now adds the real status
+      // bar instead of ignoring it.
+      expect(headerBottom, 24 + kToolbarHeight);
+      expect(markerTop, headerBottom + CollectionDetailScreen.gridTopGap);
+    },
+  );
 }

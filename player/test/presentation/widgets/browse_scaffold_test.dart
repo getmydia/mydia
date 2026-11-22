@@ -1,8 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/freshness.dart';
+
 import '../../test_utils/query_keys.dart';
+
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/l10n/l10n.dart';
@@ -34,8 +36,9 @@ Future<void> pumpScaffold(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -47,9 +50,7 @@ Future<void> pumpScaffold(
           secondRow: secondRow,
           body: (context, scrollTopPadding) => ListView(
             padding: EdgeInsets.only(top: scrollTopPadding),
-            children: const [
-              SizedBox(key: _bodyKey, height: 400, width: 400),
-            ],
+            children: const [SizedBox(key: _bodyKey, height: 400, width: 400)],
           ),
         ),
       ),
@@ -59,16 +60,18 @@ Future<void> pumpScaffold(
 }
 
 void main() {
-  testWidgets('renders the title on desktop, where the old bar was absent',
-      (tester) async {
+  testWidgets('renders the title on desktop, where the old bar was absent', (
+    tester,
+  ) async {
     await pumpScaffold(tester, size: const Size(1200, 900));
 
     expect(find.text('Unwatched'), findsOneWidget);
     expect(find.byIcon(Icons.visibility_off_rounded), findsOneWidget);
   });
 
-  testWidgets('renders the title and a drawer button on mobile',
-      (tester) async {
+  testWidgets('renders the title and a drawer button on mobile', (
+    tester,
+  ) async {
     await pumpScaffold(tester, size: const Size(400, 800));
 
     expect(find.text('Unwatched'), findsOneWidget);
@@ -98,7 +101,9 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(BrowseScaffold)),
     );
-    container.read(freshnessRegistryProvider.notifier).publish(
+    container
+        .read(freshnessRegistryProvider.notifier)
+        .publish(
           QueryKeys.unwatched,
           const Freshness(isRefreshing: true, hasData: true),
         );
@@ -107,8 +112,9 @@ void main() {
     expect(tester.getTopLeft(find.byKey(_bodyKey)), before);
   });
 
-  testWidgets('a second row makes the bar taller and insets the body',
-      (tester) async {
+  testWidgets('a second row makes the bar taller and insets the body', (
+    tester,
+  ) async {
     await pumpScaffold(tester, size: const Size(1200, 900));
     final withoutRow = tester.getTopLeft(find.byKey(_bodyKey)).dy;
 
@@ -136,8 +142,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            castCapabilitiesProvider
-                .overrideWithValue(const CastCapabilities.full()),
+            castCapabilitiesProvider.overrideWithValue(
+              const CastCapabilities.full(),
+            ),
           ],
           child: MaterialApp(
             localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -147,9 +154,7 @@ void main() {
                 body: TextButton(
                   key: const Key('push-trigger'),
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => _scaffoldUnderTest,
-                    ),
+                    MaterialPageRoute<void>(builder: (_) => _scaffoldUnderTest),
                   ),
                   child: const Text('push'),
                 ),
@@ -169,8 +174,7 @@ void main() {
       expect(find.byIcon(Icons.menu_rounded), findsNothing);
     });
 
-    testWidgets(
-        'offers back on desktop, which otherwise has no leading '
+    testWidgets('offers back on desktop, which otherwise has no leading '
         'control at all', (tester) async {
       await pumpPushed(tester, size: const Size(1200, 900));
 

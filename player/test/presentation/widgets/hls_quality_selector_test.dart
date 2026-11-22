@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/theme/palette.dart';
@@ -96,8 +96,11 @@ void main() {
   });
 
   testWidgets('marks the current rung as selected', (tester) async {
-    const current =
-        QualityRung(label: '480p', height: 480, maxBitrateKbps: 1500);
+    const current = QualityRung(
+      label: '480p',
+      height: 480,
+      maxBitrateKbps: 1500,
+    );
     await tester.pumpWidget(
       _host(
         (context) => showQualityPicker(
@@ -115,19 +118,22 @@ void main() {
     expect(find.byKey(const Key('quality-rung-selected-480p')), findsOneWidget);
   });
 
-  testWidgets('shows a clamp note when the server limited the stream',
-      (tester) async {
+  testWidgets('shows a clamp note when the server limited the stream', (
+    tester,
+  ) async {
     // A relay caps at 2000kbps and 720p regardless of what was asked for.
     // Saying so beats letting the viewer think their choice was applied.
     await tester.pumpWidget(
-      _host((context) => showQualityPicker(
-            context,
-            ladder,
-            QualityRung.original,
-            autoSubtitle: 'Auto · Direct Play',
-            originalDelivery: OriginalDelivery.directPlay,
-            clampNote: 'Limited to 720p by your remote connection',
-          )),
+      _host(
+        (context) => showQualityPicker(
+          context,
+          ladder,
+          QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
+          originalDelivery: OriginalDelivery.directPlay,
+          clampNote: 'Limited to 720p by your remote connection',
+        ),
+      ),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -175,31 +181,33 @@ void main() {
     expect(find.text('Source quality, no re-encoding'), findsNothing);
   });
 
-  testWidgets('shows Direct Play and lossless Original subtitles when supplied',
-      (tester) async {
-    for (final (delivery, subtitle) in [
-      (OriginalDelivery.directPlay, 'Direct Play'),
-      (OriginalDelivery.lossless, 'Original · no re-encoding'),
-    ]) {
-      await tester.pumpWidget(
-        _host(
-          (context) => showQualityPicker(
-            context,
-            ladder,
-            QualityRung.original,
-            autoSubtitle: 'Auto · Direct Play',
-            originalDelivery: delivery,
+  testWidgets(
+    'shows Direct Play and lossless Original subtitles when supplied',
+    (tester) async {
+      for (final (delivery, subtitle) in [
+        (OriginalDelivery.directPlay, 'Direct Play'),
+        (OriginalDelivery.lossless, 'Original · no re-encoding'),
+      ]) {
+        await tester.pumpWidget(
+          _host(
+            (context) => showQualityPicker(
+              context,
+              ladder,
+              QualityRung.original,
+              autoSubtitle: 'Auto · Direct Play',
+              originalDelivery: delivery,
+            ),
           ),
-        ),
-      );
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
 
-      expect(find.text(subtitle), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-    }
-  });
+        expect(find.text(subtitle), findsOneWidget);
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+      }
+    },
+  );
 
   testWidgets('labels capped rungs as transcoding', (tester) async {
     await tester.pumpWidget(
@@ -220,8 +228,9 @@ void main() {
     expect(find.text('Up to 4000 kbps'), findsNothing);
   });
 
-  testWidgets('offers Auto above Original with its own subtitle',
-      (tester) async {
+  testWidgets('offers Auto above Original with its own subtitle', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _host(
         (context) => showQualityPicker(

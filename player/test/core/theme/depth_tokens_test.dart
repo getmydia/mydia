@@ -5,7 +5,7 @@
 // dark-only, drives the surface hierarchy from the palette, and maps a single
 // accent hue across every Material 3 accent slot (R3).
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
@@ -178,18 +178,28 @@ void main() {
       ]) {
         expect(v, inInclusiveRange(0.0, 1.0));
       }
-      expect(DepthTokens.liquidAdaptiveLumaLow,
-          lessThan(DepthTokens.liquidAdaptiveLumaHigh));
-      expect(DepthTokens.liquidChromeAdaptiveMax,
-          greaterThanOrEqualTo(DepthTokens.liquidChromeTintOpacity));
-      expect(DepthTokens.liquidModalAdaptiveMax,
-          greaterThanOrEqualTo(DepthTokens.liquidModalTintOpacity));
-      expect(DepthTokens.liquidControlAdaptiveMax,
-          greaterThanOrEqualTo(DepthTokens.liquidControlTintOpacity));
+      expect(
+        DepthTokens.liquidAdaptiveLumaLow,
+        lessThan(DepthTokens.liquidAdaptiveLumaHigh),
+      );
+      expect(
+        DepthTokens.liquidChromeAdaptiveMax,
+        greaterThanOrEqualTo(DepthTokens.liquidChromeTintOpacity),
+      );
+      expect(
+        DepthTokens.liquidModalAdaptiveMax,
+        greaterThanOrEqualTo(DepthTokens.liquidModalTintOpacity),
+      );
+      expect(
+        DepthTokens.liquidControlAdaptiveMax,
+        greaterThanOrEqualTo(DepthTokens.liquidControlTintOpacity),
+      );
       expect(LiquidGlassProfile.lens.rimHairline, inInclusiveRange(0.0, 1.0));
       expect(LiquidGlassProfile.lens.bottomLight, inInclusiveRange(0.0, 1.0));
-      expect(DepthTokens.liquidScrollEdgeBottomOpacity,
-          lessThan(DepthTokens.liquidScrollEdgeTopOpacity));
+      expect(
+        DepthTokens.liquidScrollEdgeBottomOpacity,
+        lessThan(DepthTokens.liquidScrollEdgeTopOpacity),
+      );
     });
   });
 
@@ -209,17 +219,21 @@ void main() {
       final scheme = AppTheme.darkTheme.colorScheme;
       expect(scheme.surface, Palettes.projectionBooth.background);
       expect(scheme.surfaceContainer, Palettes.projectionBooth.surface);
-      expect(scheme.surfaceContainerHighest,
-          Palettes.projectionBooth.surfaceVariant);
+      expect(
+        scheme.surfaceContainerHighest,
+        Palettes.projectionBooth.surfaceVariant,
+      );
       expect(scheme.surfaceBright, Palettes.projectionBooth.surfaceBright);
     });
   });
 
   group('poster geometry', () {
-    test('radiusPoster is a single positive radius for all poster surfaces',
-        () {
-      expect(DepthTokens.radiusPoster, 8.0);
-      expect(DepthTokens.radiusPoster, greaterThan(0));
-    });
+    test(
+      'radiusPoster is a single positive radius for all poster surfaces',
+      () {
+        expect(DepthTokens.radiusPoster, 8.0);
+        expect(DepthTokens.radiusPoster, greaterThan(0));
+      },
+    );
   });
 }

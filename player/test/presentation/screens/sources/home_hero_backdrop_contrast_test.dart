@@ -7,7 +7,7 @@
 // artwork's own fade mask only ever reveals the shell's dark backdrop, which
 // is darker than white art, so it cannot lower contrast either.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/breakpoints.dart';
 import 'package:player/core/theme/palette.dart';
@@ -48,7 +48,7 @@ void main() {
       1280.0,
       1440.0,
       1920.0,
-      2560.0
+      2560.0,
     ]) {
       for (final pinned in const [false, true]) {
         // The backdrop spans the window, under the rail; the hero's column
@@ -85,13 +85,18 @@ void main() {
         );
         final overview = contrastRatio(overviewColor, bg);
         final chipBg = compositeOver(_white.withValues(alpha: 0.12), bg);
-        final chip =
-            contrastRatio(Palettes.projectionBooth.textPrimary, chipBg);
+        final chip = contrastRatio(
+          Palettes.projectionBooth.textPrimary,
+          chipBg,
+        );
 
         final where = 'window $window, pinned $pinned';
         expect(title, greaterThanOrEqualTo(_aa), reason: 'title, $where');
-        expect(pureWhite, greaterThanOrEqualTo(_aa),
-            reason: 'white text, $where');
+        expect(
+          pureWhite,
+          greaterThanOrEqualTo(_aa),
+          reason: 'white text, $where',
+        );
         expect(overview, greaterThanOrEqualTo(_aa), reason: 'overview, $where');
         expect(chip, greaterThanOrEqualTo(_aa), reason: 'chips, $where');
         worstTitle = worstTitle < title ? worstTitle : title;
@@ -99,9 +104,11 @@ void main() {
         worstChip = worstChip < chip ? worstChip : chip;
       }
     }
-    debugPrint('worst over white art: title ${worstTitle.toStringAsFixed(2)}, '
-        'overview ${worstOverview.toStringAsFixed(2)}, '
-        'chips ${worstChip.toStringAsFixed(2)}');
+    debugPrint(
+      'worst over white art: title ${worstTitle.toStringAsFixed(2)}, '
+      'overview ${worstOverview.toStringAsFixed(2)}, '
+      'chips ${worstChip.toStringAsFixed(2)}',
+    );
   });
 
   test('the scrim is weakest exactly at the text and is gone past it', () {
@@ -119,10 +126,15 @@ void main() {
       gap: gap,
       maxTextWidth: maxText,
     );
-    expect(_alphaAt(g, right / 1328),
-        closeTo(HomeHeroBackdropTokens.textAlpha, 1e-9));
-    expect(_alphaAt(g, 1.0), lessThan(0.05),
-        reason: 'the art is clear on the right');
+    expect(
+      _alphaAt(g, right / 1328),
+      closeTo(HomeHeroBackdropTokens.textAlpha, 1e-9),
+    );
+    expect(
+      _alphaAt(g, 1.0),
+      lessThan(0.05),
+      reason: 'the art is clear on the right',
+    );
   });
 
   test('the art is opaque until the fade starts and gone at the bottom', () {
@@ -134,8 +146,11 @@ void main() {
     final start = stops.indexOf(HomeHeroBackdropTokens.fadeStart);
     expect(alphas[start], 1.0);
     for (var i = 1; i < alphas.length; i++) {
-      expect(alphas[i], lessThanOrEqualTo(alphas[i - 1]),
-          reason: 'the fade never steps back up');
+      expect(
+        alphas[i],
+        lessThanOrEqualTo(alphas[i - 1]),
+        reason: 'the fade never steps back up',
+      );
       expect(stops[i], greaterThanOrEqualTo(stops[i - 1]));
     }
   });

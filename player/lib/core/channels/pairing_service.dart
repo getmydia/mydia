@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../auth/auth_storage.dart';
@@ -130,10 +131,15 @@ class PairingResult {
     this.isP2PMode = false,
   });
 
-  factory PairingResult.success(PairingCredentials credentials,
-      {bool isP2PMode = false}) {
+  factory PairingResult.success(
+    PairingCredentials credentials, {
+    bool isP2PMode = false,
+  }) {
     return PairingResult._(
-        success: true, credentials: credentials, isP2PMode: isP2PMode);
+      success: true,
+      credentials: credentials,
+      isP2PMode: isP2PMode,
+    );
   }
 
   factory PairingResult.failure(PairingFailureKind kind, {String? detail}) {
@@ -202,11 +208,9 @@ class PairingCredentials {
 class PairingService {
   PairingService({
     AuthStorage? authStorage,
-    P2pService? p2pService,
-    RelayApiClient? relayClient,
-  })  : _authStorage = authStorage ?? getAuthStorage(),
-        _p2pService = p2pService,
-        _relayClient = relayClient;
+    this._p2pService,
+    this._relayClient,
+  }) : _authStorage = authStorage ?? getAuthStorage();
 
   final AuthStorage _authStorage;
   final P2pService? _p2pService;
@@ -232,7 +236,8 @@ class PairingService {
       // The claim code authenticates a pairing request, so it stays out of
       // the logs. Device metadata is enough to follow a pairing through.
       debugPrint(
-          '[PairingService] deviceName=$deviceName, platform=$devicePlatform');
+        '[PairingService] deviceName=$deviceName, platform=$devicePlatform',
+      );
 
       // Use the injected P2P service - it must be provided and initialized
       final p2pService = _p2pService;
@@ -245,7 +250,8 @@ class PairingService {
       final relayClient = _relayClient ?? RelayApiClient();
       final resolveResult = await relayClient.resolveClaimCode(claimCode);
       debugPrint(
-          '[PairingService] Resolved node_addr: ${resolveResult.nodeAddr}');
+        '[PairingService] Resolved node_addr: ${resolveResult.nodeAddr}',
+      );
 
       // 2. Initialize the P2P host
       onStatusUpdate?.call(PairingStep.initializing);
@@ -264,7 +270,8 @@ class PairingService {
       final peerId = _extractNodeId(resolveResult.nodeAddr);
       if (peerId == null) {
         debugPrint(
-            '[PairingService] Could not extract node ID from resolved node_addr');
+          '[PairingService] Could not extract node ID from resolved node_addr',
+        );
         return PairingResult.failure(PairingFailureKind.invalidServerAddress);
       }
       debugPrint('[PairingService] Using peer node ID: $peerId');
@@ -355,7 +362,8 @@ class PairingService {
       final peerId = _extractNodeId(qrData.nodeAddr);
       if (peerId == null) {
         debugPrint(
-            '[PairingService] Could not extract node ID from QR node_addr');
+          '[PairingService] Could not extract node ID from QR node_addr',
+        );
         return PairingResult.failure(PairingFailureKind.invalidQrServerAddress);
       }
       debugPrint('[PairingService] Using peer node ID: $peerId');

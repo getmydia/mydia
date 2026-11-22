@@ -36,8 +36,8 @@ List<String> labelsOf(List<StatsRow> rows) =>
     rows.map((row) => _en.statsRowLabel(row.id)).toList();
 
 String valueFor(List<StatsRow> rows, String label) => _en.statsValue(
-      rows.firstWhere((row) => _en.statsRowLabel(row.id) == label).value,
-    );
+  rows.firstWhere((row) => _en.statsRowLabel(row.id) == label).value,
+);
 
 void main() {
   test('the full density shows every row in order', () {
@@ -99,10 +99,14 @@ void main() {
       ),
       duration: Duration(minutes: 30),
     );
-    expect(valueFor(statsRows(_sample, typed, StatsDensity.full), 'Playing'),
-        'Auto · 720p');
-    expect(valueFor(statsRows(_sample, _context, StatsDensity.full), 'Playing'),
-        'Auto -> 1080p');
+    expect(
+      valueFor(statsRows(_sample, typed, StatsDensity.full), 'Playing'),
+      'Auto · 720p',
+    );
+    expect(
+      valueFor(statsRows(_sample, _context, StatsDensity.full), 'Playing'),
+      'Auto -> 1080p',
+    );
   });
 
   // A dash beside a label reads as a fault in the player. A row with
@@ -133,8 +137,13 @@ void main() {
     // standing alone in place of a value is.
     expect(
       rows.every(
-        (row) => !const ['', '-', '--', 'n/a', 'unknown']
-            .contains(_en.statsValue(row.value).trim().toLowerCase()),
+        (row) => !const [
+          '',
+          '-',
+          '--',
+          'n/a',
+          'unknown',
+        ].contains(_en.statsValue(row.value).trim().toLowerCase()),
       ),
       isTrue,
     );
@@ -173,10 +182,7 @@ void main() {
       qualityLabel: 'Original',
       duration: Duration(minutes: 30),
     );
-    expect(
-      statsRows(_sample, localFile, StatsDensity.full).first.pill,
-      isNull,
-    );
+    expect(statsRows(_sample, localFile, StatsDensity.full).first.pill, isNull);
   });
 
   // A platform that reports a decoder description but cannot say whether
@@ -223,8 +229,7 @@ void main() {
   // throughput to, so the row and its clipboard line must stay gone even
   // when the sample carries a non-null reading, not only when it happens to
   // be null.
-  test(
-      'a local file omits Throughput even when the sample carries a '
+  test('a local file omits Throughput even when the sample carries a '
       'reading', () {
     const local = StatsContext(
       mode: PlaybackMode.localFile,
@@ -303,11 +308,7 @@ void main() {
   // the density dropped rows, and it carries the raw adaptation detail the
   // panel deliberately does not show.
   test('the clipboard carries rows the density dropped', () {
-    final text = statsClipboardText(
-      _sample,
-      _context,
-      appVersion: '1.4.2',
-    );
+    final text = statsClipboardText(_sample, _context, appVersion: '1.4.2');
 
     expect(text, contains('${BuildChannel.current.appName} 1.4.2'));
     expect(text, contains('Source: 2160p hevc - 14.2 Mb/s - mkv'));
@@ -326,8 +327,7 @@ void main() {
 
   // `droppedFrames` is null on the first sample of a source -- unknown, not
   // zero. `?? 0` would state a delta the platform never reported.
-  test(
-      'the clipboard states only the total when the delta is not known '
+  test('the clipboard states only the total when the delta is not known '
       'yet', () {
     final text = statsClipboardText(
       const StatsSample(
@@ -396,21 +396,23 @@ void main() {
       expect(valueFor(rows, 'HDR'), 'HLG, tonemapped by server');
     });
 
-    test('an unknown tonemapper shows the format alone, in the row and copy',
-        () {
-      const context = StatsContext(
-        mode: PlaybackMode.transcode,
-        qualityLabel: 'Auto',
-        duration: Duration(minutes: 90),
-        hdr: StatsHdr(format: 'Dolby Vision 5'),
-      );
-      final rows = statsRows(_sample, context, StatsDensity.full);
-      expect(valueFor(rows, 'HDR'), 'Dolby Vision 5');
-      expect(
-        statsClipboardText(_sample, context, appVersion: '1.0.0'),
-        contains('HDR: Dolby Vision 5\n'),
-      );
-    });
+    test(
+      'an unknown tonemapper shows the format alone, in the row and copy',
+      () {
+        const context = StatsContext(
+          mode: PlaybackMode.transcode,
+          qualityLabel: 'Auto',
+          duration: Duration(minutes: 90),
+          hdr: StatsHdr(format: 'Dolby Vision 5'),
+        );
+        final rows = statsRows(_sample, context, StatsDensity.full);
+        expect(valueFor(rows, 'HDR'), 'Dolby Vision 5');
+        expect(
+          statsClipboardText(_sample, context, appVersion: '1.0.0'),
+          contains('HDR: Dolby Vision 5\n'),
+        );
+      },
+    );
 
     test('no row and no copy line for an SDR source', () {
       final rows = statsRows(_sample, _context, StatsDensity.full);
@@ -435,21 +437,20 @@ void main() {
       String format = 'HDR10',
       PlaybackMode mode = PlaybackMode.direct,
       HdrTonemapper by = HdrTonemapper.player,
-    }) =>
-        StatsContext(
-          mode: mode,
-          qualityLabel: 'Original',
-          duration: const Duration(minutes: 90),
-          hdr: StatsHdr(format: format, by: by),
-          outputHeadroom: headroom,
-        );
+    }) => StatsContext(
+      mode: mode,
+      qualityLabel: 'Original',
+      duration: const Duration(minutes: 90),
+      hdr: StatsHdr(format: format, by: by),
+      outputHeadroom: headroom,
+    );
 
     StatsSample sampleWith({String? gamma, String? colormatrix}) => StatsSample(
-          bufferedAhead: _sample.bufferedAhead,
-          position: _sample.position,
-          targetGamma: gamma,
-          colormatrix: colormatrix,
-        );
+      bufferedAhead: _sample.bufferedAhead,
+      position: _sample.position,
+      targetGamma: gamma,
+      colormatrix: colormatrix,
+    );
 
     String row(StatsSample s, StatsContext c) =>
         valueFor(statsRows(s, c, StatsDensity.full), 'HDR');
@@ -535,25 +536,40 @@ void main() {
 
     test('the clipboard matches the panel', () {
       expect(
-        statsClipboardText(sampleWith(gamma: 'pq'), surface(),
-            appVersion: '1.0.0'),
+        statsClipboardText(
+          sampleWith(gamma: 'pq'),
+          surface(),
+          appVersion: '1.0.0',
+        ),
         contains('HDR: HDR10, HDR output, PQ, headroom 13.8x'),
       );
       expect(
-        statsClipboardText(sampleWith(gamma: 'srgb'), surface(),
-            appVersion: '1.0.0'),
+        statsClipboardText(
+          sampleWith(gamma: 'srgb'),
+          surface(),
+          appVersion: '1.0.0',
+        ),
         contains('HDR: HDR10, tonemapped by player (libplacebo)'),
       );
     });
   });
 
   group('color and display rows', () {
-    const hdrSource =
-        ColorParams(primaries: 'bt.2020', gamma: 'pq', peakNits: 4000);
-    const pqOutput =
-        ColorParams(primaries: 'bt.2020', gamma: 'pq', peakNits: 4000);
-    const sdrSource =
-        ColorParams(primaries: 'bt.709', gamma: 'bt.1886', peakNits: 203);
+    const hdrSource = ColorParams(
+      primaries: 'bt.2020',
+      gamma: 'pq',
+      peakNits: 4000,
+    );
+    const pqOutput = ColorParams(
+      primaries: 'bt.2020',
+      gamma: 'pq',
+      peakNits: 4000,
+    );
+    const sdrSource = ColorParams(
+      primaries: 'bt.709',
+      gamma: 'bt.1886',
+      peakNits: 203,
+    );
 
     StatsSample sampleWith({ColorParams? source, ColorParams? output}) =>
         StatsSample(
@@ -570,41 +586,55 @@ void main() {
     );
 
     test('HDR source to PQ output, with the peak on both ends', () {
-      final rows = statsRows(sampleWith(source: hdrSource, output: pqOutput),
-          plain, StatsDensity.full);
-      expect(valueFor(rows, 'Color'),
-          'bt.2020, pq, 4000 nits → bt.2020, pq, 4000 nits');
+      final rows = statsRows(
+        sampleWith(source: hdrSource, output: pqOutput),
+        plain,
+        StatsDensity.full,
+      );
+      expect(
+        valueFor(rows, 'Color'),
+        'bt.2020, pq, 4000 nits → bt.2020, pq, 4000 nits',
+      );
     });
 
     test('an SDR end has no peak: 203 is just SDR white', () {
-      final rows = statsRows(sampleWith(source: sdrSource, output: sdrSource),
-          plain, StatsDensity.full);
+      final rows = statsRows(
+        sampleWith(source: sdrSource, output: sdrSource),
+        plain,
+        StatsDensity.full,
+      );
       expect(valueFor(rows, 'Color'), 'bt.709, bt.1886 → bt.709, bt.1886');
     });
 
     test('one known end shows alone', () {
       expect(
         valueFor(
-            statsRows(sampleWith(source: sdrSource), plain, StatsDensity.full),
-            'Color'),
+          statsRows(sampleWith(source: sdrSource), plain, StatsDensity.full),
+          'Color',
+        ),
         'bt.709, bt.1886',
       );
       expect(
         valueFor(
-            statsRows(sampleWith(output: sdrSource), plain, StatsDensity.full),
-            'Color'),
+          statsRows(sampleWith(output: sdrSource), plain, StatsDensity.full),
+          'Color',
+        ),
         '→ bt.709, bt.1886',
       );
     });
 
     test('no colour readings, no row', () {
-      expect(labelsOf(statsRows(sampleWith(), plain, StatsDensity.full)),
-          isNot(contains('Color')));
+      expect(
+        labelsOf(statsRows(sampleWith(), plain, StatsDensity.full)),
+        isNot(contains('Color')),
+      );
     });
 
     test('Display shows the headroom only where the screen reports one', () {
-      expect(labelsOf(statsRows(sampleWith(), plain, StatsDensity.full)),
-          isNot(contains('Display')));
+      expect(
+        labelsOf(statsRows(sampleWith(), plain, StatsDensity.full)),
+        isNot(contains('Display')),
+      );
 
       const surface = StatsContext(
         mode: PlaybackMode.direct,
@@ -624,10 +654,13 @@ void main() {
         duration: Duration(minutes: 90),
         outputHeadroom: 3.5,
       );
-      final labels = labelsOf(statsRows(
+      final labels = labelsOf(
+        statsRows(
           sampleWith(source: hdrSource, output: pqOutput),
           surface,
-          StatsDensity.compact));
+          StatsDensity.compact,
+        ),
+      );
       expect(labels, isNot(contains('Color')));
       expect(labels, isNot(contains('Display')));
     });
@@ -641,8 +674,10 @@ void main() {
         outputPotentialHeadroom: 16,
       );
       final text = statsClipboardText(
-          sampleWith(source: sdrSource, output: sdrSource), surface,
-          appVersion: '1.0.0');
+        sampleWith(source: sdrSource, output: sdrSource),
+        surface,
+        appVersion: '1.0.0',
+      );
       expect(text, contains('Color: bt.709, bt.1886 → bt.709, bt.1886'));
       expect(text, contains('Display: EDR headroom 1.2x of 16.0x'));
     });

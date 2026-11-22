@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
@@ -85,8 +85,9 @@ void main() {
     expect(find.byType(QualityBadge), findsNothing);
   });
 
-  testWidgets('omits the resume bar when there is no stored progress',
-      (tester) async {
+  testWidgets('omits the resume bar when there is no stored progress', (
+    tester,
+  ) async {
     await _pump(tester, media: _media());
 
     expect(
@@ -115,8 +116,9 @@ void main() {
     );
   });
 
-  testWidgets('renders the resume bar for a third-party download',
-      (tester) async {
+  testWidgets('renders the resume bar for a third-party download', (
+    tester,
+  ) async {
     await _pump(
       tester,
       media: _media(sourceId: 'plex-acct:srv'),

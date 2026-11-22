@@ -1,7 +1,7 @@
 /// Choosing how one server is kept from whoever else uses this device.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,8 +15,12 @@ import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/toast/toaster.dart';
 import 'pin_pad.dart';
 
-Future<void> changeServerLock(BuildContext context, WidgetRef ref,
-    SourceAccountRecord record, SourceServer server) async {
+Future<void> changeServerLock(
+  BuildContext context,
+  WidgetRef ref,
+  SourceAccountRecord record,
+  SourceServer server,
+) async {
   final anyLock = ref.read(sourceLocksProvider).isNotEmpty;
   if (anyLock && !ref.read(sourceLockProvider)) {
     await context.push(unlockLocation());

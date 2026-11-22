@@ -15,9 +15,9 @@ class RankedItem {
   final int rank;
 
   factory RankedItem.fromJson(Map<String, Object?> json) => RankedItem(
-        item: ItemSummary.fromJson(json['item']! as Map<String, Object?>),
-        rank: json['rank']! as int,
-      );
+    item: ItemSummary.fromJson(json['item']! as Map<String, Object?>),
+    rank: json['rank']! as int,
+  );
 
   Map<String, Object?> toJson() => {'item': item.toJson(), 'rank': rank};
 

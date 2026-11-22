@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -51,20 +51,20 @@ class _PendingDiagnostics extends DiagnosticsController {
 }
 
 LogUploader _uploader() => LogUploader(
-      client: MockClient((_) async => http.Response('', 204)),
-      endpoint: Uri.parse('https://relay.test/player-logs'),
-      store: MemoryLogStore(),
-      sessionId: 's',
-      loadMeta: () async => const LogUploadMeta(
-        deviceId: 'd',
-        deviceName: 'Work MacBook',
-        platform: 'linux',
-        osVersion: 'Fedora Linux 42',
-        appVersion: '0.15.0',
-        build: '150',
-      ),
-      compress: (bytes) => bytes,
-    );
+  client: MockClient((_) async => http.Response('', 204)),
+  endpoint: Uri.parse('https://relay.test/player-logs'),
+  store: MemoryLogStore(),
+  sessionId: 's',
+  loadMeta: () async => const LogUploadMeta(
+    deviceId: 'd',
+    deviceName: 'Work MacBook',
+    platform: 'linux',
+    osVersion: 'Fedora Linux 42',
+    appVersion: '0.15.0',
+    build: '150',
+  ),
+  compress: (bytes) => bytes,
+);
 
 Future<void> _pumpWith(
   WidgetTester tester,
@@ -75,8 +75,9 @@ Future<void> _pumpWith(
     ProviderScope(
       overrides: [
         diagnosticsProvider.overrideWith(() => controller),
-        logUploaderProvider
-            .overrideWithValue(canShareLogs ? _uploader() : null),
+        logUploaderProvider.overrideWithValue(
+          canShareLogs ? _uploader() : null,
+        ),
       ],
       child: const MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -99,8 +100,11 @@ Future<_FakeDiagnostics> _pump(
   bool failWrites = false,
   Future<String> Function(String? note)? onSend,
 }) async {
-  final fake =
-      _FakeDiagnostics(initial, failWrites: failWrites, onSend: onSend);
+  final fake = _FakeDiagnostics(
+    initial,
+    failWrites: failWrites,
+    onSend: onSend,
+  );
   await _pumpWith(tester, fake, canShareLogs: canShareLogs);
   return fake;
 }
@@ -116,8 +120,10 @@ Switch _switch(WidgetTester tester, Key row) =>
 
 void main() {
   testWidgets('each switch shows its stored value', (tester) async {
-    await _pump(tester,
-        initial: const DiagnosticsState(crashes: true, logs: false));
+    await _pump(
+      tester,
+      initial: const DiagnosticsState(crashes: true, logs: false),
+    );
 
     expect(_switch(tester, _crashes).value, isTrue);
     expect(_switch(tester, _logs).value, isFalse);
@@ -156,8 +162,9 @@ void main() {
     expect(find.byKey(const Key('diagnostics-send-logs')), findsNothing);
   });
 
-  testWidgets('while loading both switches are off and disabled',
-      (tester) async {
+  testWidgets('while loading both switches are off and disabled', (
+    tester,
+  ) async {
     await _pumpWith(tester, _PendingDiagnostics());
 
     for (final row in [_crashes, _logs]) {
@@ -169,15 +176,20 @@ void main() {
 
   testWidgets('Send logs now shows the code', (tester) async {
     String? sentNote;
-    await _pump(tester, onSend: (note) async {
-      sentNote = note;
-      return 'LOG-7K2QX9';
-    });
+    await _pump(
+      tester,
+      onSend: (note) async {
+        sentNote = note;
+        return 'LOG-7K2QX9';
+      },
+    );
 
     await tester.tap(find.byKey(const Key('diagnostics-send-logs')));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.byKey(const Key('diagnostics-send-logs-note')), 'Audio drifts');
+      find.byKey(const Key('diagnostics-send-logs-note')),
+      'Audio drifts',
+    );
     await tester.tap(find.byKey(const Key('diagnostics-send-logs-confirm')));
     await tester.pumpAndSettle();
 
@@ -189,13 +201,16 @@ void main() {
 
   testWidgets('a failed send offers a retry', (tester) async {
     var attempts = 0;
-    await _pump(tester, onSend: (_) async {
-      attempts++;
-      if (attempts == 1) {
-        throw const LogUploadException(LogUploadFailure.relayRejected);
-      }
-      return 'LOG-7K2QX9';
-    });
+    await _pump(
+      tester,
+      onSend: (_) async {
+        attempts++;
+        if (attempts == 1) {
+          throw const LogUploadException(LogUploadFailure.relayRejected);
+        }
+        return 'LOG-7K2QX9';
+      },
+    );
 
     await tester.tap(find.byKey(const Key('diagnostics-send-logs')));
     await tester.pumpAndSettle();

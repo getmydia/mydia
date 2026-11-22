@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/palette.dart';
 
@@ -28,10 +28,7 @@ class RatingBadge extends StatelessWidget {
   /// its decimal, so 8 reads as "8.0".
   final double rating;
 
-  const RatingBadge({
-    super.key,
-    required this.rating,
-  });
+  const RatingBadge({super.key, required this.rating});
 
   @override
   Widget build(BuildContext context) {

@@ -13,7 +13,8 @@
 /// own IndexedDB-backed store, not a shared lock file.
 library;
 
-import 'startup_lock_stub.dart' if (dart.library.io) 'startup_lock_native.dart'
+import 'startup_lock_stub.dart'
+    if (dart.library.io) 'startup_lock_native.dart'
     as impl;
 
 /// Whether [error] indicates that another instance of the app already holds

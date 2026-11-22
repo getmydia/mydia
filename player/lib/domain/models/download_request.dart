@@ -54,28 +54,27 @@ class DownloadMetadata {
     String? showId,
     String? showTitle,
     String? showPosterUrl,
-  }) =>
-      DownloadMetadata(
-        title: this.showTitle == null && showTitle != null
-            ? '$showTitle - $title'
-            : title,
-        mediaType: mediaType,
-        posterUrl: posterUrl,
-        backdropUrl: backdropUrl,
-        thumbnailUrl: thumbnailUrl,
-        overview: overview,
-        runtime: runtime,
-        genres: genres,
-        rating: rating,
-        year: year,
-        contentRating: contentRating,
-        seasonNumber: seasonNumber,
-        episodeNumber: episodeNumber,
-        showId: this.showId ?? showId,
-        showTitle: this.showTitle ?? showTitle,
-        showPosterUrl: this.showPosterUrl ?? showPosterUrl,
-        airDate: airDate,
-      );
+  }) => DownloadMetadata(
+    title: this.showTitle == null && showTitle != null
+        ? '$showTitle - $title'
+        : title,
+    mediaType: mediaType,
+    posterUrl: posterUrl,
+    backdropUrl: backdropUrl,
+    thumbnailUrl: thumbnailUrl,
+    overview: overview,
+    runtime: runtime,
+    genres: genres,
+    rating: rating,
+    year: year,
+    contentRating: contentRating,
+    seasonNumber: seasonNumber,
+    episodeNumber: episodeNumber,
+    showId: this.showId ?? showId,
+    showTitle: this.showTitle ?? showTitle,
+    showPosterUrl: this.showPosterUrl ?? showPosterUrl,
+    airDate: airDate,
+  );
 }
 
 class DownloadRequest {

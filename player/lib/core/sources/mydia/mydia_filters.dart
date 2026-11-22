@@ -108,14 +108,15 @@ SavedFilterQuery? mydiaFilterQuery(SourceId sid, MediaFilter filter) {
   DocumentNode? noIds,
   String field,
   Map<String, dynamic> vars,
-}) mydiaBrowsePlan({
+})
+mydiaBrowsePlan({
   required bool movies,
   required BrowseQuery query,
   Cursor? cursor,
 }) {
   final sort =
       mydiaSortOptions.where((o) => o.id == query.sortId).firstOrNull ??
-          mydiaSortOptions.first;
+      mydiaSortOptions.first;
   final descending = query.descending ?? sort.descendingByDefault;
   final category = query.filterIds
       .where((id) => id.startsWith(_categoryPrefix))

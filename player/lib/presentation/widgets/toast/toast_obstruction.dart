@@ -104,16 +104,17 @@ class _ToastObstructionState extends State<ToastObstruction> {
   /// remove its own claim, never a newer one registered by its replacement.
   void _retractFrom(ToastController? controller) {
     if (controller == null) return;
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => controller.removeClaim(this));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => controller.removeClaim(this),
+    );
   }
 
   @override
   Widget build(BuildContext context) => _PaintedRectReporter(
-        layerBox: () => _controller?.layerBox?.call(),
-        onPainted: _handlePainted,
-        child: widget.child,
-      );
+    layerBox: () => _controller?.layerBox?.call(),
+    onPainted: _handlePainted,
+    child: widget.child,
+  );
 }
 
 class _PaintedRectReporter extends SingleChildRenderObjectWidget {

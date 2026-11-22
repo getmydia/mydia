@@ -27,18 +27,22 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    test('legacy instance id persists across reopen and stays out of load()',
-        () async {
-      final first = HiveSourceStore(await Hive.openBox<String>('legacy_box'));
-      expect(await first.legacyInstanceId(), isNull);
-      await first.putAccount(plexRecord());
-      await first.setLegacyInstanceId('mabc123');
-      await Hive.close();
+    test(
+      'legacy instance id persists across reopen and stays out of load()',
+      () async {
+        final first = HiveSourceStore(await Hive.openBox<String>('legacy_box'));
+        expect(await first.legacyInstanceId(), isNull);
+        await first.putAccount(plexRecord());
+        await first.setLegacyInstanceId('mabc123');
+        await Hive.close();
 
-      Hive.init(dir.path);
-      final second = HiveSourceStore(await Hive.openBox<String>('legacy_box'));
-      expect(await second.legacyInstanceId(), 'mabc123');
-      expect((await second.load()).accounts.single.account.id, 'acc1');
-    });
+        Hive.init(dir.path);
+        final second = HiveSourceStore(
+          await Hive.openBox<String>('legacy_box'),
+        );
+        expect(await second.legacyInstanceId(), 'mabc123');
+        expect((await second.load()).accounts.single.account.id, 'acc1');
+      },
+    );
   });
 }

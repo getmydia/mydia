@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,10 +34,8 @@ const _grey = Color(0xFF808080);
 
 Future<MemoryImage> _png(Color color) async {
   final recorder = ui.PictureRecorder();
-  Canvas(recorder).drawRect(
-    const Rect.fromLTWH(0, 0, 64, 36),
-    Paint()..color = color,
-  );
+  Canvas(recorder)
+      .drawRect(const Rect.fromLTWH(0, 0, 64, 36), Paint()..color = color);
   final image = await recorder.endRecording().toImage(64, 36);
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
   return MemoryImage(bytes!.buffer.asUint8List());
@@ -48,9 +46,9 @@ TintExtractor _extractorFor(Map<String, MemoryImage> fixtures, String key) =>
     (source) => extractTint(fixtures[key]!);
 
 AmbientTintColors _expected(Color color) => resolveAmbientTint(
-      color == _grey ? null : AmbientTintColors.fromSeed(color),
-      Palettes.projectionBooth,
-    );
+  color == _grey ? null : AmbientTintColors.fromSeed(color),
+  Palettes.projectionBooth,
+);
 
 /// Lets the real image decode finish (it needs the real event loop), then
 /// runs the debounce and the tint tween out.
@@ -82,98 +80,101 @@ void main() {
     cacheDir = Directory.systemTemp.createTempSync('ambient_fixtures_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => cacheDir.path,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async => cacheDir.path,
+        );
   });
   tearDownAll(() {
     resetCacheManagersForTest();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
     cacheDir.deleteSync(recursive: true);
   });
 
-  const fixtures = <String, Color>{
-    'warm': _warm,
-    'cool': _cool,
-    'grey': _grey,
-  };
+  const fixtures = <String, Color>{'warm': _warm, 'cool': _cool, 'grey': _grey};
 
   for (final entry in fixtures.entries) {
     final name = entry.key;
     final color = entry.value;
 
-    testWidgets('home hero over $name artwork resolves the expected tint',
-        (tester) async {
-      final images = {
-        name: (await tester.runAsync(() => _png(color)))!,
-      };
+    testWidgets('home hero over $name artwork resolves the expected tint', (
+      tester,
+    ) async {
+      final images = {name: (await tester.runAsync(() => _png(color)))!};
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       AmbientTintColors? seen;
       await mockNetworkImages(() async {
-        await tester.pumpWidget(ProviderScope(
-          overrides: [
-            mediaSourceProvider(fakeSourceId)
-                .overrideWithValue(FakeMediaSource()),
-            tintExtractorProvider
-                .overrideWithValue(_extractorFor(images, name)),
-          ],
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: ShellAmbientTint(
-              child: Scaffold(
-                body: Stack(
-                  children: [
-                    Consumer(builder: (context, ref, _) {
-                      final source =
-                          ref.watch(ambientBackdropControllerProvider);
-                      return Positioned.fill(
-                        child: AmbientBackdrop(
-                          imageUrl: source.imageUrl,
-                          id: source.id,
-                          headers: source.headers,
-                          cacheKey: source.cacheKey,
-                        ),
-                      );
-                    }),
-                    SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          const SourceHomeHero(
-                            sourceId: fakeSourceId,
-                            item: ItemSummary(
-                              ref: ItemRef(
-                                sourceId: fakeSourceId,
-                                kind: ItemKind.movie,
-                                externalId: 'night-ferry',
-                              ),
-                              title: 'Night Ferry',
-                              year: 2011,
-                              overview: 'A ferry crosses the saltmarsh.',
-                              poster: ArtworkRef('/art/night-ferry'),
-                              backdrop: ArtworkRef('/backdrop/night-ferry'),
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mediaSourceProvider(fakeSourceId)
+                  .overrideWithValue(FakeMediaSource()),
+              tintExtractorProvider.overrideWithValue(
+                _extractorFor(images, name),
+              ),
+            ],
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: ShellAmbientTint(
+                child: Scaffold(
+                  body: Stack(
+                    children: [
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final source = ref.watch(
+                            ambientBackdropControllerProvider,
+                          );
+                          return Positioned.fill(
+                            child: AmbientBackdrop(
+                              imageUrl: source.imageUrl,
+                              id: source.id,
+                              headers: source.headers,
+                              cacheKey: source.cacheKey,
                             ),
-                          ),
-                          Builder(builder: (context) {
-                            seen = AmbientTint.of(context);
-                            return const SizedBox();
-                          }),
-                        ],
+                          );
+                        },
                       ),
-                    ),
-                  ],
+                      SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            const SourceHomeHero(
+                              sourceId: fakeSourceId,
+                              item: ItemSummary(
+                                ref: ItemRef(
+                                  sourceId: fakeSourceId,
+                                  kind: ItemKind.movie,
+                                  externalId: 'night-ferry',
+                                ),
+                                title: 'Night Ferry',
+                                year: 2011,
+                                overview: 'A ferry crosses the saltmarsh.',
+                                poster: ArtworkRef('/art/night-ferry'),
+                                backdrop: ArtworkRef('/backdrop/night-ferry'),
+                              ),
+                            ),
+                            Builder(
+                              builder: (context) {
+                                seen = AmbientTint.of(context);
+                                return const SizedBox();
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ));
+        );
         await tester.pump();
         await _settleTint(tester);
       });
@@ -184,11 +185,10 @@ void main() {
       await _teardownTree(tester);
     });
 
-    testWidgets('movie detail over $name artwork tints its scaffold',
-        (tester) async {
-      final images = {
-        name: (await tester.runAsync(() => _png(color)))!,
-      };
+    testWidgets('movie detail over $name artwork tints its scaffold', (
+      tester,
+    ) async {
+      final images = {name: (await tester.runAsync(() => _png(color)))!};
       const ref = ItemRef(
         sourceId: fakeSourceId,
         kind: ItemKind.movie,
@@ -209,28 +209,31 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(1000, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await mockNetworkImages(() async {
-        await tester.pumpWidget(ProviderScope(
-          overrides: [
-            mediaSourceProvider(source.id).overrideWithValue(source),
-            // The harness maps artwork to null; this one resolves it, so the
-            // screen's tintArt closure reaches the extractor.
-            sourceArtworkProvider.overrideWith(
-              (ref, key) async => ArtworkRequest(
-                url: 'https://fake.test${key.art.path}',
-                headers: const {},
-                cacheKey: 'fixture|${key.art.path}',
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mediaSourceProvider(source.id).overrideWithValue(source),
+              // The harness maps artwork to null; this one resolves it, so the
+              // screen's tintArt closure reaches the extractor.
+              sourceArtworkProvider.overrideWith(
+                (ref, key) async => ArtworkRequest(
+                  url: 'https://fake.test${key.art.path}',
+                  headers: const {},
+                  cacheKey: 'fixture|${key.art.path}',
+                ),
               ),
+              ...castCapableOverrides(),
+              tintExtractorProvider.overrideWithValue(
+                _extractorFor(images, name),
+              ),
+            ],
+            child: const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: MovieDetailScreen.target(target: SourceTarget(ref)),
             ),
-            ...castCapableOverrides(),
-            tintExtractorProvider
-                .overrideWithValue(_extractorFor(images, name)),
-          ],
-          child: const MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: MovieDetailScreen.target(target: SourceTarget(ref)),
           ),
-        ));
+        );
         await tester.pump();
         await _settleTint(tester);
       });

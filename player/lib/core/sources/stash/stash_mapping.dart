@@ -10,23 +10,29 @@ const stashScenesLibraryId = 'scenes';
 
 const stashSortOptions = [
   SortOption(
-      id: 'created_at',
-      name: SortName.recentlyAdded,
-      descendingByDefault: true,
-      shared: SharedSort.added),
+    id: 'created_at',
+    name: SortName.recentlyAdded,
+    descendingByDefault: true,
+    shared: SharedSort.added,
+  ),
   SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
-      id: 'date',
-      name: SortName.date,
-      descendingByDefault: true,
-      shared: SharedSort.released),
+    id: 'date',
+    name: SortName.date,
+    descendingByDefault: true,
+    shared: SharedSort.released,
+  ),
   SortOption(id: 'rating', name: SortName.rating, descendingByDefault: true),
   SortOption(
-      id: 'play_count', name: SortName.mostPlayed, descendingByDefault: true),
+    id: 'play_count',
+    name: SortName.mostPlayed,
+    descendingByDefault: true,
+  ),
   SortOption(
-      id: 'last_played_at',
-      name: SortName.lastPlayed,
-      descendingByDefault: true),
+    id: 'last_played_at',
+    name: SortName.lastPlayed,
+    descendingByDefault: true,
+  ),
   SortOption(id: 'random', name: SortName.random),
 ];
 
@@ -62,14 +68,14 @@ ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
   final file = _firstFile(scene);
   final title = (scene['title'] as String?)?.trim();
   final date = scene['date'] as String?;
-  final screenshot =
-      stashRelativePath((scene['paths'] as Map?)?['screenshot'] as String?);
+  final screenshot = stashRelativePath(
+    (scene['paths'] as Map?)?['screenshot'] as String?,
+  );
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: ItemKind.video, externalId: id),
     title: title != null && title.isNotEmpty
         ? title
-        : (file?['basename'] as String? ??
-            'Scene $id'), // l10n-ignore: stored name for a scene that has none
+        : (file?['basename'] as String? ?? 'Scene $id'), // l10n-ignore: stored name for a scene that has none
     subtitle: (scene['studio'] as Map?)?['name'] as String? ?? date,
     year: date != null && date.length >= 4
         ? int.tryParse(date.substring(0, 4))
@@ -87,9 +93,9 @@ ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
 }
 
 List<String> _names(Object? list) => [
-      for (final p in (list is List ? list : const []))
-        if (p is Map && p['name'] is String) p['name'] as String,
-    ];
+  for (final p in (list is List ? list : const []))
+    if (p is Map && p['name'] is String) p['name'] as String,
+];
 
 ItemDetail stashDetail(SourceId sourceId, Map<String, dynamic> scene) {
   final summary = stashSummary(sourceId, scene);
@@ -105,7 +111,8 @@ ItemDetail stashDetail(SourceId sourceId, Map<String, dynamic> scene) {
           codec: c['caption_type'] as String?,
           language: c['language_code'] as String,
           title: '${c['language_code']}'.toUpperCase(),
-          externalPath: '/scene/$id/caption?lang=${c['language_code']}'
+          externalPath:
+              '/scene/$id/caption?lang=${c['language_code']}'
               '&type=${c['caption_type']}',
         ),
   ];

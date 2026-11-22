@@ -35,59 +35,65 @@ void main() {
       expect(ran, isTrue);
     });
 
-    test('stillWanted is asked after the wait, and a no skips the call',
-        () async {
-      final gate = SourceSwitchGate();
-      final replace = Completer<void>();
-      var wanted = true;
-      final switched = gate.closeWhile(() async {
-        await replace.future;
-        wanted = false;
-      });
-      var ran = false;
+    test(
+      'stillWanted is asked after the wait, and a no skips the call',
+      () async {
+        final gate = SourceSwitchGate();
+        final replace = Completer<void>();
+        var wanted = true;
+        final switched = gate.closeWhile(() async {
+          await replace.future;
+          wanted = false;
+        });
+        var ran = false;
 
-      final passed = gate.pass(() => wanted, () async {
-        ran = true;
-      });
-      replace.complete();
-      await switched;
+        final passed = gate.pass(() => wanted, () async {
+          ran = true;
+        });
+        replace.complete();
+        await switched;
 
-      expect(await passed, isFalse);
-      expect(ran, isFalse);
-    });
+        expect(await passed, isFalse);
+        expect(ran, isFalse);
+      },
+    );
 
-    test('a switch waits for a call already running before it replaces',
-        () async {
-      final gate = SourceSwitchGate();
-      final call = Completer<void>();
-      final passed = gate.pass(() => true, () => call.future);
-      var replaced = false;
+    test(
+      'a switch waits for a call already running before it replaces',
+      () async {
+        final gate = SourceSwitchGate();
+        final call = Completer<void>();
+        final passed = gate.pass(() => true, () => call.future);
+        var replaced = false;
 
-      final switched = gate.closeWhile(() async {
-        replaced = true;
-      });
-      await pumpEventQueue();
-      expect(replaced, isFalse);
+        final switched = gate.closeWhile(() async {
+          replaced = true;
+        });
+        await pumpEventQueue();
+        expect(replaced, isFalse);
 
-      call.complete();
-      await switched;
-      expect(replaced, isTrue);
-      expect(await passed, isTrue);
-    });
+        call.complete();
+        await switched;
+        expect(replaced, isTrue);
+        expect(await passed, isTrue);
+      },
+    );
 
-    test('a call that throws reaches its caller and does not hold the gate',
-        () async {
-      final gate = SourceSwitchGate();
-      final call = Completer<void>();
-      final passed = gate.pass(() => true, () => call.future);
-      final switched = gate.closeWhile(() async => 'replaced');
+    test(
+      'a call that throws reaches its caller and does not hold the gate',
+      () async {
+        final gate = SourceSwitchGate();
+        final call = Completer<void>();
+        final passed = gate.pass(() => true, () => call.future);
+        final switched = gate.closeWhile(() async => 'replaced');
 
-      call.completeError(StateError('[Player] has been disposed'));
+        call.completeError(StateError('[Player] has been disposed'));
 
-      await expectLater(passed, throwsStateError);
-      expect(await switched, 'replaced');
-      expect(gate.closed, isFalse);
-    });
+        await expectLater(passed, throwsStateError);
+        expect(await switched, 'replaced');
+        expect(gate.closed, isFalse);
+      },
+    );
 
     test('a switch that throws still reopens the gate', () async {
       final gate = SourceSwitchGate();
@@ -116,8 +122,7 @@ void main() {
       await first;
     });
 
-    test(
-        'a waiter waits again when a new switch closes the gate before it '
+    test('a waiter waits again when a new switch closes the gate before it '
         'resumes', () async {
       final gate = SourceSwitchGate();
       final first = Completer<void>();
@@ -148,18 +153,20 @@ void main() {
       expect(ran, isTrue);
     });
 
-    test('closes synchronously, so a check right after the call sees it',
-        () async {
-      final gate = SourceSwitchGate();
-      final replace = Completer<void>();
-      expect(gate.closed, isFalse);
+    test(
+      'closes synchronously, so a check right after the call sees it',
+      () async {
+        final gate = SourceSwitchGate();
+        final replace = Completer<void>();
+        expect(gate.closed, isFalse);
 
-      final switched = gate.closeWhile(() => replace.future);
-      expect(gate.closed, isTrue);
+        final switched = gate.closeWhile(() => replace.future);
+        expect(gate.closed, isTrue);
 
-      replace.complete();
-      await switched;
-      expect(gate.closed, isFalse);
-    });
+        replace.complete();
+        await switched;
+        expect(gate.closed, isFalse);
+      },
+    );
   });
 }

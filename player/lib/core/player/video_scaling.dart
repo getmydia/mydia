@@ -15,14 +15,14 @@ enum VideoScaling {
   fill;
 
   BoxFit get boxFit => switch (this) {
-        VideoScaling.fit => BoxFit.contain,
-        VideoScaling.fill => BoxFit.cover,
-      };
+    VideoScaling.fit => BoxFit.contain,
+    VideoScaling.fill => BoxFit.cover,
+  };
 
   VideoScaling get toggled => switch (this) {
-        VideoScaling.fit => VideoScaling.fill,
-        VideoScaling.fill => VideoScaling.fit,
-      };
+    VideoScaling.fit => VideoScaling.fill,
+    VideoScaling.fill => VideoScaling.fit,
+  };
 }
 
 /// Remembers the viewer's [VideoScaling] on this device.

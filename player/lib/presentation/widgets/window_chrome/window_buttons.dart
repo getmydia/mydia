@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/window/decoration_layout.dart';
 import '../../../core/window/window_controller.dart';
@@ -16,8 +16,8 @@ class WindowButtons extends StatelessWidget {
     super.key,
     required this.buttons,
     required this.controller,
-    ValueListenable<bool>? maximized,
-  }) : _maximized = maximized;
+    this._maximized,
+  });
 
   final List<WindowButton> buttons;
   final WindowController controller;
@@ -44,8 +44,9 @@ class WindowButtons extends StatelessWidget {
               // addressing the button still match exactly one widget.
               key: ValueKey(button),
               padding: EdgeInsets.symmetric(
-                horizontal:
-                    defaultTargetPlatform == TargetPlatform.windows ? 0 : 2,
+                horizontal: defaultTargetPlatform == TargetPlatform.windows
+                    ? 0
+                    : 2,
               ),
               child: WindowButtonWidget(
                 key: WindowButtonWidget.keyFor(button),

@@ -22,8 +22,7 @@ void main() {
       expect(LinuxUpdater.installDirWritable(path: temp.path), isTrue);
     });
 
-    test(
-        'a directory with the write bit set but no write permission reports '
+    test('a directory with the write bit set but no write permission reports '
         'not writable', () {
       // 0555 clears the owner write bit entirely, so this is not the shape
       // that fooled the old check. It covers a different case: a directory
@@ -65,8 +64,7 @@ void main() {
   });
 
   group('LinuxUpdater.applyUpdate', () {
-    test('does not download when the install directory is not writable',
-        () async {
+    test('does not download when the install directory is not writable', () async {
       // A URL that would fail loudly if it were ever fetched. The assertion is
       // that applyUpdate returns without touching it.
       final updater = LinuxUpdater(

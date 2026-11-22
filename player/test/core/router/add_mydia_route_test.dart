@@ -3,7 +3,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -23,25 +23,30 @@ import '../../test_utils/no_downloads.dart';
 Future<GoRouter> _pump(WidgetTester tester, String location) async {
   await tester.binding.setSurfaceSize(const Size(900, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  final container = ProviderContainer(overrides: [
-    noProgressFlushOverride,
-    sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
-    sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-    authServiceProvider
-        .overrideWithValue(AuthService(storage: MockAuthStorage())),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      noProgressFlushOverride,
+      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
+      authServiceProvider.overrideWithValue(
+        AuthService(storage: MockAuthStorage()),
+      ),
+    ],
+  );
   addTearDown(container.dispose);
 
   final router = container.read(appRouterProvider);
   router.go(location);
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: router,
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return router;
 }
@@ -58,8 +63,9 @@ void main() {
   });
 
   // The login screen has no app bar, and iOS has no system back.
-  testWidgets('pushed from Add a server, the login has a way back',
-      (tester) async {
+  testWidgets('pushed from Add a server, the login has a way back', (
+    tester,
+  ) async {
     final router = await _pump(tester, '/sources/add');
     unawaited(router.push('/sources/add/mydia'));
     await tester.pumpAndSettle();
@@ -71,26 +77,30 @@ void main() {
   });
 
   testWidgets(
-      'with no Mydia server, the Mydia tile opens login with a way back',
-      (tester) async {
-    final router = await _pump(tester, '/sources/add');
-    await tester.tap(find.byKey(const Key('add-source-mydia')));
-    await tester.pumpAndSettle();
+    'with no Mydia server, the Mydia tile opens login with a way back',
+    (tester) async {
+      final router = await _pump(tester, '/sources/add');
+      await tester.tap(find.byKey(const Key('add-source-mydia')));
+      await tester.pumpAndSettle();
 
-    // A pushed route is the last match; `uri` still names the page below it.
-    expect(router.routerDelegate.currentConfiguration.last.matchedLocation,
-        '/sources/add/mydia');
-    final screen = tester.widget<LoginScreen>(find.byType(LoginScreen));
-    expect(screen.reauthAccountId, isNull);
+      // A pushed route is the last match; `uri` still names the page below it.
+      expect(
+        router.routerDelegate.currentConfiguration.last.matchedLocation,
+        '/sources/add/mydia',
+      );
+      final screen = tester.widget<LoginScreen>(find.byType(LoginScreen));
+      expect(screen.reauthAccountId, isNull);
 
-    await tester.tap(find.byKey(const Key('login-back')));
-    await tester.pumpAndSettle();
-    expect(find.byType(LoginScreen), findsNothing);
-    expect(find.byType(AddSourceScreen), findsOneWidget);
-  });
+      await tester.tap(find.byKey(const Key('login-back')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsNothing);
+      expect(find.byType(AddSourceScreen), findsOneWidget);
+    },
+  );
 
-  testWidgets('/login redirects to /sources/add/mydia and keeps its query',
-      (tester) async {
+  testWidgets('/login redirects to /sources/add/mydia and keeps its query', (
+    tester,
+  ) async {
     final router = await _pump(tester, '/login?x=1');
 
     expect(router.state.uri.toString(), '/sources/add/mydia?x=1');
@@ -99,8 +109,10 @@ void main() {
 
   group('addMydiaRouteRedirect on an instance-hosted web build', () {
     test('with no Mydia account it stays, so sign-in cannot loop', () {
-      expect(addMydiaRouteRedirect(hasMydia: false, instanceHostedWeb: true),
-          isNull);
+      expect(
+        addMydiaRouteRedirect(hasMydia: false, instanceHostedWeb: true),
+        isNull,
+      );
       // `/login` -> `/sources/add/mydia` stays put with no Mydia server.
       expect(
         appRedirect(
@@ -114,12 +126,16 @@ void main() {
 
     test('with a Mydia account it redirects to /', () {
       expect(
-          addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: true), '/');
+        addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: true),
+        '/',
+      );
     });
 
     test('off the instance-hosted web it never redirects', () {
-      expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: false),
-          isNull);
+      expect(
+        addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: false),
+        isNull,
+      );
     });
   });
 }

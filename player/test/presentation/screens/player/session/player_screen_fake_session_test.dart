@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,7 +23,7 @@ import 'fake_playback_session.dart';
 
 class _RecordingPlatformPlayer extends PlatformPlayer {
   _RecordingPlatformPlayer()
-      : super(configuration: const PlayerConfiguration());
+    : super(configuration: const PlayerConfiguration());
 
   final _handle = Completer<int>();
   Media? opened;
@@ -96,34 +96,37 @@ ScriptedMydiaTransport _recordingServer(List<String> operations) {
 void main() {
   castPillTests();
 
-  testWidgets('positive control: the Mydia session does issue those operations',
-      (tester) async {
-    final operations = <String>[];
-    final container = buildPlayerScreenContainer(
-      server: _recordingServer(operations),
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-    );
-    addTearDown(container.dispose);
-    final fake = _RecordingPlatformPlayer();
+  testWidgets(
+    'positive control: the Mydia session does issue those operations',
+    (tester) async {
+      final operations = <String>[];
+      final container = buildPlayerScreenContainer(
+        server: _recordingServer(operations),
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
+      );
+      addTearDown(container.dispose);
+      final fake = _RecordingPlatformPlayer();
 
-    await pumpPlayerScreen(
-      tester,
-      container,
-      createPlayer: () => Player(platformPlayer: fake),
-    );
-    await pumpUntil(tester, () => fake.opened != null);
+      await pumpPlayerScreen(
+        tester,
+        container,
+        createPlayer: () => Player(platformPlayer: fake),
+      );
+      await pumpUntil(tester, () => fake.opened != null);
 
-    expect(operations, contains('StreamingCandidates'));
-    expect(operations, contains('MovieDetail'));
+      expect(operations, contains('StreamingCandidates'));
+      expect(operations, contains('MovieDetail'));
 
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
-  });
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
 
-  testWidgets('plays what the session resolves and reports through it',
-      (tester) async {
+  testWidgets('plays what the session resolves and reports through it', (
+    tester,
+  ) async {
     final operations = <String>[];
     final container = buildPlayerScreenContainer(
       connectionState: HarnessLink.direct(),
@@ -135,22 +138,24 @@ void main() {
     final session = FakePlaybackSession();
     final fake = _RecordingPlatformPlayer();
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        home: PlayerScreen(
-          mediaId: 'm1',
-          mediaType: 'movie',
-          fileId: 'part-1',
-          title: 'Invented Film',
-          session: session,
-          createPlayer: () => Player(platformPlayer: fake),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: PlayerScreen(
+            mediaId: 'm1',
+            mediaType: 'movie',
+            fileId: 'part-1',
+            title: 'Invented Film',
+            session: session,
+            createPlayer: () => Player(platformPlayer: fake),
+          ),
         ),
       ),
-    ));
+    );
     await pumpUntil(tester, () => fake.opened != null);
 
     expect(session.prepared, 1);
@@ -164,12 +169,16 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
-    expect(session.transport.ends, greaterThan(0),
-        reason: 'leaving the screen ends the stream');
+    expect(
+      session.transport.ends,
+      greaterThan(0),
+      reason: 'leaving the screen ends the stream',
+    );
   });
 
-  testWidgets('a session with a season offers the next episode by its route',
-      (tester) async {
+  testWidgets('a session with a season offers the next episode by its route', (
+    tester,
+  ) async {
     final container = buildPlayerScreenContainer(
       connectionState: HarnessLink.direct(),
       server: _recordingServer(<String>[]),
@@ -179,33 +188,37 @@ void main() {
     addTearDown(container.dispose);
     final session = _SeasonSession();
     final fake = _RecordingPlatformPlayer();
-    final router = GoRouter(routes: [
-      GoRoute(
-        path: '/',
-        builder: (_, __) => PlayerScreen(
-          mediaId: 'e1',
-          mediaType: 'episode',
-          fileId: 'f1',
-          showId: 's1',
-          seasonNumber: 1,
-          session: session,
-          createPlayer: () => Player(platformPlayer: fake),
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => PlayerScreen(
+            mediaId: 'e1',
+            mediaType: 'episode',
+            fileId: 'f1',
+            showId: 's1',
+            seasonNumber: 1,
+            session: session,
+            createPlayer: () => Player(platformPlayer: fake),
+          ),
+        ),
+        GoRoute(
+          path: '/fake/episode/:id',
+          builder: (_, state) => Text('landed ${state.pathParameters['id']}'),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          routerConfig: router,
         ),
       ),
-      GoRoute(
-        path: '/fake/episode/:id',
-        builder: (_, state) => Text('landed ${state.pathParameters['id']}'),
-      ),
-    ]);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        routerConfig: router,
-      ),
-    ));
+    );
     await pumpUntil(tester, () => fake.opened != null);
     await pumpUntil(tester, () => session.progress.starts.isNotEmpty);
 
@@ -218,55 +231,71 @@ void main() {
   });
 
   testWidgets(
-      'a route without show or season still finds the next episode from '
-      'the detail', (tester) async {
-    final session = _DetailNamesSeasonSession();
-    await _pumpEpisode(tester, session);
-    await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
-    expect(session.seasonRequests, [1]);
+    'a route without show or season still finds the next episode from '
+    'the detail',
+    (tester) async {
+      final session = _DetailNamesSeasonSession();
+      await _pumpEpisode(tester, session);
+      await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
+      expect(session.seasonRequests, [1]);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
-    await pumpUntil(tester, () => find.text('landed e2').evaluate().isNotEmpty);
-    expect(session.locationShowIds, ['s1'],
-        reason: 'the next episode route carries the resolved show');
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await pumpUntil(
+        tester,
+        () => find.text('landed e2').evaluate().isNotEmpty,
+      );
+      expect(session.locationShowIds, [
+        's1',
+      ], reason: 'the next episode route carries the resolved show');
 
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
-  });
-
-  testWidgets(
-      'a route with show and season asks for the season without waiting for '
-      'the detail', (tester) async {
-    final hold = Completer<void>();
-    final session = _DetailNamesSeasonSession(holdDetail: hold);
-    await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 1);
-    await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
-    expect(hold.isCompleted, isFalse);
-    expect(session.seasonRequests, [1]);
-
-    hold.complete();
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
-  });
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
 
   testWidgets(
-      'without a route season, the subtitle preference does not wait for '
-      'the season episodes', (tester) async {
-    final hold = Completer<void>();
-    final session = _DetailNamesSeasonSession(holdSeason: hold);
-    final fake = await _pumpEpisode(tester, session);
-    await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
-    await pumpUntil(tester, () => session.preferenceRequests > 0);
-    expect(session.preferenceRequests, greaterThan(0),
-        reason: 'the preference must not wait for the season');
-    expect(fake.opened, isNotNull,
-        reason: 'playback must not wait for the season');
-    expect(hold.isCompleted, isFalse);
+    'a route with show and season asks for the season without waiting for '
+    'the detail',
+    (tester) async {
+      final hold = Completer<void>();
+      final session = _DetailNamesSeasonSession(holdDetail: hold);
+      await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 1);
+      await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
+      expect(hold.isCompleted, isFalse);
+      expect(session.seasonRequests, [1]);
 
-    hold.complete();
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
-  });
+      hold.complete();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'without a route season, the subtitle preference does not wait for '
+    'the season episodes',
+    (tester) async {
+      final hold = Completer<void>();
+      final session = _DetailNamesSeasonSession(holdSeason: hold);
+      final fake = await _pumpEpisode(tester, session);
+      await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
+      await pumpUntil(tester, () => session.preferenceRequests > 0);
+      expect(
+        session.preferenceRequests,
+        greaterThan(0),
+        reason: 'the preference must not wait for the season',
+      );
+      expect(
+        fake.opened,
+        isNotNull,
+        reason: 'playback must not wait for the season',
+      );
+      expect(hold.isCompleted, isFalse);
+
+      hold.complete();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
 
   testWidgets('the route season wins over the detail one', (tester) async {
     final session = _DetailNamesSeasonSession();
@@ -285,15 +314,20 @@ class _SeasonSession extends FakePlaybackSession {
 
   @override
   Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async => [
-        const PlaybackEpisode(
-            id: 'e1', seasonNumber: 1, episodeNumber: 1, fileIds: ['f1']),
-        const PlaybackEpisode(
-            id: 'e2',
-            seasonNumber: 1,
-            episodeNumber: 2,
-            title: 'Invented Episode 2',
-            fileIds: ['f2']),
-      ];
+    const PlaybackEpisode(
+      id: 'e1',
+      seasonNumber: 1,
+      episodeNumber: 1,
+      fileIds: ['f1'],
+    ),
+    const PlaybackEpisode(
+      id: 'e2',
+      seasonNumber: 1,
+      episodeNumber: 2,
+      title: 'Invented Episode 2',
+      fileIds: ['f2'],
+    ),
+  ];
 }
 
 /// An episode session whose detail names the show and season, the way a
@@ -301,13 +335,13 @@ class _SeasonSession extends FakePlaybackSession {
 /// carried neither. Records what the screen asked for.
 class _DetailNamesSeasonSession extends _SeasonSession {
   _DetailNamesSeasonSession({this.holdDetail, this.holdSeason})
-      : super(
-          item: const ItemRef(
-            sourceId: SourceId('fake'),
-            kind: ItemKind.episode,
-            externalId: 'e1',
-          ),
-        );
+    : super(
+        item: const ItemRef(
+          sourceId: SourceId('fake'),
+          kind: ItemKind.episode,
+          externalId: 'e1',
+        ),
+      );
 
   /// When set, `detail()` waits on it, so a test can see what the screen
   /// does before the detail answers.
@@ -379,33 +413,37 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   );
   addTearDown(container.dispose);
   final fake = _RecordingPlatformPlayer();
-  final router = GoRouter(routes: [
-    GoRoute(
-      path: '/',
-      builder: (_, __) => PlayerScreen(
-        mediaId: 'e1',
-        mediaType: 'episode',
-        fileId: 'f1',
-        showId: showId,
-        seasonNumber: seasonNumber,
-        session: session,
-        createPlayer: () => Player(platformPlayer: fake),
+  final router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, _) => PlayerScreen(
+          mediaId: 'e1',
+          mediaType: 'episode',
+          fileId: 'f1',
+          showId: showId,
+          seasonNumber: seasonNumber,
+          session: session,
+          createPlayer: () => Player(platformPlayer: fake),
+        ),
+      ),
+      GoRoute(
+        path: '/fake/episode/:id',
+        builder: (_, state) => Text('landed ${state.pathParameters['id']}'),
+      ),
+    ],
+  );
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        routerConfig: router,
       ),
     ),
-    GoRoute(
-      path: '/fake/episode/:id',
-      builder: (_, state) => Text('landed ${state.pathParameters['id']}'),
-    ),
-  ]);
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      routerConfig: router,
-    ),
-  ));
+  );
   await pumpUntil(tester, () => fake.opened != null);
   return fake;
 }
@@ -422,42 +460,47 @@ Future<void> _pumpWithSession(
   );
   addTearDown(container.dispose);
   final fake = _RecordingPlatformPlayer();
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: ProviderScope(
-      overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        home: PlayerScreen(
-          mediaId: 'm1',
-          mediaType: 'movie',
-          fileId: 'part-1',
-          session: session,
-          createPlayer: () => Player(platformPlayer: fake),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: ProviderScope(
+        overrides: [
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: PlayerScreen(
+            mediaId: 'm1',
+            mediaType: 'movie',
+            fileId: 'part-1',
+            session: session,
+            createPlayer: () => Player(platformPlayer: fake),
+          ),
         ),
       ),
     ),
-  ));
+  );
   await pumpUntil(tester, () => fake.opened != null);
   await tester.pump(const Duration(milliseconds: 300));
 }
 
 void castPillTests() {
-  testWidgets('a session without the cast feature shows no cast pill',
-      (tester) async {
+  testWidgets('a session without the cast feature shows no cast pill', (
+    tester,
+  ) async {
     await _pumpWithSession(tester, FakePlaybackSession());
     expect(find.byKey(CastChromeIcon.iconKey), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
 
-  testWidgets('positive control: a session with the cast feature has one',
-      (tester) async {
+  testWidgets('positive control: a session with the cast feature has one', (
+    tester,
+  ) async {
     await _pumpWithSession(tester, _CastableSession());
     expect(find.byKey(CastChromeIcon.iconKey), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

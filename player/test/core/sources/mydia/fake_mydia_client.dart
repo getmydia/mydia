@@ -5,8 +5,10 @@ import 'package:player/core/sources/mydia/mydia_gql_transport.dart';
 /// A [MydiaClient] over [transport], with in-memory credentials.
 MydiaClient fakeMydiaClient(
   MydiaGqlTransport transport, {
-  MydiaCredentials creds =
-      const MydiaCredentials(instanceId: 'test', accessToken: 'access'),
+  MydiaCredentials creds = const MydiaCredentials(
+    instanceId: 'test',
+    accessToken: 'access',
+  ),
   void Function()? onUnauthorized,
 }) {
   var current = creds;

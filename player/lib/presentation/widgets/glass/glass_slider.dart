@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_accessibility.dart';
@@ -73,8 +73,9 @@ class _GlassSliderState extends State<GlassSlider> {
   /// `trackWidth - trackHeight`.
   double _knobStart(BuildContext context, double width) {
     final span = widget.max - widget.min;
-    final t =
-        span <= 0 ? 0.0 : ((widget.value - widget.min) / span).clamp(0.0, 1.0);
+    final t = span <= 0
+        ? 0.0
+        : ((widget.value - widget.min) / span).clamp(0.0, 1.0);
     final theme = SliderTheme.of(context);
     final rounded =
         (theme.trackShape ?? const RoundedRectSliderTrackShape()).isRounded;
@@ -92,8 +93,11 @@ class _GlassSliderState extends State<GlassSlider> {
     return centre - _knobWidth / 2;
   }
 
-  Widget _slider(BuildContext context,
-      {required bool glass, bool unbounded = false}) {
+  Widget _slider(
+    BuildContext context, {
+    required bool glass,
+    bool unbounded = false,
+  }) {
     final slider = Slider(
       value: widget.value,
       onChanged: widget.onChanged,
@@ -143,7 +147,8 @@ class _GlassSliderState extends State<GlassSlider> {
   Widget build(BuildContext context) {
     if (!GlassStyle.of(context)) return _slider(context, glass: false);
     final opaque = GlassAccessibilityScope.of(context).reduceTransparency;
-    final ring = _focused &&
+    final ring =
+        _focused &&
         FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     // Focus reports from the slider below; this node never takes focus.
     final enabled = widget.onChanged != null;
@@ -207,8 +212,9 @@ class _Knob extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const radius =
-        BorderRadius.all(Radius.circular(_GlassSliderState._knobRadius));
+    const radius = BorderRadius.all(
+      Radius.circular(_GlassSliderState._knobRadius),
+    );
     final filled = opaque || LiquidGlassSupport.program == null;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -249,8 +255,8 @@ class _KnobFill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const DecoratedBox(
-        key: Key('glass-slider-knob-fill'),
-        decoration: BoxDecoration(color: Color.fromRGBO(255, 255, 255, 0.85)),
-        child: SizedBox.expand(),
-      );
+    key: Key('glass-slider-knob-fill'),
+    decoration: BoxDecoration(color: Color.fromRGBO(255, 255, 255, 0.85)),
+    child: SizedBox.expand(),
+  );
 }

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
@@ -51,7 +51,9 @@ class _HeldHeight extends SingleChildRenderObjectWidget {
 
   @override
   void updateRenderObject(
-      BuildContext context, _RenderHeldHeight renderObject) {
+    BuildContext context,
+    _RenderHeldHeight renderObject,
+  ) {
     renderObject.height = height;
   }
 }
@@ -95,7 +97,8 @@ class _RenderHeldHeight extends RenderShiftedBox {
     final childSize =
         child?.getDryLayout(_childConstraints(constraints)) ?? Size.zero;
     return constraints.constrain(
-        Size(childSize.width, math.max(_areaHeight, childSize.height)));
+      Size(childSize.width, math.max(_areaHeight, childSize.height)),
+    );
   }
 
   @override
@@ -107,8 +110,11 @@ class _RenderHeldHeight extends RenderShiftedBox {
     }
     child.layout(_childConstraints(constraints), parentUsesSize: true);
     size = constraints.constrain(
-        Size(child.size.width, math.max(_areaHeight, child.size.height)));
-    (child.parentData! as BoxParentData).offset =
-        Offset(0, (size.height - child.size.height) / 2);
+      Size(child.size.width, math.max(_areaHeight, child.size.height)),
+    );
+    (child.parentData! as BoxParentData).offset = Offset(
+      0,
+      (size.height - child.size.height) / 2,
+    );
   }
 }

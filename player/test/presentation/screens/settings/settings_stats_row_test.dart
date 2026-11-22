@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/settings_providers.dart';
@@ -16,8 +16,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          coreSettingsServiceProvider
-              .overrideWithValue(SettingsService(storage: storage)),
+          coreSettingsServiceProvider.overrideWithValue(
+            SettingsService(storage: storage),
+          ),
         ],
         child: MaterialApp(
           home: Scaffold(

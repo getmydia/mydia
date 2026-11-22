@@ -12,7 +12,8 @@ import 'dart:ui' show Size;
 import 'package:media_kit/media_kit.dart';
 
 import 'subtitle_position_stub.dart'
-    if (dart.library.io) 'subtitle_position_native.dart' as platform;
+    if (dart.library.io) 'subtitle_position_native.dart'
+    as platform;
 
 /// media_kit's default `SubtitleView` bottom padding: where subtitles sit
 /// with no chrome to clear.

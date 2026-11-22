@@ -57,14 +57,15 @@ Map<String, dynamic> jellyfinDeviceProfile(DeviceProfile? profile) {
 }
 
 SourceException jellyfinPlaybackError(String code) => switch (code) {
-      'NotAllowed' =>
-        const SourceException.fault(SourceFault.jellyfinNotAllowed),
-      'NoCompatibleStream' =>
-        const SourceException.fault(SourceFault.jellyfinNoCompatibleStream),
-      'RateLimitExceeded' =>
-        const SourceException.fault(SourceFault.jellyfinRateLimited),
-      _ => SourceException.fault(SourceFault.jellyfinRefused, detail: code),
-    };
+  'NotAllowed' => const SourceException.fault(SourceFault.jellyfinNotAllowed),
+  'NoCompatibleStream' => const SourceException.fault(
+    SourceFault.jellyfinNoCompatibleStream,
+  ),
+  'RateLimitExceeded' => const SourceException.fault(
+    SourceFault.jellyfinRateLimited,
+  ),
+  _ => SourceException.fault(SourceFault.jellyfinRefused, detail: code),
+};
 
 @immutable
 class JellyfinSourceSupport {

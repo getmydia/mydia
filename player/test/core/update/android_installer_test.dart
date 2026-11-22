@@ -15,10 +15,10 @@ void main() {
     error = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(kInstallerChannel, (call) async {
-      calls.add(call);
-      if (error != null) throw error!;
-      return response;
-    });
+          calls.add(call);
+          if (error != null) throw error!;
+          return response;
+        });
   });
 
   tearDown(() {

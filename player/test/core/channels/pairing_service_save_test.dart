@@ -22,12 +22,11 @@ class _PairingP2p extends P2pService {
     required String claimCode,
     required String deviceName,
     required String deviceType,
-  }) async =>
-      {
-        'mediaToken': 'media-tok',
-        'accessToken': 'access-tok',
-        'deviceToken': 'device-tok',
-      };
+  }) async => {
+    'mediaToken': 'media-tok',
+    'accessToken': 'access-tok',
+    'deviceToken': 'device-tok',
+  };
 }
 
 class _Relay extends RelayApiClient {
@@ -55,11 +54,15 @@ void main() {
         authStorage: storage,
         p2pService: p2p,
         relayClient: _Relay(
-            ClaimResolveResult(nodeAddr: _nodeAddr, instanceId: 'inst-1')),
+          ClaimResolveResult(nodeAddr: _nodeAddr, instanceId: 'inst-1'),
+        ),
       );
 
       final result = await service.pairWithClaimCodeOnly(
-          claimCode: 'ABC123', deviceName: 'Test', platform: 'linux');
+        claimCode: 'ABC123',
+        deviceName: 'Test',
+        platform: 'linux',
+      );
 
       expect(result.success, isTrue);
       expect(result.credentials!.instanceId, 'inst-1');
@@ -75,7 +78,10 @@ void main() {
       );
 
       final result = await service.pairWithClaimCodeOnly(
-          claimCode: 'ABC123', deviceName: 'Test', platform: 'linux');
+        claimCode: 'ABC123',
+        deviceName: 'Test',
+        platform: 'linux',
+      );
 
       expect(result.credentials!.instanceId, isNull);
     });
@@ -85,7 +91,10 @@ void main() {
 
       final result = await service.pairWithQrData(
         qrData: const QrPairingData(
-            nodeAddr: _nodeAddr, claimCode: 'ABC123', instanceId: 'inst-2'),
+          nodeAddr: _nodeAddr,
+          claimCode: 'ABC123',
+          instanceId: 'inst-2',
+        ),
         deviceName: 'Test',
         platform: 'linux',
       );

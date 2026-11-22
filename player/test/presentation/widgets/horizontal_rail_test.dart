@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/horizontal_rail.dart';
 
@@ -51,8 +51,9 @@ void main() {
     expect(find.byKey(_leftKey), findsNothing);
   });
 
-  testWidgets('shows the left fade once scrolled away from the start',
-      (tester) async {
+  testWidgets('shows the left fade once scrolled away from the start', (
+    tester,
+  ) async {
     await _pump(tester, 12);
 
     await tester.drag(find.byType(ListView), const Offset(-400, 0));

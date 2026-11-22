@@ -40,9 +40,9 @@ class ShellPageInset extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.only(left: ShellRailInset.of(context)),
-        child: child,
-      );
+    padding: EdgeInsets.only(left: ShellRailInset.of(context)),
+    child: child,
+  );
 }
 
 /// Insets a [sliver] by the rail's footprint.
@@ -53,11 +53,12 @@ class SliverRailInset extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SliverPadding(
-        padding: EdgeInsets.only(left: ShellRailInset.of(context)),
-        sliver: sliver,
-      );
+    padding: EdgeInsets.only(left: ShellRailInset.of(context)),
+    sliver: sliver,
+  );
 }
 
 /// Wraps each of [slivers] in a [SliverRailInset].
-List<Widget> railInsetSlivers(List<Widget> slivers) =>
-    [for (final s in slivers) SliverRailInset(sliver: s)];
+List<Widget> railInsetSlivers(List<Widget> slivers) => [
+  for (final s in slivers) SliverRailInset(sliver: s),
+];

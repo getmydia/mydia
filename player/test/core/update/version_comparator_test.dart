@@ -22,7 +22,9 @@ void main() {
       // System.app_version() returns "0.9.0*abc1234" on master builds.
       expect(VersionComparator.compareCore('0.9.0*abc1234', '0.9.0'), isZero);
       expect(
-          VersionComparator.compareCore('0.10.0*deadbee', '0.9.0'), isPositive);
+        VersionComparator.compareCore('0.10.0*deadbee', '0.9.0'),
+        isPositive,
+      );
     });
 
     test('ignores prerelease suffixes, unlike isNewer', () {
@@ -45,12 +47,16 @@ void main() {
       // where "9" sorts above "10" lexicographically, so a dev install on
       // build 9 was never offered build 10.
       expect(
-          VersionComparator.isNewer('0.16.0-dev.9', '0.16.0-dev.10'), isTrue);
+        VersionComparator.isNewer('0.16.0-dev.9', '0.16.0-dev.10'),
+        isTrue,
+      );
     });
 
     test('a double-digit beta counter is newer than a single digit one', () {
       expect(
-          VersionComparator.isNewer('0.15.0-beta.9', '0.15.0-beta.10'), isTrue);
+        VersionComparator.isNewer('0.15.0-beta.9', '0.15.0-beta.10'),
+        isTrue,
+      );
     });
 
     test('the legacy no-dot form compares its counter numerically too', () {
@@ -58,8 +64,7 @@ void main() {
       expect(VersionComparator.isNewer('0.8.1-rc2', '0.8.1-rc13'), isTrue);
     });
 
-    test(
-        'the maturity bands order dev below alpha below beta below rc '
+    test('the maturity bands order dev below alpha below beta below rc '
         'below the plain release', () {
       const dev = '0.15.0-dev.1';
       const alpha = '0.15.0-alpha.1';
@@ -79,8 +84,7 @@ void main() {
       expect(VersionComparator.isNewer(release, rc), isFalse);
     });
 
-    test(
-        'a dev build never offers a stable release from an older core '
+    test('a dev build never offers a stable release from an older core '
         'version', () {
       // The core-version check must still dominate: 0.15.2 is a real
       // release, but it is older than 0.16.0 regardless of what prerelease
@@ -88,8 +92,7 @@ void main() {
       expect(VersionComparator.isNewer('0.16.0-dev.7', '0.15.2'), isFalse);
     });
 
-    test(
-        'a dev build made after a prerelease sorts above it and below the '
+    test('a dev build made after a prerelease sorts above it and below the '
         'next one', () {
       const beta2 = '0.16.0-beta.2';
       const afterBeta2 = '0.16.0-beta.2.dev.16';
@@ -107,7 +110,9 @@ void main() {
     test('a dev counter in the tail compares numerically', () {
       expect(
         VersionComparator.isNewer(
-            '0.16.0-beta.2.dev.9', '0.16.0-beta.2.dev.10'),
+          '0.16.0-beta.2.dev.9',
+          '0.16.0-beta.2.dev.10',
+        ),
         isTrue,
       );
     });

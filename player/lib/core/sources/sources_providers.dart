@@ -33,11 +33,12 @@ Duration downloadLookupTimeout = const Duration(seconds: 5);
 
 final sourceStoreProvider = FutureProvider<SourceStore>(
   (ref) => HiveSourceStore.open(),
-  retry: (_, __) => null,
+  retry: (_, _) => null,
 );
 
-final sourceSecretsProvider =
-    Provider<SourceSecrets>((ref) => SourceSecrets(getAuthStorage()));
+final sourceSecretsProvider = Provider<SourceSecrets>(
+  (ref) => SourceSecrets(getAuthStorage()),
+);
 
 /// Overridable so tests can exercise the web rules in the VM.
 final isWebProvider = Provider<bool>((_) => kIsWeb);
@@ -78,9 +79,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   }
 
   SourceSnapshot? get _current => switch (state) {
-        AsyncData(:final value) => value,
-        _ => null,
-      };
+    AsyncData(:final value) => value,
+    _ => null,
+  };
 
   /// Writes run one at a time. A read-modify-write (`markNeedsReauth`,
   /// `updateServers`) reads its record inside the queue, so it always sees
@@ -99,34 +100,39 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   ///
   /// With [replaceOnly], an account that is no longer stored (removed while
   /// a sign-in was in flight) throws [StateError] instead of coming back.
-  Future<void> putAccount(SourceAccountRecord record,
-          {bool replaceOnly = false}) =>
-      _serialise(() {
-        if (ref.read(isWebProvider) &&
-            !sourceKindAllowedOnWeb(record.account.kind)) {
-          debugPrint(
-              '[Sources] ${record.account.kind} accounts cannot run on web.');
-          return Future<void>.value();
-        }
-        final stored = _record(record.account.id);
-        if (replaceOnly && stored == null) {
-          throw StateError('Account ${record.account.id} was removed');
-        }
-        final ids = {for (final s in record.servers) s.id};
-        final kept = {
-          for (final e in (stored?.serverLocks ?? const {}).entries)
-            if (ids.contains(e.key)) e.key: e.value,
-          ...record.serverLocks,
-        };
-        return _write(
-            (store) => store.putAccount(record.copyWith(serverLocks: kept)));
-      });
+  Future<void> putAccount(
+    SourceAccountRecord record, {
+    bool replaceOnly = false,
+  }) => _serialise(() {
+    if (ref.read(isWebProvider) &&
+        !sourceKindAllowedOnWeb(record.account.kind)) {
+      debugPrint(
+        '[Sources] ${record.account.kind} accounts cannot run on web.',
+      );
+      return Future<void>.value();
+    }
+    final stored = _record(record.account.id);
+    if (replaceOnly && stored == null) {
+      throw StateError('Account ${record.account.id} was removed');
+    }
+    final ids = {for (final s in record.servers) s.id};
+    final kept = {
+      for (final e in (stored?.serverLocks ?? const {}).entries)
+        if (ids.contains(e.key)) e.key: e.value,
+      ...record.serverLocks,
+    };
+    return _write(
+      (store) => store.putAccount(record.copyWith(serverLocks: kept)),
+    );
+  });
 
   /// Drops [accountId]'s All servers choices. Best effort: a leftover choice
   /// is inert, and a failure here must not stop the account's credentials
   /// from being deleted after it.
   Future<void> _dropAllServersChoices(
-      SourceStore store, String accountId) async {
+    SourceStore store,
+    String accountId,
+  ) async {
     final all = _current?.allServers ?? const <SourceId, bool>{};
     final kept = {
       for (final e in all.entries)
@@ -177,8 +183,10 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
 
   /// Deletes the collection auto-sync entries of [sourceIds]. Best effort,
   /// like [_dropCache]: leftovers are inert without the account.
-  Future<void> _dropCollectionSync(Set<String> sourceIds,
-      {bool dropUnowned = false}) async {
+  Future<void> _dropCollectionSync(
+    Set<String> sourceIds, {
+    bool dropUnowned = false,
+  }) async {
     try {
       await deleteCollectionSyncFor(ref, sourceIds, dropUnowned: dropUnowned);
     } catch (e) {
@@ -271,33 +279,38 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
-  Future<void> markNeedsReauth(String accountId, bool value) =>
-      _serialise(() async {
-        final record = _record(accountId);
-        if (record == null || record.account.needsReauth == value) return;
-        await _write((store) => store.putAccount(record.copyWith(
-              account: record.account.copyWith(needsReauth: value),
-            )));
-      });
+  Future<void> markNeedsReauth(String accountId, bool value) => _serialise(
+    () async {
+      final record = _record(accountId);
+      if (record == null || record.account.needsReauth == value) return;
+      await _write(
+        (store) => store.putAccount(
+          record.copyWith(account: record.account.copyWith(needsReauth: value)),
+        ),
+      );
+    },
+  );
 
   Future<void> setServerLock(
-          String accountId, String serverId, SourceLock lock) =>
-      _serialise(() async {
-        final record = _record(accountId);
-        if (record == null) return;
-        final locks = {...record.serverLocks}..remove(serverId);
-        if (lock != SourceLock.none) locks[serverId] = lock;
-        final updated = record.copyWith(serverLocks: locks);
-        await _write((store) => store.putAccount(updated));
-        // A hidden files account is not lent (see `lentFilesAccounts`).
-        // Hiding one drops the grants paired players' reads hold and
-        // nudges them to fetch the manifest, which no longer lists it, so
-        // the copies they keep go; unhiding brings it back the same way.
-        if (record.account.kind == SourceKind.files &&
-            hasHiddenServer(record) != hasHiddenServer(updated)) {
-          await _forgetPeerFiles(accountId);
-        }
-      });
+    String accountId,
+    String serverId,
+    SourceLock lock,
+  ) => _serialise(() async {
+    final record = _record(accountId);
+    if (record == null) return;
+    final locks = {...record.serverLocks}..remove(serverId);
+    if (lock != SourceLock.none) locks[serverId] = lock;
+    final updated = record.copyWith(serverLocks: locks);
+    await _write((store) => store.putAccount(updated));
+    // A hidden files account is not lent (see `lentFilesAccounts`).
+    // Hiding one drops the grants paired players' reads hold and
+    // nudges them to fetch the manifest, which no longer lists it, so
+    // the copies they keep go; unhiding brings it back the same way.
+    if (record.account.kind == SourceKind.files &&
+        hasHiddenServer(record) != hasHiddenServer(updated)) {
+      await _forgetPeerFiles(accountId);
+    }
+  });
 
   Future<void> setIncludedInAllServers(SourceId id, bool included) =>
       _serialise(() async {
@@ -341,13 +354,14 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   Future<void> updateServers(
     String accountId,
     List<SourceServer> Function(List<SourceServer> servers) update,
-  ) =>
-      _serialise(() async {
-        final record = _record(accountId);
-        if (record == null) return;
-        await _write((store) =>
-            store.putAccount(record.copyWith(servers: update(record.servers))));
-      });
+  ) => _serialise(() async {
+    final record = _record(accountId);
+    if (record == null) return;
+    await _write(
+      (store) =>
+          store.putAccount(record.copyWith(servers: update(record.servers))),
+    );
+  });
 
   /// Replaces [accountId]'s record with what [update] returns. [update]
   /// runs inside the write queue and may do its own async work first (a
@@ -357,15 +371,14 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   Future<SourceAccountRecord?> updateRecord(
     String accountId,
     Future<SourceAccountRecord?> Function(SourceAccountRecord current) update,
-  ) =>
-      _serialise(() async {
-        final record = _record(accountId);
-        if (record == null) return null;
-        final next = await update(record);
-        if (next == null) return null;
-        await _write((store) => store.putAccount(next));
-        return next;
-      });
+  ) => _serialise(() async {
+    final record = _record(accountId);
+    if (record == null) return null;
+    final next = await update(record);
+    if (next == null) return null;
+    await _write((store) => store.putAccount(next));
+    return next;
+  });
 
   SourceAccountRecord? _record(String accountId) =>
       _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
@@ -383,8 +396,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
 /// sources for this launch, and the UI must not wait on backoff timers.
 final sourceRecordsProvider =
     AsyncNotifierProvider<SourceRecordsNotifier, SourceSnapshot>(
-        SourceRecordsNotifier.new,
-        retry: (_, __) => null);
+      SourceRecordsNotifier.new,
+      retry: (_, _) => null,
+    );
 
 /// True until the stored sources have loaded once, successfully or not.
 ///
@@ -443,8 +457,11 @@ final _gatedSourceKeyProvider = Provider<String>((ref) {
 
 /// Whether the window must stay out of screenshots and the app switcher:
 /// a locked or hidden source is open.
-final windowSecureProvider = Provider<bool>((ref) =>
-    ref.watch(sourceLockProvider) && ref.watch(sourceLocksProvider).isNotEmpty);
+final windowSecureProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(sourceLockProvider) &&
+      ref.watch(sourceLocksProvider).isNotEmpty,
+);
 
 /// Every source the viewer has added, Mydia included, minus hidden ones
 /// while the app is locked. Everything that lists or counts sources reads
@@ -482,8 +499,10 @@ class _SourceList extends UnmodifiableListView<Source> {
 
 /// The stored profiles of an account: a Plex account's Home users, the
 /// single owner for every other kind. Empty while loading or unknown.
-final accountProfilesProvider =
-    Provider.family<List<SourceProfile>, String>((ref, accountId) {
+final accountProfilesProvider = Provider.family<List<SourceProfile>, String>((
+  ref,
+  accountId,
+) {
   final snapshot = _snapshotOf(ref);
   return snapshot?.accounts
           .where((a) => a.account.id == accountId)
@@ -496,10 +515,12 @@ final accountProfilesProvider =
 /// locked, then the files libraries paired players lend this one. Compares
 /// element-wise like [thirdPartySourcesProvider], so a new copy of a lent
 /// index that renames nothing does not notify.
-final sourcesProvider = Provider<List<Source>>((ref) => _SourceList([
-      ...ref.watch(thirdPartySourcesProvider),
-      ...ref.watch(peerFilesSourcesProvider),
-    ]));
+final sourcesProvider = Provider<List<Source>>(
+  (ref) => _SourceList([
+    ...ref.watch(thirdPartySourcesProvider),
+    ...ref.watch(peerFilesSourcesProvider),
+  ]),
+);
 
 /// Whether any Mydia account is stored.
 final hasMydiaProvider = Provider<bool>((ref) {
@@ -509,12 +530,13 @@ final hasMydiaProvider = Provider<bool>((ref) {
 });
 
 /// How many Mydia accounts are stored.
-final mydiaAccountCountProvider = Provider<int>((ref) =>
-    _snapshotOf(ref)
-        ?.accounts
-        .where((a) => a.account.kind == SourceKind.mydia)
-        .length ??
-    0);
+final mydiaAccountCountProvider = Provider<int>(
+  (ref) =>
+      _snapshotOf(ref)?.accounts
+          .where((a) => a.account.kind == SourceKind.mydia)
+          .length ??
+      0,
+);
 
 /// The sources the switcher shows: empty unless there is a choice to make.
 final switchableSourcesProvider = Provider<List<Source>>((ref) {
@@ -526,9 +548,9 @@ class SelectedSourceNotifier extends Notifier<SourceId?> {
   /// The remembered pick, once the records have loaded.
   @override
   SourceId? build() => switch (ref.watch(sourceRecordsProvider)) {
-        AsyncData(:final value) => value.activeId,
-        _ => null,
-      };
+    AsyncData(:final value) => value.activeId,
+    _ => null,
+  };
 
   void select(SourceId id) {
     state = id;
@@ -539,7 +561,8 @@ class SelectedSourceNotifier extends Notifier<SourceId?> {
 /// The viewer's explicit pick, if any. Read [activeSourceIdProvider] instead.
 final selectedSourceIdProvider =
     NotifierProvider<SelectedSourceNotifier, SourceId?>(
-        SelectedSourceNotifier.new);
+      SelectedSourceNotifier.new,
+    );
 
 /// The source the viewer is browsing: their pick while it still exists and
 /// is open, otherwise the first source that does not ask to unlock.
@@ -565,8 +588,9 @@ final activeSourceIdProvider = Provider<SourceId?>((ref) {
 /// re-auth flag, rediscovered connections) must not rebuild it; the record
 /// is read once at build.
 final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
-  final exists =
-      ref.watch(sourcesProvider.select((all) => all.any((s) => s.id == id)));
+  final exists = ref.watch(
+    sourcesProvider.select((all) => all.any((s) => s.id == id)),
+  );
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
   if (!canBuildSource(ref, source)) return null;
@@ -577,7 +601,8 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
 
 /// The viewer's "Include in All servers" choices; empty until they load.
 final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
-    (ref) => ref.watch(sourceRecordsProvider).value?.allServers ?? const {});
+  (ref) => ref.watch(sourceRecordsProvider).value?.allServers ?? const {},
+);
 
 /// Included sources the merged views read. Leaves out
 /// what is locked away and what needs signing in again.
@@ -589,7 +614,7 @@ final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
 final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
   return _IdentityList([
     for (final s in ref.watch(_allServersIncludedRecordsProvider))
-      if (ref.watch(mediaSourceProvider(s.id)) case final media?) media,
+      ?ref.watch(mediaSourceProvider(s.id)),
   ]);
 });
 
@@ -597,12 +622,13 @@ final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
 /// only for an id that is no longer saved, which this list cannot hold, so
 /// the router, which counts [allServersIncluded] directly, agrees with
 /// [allServersSourcesProvider].
-final _allServersIncludedRecordsProvider =
-    Provider<List<Source>>((ref) => allServersIncluded(
-          ref.watch(sourcesProvider),
-          ref.watch(allServersChoicesProvider),
-          ref.watch(gatedSourceIdsProvider),
-        ));
+final _allServersIncludedRecordsProvider = Provider<List<Source>>(
+  (ref) => allServersIncluded(
+    ref.watch(sourcesProvider),
+    ref.watch(allServersChoicesProvider),
+    ref.watch(gatedSourceIdsProvider),
+  ),
+);
 
 /// An unmodifiable list whose equality is element-wise identity.
 class _IdentityList extends UnmodifiableListView<MediaSource> {

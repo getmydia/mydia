@@ -5,10 +5,12 @@ import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/files_account.dart';
 import 'package:player/core/sources/files/files_providers.dart';
 
-final _connection =
-    Uri.parse('s3+https://s3.example.test/bkt/media/?region=r&style=path');
+final _connection = Uri.parse(
+  's3+https://s3.example.test/bkt/media/?region=r&style=path',
+);
 
-const _listing = '<?xml version="1.0" encoding="UTF-8"?>'
+const _listing =
+    '<?xml version="1.0" encoding="UTF-8"?>'
     '<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>';
 
 const _creds = S3Credentials(accessKeyId: 'AKID', secretAccessKey: 'secret');
@@ -56,8 +58,10 @@ void main() {
     expect(requests, hasLength(2));
     expect(requests.first.host, 's3.example.test');
     expect(requests.first.path, '/bkt');
-    expect(playable.url,
-        startsWith('https://s3.example.test/bkt/media/Films/Copper'));
+    expect(
+      playable.url,
+      startsWith('https://s3.example.test/bkt/media/Films/Copper'),
+    );
     expect(playable.url, isNot(contains('secret')));
   });
 
@@ -70,10 +74,14 @@ void main() {
         reads++;
         return _creds.toJson();
       },
-      client: MockClient((_) async => status == 200
-          ? http.Response(_listing, 200)
-          : http.Response(
-              '<Error><Code>InvalidAccessKeyId</Code></Error>', status)),
+      client: MockClient(
+        (_) async => status == 200
+            ? http.Response(_listing, 200)
+            : http.Response(
+                '<Error><Code>InvalidAccessKeyId</Code></Error>',
+                status,
+              ),
+      ),
     );
     await expectLater(backend.probe(), throwsA(isA<BackendUnauthorized>()));
     status = 200;

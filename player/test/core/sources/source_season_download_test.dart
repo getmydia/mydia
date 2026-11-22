@@ -15,10 +15,11 @@ class _Season extends FakeMediaSource {
   @override
   Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async =>
       cursor == null
-          ? Page(
-              items: [fakeEpisode(1), fakeEpisode(2)],
-              nextCursor: const Cursor('p2'))
-          : Page(items: [fakeEpisode(3)]);
+      ? Page(
+          items: [fakeEpisode(1), fakeEpisode(2)],
+          nextCursor: const Cursor('p2'),
+        )
+      : Page(items: [fakeEpisode(3)]);
 }
 
 /// A service that has nothing downloaded, reports [active] as queued, and
@@ -43,12 +44,13 @@ class _ScriptedService extends Fake implements DownloadService {
     started.add(request.ref.externalId);
     options.add(request.optionId);
     return DownloadTask(
-        id: request.ref.externalId,
-        mediaId: request.ref.externalId,
-        title: 'x',
-        quality: request.optionId,
-        status: 'queued',
-        createdAt: DateTime(2026));
+      id: request.ref.externalId,
+      mediaId: request.ref.externalId,
+      title: 'x',
+      quality: request.optionId,
+      status: 'queued',
+      createdAt: DateTime(2026),
+    );
   }
 }
 
@@ -56,19 +58,25 @@ DownloadMetadata _metadata(ItemSummary e) =>
     DownloadMetadata(title: e.title, mediaType: MediaType.episode);
 
 void main() {
-  test('counts an episode whose start throws as failed and carries on',
-      () async {
-    final service = _ScriptedService(failing: {fakeEpisode(2).ref.externalId});
-    final result = await queueSourceSeason(
-      source: _Season(),
-      season: fakeSeason.ref,
-      manager: service,
-      metadataFor: _metadata,
-    );
-    expect((result.queued, result.skipped, result.failed), (2, 0, 1));
-    expect(service.started,
-        [fakeEpisode(1).ref.externalId, fakeEpisode(3).ref.externalId]);
-  });
+  test(
+    'counts an episode whose start throws as failed and carries on',
+    () async {
+      final service = _ScriptedService(
+        failing: {fakeEpisode(2).ref.externalId},
+      );
+      final result = await queueSourceSeason(
+        source: _Season(),
+        season: fakeSeason.ref,
+        manager: service,
+        metadataFor: _metadata,
+      );
+      expect((result.queued, result.skipped, result.failed), (2, 0, 1));
+      expect(service.started, [
+        fakeEpisode(1).ref.externalId,
+        fakeEpisode(3).ref.externalId,
+      ]);
+    },
+  );
 
   test('queues every episode at the option it was given', () async {
     final service = _ScriptedService();
@@ -83,8 +91,9 @@ void main() {
   });
 
   test('skips an episode that is already in the queue', () async {
-    final service = _ScriptedService(active: [
-      DownloadTask(
+    final service = _ScriptedService(
+      active: [
+        DownloadTask(
           id: 't1',
           mediaId: fakeEpisode(1).ref.externalId,
           title: 'x',
@@ -92,8 +101,10 @@ void main() {
           status: 'queued',
           sourceId: fakeSourceId.value,
           itemKind: ItemKind.episode.name,
-          createdAt: DateTime(2026)),
-    ]);
+          createdAt: DateTime(2026),
+        ),
+      ],
+    );
     final result = await queueSourceSeason(
       source: _Season(),
       season: fakeSeason.ref,
@@ -108,7 +119,8 @@ void main() {
     final h = await makeHarness(body: Uint8List(1));
     addTearDown(h.dispose);
     final source = _Season();
-    await h.database.saveMedia(DownloadedMedia(
+    await h.database.saveMedia(
+      DownloadedMedia(
         id: 'row',
         mediaId: fakeEpisode(2).ref.externalId,
         title: 'x',
@@ -117,7 +129,9 @@ void main() {
         fileSize: 1,
         downloadedAt: DateTime(2026),
         sourceId: fakeSourceId.value,
-        itemKind: ItemKind.episode.name));
+        itemKind: ItemKind.episode.name,
+      ),
+    );
 
     final result = await queueSourceSeason(
       source: source,
@@ -130,9 +144,13 @@ void main() {
     expect(result.queued, 2);
     expect(result.skipped, 1);
     final queuedIds = h.database.getAllTasks().map((t) => t.mediaId).toSet();
-    expect(queuedIds,
-        {fakeEpisode(1).ref.externalId, fakeEpisode(3).ref.externalId});
+    expect(queuedIds, {
+      fakeEpisode(1).ref.externalId,
+      fakeEpisode(3).ref.externalId,
+    });
     expect(
-        h.database.getAllTasks().every((t) => t.quality == 'original'), isTrue);
+      h.database.getAllTasks().every((t) => t.quality == 'original'),
+      isTrue,
+    );
   });
 }

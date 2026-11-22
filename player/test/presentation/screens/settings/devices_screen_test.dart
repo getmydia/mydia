@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
@@ -22,17 +22,18 @@ Future<void> _pumpCard(WidgetTester tester, RemoteDevice device) async {
 }
 
 RemoteDevice _device({bool revoked = false}) => RemoteDevice(
-      id: 'd-1',
-      deviceName: 'Living room TV',
-      platform: 'android',
-      lastSeenAt: DateTime.utc(2026, 8, 1),
-      isRevoked: revoked,
-      createdAt: DateTime.utc(2026, 7, 1),
-    );
+  id: 'd-1',
+  deviceName: 'Living room TV',
+  platform: 'android',
+  lastSeenAt: DateTime.utc(2026, 8, 1),
+  isRevoked: revoked,
+  createdAt: DateTime.utc(2026, 7, 1),
+);
 
 void main() {
-  testWidgets('an active device card uses the shared surface tone',
-      (tester) async {
+  testWidgets('an active device card uses the shared surface tone', (
+    tester,
+  ) async {
     await _pumpCard(tester, _device());
 
     final material = tester.widget<Material>(
@@ -54,8 +55,9 @@ void main() {
     expect(find.text('Android'), findsOneWidget);
   });
 
-  testWidgets('a revoked device shows the revoked badge and hides revoke',
-      (tester) async {
+  testWidgets('a revoked device shows the revoked badge and hides revoke', (
+    tester,
+  ) async {
     await _pumpCard(tester, _device(revoked: true));
 
     expect(find.text('Revoked'), findsOneWidget);

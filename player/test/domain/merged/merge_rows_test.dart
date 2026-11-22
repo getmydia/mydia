@@ -10,22 +10,31 @@ void main() {
   final order = [a.id, b.id];
 
   test('newest first across servers, undated last', () {
-    final d = mergeNewest([
-      [item(a, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)), item(a, 'a2')],
-      [item(b, 'b1', lastPlayedAt: DateTime.utc(2024, 1, 2))],
-    ], order, (i) => i.lastPlayedAt);
+    final d = mergeNewest(
+      [
+        [item(a, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)), item(a, 'a2')],
+        [item(b, 'b1', lastPlayedAt: DateTime.utc(2024, 1, 2))],
+      ],
+      order,
+      (i) => i.lastPlayedAt,
+    );
     expect(d.items.map((i) => i.ref.externalId), ['b1', 'a1', 'a2']);
   });
 
   test('copies collapse before the cap and are counted', () {
     const ids = ExternalIds(tmdb: '7');
-    final d = mergeNewest([
+    final d = mergeNewest(
       [
-        item(a, 'a1', ids: ids, addedAt: DateTime.utc(2024, 1, 3)),
-        item(a, 'a2', addedAt: DateTime.utc(2024, 1, 1)),
+        [
+          item(a, 'a1', ids: ids, addedAt: DateTime.utc(2024, 1, 3)),
+          item(a, 'a2', addedAt: DateTime.utc(2024, 1, 1)),
+        ],
+        [item(b, 'b1', ids: ids, addedAt: DateTime.utc(2024, 1, 2))],
       ],
-      [item(b, 'b1', ids: ids, addedAt: DateTime.utc(2024, 1, 2))],
-    ], order, (i) => i.addedAt, limit: 2);
+      order,
+      (i) => i.addedAt,
+      limit: 2,
+    );
     expect(d.items.map((i) => i.ref.externalId), ['a1', 'a2']);
     expect(d.extraCopies[d.items.first.ref], 1);
   });
@@ -55,10 +64,14 @@ void main() {
   });
 
   test('mergeRanked ties go to server order and honours the limit', () {
-    final d = mergeRanked([
-      [RankedItem(item: item(a, 'a1'), rank: 1)],
-      [RankedItem(item: item(b, 'b1'), rank: 1)],
-    ], order, limit: 1);
+    final d = mergeRanked(
+      [
+        [RankedItem(item: item(a, 'a1'), rank: 1)],
+        [RankedItem(item: item(b, 'b1'), rank: 1)],
+      ],
+      order,
+      limit: 1,
+    );
     expect(d.items.map((i) => i.ref.externalId), ['a1']);
   });
 }

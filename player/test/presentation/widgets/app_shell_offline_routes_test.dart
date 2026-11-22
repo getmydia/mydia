@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -40,29 +40,34 @@ Future<void> _pumpShell(
   addTearDown(tester.view.reset);
   final mydiaSource = _Src(testMydiaSource)..setStatus(mydia);
   final plexSource = _Src(fakeSource)..setStatus(plex);
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      sidebarLayoutStoreProvider
-          .overrideWithValue(InMemorySidebarLayoutStore()),
-      sourceProgressFlushProvider.overrideWith((ref) {}),
-      orphanDownloadSweepProvider.overrideWith((ref) {}),
-      activeSourceIdProvider.overrideWithValue(_plexId),
-      mediaSourceProvider(testMydiaSourceId).overrideWithValue(mydiaSource),
-      mediaSourceProvider(_plexId).overrideWithValue(plexSource),
-    ],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      routerConfig: GoRouter(routes: [
-        GoRoute(
-          path: '/',
-          builder: (_, __) =>
-              AppShell(location: location, child: const SizedBox.expand()),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sidebarLayoutStoreProvider.overrideWithValue(
+          InMemorySidebarLayoutStore(),
         ),
-      ]),
+        sourceProgressFlushProvider.overrideWith((ref) {}),
+        orphanDownloadSweepProvider.overrideWith((ref) {}),
+        activeSourceIdProvider.overrideWithValue(_plexId),
+        mediaSourceProvider(testMydiaSourceId).overrideWithValue(mydiaSource),
+        mediaSourceProvider(_plexId).overrideWithValue(plexSource),
+      ],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        routerConfig: GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (_, _) =>
+                  AppShell(location: location, child: const SizedBox.expand()),
+            ),
+          ],
+        ),
+      ),
     ),
-  ));
+  );
   await tester.pump();
 }
 
@@ -81,35 +86,51 @@ void main() {
   });
 
   group('the shell follows the source its route belongs to', () {
-    testWidgets('Plex unreachable while on a Mydia route: no banner',
-        (tester) async {
-      await _pumpShell(tester, '/s/${testMydiaSourceId.value}',
-          mydia: SourceConnectionStatus.remote,
-          plex: SourceConnectionStatus.unreachable);
+    testWidgets('Plex unreachable while on a Mydia route: no banner', (
+      tester,
+    ) async {
+      await _pumpShell(
+        tester,
+        '/s/${testMydiaSourceId.value}',
+        mydia: SourceConnectionStatus.remote,
+        plex: SourceConnectionStatus.unreachable,
+      );
       expect(find.byType(OfflineBanner), findsNothing);
     });
 
-    testWidgets('off any source route the active source decides',
-        (tester) async {
-      await _pumpShell(tester, '/sources/manage',
-          mydia: SourceConnectionStatus.remote,
-          plex: SourceConnectionStatus.unreachable);
+    testWidgets('off any source route the active source decides', (
+      tester,
+    ) async {
+      await _pumpShell(
+        tester,
+        '/sources/manage',
+        mydia: SourceConnectionStatus.remote,
+        plex: SourceConnectionStatus.unreachable,
+      );
       expect(find.byType(OfflineBanner), findsOneWidget);
     });
 
-    testWidgets('on the Plex route with Plex unreachable: banner shows',
-        (tester) async {
-      await _pumpShell(tester, '/s/${_plexId.value}',
-          mydia: SourceConnectionStatus.remote,
-          plex: SourceConnectionStatus.unreachable);
+    testWidgets('on the Plex route with Plex unreachable: banner shows', (
+      tester,
+    ) async {
+      await _pumpShell(
+        tester,
+        '/s/${_plexId.value}',
+        mydia: SourceConnectionStatus.remote,
+        plex: SourceConnectionStatus.unreachable,
+      );
       expect(find.byType(OfflineBanner), findsOneWidget);
     });
 
-    testWidgets('Mydia unreachable on its own route: banner shows',
-        (tester) async {
-      await _pumpShell(tester, '/s/${testMydiaSourceId.value}',
-          mydia: SourceConnectionStatus.unreachable,
-          plex: SourceConnectionStatus.remote);
+    testWidgets('Mydia unreachable on its own route: banner shows', (
+      tester,
+    ) async {
+      await _pumpShell(
+        tester,
+        '/s/${testMydiaSourceId.value}',
+        mydia: SourceConnectionStatus.unreachable,
+        plex: SourceConnectionStatus.remote,
+      );
       expect(find.byType(OfflineBanner), findsOneWidget);
     });
   });

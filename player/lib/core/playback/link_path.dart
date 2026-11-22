@@ -11,10 +11,7 @@ enum LinkPath { direct, relay, mixed, http }
 
 /// The path playback is on, or null while a p2p connection has no peer path
 /// yet. Plain HTTP is always [LinkPath.http].
-LinkPath? linkPathFor({
-  required bool isP2P,
-  required P2pConnectionType type,
-}) {
+LinkPath? linkPathFor({required bool isP2P, required P2pConnectionType type}) {
   if (!isP2P) return LinkPath.http;
   return switch (type) {
     P2pConnectionType.direct => LinkPath.direct,

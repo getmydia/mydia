@@ -9,8 +9,8 @@ class FakePeerSyncService implements PeerSyncService {
   FakePeerSyncService({
     required this.store,
     this.localNodeId = 'local-node',
-    bool isPaired = false,
-  }) : _isPaired = isPaired;
+    this._isPaired = false,
+  });
 
   final PeerSyncStore store;
   final String localNodeId;
@@ -97,14 +97,14 @@ class FakePeerSyncService implements PeerSyncService {
   bool supersedeOffer = false;
 
   ActivePairingOffer _offer(String code) => ActivePairingOffer(
-        code: code,
-        qrJson: jsonEncode({
-          'node_addr': '{"id":"$localNodeId"}',
-          'claim_code': code,
-        }),
-        lookupKey: 'lookup-$code',
-        expiresAt: DateTime.now().add(const Duration(minutes: 5)),
-      );
+    code: code,
+    qrJson: jsonEncode({
+      'node_addr': '{"id":"$localNodeId"}',
+      'claim_code': code,
+    }),
+    lookupKey: 'lookup-$code',
+    expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+  );
 
   @override
   Future<void> cancelPairingOffer() async {
@@ -143,24 +143,28 @@ class FakePeerSyncService implements PeerSyncService {
   Future<void> pairWithCode(String code) async {
     pairWithCodeCalls.add(code);
     if (failPairing) throw StateError('pairing failed');
-    await _join(PeerMember(
-      nodeId: 'peer-device-1',
-      deviceName: 'Living Room TV',
-      platform: 'android',
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await _join(
+      PeerMember(
+        nodeId: 'peer-device-1',
+        deviceName: 'Living Room TV',
+        platform: 'android',
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   @override
   Future<void> pairWithQr(String qrJson) async {
     pairWithQrCalls.add(qrJson);
     if (failPairing) throw StateError('pairing failed');
-    await _join(PeerMember(
-      nodeId: 'peer-device-qr',
-      deviceName: 'Bedroom TV',
-      platform: 'ios',
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await _join(
+      PeerMember(
+        nodeId: 'peer-device-qr',
+        deviceName: 'Bedroom TV',
+        platform: 'ios',
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   @override
@@ -179,8 +183,8 @@ class FakePeerSyncService implements PeerSyncService {
       await store.putMember(existing.copyWith(revoked: true));
     }
     final active = store.members().values.where(
-          (m) => !m.revoked && m.nodeId != localNodeId,
-        );
+      (m) => !m.revoked && m.nodeId != localNodeId,
+    );
     if (active.isEmpty) {
       _isPaired = false;
     }

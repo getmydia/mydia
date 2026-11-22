@@ -61,11 +61,13 @@ void mediaProxyConformanceTests(
       expect(proxy.isRunning, isTrue);
     });
 
-    test('baseUrl has no trailing slash so callers can append /hls/...',
-        () async {
-      await startProxy();
-      expect(proxy.baseUrl, isNot(endsWith('/')));
-    });
+    test(
+      'baseUrl has no trailing slash so callers can append /hls/...',
+      () async {
+        await startProxy();
+        expect(proxy.baseUrl, isNot(endsWith('/')));
+      },
+    );
 
     test('buildHlsUrl is the target base plus the manifest path', () async {
       await startProxy();
@@ -93,11 +95,11 @@ void mediaProxyConformanceTests(
       setUp(() => other = Object());
 
       Future<void> startAs(Object who) => proxy.start(
-            owner: who,
-            targetPeer: 'peer-1',
-            authToken: 'token-1',
-            target: target,
-          );
+        owner: who,
+        targetPeer: 'peer-1',
+        authToken: 'token-1',
+        target: target,
+      );
 
       // The next-episode handoff, in the order Flutter actually runs it: the
       // incoming screen mounts and starts the proxy, then the outgoing
@@ -137,15 +139,17 @@ void mediaProxyConformanceTests(
         expect(proxy.isRunning, isFalse);
       });
 
-      test('a stop from something that never started it changes nothing',
-          () async {
-        await startAs(owner);
-        addTearDown(proxy.shutdown);
+      test(
+        'a stop from something that never started it changes nothing',
+        () async {
+          await startAs(owner);
+          addTearDown(proxy.shutdown);
 
-        await proxy.stop(other, target: target);
+          await proxy.stop(other, target: target);
 
-        expect(proxy.isRunning, isTrue);
-      });
+          expect(proxy.isRunning, isTrue);
+        },
+      );
 
       test('shutdown stops serving even while owners remain', () async {
         await startAs(owner);
@@ -158,40 +162,44 @@ void mediaProxyConformanceTests(
 
       // Whoever is left keeps a working proxy, not a husk that reports
       // running while its target is gone.
-      test('still serves the remaining owner after the other lets go',
-          () async {
-        await startAs(owner);
-        await startAs(other);
-        addTearDown(proxy.shutdown);
+      test(
+        'still serves the remaining owner after the other lets go',
+        () async {
+          await startAs(owner);
+          await startAs(other);
+          addTearDown(proxy.shutdown);
 
-        await proxy.stop(owner, target: target);
+          await proxy.stop(owner, target: target);
 
-        p2p.onSendHlsRequest = (_) async => testHlsResponse(
-              status: 200,
-              contentType: 'application/vnd.apple.mpegurl',
-              data: utf8.encode(manifest),
-            );
+          p2p.onSendHlsRequest = (_) async => testHlsResponse(
+            status: 200,
+            contentType: 'application/vnd.apple.mpegurl',
+            data: utf8.encode(manifest),
+          );
 
-        final response = await proxyGet(
-            '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8');
+          final response = await proxyGet(
+            '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8',
+          );
 
-        expect(response.status, 200);
-        expect(utf8.decode(response.body), manifest);
-        expect(p2p.calls.single.authToken, 'token-1');
-      });
+          expect(response.status, 200);
+          expect(utf8.decode(response.body), manifest);
+          expect(p2p.calls.single.authToken, 'token-1');
+        },
+      );
     });
 
     test('serves the manifest bytes the peer returned', () async {
       await startProxy();
 
       p2p.onSendHlsRequest = (_) async => testHlsResponse(
-            status: 200,
-            contentType: 'application/vnd.apple.mpegurl',
-            data: utf8.encode(manifest),
-          );
+        status: 200,
+        contentType: 'application/vnd.apple.mpegurl',
+        data: utf8.encode(manifest),
+      );
 
       final response = await proxyGet(
-          '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8');
+        '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8',
+      );
 
       expect(response.status, 200);
       expect(utf8.decode(response.body), manifest);
@@ -205,22 +213,25 @@ void mediaProxyConformanceTests(
       expect(call.rangeEnd, isNull);
     });
 
-    test('answers a failed p2p request with an error status, not a body',
-        () async {
-      await startProxy();
+    test(
+      'answers a failed p2p request with an error status, not a body',
+      () async {
+        await startProxy();
 
-      p2p.onSendHlsRequest =
-          (_) async => throw Exception('p2p transport failure');
+        p2p.onSendHlsRequest = (_) async =>
+            throw Exception('p2p transport failure');
 
-      final response = await proxyGet(
-          '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8');
+        final response = await proxyGet(
+          '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8',
+        );
 
-      // A failure that arrives as a 200 with a short body is the worst of
-      // both: the player treats it as media and fails much later, somewhere
-      // unrelated.
-      expect(response.status, 500);
-      expect(utf8.decode(response.body), contains('p2p transport failure'));
-    });
+        // A failure that arrives as a 200 with a short body is the worst of
+        // both: the player treats it as media and fails much later, somewhere
+        // unrelated.
+        expect(response.status, 500);
+        expect(utf8.decode(response.body), contains('p2p transport failure'));
+      },
+    );
 
     test('serves the slice a byte range asked for', () async {
       await startProxy();

@@ -14,12 +14,14 @@ void main() {
     expect(LiquidGlassSupport.program, isNull);
   });
 
-  test('initialize without shader filter support falls back, never throws',
-      () async {
-    // flutter test runs without Impeller, so shader filters are unsupported.
-    await LiquidGlassSupport.initialize();
-    expect(LiquidGlassSupport.available, isFalse);
-  });
+  test(
+    'initialize without shader filter support falls back, never throws',
+    () async {
+      // flutter test runs without Impeller, so shader filters are unsupported.
+      await LiquidGlassSupport.initialize();
+      expect(LiquidGlassSupport.available, isFalse);
+    },
+  );
 
   test('debugOverride forces availability', () {
     LiquidGlassSupport.debugOverride = true;

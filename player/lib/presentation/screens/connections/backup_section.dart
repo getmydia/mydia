@@ -7,7 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/backup/backup_providers.dart';
@@ -80,9 +80,13 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     required String body,
     required String action,
     required Key key,
-  }) =>
-      showBackupConfirm(context,
-          title: title, body: body, action: action, key: key);
+  }) => showBackupConfirm(
+    context,
+    title: title,
+    body: body,
+    action: action,
+    key: key,
+  );
 
   /// Runs [op], toasting a failure. The section rebuilds after, since the
   /// service's plain getters (enabled, the recovery key) may have changed.
@@ -96,10 +100,11 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     } catch (e) {
       debugPrint('[Backup] Action failed: ${e.runtimeType}');
       toaster.show(
-          store == null
-              ? l10n.backupActionFailed
-              : cloudFailureText(l10n, store, e),
-          kind: ToastKind.error);
+        store == null
+            ? l10n.backupActionFailed
+            : cloudFailureText(l10n, store, e),
+        kind: ToastKind.error,
+      );
       return null;
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -123,8 +128,10 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   /// Signs in to Google when [kind] is Drive. True when [kind] can be used
   /// now.
-  Future<bool> _signInFor(BackupStoreKind kind,
-      {String? expectedAccount}) async {
+  Future<bool> _signInFor(
+    BackupStoreKind kind, {
+    String? expectedAccount,
+  }) async {
     if (kind != BackupStoreKind.gdrive) return true;
     final ok = await signInToGoogle(
       context,
@@ -139,12 +146,19 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
   Future<void> _pick(BackupStoreKind kind, {String? expectedAccount}) async {
     if (kind == BackupStoreKind.relay) {
       if (_service.dormant) {
-        await _run(() =>
-            _controller.switchTo(BackupStoreKind.relay, deleteOld: false));
+        await _run(
+          () => _controller.switchTo(BackupStoreKind.relay, deleteOld: false),
+        );
       } else {
-        await showEnableBackupSheet(context, _service,
-            confirm: (key) => _controller.switchTo(BackupStoreKind.relay,
-                deleteOld: false, relayKey: key));
+        await showEnableBackupSheet(
+          context,
+          _service,
+          confirm: (key) => _controller.switchTo(
+            BackupStoreKind.relay,
+            deleteOld: false,
+            relayKey: key,
+          ),
+        );
       }
       if (mounted) setState(() {});
       return;
@@ -155,8 +169,11 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   /// Moves the backup from the active store to [to], after asking (and
   /// whether to delete the old one) unless [ask] is false.
-  Future<void> _switch(BackupStoreKind to,
-      {bool ask = true, String? expectedAccount}) async {
+  Future<void> _switch(
+    BackupStoreKind to, {
+    bool ask = true,
+    String? expectedAccount,
+  }) async {
     final from = _controller.active.value;
     if (from == null) return _pick(to, expectedAccount: expectedAccount);
     var deleteOld = false;
@@ -166,9 +183,15 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       deleteOld = answer;
     }
     if (to == BackupStoreKind.relay && !_service.dormant) {
-      await showEnableBackupSheet(context, _service,
-          confirm: (key) => _controller.switchTo(BackupStoreKind.relay,
-              deleteOld: deleteOld, relayKey: key));
+      await showEnableBackupSheet(
+        context,
+        _service,
+        confirm: (key) => _controller.switchTo(
+          BackupStoreKind.relay,
+          deleteOld: deleteOld,
+          relayKey: key,
+        ),
+      );
       if (mounted) setState(() {});
       return;
     }
@@ -206,8 +229,11 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
   /// alone acknowledges it.
   Future<void> _showNewKey(String keyText) async {
     if (!mounted) return;
-    await showReplacedRecoveryKeySheet(context, keyText,
-        onDone: () => unawaited(_service.acknowledgeNewRecoveryKey()));
+    await showReplacedRecoveryKeySheet(
+      context,
+      keyText,
+      onDone: () => unawaited(_service.acknowledgeNewRecoveryKey()),
+    );
   }
 
   Future<void> _regenerate() async {
@@ -260,7 +286,8 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
         final offered = c.offered.value;
         // A cloud store is only usable once its service is built, which
         // `offered` says.
-        final cloud = active != null &&
+        final cloud =
+            active != null &&
             active != BackupStoreKind.relay &&
             offered.contains(active);
         final status = s.status.value;
@@ -307,9 +334,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                         child: Text(l10n.backupVaultChoiceOpen),
                       ),
                     ),
-                  if (_hint(l10n, c.storeHint.value, active, offered)
-                      case final hint?)
-                    hint,
+                  ?_hint(l10n, c.storeHint.value, active, offered),
                   if (unavailable)
                     BackupLine(
                       key: const Key('backup-unavailable'),
@@ -317,11 +342,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                       text: l10n.backupUnavailable,
                     ),
                   if (picking)
-                    StorePicker(
-                      stores: others,
-                      enabled: !_busy,
-                      onPick: _pick,
-                    )
+                    StorePicker(stores: others, enabled: !_busy, onPick: _pick)
                   else if (cloud) ...[
                     _StoreNotices(
                       moved: c.cloud(active).movedSlots,
@@ -351,8 +372,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                         names: () => s.slotDeviceNames,
                         offered: offered,
                         dormantRelay: () => false,
-                        onSwitch:
-                            _busy ? null : (to) => _switch(to, ask: false),
+                        onSwitch: _busy
+                            ? null
+                            : (to) => _switch(to, ask: false),
                       ),
                       ..._enabledBody(l10n),
                     ],
@@ -364,8 +386,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                       child: Text(
                         l10n.backupSwitchStoreHeader,
                         style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: context.palette.textSecondary),
+                          fontWeight: FontWeight.w600,
+                          color: context.palette.textSecondary,
+                        ),
                       ),
                     ),
                     StorePicker(
@@ -381,7 +404,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                         l10n.backupIdleNotice,
                         key: const Key('backup-idle-notice'),
                         style: TextStyle(
-                            fontSize: 12, color: context.palette.textDisabled),
+                          fontSize: 12,
+                          color: context.palette.textDisabled,
+                        ),
                       ),
                     ),
                 ],
@@ -395,8 +420,12 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   /// Pairing said the group backs up to a cloud store this device offers
   /// and does not use: join it, or dismiss.
-  Widget? _hint(AppLocalizations l10n, CloudStoreHint? hint,
-      BackupStoreKind? active, Set<BackupStoreKind> offered) {
+  Widget? _hint(
+    AppLocalizations l10n,
+    CloudStoreHint? hint,
+    BackupStoreKind? active,
+    Set<BackupStoreKind> offered,
+  ) {
     if (hint == null || hint.kind == active || !offered.contains(hint.kind)) {
       return null;
     }
@@ -435,16 +464,15 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       BackupIdle(:final lastSuccessMs) => [last(lastSuccessMs)],
       BackupUploading() => [l10n.backupStatusUploading],
       BackupError(:final kind, :final lastSuccessMs) => [
-          switch (kind) {
-            BackupRelayError.network => l10n.backupErrorNetwork,
-            BackupRelayError.rateLimited => l10n.backupErrorRateLimited,
-            BackupRelayError.tooLarge ||
-            BackupRelayError.quotaFull =>
-              l10n.backupErrorTooLarge,
-            _ => l10n.backupErrorGeneric,
-          },
-          last(lastSuccessMs),
-        ],
+        switch (kind) {
+          BackupRelayError.network => l10n.backupErrorNetwork,
+          BackupRelayError.rateLimited => l10n.backupErrorRateLimited,
+          BackupRelayError.tooLarge ||
+          BackupRelayError.quotaFull => l10n.backupErrorTooLarge,
+          _ => l10n.backupErrorGeneric,
+        },
+        last(lastSuccessMs),
+      ],
     };
     if (lines.isEmpty) return null;
     return Column(
@@ -486,14 +514,17 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           key: Key('backup-pending-removal-${r.slotId}'),
           icon: Icons.warning_amber_rounded,
           warning: true,
-          text: l10n
-              .backupPendingRemoval(r.deviceName ?? l10n.backupUnknownDevice),
+          text: l10n.backupPendingRemoval(
+            r.deviceName ?? l10n.backupUnknownDevice,
+          ),
           action: TextButton(
             key: Key('backup-pending-removal-remove-${r.slotId}'),
             onPressed: _busy
                 ? null
                 : () => _removeMember(
-                    r.slotId, r.deviceName ?? l10n.backupUnknownDevice),
+                    r.slotId,
+                    r.deviceName ?? l10n.backupUnknownDevice,
+                  ),
             child: Text(l10n.commonRemove),
           ),
         ),
@@ -508,9 +539,11 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
         ListTile(
           key: Key('backup-member-${m.slotId}'),
           dense: true,
-          leading: Icon(m.isThisDevice
-              ? Icons.smartphone_rounded
-              : Icons.devices_other_rounded),
+          leading: Icon(
+            m.isThisDevice
+                ? Icons.smartphone_rounded
+                : Icons.devices_other_rounded,
+          ),
           title: Text(nameOf(m)),
           subtitle: Text(switch (m.lastUploadMs) {
             null => l10n.backupStatusNever,
@@ -522,8 +555,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                   key: Key('backup-member-remove-${m.slotId}'),
                   tooltip: l10n.commonRemove,
                   icon: const Icon(Icons.remove_circle_outline_rounded),
-                  onPressed:
-                      _busy ? null : () => _removeMember(m.slotId, nameOf(m)),
+                  onPressed: _busy
+                      ? null
+                      : () => _removeMember(m.slotId, nameOf(m)),
                 ),
         ),
       PendingSourcesRow(service: s),
@@ -542,8 +576,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
               key: const Key('backup-show-key'),
               icon: const Icon(Icons.key_rounded, size: 18),
               label: Text(l10n.backupShowRecoveryKey),
-              onPressed:
-                  _busy ? null : () => showRecoveryKeySheet(context, keyText),
+              onPressed: _busy
+                  ? null
+                  : () => showRecoveryKeySheet(context, keyText),
             ),
           TextButton.icon(
             key: const Key('backup-regenerate-key'),
@@ -554,7 +589,8 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           TextButton.icon(
             key: const Key('backup-delete'),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             icon: const Icon(Icons.delete_outline_rounded, size: 18),
             label: Text(l10n.backupDelete),
             onPressed: _busy ? null : _delete,
@@ -597,7 +633,8 @@ class _SwitchDialogState extends State<_SwitchDialog> {
             value: _deleteOld,
             onChanged: (v) => setState(() => _deleteOld = v ?? false),
             title: Text(
-                l10n.backupSwitchDeleteOld(backupStoreName(l10n, widget.from))),
+              l10n.backupSwitchDeleteOld(backupStoreName(l10n, widget.from)),
+            ),
           ),
         ],
       ),
@@ -662,14 +699,15 @@ class _StoreNotices extends StatelessWidget {
                   key: Key('backup-moved-$slot'),
                   icon: Icons.drive_file_move_rounded,
                   text: l10n.backupMovedNotice(
-                      deviceNames[slot] ?? l10n.backupUnknownDevice,
-                      backupStoreName(l10n, to)),
+                    deviceNames[slot] ?? l10n.backupUnknownDevice,
+                    backupStoreName(l10n, to),
+                  ),
                   action: switch (onSwitch) {
                     final follow? when _canFollow(to) => TextButton(
-                        key: Key('backup-moved-switch-$slot'),
-                        onPressed: () => follow(to),
-                        child: Text(l10n.backupSwitch),
-                      ),
+                      key: Key('backup-moved-switch-$slot'),
+                      onPressed: () => follow(to),
+                      child: Text(l10n.backupSwitch),
+                    ),
                     _ => const SizedBox.shrink(),
                   },
                 ),

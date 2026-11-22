@@ -20,8 +20,10 @@ Future<void> _check(SourceCache cache) async {
 }
 
 void main() {
-  test('InMemorySourceCache.deletePrefix removes only matching keys',
-      () async => _check(InMemorySourceCache()));
+  test(
+    'InMemorySourceCache.deletePrefix removes only matching keys',
+    () async => _check(InMemorySourceCache()),
+  );
 
   test('HiveSourceCache.deletePrefix removes only matching keys', () async {
     final dir = await Directory.systemTemp.createTemp('source_cache_prefix');

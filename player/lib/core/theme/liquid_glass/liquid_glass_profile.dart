@@ -87,7 +87,10 @@ class LiquidGlassProfile {
     interactive: false,
     shadow: [
       BoxShadow(
-          color: Color(0x73000000), blurRadius: 48, offset: Offset(0, 18)),
+        color: Color(0x73000000),
+        blurRadius: 48,
+        offset: Offset(0, 18),
+      ),
     ],
   );
 

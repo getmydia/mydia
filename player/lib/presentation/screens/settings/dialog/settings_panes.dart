@@ -2,7 +2,7 @@
 /// rows navigate there.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -23,27 +23,27 @@ import 'settings_dialog.dart';
 const _bodyPadding = EdgeInsets.fromLTRB(24, 8, 24, 24);
 
 Widget settingsRootPage(SettingsCategory category) => switch (category) {
-      SettingsCategory.connections => const _ConnectionsPage(),
-      SettingsCategory.backup => const _CategoryPane(
-          category: SettingsCategory.backup,
-          child: SingleChildScrollView(
-            padding: _bodyPadding,
-            child: BackupSection(key: Key('settings-backup-section')),
-          ),
-        ),
-      SettingsCategory.playback => const _PlaybackPage(),
-      SettingsCategory.diagnostics => const _CategoryPane(
-          category: SettingsCategory.diagnostics,
-          child: DiagnosticsBody(padding: _bodyPadding),
-        ),
-      SettingsCategory.about => _CategoryPane(
-          category: SettingsCategory.about,
-          child: ListView(
-            padding: _bodyPadding,
-            children: const [AboutSettingsSection()],
-          ),
-        ),
-    };
+  SettingsCategory.connections => const _ConnectionsPage(),
+  SettingsCategory.backup => const _CategoryPane(
+    category: SettingsCategory.backup,
+    child: SingleChildScrollView(
+      padding: _bodyPadding,
+      child: BackupSection(key: Key('settings-backup-section')),
+    ),
+  ),
+  SettingsCategory.playback => const _PlaybackPage(),
+  SettingsCategory.diagnostics => const _CategoryPane(
+    category: SettingsCategory.diagnostics,
+    child: DiagnosticsBody(padding: _bodyPadding),
+  ),
+  SettingsCategory.about => _CategoryPane(
+    category: SettingsCategory.about,
+    child: ListView(
+      padding: _bodyPadding,
+      children: const [AboutSettingsSection()],
+    ),
+  ),
+};
 
 /// A category's root page, titled with the category's sidebar label.
 class _CategoryPane extends StatelessWidget {
@@ -136,13 +136,13 @@ class _ConnectionsPageState extends State<_ConnectionsPage> {
 
   @override
   Widget build(BuildContext context) => SettingsPane(
-        title: null,
-        child: ConnectionsHubBody(
-          padding: _bodyPadding,
-          initialSection: _section,
-          wideHeader: true,
-        ),
-      );
+    title: null,
+    child: ConnectionsHubBody(
+      padding: _bodyPadding,
+      initialSection: _section,
+      wideHeader: true,
+    ),
+  );
 }
 
 class _MydiaInstancePage extends ConsumerWidget {
@@ -152,8 +152,10 @@ class _MydiaInstancePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final account =
-        mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
+    final account = mydiaAccountFor(
+      ref.watch(sourceRecordsProvider).value,
+      sourceId,
+    );
     return SettingsPane(
       title: account?.displayName ?? context.l10n.commonServer,
       child: MydiaInstanceBody(sourceId: sourceId, padding: _bodyPadding),
@@ -196,9 +198,9 @@ class DialogSettingsNav implements SettingsNav {
       scope.paneNavigator(SettingsCategory.connections);
 
   @override
-  void openInstance(SourceId id) => _connections?.push(MaterialPageRoute<void>(
-        builder: (_) => _MydiaInstancePage(sourceId: id),
-      ));
+  void openInstance(SourceId id) => _connections?.push(
+    MaterialPageRoute<void>(builder: (_) => _MydiaInstancePage(sourceId: id)),
+  );
 
   /// Selects [category] while the dialog is open. Its controller is disposed
   /// as the dialog starts closing, and a toast action (the pairing notice's
@@ -226,10 +228,11 @@ class DialogSettingsNav implements SettingsNav {
   void openConnections() => _select(SettingsCategory.connections);
 
   @override
-  void openAccount(String accountId) =>
-      _connections?.push(MaterialPageRoute<void>(
-        builder: (_) => _AccountDetailPage(accountId: accountId),
-      ));
+  void openAccount(String accountId) => _connections?.push(
+    MaterialPageRoute<void>(
+      builder: (_) => _AccountDetailPage(accountId: accountId),
+    ),
+  );
 
   /// Called after the removal's awaits, by which time the dialog may have
   /// closed; then there is nothing to pop.
@@ -245,7 +248,8 @@ class DialogSettingsNav implements SettingsNav {
 
   @override
   void reauth(SourceKind kind, String accountId) => _closeThen(
-      () => router.push('/sources/add/${kind.name}?account=$accountId'));
+    () => router.push('/sources/add/${kind.name}?account=$accountId'),
+  );
 
   @override
   void switchedTo(SourceId id) =>

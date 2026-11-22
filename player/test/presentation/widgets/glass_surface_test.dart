@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
@@ -9,8 +9,8 @@ import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(body: Center(child: child)),
-    );
+  home: Scaffold(body: Center(child: child)),
+);
 
 BackdropFilter _backdropOf(WidgetTester tester) {
   return tester.widget<BackdropFilter>(find.byType(BackdropFilter));
@@ -33,11 +33,13 @@ DecoratedBox _decoratedBoxOf(WidgetTester tester) {
 
 void main() {
   group('GlassSurface.appBar', () {
-    testWidgets('renders a BackdropFilter with sigma 10 and the fill opacity',
-        (tester) async {
+    testWidgets('renders a BackdropFilter with sigma 10 and the fill opacity', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
-            const GlassSurface.appBar(child: SizedBox(width: 50, height: 50))),
+          const GlassSurface.appBar(child: SizedBox(width: 50, height: 50)),
+        ),
       );
 
       expect(find.byType(BackdropFilter), findsOneWidget);
@@ -63,8 +65,9 @@ void main() {
   });
 
   group('GlassSurface.modal', () {
-    testWidgets('renders border + radius 20 + sigma 8 fill at 0.6',
-        (tester) async {
+    testWidgets('renders border + radius 20 + sigma 8 fill at 0.6', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(GlassSurface.modal(child: const SizedBox())),
       );
@@ -72,16 +75,19 @@ void main() {
       expect(_hasBlurSigma(_backdropOf(tester), 8), isTrue);
 
       final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
-      expect(decoration.color,
-          Palettes.projectionBooth.surface.withValues(alpha: 0.6));
+      expect(
+        decoration.color,
+        Palettes.projectionBooth.surface.withValues(alpha: 0.6),
+      );
       expect(decoration.border, isNotNull);
       expect(decoration.borderRadius, BorderRadius.circular(20));
     });
   });
 
   group('GlassSurface.hoverOverlay', () {
-    testWidgets('renders sigma 2 with a dark gradient and radius 12',
-        (tester) async {
+    testWidgets('renders sigma 2 with a dark gradient and radius 12', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(GlassSurface.hoverOverlay(child: const SizedBox())),
       );
@@ -108,8 +114,9 @@ void main() {
   });
 
   group('GlassSurface.faux (R8)', () {
-    testWidgets('renders no BackdropFilter while painting fill + rim',
-        (tester) async {
+    testWidgets('renders no BackdropFilter while painting fill + rim', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           GlassSurface.faux(
@@ -130,8 +137,10 @@ void main() {
         ),
       );
       final decoration = decorated.decoration as BoxDecoration;
-      expect(decoration.color,
-          Palettes.projectionBooth.surface.withValues(alpha: 0.5));
+      expect(
+        decoration.color,
+        Palettes.projectionBooth.surface.withValues(alpha: 0.5),
+      );
       // Rim is applied by default.
       expect(decoration.border, isNotNull);
     });
@@ -172,8 +181,7 @@ void main() {
       expect(decoration.gradient, isA<LinearGradient>());
     });
 
-    testWidgets(
-        'a faux surface and a real-blur surface co-render; only the '
+    testWidgets('a faux surface and a real-blur surface co-render; only the '
         'real one adds a blur pass', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -204,8 +212,9 @@ void main() {
         .whereType<BoxDecoration>()
         .toList();
 
-    testWidgets('blurs once at the OSD sigma, with no colour matrix',
-        (tester) async {
+    testWidgets('blurs once at the OSD sigma, with no colour matrix', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(GlassSurface.osd(child: const SizedBox(width: 200, height: 60))),
       );
@@ -231,10 +240,7 @@ void main() {
       expect(fill.gradient, isNull);
       expect(
         fill.border,
-        Border.all(
-          color: DepthTokens.osdHairline,
-          width: DepthTokens.rimWidth,
-        ),
+        Border.all(color: DepthTokens.osdHairline, width: DepthTokens.rimWidth),
       );
       expect(
         fill.borderRadius,
@@ -242,12 +248,14 @@ void main() {
       );
     });
 
-    testWidgets('paints the panel shadow outside the clip by default',
-        (tester) async {
+    testWidgets('paints the panel shadow outside the clip by default', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(GlassSurface.osd(child: const SizedBox())));
 
-      final shadowed =
-          decorationsOf(tester).where((d) => d.boxShadow != null).single;
+      final shadowed = decorationsOf(tester)
+          .where((d) => d.boxShadow != null)
+          .single;
       expect(shadowed.boxShadow, DepthTokens.osdShadowPanel);
       expect(
         find.ancestor(
@@ -324,8 +332,7 @@ void main() {
   });
 
   group('grouped rendering', () {
-    testWidgets(
-        'a BackdropGroup wrapping two grouped surfaces builds and '
+    testWidgets('a BackdropGroup wrapping two grouped surfaces builds and '
         'both render', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -333,14 +340,8 @@ void main() {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const GlassSurface.appBar(
-                  grouped: true,
-                  child: Text('one'),
-                ),
-                GlassSurface.modal(
-                  grouped: true,
-                  child: const Text('two'),
-                ),
+                const GlassSurface.appBar(grouped: true, child: Text('one')),
+                GlassSurface.modal(grouped: true, child: const Text('two')),
               ],
             ),
           ),
@@ -386,33 +387,51 @@ void main() {
     final warm = AmbientTintColors.fromSeed(const Color(0xFF9F4A2F));
 
     Widget tinted(Widget child) => MaterialApp(
-          home: Scaffold(
-            body: AmbientTint(colors: warm, child: Center(child: child)),
-          ),
-        );
+      home: Scaffold(
+        body: AmbientTint(
+          colors: warm,
+          child: Center(child: child),
+        ),
+      ),
+    );
 
     testWidgets('appBar fills with the tinted ground', (tester) async {
-      await tester.pumpWidget(tinted(
-          const GlassSurface.appBar(child: SizedBox(width: 50, height: 50))));
+      await tester.pumpWidget(
+        tinted(
+          const GlassSurface.appBar(child: SizedBox(width: 50, height: 50)),
+        ),
+      );
       final box = _decoratedBoxOf(tester).decoration as BoxDecoration;
-      expect(box.color,
-          warm.ground.withValues(alpha: DepthTokens.chromeFillOpacity));
+      expect(
+        box.color,
+        warm.ground.withValues(alpha: DepthTokens.chromeFillOpacity),
+      );
     });
 
     testWidgets('chrome fills with the tinted surface', (tester) async {
-      await tester.pumpWidget(tinted(
-          const GlassSurface.chrome(child: SizedBox(width: 50, height: 50))));
+      await tester.pumpWidget(
+        tinted(
+          const GlassSurface.chrome(child: SizedBox(width: 50, height: 50)),
+        ),
+      );
       final box = _decoratedBoxOf(tester).decoration as BoxDecoration;
-      expect(box.color,
-          warm.surface.withValues(alpha: DepthTokens.chromeFillOpacity));
+      expect(
+        box.color,
+        warm.surface.withValues(alpha: DepthTokens.chromeFillOpacity),
+      );
     });
 
     testWidgets('modal fills with the tinted surface', (tester) async {
-      await tester.pumpWidget(tinted(
-          GlassSurface.modal(child: const SizedBox(width: 50, height: 50))));
+      await tester.pumpWidget(
+        tinted(
+          GlassSurface.modal(child: const SizedBox(width: 50, height: 50)),
+        ),
+      );
       final box = _decoratedBoxOf(tester).decoration as BoxDecoration;
-      expect(box.color,
-          warm.surface.withValues(alpha: DepthTokens.modalFillOpacity));
+      expect(
+        box.color,
+        warm.surface.withValues(alpha: DepthTokens.modalFillOpacity),
+      );
     });
   });
 }

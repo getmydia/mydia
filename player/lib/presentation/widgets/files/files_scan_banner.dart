@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -20,14 +20,18 @@ String filesScanProgressText(AppLocalizations l10n, ScanState scan) {
   return scan.walking
       ? l10n.filesScanReadingFolders(format.format(scan.foldersRead))
       : l10n.filesScanProgress(
-          format.format(scan.done), format.format(scan.total));
+          format.format(scan.done),
+          format.format(scan.total),
+        );
 }
 
 /// How far the background read of file details has got.
 String filesProbeProgressText(AppLocalizations l10n, ProbeProgress probe) {
   final format = NumberFormat.decimalPattern(l10n.localeName);
   return l10n.filesProbeProgress(
-      format.format(probe.done), format.format(probe.total));
+    format.format(probe.done),
+    format.format(probe.total),
+  );
 }
 
 /// "Scanning 312 of 2,040" above a files library while its folders are read,
@@ -58,8 +62,11 @@ class FilesScanBanner extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  Icon(Icons.folder_off_outlined,
-                      size: 16, color: palette.textSecondary),
+                  Icon(
+                    Icons.folder_off_outlined,
+                    size: 16,
+                    color: palette.textSecondary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -84,8 +91,10 @@ class FilesScanBanner extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       filesProbeProgressText(l10n, probe),
-                      style:
-                          TextStyle(color: palette.textSecondary, fontSize: 12),
+                      style: TextStyle(
+                        color: palette.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],

@@ -8,12 +8,14 @@ import 'jellyfin_media_source_test.dart' show build;
 
 void main() {
   test('transcode codecs keep what servers can produce', () {
-    final c = transcodeCodecs(const DeviceProfile(
-      containers: ['mp4', 'mkv'],
-      videoCodecs: ['h264', 'hevc', 'mpeg2video'],
-      audioCodecs: ['aac', 'truehd', 'opus'],
-      hdrFormats: [],
-    ));
+    final c = transcodeCodecs(
+      const DeviceProfile(
+        containers: ['mp4', 'mkv'],
+        videoCodecs: ['h264', 'hevc', 'mpeg2video'],
+        audioCodecs: ['aac', 'truehd', 'opus'],
+        hdrFormats: [],
+      ),
+    );
     expect(c.video, ['h264', 'hevc']);
     expect(c.audio, ['aac', 'opus']);
     // Records compare their lists by identity, so check the fields.
@@ -23,12 +25,14 @@ void main() {
   });
 
   test('the device profile offers direct play and an HLS target', () {
-    final p = jellyfinDeviceProfile(const DeviceProfile(
-      containers: ['mp4', 'mkv'],
-      videoCodecs: ['h264', 'hevc'],
-      audioCodecs: ['aac', 'eac3'],
-      hdrFormats: [],
-    ));
+    final p = jellyfinDeviceProfile(
+      const DeviceProfile(
+        containers: ['mp4', 'mkv'],
+        videoCodecs: ['h264', 'hevc'],
+        audioCodecs: ['aac', 'eac3'],
+        hdrFormats: [],
+      ),
+    );
     final direct = (p['DirectPlayProfiles'] as List).single as Map;
     expect(direct['Container'], 'mp4,mkv');
     expect(direct['VideoCodec'], 'h264,hevc');
@@ -60,15 +64,23 @@ void main() {
   test('an ErrorCode becomes a readable server error', () {
     expect(
       () => JellyfinPlaybackInfo.fromJson(const {'ErrorCode': 'NotAllowed'}),
-      throwsA(isA<SourceException>()
-          .having((e) => e.fault, 'fault', SourceFault.jellyfinNotAllowed)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.fault,
+          'fault',
+          SourceFault.jellyfinNotAllowed,
+        ),
+      ),
     );
   });
 
   test('posts the profile for the chosen version', () async {
     final b = build();
-    final info = await b.source.playbackInfo('m2',
-        mediaSourceId: 'm2', deviceProfile: jellyfinDeviceProfile(null));
+    final info = await b.source.playbackInfo(
+      'm2',
+      mediaSourceId: 'm2',
+      deviceProfile: jellyfinDeviceProfile(null),
+    );
     expect(info.playSessionId, 'ps1');
     final (path, body) = b.server.bodies.single;
     expect(path, '/Items/m2/PlaybackInfo');

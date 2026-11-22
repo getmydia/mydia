@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
 import '../../../core/sources/mydia/mydia_credentials.dart';
 import '../../../core/sources/mydia/mydia_source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -33,8 +34,9 @@ class SettingsController extends _$SettingsController {
     // Watched before any await, so a switch of server reloads this.
     final id = ref.watch(activeSourceIdProvider);
     final source = id == null ? null : ref.watch(mediaSourceProvider(id));
-    final accountName =
-        source is MydiaSource ? source.source.account.displayName : null;
+    final accountName = source is MydiaSource
+        ? source.source.account.displayName
+        : null;
     MydiaCredentials? credentials;
     if (source is MydiaSource) {
       try {

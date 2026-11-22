@@ -13,7 +13,9 @@ import '../../downloads/download_job_service.dart';
 
 /// `MydiaClient.request`, which refreshes the instance's token on a 401.
 typedef MydiaRequest = Future<Map<String, dynamic>> Function(
-    DocumentNode document, Map<String, dynamic> variables);
+  DocumentNode document,
+  Map<String, dynamic> variables,
+);
 
 class MydiaDownloadJobService implements DownloadJobService {
   MydiaDownloadJobService({required this.request});
@@ -22,27 +24,38 @@ class MydiaDownloadJobService implements DownloadJobService {
 
   @override
   Future<DownloadOptionsResponse> getOptions(
-          String contentType, String id) async =>
-      parseDownloadOptions(await request(documentNodeMutationDownloadOptions,
-          {'contentType': contentType, 'id': id}));
+    String contentType,
+    String id,
+  ) async => parseDownloadOptions(
+    await request(documentNodeMutationDownloadOptions, {
+      'contentType': contentType,
+      'id': id,
+    }),
+  );
 
   @override
   Future<DownloadJobStatus> prepareDownload({
     required String contentType,
     required String id,
     required String resolution,
-  }) async =>
-      parsePrepareDownload(await request(documentNodeMutationPrepareDownload,
-          {'contentType': contentType, 'id': id, 'resolution': resolution}));
+  }) async => parsePrepareDownload(
+    await request(documentNodeMutationPrepareDownload, {
+      'contentType': contentType,
+      'id': id,
+      'resolution': resolution,
+    }),
+  );
 
   @override
   Future<DownloadJobStatus> getJobStatus(String jobId) async =>
-      parseDownloadJobStatus(await request(
-          documentNodeMutationDownloadJobStatus, {'jobId': jobId}));
+      parseDownloadJobStatus(
+        await request(documentNodeMutationDownloadJobStatus, {'jobId': jobId}),
+      );
 
   @override
   Future<void> cancelJob(String jobId) async => parseCancelDownloadJob(
-      await request(documentNodeMutationCancelDownloadJob, {'jobId': jobId}));
+    await request(documentNodeMutationCancelDownloadJob, {'jobId': jobId}),
+  );
 
   /// An instance's file URL depends on its transport and needs headers, so
   /// `MydiaSource.resolve` builds it rather than this.

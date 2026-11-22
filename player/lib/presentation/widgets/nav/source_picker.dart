@@ -4,7 +4,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/breakpoints.dart';
@@ -87,17 +87,18 @@ Future<PickerChoice?> showSourcePicker(
   // Once, here: the transition runs through the exit animation too, when
   // the anchor may already be inactive.
   final liquid = GlassStyle.of(anchorContext);
-  final emergenceAlignment =
-      liquid ? glassEmergenceAlignment(anchorContext) : null;
+  final emergenceAlignment = liquid
+      ? glassEmergenceAlignment(anchorContext)
+      : null;
   return showGeneralDialog<PickerChoice>(
     context: anchorContext,
     barrierDismissible: true,
-    barrierLabel:
-        MaterialLocalizations.of(anchorContext).modalBarrierDismissLabel,
+    barrierLabel: MaterialLocalizations.of(anchorContext)
+        .modalBarrierDismissLabel,
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 150),
-    pageBuilder: (_, __, ___) => _Popover(anchor: anchor, child: list),
-    transitionBuilder: (context, animation, __, child) => popoverTransition(
+    pageBuilder: (_, _, _) => _Popover(anchor: anchor, child: list),
+    transitionBuilder: (context, animation, _, child) => popoverTransition(
       animation: animation,
       emergenceAlignment: emergenceAlignment,
       reduceMotion: ReducedMotion.of(context),
@@ -168,8 +169,10 @@ class _Popover extends StatelessWidget {
           width: narrow ? minWidth : anchor.width,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxHeight:
-                  math.max(0, MediaQuery.sizeOf(context).height - top - 16),
+              maxHeight: math.max(
+                0,
+                MediaQuery.sizeOf(context).height - top - 16,
+              ),
             ),
             child: GlassPopoverSurface(child: child),
           ),
@@ -180,12 +183,12 @@ class _Popover extends StatelessWidget {
 }
 
 IconData sourceKindIcon(SourceKind kind) => switch (kind) {
-      SourceKind.mydia => Icons.dns_rounded,
-      SourceKind.plex => Icons.live_tv_rounded,
-      SourceKind.stash => Icons.video_library_rounded,
-      SourceKind.jellyfin => Icons.smart_display_rounded,
-      SourceKind.files => Icons.folder_rounded,
-    };
+  SourceKind.mydia => Icons.dns_rounded,
+  SourceKind.plex => Icons.live_tv_rounded,
+  SourceKind.stash => Icons.video_library_rounded,
+  SourceKind.jellyfin => Icons.smart_display_rounded,
+  SourceKind.files => Icons.folder_rounded,
+};
 
 /// Sources grouped by account, in the order each account first appears.
 List<List<Source>> groupSourcesByAccount(List<Source> sources) {
@@ -207,7 +210,7 @@ class SourceStatusBuilder extends ConsumerWidget {
 
   final SourceId sourceId;
   final Widget Function(BuildContext context, SourceConnectionStatus? status)
-      builder;
+  builder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -229,25 +232,25 @@ class SourceStatusDot extends StatelessWidget {
   Widget build(BuildContext context) {
     final (color, label) = switch (status) {
       SourceConnectionStatus.local => (
-          AppColors.success,
-          context.l10n.sourceStatusLocal
-        ),
+        AppColors.success,
+        context.l10n.sourceStatusLocal,
+      ),
       SourceConnectionStatus.remote => (
-          AppColors.success,
-          context.l10n.sourceStatusRemote
-        ),
+        AppColors.success,
+        context.l10n.sourceStatusRemote,
+      ),
       SourceConnectionStatus.relay => (
-          AppColors.warning,
-          context.l10n.sourceStatusRelay
-        ),
+        AppColors.warning,
+        context.l10n.sourceStatusRelay,
+      ),
       SourceConnectionStatus.connecting => (
-          AppColors.info,
-          context.l10n.sourceStatusConnecting
-        ),
+        AppColors.info,
+        context.l10n.sourceStatusConnecting,
+      ),
       SourceConnectionStatus.unreachable => (
-          AppColors.error,
-          context.l10n.sourceStatusUnreachable
-        ),
+        AppColors.error,
+        context.l10n.sourceStatusUnreachable,
+      ),
     };
     return Tooltip(
       message: label,
@@ -305,82 +308,84 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
     // Not a ListView: that builds lazily, so a current row below the fold
     // would never attach `_currentNode` and the focus request would do nothing.
     return SingleChildScrollView(
-        key: const ValueKey('source-picker'),
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (ref.watch(allServersSourcesProvider).length >= 2)
-              SidebarRow(
-                key: const ValueKey('source-switcher-all'),
-                focusNode: widget.currentId == null ? _currentNode : null,
-                icon: Icons.layers_rounded,
-                selectedIcon: Icons.layers_rounded,
-                label: context.l10n.navAllServers,
-                isSelected: widget.currentId == null,
-                onTap: () => _pick(const PickAllServers()),
+      key: const ValueKey('source-picker'),
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (ref.watch(allServersSourcesProvider).length >= 2)
+            SidebarRow(
+              key: const ValueKey('source-switcher-all'),
+              focusNode: widget.currentId == null ? _currentNode : null,
+              icon: Icons.layers_rounded,
+              selectedIcon: Icons.layers_rounded,
+              label: context.l10n.navAllServers,
+              isSelected: widget.currentId == null,
+              onTap: () => _pick(const PickAllServers()),
+            ),
+          for (final group in groupSourcesByAccount(sources)) ...[
+            _AccountCaption(account: group.first.account),
+            for (final source in group)
+              _SourceRow(
+                source: source,
+                isCurrent: source.id == widget.currentId,
+                locked: !unlocked && locks[source.id] == SourceLock.locked,
+                focusNode: source.id == widget.currentId ? _currentNode : null,
+                onTap: () => _pick(PickSource(source)),
               ),
-            for (final group in groupSourcesByAccount(sources)) ...[
-              _AccountCaption(account: group.first.account),
-              for (final source in group)
-                _SourceRow(
-                  source: source,
-                  isCurrent: source.id == widget.currentId,
-                  locked: !unlocked && locks[source.id] == SourceLock.locked,
-                  focusNode:
-                      source.id == widget.currentId ? _currentNode : null,
-                  onTap: () => _pick(PickSource(source)),
+            if (_hasHomeUsers(group.first.account))
+              SidebarRow(
+                key: ValueKey(
+                  'source-switcher-switch-user-${group.first.account.id}',
                 ),
-              if (_hasHomeUsers(group.first.account))
-                SidebarRow(
-                  key: ValueKey(
-                      'source-switcher-switch-user-${group.first.account.id}'),
-                  icon: Icons.switch_account_rounded,
-                  selectedIcon: Icons.switch_account_rounded,
-                  label: context.l10n.navSwitchUser(group.first.profile.name),
-                  isSelected: false,
-                  onTap: () => _pick(SwitchUser(group.first.account)),
-                ),
-            ],
-            if (!kIsWeb) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Divider(
-                  height: 1,
-                  color: context.palette.divider.withValues(alpha: 0.4),
-                ),
-              ),
-              SidebarRow(
-                key: const ValueKey('source-switcher-add'),
-                icon: Icons.add_rounded,
-                selectedIcon: Icons.add_rounded,
-                label: context.l10n.navAddServer,
+                icon: Icons.switch_account_rounded,
+                selectedIcon: Icons.switch_account_rounded,
+                label: context.l10n.navSwitchUser(group.first.profile.name),
                 isSelected: false,
-                onTap: () => _pick(const AddServer()),
+                onTap: () => _pick(SwitchUser(group.first.account)),
               ),
-              SidebarRow(
-                key: const ValueKey('source-switcher-manage'),
-                icon: Icons.tune_rounded,
-                selectedIcon: Icons.tune_rounded,
-                label: context.l10n.navManageServers,
-                isSelected: false,
-                onTap: () => _pick(const ManageServers()),
-              ),
-              SidebarRow(
-                key: const ValueKey('source-switcher-hidden'),
-                icon: unlocked ? Icons.lock_rounded : Icons.visibility_rounded,
-                selectedIcon:
-                    unlocked ? Icons.lock_rounded : Icons.visibility_rounded,
-                label: unlocked
-                    ? context.l10n.navLockNow
-                    : context.l10n.navShowHiddenServers,
-                isSelected: false,
-                onTap: () => _pick(const ToggleHidden()),
-              ),
-            ],
           ],
-        ));
+          if (!kIsWeb) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Divider(
+                height: 1,
+                color: context.palette.divider.withValues(alpha: 0.4),
+              ),
+            ),
+            SidebarRow(
+              key: const ValueKey('source-switcher-add'),
+              icon: Icons.add_rounded,
+              selectedIcon: Icons.add_rounded,
+              label: context.l10n.navAddServer,
+              isSelected: false,
+              onTap: () => _pick(const AddServer()),
+            ),
+            SidebarRow(
+              key: const ValueKey('source-switcher-manage'),
+              icon: Icons.tune_rounded,
+              selectedIcon: Icons.tune_rounded,
+              label: context.l10n.navManageServers,
+              isSelected: false,
+              onTap: () => _pick(const ManageServers()),
+            ),
+            SidebarRow(
+              key: const ValueKey('source-switcher-hidden'),
+              icon: unlocked ? Icons.lock_rounded : Icons.visibility_rounded,
+              selectedIcon: unlocked
+                  ? Icons.lock_rounded
+                  : Icons.visibility_rounded,
+              label: unlocked
+                  ? context.l10n.navLockNow
+                  : context.l10n.navShowHiddenServers,
+              isSelected: false,
+              onTap: () => _pick(const ToggleHidden()),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -398,9 +403,7 @@ class _AccountCaption extends StatelessWidget {
         account.displayName,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
+        style: Theme.of(context).textTheme.labelSmall
             ?.copyWith(color: context.palette.textSecondary),
       ),
     );
@@ -427,7 +430,8 @@ class _SourceRow extends StatelessWidget {
     return SourceStatusBuilder(
       sourceId: source.id,
       builder: (context, status) {
-        final dim = !source.server.presence ||
+        final dim =
+            !source.server.presence ||
             status == SourceConnectionStatus.unreachable;
         return Opacity(
           opacity: dim ? 0.5 : 1,
@@ -441,16 +445,22 @@ class _SourceRow extends StatelessWidget {
                 : source.displayName,
             isSelected: isCurrent,
             badge: locked
-                ? Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.lock_rounded,
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.lock_rounded,
                         size: 12,
                         key: ValueKey(
-                            'source-switcher-lock-${source.id.value}')),
-                    if (status != null) ...[
-                      const SizedBox(width: 4),
-                      SourceStatusDot(status),
+                          'source-switcher-lock-${source.id.value}',
+                        ),
+                      ),
+                      if (status != null) ...[
+                        const SizedBox(width: 4),
+                        SourceStatusDot(status),
+                      ],
                     ],
-                  ])
+                  )
                 : (status == null ? null : SourceStatusDot(status)),
             onTap: onTap,
           ),

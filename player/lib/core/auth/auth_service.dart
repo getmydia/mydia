@@ -66,10 +66,11 @@ class AuthService {
     AuthStorage? storage,
     DeviceInfoService? deviceInfo,
     MydiaGqlTransport Function(String serverUrl)? transportFactory,
-  })  : _storage = storage ?? getAuthStorage(),
-        _deviceInfo = deviceInfo ?? DeviceInfoService(),
-        _transportFactory = transportFactory ??
-            ((url) => HttpMydiaTransport(serverUrl: url, http: SourceHttp()));
+  }) : _storage = storage ?? getAuthStorage(),
+       _deviceInfo = deviceInfo ?? DeviceInfoService(),
+       _transportFactory =
+           transportFactory ??
+           ((url) => HttpMydiaTransport(serverUrl: url, http: SourceHttp()));
 
   final AuthStorage _storage;
   final DeviceInfoService _deviceInfo;
@@ -86,8 +87,9 @@ class AuthService {
   /// Store a custom relay URL.
   Future<void> setRelayUrl(String url) async {
     // Ensure URL doesn't have trailing slash
-    final normalizedUrl =
-        url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+    final normalizedUrl = url.endsWith('/')
+        ? url.substring(0, url.length - 1)
+        : url;
     await _storage.write(_relayUrlKey, normalizedUrl);
   }
 
@@ -169,8 +171,8 @@ class AuthService {
         ).toJson(),
       );
 
-      final payload =
-          Mutation$VerifyTotp.fromJson(rootMutation(data)).verifyTotp;
+      final payload = Mutation$VerifyTotp.fromJson(rootMutation(data))
+          .verifyTotp;
       if (payload == null) {
         throw Exception('No data returned from verifyTotp mutation');
       }

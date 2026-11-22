@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
@@ -30,8 +30,9 @@ void main() {
         ),
       );
 
-  testWidgets('a different unavailable server shows the banner again',
-      (tester) async {
+  testWidgets('a different unavailable server shows the banner again', (
+    tester,
+  ) async {
     await pump(tester, [a.id]);
     expect(find.byKey(const Key('all-unavailable-banner')), findsOneWidget);
 

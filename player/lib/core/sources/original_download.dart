@@ -55,7 +55,9 @@ DownloadOption originalOption(MediaVersion version) {
 }
 
 Future<List<DownloadOption>> originalOptions(
-    MediaSource source, ItemRef ref) async {
+  MediaSource source,
+  ItemRef ref,
+) async {
   final version = downloadVersion(await source.item(ref));
   return version == null ? const [] : [originalOption(version)];
 }
@@ -66,9 +68,11 @@ Future<DirectFile> originalFile(
   required Future<Uri> Function(MediaVersion version) url,
   required Future<Map<String, String>> Function() headers,
 }) async {
-  final version = downloadVersion(await source.item(ref)) ??
+  final version =
+      downloadVersion(await source.item(ref)) ??
       (throw const SourceException.unsupportedFault(
-          SourceFault.noFileToDownload));
+        SourceFault.noFileToDownload,
+      ));
   return DirectFile(
     url: (await url(version)).toString(),
     headers: await headers(),
@@ -81,10 +85,9 @@ PreparedDownloadFile originalFileForVersion(
   MediaVersion version, {
   required String url,
   Map<String, String> headers = const {},
-}) =>
-    DirectFile(
-      url: url,
-      headers: headers,
-      extension: extensionForContainer(version.container),
-      expectedBytes: version.sizeBytes ?? estimatedBytes(version),
-    );
+}) => DirectFile(
+  url: url,
+  headers: headers,
+  extension: extensionForContainer(version.container),
+  expectedBytes: version.sizeBytes ?? estimatedBytes(version),
+);

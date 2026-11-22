@@ -1,56 +1,63 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/dialog/settings_dialog.dart';
 
 Widget _page(SettingsCategory c) => Builder(
-      builder: (context) => SettingsPane(
-        title: c.label(context.l10n),
-        child: TextButton(
-          key: Key('push-${c.name}'),
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => SettingsPane(
-              title: '${c.label(context.l10n)} detail',
-              child: const SizedBox.shrink(),
-            ),
-          )),
-          child: Text('root ${c.name}'),
+  builder: (context) => SettingsPane(
+    title: c.label(context.l10n),
+    child: TextButton(
+      key: Key('push-${c.name}'),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SettingsPane(
+            title: '${c.label(context.l10n)} detail',
+            child: const SizedBox.shrink(),
+          ),
         ),
       ),
-    );
+      child: Text('root ${c.name}'),
+    ),
+  ),
+);
 
-Future<SettingsDialogController> _open(WidgetTester tester,
-    {Size size = const Size(1280, 800),
-    SettingsCategory initial = SettingsCategory.playback}) async {
+Future<SettingsDialogController> _open(
+  WidgetTester tester, {
+  Size size = const Size(1280, 800),
+  SettingsCategory initial = SettingsCategory.playback,
+}) async {
   // setSurfaceSize leaves MediaQuery at the default 800x600, so drive the
   // view itself.
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final controller = SettingsDialogController(initial);
-  await tester.pumpWidget(MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Builder(
-      builder: (context) => TextButton(
-        onPressed: () => showDialog<void>(
-          context: context,
-          builder: (_) =>
-              SettingsDialog(controller: controller, rootPage: _page),
+  await tester.pumpWidget(
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) =>
+                SettingsDialog(controller: controller, rootPage: _page),
+          ),
+          child: const Text('open'),
         ),
-        child: const Text('open'),
       ),
     ),
-  ));
+  );
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   return controller;
 }
 
 void main() {
-  testWidgets('lists every category and shows the selected one',
-      (tester) async {
+  testWidgets('lists every category and shows the selected one', (
+    tester,
+  ) async {
     await _open(tester);
     for (final c in SettingsCategory.values) {
       expect(find.byKey(Key('settings-category-${c.name}')), findsOneWidget);
@@ -75,8 +82,9 @@ void main() {
     expect(tiles.first, 'settings-category-connections');
     expect(find.text('Servers & devices'), findsWidgets);
     final icon = find.descendant(
-        of: find.byKey(const Key('settings-category-connections')),
-        matching: find.byIcon(Icons.hub_outlined));
+      of: find.byKey(const Key('settings-category-connections')),
+      matching: find.byIcon(Icons.hub_outlined),
+    );
     expect(icon, findsOneWidget);
   });
 
@@ -123,19 +131,26 @@ void main() {
     expect(find.text('root diagnostics'), findsOneWidget);
   });
 
-  testWidgets('sizes to 880x600 with room, fills a small window',
-      (tester) async {
+  testWidgets('sizes to 880x600 with room, fills a small window', (
+    tester,
+  ) async {
     await _open(tester);
-    expect(tester.getSize(find.byKey(const Key('settings-dialog'))),
-        const Size(880, 600));
+    expect(
+      tester.getSize(find.byKey(const Key('settings-dialog'))),
+      const Size(880, 600),
+    );
     await tester.tap(find.byKey(const Key('settings-dialog-close')));
     await tester.pumpAndSettle();
 
     await _open(tester, size: const Size(600, 400));
-    expect(tester.getSize(find.byKey(const Key('settings-dialog'))),
-        const Size(600, 400));
     expect(
-        find.byKey(const Key('settings-category-label-playback')), findsNothing,
-        reason: 'the sidebar collapses to icons');
+      tester.getSize(find.byKey(const Key('settings-dialog'))),
+      const Size(600, 400),
+    );
+    expect(
+      find.byKey(const Key('settings-category-label-playback')),
+      findsNothing,
+      reason: 'the sidebar collapses to icons',
+    );
   });
 }

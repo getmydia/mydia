@@ -1,5 +1,5 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/stream_timeline.dart';
@@ -61,42 +61,41 @@ void main() {
     // Positioned.fill(PlaybackChrome)] -> wrapped by GestureControls) so the
     // hit-testing story matches production, not a simplified stand-in.
     Widget host(Player player) => MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: SizedBox.expand(
-              child: GestureControls(
-                player: player,
-                timeline: StreamTimeline.zero,
-                // `StreamTimeline.zero` has a zero `startOffset`, so
-                // `toPlayer`/`toReal` are both no-ops here — seeking straight
-                // to the real target reproduces the direct `player.seek`
-                // this test asserted on before `onSeekToReal` existed.
-                onSeekToReal: (target) async => player.seek(target),
-                child: SizedBox.expand(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Stand-in for the video texture: it never registers a
-                      // gesture/mouse hit, exactly like media_kit's Texture.
-                      const SizedBox.shrink(),
-                      Positioned.fill(
-                        child: PlaybackChrome(
-                          player: player,
-                          timeline: StreamTimeline.zero,
-                          onSeekToReal: (target) async => player.seek(target),
-                        ),
-                      ),
-                    ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: SizedBox.expand(
+          child: GestureControls(
+            player: player,
+            timeline: StreamTimeline.zero,
+            // `StreamTimeline.zero` has a zero `startOffset`, so
+            // `toPlayer`/`toReal` are both no-ops here — seeking straight
+            // to the real target reproduces the direct `player.seek`
+            // this test asserted on before `onSeekToReal` existed.
+            onSeekToReal: (target) async => player.seek(target),
+            child: SizedBox.expand(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Stand-in for the video texture: it never registers a
+                  // gesture/mouse hit, exactly like media_kit's Texture.
+                  const SizedBox.shrink(),
+                  Positioned.fill(
+                    child: PlaybackChrome(
+                      player: player,
+                      timeline: StreamTimeline.zero,
+                      onSeekToReal: (target) async => player.seek(target),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
-        );
+        ),
+      ),
+    );
 
-    testWidgets(
-        'a double-tap on an empty region still reaches GestureControls '
+    testWidgets('a double-tap on an empty region still reaches GestureControls '
         'and seeks forward, despite ChromeVisibility\'s opaque background '
         'tap-catcher sitting on top of it', (tester) async {
       final fake = _FakePlatformPlayer();
@@ -126,38 +125,42 @@ void main() {
       expect(
         fake.lastSeek,
         const Duration(seconds: 10),
-        reason: 'GestureControls double-tap-right must still seek forward '
+        reason:
+            'GestureControls double-tap-right must still seek forward '
             'through PlaybackChrome\'s opaque tap catcher',
       );
     });
 
     testWidgets(
-        'a single tap on an empty region still toggles chrome visibility '
-        'through GestureControls\' translucent wrapper', (tester) async {
-      final fake = _FakePlatformPlayer();
-      final player = Player(platformPlayer: fake);
-      addTearDown(player.dispose);
+      'a single tap on an empty region still toggles chrome visibility '
+      'through GestureControls\' translucent wrapper',
+      (tester) async {
+        final fake = _FakePlatformPlayer();
+        final player = Player(platformPlayer: fake);
+        addTearDown(player.dispose);
 
-      await tester.pumpWidget(host(player));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(host(player));
+        await tester.pumpAndSettle();
 
-      expect(_opacity(tester), 1.0);
+        expect(_opacity(tester), 1.0);
 
-      final size = tester.getSize(find.byType(GestureControls));
-      final center = Offset(size.width / 2, size.height / 2);
+        final size = tester.getSize(find.byType(GestureControls));
+        final center = Offset(size.width / 2, size.height / 2);
 
-      await tester.tapAt(center);
-      // A lone tap only resolves once the ancestor double-tap recognizer
-      // (GestureControls) gives up waiting for a second tap.
-      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
-      await tester.pumpAndSettle();
+        await tester.tapAt(center);
+        // A lone tap only resolves once the ancestor double-tap recognizer
+        // (GestureControls) gives up waiting for a second tap.
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+        await tester.pumpAndSettle();
 
-      expect(
-        _opacity(tester),
-        0.0,
-        reason: 'the background tap-to-toggle must still fire through '
-            'GestureControls\' translucent GestureDetector',
-      );
-    });
+        expect(
+          _opacity(tester),
+          0.0,
+          reason:
+              'the background tap-to-toggle must still fire through '
+              'GestureControls\' translucent GestureDetector',
+        );
+      },
+    );
   });
 }

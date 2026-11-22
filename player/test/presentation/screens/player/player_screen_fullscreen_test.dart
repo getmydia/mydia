@@ -89,8 +89,9 @@ void main() {
     await pumpUntil(tester, () => castManager.capturedRequest != null);
   }
 
-  testWidgets('the screen follows availability, not just fullscreen state',
-      (tester) async {
+  testWidgets('the screen follows availability, not just fullscreen state', (
+    tester,
+  ) async {
     await mount(tester);
 
     // The defect this guards: reading `available` once at build time leaves the
@@ -98,8 +99,9 @@ void main() {
     expect(backend.readyNotifier.listenerCount, greaterThan(0));
   });
 
-  testWidgets('the availability listener is released on dispose',
-      (tester) async {
+  testWidgets('the availability listener is released on dispose', (
+    tester,
+  ) async {
     await mount(tester);
     expect(backend.readyNotifier.listenerCount, greaterThan(0));
 
@@ -112,10 +114,12 @@ void main() {
   testWidgets('a refused request tells the viewer', (tester) async {
     await mount(tester);
 
-    backend.fail(const FullscreenFailure(
-      FullscreenFailureCause.documentRequestRejected,
-      requestInitiated: true,
-    ));
+    backend.fail(
+      const FullscreenFailure(
+        FullscreenFailureCause.documentRequestRejected,
+        requestInitiated: true,
+      ),
+    );
     await tester.pump();
     await tester.pump();
 
@@ -125,10 +129,12 @@ void main() {
   testWidgets('a refused exit says exit, not enter', (tester) async {
     await mount(tester);
 
-    backend.fail(const FullscreenFailure(
-      FullscreenFailureCause.documentExitRejected,
-      requestInitiated: true,
-    ));
+    backend.fail(
+      const FullscreenFailure(
+        FullscreenFailureCause.documentExitRejected,
+        requestInitiated: true,
+      ),
+    );
     await tester.pump();
     await tester.pump();
 
@@ -136,13 +142,16 @@ void main() {
     expect(find.text('Could not enter fullscreen'), findsNothing);
   });
 
-  testWidgets('a failure nobody asked for stays out of the way',
-      (tester) async {
+  testWidgets('a failure nobody asked for stays out of the way', (
+    tester,
+  ) async {
     await mount(tester);
 
-    backend.fail(const FullscreenFailure(
-      FullscreenFailureCause.documentEnabledProbeFailed,
-    ));
+    backend.fail(
+      const FullscreenFailure(
+        FullscreenFailureCause.documentEnabledProbeFailed,
+      ),
+    );
     await tester.pump();
     await tester.pump();
 
@@ -152,10 +161,12 @@ void main() {
   testWidgets('the report reaches the diagnostics signal', (tester) async {
     await mount(tester);
 
-    backend.fail(const FullscreenFailure(
-      FullscreenFailureCause.documentRequestRejected,
-      requestInitiated: true,
-    ));
+    backend.fail(
+      const FullscreenFailure(
+        FullscreenFailureCause.documentRequestRejected,
+        requestInitiated: true,
+      ),
+    );
     await tester.pump();
 
     expect(fullscreenReportSignal.value, isNotNull);

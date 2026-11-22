@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/web_config.dart';
@@ -47,23 +47,22 @@ List<NativeTab> nativeTabsFor(
   required bool isOffline,
   required bool showBackToMydia,
   String? settingsBadge,
-}) =>
-    [
-      if (showBackToMydia)
-        NativeTab(
-          id: kMydiaBackTabId,
-          title: 'Mydia', // l10n-ignore: product name
-          symbol: nativeTabSymbol(kMydiaBackTabId),
-        ),
-      for (final entry in entries)
-        NativeTab(
-          id: entry.id,
-          title: l10n.navEntryTabLabel(entry),
-          symbol: nativeTabSymbol(entry.id),
-          badge: entry.id == 'settings' ? settingsBadge : null,
-          enabled: !isOffline || entry.id == 'downloads',
-        ),
-    ];
+}) => [
+  if (showBackToMydia)
+    NativeTab(
+      id: kMydiaBackTabId,
+      title: 'Mydia', // l10n-ignore: product name
+      symbol: nativeTabSymbol(kMydiaBackTabId),
+    ),
+  for (final entry in entries)
+    NativeTab(
+      id: entry.id,
+      title: l10n.navEntryTabLabel(entry),
+      symbol: nativeTabSymbol(entry.id),
+      badge: entry.id == 'settings' ? settingsBadge : null,
+      enabled: !isOffline || entry.id == 'downloads',
+    ),
+];
 
 /// The entry [location] falls under, or null where none does. A native tab
 /// bar always has a selection, so null means "leave it where it is".
@@ -114,8 +113,9 @@ class NativeTabBar extends ConsumerStatefulWidget {
 
 class _NativeTabBarState extends ConsumerState<NativeTabBar> {
   // Read once: `dispose` must still reach the channel to hide the bar.
-  late final NativeTabBarChannel _channel =
-      ref.read(nativeTabBarChannelProvider);
+  late final NativeTabBarChannel _channel = ref.read(
+    nativeTabBarChannelProvider,
+  );
   StreamSubscription<NativeTabBarEvent>? _events;
   double? _inset;
 
@@ -146,10 +146,10 @@ class _NativeTabBarState extends ConsumerState<NativeTabBar> {
           setState(() => _inset = bottom);
         }
       case NativeAccessoryTapped() ||
-            NativeAccessoryPlayPause() ||
-            NativeLayoutChanged() ||
-            NativeSystemAccentChanged() ||
-            NativeGlassAccessibilityChanged():
+          NativeAccessoryPlayPause() ||
+          NativeLayoutChanged() ||
+          NativeSystemAccentChanged() ||
+          NativeGlassAccessibilityChanged():
         break;
     }
   }
@@ -168,13 +168,17 @@ class _NativeTabBarState extends ConsumerState<NativeTabBar> {
   }
 
   void _sync() {
-    unawaited(_channel.setTabs(nativeTabsFor(
-      widget.entries,
-      l10n: context.l10n,
-      isOffline: widget.isOffline,
-      showBackToMydia: widget.showBackToMydia,
-      settingsBadge: widget.settingsBadge,
-    )));
+    unawaited(
+      _channel.setTabs(
+        nativeTabsFor(
+          widget.entries,
+          l10n: context.l10n,
+          isOffline: widget.isOffline,
+          showBackToMydia: widget.showBackToMydia,
+          settingsBadge: widget.settingsBadge,
+        ),
+      ),
+    );
     final selected = selectedNativeTabId(widget.entries, widget.location);
     if (selected != null) unawaited(_channel.select(selected));
     unawaited(_channel.setVisible(widget.visible));
@@ -187,7 +191,8 @@ class _NativeTabBarState extends ConsumerState<NativeTabBar> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _sync();
     });
-    final height = _inset ??
+    final height =
+        _inset ??
         NativeTabBar.fallbackBarHeight +
             MediaQuery.viewPaddingOf(context).bottom;
     return IgnorePointer(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
@@ -129,14 +129,16 @@ class DetailErrorState extends StatelessWidget {
                         DetailNoun.episode =>
                           context.l10n.detailLoadFailedEpisode,
                       },
-                      style: textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       error.toString(),
-                      style: textTheme.bodyMedium
-                          ?.copyWith(color: palette.textSecondary),
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: palette.textSecondary,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 32),

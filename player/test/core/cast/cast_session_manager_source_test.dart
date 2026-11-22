@@ -27,8 +27,7 @@ class _FakeSink implements CastProgressSink {
     required Duration position,
     required Duration duration,
     required bool paused,
-  }) async =>
-      reports.add(position);
+  }) async => reports.add(position);
   @override
   Future<void> stopped() async {
     stops++;
@@ -79,14 +78,21 @@ class _FakeBinding implements SourceCastBinding {
 
 void main() {
   const tv = CastDevice(
-      id: 'tv-1', name: 'Den TV', protocol: CastProtocolKind.chromecast);
+    id: 'tv-1',
+    name: 'Den TV',
+    protocol: CastProtocolKind.chromecast,
+  );
   const mydiaTarget = CastDevice(
-      id: 'node-1', name: 'Bedroom', protocol: CastProtocolKind.mydia);
+    id: 'node-1',
+    name: 'Bedroom',
+    protocol: CastProtocolKind.mydia,
+  );
   const content = SourceCastContent(
     item: ItemRef(
-        sourceId: SourceId('px1:owner:srv'),
-        kind: ItemKind.movie,
-        externalId: '101'),
+      sourceId: SourceId('px1:owner:srv'),
+      kind: ItemKind.movie,
+      externalId: '101',
+    ),
     versionId: '21',
   );
 
@@ -96,23 +102,23 @@ void main() {
   late InMemoryCastSessionStore store;
 
   CastSessionManager build({SourceCastBinder? binder}) => CastSessionManager(
-        backend: backend,
-        mydiaBackend: backend,
-        store: store,
-        mydiaDeps: (_) async => MydiaCastDeps(
-          progress: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
-          streamingSessions: mydiaSessions,
-          resolver: () => CastRouteResolver(
-            isP2pMode: false,
-            serverUrl: 'https://mydia.test',
-            mediaToken: () async => 'tok',
-            lanBaseUrl: () => null,
-            streamingSessions: mydiaSessions,
-          ),
-        ),
-        setLanAccess: (_) async {},
-        bindSource: binder ?? (_) async => binding,
-      );
+    backend: backend,
+    mydiaBackend: backend,
+    store: store,
+    mydiaDeps: (_) async => MydiaCastDeps(
+      progress: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
+      streamingSessions: mydiaSessions,
+      resolver: () => CastRouteResolver(
+        isP2pMode: false,
+        serverUrl: 'https://mydia.test',
+        mediaToken: () async => 'tok',
+        lanBaseUrl: () => null,
+        streamingSessions: mydiaSessions,
+      ),
+    ),
+    setLanAccess: (_) async {},
+    bindSource: binder ?? (_) async => binding,
+  );
 
   const request = CastLaunchRequest.forContent(
     content: content,
@@ -133,8 +139,10 @@ void main() {
     await manager.startCast(device: tv, request: request);
 
     expect(backend.loadedRequests.single.url, contains('session=srv-0'));
-    expect(backend.loadedRequests.single.startPosition,
-        const Duration(minutes: 3));
+    expect(
+      backend.loadedRequests.single.startPosition,
+      const Duration(minutes: 3),
+    );
     expect((await store.load())!.content, content);
     expect(mydiaSessions.started, isEmpty);
   });
@@ -172,9 +180,10 @@ void main() {
   group('switching source items', () {
     const otherContent = SourceCastContent(
       item: ItemRef(
-          sourceId: SourceId('px1:owner:srv'),
-          kind: ItemKind.movie,
-          externalId: '202'),
+        sourceId: SourceId('px1:owner:srv'),
+        kind: ItemKind.movie,
+        externalId: '202',
+      ),
       versionId: '31',
     );
     const otherRequest = CastLaunchRequest.forContent(
@@ -185,15 +194,17 @@ void main() {
     late _FakeBinding otherBinding;
 
     SourceCastBinder perContent({bool failOther = false}) => (c) async {
-          if (c == otherContent) {
-            if (failOther) {
-              throw const CastBackendException(
-                  'bind failed', CastFailureKind.unknown);
-            }
-            return otherBinding;
-          }
-          return binding;
-        };
+      if (c == otherContent) {
+        if (failOther) {
+          throw const CastBackendException(
+            'bind failed',
+            CastFailureKind.unknown,
+          );
+        }
+        return otherBinding;
+      }
+      return binding;
+    };
 
     setUp(() => otherBinding = _FakeBinding());
 
@@ -222,36 +233,38 @@ void main() {
       expect(binding.sink.reports, [const Duration(minutes: 5)]);
     });
 
-    test('a slow bind for a superseded cast does not take over the newer one',
-        () async {
-      final slowBind = Completer<SourceCastBinding>();
-      final manager = build(
-        binder: (c) =>
-            c == otherContent ? Future.value(otherBinding) : slowBind.future,
-      );
-
-      final first = manager.startCast(device: tv, request: request);
-      await pumpEventQueue();
-      await manager.startCast(device: tv, request: otherRequest);
-      slowBind.complete(binding);
-      await first;
-
-      backend.emitDuration(const Duration(minutes: 80));
-      backend.emitPosition(const Duration(minutes: 7));
-      await pumpEventQueue();
-
-      expect(otherBinding.sink.reports, [const Duration(minutes: 7)]);
-      expect(binding.sink.reports, isEmpty);
-    });
-
     test(
-        'a slow stop report for the old item does not let a superseded cast '
+      'a slow bind for a superseded cast does not take over the newer one',
+      () async {
+        final slowBind = Completer<SourceCastBinding>();
+        final manager = build(
+          binder: (c) =>
+              c == otherContent ? Future.value(otherBinding) : slowBind.future,
+        );
+
+        final first = manager.startCast(device: tv, request: request);
+        await pumpEventQueue();
+        await manager.startCast(device: tv, request: otherRequest);
+        slowBind.complete(binding);
+        await first;
+
+        backend.emitDuration(const Duration(minutes: 80));
+        backend.emitPosition(const Duration(minutes: 7));
+        await pumpEventQueue();
+
+        expect(otherBinding.sink.reports, [const Duration(minutes: 7)]);
+        expect(binding.sink.reports, isEmpty);
+      },
+    );
+
+    test('a slow stop report for the old item does not let a superseded cast '
         'take over the newer one', () async {
       const thirdContent = SourceCastContent(
         item: ItemRef(
-            sourceId: SourceId('px1:owner:srv'),
-            kind: ItemKind.movie,
-            externalId: '303'),
+          sourceId: SourceId('px1:owner:srv'),
+          kind: ItemKind.movie,
+          externalId: '303',
+        ),
         versionId: '41',
       );
       const thirdRequest = CastLaunchRequest.forContent(
@@ -264,8 +277,8 @@ void main() {
         binder: (c) async => c == otherContent
             ? otherBinding
             : c == thirdContent
-                ? thirdBinding
-                : binding,
+            ? thirdBinding
+            : binding,
       );
 
       await manager.startCast(device: tv, request: request);
@@ -291,7 +304,10 @@ void main() {
 
   test('a DLNA device is not retried with a transcode', () async {
     const dlna = CastDevice(
-        id: 'tv-2', name: 'Porch TV', protocol: CastProtocolKind.dlna);
+      id: 'tv-2',
+      name: 'Porch TV',
+      protocol: CastProtocolKind.dlna,
+    );
     backend.failNextLoad(CastFailureKind.mediaLoadFailed);
     final manager = build();
 
@@ -325,8 +341,7 @@ void main() {
     expect(binding.ended, ['srv-0']);
   });
 
-  test(
-      'positions go to the source sink, and stop reports stopped and ends '
+  test('positions go to the source sink, and stop reports stopped and ends '
       'the transcode', () async {
     final manager = build();
     await manager.startCast(device: tv, request: request);
@@ -362,24 +377,31 @@ void main() {
   test('a failed bind surfaces its exception', () async {
     final manager = build(
       binder: (_) async => throw const CastBackendException(
-          'Sign in to this server again to cast from it.',
-          CastFailureKind.notAuthorized),
+        'Sign in to this server again to cast from it.',
+        CastFailureKind.notAuthorized,
+      ),
     );
     await expectLater(
       manager.startCast(device: tv, request: request),
-      throwsA(isA<CastBackendException>()
-          .having((e) => e.kind, 'kind', CastFailureKind.notAuthorized)),
+      throwsA(
+        isA<CastBackendException>().having(
+          (e) => e.kind,
+          'kind',
+          CastFailureKind.notAuthorized,
+        ),
+      ),
     );
   });
 
   test('choosing a burned-in track restarts at the current position', () async {
     binding.subtitles = const [
       CastSubtitleTrack(
-          trackId: '33',
-          url: '',
-          label: 'Spanish',
-          language: 'spa',
-          burnedIn: true),
+        trackId: '33',
+        url: '',
+        label: 'Spanish',
+        language: 'spa',
+        burnedIn: true,
+      ),
     ];
     final manager = build();
     await manager.startCast(device: tv, request: request);
@@ -398,14 +420,16 @@ void main() {
     final manager = build();
     await manager.startCast(device: tv, request: request);
     await manager.detach();
-    await store.save(PersistedCastSession.forContent(
-      device: tv,
-      content: content,
-      title: 'The Lantern Keeper',
-      position: const Duration(minutes: 20),
-      routeKind: CastRouteKind.directServer,
-      savedAt: DateTime.now(),
-    ));
+    await store.save(
+      PersistedCastSession.forContent(
+        device: tv,
+        content: content,
+        title: 'The Lantern Keeper',
+        position: const Duration(minutes: 20),
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.now(),
+      ),
+    );
 
     await manager.reconnectStoredSession();
 

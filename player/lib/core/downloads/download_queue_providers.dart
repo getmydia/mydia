@@ -97,10 +97,12 @@ Future<DownloadQueueStatus> downloadQueueStatus(Ref ref) async {
 
   // Categorize tasks: active (running or recovering) vs waiting for a slot
   final activeDownloads = allTasks
-      .where((t) =>
-          DownloadStatusSets.running.contains(t.status) ||
-          t.status == 'interrupted' ||
-          t.status == 'stalled')
+      .where(
+        (t) =>
+            DownloadStatusSets.running.contains(t.status) ||
+            t.status == 'interrupted' ||
+            t.status == 'stalled',
+      )
       .toList();
 
   // Deliberately excludes 'transcoding'. It is already counted as active
@@ -108,11 +110,12 @@ Future<DownloadQueueStatus> downloadQueueStatus(Ref ref) async {
   // double-counted it in totalPending. It also made the "Cancel N queued
   // downloads" button overstate itself, since cancelAllQueued only acts on
   // 'queued' and 'pending'.
-  final queuedDownloads = allTasks
-      .where((t) => t.status == 'pending' || t.status == 'queued')
-      .toList()
-    // Sort by creation date (FIFO)
-    ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  final queuedDownloads =
+      allTasks
+          .where((t) => t.status == 'pending' || t.status == 'queued')
+          .toList()
+        // Sort by creation date (FIFO)
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
   return DownloadQueueStatus(
     activeCount: activeDownloads.length,
@@ -145,10 +148,11 @@ class DownloadQueueManager {
     }
 
     // Get queued tasks sorted by creation date
-    final queuedTasks = allTasks
-        .where((t) => t.status == 'pending' || t.status == 'queued')
-        .toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final queuedTasks =
+        allTasks
+            .where((t) => t.status == 'pending' || t.status == 'queued')
+            .toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     final index = queuedTasks.indexWhere((t) => t.id == taskId);
     return index + 1; // 1-based position

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/connection/connection_summary.dart';
@@ -57,8 +57,10 @@ class SettingsScreen extends ConsumerWidget {
   static PreferredSizeWidget header(BuildContext context) {
     return WindowTitleBar(
       height: WindowTitleRow.heightOf(context),
-      title: Text(context.l10n.settingsTitle,
-          style: Theme.of(context).textTheme.titleLarge),
+      title: Text(
+        context.l10n.settingsTitle,
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
     );
   }
 
@@ -66,7 +68,8 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(settingsControllerProvider);
     final activeId = ref.watch(activeSourceIdProvider);
-    final isP2P = activeId != null &&
+    final isP2P =
+        activeId != null &&
         (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
     final p2pStatus = ref.watch(p2pStatusNotifierProvider);
     final currentVersion = ref.watch(updateProvider).currentVersion;
@@ -115,79 +118,82 @@ class SettingsScreen extends ConsumerWidget {
           // An explicit padding turns off ListView's own MediaQuery bottom
           // inset, so the dock's height has to be reserved here by hand.
           body: SettingsInitialFocus(
-            child: list(ListView(
-              padding: EdgeInsets.fromLTRB(
-                horizontal,
-                20,
-                horizontal,
-                DockInsets.bottomOf(context),
-              ),
-              children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 660),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // With several Mydia accounts this would name only the
-                        // bound one; each instance's own screen carries it.
-                        if (!manyMydiaAccounts)
-                          SettingsIdentity(
-                            username: settings?.username ?? '',
-                            serverUrl: settings?.serverUrl ?? '',
-                          ),
-                        if (directional)
-                          const FocusMemoryItem(
-                            id: 'update-card',
-                            index: 0,
-                            child: updateCard,
-                          )
-                        else
-                          updateCard,
-                        // Between the update card (item 0) and the first
-                        // section (item 100) in the television's focus order.
-                        if (directional)
-                          const FocusMemoryItem(
-                            id: 'connections-card',
-                            index: 1,
-                            child: ConnectionsConstellationCard(),
-                          )
-                        else
-                          const ConnectionsConstellationCard(),
-                        // The web player has no cloud backup.
-                        if (!ref.watch(isWebProvider)) ...[
+            child: list(
+              ListView(
+                padding: EdgeInsets.fromLTRB(
+                  horizontal,
+                  20,
+                  horizontal,
+                  DockInsets.bottomOf(context),
+                ),
+                children: [
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 660),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // With several Mydia accounts this would name only the
+                          // bound one; each instance's own screen carries it.
+                          if (!manyMydiaAccounts)
+                            SettingsIdentity(
+                              username: settings?.username ?? '',
+                              serverUrl: settings?.serverUrl ?? '',
+                            ),
+                          if (directional)
+                            const FocusMemoryItem(
+                              id: 'update-card',
+                              index: 0,
+                              child: updateCard,
+                            )
+                          else
+                            updateCard,
+                          // Between the update card (item 0) and the first
+                          // section (item 100) in the television's focus order.
+                          if (directional)
+                            const FocusMemoryItem(
+                              id: 'connections-card',
+                              index: 1,
+                              child: ConnectionsConstellationCard(),
+                            )
+                          else
+                            const ConnectionsConstellationCard(),
+                          // The web player has no cloud backup.
+                          if (!ref.watch(isWebProvider)) ...[
+                            const SizedBox(height: 18),
+                            // After the connections card (item 1), before the
+                            // first section (item 100).
+                            FocusMemoryItem(
+                              id: 'backup-section',
+                              index: 2,
+                              child: _RevealOnRequest(
+                                request: backupRequest,
+                                child: const BackupSection(
+                                  key: Key('settings-backup-section'),
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 18),
-                          // After the connections card (item 1), before the
-                          // first section (item 100).
-                          FocusMemoryItem(
-                            id: 'backup-section',
-                            index: 2,
-                            child: _RevealOnRequest(
-                              request: backupRequest,
-                              child: const BackupSection(
-                                  key: Key('settings-backup-section')),
+                          section(
+                            1,
+                            PlaybackSettingsSection(
+                              settings: settings,
+                              failed: settingsAsync.hasError,
                             ),
                           ),
+                          const SizedBox(height: 18),
+                          section(2, const AppearanceSettingsSection()),
+                          const SizedBox(height: 18),
+                          section(3, _ManageSection(connection: summary)),
+                          VersionFooter(version: currentVersion),
                         ],
-                        const SizedBox(height: 18),
-                        section(
-                          1,
-                          PlaybackSettingsSection(
-                            settings: settings,
-                            failed: settingsAsync.hasError,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        section(2, const AppearanceSettingsSection()),
-                        const SizedBox(height: 18),
-                        section(3, _ManageSection(connection: summary)),
-                        VersionFooter(version: currentVersion),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            )),
+                ],
+              ),
+            ),
           ),
         ),
       ),

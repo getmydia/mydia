@@ -36,7 +36,8 @@ class SmbBackend implements FileSystemBackend {
 
   @override
   Future<PlayableFile> playable(String path) async => PlayableFile(
-      url: await native.open(accountId, target, credentials, path));
+    url: await native.open(accountId, target, credentials, path),
+  );
 
   @override
   Future<void> probe() => native.probe(target, credentials, '/');
@@ -66,8 +67,8 @@ class LazySmbBackend implements FileSystemBackend {
     this.discovery,
     this.onReachedVia,
     this.browseTimeout = const Duration(seconds: 5),
-  })  : assert(targets.isNotEmpty, 'an SMB share has at least one address'),
-        _targets = [...targets];
+  }) : assert(targets.isNotEmpty, 'an SMB share has at least one address'),
+       _targets = [...targets];
 
   final SmbNative native;
   final String accountId;
@@ -79,7 +80,7 @@ class LazySmbBackend implements FileSystemBackend {
   final String? serviceName;
   final SmbDiscovery? discovery;
   final Future<void> Function(SmbTarget reached, List<SmbTarget> discovered)?
-      onReachedVia;
+  onReachedVia;
   final Duration browseTimeout;
   Future<SmbBackend>? _backend;
 
@@ -162,12 +163,19 @@ class LazySmbBackend implements FileSystemBackend {
   }
 
   SmbBackend _backendOn(SmbTarget t, SmbCredentials c) => SmbBackend(
-      native: native, accountId: accountId, target: t, credentials: c);
+    native: native,
+    accountId: accountId,
+    target: t,
+    credentials: c,
+  );
 
   /// The first of [candidates] whose root answers, or null; every failure is
   /// appended to [failures].
-  Future<SmbTarget?> _firstAnswering(List<SmbTarget> candidates,
-      SmbCredentials c, List<BackendFailure> failures) async {
+  Future<SmbTarget?> _firstAnswering(
+    List<SmbTarget> candidates,
+    SmbCredentials c,
+    List<BackendFailure> failures,
+  ) async {
     for (final t in candidates) {
       try {
         await native.probe(t, c, '/');
@@ -183,7 +191,9 @@ class LazySmbBackend implements FileSystemBackend {
   /// within [browseTimeout] or the browse ends. The browse is always
   /// cancelled.
   Future<DiscoveredSmbServer?> _browseFor(
-      SmbDiscovery browser, String name) async {
+    SmbDiscovery browser,
+    String name,
+  ) async {
     final found = Completer<DiscoveredSmbServer?>();
     final sub = browser.browse().listen(
       (servers) {
@@ -209,10 +219,7 @@ class LazySmbBackend implements FileSystemBackend {
   List<SmbTarget> _targetsOf(DiscoveredSmbServer server) {
     final share = _targets.first.share;
     final hostname = server.hostname;
-    final hosts = [
-      ...server.addresses,
-      if (hostname != null) hostname,
-    ];
+    final hosts = [...server.addresses, ?hostname];
     final seen = <String>{};
     return [
       for (final host in hosts.map(normalizeSmbHost))
@@ -251,9 +258,11 @@ class LazySmbBackend implements FileSystemBackend {
   void _reportReached(SmbTarget reached, List<SmbTarget> discovered) {
     final report = onReachedVia;
     if (report == null) return;
-    unawaited(Future.sync(() => report(reached, discovered)).catchError(
-      (Object e) => debugPrint('[FilesSource] Saving the SMB address: $e'),
-    ));
+    unawaited(
+      Future.sync(() => report(reached, discovered)).catchError(
+        (Object e) => debugPrint('[FilesSource] Saving the SMB address: $e'),
+      ),
+    );
   }
 
   @override

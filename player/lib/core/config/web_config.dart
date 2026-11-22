@@ -6,7 +6,8 @@ library;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-import 'web_config_stub.dart' if (dart.library.js_interop) 'web_config_web.dart'
+import 'web_config_stub.dart'
+    if (dart.library.js_interop) 'web_config_web.dart'
     as impl;
 
 /// Configuration injected by Phoenix for web auto-authentication.

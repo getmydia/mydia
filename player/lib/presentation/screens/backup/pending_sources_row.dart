@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/backup/backup_meta_store.dart';
 import '../../../core/backup/backup_sync_service.dart';
@@ -15,15 +15,15 @@ import '../../widgets/toast/toaster.dart';
 class PendingSourcesRow extends StatelessWidget {
   /// The relay backup's offers.
   PendingSourcesRow({super.key, required BackupSyncService service})
-      : offers = service.pendingOffers,
-        accept = ((id) => service.acceptPendingAccount(id)),
-        dismiss = ((id) => service.dismissPendingAccount(id));
+    : offers = service.pendingOffers,
+      accept = ((id) => service.acceptPendingAccount(id)),
+      dismiss = ((id) => service.dismissPendingAccount(id));
 
   /// A cloud store's offers.
   PendingSourcesRow.cloud({super.key, required CloudBackupService service})
-      : offers = service.pendingOffers,
-        accept = ((id) => service.acceptPendingAccount(id)),
-        dismiss = ((id) => service.dismissPendingAccount(id));
+    : offers = service.pendingOffers,
+      accept = ((id) => service.acceptPendingAccount(id)),
+      dismiss = ((id) => service.dismissPendingAccount(id));
 
   final ValueListenable<List<PendingAccountOffer>> offers;
   final Future<void> Function(String accountId) accept;
@@ -110,17 +110,23 @@ class _DeviceOffersState extends State<_DeviceOffers> {
               children: [
                 Text(
                   l10n.backupPendingSources(
-                      widget.offers.length, widget.device),
+                    widget.offers.length,
+                    widget.device,
+                  ),
                   style: TextStyle(
-                      fontWeight: FontWeight.w600, color: palette.textPrimary),
+                    fontWeight: FontWeight.w600,
+                    color: palette.textPrimary,
+                  ),
                 ),
                 Text(
                   // Account names: user data, not a sentence.
                   widget.offers.map((o) => o.displayName).join(', '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      TextStyle(fontSize: 12.5, color: palette.textSecondary),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: palette.textSecondary,
+                  ),
                 ),
               ],
             ),

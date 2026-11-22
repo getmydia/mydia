@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/settings_providers.dart';
@@ -16,20 +16,21 @@ class _ThemedHost extends ConsumerWidget {
   const _ThemedHost();
   @override
   Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: AppTheme.build(ref.watch(paletteProvider), liquid: false),
-        home: const Scaffold(body: ThemePresetSettingsRow()),
-      );
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: AppTheme.build(ref.watch(paletteProvider), liquid: false),
+    home: const Scaffold(body: ThemePresetSettingsRow()),
+  );
 }
 
 Widget _host(MockAuthStorage storage) => ProviderScope(
-      overrides: [
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: storage)),
-      ],
-      child: const _ThemedHost(),
-    );
+  overrides: [
+    coreSettingsServiceProvider.overrideWithValue(
+      SettingsService(storage: storage),
+    ),
+  ],
+  child: const _ThemedHost(),
+);
 
 void main() {
   testWidgets('shows the current preset', (tester) async {
@@ -70,14 +71,17 @@ void main() {
       await tester.tap(find.byKey(const Key('theme-preset-row')));
       await tester.pumpAndSettle();
       expect(
-          find.byKey(const Key('theme-preset-option-macos')), findsOneWidget);
+        find.byKey(const Key('theme-preset-option-macos')),
+        findsOneWidget,
+      );
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
   });
 
-  testWidgets('picking a preset stores it and re-themes the app',
-      (tester) async {
+  testWidgets('picking a preset stores it and re-themes the app', (
+    tester,
+  ) async {
     try {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       final storage = MockAuthStorage();

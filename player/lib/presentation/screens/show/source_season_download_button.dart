@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/downloads/download_providers.dart';
@@ -126,8 +126,10 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     final picked = await pickDownloadOption(
       context,
       title: targets.length == 1
-          ? context.l10n
-              .showDownloadPickerSeason(show.title, targets.first.number)
+          ? context.l10n.showDownloadPickerSeason(
+              show.title,
+              targets.first.number,
+            )
           : context.l10n.showDownloadPickerAllSeasons(show.title),
       options: Future.value(options),
     );
@@ -144,8 +146,11 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     final manager = await ref.read(downloadManagerProvider.future);
     if (!context.mounted) return;
     if (source == null) {
-      showToast(context, context.l10n.showSourceUnavailable,
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.showSourceUnavailable,
+        kind: ToastKind.error,
+      );
       return;
     }
     var queued = 0, skipped = 0, failed = 0;
@@ -167,8 +172,11 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     } catch (e) {
       debugPrint('Failed to list season episodes: $e');
       if (context.mounted) {
-        showToast(context, context.l10n.showSeasonListFailed,
-            kind: ToastKind.error);
+        showToast(
+          context,
+          context.l10n.showSeasonListFailed,
+          kind: ToastKind.error,
+        );
       }
       return;
     }
@@ -181,7 +189,10 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
   }
 
   DownloadMetadata _metadata(
-      ItemSummary e, int fallbackSeason, ItemRef showRef) {
+    ItemSummary e,
+    int fallbackSeason,
+    ItemRef showRef,
+  ) {
     final seasonNumber = e.parentIndex ?? fallbackSeason;
     return DownloadMetadata(
       title:

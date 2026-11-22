@@ -1,5 +1,5 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The app's scroll behavior.
 ///
@@ -17,7 +17,7 @@ class AppScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        ...super.dragDevices,
-        PointerDeviceKind.mouse,
-      };
+    ...super.dragDevices,
+    PointerDeviceKind.mouse,
+  };
 }

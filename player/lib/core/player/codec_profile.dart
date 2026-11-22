@@ -58,16 +58,18 @@ class ProfileCondition {
   });
 
   /// `property <= value`, the common shape for a ceiling.
-  const ProfileCondition.atMost(this.property, this.value,
-      {this.isRequired = true})
-      : condition = ProfileComparison.lessThanEqual;
+  const ProfileCondition.atMost(
+    this.property,
+    this.value, {
+    this.isRequired = true,
+  }) : condition = ProfileComparison.lessThanEqual;
 
   Map<String, dynamic> toJson() => {
-        'property': property,
-        'condition': condition,
-        'value': value,
-        'isRequired': isRequired,
-      };
+    'property': property,
+    'condition': condition,
+    'value': value,
+    'isRequired': isRequired,
+  };
 
   @override
   String toString() => 'ProfileCondition($property $condition $value)';
@@ -97,19 +99,21 @@ class CodecProfile {
   const CodecProfile.audio(this.codec, this.conditions) : type = 'audio';
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'codec': codec,
-        'conditions': conditions.map((c) => c.toJson()).toList(),
-      };
+    'type': type,
+    'codec': codec,
+    'conditions': conditions.map((c) => c.toJson()).toList(),
+  };
 
   @override
   String toString() {
     final detail = conditions.isEmpty
         ? 'unconstrained'
         : conditions
-            .map((c) =>
-                '${c.property}${c.isRequired ? '' : '?'} ${c.condition} ${c.value}')
-            .join(' AND ');
+              .map(
+                (c) =>
+                    '${c.property}${c.isRequired ? '' : '?'} ${c.condition} ${c.value}',
+              )
+              .join(' AND ');
 
     return '$type/$codec[$detail]';
   }

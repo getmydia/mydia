@@ -5,23 +5,24 @@ import 'package:player/domain/navigation/source_nav.dart';
 void main() {
   test('maps merged rows to /all and hides the rest, in layout order', () {
     final entries = resolveAllServersNav(builtinDestinations);
-    expect({
-      for (final e in entries) e.id: e.route
-    }, {
-      'search': '/all/search',
-      'home': '/all',
-      'continue_watching': '/all/continue-watching',
-      'movies': '/all/movies',
-      'shows': '/all/shows',
-      'recently_added': '/all/recently-added',
-      'favorites': '/all/favorites',
-      'collections': '/all/collections',
-      'downloads': '/downloads',
-      'settings': '/settings',
-    });
+    expect(
+      {for (final e in entries) e.id: e.route},
+      {
+        'search': '/all/search',
+        'home': '/all',
+        'continue_watching': '/all/continue-watching',
+        'movies': '/all/movies',
+        'shows': '/all/shows',
+        'recently_added': '/all/recently-added',
+        'favorites': '/all/favorites',
+        'collections': '/all/collections',
+        'downloads': '/downloads',
+        'settings': '/settings',
+      },
+    );
     expect(entries.map((e) => e.id), [
       for (final d in builtinDestinations)
-        if (!{'calendar', 'unwatched'}.contains(d.id)) d.id
+        if (!{'calendar', 'unwatched'}.contains(d.id)) d.id,
     ]);
   });
 

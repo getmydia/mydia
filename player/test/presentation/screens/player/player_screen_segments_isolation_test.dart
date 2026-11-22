@@ -19,7 +19,7 @@
 // stub answers per operation), so the second test pins the request shape
 // instead: exactly one segments document, separate from the detail one.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/sources/source_error.dart';
 
@@ -47,17 +47,16 @@ ScriptedMydiaTransport _serverAnsweringSegmentsWith(Object segmentsOutcome) {
 }
 
 void main() {
-  testWidgets('a segments failure leaves the rest of the detail data intact',
-      (tester) async {
+  testWidgets('a segments failure leaves the rest of the detail data intact', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
     // The exact shape an older server answers with: the field does not exist,
     // so validation rejects the document.
     final server = _serverAnsweringSegmentsWith(
-      graphqlError(
-        'Cannot query field "segments" on type "MediaFile".',
-      ),
+      graphqlError('Cannot query field "segments" on type "MediaFile".'),
     );
 
     final container = buildPlayerScreenContainer(
@@ -74,7 +73,8 @@ void main() {
     expect(
       find.text('Resume'),
       findsOneWidget,
-      reason: 'the segments query failed the way an older server fails it, '
+      reason:
+          'the segments query failed the way an older server fails it, '
           'and the resume position still came through',
     );
     expect(find.text('Start Over'), findsOneWidget);
@@ -89,15 +89,17 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a thrown transport error on segments is swallowed too',
-      (tester) async {
+  testWidgets('a thrown transport error on segments is swallowed too', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
     // Not every failure arrives as a well-formed GraphQL error response; a
     // transport that throws has to land on the same answer.
-    final server =
-        _serverAnsweringSegmentsWith(const SourceException.unreachable());
+    final server = _serverAnsweringSegmentsWith(
+      const SourceException.unreachable(),
+    );
 
     final container = buildPlayerScreenContainer(
       server: server,
@@ -116,8 +118,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('segments travel in their own document, not the detail one',
-      (tester) async {
+  testWidgets('segments travel in their own document, not the detail one', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
@@ -165,7 +168,8 @@ void main() {
     expect(
       server.of('MovieDetail'),
       hasLength(1),
-      reason: 'the detail query is still its own separate request, and the '
+      reason:
+          'the detail query is still its own separate request, and the '
           'segments selection did not ride along inside it',
     );
 

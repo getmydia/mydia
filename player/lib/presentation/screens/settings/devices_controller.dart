@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -14,8 +15,9 @@ class DevicesController extends _$DevicesController {
 
   /// Resolved per call, so a rebuilt source object is picked up.
   RemoteTargets _targets() {
-    final targets =
-        ref.read(mediaSourceProvider(sourceId))?.as<RemoteTargets>();
+    final targets = ref
+        .read(mediaSourceProvider(sourceId))
+        ?.as<RemoteTargets>();
     if (targets == null) throw Exception('No Mydia server');
     return targets;
   }

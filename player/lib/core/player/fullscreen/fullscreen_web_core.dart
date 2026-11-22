@@ -79,14 +79,14 @@ class WebFullscreenCore {
   ValueListenable<bool> get ready => _ready;
 
   FullscreenReport get report => FullscreenReport(
-        mode: _mode,
-        ready: _ready.value,
-        mediaElementBound: _videoBound,
-        demoted: _demoted,
-        lastFailure: _lastFailure,
-        documentFullscreenEnabled: _documentEnabled,
-        videoElementFullscreenSupported: _videoSupported,
-      );
+    mode: _mode,
+    ready: _ready.value,
+    mediaElementBound: _videoBound,
+    demoted: _demoted,
+    lastFailure: _lastFailure,
+    documentFullscreenEnabled: _documentEnabled,
+    videoElementFullscreenSupported: _videoSupported,
+  );
 
   /// Binds the media element of [player], releasing any previous one.
   ///
@@ -120,22 +120,26 @@ class WebFullscreenCore {
       case FullscreenMode.documentElement:
         platform.exitDocumentFullscreen((error) {
           if (_disposed) return;
-          _record(FullscreenFailure(
-            FullscreenFailureCause.documentExitRejected,
-            detail: '$error',
-            requestInitiated: true,
-          ));
+          _record(
+            FullscreenFailure(
+              FullscreenFailureCause.documentExitRejected,
+              detail: '$error',
+              requestInitiated: true,
+            ),
+          );
         });
       case FullscreenMode.nativeVideoElement:
         if (!_videoBound) return;
         try {
           platform.exitVideoFullscreen();
         } catch (e) {
-          _record(FullscreenFailure(
-            FullscreenFailureCause.videoExitFailed,
-            detail: '$e',
-            requestInitiated: true,
-          ));
+          _record(
+            FullscreenFailure(
+              FullscreenFailureCause.videoExitFailed,
+              detail: '$e',
+              requestInitiated: true,
+            ),
+          );
         }
       case FullscreenMode.osWindow:
       case FullscreenMode.unsupported:
@@ -153,11 +157,11 @@ class WebFullscreenCore {
   // --- internals -----------------------------------------------------------
 
   bool _computeReady() => switch (_mode) {
-        FullscreenMode.documentElement => true,
-        FullscreenMode.nativeVideoElement => _videoBound,
-        FullscreenMode.osWindow => true,
-        FullscreenMode.unsupported => false,
-      };
+    FullscreenMode.documentElement => true,
+    FullscreenMode.nativeVideoElement => _videoBound,
+    FullscreenMode.osWindow => true,
+    FullscreenMode.unsupported => false,
+  };
 
   void _updateReady() => _ready.value = _computeReady();
 
@@ -183,10 +187,12 @@ class WebFullscreenCore {
 
   void _enterVideo() {
     if (!_videoBound) {
-      _record(const FullscreenFailure(
-        FullscreenFailureCause.noVideoElement,
-        requestInitiated: true,
-      ));
+      _record(
+        const FullscreenFailure(
+          FullscreenFailureCause.noVideoElement,
+          requestInitiated: true,
+        ),
+      );
       _demoteAfterRefusal();
       _updateReady();
       return;
@@ -194,11 +200,13 @@ class WebFullscreenCore {
     try {
       platform.enterVideoFullscreen();
     } catch (e) {
-      _record(FullscreenFailure(
-        FullscreenFailureCause.videoEnterFailed,
-        detail: '$e',
-        requestInitiated: true,
-      ));
+      _record(
+        FullscreenFailure(
+          FullscreenFailureCause.videoEnterFailed,
+          detail: '$e',
+          requestInitiated: true,
+        ),
+      );
       _demoteAfterRefusal();
       _updateReady();
     }
@@ -218,11 +226,13 @@ class WebFullscreenCore {
   /// video route with fresh activation. One message, then it works.
   void _onDocumentRequestRejected(Object error) {
     if (_disposed) return;
-    _record(FullscreenFailure(
-      FullscreenFailureCause.documentRequestRejected,
-      detail: '$error',
-      requestInitiated: true,
-    ));
+    _record(
+      FullscreenFailure(
+        FullscreenFailureCause.documentRequestRejected,
+        detail: '$error',
+        requestInitiated: true,
+      ),
+    );
 
     _demoteAfterRefusal();
     _updateReady();

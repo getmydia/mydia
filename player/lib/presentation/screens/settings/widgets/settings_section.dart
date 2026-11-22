@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../../core/focus/focus_memory.dart';
 import '../../../../core/player/input_capabilities.dart';
@@ -42,9 +42,7 @@ class SettingsCard extends StatelessWidget {
     final result = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
-        result.add(
-          Divider(height: 1, thickness: 1, color: palette.divider),
-        );
+        result.add(Divider(height: 1, thickness: 1, color: palette.divider));
       }
       result.add(children[i]);
     }

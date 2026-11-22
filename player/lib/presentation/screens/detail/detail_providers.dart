@@ -35,48 +35,53 @@ Future<void> pushPlayer(
 
 typedef SeasonKey = ({DetailTarget show, int seasonNumber});
 
-final movieViewProvider =
-    Provider.autoDispose.family<AsyncValue<MovieView>, DetailTarget>(
-  (ref, target) => ref.watch(sourceMovieProvider(target.ref)),
-);
+final movieViewProvider = Provider.autoDispose
+    .family<AsyncValue<MovieView>, DetailTarget>(
+      (ref, target) => ref.watch(sourceMovieProvider(target.ref)),
+    );
 
-final showViewProvider =
-    Provider.autoDispose.family<AsyncValue<ShowView>, DetailTarget>(
-  (ref, target) => ref.watch(sourceShowProvider(target.ref)),
-);
+final showViewProvider = Provider.autoDispose
+    .family<AsyncValue<ShowView>, DetailTarget>(
+      (ref, target) => ref.watch(sourceShowProvider(target.ref)),
+    );
 
-final seasonEpisodesViewProvider =
-    Provider.autoDispose.family<AsyncValue<List<EpisodeView>>, SeasonKey>(
-  (ref, key) => ref.watch(
-    sourceSeasonProvider((show: key.show.ref, seasonNumber: key.seasonNumber)),
-  ),
-);
+final seasonEpisodesViewProvider = Provider.autoDispose
+    .family<AsyncValue<List<EpisodeView>>, SeasonKey>(
+      (ref, key) => ref.watch(
+        sourceSeasonProvider((
+          show: key.show.ref,
+          seasonNumber: key.seasonNumber,
+        )),
+      ),
+    );
 
-final episodeViewProvider =
-    Provider.autoDispose.family<AsyncValue<EpisodeView>, DetailTarget>(
-  (ref, target) => ref.watch(sourceEpisodeProvider(target.ref)),
-);
+final episodeViewProvider = Provider.autoDispose
+    .family<AsyncValue<EpisodeView>, DetailTarget>(
+      (ref, target) => ref.watch(sourceEpisodeProvider(target.ref)),
+    );
 
-final movieActionsProvider =
-    Provider.autoDispose.family<MovieActions, DetailTarget>(
-  (ref, target) => ref.read(sourceMovieProvider(target.ref).notifier),
-);
+final movieActionsProvider = Provider.autoDispose
+    .family<MovieActions, DetailTarget>(
+      (ref, target) => ref.read(sourceMovieProvider(target.ref).notifier),
+    );
 
-final showActionsProvider =
-    Provider.autoDispose.family<ShowActions, DetailTarget>(
-  (ref, target) => ref.read(sourceShowProvider(target.ref).notifier),
-);
+final showActionsProvider = Provider.autoDispose
+    .family<ShowActions, DetailTarget>(
+      (ref, target) => ref.read(sourceShowProvider(target.ref).notifier),
+    );
 
-final seasonActionsProvider =
-    Provider.autoDispose.family<SeasonActions, SeasonKey>(
-  (ref, key) => ref.read(
-    sourceSeasonProvider((show: key.show.ref, seasonNumber: key.seasonNumber))
-        .notifier,
-  ),
-);
+final seasonActionsProvider = Provider.autoDispose
+    .family<SeasonActions, SeasonKey>(
+      (ref, key) => ref.read(
+        sourceSeasonProvider((
+          show: key.show.ref,
+          seasonNumber: key.seasonNumber,
+        )).notifier,
+      ),
+    );
 
 /// The freshness banner's keys.
 List<QueryKey> freshnessKeys(DetailTarget target) => [
-      SourceKeys.item(target.ref),
-      if (target.ref.kind == ItemKind.show) SourceKeys.children(target.ref),
-    ];
+  SourceKeys.item(target.ref),
+  if (target.ref.kind == ItemKind.show) SourceKeys.children(target.ref),
+];

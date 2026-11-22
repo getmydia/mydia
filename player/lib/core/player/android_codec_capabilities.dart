@@ -34,8 +34,9 @@ Future<List<CodecProfile>> probeAndroidCodecProfiles({
   MethodChannel channel = _channel,
 }) async {
   try {
-    final raw =
-        await channel.invokeListMethod<dynamic>('videoDecoderCapabilities');
+    final raw = await channel.invokeListMethod<dynamic>(
+      'videoDecoderCapabilities',
+    );
     if (raw == null || raw.isEmpty) return const [];
 
     final profiles = <CodecProfile>[];
@@ -55,7 +56,8 @@ Future<List<CodecProfile>> probeAndroidCodecProfiles({
     return profiles;
   } catch (error, stackTrace) {
     debugPrint(
-        'MediaCodec probe failed, leaving codec claims unconstrained: $error');
+      'MediaCodec probe failed, leaving codec claims unconstrained: $error',
+    );
     debugPrintStack(stackTrace: stackTrace);
     return const [];
   }
@@ -79,16 +81,22 @@ List<ProfileCondition> _conditionsFor(Map<dynamic, dynamic> entry) {
   final width = _positiveInt(entry['maxWidth']);
   if (width != null) {
     conditions.add(
-      ProfileCondition.atMost(ProfileProperty.width, '$width',
-          isRequired: false),
+      ProfileCondition.atMost(
+        ProfileProperty.width,
+        '$width',
+        isRequired: false,
+      ),
     );
   }
 
   final height = _positiveInt(entry['maxHeight']);
   if (height != null) {
     conditions.add(
-      ProfileCondition.atMost(ProfileProperty.height, '$height',
-          isRequired: false),
+      ProfileCondition.atMost(
+        ProfileProperty.height,
+        '$height',
+        isRequired: false,
+      ),
     );
   }
 

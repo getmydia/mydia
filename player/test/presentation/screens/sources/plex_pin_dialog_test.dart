@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -11,25 +11,32 @@ void main() {
   bool? result;
 
   Future<void> open(
-      WidgetTester tester, Future<String?> Function(String) answer) async {
+    WidgetTester tester,
+    Future<String?> Function(String) answer,
+  ) async {
     submitted = [];
     result = null;
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Builder(
-        builder: (context) => TextButton(
-          onPressed: () async {
-            result = await showPlexPinDialog(context, userName: 'Pip',
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              result = await showPlexPinDialog(
+                context,
+                userName: 'Pip',
                 submit: (pin) {
-              submitted.add(pin);
-              return answer(pin);
-            });
-          },
-          child: const Text('open'),
+                  submitted.add(pin);
+                  return answer(pin);
+                },
+              );
+            },
+            child: const Text('open'),
+          ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
   }
@@ -42,8 +49,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('submits after four digits and closes on success',
-      (tester) async {
+  testWidgets('submits after four digits and closes on success', (
+    tester,
+  ) async {
     await open(tester, (_) async => null);
     expect(find.text('PIN for Pip'), findsOneWidget);
     await type(tester, '1234');
@@ -52,10 +60,13 @@ void main() {
     expect(find.text('PIN for Pip'), findsNothing);
   });
 
-  testWidgets('a wrong PIN shows the error, clears, and stays open',
-      (tester) async {
+  testWidgets('a wrong PIN shows the error, clears, and stays open', (
+    tester,
+  ) async {
     await open(
-        tester, (pin) async => pin == '1234' ? null : 'That PIN is not right.');
+      tester,
+      (pin) async => pin == '1234' ? null : 'That PIN is not right.',
+    );
     await type(tester, '0000');
     expect(find.byKey(const Key('plex-pin-error')), findsOneWidget);
     expect(find.text('PIN for Pip'), findsOneWidget);
@@ -97,7 +108,9 @@ void main() {
 
   testWidgets('keyboard still works after a wrong PIN', (tester) async {
     await open(
-        tester, (pin) async => pin == '1234' ? null : 'That PIN is not right.');
+      tester,
+      (pin) async => pin == '1234' ? null : 'That PIN is not right.',
+    );
     await type(tester, '0000');
     for (final key in [
       LogicalKeyboardKey.digit1,
@@ -113,8 +126,9 @@ void main() {
     expect(result, isTrue);
   });
 
-  testWidgets('cancel is disabled while a PIN is being checked',
-      (tester) async {
+  testWidgets('cancel is disabled while a PIN is being checked', (
+    tester,
+  ) async {
     final completer = Completer<String?>();
     await open(tester, (_) => completer.future);
     // No pumpAndSettle: the busy spinner animates until the submit answers.
@@ -122,8 +136,10 @@ void main() {
       await tester.tap(find.byKey(Key('plex-pin-key-$d')));
       await tester.pump();
     }
-    await tester.tap(find.byKey(const Key('plex-pin-cancel')),
-        warnIfMissed: false);
+    await tester.tap(
+      find.byKey(const Key('plex-pin-cancel')),
+      warnIfMissed: false,
+    );
     await tester.pump();
     expect(find.text('PIN for Pip'), findsOneWidget);
     expect(result, isNull);
@@ -132,8 +148,9 @@ void main() {
     expect(result, isTrue);
   });
 
-  testWidgets('a throwing submit shows an error and allows a retry',
-      (tester) async {
+  testWidgets('a throwing submit shows an error and allows a retry', (
+    tester,
+  ) async {
     var calls = 0;
     await open(tester, (_) async {
       calls++;

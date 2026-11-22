@@ -85,8 +85,7 @@ class ArtworkNetworkImageProvider extends CachedNetworkImageProvider {
   ImageStreamCompleter loadImage(
     CachedNetworkImageProvider key,
     ImageDecoderCallback decode,
-  ) =>
-      super.loadImage(key, replaySafe ? replaySafeDecode(decode) : decode);
+  ) => super.loadImage(key, replaySafe ? replaySafeDecode(decode) : decode);
 }
 
 /// The provider every network artwork widget resolves. `ArtworkImage` builds
@@ -101,14 +100,13 @@ ImageProvider<Object> artworkImageProvider(
   int? decodeWidth,
   Map<String, String>? headers,
   String? cacheKey,
-}) =>
-    ResizeImage.resizeIfNeeded(
-      decodeWidth,
-      null,
-      ArtworkNetworkImageProvider(
-        url,
-        cacheManager: cacheManager,
-        headers: headers,
-        cacheKey: cacheKey,
-      ),
-    );
+}) => ResizeImage.resizeIfNeeded(
+  decodeWidth,
+  null,
+  ArtworkNetworkImageProvider(
+    url,
+    cacheManager: cacheManager,
+    headers: headers,
+    cacheKey: cacheKey,
+  ),
+);

@@ -43,13 +43,13 @@ class BackdropSource {
 
   @override
   int get hashCode => Object.hash(
-        imageUrl,
-        id,
-        cacheKey,
-        Object.hashAllUnordered(
-          headers.entries.map((e) => Object.hash(e.key, e.value)),
-        ),
-      );
+    imageUrl,
+    id,
+    cacheKey,
+    Object.hashAllUnordered(
+      headers.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
+  );
 }
 
 /// Carries the current shell backdrop source as two layers:

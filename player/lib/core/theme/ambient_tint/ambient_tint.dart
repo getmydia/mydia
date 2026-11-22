@@ -70,7 +70,9 @@ class ShellAmbientTint extends ConsumerWidget {
       // changes extract nothing.
       colors: palette.ambientTint
           ? resolveAmbientTint(
-              ref.watch(ambientTintControllerProvider), palette)
+              ref.watch(ambientTintControllerProvider),
+              palette,
+            )
           : AmbientTintColors.neutralFor(palette),
       child: child,
     );

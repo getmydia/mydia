@@ -10,7 +10,7 @@
 //
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/focus/focus_memory.dart';
@@ -25,8 +25,8 @@ void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; CI runs it in the '
-          '"Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; CI runs it in the '
+            '"Run television-tier tests" step.';
 
   String focused() => FocusManager.instance.primaryFocus?.debugLabel ?? '';
 

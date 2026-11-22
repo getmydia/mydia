@@ -101,24 +101,26 @@ class HiveLegacyDataRewriter implements LegacyDataRewriter {
       if (content is! SourceCastContent || content.item.sourceId != from) {
         return;
       }
-      await castStore.save(PersistedCastSession.forContent(
-        device: session.device,
-        content: SourceCastContent(
-          item: ItemRef(
-            sourceId: to,
-            kind: content.item.kind,
-            externalId: content.item.externalId,
+      await castStore.save(
+        PersistedCastSession.forContent(
+          device: session.device,
+          content: SourceCastContent(
+            item: ItemRef(
+              sourceId: to,
+              kind: content.item.kind,
+              externalId: content.item.externalId,
+            ),
+            versionId: content.versionId,
           ),
-          versionId: content.versionId,
+          title: session.title,
+          position: session.position,
+          routeKind: session.routeKind,
+          savedAt: session.savedAt,
+          mediaUrl: session.mediaUrl,
+          duration: session.duration,
+          selectedSubtitleTrackId: session.selectedSubtitleTrackId,
         ),
-        title: session.title,
-        position: session.position,
-        routeKind: session.routeKind,
-        savedAt: session.savedAt,
-        mediaUrl: session.mediaUrl,
-        duration: session.duration,
-        selectedSubtitleTrackId: session.selectedSubtitleTrackId,
-      ));
+      );
     } catch (e) {
       // A stale cast session is not worth failing the migration over.
       debugPrint('[Migration] Cast session left as is: $e');

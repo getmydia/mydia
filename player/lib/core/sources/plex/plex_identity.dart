@@ -28,21 +28,21 @@ class PlexIdentity {
   final String deviceName;
 
   Map<String, String> get headers => {
-        'X-Plex-Product': product,
-        'X-Plex-Version': version,
-        'X-Plex-Client-Identifier': clientIdentifier,
-        'X-Plex-Platform': platform,
-        'X-Plex-Device-Name': deviceName,
-        'Accept': 'application/json',
-      };
+    'X-Plex-Product': product,
+    'X-Plex-Version': version,
+    'X-Plex-Client-Identifier': clientIdentifier,
+    'X-Plex-Platform': platform,
+    'X-Plex-Device-Name': deviceName,
+    'Accept': 'application/json',
+  };
 
   static String platformName(TargetPlatform platform) => switch (platform) {
-        TargetPlatform.android => 'Android',
-        TargetPlatform.iOS => 'iOS',
-        TargetPlatform.macOS => 'macOS',
-        TargetPlatform.windows => 'Windows',
-        TargetPlatform.linux || TargetPlatform.fuchsia => 'Linux',
-      };
+    TargetPlatform.android => 'Android',
+    TargetPlatform.iOS => 'iOS',
+    TargetPlatform.macOS => 'macOS',
+    TargetPlatform.windows => 'Windows',
+    TargetPlatform.linux || TargetPlatform.fuchsia => 'Linux',
+  };
 
   static Future<String> loadClientIdentifier(AuthStorage storage) async {
     final existing = await storage.read(clientIdKey);

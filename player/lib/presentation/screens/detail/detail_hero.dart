@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../../core/theme/ambient_tint/ambient_tint_colors.dart';
@@ -119,7 +119,8 @@ class DetailHeroTitle extends StatelessWidget {
     final below = this.below;
     final action = this.action;
     final poster = this.poster;
-    final showPoster = poster != null &&
+    final showPoster =
+        poster != null &&
         MediaQuery.sizeOf(context).width >= kDetailHeroBreakpoint;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -155,23 +156,18 @@ class DetailHeroTitle extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: textTheme.bodyMedium
-                      ?.copyWith(color: context.palette.textSecondary),
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: context.palette.textSecondary,
+                  ),
                 ),
               ],
-              if (below != null) ...[
-                const SizedBox(height: 8),
-                below,
-              ],
+              if (below != null) ...[const SizedBox(height: 8), below],
             ],
           ),
         ),
         // Gap and control are emitted together so a missing action leaves
         // no dangling spacer.
-        if (action != null) ...[
-          const SizedBox(width: 16),
-          action,
-        ],
+        if (action != null) ...[const SizedBox(width: 16), action],
       ],
     );
   }

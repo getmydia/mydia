@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/config/web_config.dart';
 import '../../../core/theme/palette.dart';
@@ -86,8 +86,9 @@ class _BackToMydiaButtonState extends State<BackToMydiaButton> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color:
-                      _isHovered ? palette.textPrimary : palette.textSecondary,
+                  color: _isHovered
+                      ? palette.textPrimary
+                      : palette.textSecondary,
                 ),
               ),
             ],

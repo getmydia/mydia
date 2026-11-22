@@ -125,8 +125,9 @@ void main() {
 
     group('connectedUrl getter', () {
       test('returns URL for direct connection', () {
-        final result =
-            ConnectionResult.direct(url: 'https://mydia.example.com:4443');
+        final result = ConnectionResult.direct(
+          url: 'https://mydia.example.com:4443',
+        );
         expect(result.connectedUrl, equals('https://mydia.example.com:4443'));
       });
 

@@ -11,7 +11,7 @@
 // the parity group below asserts they agree on *meaning* (connected-ness,
 // colour, wording) rather than on identical `IconData`.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
 // Riverpod 3.x; it lives in the `misc.dart` sub-library.
@@ -35,21 +35,23 @@ void main() {
     WidgetTester tester, {
     List<Override> overrides = const [],
   }) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: overrides,
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          // The pill's IconTheme, reproduced: an idle glyph must inherit this
-          // rather than hard-coding a colour of its own.
-          body: IconTheme(
-            data: IconThemeData(size: 18, color: Color(0xCCFFFFFF)),
-            child: CastChromeIcon(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: overrides,
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            // The pill's IconTheme, reproduced: an idle glyph must inherit this
+            // rather than hard-coding a colour of its own.
+            body: IconTheme(
+              data: IconThemeData(size: 18, color: Color(0xCCFFFFFF)),
+              child: CastChromeIcon(),
+            ),
           ),
         ),
       ),
-    ));
+    );
     await tester.pump();
   }
 
@@ -61,36 +63,52 @@ void main() {
 
   group('CastChromeIcon', () {
     testWidgets(
-        'idle inherits the chrome icon colour instead of forcing its own, so '
-        'the cast glyph matches the back chevron beside it', (tester) async {
-      await pumpIcon(tester);
+      'idle inherits the chrome icon colour instead of forcing its own, so '
+      'the cast glyph matches the back chevron beside it',
+      (tester) async {
+        await pumpIcon(tester);
 
-      expect(iconOf(tester).icon, Icons.cast_rounded);
-      expect(iconOf(tester).color, isNull,
-          reason: 'a null colour is what makes Icon fall back to the '
+        expect(iconOf(tester).icon, Icons.cast_rounded);
+        expect(
+          iconOf(tester).color,
+          isNull,
+          reason:
+              'a null colour is what makes Icon fall back to the '
               "surrounding IconTheme — CastButton's opaque white would read "
-              'brighter than every other pill glyph');
-      expect(tooltipOf(tester), 'Cast to device');
-    });
+              'brighter than every other pill glyph',
+        );
+        expect(tooltipOf(tester), 'Cast to device');
+      },
+    );
 
-    testWidgets('a live cast shows the connected glyph in blue',
-        (tester) async {
-      await pumpIcon(tester, overrides: [
-        castConnectionProvider.overrideWithValue(CastConnection.casting),
-        castDisplayDeviceProvider.overrideWithValue(_device),
-      ]);
+    testWidgets('a live cast shows the connected glyph in blue', (
+      tester,
+    ) async {
+      await pumpIcon(
+        tester,
+        overrides: [
+          castConnectionProvider.overrideWithValue(CastConnection.casting),
+          castDisplayDeviceProvider.overrideWithValue(_device),
+        ],
+      );
 
       expect(iconOf(tester).icon, Icons.cast_connected_rounded);
       expect(iconOf(tester).color, Colors.blue);
       expect(tooltipOf(tester), 'Casting to ${_device.name}');
     });
 
-    testWidgets('a chosen-but-offline device is blue but not "connected"',
-        (tester) async {
-      await pumpIcon(tester, overrides: [
-        castConnectionProvider.overrideWithValue(CastConnection.chosenOffline),
-        castDisplayDeviceProvider.overrideWithValue(_device),
-      ]);
+    testWidgets('a chosen-but-offline device is blue but not "connected"', (
+      tester,
+    ) async {
+      await pumpIcon(
+        tester,
+        overrides: [
+          castConnectionProvider.overrideWithValue(
+            CastConnection.chosenOffline,
+          ),
+          castDisplayDeviceProvider.overrideWithValue(_device),
+        ],
+      );
 
       expect(iconOf(tester).icon, Icons.cast_rounded);
       expect(iconOf(tester).color, Colors.blue);
@@ -98,40 +116,51 @@ void main() {
     });
 
     testWidgets('shows a progress ring while connecting', (tester) async {
-      await pumpIcon(tester, overrides: [
-        castConnectionProvider.overrideWithValue(CastConnection.connecting),
-        castDisplayDeviceProvider.overrideWithValue(_device),
-      ]);
+      await pumpIcon(
+        tester,
+        overrides: [
+          castConnectionProvider.overrideWithValue(CastConnection.connecting),
+          castDisplayDeviceProvider.overrideWithValue(_device),
+        ],
+      );
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(tooltipOf(tester), 'Connecting to ${_device.name}…');
     });
 
     testWidgets(
-        'the connecting ring stays inside the 36px pill it has to sit in',
-        (tester) async {
-      await pumpIcon(tester, overrides: [
-        castConnectionProvider.overrideWithValue(CastConnection.connecting),
-        castDisplayDeviceProvider.overrideWithValue(_device),
-      ]);
+      'the connecting ring stays inside the 36px pill it has to sit in',
+      (tester) async {
+        await pumpIcon(
+          tester,
+          overrides: [
+            castConnectionProvider.overrideWithValue(CastConnection.connecting),
+            castDisplayDeviceProvider.overrideWithValue(_device),
+          ],
+        );
 
-      // GlassPill is 36px tall with 12px of horizontal padding; anything
-      // taller than the pill's own icon slot would force the bar to grow.
-      expect(
-        tester.getSize(find.byType(CircularProgressIndicator)).height,
-        lessThanOrEqualTo(18),
-      );
-    });
+        // GlassPill is 36px tall with 12px of horizontal padding; anything
+        // taller than the pill's own icon slot would force the bar to grow.
+        expect(
+          tester.getSize(find.byType(CircularProgressIndicator)).height,
+          lessThanOrEqualTo(18),
+        );
+      },
+    );
 
-    testWidgets('every glyph it can draw is from the _rounded family',
-        (tester) async {
+    testWidgets('every glyph it can draw is from the _rounded family', (
+      tester,
+    ) async {
       // icon_family_test.dart scans this file's source for `Icons.*`, but only
       // a render proves the branch actually selected a rounded glyph.
       for (final connection in CastConnection.values) {
-        await pumpIcon(tester, overrides: [
-          castConnectionProvider.overrideWithValue(connection),
-          castDisplayDeviceProvider.overrideWithValue(_device),
-        ]);
+        await pumpIcon(
+          tester,
+          overrides: [
+            castConnectionProvider.overrideWithValue(connection),
+            castDisplayDeviceProvider.overrideWithValue(_device),
+          ],
+        );
 
         expect(
           iconOf(tester).icon,
@@ -149,36 +178,46 @@ void main() {
     // floating in the top-right corner on web.
     testWidgets('is null when the build cannot cast at all', (tester) async {
       Widget? action;
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.web()),
-        ],
-        child: Consumer(builder: (context, ref, _) {
-          action = castChromeActionFor(ref);
-          return const SizedBox.shrink();
-        }),
-      ));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            castCapabilitiesProvider.overrideWithValue(
+              const CastCapabilities.web(),
+            ),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              action = castChromeActionFor(ref);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
 
       expect(action, isNull);
     });
 
-    testWidgets('is a glyph when any cast protocol is available',
-        (tester) async {
+    testWidgets('is a glyph when any cast protocol is available', (
+      tester,
+    ) async {
       for (final capabilities in const [
         CastCapabilities.full(),
         CastCapabilities.iOS(),
       ]) {
         Widget? action;
-        await tester.pumpWidget(ProviderScope(
-          overrides: [
-            castCapabilitiesProvider.overrideWithValue(capabilities),
-          ],
-          child: Consumer(builder: (context, ref, _) {
-            action = castChromeActionFor(ref);
-            return const SizedBox.shrink();
-          }),
-        ));
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              castCapabilitiesProvider.overrideWithValue(capabilities),
+            ],
+            child: Consumer(
+              builder: (context, ref, _) {
+                action = castChromeActionFor(ref);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
 
         expect(action, isA<CastChromeIcon>());
       }
@@ -198,11 +237,13 @@ void main() {
     // visuals helper exists to prevent, and it would only ever be noticed on
     // whichever screen the reviewer happened not to be looking at.
     for (final connection in CastConnection.values) {
-      testWidgets('$connection means the same thing in both affordances',
-          (tester) async {
+      testWidgets('$connection means the same thing in both affordances', (
+        tester,
+      ) async {
         final overrides = [
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.full()),
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
           castConnectionProvider.overrideWithValue(connection),
           castDisplayDeviceProvider.overrideWithValue(_device),
         ];
@@ -211,29 +252,37 @@ void main() {
         final chromeGlyph = iconOf(tester).icon;
         final chromeTooltip = tooltipOf(tester);
 
-        await tester.pumpWidget(ProviderScope(
-          overrides: overrides,
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: CastButton(onPressed: () {})),
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: overrides,
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: CastButton(onPressed: () {})),
+            ),
           ),
-        ));
+        );
         await tester.pump();
 
         final button = tester.widget<IconButton>(
           find.byKey(const Key('cast-button')),
         );
         final buttonGlyph = tester
-            .widget<Icon>(find.descendant(
-              of: find.byKey(const Key('cast-button')),
-              matching: find.byType(Icon),
-            ))
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const Key('cast-button')),
+                matching: find.byType(Icon),
+              ),
+            )
             .icon;
 
-        expect(chromeGlyph, roundedCounterpart(buttonGlyph!),
-            reason: 'the two families must stay in lockstep on whether this '
-                'state counts as connected');
+        expect(
+          chromeGlyph,
+          roundedCounterpart(buttonGlyph!),
+          reason:
+              'the two families must stay in lockstep on whether this '
+              'state counts as connected',
+        );
         expect(chromeTooltip, button.tooltip);
       });
     }

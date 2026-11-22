@@ -10,6 +10,9 @@ import '../sources/source_browse_providers.dart';
 
 Future<ItemDetail> fetchLoadContentItem(WidgetRef ref, ItemRef itemRef) {
   final provider = sourceItemProvider(itemRef);
-  return readDetailKeepingAlive(ref,
-      provider: provider, future: provider.future);
+  return readDetailKeepingAlive(
+    ref,
+    provider: provider,
+    future: provider.future,
+  );
 }

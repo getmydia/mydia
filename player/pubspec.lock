@@ -290,7 +290,7 @@ packages:
     source: hosted
     version: "2.9.0"
   cupertino_ui:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: cupertino_ui
       sha256: c3eaf7f5bdfee36deb0b14a4cbf7602f1b6b8d8b8576b81f38fc08c25881c94c
@@ -965,7 +965,7 @@ packages:
     source: hosted
     version: "0.13.0"
   material_ui:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: material_ui
       sha256: a6b19012df437a356cbc01f8ea22a105e07194c47c9a6009da0032a0ce35c4ab
@@ -1832,5 +1832,5 @@ packages:
     source: hosted
     version: "2.1.0"
 sdks:
-  dart: ">=3.13.0 <4.0.0"
-  flutter: ">=3.50.0"
+  dart: ">=3.14.0 <4.0.0"
+  flutter: ">=3.50.0 <3.51.0"

@@ -145,15 +145,17 @@ Future<List<WorkArea>> _readWorkAreas() async {
       if (position == null || size == null) continue;
       if (size.width <= 0 || size.height <= 0) continue;
 
-      areas.add(WorkArea(
-        bounds: Rect.fromLTWH(
-          position.dx,
-          position.dy,
-          size.width,
-          size.height,
+      areas.add(
+        WorkArea(
+          bounds: Rect.fromLTWH(
+            position.dx,
+            position.dy,
+            size.width,
+            size.height,
+          ),
+          isPrimary: display.id == primary.id,
         ),
-        isPrimary: display.id == primary.id,
-      ));
+      );
     }
     return areas;
   } catch (e) {
@@ -167,7 +169,8 @@ Future<WindowGeometryStore> _openStore() async {
     await initAppHive();
     return HiveWindowGeometryStore(
       await Hive.openBox<Map<dynamic, dynamic>>(
-          HiveWindowGeometryStore.boxName),
+        HiveWindowGeometryStore.boxName,
+      ),
     );
   } catch (e) {
     // Most likely a second instance holding the lock, which `_startApp`
@@ -182,9 +185,9 @@ void startWindowDrag() {
   try {
     unawaited(
       windowManager.startDragging().catchError(
-            (Object e) =>
-                debugPrint('[DesktopWindow] Failed to start window drag: $e'),
-          ),
+        (Object e) =>
+            debugPrint('[DesktopWindow] Failed to start window drag: $e'),
+      ),
     );
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to start window drag: $e');
@@ -200,10 +203,11 @@ void setWindowAlwaysOnTop(bool value) {
   if (!PlatformFeatures.isDesktop) return;
   try {
     unawaited(
-      windowManager.setAlwaysOnTop(value).catchError(
-            (Object e) => debugPrint(
-              '[DesktopWindow] Failed to set always-on-top: $e',
-            ),
+      windowManager
+          .setAlwaysOnTop(value)
+          .catchError(
+            (Object e) =>
+                debugPrint('[DesktopWindow] Failed to set always-on-top: $e'),
           ),
     );
   } catch (e) {

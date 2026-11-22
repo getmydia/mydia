@@ -17,10 +17,8 @@ import 'cloud_slot_transport.dart';
 /// The relay's `RestorePreview` carries a vault key and manifest, so it is
 /// not reused.
 class CloudRestorePreview {
-  CloudRestorePreview({
-    required this.payloads,
-    required this.unreadableSlots,
-  }) : records = lwwMerge(payloads.values.map((p) => p.records));
+  CloudRestorePreview({required this.payloads, required this.unreadableSlots})
+    : records = lwwMerge(payloads.values.map((p) => p.records));
 
   /// Every other device's slot that read, by slot id. Moved stubs are left
   /// out.
@@ -32,8 +30,9 @@ class CloudRestorePreview {
   /// Every slot's records, merged.
   final List<BackupRecord> records;
 
-  List<String> get deviceNames =>
-      [for (final p in payloads.values) p.deviceName];
+  List<String> get deviceNames => [
+    for (final p in payloads.values) p.deviceName,
+  ];
 }
 
 /// The backup in one cloud store (iCloud or Google Drive): this device's
@@ -52,20 +51,16 @@ class CloudRestorePreview {
 /// uploaded (the transport drops it too).
 class CloudBackupService {
   CloudBackupService({
-    required SlotSyncEngine engine,
+    required this._engine,
     required CloudBackend backend,
     required BackupIdentity identity,
-    required BackupMetaStore meta,
-    required Future<String> Function() deviceName,
-    required String platform,
+    required this._meta,
+    required this._deviceName,
+    required this._platform,
     DateTime Function()? clock,
-  })  : _engine = engine,
-        _backend = backend,
-        _meta = meta,
-        _deviceName = deviceName,
-        _platform = platform,
-        _clock = clock ?? DateTime.now,
-        _transport = CloudSlotTransport(backend, identity.slotId);
+  }) : _backend = backend,
+       _clock = clock ?? DateTime.now,
+       _transport = CloudSlotTransport(backend, identity.slotId);
 
   /// The engine's `filterOwn` for a cloud store.
   static const filterOwn = withoutGroupRecords;
@@ -113,10 +108,12 @@ class CloudBackupService {
       if (!enabled) _attach();
     });
     _engine.markDirty();
-    unawaited(_engine.background(() async {
-      _accountLabel.value = await _availableLabel();
-      await _engine.pollOnce();
-    }));
+    unawaited(
+      _engine.background(() async {
+        _accountLabel.value = await _availableLabel();
+        await _engine.pollOnce();
+      }),
+    );
   }
 
   void dispose() {
@@ -140,11 +137,11 @@ class CloudBackupService {
   /// Detaches locally without writing a moved stub, used to roll back a store
   /// enable when persisting the active store fails.
   Future<void> rollbackEnable() => _engine.serialise(() async {
-        if (!enabled) return;
-        await _engine.detach();
-        _accountLabel.value = null;
-        _engine.setStatus(const BackupOff());
-      });
+    if (!enabled) return;
+    await _engine.detach();
+    _accountLabel.value = null;
+    _engine.setStatus(const BackupOff());
+  });
 
   void markDirty() => _engine.markDirty();
   Future<void> flush() => _engine.flush();
@@ -157,40 +154,39 @@ class CloudBackupService {
   /// `cloudUnavailable`), or an upload failure such as `quotaFull`, detaching
   /// cleanly and leaving the store off.
   Future<void> enable() => _userOp(() async {
-        if (enabled) throw StateError('backup is already on');
-        final label = await _availableLabel();
-        await _forgetStore(shared: false);
-        await _join(label, clearSharedOnUpload: true);
-      });
+    if (enabled) throw StateError('backup is already on');
+    final label = await _availableLabel();
+    await _forgetStore(shared: false);
+    await _join(label, clearSharedOnUpload: true);
+  });
 
   /// Reads every other device's slot. Changes nothing. Throws
   /// `BackupRelayException(notFound)` when the store holds no slot to
   /// restore (only this device's own, or moved stubs).
   Future<CloudRestorePreview> previewRestore() => _engine.serialise(() async {
-        await _availableLabel();
-        final listing = await _transport.list();
-        final payloads = <String, BackupPayload>{};
-        final unreadable = <String>{};
-        for (final s in listing?.slots ?? const <SlotInfo>[]) {
-          if (s.slotId == _transport.ownSlotId) continue;
-          try {
-            final p = await _transport.read(s);
-            if (p.movedTo == null) payloads[s.slotId] = p;
-          } on FormatException {
-            debugPrint('[Backup] Slot ${s.slotId} is unreadable');
-            unreadable.add(s.slotId);
-          } on BackupRelayException catch (e) {
-            // Deleted between the listing and the read.
-            if (e.kind != BackupRelayError.notFound) rethrow;
-            unreadable.add(s.slotId);
-          }
-        }
-        if (payloads.isEmpty && unreadable.isEmpty) {
-          throw const BackupRelayException(BackupRelayError.notFound);
-        }
-        return CloudRestorePreview(
-            payloads: payloads, unreadableSlots: unreadable);
-      });
+    await _availableLabel();
+    final listing = await _transport.list();
+    final payloads = <String, BackupPayload>{};
+    final unreadable = <String>{};
+    for (final s in listing?.slots ?? const <SlotInfo>[]) {
+      if (s.slotId == _transport.ownSlotId) continue;
+      try {
+        final p = await _transport.read(s);
+        if (p.movedTo == null) payloads[s.slotId] = p;
+      } on FormatException {
+        debugPrint('[Backup] Slot ${s.slotId} is unreadable');
+        unreadable.add(s.slotId);
+      } on BackupRelayException catch (e) {
+        // Deleted between the listing and the read.
+        if (e.kind != BackupRelayError.notFound) rethrow;
+        unreadable.add(s.slotId);
+      }
+    }
+    if (payloads.isEmpty && unreadable.isEmpty) {
+      throw const BackupRelayException(BackupRelayError.notFound);
+    }
+    return CloudRestorePreview(payloads: payloads, unreadableSlots: unreadable);
+  });
 
   /// Applies [preview] in restore mode (accounts and settings are written),
   /// then joins the store as [enable] does. Throws
@@ -200,8 +196,10 @@ class CloudBackupService {
         if (enabled) throw const BackupAlreadyOnException();
         final label = await _availableLabel();
         await _forgetStore();
-        final result =
-            await _engine.apply(preview.payloads, BackupApplyMode.restore);
+        final result = await _engine.apply(
+          preview.payloads,
+          BackupApplyMode.restore,
+        );
         for (final e in preview.payloads.entries) {
           await _engine.rememberName(e.key, e.value.deviceName);
         }
@@ -214,12 +212,12 @@ class CloudBackupService {
   /// again, lifts the halt and polls. Throws as [enable] does while the
   /// account is still not usable.
   Future<void> reconnect() => _engine.serialise(() async {
-        final label = await _availableLabel();
-        _accountLabel.value = label;
-        if (!enabled) return;
-        _engine.resume();
-        await _engine.attempt(_engine.pollOnce);
-      });
+    final label = await _availableLabel();
+    _accountLabel.value = label;
+    if (!enabled) return;
+    _engine.resume();
+    await _engine.attempt(_engine.pollOnce);
+  });
 
   // Pending accounts
 
@@ -235,12 +233,12 @@ class CloudBackupService {
   /// read the store, and writes its slot again on its next upload while
   /// signed in. This device's own slot cannot be removed here.
   Future<void> removeDevice(String slotId) => _userOp(() async {
-        if (slotId == _transport.ownSlotId) {
-          throw ArgumentError.value(slotId, 'slotId', 'is this device');
-        }
-        await _transport.delete(slotId);
-        if (enabled) await _engine.attempt(_engine.pollOnce);
-      });
+    if (slotId == _transport.ownSlotId) {
+      throw ArgumentError.value(slotId, 'slotId', 'is this device');
+    }
+    await _transport.delete(slotId);
+    if (enabled) await _engine.attempt(_engine.pollOnce);
+  });
 
   // Leaving
 
@@ -261,13 +259,15 @@ class CloudBackupService {
     try {
       await _userOp(() async {
         if (!enabled) throw StateError('backup is off');
-        await _transport.writeOwn(BackupPayload(
-          deviceName: await _deviceName(),
-          platform: _platform,
-          createdAt: _clock().millisecondsSinceEpoch,
-          records: const [],
-          movedTo: to,
-        ));
+        await _transport.writeOwn(
+          BackupPayload(
+            deviceName: await _deviceName(),
+            platform: _platform,
+            createdAt: _clock().millisecondsSinceEpoch,
+            records: const [],
+            movedTo: to,
+          ),
+        );
         if (deleteOld) await _deleteAll(keepOwn: true);
         await _leave(forgetShared: false);
       });
@@ -283,16 +283,16 @@ class CloudBackupService {
   /// Stops syncing and forgets the account's credentials on this device.
   /// The slots stay in the store.
   Future<void> disable() => _userOp(() async {
-        await _leave();
-        await _backend.signOut();
-      });
+    await _leave();
+    await _backend.signOut();
+  });
 
   /// Deletes every slot in the store, for every device, then [disable]s.
   Future<void> deleteBackup() => _userOp(() async {
-        await _deleteAll();
-        await _leave();
-        await _backend.signOut();
-      });
+    await _deleteAll();
+    await _leave();
+    await _backend.signOut();
+  });
 
   // Internals
 
@@ -301,10 +301,12 @@ class CloudBackupService {
   Future<String?> _availableLabel() async =>
       switch (await _backend.availability()) {
         CloudAvailable(:final accountLabel) => accountLabel,
-        CloudSignedOut() =>
-          throw const BackupRelayException(BackupRelayError.signedOut),
-        CloudUnavailable() =>
-          throw const BackupRelayException(BackupRelayError.cloudUnavailable),
+        CloudSignedOut() => throw const BackupRelayException(
+          BackupRelayError.signedOut,
+        ),
+        CloudUnavailable() => throw const BackupRelayException(
+          BackupRelayError.cloudUnavailable,
+        ),
       };
 
   /// Attaches, uploads this device's slot and merges every other one.
@@ -335,19 +337,21 @@ class CloudBackupService {
   /// The engine's `afterUpload` for a cloud store: keeps the upload's time
   /// in [meta], so the status line survives a restart.
   static void Function() persistLastSuccess(
-          BackupMetaStore meta, CloudStoreKind kind, SlotSyncEngine engine) =>
-      () {
-        final at = engine.lastSuccessMs;
-        if (at != null) unawaited(meta.setCloudLastSuccessMs(kind.name, at));
-      };
+    BackupMetaStore meta,
+    CloudStoreKind kind,
+    SlotSyncEngine engine,
+  ) => () {
+    final at = engine.lastSuccessMs;
+    if (at != null) unawaited(meta.setCloudLastSuccessMs(kind.name, at));
+  };
 
   void _attach() => _engine.attach(
-        _transport,
-        lastSuccessMs: _meta.cloudLastSuccessMs(kind.name),
-        readCursor: () => _meta.cloudCursor(kind.name),
-        writeCursor: (c) => _meta.setCloudCursor(kind.name, c),
-        mergedStore: kind.name,
-      );
+    _transport,
+    lastSuccessMs: _meta.cloudLastSuccessMs(kind.name),
+    readCursor: () => _meta.cloudCursor(kind.name),
+    writeCursor: (c) => _meta.setCloudCursor(kind.name, c),
+    mergedStore: kind.name,
+  );
 
   Future<void> _deleteAll({bool keepOwn = false}) async {
     final listing = await _transport.list();
@@ -383,15 +387,15 @@ class CloudBackupService {
   /// unreachable account while syncing becomes the status (and halts, as a
   /// background failure would) before the error is rethrown.
   Future<T> _userOp<T>(Future<T> Function() op) => _engine.serialise(() async {
-        try {
-          return await op();
-        } on BackupRelayException catch (e) {
-          if (enabled &&
-              (e.kind == BackupRelayError.signedOut ||
-                  e.kind == BackupRelayError.cloudUnavailable)) {
-            _engine.reportFailure(e.kind, e);
-          }
-          rethrow;
-        }
-      });
+    try {
+      return await op();
+    } on BackupRelayException catch (e) {
+      if (enabled &&
+          (e.kind == BackupRelayError.signedOut ||
+              e.kind == BackupRelayError.cloudUnavailable)) {
+        _engine.reportFailure(e.kind, e);
+      }
+      rethrow;
+    }
+  });
 }

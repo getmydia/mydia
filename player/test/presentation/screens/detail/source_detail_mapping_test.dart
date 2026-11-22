@@ -24,11 +24,12 @@ void main() {
       ],
       versions: const [
         MediaVersion(
-            id: 'part-1',
-            container: 'mkv',
-            height: 1080,
-            videoCodec: 'hevc',
-            bitrateKbps: 8000),
+          id: 'part-1',
+          container: 'mkv',
+          height: 1080,
+          videoCodec: 'hevc',
+          bitrateKbps: 8000,
+        ),
       ],
     );
     final v = movieViewFromSource(detail, features: features);
@@ -36,14 +37,18 @@ void main() {
     expect(v.year, 2001);
     expect(v.runtime, 100);
     expect(
-        v.backdrop, const SourceArt(fakeSourceId, ArtworkRef('/backdrop/m1')));
+      v.backdrop,
+      const SourceArt(fakeSourceId, ArtworkRef('/backdrop/m1')),
+    );
     expect(v.progress?.positionSeconds, 600);
     expect(v.progress?.percentage, closeTo(10, 0.01));
     expect(v.files.single.id, 'part-1');
     expect(v.files.single.resolution, '1080p');
     expect(v.files.single.bitrate, 8000000);
     expect(
-        v.cast.single.photo, const SourceArt(fakeSourceId, ArtworkRef('/p/1')));
+      v.cast.single.photo,
+      const SourceArt(fakeSourceId, ArtworkRef('/p/1')),
+    );
     expect(v.features, features);
   });
 
@@ -63,16 +68,17 @@ void main() {
   test('season chips know how many episodes are unwatched', () {
     const season = ItemSummary(
       ref: ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.season, externalId: 'se-1'),
+        sourceId: fakeSourceId,
+        kind: ItemKind.season,
+        externalId: 'se-1',
+      ),
       title: 'Season 1',
       index: 1,
       userState: UserState(unwatchedCount: 3),
     );
-    final v = showViewFromSource(
-      const ItemDetail(summary: fakeShow),
-      const [season],
-      features: features,
-    );
+    final v = showViewFromSource(const ItemDetail(summary: fakeShow), const [
+      season,
+    ], features: features);
     expect(v.seasons.single.watchStatus?.unwatchedEpisodeCount, 3);
     expect(v.seasons.single.watchStatus?.watched, isFalse);
   });
@@ -85,8 +91,11 @@ void main() {
       parentIndex: 1,
       defaultVersionId: 'part-9',
     );
-    final v = episodeViewFromSource(e,
-        showTitle: 'Invented Series', features: features);
+    final v = episodeViewFromSource(
+      e,
+      showTitle: 'Invented Series',
+      features: features,
+    );
     expect(v.files.single.id, 'part-9');
     expect(v.episodeCode, 'S01E01');
   });
@@ -114,13 +123,18 @@ void main() {
 
   test('progress from user state', () {
     expect(progressFromUserState(const UserState(), 100), isNull);
-    expect(progressFromUserState(const UserState(watched: true), 100)?.watched,
-        isTrue);
+    expect(
+      progressFromUserState(const UserState(watched: true), 100)?.watched,
+      isTrue,
+    );
   });
 
   test('a watched movie keeps the date it was watched', () {
-    final p = progressFromUserState(const UserState(watched: true), 100,
-        lastPlayedAt: DateTime.utc(2026, 3, 4, 20));
+    final p = progressFromUserState(
+      const UserState(watched: true),
+      100,
+      lastPlayedAt: DateTime.utc(2026, 3, 4, 20),
+    );
     expect(p?.lastWatchedAt, '2026-03-04T20:00:00.000Z');
   });
 

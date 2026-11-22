@@ -80,10 +80,9 @@ Future<RelayListResult> resolveRelayList({
     return RelayListResult(cached, RelayListSource.cached);
   }
 
-  return const RelayListResult(
-    [defaultIrohRelayUrl],
-    RelayListSource.defaultBuiltIn,
-  );
+  return const RelayListResult([
+    defaultIrohRelayUrl,
+  ], RelayListSource.defaultBuiltIn);
 }
 
 Future<List<String>> _fetch(String baseUrl, http.Client? client) async {
@@ -91,12 +90,17 @@ Future<List<String>> _fetch(String baseUrl, http.Client? client) async {
   final httpClient = client ?? http.Client();
 
   try {
-    final response = await httpClient.get(Uri.parse('$baseUrl$_path'),
-        headers: {'accept': 'application/json'}).timeout(_timeout);
+    final response = await httpClient
+        .get(
+          Uri.parse('$baseUrl$_path'),
+          headers: {'accept': 'application/json'},
+        )
+        .timeout(_timeout);
 
     if (response.statusCode != 200) {
       debugPrint(
-          '[P2P] Relay list fetch returned ${response.statusCode}, falling back');
+        '[P2P] Relay list fetch returned ${response.statusCode}, falling back',
+      );
       return const [];
     }
 

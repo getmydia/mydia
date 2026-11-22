@@ -8,15 +8,16 @@ import 'package:player/domain/sources/item.dart';
 import 'files_fixture.dart';
 
 ItemSummary _item(String title, {DateTime? added, String? date}) => ItemSummary(
-      ref: ItemRef(
-          sourceId: filesLocalSource.id,
-          kind: ItemKind.movie,
-          externalId: title),
-      title: title,
-      sortTitle: filesSortTitle(title),
-      addedAt: added,
-      airDate: date,
-    );
+  ref: ItemRef(
+    sourceId: filesLocalSource.id,
+    kind: ItemKind.movie,
+    externalId: title,
+  ),
+  title: title,
+  sortTitle: filesSortTitle(title),
+  addedAt: added,
+  airDate: date,
+);
 
 void main() {
   test('sort_title_drops_a_leading_article', () {
@@ -28,7 +29,7 @@ void main() {
 
   test('pages_by_decimal_offset', () {
     final items = [
-      for (final t in ['a', 'b', 'c']) _item(t)
+      for (final t in ['a', 'b', 'c']) _item(t),
     ];
     final first = filesPage(items, 2);
     expect(first.items.map((i) => i.title), ['a', 'b']);
@@ -49,16 +50,26 @@ void main() {
     expect(titles(sortFilesItems(items, 'title')), 'Ant,The Bee,Cat');
     expect(titles(sortFilesItems(items, 'added')), 'Ant,The Bee,Cat');
     expect(titles(sortFilesItems(items, 'released')), 'Cat,The Bee,Ant');
-    expect(titles(sortFilesItems(items, 'released', descending: false)),
-        'Ant,The Bee,Cat');
+    expect(
+      titles(sortFilesItems(items, 'released', descending: false)),
+      'Ant,The Bee,Cat',
+    );
   });
 
   test('backend_paths_join_the_root', () {
     const root = LibraryRoot(
-        id: 'r', path: '/media/', kind: FilesLibraryKind.movies, title: 'M');
+      id: 'r',
+      path: '/media/',
+      kind: FilesLibraryKind.movies,
+      title: 'M',
+    );
     expect(filesBackendPath(root, 'a/b.srt'), '/media/a/b.srt');
     const win = LibraryRoot(
-        id: 'r', path: r'D:\Films', kind: FilesLibraryKind.movies, title: 'M');
+      id: 'r',
+      path: r'D:\Films',
+      kind: FilesLibraryKind.movies,
+      title: 'M',
+    );
     expect(filesBackendPath(win, 'b.srt'), r'D:\Films\b.srt');
   });
 
@@ -69,8 +80,10 @@ void main() {
 
   test('folder_ids_round_trip', () {
     expect(parseFolderId(folderId('r1')), (rootId: 'r1', dir: ''));
-    expect(
-        parseFolderId(folderId('r1', 'a/b c')), (rootId: 'r1', dir: 'a/b c'));
+    expect(parseFolderId(folderId('r1', 'a/b c')), (
+      rootId: 'r1',
+      dir: 'a/b c',
+    ));
     expect(parseFolderId('101'), isNull);
   });
 
@@ -87,9 +100,13 @@ void main() {
     expect(catalog.shows['201']!.episodeKeys, [(1, 1), (1, 2), (1, 3), (0, 1)]);
     expect(catalog.unmatched.values.single.path, 'loose/home video.mkv');
     // A show is as new as its newest file; a movie as old as its oldest.
-    expect(catalog.showSummary(catalog.shows['201']!).addedAt,
-        filesT0.add(const Duration(days: 1)));
     expect(
-        catalog.movieSummary(catalog.movies['101']!).externalIds.tmdb, '101');
+      catalog.showSummary(catalog.shows['201']!).addedAt,
+      filesT0.add(const Duration(days: 1)),
+    );
+    expect(
+      catalog.movieSummary(catalog.movies['101']!).externalIds.tmdb,
+      '101',
+    );
   });
 }

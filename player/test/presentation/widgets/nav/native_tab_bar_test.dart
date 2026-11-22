@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,84 +59,103 @@ Future<_Harness> _pump(
 }) async {
   final recorded = calls ?? <MethodCall>[];
   final routes = navigated ?? <String>[];
-  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel,
-      (call) async {
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (
+    call,
+  ) async {
     recorded.add(call);
     return null;
   });
-  addTearDown(() => tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(_channel, null));
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      _channel,
+      null,
+    ),
+  );
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MediaQuery(
-      data: MediaQueryData(
-        size: const Size(400, 800),
-        padding: EdgeInsets.only(bottom: homeIndicator),
-        viewPadding: EdgeInsets.only(bottom: homeIndicator),
-      ),
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          extendBody: true,
-          bottomNavigationBar: NativeTabBar(
-            location: location,
-            entries: _bar,
-            visible: visible,
-            isOffline: isOffline,
-            onNavigate: routes.add,
-            onBackToMydia: () => routes.add('mydia-app'),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MediaQuery(
+        data: MediaQueryData(
+          size: const Size(400, 800),
+          padding: EdgeInsets.only(bottom: homeIndicator),
+          viewPadding: EdgeInsets.only(bottom: homeIndicator),
+        ),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            extendBody: true,
+            bottomNavigationBar: NativeTabBar(
+              location: location,
+              entries: _bar,
+              visible: visible,
+              isOffline: isOffline,
+              onNavigate: routes.add,
+              onBackToMydia: () => routes.add('mydia-app'),
+            ),
+            body: Builder(
+              builder: (context) {
+                onDockInset?.call(DockInsets.bottomOf(context));
+                return const SizedBox.expand();
+              },
+            ),
           ),
-          body: Builder(builder: (context) {
-            onDockInset?.call(DockInsets.bottomOf(context));
-            return const SizedBox.expand();
-          }),
         ),
       ),
     ),
-  ));
+  );
   await tester.pump();
   return _Harness(recorded, routes);
 }
 
 ProviderContainer _container() {
-  final container = ProviderContainer(overrides: [
-    nativeTabBarChannelProvider.overrideWith((ref) {
-      final channel = NativeTabBarChannel(channel: _channel);
-      ref.onDispose(channel.dispose);
-      return channel;
-    }),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      nativeTabBarChannelProvider.overrideWith((ref) {
+        final channel = NativeTabBarChannel(channel: _channel);
+        ref.onDispose(channel.dispose);
+        return channel;
+      }),
+    ],
+  );
   addTearDown(container.dispose);
   return container;
 }
 
-Future<void> _fromNative(WidgetTester tester, String method,
-        [Object? arguments]) =>
-    tester.binding.defaultBinaryMessenger.handlePlatformMessage(
-      _name,
-      const StandardMethodCodec()
-          .encodeMethodCall(MethodCall(method, arguments)),
-      (_) {},
-    );
+Future<void> _fromNative(
+  WidgetTester tester,
+  String method, [
+  Object? arguments,
+]) => tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+  _name,
+  const StandardMethodCodec().encodeMethodCall(MethodCall(method, arguments)),
+  (_) {},
+);
 
 void main() {
   group('nativeTabsFor', () {
     test('the bar entries, in order, with symbols and short labels', () {
-      final tabs = nativeTabsFor(_bar,
-          l10n: _en, isOffline: false, showBackToMydia: false);
-      expect([for (final t in tabs) t.id],
-          ['home', 'movies', 'shows', 'downloads', 'settings']);
-      expect([
-        for (final t in tabs) t.symbol
-      ], [
-        'house.fill',
-        'film.fill',
-        'tv.fill',
-        'arrow.down.circle.fill',
-        'gearshape.fill',
-      ]);
+      final tabs = nativeTabsFor(
+        _bar,
+        l10n: _en,
+        isOffline: false,
+        showBackToMydia: false,
+      );
+      expect(
+        [for (final t in tabs) t.id],
+        ['home', 'movies', 'shows', 'downloads', 'settings'],
+      );
+      expect(
+        [for (final t in tabs) t.symbol],
+        [
+          'house.fill',
+          'film.fill',
+          'tv.fill',
+          'arrow.down.circle.fill',
+          'gearshape.fill',
+        ],
+      );
       expect(tabs[2].title, 'Shows');
       expect(tabs.every((t) => t.enabled), isTrue);
     });
@@ -148,14 +167,20 @@ void main() {
         isOffline: false,
         showBackToMydia: false,
       );
-      expect([for (final t in tabs) t.id],
-          ['home', 'movies', 'shows', 'favorites', 'settings']);
+      expect(
+        [for (final t in tabs) t.id],
+        ['home', 'movies', 'shows', 'favorites', 'settings'],
+      );
       expect(tabs[3].symbol, 'heart.fill');
     });
 
     test('embed mode leads with the Mydia back item', () {
-      final tabs = nativeTabsFor(_bar,
-          l10n: _en, isOffline: true, showBackToMydia: true);
+      final tabs = nativeTabsFor(
+        _bar,
+        l10n: _en,
+        isOffline: true,
+        showBackToMydia: true,
+      );
       expect(tabs.first.id, kMydiaBackTabId);
       expect(tabs.first.title, 'Mydia');
       expect(tabs.first.symbol, 'chevron.backward');
@@ -164,34 +189,42 @@ void main() {
     });
 
     test('offline disables everything except Downloads', () {
-      final tabs = nativeTabsFor(_bar,
-          l10n: _en, isOffline: true, showBackToMydia: false);
-      expect({
-        for (final t in tabs) t.id: t.enabled
-      }, {
-        'home': false,
-        'movies': false,
-        'shows': false,
-        'downloads': true,
-        'settings': false,
-      });
+      final tabs = nativeTabsFor(
+        _bar,
+        l10n: _en,
+        isOffline: true,
+        showBackToMydia: false,
+      );
+      expect(
+        {for (final t in tabs) t.id: t.enabled},
+        {
+          'home': false,
+          'movies': false,
+          'shows': false,
+          'downloads': true,
+          'settings': false,
+        },
+      );
     });
 
     test('the badge goes on Settings only', () {
-      final tabs = nativeTabsFor(_bar,
-          l10n: _en,
-          isOffline: false,
-          showBackToMydia: false,
-          settingsBadge: '1');
-      expect({
-        for (final t in tabs) t.id: t.badge
-      }, {
-        'home': null,
-        'movies': null,
-        'shows': null,
-        'downloads': null,
-        'settings': '1',
-      });
+      final tabs = nativeTabsFor(
+        _bar,
+        l10n: _en,
+        isOffline: false,
+        showBackToMydia: false,
+        settingsBadge: '1',
+      );
+      expect(
+        {for (final t in tabs) t.id: t.badge},
+        {
+          'home': null,
+          'movies': null,
+          'shows': null,
+          'downloads': null,
+          'settings': '1',
+        },
+      );
     });
 
     test('an unknown id gets a circle', () {
@@ -215,17 +248,24 @@ void main() {
     });
   });
 
-  testWidgets('mount sends tabs, the selection and visibility, in that order',
-      (tester) async {
-    final h = await _pump(tester,
-        container: _container(), location: '/s/aa/library/movies');
+  testWidgets('mount sends tabs, the selection and visibility, in that order', (
+    tester,
+  ) async {
+    final h = await _pump(
+      tester,
+      container: _container(),
+      location: '/s/aa/library/movies',
+    );
     expect(h.calls.map((c) => c.method), ['setTabs', 'select', 'setVisible']);
     expect(h.log.sublist(1), ['select:movies', 'setVisible:true']);
   });
 
   testWidgets('no matching entry sends no select', (tester) async {
-    final h = await _pump(tester,
-        container: _container(), location: '/sources/manage');
+    final h = await _pump(
+      tester,
+      container: _container(),
+      location: '/sources/manage',
+    );
     expect(h.calls.map((c) => c.method), ['setTabs', 'setVisible']);
   });
 
@@ -238,8 +278,9 @@ void main() {
     expect(calls, isEmpty);
   });
 
-  testWidgets('a tap navigates to the entry route; unknown ids are ignored',
-      (tester) async {
+  testWidgets('a tap navigates to the entry route; unknown ids are ignored', (
+    tester,
+  ) async {
     final h = await _pump(tester, container: _container());
     await _fromNative(tester, 'tabSelected', 'movies');
     await _fromNative(tester, 'tabSelected', 'calendar');
@@ -254,8 +295,9 @@ void main() {
     expect(h.navigated, ['mydia-app']);
   });
 
-  testWidgets('a refused route leaves the selection where it was',
-      (tester) async {
+  testWidgets('a refused route leaves the selection where it was', (
+    tester,
+  ) async {
     final container = _container();
     final calls = <MethodCall>[];
     await _pump(tester, container: container, calls: calls);
@@ -273,14 +315,21 @@ void main() {
     await _fromNative(tester, 'tabSelected', 'movies');
     // The router redirected the Movies tap to Downloads.
     calls.clear();
-    await _pump(tester,
-        container: container, calls: calls, location: '/downloads');
-    expect([for (final c in calls) '${c.method}:${c.arguments}'],
-        ['select:downloads']);
+    await _pump(
+      tester,
+      container: container,
+      calls: calls,
+      location: '/downloads',
+    );
+    expect(
+      [for (final c in calls) '${c.method}:${c.arguments}'],
+      ['select:downloads'],
+    );
   });
 
-  testWidgets('hidden sends setVisible(false); unmount hides the bar',
-      (tester) async {
+  testWidgets('hidden sends setVisible(false); unmount hides the bar', (
+    tester,
+  ) async {
     final container = _container();
     final calls = <MethodCall>[];
     await _pump(tester, container: container, calls: calls, visible: false);
@@ -294,24 +343,31 @@ void main() {
     expect('${calls.last.method}:${calls.last.arguments}', 'setVisible:false');
   });
 
-  testWidgets('before the first inset, the dock height stands in',
-      (tester) async {
+  testWidgets('before the first inset, the dock height stands in', (
+    tester,
+  ) async {
     double? dockInset;
-    await _pump(tester,
-        container: _container(),
-        homeIndicator: 34,
-        onDockInset: (v) => dockInset = v);
-    expect(tester.getSize(find.byKey(const Key('native-tab-bar-inset'))).height,
-        NativeTabBar.fallbackBarHeight + 34);
+    await _pump(
+      tester,
+      container: _container(),
+      homeIndicator: 34,
+      onDockInset: (v) => dockInset = v,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('native-tab-bar-inset'))).height,
+      NativeTabBar.fallbackBarHeight + 34,
+    );
     expect(dockInset, NativeTabBar.fallbackBarHeight + 34 + DockInsets.dockGap);
   });
 
   testWidgets('the native inset reaches DockInsets.bottomOf', (tester) async {
     double? dockInset;
-    await _pump(tester,
-        container: _container(),
-        homeIndicator: 34,
-        onDockInset: (v) => dockInset = v);
+    await _pump(
+      tester,
+      container: _container(),
+      homeIndicator: 34,
+      onDockInset: (v) => dockInset = v,
+    );
     await _fromNative(tester, 'insetsChanged', 120.0);
     await tester.pump();
     expect(dockInset, 120 + DockInsets.dockGap);
@@ -319,8 +375,11 @@ void main() {
 
   testWidgets('insetsChanged(0) keeps the last height', (tester) async {
     double? dockInset;
-    await _pump(tester,
-        container: _container(), onDockInset: (v) => dockInset = v);
+    await _pump(
+      tester,
+      container: _container(),
+      onDockInset: (v) => dockInset = v,
+    );
     await _fromNative(tester, 'insetsChanged', 120.0);
     await tester.pump();
     await _fromNative(tester, 'insetsChanged', 0.0);
@@ -328,18 +387,22 @@ void main() {
     expect(dockInset, 120 + DockInsets.dockGap);
   });
 
-  testWidgets('claims the inset as a bottom toast obstruction, and passes taps',
-      (tester) async {
-    await _pump(tester, container: _container());
-    final obstruction =
-        tester.widget<ToastObstruction>(find.byType(ToastObstruction));
-    expect(obstruction.edge, ToastEdge.bottom);
-    expect(obstruction.active, isTrue);
-    expect(
-      find.ancestor(
+  testWidgets(
+    'claims the inset as a bottom toast obstruction, and passes taps',
+    (tester) async {
+      await _pump(tester, container: _container());
+      final obstruction = tester.widget<ToastObstruction>(
+        find.byType(ToastObstruction),
+      );
+      expect(obstruction.edge, ToastEdge.bottom);
+      expect(obstruction.active, isTrue);
+      expect(
+        find.ancestor(
           of: find.byKey(const Key('native-tab-bar-inset')),
-          matching: find.byType(IgnorePointer)),
-      findsWidgets,
-    );
-  });
+          matching: find.byType(IgnorePointer),
+        ),
+        findsWidgets,
+      );
+    },
+  );
 }

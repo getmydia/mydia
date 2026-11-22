@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
@@ -77,9 +77,8 @@ class MovieWatchedLine extends StatelessWidget {
           dateLabel.isEmpty
               ? context.l10n.commonWatched
               : context.l10n.movieWatchedOn(dateLabel),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: context.palette.textSecondary,
-              ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: context.palette.textSecondary),
         ),
       ],
     );

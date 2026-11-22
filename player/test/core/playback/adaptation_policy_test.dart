@@ -72,23 +72,25 @@ void main() {
       expect(policy.observe(s.next(fault: true)), isA<NoAction>());
     });
 
-    test('more than one dropped frame per second over 10 s is decodeTooSlow',
-        () {
-      final policy = AdaptationPolicy(source: SourceKind.direct);
-      final s = _Script();
-      // 10 samples of 1 drop each: exactly 10 over 10 s, not over.
-      expect(
-        _drive(policy, List.generate(10, (_) => s.next(dropped: 1))),
-        isA<NoAction>(),
-      );
-      // One more sample with 2 drops: window is now 11 over 10 s.
-      final action = policy.observe(s.next(dropped: 2));
-      expect(action, isA<FallbackToTranscode>());
-      expect(
-        (action as FallbackToTranscode).reason,
-        FailureReason.decodeTooSlow,
-      );
-    });
+    test(
+      'more than one dropped frame per second over 10 s is decodeTooSlow',
+      () {
+        final policy = AdaptationPolicy(source: SourceKind.direct);
+        final s = _Script();
+        // 10 samples of 1 drop each: exactly 10 over 10 s, not over.
+        expect(
+          _drive(policy, List.generate(10, (_) => s.next(dropped: 1))),
+          isA<NoAction>(),
+        );
+        // One more sample with 2 drops: window is now 11 over 10 s.
+        final action = policy.observe(s.next(dropped: 2));
+        expect(action, isA<FallbackToTranscode>());
+        expect(
+          (action as FallbackToTranscode).reason,
+          FailureReason.decodeTooSlow,
+        );
+      },
+    );
 
     test('a partial drop window cannot trigger a strict fallback', () {
       final policy = AdaptationPolicy(source: SourceKind.direct);
@@ -137,8 +139,10 @@ void main() {
       // The first sample only sets the baseline; a decrease needs a previous.
       policy.observe(s.next(aheadMs: 9000));
       // 8.5 s down to 2.0 s in 500 ms steps: 14 consecutive decreases.
-      final draining =
-          List.generate(14, (i) => s.next(aheadMs: 8500 - 500 * i));
+      final draining = List.generate(
+        14,
+        (i) => s.next(aheadMs: 8500 - 500 * i),
+      );
       expect(_drive(policy, draining), isA<NoAction>());
       // The 15th decrease.
       final action = policy.observe(s.next(aheadMs: 1000));
@@ -150,8 +154,10 @@ void main() {
       final policy = AdaptationPolicy(source: SourceKind.direct);
       final s = _Script();
       // 40 s down to 21 s: shrinking, but never under the 10 s floor.
-      final draining =
-          List.generate(20, (i) => s.next(aheadMs: 40000 - 1000 * i));
+      final draining = List.generate(
+        20,
+        (i) => s.next(aheadMs: 40000 - 1000 * i),
+      );
       expect(_drive(policy, draining), isA<NoAction>());
     });
 
@@ -161,8 +167,10 @@ void main() {
       policy.observe(s.next(aheadMs: 9000));
       _drive(policy, List.generate(10, (i) => s.next(aheadMs: 8500 - 500 * i)));
       policy.observe(s.next(aheadMs: 4000)); // equal to the previous: reset
-      final draining =
-          List.generate(14, (i) => s.next(aheadMs: 3900 - 100 * i));
+      final draining = List.generate(
+        14,
+        (i) => s.next(aheadMs: 3900 - 100 * i),
+      );
       expect(_drive(policy, draining), isA<NoAction>());
     });
 
@@ -198,8 +206,7 @@ void main() {
   });
 
   group('elapsed time, not sample count', () {
-    test(
-        'two-second samples at exactly the drop limit never fall back, '
+    test('two-second samples at exactly the drop limit never fall back, '
         'through a full window and well beyond', () {
       final policy = AdaptationPolicy(source: SourceKind.direct);
       final s = _Script();
@@ -208,10 +215,7 @@ void main() {
       // of elapsed time, well past both the verification window and a full
       // sustained-drops history.
       expect(
-        _drive(
-          policy,
-          List.generate(30, (_) => s.next(dropped: 2, step: 2)),
-        ),
+        _drive(policy, List.generate(30, (_) => s.next(dropped: 2, step: 2))),
         isA<NoAction>(),
       );
     });
@@ -231,8 +235,7 @@ void main() {
       );
     });
 
-    test(
-        'verification tracks elapsed time: two-second samples end it in '
+    test('verification tracks elapsed time: two-second samples end it in '
         'about half as many samples as one-second ones', () {
       final policy = AdaptationPolicy(source: SourceKind.direct);
       final s = _Script();
@@ -247,8 +250,7 @@ void main() {
       expect(policy.verifying, isFalse);
     });
 
-    test(
-        'unknown seconds do not fill the drop window; known seconds still '
+    test('unknown seconds do not fill the drop window; known seconds still '
         'decide on their own', () {
       final policy = AdaptationPolicy(source: SourceKind.direct);
       final s = _Script();
@@ -432,8 +434,10 @@ void main() {
         isA<NoAction>(),
       );
       // Three heavy windows in a row.
-      final action =
-          _drive(policy, List.generate(30, (_) => s.next(dropped: 2)));
+      final action = _drive(
+        policy,
+        List.generate(30, (_) => s.next(dropped: 2)),
+      );
       expect(action, isA<FallbackToTranscode>());
       expect(
         (action as FallbackToTranscode).reason,
@@ -458,7 +462,9 @@ void main() {
     policy.observe(s.next(playing: false, fault: true));
     expect(policy.done, isTrue);
     expect(
-        policy.observe(s.next(playing: false, fault: true)), isA<NoAction>());
+      policy.observe(s.next(playing: false, fault: true)),
+      isA<NoAction>(),
+    );
   });
 
   group('reactsToBandwidth: false', () {
@@ -484,8 +490,10 @@ void main() {
       final s = _Script();
       policy.observe(s.next(aheadMs: 9000));
       // 8.5 s down to 1.3 s in 400 ms steps: 19 consecutive decreases.
-      final draining =
-          List.generate(19, (i) => s.next(aheadMs: 8500 - 400 * i));
+      final draining = List.generate(
+        19,
+        (i) => s.next(aheadMs: 8500 - 400 * i),
+      );
       expect(_drive(policy, draining), isA<NoAction>());
     });
 
@@ -530,8 +538,10 @@ void main() {
       final policy = original(SourceKind.copy);
       final s = _Script();
       _drive(policy, List.generate(20, (_) => s.next()));
-      final action =
-          _drive(policy, List.generate(30, (_) => s.next(dropped: 2)));
+      final action = _drive(
+        policy,
+        List.generate(30, (_) => s.next(dropped: 2)),
+      );
       expect(action, isA<FallbackToTranscode>());
       expect(
         (action as FallbackToTranscode).reason,
@@ -578,8 +588,9 @@ void main() {
     test('a fault before the first frame', () {
       final policy = AdaptationPolicy(source: SourceKind.direct);
       final s = _Script();
-      final action = policy.observe(s.next(playing: false, fault: true))
-          as FallbackToTranscode;
+      final action = policy.observe(
+        s.next(playing: false, fault: true),
+      ) as FallbackToTranscode;
       expect(action.detail, 'decodeFailed: fault before first frame');
     });
 
@@ -597,9 +608,10 @@ void main() {
       final policy = AdaptationPolicy(source: SourceKind.copy);
       final s = _Script();
       _drive(policy, List.generate(20, (_) => s.next()));
-      final action =
-          _drive(policy, List.generate(30, (_) => s.next(dropped: 2)))
-              as FallbackToTranscode;
+      final action = _drive(
+        policy,
+        List.generate(30, (_) => s.next(dropped: 2)),
+      ) as FallbackToTranscode;
       expect(action.detail, 'decodeTooSlow: sustained drops over 3 windows');
     });
 
@@ -662,10 +674,7 @@ void main() {
       final policy = AdaptationPolicy(source: SourceKind.direct);
       final s = _Script();
       policy.observe(s.next(aheadMs: 9000));
-      _drive(
-        policy,
-        List.generate(14, (i) => s.next(aheadMs: 8500 - 500 * i)),
-      );
+      _drive(policy, List.generate(14, (i) => s.next(aheadMs: 8500 - 500 * i)));
       final action =
           policy.observe(s.next(aheadMs: 1000)) as FallbackToTranscode;
       expect(action.detail, 'bandwidth: buffer drained for 15 samples');

@@ -20,8 +20,7 @@ void main() {
     expect(value, 7);
   });
 
-  test(
-      'a provider that only ever errors fails with a message naming the '
+  test('a provider that only ever errors fails with a message naming the '
       'error, not a bare timeout', () async {
     final provider = StreamProvider<int>(
       (ref) => Stream<int>.error(Exception('boom')),

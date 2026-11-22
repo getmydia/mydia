@@ -14,8 +14,8 @@ import 'remote_control_settings.dart';
 /// One registration per Mydia instance, following the accounts.
 final nodeRegistrationsProvider =
     NotifierProvider<NodeRegistrations, Map<SourceId, RegistrationStatus>>(
-  NodeRegistrations.new,
-);
+      NodeRegistrations.new,
+    );
 
 /// The worst status across instances, for the one global settings row.
 final nodeRegistrationSummaryProvider = Provider<RegistrationStatus>(
@@ -60,16 +60,17 @@ class NodeRegistrations extends Notifier<Map<SourceId, RegistrationStatus>> {
       }
       _entries.clear();
     });
-    ref.listen(p2pStatusNotifierProvider, (_, __) => _sync());
-    ref.listen(remoteControlEnabledProvider, (_, __) => _sync());
-    ref.listen(sourceRecordsProvider, (_, __) => _sync());
+    ref.listen(p2pStatusNotifierProvider, (_, _) => _sync());
+    ref.listen(remoteControlEnabledProvider, (_, _) => _sync());
+    ref.listen(sourceRecordsProvider, (_, _) => _sync());
     return _sync();
   }
 
   Map<SourceId, RegistrationStatus> _sync() {
     final nodeId = ref.read(p2pStatusNotifierProvider).nodeId;
     final controllableAsync = ref.read(remoteControlEnabledProvider);
-    final records = ref.read(sourceRecordsProvider).value?.accounts ??
+    final records =
+        ref.read(sourceRecordsProvider).value?.accounts ??
         const <SourceAccountRecord>[];
     final mydia = [
       for (final r in records)
@@ -95,8 +96,9 @@ class NodeRegistrations extends Notifier<Map<SourceId, RegistrationStatus>> {
         record.account.id,
         () => _create(record.account.id, mydiaSourceIdOf(record)),
       );
-      final remoteTargets =
-          ref.read(mediaSourceProvider(entry.sourceId))?.as<RemoteTargets>();
+      final remoteTargets = ref
+          .read(mediaSourceProvider(entry.sourceId))
+          ?.as<RemoteTargets>();
       entry.service.update(
         controllable: controllable,
         nodeId: nodeId,
@@ -123,8 +125,9 @@ class NodeRegistrations extends Notifier<Map<SourceId, RegistrationStatus>> {
       // Resolved per attempt, so a rebuilt source object is picked up by the
       // next retry instead of pinning a stale one.
       register: (nodeId) async {
-        final targets =
-            ref.read(mediaSourceProvider(sourceId))?.as<RemoteTargets>();
+        final targets = ref
+            .read(mediaSourceProvider(sourceId))
+            ?.as<RemoteTargets>();
         if (targets == null) throw StateError('No Mydia server');
         return targets.registerNode(nodeId);
       },
@@ -139,8 +142,10 @@ class NodeRegistrations extends Notifier<Map<SourceId, RegistrationStatus>> {
     });
     // The source object appearing or being replaced changes whether the
     // client is ready.
-    entry.sourceSubscription =
-        ref.listen(mediaSourceProvider(sourceId), (_, __) => _sync());
+    entry.sourceSubscription = ref.listen(
+      mediaSourceProvider(sourceId),
+      (_, _) => _sync(),
+    );
     return entry;
   }
 
@@ -152,7 +157,8 @@ class NodeRegistrations extends Notifier<Map<SourceId, RegistrationStatus>> {
   RegistrationStatus _reported(RegistrationStatus status) {
     if (_settingUnresolved && status is RegistrationIdle) {
       return const RegistrationWaiting(
-          RegistrationDependency.remoteControlSetting);
+        RegistrationDependency.remoteControlSetting,
+      );
     }
     return status;
   }

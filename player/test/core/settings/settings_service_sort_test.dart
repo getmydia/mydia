@@ -38,8 +38,10 @@ void main() {
   test('every stored library sort key is listed for the backup', () async {
     final service = SettingsService();
 
-    expect(await service.librarySortStorageKeys(),
-        ['library_sort_movies', 'library_sort_tvShows']);
+    expect(await service.librarySortStorageKeys(), [
+      'library_sort_movies',
+      'library_sort_tvShows',
+    ]);
     await service.setLibrarySort('acct:owner:srv/lib1', 'TITLE:ASC');
     await service.setLibrarySort('acct:owner:srv/lib1', 'YEAR:ASC');
 

@@ -25,5 +25,5 @@ const Color _white = Color(0xFFFFFFFF);
 /// One of black or white always clears 4.5:1 against any opaque colour.
 Color onColorFor(Color fill) =>
     contrastRatio(_black, fill) >= contrastRatio(_white, fill)
-        ? _black
-        : _white;
+    ? _black
+    : _white;

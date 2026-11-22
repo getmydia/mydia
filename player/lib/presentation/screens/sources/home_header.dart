@@ -7,7 +7,7 @@
 /// Mydia home built it.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/palette.dart';
@@ -68,26 +68,24 @@ class HomeDesktopTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(left: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: context.palette.primary, size: 22),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.3,
-                    ),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.only(left: 8),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: context.palette.primary, size: 22),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.bold, letterSpacing: -0.3),
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 /// A source's name as the phone bar title.
@@ -98,14 +96,11 @@ class HomeServerTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        name,
-        overflow: TextOverflow.ellipsis,
-        maxLines: 1,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          letterSpacing: -0.5,
-        ),
-      );
+    name,
+    overflow: TextOverflow.ellipsis,
+    maxLines: 1,
+    style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5),
+  );
 }
 
 /// The Mydia lockup, for the All servers home, which is no single server.
@@ -114,15 +109,15 @@ class HomeMydiaLockup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          MydiaLogo(size: 32),
-          SizedBox(width: 10),
-          // Flexible so the channel pill fits on a narrow phone: the wordmark
-          // ellipsizes instead of overflowing.
-          Flexible(child: HomeServerTitle('Mydia Player')),
-          SizedBox(width: 8),
-          ChannelBadge(),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      MydiaLogo(size: 32),
+      SizedBox(width: 10),
+      // Flexible so the channel pill fits on a narrow phone: the wordmark
+      // ellipsizes instead of overflowing.
+      Flexible(child: HomeServerTitle('Mydia Player')),
+      SizedBox(width: 8),
+      ChannelBadge(),
+    ],
+  );
 }

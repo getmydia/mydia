@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
@@ -10,19 +10,19 @@ ThemeData _theme({required bool liquid}) =>
     AppTheme.build(Palettes.projectionBooth, liquid: liquid);
 
 Widget _host({required bool liquid}) => MaterialApp(
-      theme: _theme(liquid: liquid),
-      home: Scaffold(
-        body: GlassDialog(
-          icon: const Icon(Icons.warning_rounded),
-          title: const Text('Remove account?'),
-          content: const Text('This signs you out.'),
-          actions: [
-            TextButton(onPressed: () {}, child: const Text('Cancel')),
-            FilledButton(onPressed: () {}, child: const Text('Remove')),
-          ],
-        ),
-      ),
-    );
+  theme: _theme(liquid: liquid),
+  home: Scaffold(
+    body: GlassDialog(
+      icon: const Icon(Icons.warning_rounded),
+      title: const Text('Remove account?'),
+      content: const Text('This signs you out.'),
+      actions: [
+        TextButton(onPressed: () {}, child: const Text('Cancel')),
+        FilledButton(onPressed: () {}, child: const Text('Remove')),
+      ],
+    ),
+  ),
+);
 
 void main() {
   _focusTests();
@@ -51,26 +51,29 @@ void main() {
     expect(find.text('Cancel'), findsOneWidget);
     expect(find.text('Remove'), findsOneWidget);
   });
-  testWidgets('Liquid Glass: tall content scrolls instead of overflowing',
-      (tester) async {
+  testWidgets('Liquid Glass: tall content scrolls instead of overflowing', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(400, 500);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(MaterialApp(
-      theme: _theme(liquid: true),
-      home: Scaffold(
-        body: Center(
-          child: GlassDialog(
-            title: const Text('Logs'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [for (var i = 0; i < 60; i++) Text('Row $i')],
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: _theme(liquid: true),
+        home: Scaffold(
+          body: Center(
+            child: GlassDialog(
+              title: const Text('Logs'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [for (var i = 0; i < 60; i++) Text('Row $i')],
+              ),
+              actions: [TextButton(onPressed: () {}, child: const Text('OK'))],
             ),
-            actions: [TextButton(onPressed: () {}, child: const Text('OK'))],
           ),
         ),
       ),
-    ));
+    );
     expect(tester.takeException(), isNull);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
   });
@@ -84,44 +87,45 @@ Future<void> _openDialog(
   bool destructive = false,
   Widget? content,
 }) async {
-  await tester.pumpWidget(MaterialApp(
-    theme: _theme(liquid: liquid),
-    home: Builder(
-      builder: (context) => TextButton(
-        onPressed: () => showDialog<void>(
-          context: context,
-          builder: (_) => GlassDialog(
-            destructive: destructive,
-            title: const Text('Confirm'),
-            content: content,
-            actions: [
-              TextButton(
-                key: const Key('first'),
-                onPressed: () {},
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                key: const Key('last'),
-                onPressed: () {},
-                child: const Text('Okay'),
-              ),
-            ],
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: _theme(liquid: liquid),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => GlassDialog(
+              destructive: destructive,
+              title: const Text('Confirm'),
+              content: content,
+              actions: [
+                TextButton(
+                  key: const Key('first'),
+                  onPressed: () {},
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  key: const Key('last'),
+                  onPressed: () {},
+                  child: const Text('Okay'),
+                ),
+              ],
+            ),
           ),
+          child: const Text('open'),
         ),
-        child: const Text('open'),
       ),
     ),
-  ));
+  );
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
 }
 
 bool _hasFocus(WidgetTester tester, Key key) => Focus.of(
-      tester.element(find.descendant(
-        of: find.byKey(key),
-        matching: find.byType(Text),
-      )),
-    ).hasPrimaryFocus;
+  tester.element(
+    find.descendant(of: find.byKey(key), matching: find.byType(Text)),
+  ),
+).hasPrimaryFocus;
 
 void _focusTests() {
   for (final liquid in [true, false]) {
@@ -145,8 +149,9 @@ void _focusTests() {
           liquid: liquid,
           content: const TextField(key: Key('field'), autofocus: true),
         );
-        final field =
-            tester.state<EditableTextState>(find.byType(EditableText));
+        final field = tester.state<EditableTextState>(
+          find.byType(EditableText),
+        );
         expect(field.widget.focusNode.hasPrimaryFocus, isTrue);
         expect(_hasFocus(tester, const Key('last')), isFalse);
       });

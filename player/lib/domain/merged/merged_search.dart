@@ -8,12 +8,12 @@ import '../sources/item.dart';
 enum MergedSection { movies, shows, episodes, videos }
 
 MergedSection? sectionOf(ItemKind kind) => switch (kind) {
-      ItemKind.movie => MergedSection.movies,
-      ItemKind.show => MergedSection.shows,
-      ItemKind.episode => MergedSection.episodes,
-      ItemKind.video => MergedSection.videos,
-      _ => null,
-    };
+  ItemKind.movie => MergedSection.movies,
+  ItemKind.show => MergedSection.shows,
+  ItemKind.episode => MergedSection.episodes,
+  ItemKind.video => MergedSection.videos,
+  _ => null,
+};
 
 @immutable
 class MergedSearch {
@@ -28,7 +28,7 @@ class MergedSearch {
 /// First of each list, then second of each, and so on.
 List<T> roundRobin<T>(List<List<T>> lists) {
   final out = <T>[];
-  for (var i = 0;; i++) {
+  for (var i = 0; ; i++) {
     var any = false;
     for (final l in lists) {
       if (i < l.length) {

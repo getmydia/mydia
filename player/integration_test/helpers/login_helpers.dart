@@ -25,8 +25,10 @@ enum AppLanding {
 bool hasMydiaAccount(WidgetTester tester) {
   final finder = find.byType(MyApp);
   if (finder.evaluate().isEmpty) return false;
-  final container =
-      ProviderScope.containerOf(tester.element(finder.first), listen: false);
+  final container = ProviderScope.containerOf(
+    tester.element(finder.first),
+    listen: false,
+  );
   return container.read(hasMydiaProvider);
 }
 
@@ -75,8 +77,11 @@ Future<void> waitForLoginScreen(
   int maxSeconds = 30,
   String tag = '[Test]',
 }) async {
-  final landing =
-      await waitForLoginOrSignedIn(tester, maxSeconds: maxSeconds, tag: tag);
+  final landing = await waitForLoginOrSignedIn(
+    tester,
+    maxSeconds: maxSeconds,
+    tag: tag,
+  );
   if (landing != AppLanding.login) {
     throw StateError('Expected a fresh install but a Mydia account is stored');
   }
@@ -94,10 +99,12 @@ Future<bool> dismissStorageWarningIfShown(
 }) async {
   if (find.byType(StorageUnavailableDialog).evaluate().isEmpty) return false;
   debugPrint('$tag Storage warning shown, tapping Continue');
-  await tester.tap(find.descendant(
-    of: find.byType(StorageUnavailableDialog),
-    matching: find.text('Continue'),
-  ));
+  await tester.tap(
+    find.descendant(
+      of: find.byType(StorageUnavailableDialog),
+      matching: find.text('Continue'),
+    ),
+  );
   await tester.pump(const Duration(milliseconds: 500));
   return true;
 }

@@ -27,11 +27,13 @@ class FakeTransport implements PlaybackTransport {
   ResolvedSource? sessionFile(String name) => null;
 
   @override
-  Future<PlaybackSource> open(PlaybackPlan plan,
-      {required String fileId,
-      required Duration startAt,
-      Duration? totalDuration,
-      void Function(LoadingStep step)? onProgress}) async {
+  Future<PlaybackSource> open(
+    PlaybackPlan plan, {
+    required String fileId,
+    required Duration startAt,
+    Duration? totalDuration,
+    void Function(LoadingStep step)? onProgress,
+  }) async {
     opened.add(plan);
     return PlaybackSource(
       url: 'https://fake.test/v.mkv',
@@ -43,14 +45,14 @@ class FakeTransport implements PlaybackTransport {
   }
 
   @override
-  Future<PlaybackSource> replaceSource(PlaybackPlan plan,
-          {required String fileId,
-          required Duration realPosition,
-          Duration? totalDuration,
-          required Future<Stream<Duration>> Function(PlaybackSource source)
-              attach,
-          void Function(LoadingStep step)? onProgress}) =>
-      throw UnimplementedError();
+  Future<PlaybackSource> replaceSource(
+    PlaybackPlan plan, {
+    required String fileId,
+    required Duration realPosition,
+    Duration? totalDuration,
+    required Future<Stream<Duration>> Function(PlaybackSource source) attach,
+    void Function(LoadingStep step)? onProgress,
+  }) => throw UnimplementedError();
 
   @override
   Future<void> endSession() async => ends++;
@@ -63,14 +65,18 @@ class FakeProgress implements ProgressReporter {
   final saves = <(String, String)>[];
 
   @override
-  void start(Player player,
-          {required String mediaType, required String mediaId}) =>
-      starts.add((mediaType, mediaId));
+  void start(
+    Player player, {
+    required String mediaType,
+    required String mediaId,
+  }) => starts.add((mediaType, mediaId));
 
   @override
-  Future<void> save(Player player,
-          {required String mediaType, required String mediaId}) async =>
-      saves.add((mediaType, mediaId));
+  Future<void> save(
+    Player player, {
+    required String mediaType,
+    required String mediaId,
+  }) async => saves.add((mediaType, mediaId));
 
   @override
   bool isWatched(Player player) => false;
@@ -104,16 +110,15 @@ class FakePlaybackSession implements PlaybackSession {
 
   @override
   Future<CandidatesFetch> candidates(CandidateScope scope) async => (
-        offer: const PlaybackOffer(
-          fileId: 'part-1',
-          candidates: [
-            CandidateStrategy(
-                strategy: 'DIRECT_PLAY', mime: 'video/x-matroska'),
-          ],
-          durationSeconds: 90,
-        ),
-        serverRejected: false,
-      );
+    offer: const PlaybackOffer(
+      fileId: 'part-1',
+      candidates: [
+        CandidateStrategy(strategy: 'DIRECT_PLAY', mime: 'video/x-matroska'),
+      ],
+      durationSeconds: 90,
+    ),
+    serverRejected: false,
+  );
 
   @override
   Future<PlaybackDetail?> detail() async => const PlaybackDetail();
@@ -136,14 +141,17 @@ class FakePlaybackSession implements PlaybackSession {
   @override
   bool get canWrite => false;
   @override
-  Future<WriteOutcome> saveSubtitleOffset(
-          {required String trackRef, required int offsetMs}) async =>
-      WriteOutcome.unavailable;
+  Future<WriteOutcome> saveSubtitleOffset({
+    required String trackRef,
+    required int offsetMs,
+  }) async => WriteOutcome.unavailable;
   @override
   Future<List<String>?> rememberAudioLanguage(String language) async => null;
   @override
-  Future<void> writeSubtitlePreference(
-      {required String fileId, required SubtitleTrack? resolved}) async {}
+  Future<void> writeSubtitlePreference({
+    required String fileId,
+    required SubtitleTrack? resolved,
+  }) async {}
 
   @override
   Future<ProgressReporter> openProgress() async => progress;
@@ -155,8 +163,7 @@ class FakePlaybackSession implements PlaybackSession {
     required String title,
     required int seasonNumber,
     required String? showId,
-  }) =>
-      '/fake/episode/$episodeId';
+  }) => '/fake/episode/$episodeId';
 
   @override
   Future<StreamingPreparation> prepareStreaming({
@@ -165,10 +172,12 @@ class FakePlaybackSession implements PlaybackSession {
     required bool Function() isCurrent,
   }) async {
     prepared++;
-    return StreamingReady(StreamingSetup(
-      memoryKey: 'source:fake',
-      progress: progress,
-      createTransport: ({required bool relayed}) => transport,
-    ));
+    return StreamingReady(
+      StreamingSetup(
+        memoryKey: 'source:fake',
+        progress: progress,
+        createTransport: ({required bool relayed}) => transport,
+      ),
+    );
   }
 }

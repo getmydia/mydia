@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/backup/backup_providers.dart';
@@ -30,25 +30,34 @@ void main() {
     expect(find.byKey(const Key('backup-store-gdrive')), findsOneWidget);
     expect(find.text('Mydia relay (end-to-end encrypted)'), findsOneWidget);
     expect(
-        find.text('Only your devices can read it. Keep the recovery key safe.'),
-        findsOneWidget);
+      find.text('Only your devices can read it. Keep the recovery key safe.'),
+      findsOneWidget,
+    );
     expect(
-        find.text('Stored in your iCloud account. Apple can read it, '
-            'including your source sign-ins.'),
-        findsOneWidget);
+      find.text(
+        'Stored in your iCloud account. Apple can read it, '
+        'including your source sign-ins.',
+      ),
+      findsOneWidget,
+    );
     expect(
-        find.text('Stored in your Google account. Google can read it, '
-            'including your source sign-ins.'),
-        findsOneWidget);
+      find.text(
+        'Stored in your Google account. Google can read it, '
+        'including your source sign-ins.',
+      ),
+      findsOneWidget,
+    );
     // The picker takes the switch's place.
     expect(find.byKey(const Key('backup-switch')), findsNothing);
   });
 
   testWidgets('a store that is not offered is not listed', (tester) async {
     await pumpBackupSection(
-        tester,
-        FakeBackupController(
-            offered: const {BackupStoreKind.relay, BackupStoreKind.gdrive}));
+      tester,
+      FakeBackupController(
+        offered: const {BackupStoreKind.relay, BackupStoreKind.gdrive},
+      ),
+    );
 
     expect(find.byKey(const Key('backup-store-icloud')), findsNothing);
     expect(find.byKey(const Key('backup-store-gdrive')), findsOneWidget);
@@ -73,8 +82,9 @@ void main() {
     expect(controller.active.value, BackupStoreKind.gdrive);
   });
 
-  testWidgets('picking gdrive while signed in skips the sign-in',
-      (tester) async {
+  testWidgets('picking gdrive while signed in skips the sign-in', (
+    tester,
+  ) async {
     final controller = FakeBackupController(offered: _all);
     final google = FakeGoogleSignIn(controller.calls, email: 'ana@example.com');
     await pumpBackupSection(tester, controller, google: google);
@@ -85,8 +95,9 @@ void main() {
     expect(controller.calls, ['enableCloud gdrive']);
   });
 
-  testWidgets('a declined Google sign-in enables nothing, quietly',
-      (tester) async {
+  testWidgets('a declined Google sign-in enables nothing, quietly', (
+    tester,
+  ) async {
     final controller = FakeBackupController(offered: _all);
     final google = FakeGoogleSignIn(controller.calls)
       ..signInError = const BackupRelayException(BackupRelayError.signedOut);
@@ -100,23 +111,28 @@ void main() {
     expect(find.text("Couldn't update the backup. Try again."), findsNothing);
   });
 
-  testWidgets('picking iCloud while iCloud is unavailable says how to fix it',
-      (tester) async {
+  testWidgets('picking iCloud while iCloud is unavailable says how to fix it', (
+    tester,
+  ) async {
     final controller = FakeBackupController(offered: _all)
-      ..enableError =
-          const BackupRelayException(BackupRelayError.cloudUnavailable);
+      ..enableError = const BackupRelayException(
+        BackupRelayError.cloudUnavailable,
+      );
     await pumpBackupSection(tester, controller);
 
     await tester.tap(find.byKey(const Key('backup-store-icloud')));
     await tester.pumpAndSettle();
 
     expect(controller.calls, ['enableCloud icloud']);
-    expect(find.text('iCloud is unavailable. Sign in to iCloud in Settings.'),
-        findsOneWidget);
+    expect(
+      find.text('iCloud is unavailable. Sign in to iCloud in Settings.'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('picking the relay goes through the controller with the key',
-      (tester) async {
+  testWidgets('picking the relay goes through the controller with the key', (
+    tester,
+  ) async {
     final relay = FakeBackupSyncService();
     final controller = FakeBackupController(relay: relay, offered: _all);
     await pumpBackupSection(tester, controller);
@@ -134,66 +150,71 @@ void main() {
   });
 
   testWidgets(
-      'a stored cloud store that cannot be built shows the picker, and the '
-      'relay can still be turned on', (tester) async {
-    final device = BackupTestDevice(FakeBackupRelay(), 'Living Room TV');
-    addTearDown(device.dispose);
-    device.auth.seedData({BackupController.storeKey: 'gdrive'});
-    final icloud = InMemoryCloudStore();
-    final controller = BackupController(
-      relay: device.service,
-      authStorage: device.auth,
-      resolveOffered: () async => _all,
-      buildCloud: (kind) async {
-        if (kind == BackupStoreKind.gdrive) throw StateError('no backend');
-        return buildCloudBackupService(
-          backend: InMemoryCloudBackend(icloud, kind: kind.cloudKind!),
-          authStorage: device.auth,
-          meta: device.meta,
-          snapshot: device.snapshot,
-          deviceName: () async => device.name,
-          platform: 'linux',
-        );
-      },
-    );
-    addTearDown(controller.dispose);
-    await tester.runAsync(() async {
-      await controller.ready;
-      await controller.start();
-    });
+    'a stored cloud store that cannot be built shows the picker, and the '
+    'relay can still be turned on',
+    (tester) async {
+      final device = BackupTestDevice(FakeBackupRelay(), 'Living Room TV');
+      addTearDown(device.dispose);
+      device.auth.seedData({BackupController.storeKey: 'gdrive'});
+      final icloud = InMemoryCloudStore();
+      final controller = BackupController(
+        relay: device.service,
+        authStorage: device.auth,
+        resolveOffered: () async => _all,
+        buildCloud: (kind) async {
+          if (kind == BackupStoreKind.gdrive) throw StateError('no backend');
+          return buildCloudBackupService(
+            backend: InMemoryCloudBackend(icloud, kind: kind.cloudKind!),
+            authStorage: device.auth,
+            meta: device.meta,
+            snapshot: device.snapshot,
+            deviceName: () async => device.name,
+            platform: 'linux',
+          );
+        },
+      );
+      addTearDown(controller.dispose);
+      await tester.runAsync(() async {
+        await controller.ready;
+        await controller.start();
+      });
 
-    tester.view.physicalSize = const Size(900, 1800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        backupSyncServiceProvider.overrideWithValue(device.service),
-        backupControllerProvider.overrideWithValue(controller),
-        googleSignInMethodProvider.overrideWithValue(null),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        home: Scaffold(body: SingleChildScrollView(child: BackupSection())),
-      ),
-    ));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      tester.view.physicalSize = const Size(900, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            backupSyncServiceProvider.overrideWithValue(device.service),
+            backupControllerProvider.overrideWithValue(controller),
+            googleSignInMethodProvider.overrideWithValue(null),
+          ],
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: toastLayerBuilder,
+            home: Scaffold(body: SingleChildScrollView(child: BackupSection())),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    // Off, so the picker, not a relay switch whose toggle would throw for
-    // the missing store. Turning the relay on from here is covered by
-    // `stored_cloud_store_that_cannot_be_built_is_off_not_stuck`.
-    expect(controller.active.value, isNull);
-    expect(find.byKey(const Key('backup-store-relay')), findsOneWidget);
-    expect(find.byKey(const Key('backup-store-icloud')), findsOneWidget);
-    expect(find.byKey(const Key('backup-store-gdrive')), findsNothing);
-    expect(find.byKey(const Key('backup-switch')), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      // Off, so the picker, not a relay switch whose toggle would throw for
+      // the missing store. Turning the relay on from here is covered by
+      // `stored_cloud_store_that_cannot_be_built_is_off_not_stuck`.
+      expect(controller.active.value, isNull);
+      expect(find.byKey(const Key('backup-store-relay')), findsOneWidget);
+      expect(find.byKey(const Key('backup-store-icloud')), findsOneWidget);
+      expect(find.byKey(const Key('backup-store-gdrive')), findsNothing);
+      expect(find.byKey(const Key('backup-switch')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('picking a dormant relay wakes it without a new key',
-      (tester) async {
+  testWidgets('picking a dormant relay wakes it without a new key', (
+    tester,
+  ) async {
     final relay = FakeBackupSyncService()..isDormant = true;
     final controller = FakeBackupController(relay: relay, offered: _all);
     await pumpBackupSection(tester, controller);

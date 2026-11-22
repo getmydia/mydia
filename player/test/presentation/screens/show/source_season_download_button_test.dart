@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -19,27 +19,30 @@ import '../sources/fake_capable_source.dart';
 import '../sources/fake_media_source.dart';
 
 ShowView _show({Set<DetailFeature> features = const {}}) => ShowView(
-      target: SourceTarget(fakeShow.ref),
-      title: 'Invented Series',
-      seasons: [SeasonView(number: 1, target: SourceTarget(fakeSeason.ref))],
-      features: features,
-    );
+  target: SourceTarget(fakeShow.ref),
+  title: 'Invented Series',
+  seasons: [SeasonView(number: 1, target: SourceTarget(fakeSeason.ref))],
+  features: features,
+);
 
 ShowView _twoSeasons() => ShowView(
-      target: SourceTarget(fakeShow.ref),
-      title: 'Invented Series',
-      seasons: [
-        SeasonView(number: 1, target: SourceTarget(fakeSeason.ref)),
-        const SeasonView(
-          number: 2,
-          target: SourceTarget(ItemRef(
-              sourceId: fakeSourceId,
-              kind: ItemKind.season,
-              externalId: 'se2')),
+  target: SourceTarget(fakeShow.ref),
+  title: 'Invented Series',
+  seasons: [
+    SeasonView(number: 1, target: SourceTarget(fakeSeason.ref)),
+    const SeasonView(
+      number: 2,
+      target: SourceTarget(
+        ItemRef(
+          sourceId: fakeSourceId,
+          kind: ItemKind.season,
+          externalId: 'se2',
         ),
-      ],
-      features: const {DetailFeature.seasonDownload},
-    );
+      ),
+    ),
+  ],
+  features: const {DetailFeature.seasonDownload},
+);
 
 /// A download manager that has downloaded nothing and records what starts.
 class _RecordingService extends Fake implements DownloadService {
@@ -71,20 +74,23 @@ Future<void> _pump(
   FakeMediaSource? source,
   _RecordingService? service,
 }) async {
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      if (source != null)
-        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-      downloadManagerProvider
-          .overrideWith((ref) async => service ?? _RecordingService()),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: Scaffold(body: ShowSeasonSection(show: show)),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        if (source != null)
+          mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        downloadManagerProvider.overrideWith(
+          (ref) async => service ?? _RecordingService(),
+        ),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Scaffold(body: ShowSeasonSection(show: show)),
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
@@ -94,20 +100,23 @@ const _options = [
 ];
 
 void main() {
-  testWidgets('a source show with season download gets the season button',
-      (tester) async {
+  testWidgets('a source show with season download gets the season button', (
+    tester,
+  ) async {
     await _pump(tester, _show(features: {DetailFeature.seasonDownload}));
     expect(find.byKey(const Key('source-season-download')), findsOneWidget);
   });
 
-  testWidgets('without the feature there is no download button',
-      (tester) async {
+  testWidgets('without the feature there is no download button', (
+    tester,
+  ) async {
     await _pump(tester, _show());
     expect(find.byKey(const Key('source-season-download')), findsNothing);
   });
 
-  testWidgets('more than one option asks for a quality, and it is queued',
-      (tester) async {
+  testWidgets('more than one option asks for a quality, and it is queued', (
+    tester,
+  ) async {
     final service = _RecordingService();
     await _pump(
       tester,
@@ -129,16 +138,12 @@ void main() {
     expect(service.started.map((r) => r.optionId), ['720p', '720p']);
   });
 
-  testWidgets('all seasons queue every season with one quality prompt',
-      (tester) async {
+  testWidgets('all seasons queue every season with one quality prompt', (
+    tester,
+  ) async {
     final service = _RecordingService();
     final source = FakeCapableSource()..downloadOptionsResult = _options;
-    await _pump(
-      tester,
-      _twoSeasons(),
-      source: source,
-      service: service,
-    );
+    await _pump(tester, _twoSeasons(), source: source, service: service);
 
     await tester.tap(find.byKey(const Key('source-season-download')));
     await tester.pumpAndSettle();
@@ -156,12 +161,15 @@ void main() {
     expect(service.started, hasLength(4));
     expect(service.started.map((r) => r.optionId).toSet(), {'720p'});
     // One probe for the whole show.
-    expect(source.calls.where((c) => c.startsWith('downloadOptions')),
-        hasLength(1));
+    expect(
+      source.calls.where((c) => c.startsWith('downloadOptions')),
+      hasLength(1),
+    );
   });
 
-  testWidgets('the all-seasons entry is absent for a single season',
-      (tester) async {
+  testWidgets('the all-seasons entry is absent for a single season', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _show(features: {DetailFeature.seasonDownload}),
@@ -200,7 +208,10 @@ void main() {
       source: FakeCapableSource()
         ..downloadOptionsResult = const [
           DownloadOption(
-              resolution: 'original', label: 'Original', estimatedSize: 1),
+            resolution: 'original',
+            label: 'Original',
+            estimatedSize: 1,
+          ),
         ],
       service: service,
     );

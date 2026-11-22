@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../l10n/l10n.dart';
@@ -23,10 +24,7 @@ Future<MediaFile?> showQualitySelector(
 class QualitySelectorSheet extends StatelessWidget {
   final List<MediaFile> files;
 
-  const QualitySelectorSheet({
-    super.key,
-    required this.files,
-  });
+  const QualitySelectorSheet({super.key, required this.files});
 
   @override
   Widget build(BuildContext context) {
@@ -42,9 +40,8 @@ class QualitySelectorSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 context.l10n.downloadSelectQuality,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 16),
@@ -53,9 +50,7 @@ class QualitySelectorSheet extends StatelessWidget {
                 onTap: () => Navigator.of(context).pop(file),
                 title: Text(
                   file.displayQuality ?? context.l10n.commonUnknown,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: _buildFileDetails(context.l10n, file, palette),
                 trailing: const Icon(Icons.chevron_right),
@@ -93,10 +88,7 @@ class QualitySelectorSheet extends StatelessWidget {
 
     return Text(
       details.join(' • '),
-      style: TextStyle(
-        color: palette.textSecondary,
-        fontSize: 12,
-      ),
+      style: TextStyle(color: palette.textSecondary, fontSize: 12),
     );
   }
 }

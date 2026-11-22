@@ -7,9 +7,9 @@ import '../../test_utils/mydia_test_source.dart';
 
 void main() {
   Future<ProviderContainer> container(InMemorySourceStore store) async {
-    final c = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => store),
-    ]);
+    final c = ProviderContainer(
+      overrides: [sourceStoreProvider.overrideWith((ref) async => store)],
+    );
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
     return c;

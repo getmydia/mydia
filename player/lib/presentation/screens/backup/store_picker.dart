@@ -2,7 +2,7 @@
 /// to turn backup on, or to move it somewhere else.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/backup/backup_providers.dart';
 import '../../../core/theme/palette.dart';
@@ -25,10 +25,10 @@ String backupStorePrivacy(AppLocalizations l10n, BackupStoreKind kind) =>
     };
 
 IconData backupStoreIcon(BackupStoreKind kind) => switch (kind) {
-      BackupStoreKind.relay => Icons.lock_rounded,
-      BackupStoreKind.icloud => Icons.cloud_rounded,
-      BackupStoreKind.gdrive => Icons.add_to_drive_rounded,
-    };
+  BackupStoreKind.relay => Icons.lock_rounded,
+  BackupStoreKind.icloud => Icons.cloud_rounded,
+  BackupStoreKind.gdrive => Icons.add_to_drive_rounded,
+};
 
 /// One row per store in [stores], in the order relay, iCloud, Google
 /// Drive. Tapping one calls [onPick]; nothing is tappable while [enabled]

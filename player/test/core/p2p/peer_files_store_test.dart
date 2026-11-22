@@ -33,9 +33,10 @@ class _FlakyBox implements Box<Map<dynamic, dynamic>> {
   @override
   Iterable<dynamic> get keys => _inner.keys;
   @override
-  Map<dynamic, dynamic>? get(dynamic key,
-          {Map<dynamic, dynamic>? defaultValue}) =>
-      _inner.get(key, defaultValue: defaultValue);
+  Map<dynamic, dynamic>? get(
+    dynamic key, {
+    Map<dynamic, dynamic>? defaultValue,
+  }) => _inner.get(key, defaultValue: defaultValue);
   @override
   Future<void> put(dynamic key, Map<dynamic, dynamic> value) async {
     putKeys.add(key);
@@ -62,33 +63,32 @@ class _FlakyBox implements Box<Map<dynamic, dynamic>> {
 final _t = DateTime.fromMillisecondsSinceEpoch(1700000000000);
 
 LibraryRoot _root(String id) => LibraryRoot(
-      id: id,
-      path: '/media/$id',
-      kind: FilesLibraryKind.movies,
-      title: id,
-    );
+  id: id,
+  path: '/media/$id',
+  kind: FilesLibraryKind.movies,
+  title: id,
+);
 
 IndexedFile _file(String root, String name) => IndexedFile(
-      key: fileKeyFor(root, name),
-      rootId: root,
-      path: name,
-      size: 1,
-      modified: _t,
-      firstSeen: _t,
-    );
+  key: fileKeyFor(root, name),
+  rootId: root,
+  path: name,
+  size: 1,
+  modified: _t,
+  firstSeen: _t,
+);
 
 FlutterWireIndexPage _page({
   List<LibraryRoot> roots = const [],
   List<IndexedFile> files = const [],
   List<MatchedMovie> movies = const [],
-}) =>
-    FlutterWireIndexPage(
-      roots: encodeJsonRecords(roots, (r) => r.toMap()),
-      files: encodeJsonRecords(files, (f) => f.toMap()),
-      groups: const [],
-      movies: encodeJsonRecords(movies, (m) => m.toMap()),
-      shows: const [],
-    );
+}) => FlutterWireIndexPage(
+  roots: encodeJsonRecords(roots, (r) => r.toMap()),
+  files: encodeJsonRecords(files, (f) => f.toMap()),
+  groups: const [],
+  movies: encodeJsonRecords(movies, (m) => m.toMap()),
+  shows: const [],
+);
 
 void main() {
   late Directory dir;
@@ -147,8 +147,9 @@ void main() {
     // The flip is on disk: a fresh store over the same box agrees.
     final reopened = PeerFilesStore(box);
     expect(reopened.revision(_id), 4);
-    expect(reopened.index(_id).files().values.map((f) => f.path),
-        ['New Kite.mkv']);
+    expect(reopened.index(_id).files().values.map((f) => f.path), [
+      'New Kite.mkv',
+    ]);
   });
 
   test('replace_is_atomic', () async {
@@ -167,10 +168,12 @@ void main() {
     );
 
     expect(store.revision(_id), 1);
-    expect(
-        store.index(_id).files().values.map((f) => f.path), ['Old Lamp.mkv']);
-    expect(PeerFilesStore(box).index(_id).files().values.map((f) => f.path),
-        ['Old Lamp.mkv']);
+    expect(store.index(_id).files().values.map((f) => f.path), [
+      'Old Lamp.mkv',
+    ]);
+    expect(PeerFilesStore(box).index(_id).files().values.map((f) => f.path), [
+      'Old Lamp.mkv',
+    ]);
 
     // The next fetch starts clean: nothing of the broken one survives.
     box.failPrefix = null;
@@ -181,9 +184,9 @@ void main() {
     expect(store.index(_id).files().values.map((f) => f.path), ['Whole.mkv']);
     final live = store.index(_id).accountId;
     expect(
-      raw.keys
-          .whereType<String>()
-          .where((k) => k.startsWith('$_id@') && !k.startsWith('$live/')),
+      raw.keys.whereType<String>().where(
+        (k) => k.startsWith('$_id@') && !k.startsWith('$live/'),
+      ),
       isEmpty,
     );
   });
@@ -213,11 +216,14 @@ void main() {
     expect(store.index(_id).files(), isEmpty);
     expect(store.storedAccounts(), isEmpty);
     expect(keysOf(_id).where((k) => !k.startsWith(other)), isEmpty);
-    expect(raw.keys.whereType<String>().where((k) => k.endsWith('/$_id')),
-        isEmpty);
+    expect(
+      raw.keys.whereType<String>().where((k) => k.endsWith('/$_id')),
+      isEmpty,
+    );
     // A neighbouring id sharing the prefix is untouched.
-    expect(store.index(other).files().values.map((f) => f.path),
-        ['Neighbour.mkv']);
+    expect(store.index(other).files().values.map((f) => f.path), [
+      'Neighbour.mkv',
+    ]);
   });
 
   test('saved accounts read back with their host and manifest entry', () async {
@@ -254,14 +260,16 @@ void main() {
     await store.saveAccount(_id, nodeId: 'node-tv', wire: wire);
     expect(box.putKeys, hasLength(1));
 
-    await store.saveAccount(_id,
-        nodeId: 'node-tv',
-        wire: FlutterWireSharedAccount(
-          accountId: 'flocal',
-          kind: 'local',
-          name: 'Films',
-          revision: BigInt.from(3),
-        ));
+    await store.saveAccount(
+      _id,
+      nodeId: 'node-tv',
+      wire: FlutterWireSharedAccount(
+        accountId: 'flocal',
+        kind: 'local',
+        name: 'Films',
+        revision: BigInt.from(3),
+      ),
+    );
     expect(box.putKeys, hasLength(2));
   });
 
@@ -284,10 +292,13 @@ void main() {
     final reopened = PeerFilesStore(box);
     await reopened.sweep();
 
-    expect(raw.keys.whereType<String>().where((k) => k.contains('@')),
-        everyElement(startsWith('$_id@2/')));
-    expect(reopened.index(_id).files().values.map((f) => f.path),
-        ['New Kite.mkv']);
+    expect(
+      raw.keys.whereType<String>().where((k) => k.contains('@')),
+      everyElement(startsWith('$_id@2/')),
+    );
+    expect(reopened.index(_id).files().values.map((f) => f.path), [
+      'New Kite.mkv',
+    ]);
     expect(reopened.revision(_id), 2);
   });
 }

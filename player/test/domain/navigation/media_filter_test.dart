@@ -42,14 +42,11 @@ void main() {
   test('categories are constrained to their kind', () {
     expect(MediaCategoryFilter.animeMovie.kind, MediaKind.movies);
     expect(MediaCategoryFilter.animeSeries.kind, MediaKind.shows);
-    expect(
-      MediaCategoryFilter.forKind(MediaKind.movies),
-      [
-        MediaCategoryFilter.movie,
-        MediaCategoryFilter.animeMovie,
-        MediaCategoryFilter.cartoonMovie,
-      ],
-    );
+    expect(MediaCategoryFilter.forKind(MediaKind.movies), [
+      MediaCategoryFilter.movie,
+      MediaCategoryFilter.animeMovie,
+      MediaCategoryFilter.cartoonMovie,
+    ]);
   });
 
   test('exposes GraphQL variables', () {

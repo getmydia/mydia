@@ -20,6 +20,10 @@ analyzer:
     - "**/*.freezed.dart"
     - "**/*.graphql.dart"
     - "lib/native/frb_generated*.dart"
+    # gen-l10n output. It still lists flutter_localizations' deprecated Material
+    # and Cupertino delegates, which the app does not use: appLocalizationsDelegates
+    # (lib/l10n/locale_aliases.dart) supplies material_ui's and cupertino_ui's.
+    - "lib/l10n/gen/**"
     - "rust_builder/cargokit/**"
     - build/**
     - android/**
@@ -30,10 +34,6 @@ analyzer:
     - linux/**
   errors:
     invalid_annotation_target: ignore
-    # Flutter 3.50 deprecates package:flutter/material.dart and cupertino.dart
-    # in favour of material_ui and cupertino_ui. The material_ui migration PR
-    # moves every import over and removes this line.
-    deprecated_member_use: ignore
   language:
     strict-casts: true
     strict-inference: true

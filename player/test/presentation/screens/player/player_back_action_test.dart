@@ -10,12 +10,11 @@ void main() {
     bool directionalPrimary = true,
     bool scrubActive = false,
     bool chromeBlocksBack = false,
-  }) =>
-      PlayerScreen.resolveBackAction(
-        directionalPrimary: directionalPrimary,
-        scrubActive: scrubActive,
-        chromeBlocksBack: chromeBlocksBack,
-      );
+  }) => PlayerScreen.resolveBackAction(
+    directionalPrimary: directionalPrimary,
+    scrubActive: scrubActive,
+    chromeBlocksBack: chromeBlocksBack,
+  );
 
   test('an active scrub is cancelled first', () {
     expect(

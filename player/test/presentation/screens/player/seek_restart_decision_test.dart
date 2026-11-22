@@ -37,25 +37,26 @@ void main() {
       );
     });
 
-    test('a seek past what has been transcoded so far restarts the session',
-        () {
-      // Same session as above, but the user scrubs to local 400s — beyond
-      // the 300s the playlist currently covers.
-      expect(
-        shouldRestartForSeek(
-          isDirectPlay: false,
-          fullPlaylist: false,
-          realTarget: const Duration(seconds: 1000),
-          localTarget: const Duration(seconds: 400),
-          seekableEnd: const Duration(seconds: 300),
-          startOffset: const Duration(seconds: 600),
-        ),
-        isTrue,
-      );
-    });
-
     test(
-        'a seek before the session start offset restarts the session even '
+      'a seek past what has been transcoded so far restarts the session',
+      () {
+        // Same session as above, but the user scrubs to local 400s — beyond
+        // the 300s the playlist currently covers.
+        expect(
+          shouldRestartForSeek(
+            isDirectPlay: false,
+            fullPlaylist: false,
+            realTarget: const Duration(seconds: 1000),
+            localTarget: const Duration(seconds: 400),
+            seekableEnd: const Duration(seconds: 300),
+            startOffset: const Duration(seconds: 600),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('a seek before the session start offset restarts the session even '
         'when the local target looks in range', () {
       // Scrubbing to real 500s when the session only covers from 600s
       // onward: not present in this stream at all, regardless of how
@@ -73,8 +74,7 @@ void main() {
       );
     });
 
-    test(
-        'direct play never restarts, even when the raw numbers would look '
+    test('direct play never restarts, even when the raw numbers would look '
         'out of range', () {
       // Direct play/offline hold the whole file locally; there is no HLS
       // session to restart, whatever `seekableEnd`/`startOffset` say.
@@ -119,8 +119,7 @@ void main() {
       );
     });
 
-    test(
-        'an out-of-range seek restarts even for a zero-offset session '
+    test('an out-of-range seek restarts even for a zero-offset session '
         '(no resume in play)', () {
       expect(
         shouldRestartForSeek(
@@ -195,7 +194,8 @@ void main() {
           startOffset: Duration.zero,
         ),
         isTrue,
-        reason: 'past the tolerance a restart is the only way to reach the '
+        reason:
+            'past the tolerance a restart is the only way to reach the '
             'target, and the user asked for a deliberate jump',
       );
     });
@@ -216,8 +216,7 @@ void main() {
       );
     });
 
-    test(
-        'a seek to the very start of the media restarts when the session '
+    test('a seek to the very start of the media restarts when the session '
         'does not cover real position 0', () {
       // The scenario Finding 1 was about: dragging the scrubber all the way
       // back to the start of a resumed session. The target itself (real 0)

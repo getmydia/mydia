@@ -4,7 +4,8 @@ import 'package:uuid/uuid.dart';
 import 'auth_storage.dart';
 import 'device_info_service_stub.dart'
     if (dart.library.io) 'device_info_service_native.dart'
-    if (dart.library.html) 'device_info_service_web.dart' as platform;
+    if (dart.library.html) 'device_info_service_web.dart'
+    as platform;
 
 /// Service for managing device information and persistent device ID.
 ///

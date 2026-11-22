@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
@@ -15,8 +15,11 @@ import 'package:player/presentation/widgets/primary_play_button.dart';
 import '../detail/detail_harness.dart';
 import '../sources/fake_media_source.dart';
 
-const _ref =
-    ItemRef(sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm-1');
+const _ref = ItemRef(
+  sourceId: fakeSourceId,
+  kind: ItemKind.movie,
+  externalId: 'm-1',
+);
 
 /// The fixture supplies no versions, so the hero's play control renders no
 /// resolution label and PrimaryPlayButton is its only child.
@@ -52,8 +55,9 @@ Future<void> _pumpScreen(
 void main() {
   menuButtonTests();
 
-  testWidgets('wide layout shows the action column beside the tag column',
-      (tester) async {
+  testWidgets('wide layout shows the action column beside the tag column', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const Size(1000, 900));
 
     expect(find.text('Play'), findsOneWidget);
@@ -61,32 +65,35 @@ void main() {
     expect(find.byType(CastRail), findsOneWidget);
   });
 
-  testWidgets('overview is its own section and not repeated in the tag column',
-      (tester) async {
-    await _pumpScreen(tester, const Size(1000, 1400));
+  testWidgets(
+    'overview is its own section and not repeated in the tag column',
+    (tester) async {
+      await _pumpScreen(tester, const Size(1000, 1400));
 
-    expect(find.byType(DetailOverview), findsOneWidget);
-    expect(find.text('Overview'), findsOneWidget);
-    expect(find.byType(CastRail), findsOneWidget);
-    expect(find.text('Ana Bergstrom'), findsOneWidget);
-    const overview = 'A drifting research platform runs out of air.';
-    expect(find.text(overview), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(DetailTagColumn),
-        matching: find.text(overview),
-      ),
-      findsNothing,
-    );
-    // Same order as the show page: cast first, overview below it.
-    expect(
-      tester.getTopLeft(find.byType(DetailOverview)).dy,
-      greaterThan(tester.getBottomLeft(find.byType(CastRail)).dy),
-    );
-  });
+      expect(find.byType(DetailOverview), findsOneWidget);
+      expect(find.text('Overview'), findsOneWidget);
+      expect(find.byType(CastRail), findsOneWidget);
+      expect(find.text('Ana Bergstrom'), findsOneWidget);
+      const overview = 'A drifting research platform runs out of air.';
+      expect(find.text(overview), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(DetailTagColumn),
+          matching: find.text(overview),
+        ),
+        findsNothing,
+      );
+      // Same order as the show page: cast first, overview below it.
+      expect(
+        tester.getTopLeft(find.byType(DetailOverview)).dy,
+        greaterThan(tester.getBottomLeft(find.byType(CastRail)).dy),
+      );
+    },
+  );
 
-  testWidgets('narrow layout still renders the action column and tags',
-      (tester) async {
+  testWidgets('narrow layout still renders the action column and tags', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const Size(400, 900));
 
     expect(find.text('Play'), findsOneWidget);
@@ -99,15 +106,17 @@ void main() {
     expect(find.text('2024'), findsOneWidget);
   });
 
-  testWidgets('rating renders under the overview, not in the tag row',
-      (tester) async {
+  testWidgets('rating renders under the overview, not in the tag row', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const Size(1000, 900));
 
     expect(find.text('8.1'), findsOneWidget);
   });
 
-  testWidgets('shows the watched line when the movie is marked watched',
-      (tester) async {
+  testWidgets('shows the watched line when the movie is marked watched', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       const Size(1000, 900),
@@ -117,8 +126,9 @@ void main() {
     expect(find.byType(MovieWatchedLine), findsOneWidget);
   });
 
-  testWidgets('shows a resume progress bar when there is resumable progress',
-      (tester) async {
+  testWidgets('shows a resume progress bar when there is resumable progress', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       const Size(1000, 900),
@@ -128,17 +138,21 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
   });
 
-  testWidgets('hero play control sits flush against the overlay right edge',
-      (tester) async {
+  testWidgets('hero play control sits flush against the overlay right edge', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const Size(1000, 900));
 
     // The content overlay is inset 20 from the right of the 1000px surface.
-    expect(tester.getRect(find.byType(PrimaryPlayButton)).right,
-        closeTo(980, 0.5));
+    expect(
+      tester.getRect(find.byType(PrimaryPlayButton)).right,
+      closeTo(980, 0.5),
+    );
   });
 
-  testWidgets('hero play control lives in the hero, not the body',
-      (tester) async {
+  testWidgets('hero play control lives in the hero, not the body', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const Size(1000, 900));
 
     // 380 is the hero SliverAppBar's expandedHeight, set in
@@ -185,8 +199,9 @@ Future<void> _pumpInShell(WidgetTester tester, Size size) {
 }
 
 void menuButtonTests() {
-  testWidgets('a phone gets a Menu button that opens the shell drawer',
-      (tester) async {
+  testWidgets('a phone gets a Menu button that opens the shell drawer', (
+    tester,
+  ) async {
     await _pumpInShell(tester, const Size(400, 900));
 
     final menu = find.byKey(const Key('source-open-drawer'));
@@ -200,8 +215,9 @@ void menuButtonTests() {
     expect(find.byType(MobileDrawer), findsOneWidget);
   });
 
-  testWidgets('the Menu button is left of the back button, both leading',
-      (tester) async {
+  testWidgets('the Menu button is left of the back button, both leading', (
+    tester,
+  ) async {
     await _pumpInShell(tester, const Size(400, 900));
 
     final menu = tester.getRect(find.byKey(const Key('source-open-drawer')));
@@ -220,8 +236,9 @@ void menuButtonTests() {
     expect(find.byKey(const Key('source-open-drawer')), findsNothing);
   });
 
-  testWidgets('outside the shell there is no drawer, so no Menu button',
-      (tester) async {
+  testWidgets('outside the shell there is no drawer, so no Menu button', (
+    tester,
+  ) async {
     await _pumpScreen(tester, const Size(400, 900));
 
     expect(find.byKey(const Key('source-open-drawer')), findsNothing);

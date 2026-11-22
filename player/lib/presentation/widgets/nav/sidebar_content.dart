@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -141,23 +141,25 @@ class SidebarContent extends ConsumerWidget {
     final destinations = switch (asyncDestinations) {
       AsyncData(:final value) => value,
       _ => SidebarLayout.defaults.reconcile(
-          downloadSupported: isDownloadSupported,
-        ),
+        downloadSupported: isDownloadSupported,
+      ),
     };
 
     final asyncEditRows = ref.watch(sidebarEditRowsProvider);
     final editRows = switch (asyncEditRows) {
       AsyncData(:final value) => value,
       _ => SidebarLayout.defaults.reconcileForEditing(
-          downloadSupported: isDownloadSupported,
-        ),
+        downloadSupported: isDownloadSupported,
+      ),
     };
 
     final selected = selectedFor(destinations, location);
-    final leading =
-        destinations.where((d) => d.isAnchored && d.id == 'search').toList();
-    final trailing =
-        destinations.where((d) => d.isAnchored && d.id != 'search').toList();
+    final leading = destinations
+        .where((d) => d.isAnchored && d.id == 'search')
+        .toList();
+    final trailing = destinations
+        .where((d) => d.isAnchored && d.id != 'search')
+        .toList();
     final focusRowId = _focusRowId(
       selected: selected,
       leading: leading,
@@ -193,9 +195,7 @@ class SidebarContent extends ConsumerWidget {
                           'Mydia Player', // l10n-ignore: product name
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
+                          style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: -0.5,
@@ -281,7 +281,7 @@ class SidebarContent extends ConsumerWidget {
                           ref.read(sidebarLayoutControllerProvider).unhide(id),
                     ),
                   ),
-                  if (railFooter case final footer?) footer,
+                  ?railFooter,
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Divider(
@@ -327,7 +327,8 @@ class SidebarContent extends ConsumerWidget {
     final entries = ref.watch(sourceNavEntriesProvider(location));
     final source = ref.watch(currentSourceIdProvider(location));
     final allServers = isAllServersLocation(location);
-    final canFilter = !allServers &&
+    final canFilter =
+        !allServers &&
         source != null &&
         (ref
                 .watch(mediaSourceProvider(source))
@@ -347,8 +348,9 @@ class SidebarContent extends ConsumerWidget {
     final focusId = selected?.id ?? entries.firstOrNull?.id;
 
     Widget buildEntry(SourceNavEntry entry) {
-      final destination =
-          destinations.where((d) => d.id == entry.id).firstOrNull;
+      final destination = destinations
+          .where((d) => d.id == entry.id)
+          .firstOrNull;
       final isSelected = selected?.id == entry.id;
       if (destination == null) {
         return KeyedSubtree(
@@ -424,7 +426,7 @@ class SidebarContent extends ConsumerWidget {
                 initialFilter: MediaFilter.allMovies,
               ),
             ),
-          if (railFooter case final footer?) footer,
+          ?railFooter,
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Divider(
@@ -554,7 +556,7 @@ class SidebarContent extends ConsumerWidget {
         canCustomise: canCustomise,
         onHide: canCustomise
             ? () =>
-                ref.read(sidebarLayoutControllerProvider).hide(destination.id)
+                  ref.read(sidebarLayoutControllerProvider).hide(destination.id)
             : null,
         onEdit: () => showFilterEditor(
           context: context,

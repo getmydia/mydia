@@ -29,8 +29,9 @@ class ThemePresetSetting extends _$ThemePresetSetting {
 
   Future<void> _load() async {
     try {
-      final stored =
-          await ref.read(coreSettingsServiceProvider).getThemePreset();
+      final stored = await ref
+          .read(coreSettingsServiceProvider)
+          .getThemePreset();
       if (!ref.mounted || _selected != null) return;
       state = ThemePreset.resolve(stored, defaultTargetPlatform);
     } catch (e) {
@@ -67,8 +68,9 @@ class GlassMaterialSetting extends _$GlassMaterialSetting {
 
   Future<void> _load() async {
     try {
-      final stored =
-          await ref.read(coreSettingsServiceProvider).getGlassMaterial();
+      final stored = await ref
+          .read(coreSettingsServiceProvider)
+          .getGlassMaterial();
       if (!ref.mounted || _selected != null) return;
       state = GlassMaterial.resolve(stored, defaultTargetPlatform);
     } catch (e) {
@@ -94,14 +96,15 @@ class GlassMaterialSetting extends _$GlassMaterialSetting {
 /// native channel. Shared by the app theme and the picker's swatches.
 @Riverpod(keepAlive: true)
 MydiaPalette presetPalette(Ref ref, ThemePreset preset) => switch (preset) {
-      ThemePreset.macos =>
-        preset.palette(systemAccent: ref.watch(systemAccentProvider)),
-      ThemePreset.linux => preset.palette(
-          linuxDesktop: ref.watch(linuxDesktopProvider),
-          linuxAccent: ref.watch(linuxAccentProvider),
-        ),
-      _ => preset.palette(),
-    };
+  ThemePreset.macos => preset.palette(
+    systemAccent: ref.watch(systemAccentProvider),
+  ),
+  ThemePreset.linux => preset.palette(
+    linuxDesktop: ref.watch(linuxDesktopProvider),
+    linuxAccent: ref.watch(linuxAccentProvider),
+  ),
+  _ => preset.palette(),
+};
 
 /// The colours the app is drawn with right now.
 @Riverpod(keepAlive: true)

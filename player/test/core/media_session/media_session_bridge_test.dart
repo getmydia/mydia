@@ -27,30 +27,31 @@ void main() {
   SourceId? playingSource = playing;
 
   NowPlayingMetadataResolver resolver({String? posterUrl}) =>
-      NowPlayingMetadataResolver((id, document, variables) async => {
-            'movie': {
-              'year': 2031,
-              'artwork': {'posterUrl': posterUrl},
-            },
-          });
+      NowPlayingMetadataResolver(
+        (id, document, variables) async => {
+          'movie': {
+            'year': 2031,
+            'artwork': {'posterUrl': posterUrl},
+          },
+        },
+      );
 
   MediaSessionBridge build({
     NowPlayingMetadataResolver? metadata,
     Future<SystemMediaSession> Function()? createSession,
     bool Function()? redact,
-  }) =>
-      MediaSessionBridge(
-        controller: controller,
-        createSession: createSession ?? () async => session,
-        resolver: metadata ?? resolver(),
-        loadArtwork: (url) async {
-          artworkRequests.add(url);
-          return artworkResult;
-        },
-        raiseWindow: () async => raises++,
-        playingSource: () => playingSource,
-        redact: redact ?? () => false,
-      );
+  }) => MediaSessionBridge(
+    controller: controller,
+    createSession: createSession ?? () async => session,
+    resolver: metadata ?? resolver(),
+    loadArtwork: (url) async {
+      artworkRequests.add(url);
+      return artworkResult;
+    },
+    raiseWindow: () async => raises++,
+    playingSource: () => playingSource,
+    redact: redact ?? () => false,
+  );
 
   setUp(() {
     playingSource = playing;
@@ -72,8 +73,9 @@ void main() {
   });
 
   test('pushes the attached player with metadata and artwork', () async {
-    final bridge =
-        build(metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'));
+    final bridge = build(
+      metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'),
+    );
     await bridge.start();
     controller.attachPlayer(FakeBinding(buildSnapshot()));
     await settle();
@@ -86,55 +88,61 @@ void main() {
     await bridge.dispose();
   });
 
-  test('with no playing source nothing is looked up and the snapshot stays',
-      () async {
-    playingSource = null;
-    final bridge =
-        build(metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'));
-    await bridge.start();
-    controller.attachPlayer(FakeBinding(buildSnapshot()));
-    await settle();
+  test(
+    'with no playing source nothing is looked up and the snapshot stays',
+    () async {
+      playingSource = null;
+      final bridge = build(
+        metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'),
+      );
+      await bridge.start();
+      controller.attachPlayer(FakeBinding(buildSnapshot()));
+      await settle();
 
-    final state = session.updates.last;
-    expect(state.title, 'The Glass Orchard');
-    expect(state.subtitle, isNull);
-    expect(state.artworkPath, isNull);
-    expect(artworkRequests, isEmpty);
-    await bridge.dispose();
-  });
+      final state = session.updates.last;
+      expect(state.title, 'The Glass Orchard');
+      expect(state.subtitle, isNull);
+      expect(state.artworkPath, isNull);
+      expect(artworkRequests, isEmpty);
+      await bridge.dispose();
+    },
+  );
 
-  test('redacts title, subtitle and artwork while a locked source plays',
-      () async {
-    var resolved = 0;
-    final bridge = build(
-      metadata: NowPlayingMetadataResolver((id, document, variables) async {
-        resolved++;
-        return {
-          'movie': {
-            'year': 2031,
-            'artwork': {'posterUrl': 'https://img.example/ferry.jpg'},
-          },
-        };
-      }),
-      redact: () => true,
-    );
-    await bridge.start();
-    controller.attachPlayer(FakeBinding(buildSnapshot()));
-    await settle();
+  test(
+    'redacts title, subtitle and artwork while a locked source plays',
+    () async {
+      var resolved = 0;
+      final bridge = build(
+        metadata: NowPlayingMetadataResolver((id, document, variables) async {
+          resolved++;
+          return {
+            'movie': {
+              'year': 2031,
+              'artwork': {'posterUrl': 'https://img.example/ferry.jpg'},
+            },
+          };
+        }),
+        redact: () => true,
+      );
+      await bridge.start();
+      controller.attachPlayer(FakeBinding(buildSnapshot()));
+      await settle();
 
-    final state = session.updates.last;
-    expect(state.status, MediaSessionStatus.playing);
-    expect(state.title, 'Mydia');
-    expect(state.subtitle, isNull);
-    expect(state.artworkPath, isNull);
-    expect(resolved, 0);
-    expect(artworkRequests, isEmpty);
-    await bridge.dispose();
-  });
+      final state = session.updates.last;
+      expect(state.status, MediaSessionStatus.playing);
+      expect(state.title, 'Mydia');
+      expect(state.subtitle, isNull);
+      expect(state.artworkPath, isNull);
+      expect(resolved, 0);
+      expect(artworkRequests, isEmpty);
+      await bridge.dispose();
+    },
+  );
 
   test('loads each poster once', () async {
-    final bridge =
-        build(metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'));
+    final bridge = build(
+      metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'),
+    );
     await bridge.start();
     final binding = FakeBinding(buildSnapshot());
     controller.attachPlayer(binding);
@@ -150,8 +158,9 @@ void main() {
 
   test('an artwork failure still pushes metadata', () async {
     artworkResult = null;
-    final bridge =
-        build(metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'));
+    final bridge = build(
+      metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'),
+    );
     await bridge.start();
     controller.attachPlayer(FakeBinding(buildSnapshot()));
     await settle();
@@ -162,8 +171,9 @@ void main() {
 
   test('retries artwork after a failed load', () async {
     artworkResult = null;
-    final bridge =
-        build(metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'));
+    final bridge = build(
+      metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'),
+    );
     await bridge.start();
     controller.attachPlayer(FakeBinding(buildSnapshot()));
     await settle();
@@ -235,8 +245,11 @@ void main() {
 
   test('a no-op session skips metadata and artwork lookups entirely', () async {
     final fetchCalls = <Object>[];
-    final noopResolver =
-        NowPlayingMetadataResolver((id, document, variables) async {
+    final noopResolver = NowPlayingMetadataResolver((
+      id,
+      document,
+      variables,
+    ) async {
       fetchCalls.add(document);
       return null;
     });

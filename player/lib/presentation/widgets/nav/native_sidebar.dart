@@ -52,14 +52,14 @@ class NativeSidebarItem {
   final bool inTabBar;
 
   Map<String, Object?> toMap() => {
-        'id': id,
-        'title': title,
-        'symbol': symbol,
-        'badge': badge,
-        'enabled': enabled,
-        'kind': kind.name,
-        'inTabBar': inTabBar,
-      };
+    'id': id,
+    'title': title,
+    'symbol': symbol,
+    'badge': badge,
+    'enabled': enabled,
+    'kind': kind.name,
+    'inTabBar': inTabBar,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -93,10 +93,10 @@ class NativeSidebarSection {
   final List<NativeSidebarItem> items;
 
   Map<String, Object?> toMap() => {
-        'id': id,
-        'title': title,
-        'items': [for (final item in items) item.toMap()],
-      };
+    'id': id,
+    'title': title,
+    'items': [for (final item in items) item.toMap()],
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -119,8 +119,8 @@ class NativeSidebar {
       sections.expand((section) => section.items);
 
   Map<String, Object?> toMap() => {
-        'sections': [for (final section in sections) section.toMap()],
-      };
+    'sections': [for (final section in sections) section.toMap()],
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -182,14 +182,14 @@ NativeSidebar nativeSidebarFor({
   };
 
   NativeSidebarItem destination(SourceNavEntry entry) => NativeSidebarItem(
-        id: entry.id,
-        title: l10n.navEntryLabel(entry),
-        symbol: nativeSidebarSymbol(entry.id),
-        badge: entry.id == 'settings' ? settingsBadge : null,
-        // The Flutter rows' offline rule (`SidebarContent._buildRow`).
-        enabled: !isOffline || entry.id == 'downloads',
-        inTabBar: entry.id == 'search' || barIds.contains(entry.id),
-      );
+    id: entry.id,
+    title: l10n.navEntryLabel(entry),
+    symbol: nativeSidebarSymbol(entry.id),
+    badge: entry.id == 'settings' ? settingsBadge : null,
+    // The Flutter rows' offline rule (`SidebarContent._buildRow`).
+    enabled: !isOffline || entry.id == 'downloads',
+    inTabBar: entry.id == 'search' || barIds.contains(entry.id),
+  );
 
   final middle = [
     for (final entry in entries)
@@ -208,58 +208,76 @@ NativeSidebar nativeSidebarFor({
       : null;
 
   final sections = [
-    NativeSidebarSection(id: 'leading', items: [
-      if (showBackToMydia)
-        NativeSidebarItem(
-          id: kMydiaBackTabId,
-          title: 'Mydia', // l10n-ignore: product name
-          symbol: nativeSidebarSymbol(kMydiaBackTabId),
-          kind: NativeSidebarItemKind.action,
-        ),
-      if (sourceHeader != null)
-        NativeSidebarItem(
-          id: kSourceHeaderId,
-          title: sourceHeader,
-          symbol: 'server.rack',
-          kind: NativeSidebarItemKind.action,
-        ),
-      for (final entry in entries)
-        if (entry.anchored && entry.id == 'search') destination(entry),
-    ]),
+    NativeSidebarSection(
+      id: 'leading',
+      items: [
+        if (showBackToMydia)
+          NativeSidebarItem(
+            id: kMydiaBackTabId,
+            title: 'Mydia', // l10n-ignore: product name
+            symbol: nativeSidebarSymbol(kMydiaBackTabId),
+            kind: NativeSidebarItemKind.action,
+          ),
+        if (sourceHeader != null)
+          NativeSidebarItem(
+            id: kSourceHeaderId,
+            title: sourceHeader,
+            symbol: 'server.rack',
+            kind: NativeSidebarItemKind.action,
+          ),
+        for (final entry in entries)
+          if (entry.anchored && entry.id == 'search') destination(entry),
+      ],
+    ),
     if (grouped) ...[
-      NativeSidebarSection(id: 'library', title: l10n.navLibrary, items: [
-        for (final entry in middle)
-          if (isLibrary(entry)) destination(entry),
-      ]),
-      NativeSidebarSection(id: 'filters', title: l10n.navFilters, items: [
-        for (final entry in middle)
-          if (!isLibrary(entry)) destination(entry),
-        if (newFilter != null) newFilter,
-      ]),
-    ] else
-      NativeSidebarSection(id: 'main', items: [
-        for (final entry in middle) destination(entry),
-        if (newFilter != null) newFilter,
-      ]),
-    NativeSidebarSection(id: 'servers', title: l10n.settingsServers, items: [
-      for (final server in servers)
-        NativeSidebarItem(
-          id: serverItemId(server.id),
-          title: server.name,
-          symbol: 'server.rack',
-          enabled: !isOffline,
-        ),
-    ]),
-    NativeSidebarSection(id: 'trailing', items: [
-      NativeSidebarItem(
-        id: kEditSidebarId,
-        title: l10n.navEditSidebar,
-        symbol: 'slider.horizontal.3',
-        kind: NativeSidebarItemKind.action,
+      NativeSidebarSection(
+        id: 'library',
+        title: l10n.navLibrary,
+        items: [
+          for (final entry in middle)
+            if (isLibrary(entry)) destination(entry),
+        ],
       ),
-      for (final entry in entries)
-        if (entry.anchored && entry.id != 'search') destination(entry),
-    ]),
+      NativeSidebarSection(
+        id: 'filters',
+        title: l10n.navFilters,
+        items: [
+          for (final entry in middle)
+            if (!isLibrary(entry)) destination(entry),
+          ?newFilter,
+        ],
+      ),
+    ] else
+      NativeSidebarSection(
+        id: 'main',
+        items: [for (final entry in middle) destination(entry), ?newFilter],
+      ),
+    NativeSidebarSection(
+      id: 'servers',
+      title: l10n.settingsServers,
+      items: [
+        for (final server in servers)
+          NativeSidebarItem(
+            id: serverItemId(server.id),
+            title: server.name,
+            symbol: 'server.rack',
+            enabled: !isOffline,
+          ),
+      ],
+    ),
+    NativeSidebarSection(
+      id: 'trailing',
+      items: [
+        NativeSidebarItem(
+          id: kEditSidebarId,
+          title: l10n.navEditSidebar,
+          symbol: 'slider.horizontal.3',
+          kind: NativeSidebarItemKind.action,
+        ),
+        for (final entry in entries)
+          if (entry.anchored && entry.id != 'search') destination(entry),
+      ],
+    ),
   ];
   return NativeSidebar([
     for (final section in sections)

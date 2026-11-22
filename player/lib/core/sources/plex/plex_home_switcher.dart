@@ -16,12 +16,10 @@ import 'plex_tv_client.dart';
 
 class PlexHomeSwitcher {
   PlexHomeSwitcher({
-    required PlexTvClient tv,
-    required SourceSecrets secrets,
-    required SourceRecordsNotifier records,
-  })  : _tv = tv,
-        _secrets = secrets,
-        _records = records;
+    required this._tv,
+    required this._secrets,
+    required this._records,
+  });
 
   final PlexTvClient _tv;
   final SourceSecrets _secrets;
@@ -60,8 +58,11 @@ class PlexHomeSwitcher {
     String? pin,
     String? serverId,
   }) async {
-    final userToken =
-        await _tv.switchUser(await _adminToken(account), user.uuid, pin: pin);
+    final userToken = await _tv.switchUser(
+      await _adminToken(account),
+      user.uuid,
+      pin: pin,
+    );
     final resources = await _tv.servers(userToken);
     final profileId = user.profileId;
 
@@ -79,7 +80,8 @@ class PlexHomeSwitcher {
         ];
         if (visible.isEmpty) {
           throw const SourceException.unsupportedFault(
-              SourceFault.plexNoServersForUser);
+            SourceFault.plexNoServersForUser,
+          );
         }
         previousProfile = current.account.activeProfileId;
         previousServers = current.servers;
@@ -98,8 +100,10 @@ class PlexHomeSwitcher {
           written.add(r.clientIdentifier);
         }
         return current.copyWith(
-          account: current.account
-              .copyWith(activeProfileId: profileId, needsReauth: false),
+          account: current.account.copyWith(
+            activeProfileId: profileId,
+            needsReauth: false,
+          ),
           profiles: current.profiles.any((p) => p.id == profileId)
               ? current.profiles
               : [...current.profiles, user.toProfile(account.id)],
@@ -122,15 +126,10 @@ class PlexHomeSwitcher {
     if (previous != null) {
       final stillVisible = {for (final s in next.servers) s.id};
       final sameUser = previous == profileId;
-      await _forget(
-        account,
-        previous,
-        [
-          for (final s in previousServers)
-            if (!sameUser || !stillVisible.contains(s.id)) s.id,
-        ],
-        !sameUser,
-      );
+      await _forget(account, previous, [
+        for (final s in previousServers)
+          if (!sameUser || !stillVisible.contains(s.id)) s.id,
+      ], !sameUser);
     }
 
     final sources = next.sources;
@@ -142,12 +141,19 @@ class PlexHomeSwitcher {
   /// Best effort, each delete on its own: a token left behind under an
   /// inactive profile is never read, and removing the account deletes every
   /// profile's tokens.
-  Future<void> _forget(ProviderAccount account, String profileId,
-      List<String> serverIds, bool userToken) async {
+  Future<void> _forget(
+    ProviderAccount account,
+    String profileId,
+    List<String> serverIds,
+    bool userToken,
+  ) async {
     for (final id in serverIds) {
       try {
         await _secrets.deleteServerToken(
-            account: account, profileId: profileId, serverId: id);
+          account: account,
+          profileId: profileId,
+          serverId: id,
+        );
       } catch (e) {
         debugPrint('[Sources] Could not delete a Plex Home server token: $e');
       }

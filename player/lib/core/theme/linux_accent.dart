@@ -14,11 +14,7 @@ const _appearance = 'org.freedesktop.appearance';
 const _accentKey = 'accent-color';
 
 /// One `SettingChanged` signal from the Settings portal.
-typedef PortalSettingChange = ({
-  String namespace,
-  String key,
-  DBusValue value,
-});
+typedef PortalSettingChange = ({String namespace, String key, DBusValue value});
 
 /// The slice of `org.freedesktop.portal.Settings` the theme needs. A seam so
 /// tests can script the portal without a session bus.
@@ -41,7 +37,7 @@ abstract interface class PortalSettingsClient {
 
 class DBusPortalSettingsClient implements PortalSettingsClient {
   DBusPortalSettingsClient({DBusClient? client})
-      : _client = client ?? DBusClient.session() {
+    : _client = client ?? DBusClient.session() {
     _portal = DBusRemoteObject(
       _client,
       name: _portalName,
@@ -53,12 +49,10 @@ class DBusPortalSettingsClient implements PortalSettingsClient {
   late final DBusRemoteObject _portal;
 
   Future<DBusValue> _call(String method, String namespace, String key) async {
-    final reply = await _portal.callMethod(
-      _settingsInterface,
-      method,
-      [DBusString(namespace), DBusString(key)],
-      replySignature: DBusSignature('v'),
-    );
+    final reply = await _portal.callMethod(_settingsInterface, method, [
+      DBusString(namespace),
+      DBusString(key),
+    ], replySignature: DBusSignature('v'));
     return reply.returnValues[0];
   }
 
@@ -74,16 +68,19 @@ class DBusPortalSettingsClient implements PortalSettingsClient {
       _call('Read', namespace, key);
 
   @override
-  Stream<PortalSettingChange> get changes => DBusRemoteObjectSignalStream(
+  Stream<PortalSettingChange> get changes =>
+      DBusRemoteObjectSignalStream(
         object: _portal,
         interface: _settingsInterface,
         name: 'SettingChanged',
         signature: DBusSignature('ssv'),
-      ).map((s) => (
-            namespace: s.values[0].asString(),
-            key: s.values[1].asString(),
-            value: s.values[2],
-          ));
+      ).map(
+        (s) => (
+          namespace: s.values[0].asString(),
+          key: s.values[1].asString(),
+          value: s.values[2],
+        ),
+      );
 
   @override
   Future<void> close() => _client.close();
@@ -181,12 +178,12 @@ class LinuxAccent extends Notifier<Color?> {
     _sub = client.changes
         .where((c) => c.namespace == _appearance && c.key == _accentKey)
         .listen(
-      (c) {
-        _signalled = true;
-        state = decodePortalAccent(c.value);
-      },
-      onError: (Object e) => debugPrint('[LinuxAccent] Signal failed: $e'),
-    );
+          (c) {
+            _signalled = true;
+            state = decodePortalAccent(c.value);
+          },
+          onError: (Object e) => debugPrint('[LinuxAccent] Signal failed: $e'),
+        );
     try {
       DBusValue value;
       try {

@@ -30,7 +30,7 @@ Map<String, dynamic> _episodeDetail({required int season, int number = 1}) {
     'monitored': true,
     'progress': {
       ...(base['progress'] as Map<String, dynamic>),
-      '__typename': 'Progress'
+      '__typename': 'Progress',
     },
     'files': [
       for (final f in base['files'] as List<dynamic>)
@@ -39,9 +39,9 @@ Map<String, dynamic> _episodeDetail({required int season, int number = 1}) {
           '__typename': 'MediaFile',
           'subtitles': [
             for (final t in f['subtitles'] as List<dynamic>)
-              {...(t as Map<String, dynamic>), '__typename': 'SubtitleTrack'}
+              {...(t as Map<String, dynamic>), '__typename': 'SubtitleTrack'},
           ],
-        }
+        },
     ],
     'show': {
       ...(base['show'] as Map<String, dynamic>),
@@ -56,9 +56,15 @@ Map<String, dynamic> _episodeDetail({required int season, int number = 1}) {
 }
 
 const _movie = ItemRef(
-    sourceId: testMydiaSourceId, kind: ItemKind.movie, externalId: 'movie-1');
+  sourceId: testMydiaSourceId,
+  kind: ItemKind.movie,
+  externalId: 'movie-1',
+);
 const _episode = ItemRef(
-    sourceId: testMydiaSourceId, kind: ItemKind.episode, externalId: 'ep-1');
+  sourceId: testMydiaSourceId,
+  kind: ItemKind.episode,
+  externalId: 'ep-1',
+);
 
 const _hls = HlsPlan(
   strategy: HlsStrategy.transcode,
@@ -69,10 +75,16 @@ const _hls = HlsPlan(
 const _direct = DirectPlayPlan(reason: PlanReason.directPlayAccepted);
 
 const _httpCreds = MydiaCredentials(
-    instanceId: 'inst-a', accessToken: 'access', serverUrl: 'http://a.test');
+  instanceId: 'inst-a',
+  accessToken: 'access',
+  serverUrl: 'http://a.test',
+);
 
 MydiaCredentials _p2pCreds(String node) => MydiaCredentials(
-    instanceId: 'inst-$node', accessToken: 'access', nodeAddr: node);
+  instanceId: 'inst-$node',
+  accessToken: 'access',
+  nodeAddr: node,
+);
 
 MydiaPlaybackSession _session(
   ScriptedMydiaTransport server, {
@@ -84,8 +96,11 @@ MydiaPlaybackSession _session(
   LocalProxyService? proxy,
   String accountId = 'macct',
 }) {
-  final source =
-      testMydiaSourceOver(server, creds: creds, accountId: accountId);
+  final source = testMydiaSourceOver(
+    server,
+    creds: creds,
+    accountId: accountId,
+  );
   return MydiaPlaybackSession(
     source: source,
     item: item,
@@ -97,15 +112,16 @@ MydiaPlaybackSession _session(
 }
 
 ScriptedMydiaTransport _answering(Object answer) =>
-    ScriptedMydiaTransport((_, __) => answer);
+    ScriptedMydiaTransport((_, _) => answer);
 
-Future<StreamingSetup> _setupOf(MydiaPlaybackSession s,
-        {Object? owner}) async =>
-    ((await s.prepareStreaming(
-            owner: owner ?? Object(),
-            onProgress: (_) {},
-            isCurrent: () => true)) as StreamingReady)
-        .setup;
+Future<StreamingSetup> _setupOf(
+  MydiaPlaybackSession s, {
+  Object? owner,
+}) async => ((await s.prepareStreaming(
+  owner: owner ?? Object(),
+  onProgress: (_) {},
+  isCurrent: () => true,
+)) as StreamingReady).setup;
 
 Future<String> _directPlayUrl(MydiaPlaybackSession s, Object owner) async {
   final setup = await _setupOf(s, owner: owner);
@@ -121,19 +137,23 @@ void main() {
 
   group('candidates', () {
     test('asks about the file and maps the offer', () async {
-      final server = _answering(streamingCandidatesResponse(
-        duration: 5400.5,
-        height: 1080,
-        bitrate: 8000000,
-        fileId: 'file-1',
-        preferredAudioLanguages: ['jpn'],
-        directPlay: true,
-      ));
+      final server = _answering(
+        streamingCandidatesResponse(
+          duration: 5400.5,
+          height: 1080,
+          bitrate: 8000000,
+          fileId: 'file-1',
+          preferredAudioLanguages: ['jpn'],
+          directPlay: true,
+        ),
+      );
 
       final fetch = await _session(server).candidates(CandidateScope.file);
 
-      expect(server.requests.single.variables,
-          {'contentType': 'file', 'id': 'file-1'});
+      expect(server.requests.single.variables, {
+        'contentType': 'file',
+        'id': 'file-1',
+      });
       expect(fetch.serverRejected, isFalse);
       final offer = fetch.offer!;
       expect(offer.fileId, 'file-1');
@@ -147,17 +167,23 @@ void main() {
     test('asks about the item by media type for the item scope', () async {
       final server = _answering(streamingCandidatesResponse());
       await _session(server).candidates(CandidateScope.item);
-      expect(server.requests.single.variables,
-          {'contentType': 'movie', 'id': 'movie-1'});
+      expect(server.requests.single.variables, {
+        'contentType': 'movie',
+        'id': 'movie-1',
+      });
     });
 
-    test('maps any non-movie media type to episode for the item scope',
-        () async {
-      final server = _answering(streamingCandidatesResponse());
-      await _session(server, item: _episode).candidates(CandidateScope.item);
-      expect(server.requests.single.variables,
-          {'contentType': 'episode', 'id': 'ep-1'});
-    });
+    test(
+      'maps any non-movie media type to episode for the item scope',
+      () async {
+        final server = _answering(streamingCandidatesResponse());
+        await _session(server, item: _episode).candidates(CandidateScope.item);
+        expect(server.requests.single.variables, {
+          'contentType': 'episode',
+          'id': 'ep-1',
+        });
+      },
+    );
 
     test('never answers from the cache', () async {
       final server = _answering(streamingCandidatesResponse());
@@ -183,7 +209,8 @@ void main() {
 
     test('an HTTP 5xx is not a server rejection', () async {
       final server = _answering(
-          const SourceException.server('The server answered HTTP 500.'));
+        const SourceException.server('The server answered HTTP 500.'),
+      );
       final fetch = await _session(server).candidates(CandidateScope.file);
       expect(fetch.serverRejected, isFalse);
     });
@@ -204,11 +231,13 @@ void main() {
 
   group('detail', () {
     test('maps progress, runtime and the picked file subtitles', () async {
-      final server = _answering(movieDetailResponse(
-        positionSeconds: 120,
-        durationSeconds: 5400,
-        files: [mediaFileWithSubtitle(fileId: 'file-1', trackId: '3')],
-      ));
+      final server = _answering(
+        movieDetailResponse(
+          positionSeconds: 120,
+          durationSeconds: 5400,
+          files: [mediaFileWithSubtitle(fileId: 'file-1', trackId: '3')],
+        ),
+      );
 
       final detail = (await _session(server).detail())!;
 
@@ -218,9 +247,11 @@ void main() {
     });
 
     test('leaves subtitles null when no file matches', () async {
-      final server = _answering(movieDetailResponse(
-        files: [mediaFileWithSubtitle(fileId: 'other-file')],
-      ));
+      final server = _answering(
+        movieDetailResponse(
+          files: [mediaFileWithSubtitle(fileId: 'other-file')],
+        ),
+      );
       final detail = (await _session(server).detail())!;
       expect(detail.serverSubtitleTracks, isNull);
     });
@@ -230,16 +261,23 @@ void main() {
       expect(await _session(server).detail(), isNull);
     });
 
-    test('a partial answer with an error still yields the saved position',
-        () async {
-      final server = _answering(graphqlError(
-        'A field failed',
-        data: movieDetailResponse(positionSeconds: 120, durationSeconds: 5400),
-      ));
-      final detail = (await _session(server).detail())!;
-      expect(detail.savedPositionSeconds, 120);
-      expect(detail.savedDurationSeconds, 5400);
-    });
+    test(
+      'a partial answer with an error still yields the saved position',
+      () async {
+        final server = _answering(
+          graphqlError(
+            'A field failed',
+            data: movieDetailResponse(
+              positionSeconds: 120,
+              durationSeconds: 5400,
+            ),
+          ),
+        );
+        final detail = (await _session(server).detail())!;
+        expect(detail.savedPositionSeconds, 120);
+        expect(detail.savedDurationSeconds, 5400);
+      },
+    );
 
     test('an error with no data at all is null', () async {
       final server = _answering(graphqlError('boom'));
@@ -247,8 +285,9 @@ void main() {
     });
 
     test('an episode reports its show and season', () async {
-      final server =
-          _answering({'episode': _episodeDetail(season: 4, number: 2)});
+      final server = _answering({
+        'episode': _episodeDetail(season: 4, number: 2),
+      });
       final detail = (await _session(server, item: _episode).detail())!;
       expect(detail.showId, 's-1');
       expect(detail.seasonNumber, 4);
@@ -284,11 +323,11 @@ void main() {
     });
 
     test('maps a stored preference', () async {
-      final server = _answering(subtitlePreferenceResponse(
-        preferences: {
-          'file-1': preferredSubtitleObject(mode: 'OFF'),
-        },
-      ));
+      final server = _answering(
+        subtitlePreferenceResponse(
+          preferences: {'file-1': preferredSubtitleObject(mode: 'OFF')},
+        ),
+      );
       final fetched = await _session(server).subtitlePreference();
       expect(fetched!.value, isNotNull);
     });
@@ -309,15 +348,17 @@ void main() {
 
   group('subtitleOffsets', () {
     test('maps track refs to offsets', () async {
-      final server = _answering(subtitleTrackSettingsResponse(
-        settings: [
-          {
-            '__typename': 'SubtitleTrackSetting',
-            'trackRef': '3',
-            'offsetMs': 250,
-          },
-        ],
-      ));
+      final server = _answering(
+        subtitleTrackSettingsResponse(
+          settings: [
+            {
+              '__typename': 'SubtitleTrackSetting',
+              'trackRef': '3',
+              'offsetMs': 250,
+            },
+          ],
+        ),
+      );
       expect(await _session(server).subtitleOffsets(), {'3': 250});
       expect(server.requests.single.variables, {'mediaFileId': 'file-1'});
     });
@@ -338,43 +379,55 @@ void main() {
 
   group('seasonEpisodes', () {
     Map<String, dynamic> episode(int n, {List<Object?>? files}) => {
-          '__typename': 'Episode',
-          'id': 'ep-$n',
-          'seasonNumber': 2,
-          'episodeNumber': n,
-          'title': n == 2 ? null : 'The Lantern Keeper $n',
-          'overview': null,
-          'airDate': null,
-          'runtime': null,
-          'monitored': true,
-          'thumbnailUrl': null,
-          'hasFile': true,
-          'progress': null,
-          'files': files,
-        };
+      '__typename': 'Episode',
+      'id': 'ep-$n',
+      'seasonNumber': 2,
+      'episodeNumber': n,
+      'title': n == 2 ? null : 'The Lantern Keeper $n',
+      'overview': null,
+      'airDate': null,
+      'runtime': null,
+      'monitored': true,
+      'thumbnailUrl': null,
+      'hasFile': true,
+      'progress': null,
+      'files': files,
+    };
 
     test('asks for the given season of the target show', () async {
       final server = _answering({
         'seasonEpisodes': [episode(1, files: const [])],
       });
-      await _session(server, item: _episode, showId: 'show-1', seasonNumber: 2)
-          .seasonEpisodes(3);
-      expect(server.requests.single.variables,
-          {'showId': 'show-1', 'seasonNumber': 3});
+      await _session(
+        server,
+        item: _episode,
+        showId: 'show-1',
+        seasonNumber: 2,
+      ).seasonEpisodes(3);
+      expect(server.requests.single.variables, {
+        'showId': 'show-1',
+        'seasonNumber': 3,
+      });
     });
 
     test('keeps null titles and the server file list shape', () async {
       final server = _answering({
         'seasonEpisodes': [
-          episode(1, files: [
-            {'__typename': 'MediaFile', 'id': 'f-1'},
-          ]),
+          episode(
+            1,
+            files: [
+              {'__typename': 'MediaFile', 'id': 'f-1'},
+            ],
+          ),
           episode(2),
         ],
       });
-      final episodes = (await _session(server,
-              item: _episode, showId: 'show-1', seasonNumber: 2)
-          .seasonEpisodes(2))!;
+      final episodes = (await _session(
+        server,
+        item: _episode,
+        showId: 'show-1',
+        seasonNumber: 2,
+      ).seasonEpisodes(2))!;
       expect(episodes[0].title, 'The Lantern Keeper 1');
       expect(episodes[0].fileIds, ['f-1']);
       expect(episodes[1].title, isNull);
@@ -382,16 +435,27 @@ void main() {
     });
 
     test('a partial answer with an error still yields the episodes', () async {
-      final server = _answering(graphqlError('A field failed', data: {
-        'seasonEpisodes': [
-          episode(1, files: [
-            {'__typename': 'MediaFile', 'id': 'f-1'},
-          ]),
-        ],
-      }));
-      final episodes = (await _session(server,
-              item: _episode, showId: 'show-1', seasonNumber: 2)
-          .seasonEpisodes(2))!;
+      final server = _answering(
+        graphqlError(
+          'A field failed',
+          data: {
+            'seasonEpisodes': [
+              episode(
+                1,
+                files: [
+                  {'__typename': 'MediaFile', 'id': 'f-1'},
+                ],
+              ),
+            ],
+          },
+        ),
+      );
+      final episodes = (await _session(
+        server,
+        item: _episode,
+        showId: 'show-1',
+        seasonNumber: 2,
+      ).seasonEpisodes(2))!;
       expect(episodes.single.id, 'ep-1');
     });
 
@@ -403,16 +467,19 @@ void main() {
 
     test('without a route show id, uses the show its detail named', () async {
       final server = ScriptedMydiaTransport(
-          (request, _) => request.operation == 'EpisodeDetail'
-              ? {'episode': _episodeDetail(season: 2)}
-              : {
-                  'seasonEpisodes': [episode(1, files: const [])]
-                });
+        (request, _) => request.operation == 'EpisodeDetail'
+            ? {'episode': _episodeDetail(season: 2)}
+            : {
+                'seasonEpisodes': [episode(1, files: const [])],
+              },
+      );
       final session = _session(server, item: _episode);
       await session.detail();
       await session.seasonEpisodes(2);
-      expect(
-          server.requests.last.variables, {'showId': 's-1', 'seasonNumber': 2});
+      expect(server.requests.last.variables, {
+        'showId': 's-1',
+        'seasonNumber': 2,
+      });
     });
 
     test('without any show id, asks nothing and answers null', () async {
@@ -423,11 +490,12 @@ void main() {
 
     test('the route show id wins over the detail one', () async {
       final server = ScriptedMydiaTransport(
-          (request, _) => request.operation == 'EpisodeDetail'
-              ? {'episode': _episodeDetail(season: 2)}
-              : {
-                  'seasonEpisodes': [episode(1, files: const [])]
-                });
+        (request, _) => request.operation == 'EpisodeDetail'
+            ? {'episode': _episodeDetail(season: 2)}
+            : {
+                'seasonEpisodes': [episode(1, files: const [])],
+              },
+      );
       final session = _session(server, item: _episode, showId: 'route-show');
       await session.detail();
       await session.seasonEpisodes(2);
@@ -438,8 +506,10 @@ void main() {
   group('searchSubtitles', () {
     test('refuses the offline sentinel without a request', () async {
       final server = _answering(<String, dynamic>{});
-      final outcome =
-          await _session(server, fileId: 'offline').searchSubtitles(['eng']);
+      final outcome = await _session(
+        server,
+        fileId: 'offline',
+      ).searchSubtitles(['eng']);
       expect(outcome.issue, SubtitleIssue.searchOffline);
       expect(server.requests, isEmpty);
     });
@@ -461,7 +531,7 @@ void main() {
       await _session(server).searchSubtitles(['eng', 'por']);
       expect(server.requests.single.variables, {
         'mediaFileId': 'file-1',
-        'languages': ['eng', 'por']
+        'languages': ['eng', 'por'],
       });
     });
   });
@@ -472,8 +542,10 @@ void main() {
         'subtitleContent': 'WEBVTT\n\n00:00.000 --> 00:01.000\nHi',
       });
       expect(await _session(server).subtitleContent('3'), startsWith('WEBVTT'));
-      expect(server.requests.single.variables,
-          {'mediaFileId': 'file-1', 'trackId': '3'});
+      expect(server.requests.single.variables, {
+        'mediaFileId': 'file-1',
+        'trackId': '3',
+      });
     });
 
     test('asks the transport to outwait the server\'s 30 s limit', () async {
@@ -503,12 +575,17 @@ void main() {
         },
       });
       final session = _session(server);
-      final outcome =
-          await session.saveSubtitleOffset(trackRef: '3', offsetMs: 400);
+      final outcome = await session.saveSubtitleOffset(
+        trackRef: '3',
+        offsetMs: 400,
+      );
       expect(session.canWrite, isTrue);
       expect(outcome, WriteOutcome.done);
-      expect(server.requests.single.variables,
-          {'mediaFileId': 'file-1', 'trackRef': '3', 'offsetMs': 400});
+      expect(server.requests.single.variables, {
+        'mediaFileId': 'file-1',
+        'trackRef': '3',
+        'offsetMs': 400,
+      });
     });
 
     test('fails on a GraphQL error', () async {
@@ -530,10 +607,14 @@ void main() {
           'preferredAudioLanguages': ['jpn', 'eng'],
         },
       });
-      expect(
-          await _session(server).rememberAudioLanguage('jpn'), ['jpn', 'eng']);
-      expect(server.requests.single.variables,
-          {'fileId': 'file-1', 'language': 'jpn'});
+      expect(await _session(server).rememberAudioLanguage('jpn'), [
+        'jpn',
+        'eng',
+      ]);
+      expect(server.requests.single.variables, {
+        'fileId': 'file-1',
+        'language': 'jpn',
+      });
     });
 
     test('is null on a GraphQL error', () async {
@@ -571,8 +652,13 @@ void main() {
       final server = _answering(<String, dynamic>{});
       await expectLater(
         _session(server, fileId: 'offline').downloadSubtitle(_candidate()),
-        throwsA(isA<SubtitleActionException>()
-            .having((e) => e.issue, 'issue', SubtitleIssue.downloadOffline)),
+        throwsA(
+          isA<SubtitleActionException>().having(
+            (e) => e.issue,
+            'issue',
+            SubtitleIssue.downloadOffline,
+          ),
+        ),
       );
       expect(server.requests, isEmpty);
     });
@@ -581,8 +667,13 @@ void main() {
       final server = _answering(graphqlError('Search again.'));
       await expectLater(
         _session(server).downloadSubtitle(_candidate()),
-        throwsA(isA<SubtitleActionException>()
-            .having((e) => e.message, 'message', 'Search again.')),
+        throwsA(
+          isA<SubtitleActionException>().having(
+            (e) => e.message,
+            'message',
+            'Search again.',
+          ),
+        ),
       );
     });
   });
@@ -600,76 +691,100 @@ void main() {
           .open(_direct, fileId: 'file-1', startAt: Duration.zero);
       expect(setup.viaP2p, isFalse);
       expect(setup.memoryKey, 'http://a.test');
-      expect(source.url,
-          'http://a.test/api/v1/stream/file/file-1?strategy=DIRECT_PLAY');
+      expect(
+        source.url,
+        'http://a.test/api/v1/stream/file/file-1?strategy=DIRECT_PLAY',
+      );
       expect(source.headers, {'Authorization': 'Bearer access'});
     });
 
-    test('an HTTP instance direct plays with the media token when it has one',
-        () async {
-      final session = _session(
-        _answering(<String, dynamic>{}),
-        creds: MydiaCredentials(
-          instanceId: 'inst-a',
-          accessToken: 'access',
-          serverUrl: 'http://a.test',
-          mediaToken: 'media-tok',
-          mediaTokenExpiry: DateTime.now().add(const Duration(days: 1)),
-        ),
-      );
-      final setup = await _setupOf(session);
-      final source = await setup
-          .createTransport(relayed: false)
-          .open(_direct, fileId: 'file-1', startAt: Duration.zero);
-      expect(
+    test(
+      'an HTTP instance direct plays with the media token when it has one',
+      () async {
+        final session = _session(
+          _answering(<String, dynamic>{}),
+          creds: MydiaCredentials(
+            instanceId: 'inst-a',
+            accessToken: 'access',
+            serverUrl: 'http://a.test',
+            mediaToken: 'media-tok',
+            mediaTokenExpiry: DateTime.now().add(const Duration(days: 1)),
+          ),
+        );
+        final setup = await _setupOf(session);
+        final source = await setup
+            .createTransport(relayed: false)
+            .open(_direct, fileId: 'file-1', startAt: Duration.zero);
+        expect(
           source.url,
           'http://a.test/api/v1/stream/file/file-1'
-          '?strategy=DIRECT_PLAY&token=media-tok');
-      expect(source.headers, isEmpty);
-    });
+          '?strategy=DIRECT_PLAY&token=media-tok',
+        );
+        expect(source.headers, isEmpty);
+      },
+    );
 
-    test('an HTTP instance starts a streaming session and plays its playlist',
-        () async {
-      final playlist = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() => playlist.close(force: true));
-      playlist.listen((request) {
-        request.response
-          ..write('#EXTM3U\n#EXTINF:6,\na.ts\n#EXTINF:6,\nb.ts\n'
-              '#EXTINF:6,\nc.ts\n#EXT-X-ENDLIST\n')
-          ..close();
-      });
-      final base = 'http://127.0.0.1:${playlist.port}';
-      final server = ScriptedMydiaTransport((r, _) => switch (r.operation) {
-            'StartStreamingSession' =>
-              startStreamingSessionResponse(playlistMode: 'FULL'),
+    test(
+      'an HTTP instance starts a streaming session and plays its playlist',
+      () async {
+        final playlist = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(() => playlist.close(force: true));
+        playlist.listen((request) {
+          request.response
+            ..write(
+              '#EXTM3U\n#EXTINF:6,\na.ts\n#EXTINF:6,\nb.ts\n'
+              '#EXTINF:6,\nc.ts\n#EXT-X-ENDLIST\n',
+            )
+            ..close();
+        });
+        final base = 'http://127.0.0.1:${playlist.port}';
+        final server = ScriptedMydiaTransport(
+          (r, _) => switch (r.operation) {
+            'StartStreamingSession' => startStreamingSessionResponse(
+              playlistMode: 'FULL',
+            ),
             _ => <String, dynamic>{},
-          });
-      final session = _session(server,
+          },
+        );
+        final session = _session(
+          server,
           creds: MydiaCredentials(
-              instanceId: 'inst-a', accessToken: 'access', serverUrl: base));
+            instanceId: 'inst-a',
+            accessToken: 'access',
+            serverUrl: base,
+          ),
+        );
 
-      final transport =
-          (await _setupOf(session)).createTransport(relayed: false);
-      final source = await transport.open(_hls,
-          fileId: 'file-1', startAt: const Duration(seconds: 90));
+        final transport = (await _setupOf(session))
+            .createTransport(relayed: false);
+        final source = await transport.open(
+          _hls,
+          fileId: 'file-1',
+          startAt: const Duration(seconds: 90),
+        );
 
-      expect(server.of('StartStreamingSession').single.variables, {
-        'fileId': 'file-1',
-        'strategy': 'TRANSCODE',
-        'maxBitrate': 4000,
-        'maxHeight': 720,
-        'startPosition': 90,
-        'playlistMode': 'FULL',
-      });
-      expect(source.url, '$base/api/v1/hls/sess-1/index.m3u8');
-      await transport.endSession();
-      expect(server.of('EndStreamingSession').single.variables,
-          {'sessionId': 'sess-1'});
-    });
+        expect(server.of('StartStreamingSession').single.variables, {
+          'fileId': 'file-1',
+          'strategy': 'TRANSCODE',
+          'maxBitrate': 4000,
+          'maxHeight': 720,
+          'startPosition': 90,
+          'playlistMode': 'FULL',
+        });
+        expect(source.url, '$base/api/v1/hls/sess-1/index.m3u8');
+        await transport.endSession();
+        expect(server.of('EndStreamingSession').single.variables, {
+          'sessionId': 'sess-1',
+        });
+      },
+    );
 
     test('a p2p instance direct plays through its own proxy target', () async {
-      final session = _session(_answering(<String, dynamic>{}),
-          creds: _p2pCreds('node-a'), proxy: proxy);
+      final session = _session(
+        _answering(<String, dynamic>{}),
+        creds: _p2pCreds('node-a'),
+        proxy: proxy,
+      );
       final setup = await _setupOf(session);
       final source = await setup
           .createTransport(relayed: false)
@@ -680,23 +795,35 @@ void main() {
       expect(source.headers, isEmpty);
     });
 
-    test('the proxy hold belongs to the owner and release lets it go',
-        () async {
-      final owner = Object();
-      final session = _session(_answering(<String, dynamic>{}),
-          creds: _p2pCreds('node-a'), proxy: proxy);
-      await _directPlayUrl(session, owner);
-      expect(proxy.isRunning, isTrue);
-      await proxy.release(owner);
-      expect(proxy.isRunning, isFalse);
-    });
+    test(
+      'the proxy hold belongs to the owner and release lets it go',
+      () async {
+        final owner = Object();
+        final session = _session(
+          _answering(<String, dynamic>{}),
+          creds: _p2pCreds('node-a'),
+          proxy: proxy,
+        );
+        await _directPlayUrl(session, owner);
+        expect(proxy.isRunning, isTrue);
+        await proxy.release(owner);
+        expect(proxy.isRunning, isFalse);
+      },
+    );
 
     test('two instances each stream through their own proxy target', () async {
       const owner = Object();
-      final sa = _session(ScriptedMydiaTransport.responses([{}]),
-          creds: _p2pCreds('node-a'), proxy: proxy);
-      final sb = _session(ScriptedMydiaTransport.responses([{}]),
-          creds: _p2pCreds('node-b'), proxy: proxy, accountId: 'macct-b');
+      final sa = _session(
+        ScriptedMydiaTransport.responses([{}]),
+        creds: _p2pCreds('node-a'),
+        proxy: proxy,
+      );
+      final sb = _session(
+        ScriptedMydiaTransport.responses([{}]),
+        creds: _p2pCreds('node-b'),
+        proxy: proxy,
+        accountId: 'macct-b',
+      );
 
       final urlA = await _directPlayUrl(sa, owner);
       final urlB = await _directPlayUrl(sb, owner);
@@ -710,19 +837,33 @@ void main() {
     });
 
     test('an account id the proxy rejects is reported, not thrown', () async {
-      final session = _session(_answering(<String, dynamic>{}),
-          creds: _p2pCreds('node-a'), proxy: proxy, accountId: 'bad id');
+      final session = _session(
+        _answering(<String, dynamic>{}),
+        creds: _p2pCreds('node-a'),
+        proxy: proxy,
+        accountId: 'bad id',
+      );
       final prep = await session.prepareStreaming(
-          owner: Object(), onProgress: (_) {}, isCurrent: () => true);
+        owner: Object(),
+        onProgress: (_) {},
+        isCurrent: () => true,
+      );
       expect(prep, isA<StreamingUnavailable>());
     });
 
     test('an instance with neither a URL nor a node cannot stream', () async {
-      final session = _session(_answering(<String, dynamic>{}),
-          creds: const MydiaCredentials(
-              instanceId: 'inst-x', accessToken: 'access'));
+      final session = _session(
+        _answering(<String, dynamic>{}),
+        creds: const MydiaCredentials(
+          instanceId: 'inst-x',
+          accessToken: 'access',
+        ),
+      );
       final prep = await session.prepareStreaming(
-          owner: Object(), onProgress: (_) {}, isCurrent: () => true);
+        owner: Object(),
+        onProgress: (_) {},
+        isCurrent: () => true,
+      );
       expect(prep, isA<StreamingUnavailable>());
     });
 
@@ -731,9 +872,13 @@ void main() {
       final setup = await _setupOf(_session(server));
       final progress = setup.progress as ProgressService;
       expect(
-          await progress.syncMoviePosition('movie-1',
-              const Duration(seconds: 12), const Duration(seconds: 6000)),
-          isTrue);
+        await progress.syncMoviePosition(
+          'movie-1',
+          const Duration(seconds: 12),
+          const Duration(seconds: 6000),
+        ),
+        isTrue,
+      );
       expect(server.of('UpdateMovieProgress').single.variables, {
         'movieId': 'movie-1',
         'positionSeconds': 12,
@@ -745,15 +890,20 @@ void main() {
       final server = _answering(<String, dynamic>{});
       final progress = await _session(server).openProgress();
       await (progress as ProgressService).syncEpisodePosition(
-          'ep-1', const Duration(seconds: 5), const Duration(seconds: 1440));
+        'ep-1',
+        const Duration(seconds: 5),
+        const Duration(seconds: 1440),
+      );
       expect(server.of('UpdateEpisodeProgress'), hasLength(1));
     });
   });
 
   group('session shape', () {
     test('every feature on every instance', () {
-      expect(_session(ScriptedMydiaTransport.responses([{}])).features,
-          PlaybackFeature.values.toSet());
+      expect(
+        _session(ScriptedMydiaTransport.responses([{}])).features,
+        PlaybackFeature.values.toSet(),
+      );
     });
 
     test('reachable follows the instance\'s connection status', () async {
@@ -764,23 +914,29 @@ void main() {
       expect(session.reachable, isFalse);
     });
 
-    test('playbackSessionFor returns a MydiaPlaybackSession for a MydiaSource',
-        () {
-      final source = testMydiaSourceOver(_answering(<String, dynamic>{}));
-      final session = playbackSessionFor(source, _movie, 'file-1',
-          proxy: LocalProxyService.forTesting);
-      expect(session, isA<MydiaPlaybackSession>());
-    });
+    test(
+      'playbackSessionFor returns a MydiaPlaybackSession for a MydiaSource',
+      () {
+        final source = testMydiaSourceOver(_answering(<String, dynamic>{}));
+        final session = playbackSessionFor(
+          source,
+          _movie,
+          'file-1',
+          proxy: LocalProxyService.forTesting,
+        );
+        expect(session, isA<MydiaPlaybackSession>());
+      },
+    );
   });
 }
 
 SubtitleCandidate _candidate() => const SubtitleCandidate(
-      token: 'tok-1',
-      language: 'en',
-      releaseName: 'Harbor.Lights.2031.WEB',
-      format: 'srt',
-      hearingImpaired: false,
-      hashMatch: false,
-      score: 50,
-      providerName: 'testprovider',
-    );
+  token: 'tok-1',
+  language: 'en',
+  releaseName: 'Harbor.Lights.2031.WEB',
+  format: 'srt',
+  hearingImpaired: false,
+  hashMatch: false,
+  score: 50,
+  providerName: 'testprovider',
+);

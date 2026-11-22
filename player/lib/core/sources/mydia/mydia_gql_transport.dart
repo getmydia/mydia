@@ -14,7 +14,7 @@ import '../source_http.dart';
 /// resolved, when it sent any.
 class MydiaGraphqlError extends SourceException {
   const MydiaGraphqlError(String message, {this.data})
-      : super(SourceErrorKind.server, message);
+    : super(SourceErrorKind.server, message);
 
   final Map<String, dynamic>? data;
 }
@@ -48,9 +48,8 @@ bool isMydiaAuthError(String message) {
 }
 
 class HttpMydiaTransport implements MydiaGqlTransport {
-  HttpMydiaTransport({required String serverUrl, required SourceHttp http})
-      : _url = Uri.parse('$serverUrl/api/graphql'),
-        _http = http;
+  HttpMydiaTransport({required String serverUrl, required this._http})
+    : _url = Uri.parse('$serverUrl/api/graphql');
 
   final Uri _url;
   final SourceHttp _http;
@@ -72,7 +71,7 @@ class HttpMydiaTransport implements MydiaGqlTransport {
       timeout: timeout ?? SourceHttp.defaultTimeout,
       headers: {
         if (token != null) 'Authorization': 'Bearer $token',
-        if (deviceProfile != null) DeviceProfile.headerName: deviceProfile,
+        DeviceProfile.headerName: ?deviceProfile,
       },
       body: {'query': query, 'variables': variables},
     );
@@ -82,12 +81,15 @@ class HttpMydiaTransport implements MydiaGqlTransport {
     final errors = body['errors'];
     if (errors is List && errors.isNotEmpty) {
       final first = errors.first;
-      final message =
-          first is Map ? (first['message'] as String? ?? '') : '$first';
+      final message = first is Map
+          ? (first['message'] as String? ?? '')
+          : '$first';
       if (isMydiaAuthError(message)) throw const SourceException.unauthorized();
       final partial = body['data'];
-      throw MydiaGraphqlError(message,
-          data: partial is Map<String, dynamic> ? partial : null);
+      throw MydiaGraphqlError(
+        message,
+        data: partial is Map<String, dynamic> ? partial : null,
+      );
     }
     final data = body['data'];
     if (data is! Map<String, dynamic>) {
@@ -98,9 +100,7 @@ class HttpMydiaTransport implements MydiaGqlTransport {
 }
 
 class P2pMydiaTransport implements MydiaGqlTransport {
-  P2pMydiaTransport({required P2pService p2p, required String nodeAddr})
-      : _p2p = p2p,
-        _nodeAddr = nodeAddr;
+  P2pMydiaTransport({required this._p2p, required this._nodeAddr});
 
   final P2pService _p2p;
   final String _nodeAddr;
@@ -117,12 +117,12 @@ class P2pMydiaTransport implements MydiaGqlTransport {
     Duration? timeout,
   }) async {
     Future<Map<String, dynamic>> attempt() => _p2p.sendGraphQLRequest(
-          peer: _nodeAddr,
-          query: query,
-          variables: variables,
-          authToken: token,
-          deviceProfile: deviceProfile,
-        );
+      peer: _nodeAddr,
+      query: query,
+      variables: variables,
+      authToken: token,
+      deviceProfile: deviceProfile,
+    );
 
     try {
       try {
@@ -162,8 +162,7 @@ class P2pMydiaTransport implements MydiaGqlTransport {
 /// cannot repeat a side effect. Anything unparseable counts as not a query.
 bool _isQueryOnly(String document) {
   try {
-    final operations = parseString(document)
-        .definitions
+    final operations = parseString(document).definitions
         .whereType<OperationDefinitionNode>()
         .toList();
     return operations.isNotEmpty &&

@@ -9,13 +9,17 @@ void main() {
         totalDuration: Duration(seconds: 5400),
       );
 
-      expect(timeline.toReal(const Duration(seconds: 120)),
-          const Duration(seconds: 3720));
+      expect(
+        timeline.toReal(const Duration(seconds: 120)),
+        const Duration(seconds: 3720),
+      );
     });
 
     test('is the identity when there is no offset', () {
-      expect(StreamTimeline.zero.toReal(const Duration(seconds: 42)),
-          const Duration(seconds: 42));
+      expect(
+        StreamTimeline.zero.toReal(const Duration(seconds: 42)),
+        const Duration(seconds: 42),
+      );
     });
   });
 
@@ -23,8 +27,10 @@ void main() {
     test('removes the start offset', () {
       const timeline = StreamTimeline(startOffset: Duration(seconds: 3600));
 
-      expect(timeline.toPlayer(const Duration(seconds: 3720)),
-          const Duration(seconds: 120));
+      expect(
+        timeline.toPlayer(const Duration(seconds: 3720)),
+        const Duration(seconds: 120),
+      );
     });
 
     test('clamps to zero for a real position before the offset', () {
@@ -48,30 +54,40 @@ void main() {
       // 100% and is the original resume bug.
       const timeline = StreamTimeline(totalDuration: Duration(seconds: 5400));
 
-      expect(timeline.resolveDuration(const Duration(seconds: 20)),
-          const Duration(seconds: 5400));
+      expect(
+        timeline.resolveDuration(const Duration(seconds: 20)),
+        const Duration(seconds: 5400),
+      );
     });
 
-    test('falls back to offset plus player duration when the server is silent',
-        () {
-      // With an offset the player's own duration covers only the remainder of
-      // the stream, so the real length is offset + remainder.
-      const timeline = StreamTimeline(startOffset: Duration(seconds: 3600));
+    test(
+      'falls back to offset plus player duration when the server is silent',
+      () {
+        // With an offset the player's own duration covers only the remainder of
+        // the stream, so the real length is offset + remainder.
+        const timeline = StreamTimeline(startOffset: Duration(seconds: 3600));
 
-      expect(timeline.resolveDuration(const Duration(seconds: 1800)),
-          const Duration(seconds: 5400));
-    });
+        expect(
+          timeline.resolveDuration(const Duration(seconds: 1800)),
+          const Duration(seconds: 5400),
+        );
+      },
+    );
 
     test('falls back to the player duration when nothing is known', () {
-      expect(StreamTimeline.zero.resolveDuration(const Duration(seconds: 3452)),
-          const Duration(seconds: 3452));
+      expect(
+        StreamTimeline.zero.resolveDuration(const Duration(seconds: 3452)),
+        const Duration(seconds: 3452),
+      );
     });
 
     test('ignores a non-positive server duration', () {
       const timeline = StreamTimeline(totalDuration: Duration.zero);
 
-      expect(timeline.resolveDuration(const Duration(seconds: 300)),
-          const Duration(seconds: 300));
+      expect(
+        timeline.resolveDuration(const Duration(seconds: 300)),
+        const Duration(seconds: 300),
+      );
     });
   });
 
@@ -79,11 +95,13 @@ void main() {
     test('two timelines with the same fields are equal', () {
       expect(
         const StreamTimeline(
-            startOffset: Duration(seconds: 10),
-            totalDuration: Duration(seconds: 20)),
+          startOffset: Duration(seconds: 10),
+          totalDuration: Duration(seconds: 20),
+        ),
         const StreamTimeline(
-            startOffset: Duration(seconds: 10),
-            totalDuration: Duration(seconds: 20)),
+          startOffset: Duration(seconds: 10),
+          totalDuration: Duration(seconds: 20),
+        ),
       );
     });
 

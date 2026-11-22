@@ -30,5 +30,4 @@ Future<MediaFile?> pickBestFile(
 Future<String?> pickBestVersionId(
   List<MediaVersion> versions,
   double screenWidth,
-) async =>
-    (await pickBestFile(filesFromVersions(versions), screenWidth))?.id;
+) async => (await pickBestFile(filesFromVersions(versions), screenWidth))?.id;

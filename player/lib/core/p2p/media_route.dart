@@ -97,8 +97,9 @@ abstract final class MediaRoutes {
   /// The server's hosted poster naming scheme, `<item id>-<sha8>.<ext>`,
   /// exactly as `Mydia.Media.PosterStore` matches it. Anything else is never
   /// a hosted poster, so it is refused before it reaches a URL or the host.
-  static final hostedPosterName =
-      RegExp(r'^[0-9a-f-]+-[0-9a-f]{8}\.(jpg|png|webp)$');
+  static final hostedPosterName = RegExp(
+    r'^[0-9a-f-]+-[0-9a-f]{8}\.(jpg|png|webp)$',
+  );
 
   /// How a paired player's file path travels in a URL and to its host:
   /// base64url of its UTF-8, without padding. A path holds spaces, `#`, `?`,

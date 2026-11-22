@@ -43,8 +43,9 @@ void main() {
     await container.read(sidebarLayoutProvider.future);
     await container.read(sidebarLayoutControllerProvider).hide('settings');
 
-    final destinations =
-        await container.read(sidebarDestinationsProvider.future);
+    final destinations = await container.read(
+      sidebarDestinationsProvider.future,
+    );
     expect(destinations.map((d) => d.id), contains('settings'));
   });
 
@@ -67,8 +68,9 @@ void main() {
     test('starts off, toggles, and exits', () {
       final container = ProviderContainer(
         overrides: [
-          sidebarLayoutStoreProvider
-              .overrideWithValue(InMemorySidebarLayoutStore()),
+          sidebarLayoutStoreProvider.overrideWithValue(
+            InMemorySidebarLayoutStore(),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -85,8 +87,9 @@ void main() {
     test('exit is idempotent', () {
       final container = ProviderContainer(
         overrides: [
-          sidebarLayoutStoreProvider
-              .overrideWithValue(InMemorySidebarLayoutStore()),
+          sidebarLayoutStoreProvider.overrideWithValue(
+            InMemorySidebarLayoutStore(),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -106,16 +109,15 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final destinations =
-          await container.read(sidebarDestinationsProvider.future);
-      expect(
-        destinations.map((d) => d.id),
-        isNot(contains('collections')),
+      final destinations = await container.read(
+        sidebarDestinationsProvider.future,
       );
+      expect(destinations.map((d) => d.id), isNot(contains('collections')));
 
       final rows = await container.read(sidebarEditRowsProvider.future);
-      final collections =
-          rows.firstWhere((r) => r.destination.id == 'collections');
+      final collections = rows.firstWhere(
+        (r) => r.destination.id == 'collections',
+      );
       expect(collections.hidden, isTrue);
     });
   });
@@ -144,8 +146,9 @@ void main() {
       expect(after.hidden, isEmpty);
       expect(after.filters.keys, contains('filter_keep_me'));
 
-      final destinations =
-          await container.read(sidebarDestinationsProvider.future);
+      final destinations = await container.read(
+        sidebarDestinationsProvider.future,
+      );
       expect(destinations.map((d) => d.id), contains('filter_keep_me'));
       expect(destinations.map((d) => d.id), contains('collections'));
     });

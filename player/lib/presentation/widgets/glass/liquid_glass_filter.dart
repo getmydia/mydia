@@ -79,11 +79,15 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
   @override
   RenderLiquidGlass createRenderObject(BuildContext context) =>
       RenderLiquidGlass(
-          uniforms: _uniforms(context), backdropKey: _key(context));
+        uniforms: _uniforms(context),
+        backdropKey: _key(context),
+      );
 
   @override
   void updateRenderObject(
-      BuildContext context, RenderLiquidGlass renderObject) {
+    BuildContext context,
+    RenderLiquidGlass renderObject,
+  ) {
     renderObject
       ..uniforms = _uniforms(context)
       ..backdropKey = _key(context);
@@ -94,11 +98,7 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
 /// second [BackdropFilterLayer] nested inside it, holding the shader. The
 /// blur keeps the `backdropKey` only when there is no lens.
 class RenderLiquidGlass extends RenderProxyBox {
-  RenderLiquidGlass({
-    required LiquidGlassUniforms uniforms,
-    BackdropKey? backdropKey,
-  })  : _uniforms = uniforms,
-        _backdropKey = backdropKey;
+  RenderLiquidGlass({required this._uniforms, this._backdropKey});
 
   LiquidGlassUniforms get uniforms => _uniforms;
   LiquidGlassUniforms _uniforms;
@@ -148,8 +148,8 @@ class RenderLiquidGlass extends RenderProxyBox {
   @visibleForTesting
   static double effectiveBlurSigma(LiquidGlassProfile p) =>
       p.blurSigma < kLiquidGlassMinBlurSigma
-          ? kLiquidGlassMinBlurSigma
-          : p.blurSigma;
+      ? kLiquidGlassMinBlurSigma
+      : p.blurSigma;
 
   final LayerHandle<BackdropFilterLayer> _lens = LayerHandle();
 

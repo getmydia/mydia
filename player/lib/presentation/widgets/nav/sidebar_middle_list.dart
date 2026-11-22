@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
@@ -115,7 +115,8 @@ class SidebarMiddleList extends StatelessWidget {
             ? IconButton(
                 onPressed: () => onRestore(row.destination.id),
                 tooltip: context.l10n.navRestoreRow(
-                    context.l10n.navDestinationLabel(row.destination)),
+                  context.l10n.navDestinationLabel(row.destination),
+                ),
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints.tightFor(

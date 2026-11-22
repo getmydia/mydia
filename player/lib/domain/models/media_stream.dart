@@ -153,7 +153,7 @@ class MediaFileInfo {
   /// file has neither resolution nor codec.
   String? get versionLabel {
     final parts = <String>[
-      if (resolution != null) resolution!,
+      ?resolution,
       if (codec != null) codec!.toUpperCase(),
     ];
     return parts.isEmpty ? null : parts.join(' ');
@@ -176,13 +176,15 @@ class MediaFileInfo {
           .toList(),
       externalSubtitles: (f.externalSubtitles ?? [])
           .whereType<Fragment$MediaInfoFragment$externalSubtitles>()
-          .map((s) => SubtitleTrack(
-                id: s.trackId,
-                language: s.language,
-                title: s.title,
-                format: s.format,
-                embedded: s.embedded,
-              ))
+          .map(
+            (s) => SubtitleTrack(
+              id: s.trackId,
+              language: s.language,
+              title: s.title,
+              format: s.format,
+              embedded: s.embedded,
+            ),
+          )
           .toList(),
     );
   }

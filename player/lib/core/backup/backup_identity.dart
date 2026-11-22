@@ -14,10 +14,9 @@ class BackupIdentity {
     required this.signer,
     required this.box,
     required this.slotId,
-    required SimplePublicKey signerPublic,
-    required SimplePublicKey boxPublic,
-  })  : _signerPublic = signerPublic,
-        _boxPublic = boxPublic;
+    required this._signerPublic,
+    required this._boxPublic,
+  });
 
   static const storageKey = 'backup/identity';
 
@@ -101,7 +100,8 @@ class BackupIdentity {
       boxSeed = _decodeSeed(json['boxSeed']);
     } on Object catch (e) {
       throw StateError(
-          'stored backup identity is unreadable (${e.runtimeType})');
+        'stored backup identity is unreadable (${e.runtimeType})',
+      );
     }
     return _build(signerSeed, boxSeed);
   }

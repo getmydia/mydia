@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/ui/reduced_motion.dart';
@@ -12,11 +12,7 @@ import 'glass_pointer.dart';
 /// Passive: it listens without competing in the gesture arena, so the
 /// button inside keeps its tap, focus and semantics.
 class GlassInteraction extends StatefulWidget {
-  const GlassInteraction({
-    super.key,
-    this.enabled = true,
-    required this.child,
-  });
+  const GlassInteraction({super.key, this.enabled = true, required this.child});
 
   final bool enabled;
   final Widget child;
@@ -50,9 +46,9 @@ class _GlassInteractionState extends State<GlassInteraction> {
   }
 
   void _down(PointerDownEvent e) => setState(() {
-        _pressed = true;
-        _light = _fraction(e.localPosition);
-      });
+    _pressed = true;
+    _light = _fraction(e.localPosition);
+  });
 
   void _move(PointerMoveEvent e) {
     if (!_pressed) return;
@@ -60,9 +56,9 @@ class _GlassInteractionState extends State<GlassInteraction> {
   }
 
   void _up() => setState(() {
-        _pressed = false;
-        _light = null;
-      });
+    _pressed = false;
+    _light = null;
+  });
 
   @override
   Widget build(BuildContext context) {

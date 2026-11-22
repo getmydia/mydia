@@ -13,12 +13,12 @@ class _Signals {
   }
 
   Future<void> close() => Future.wait([
-        position.close(),
-        buffer.close(),
-        buffering.close(),
-        playing.close(),
-        error.close(),
-      ]);
+    position.close(),
+    buffer.close(),
+    buffering.close(),
+    playing.close(),
+    error.close(),
+  ]);
 
   final position = StreamController<Duration>.broadcast();
   final buffer = StreamController<Duration>.broadcast();
@@ -27,12 +27,12 @@ class _Signals {
   final error = StreamController<String>.broadcast();
 
   PlayerSignals get signals => PlayerSignals(
-        position: position.stream,
-        buffer: buffer.stream,
-        buffering: buffering.stream,
-        playing: playing.stream,
-        error: error.stream,
-      );
+    position: position.stream,
+    buffer: buffer.stream,
+    buffering: buffering.stream,
+    playing: playing.stream,
+    error: error.stream,
+  );
 }
 
 class _ScriptedSampler implements FrameStatsSampler {

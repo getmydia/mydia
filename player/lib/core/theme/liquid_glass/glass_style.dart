@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Whether this tree draws the Liquid Glass design language, carried on the
 /// app theme so the capsule buttons in `AppTheme.build` and every glass

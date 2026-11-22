@@ -6,7 +6,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -30,33 +30,35 @@ const restoreBackupLocation = '/backup/restore';
 
 /// Whether this device can back up to iCloud at all: iOS and macOS.
 final Provider<bool> appleBackupPlatformProvider = Provider<bool>(
-    (_) => !kIsWeb && (PlatformFeatures.isIOS || PlatformFeatures.isMacOS));
+  (_) => !kIsWeb && (PlatformFeatures.isIOS || PlatformFeatures.isMacOS),
+);
 
 /// Whether iCloud holds a backup this device could restore, asked once per
 /// app run and given up on after 5 s. Never asked off Apple platforms, or
 /// where this build has no iCloud.
 final FutureProvider<bool> iCloudRestoreAvailableProvider =
     FutureProvider<bool>((ref) async {
-  if (!ref.watch(appleBackupPlatformProvider)) return false;
-  final controller = ref.read(backupControllerProvider);
-  Future<bool> probe() async {
-    await controller.ready;
-    if (!controller.offered.value.contains(BackupStoreKind.icloud) ||
-        controller.active.value != null) {
-      return false;
-    }
-    final preview =
-        await controller.cloud(BackupStoreKind.icloud).previewRestore();
-    return preview.payloads.isNotEmpty;
-  }
+      if (!ref.watch(appleBackupPlatformProvider)) return false;
+      final controller = ref.read(backupControllerProvider);
+      Future<bool> probe() async {
+        await controller.ready;
+        if (!controller.offered.value.contains(BackupStoreKind.icloud) ||
+            controller.active.value != null) {
+          return false;
+        }
+        final preview = await controller
+            .cloud(BackupStoreKind.icloud)
+            .previewRestore();
+        return preview.payloads.isNotEmpty;
+      }
 
-  try {
-    return await probe().timeout(const Duration(seconds: 5));
-  } catch (e) {
-    debugPrint('[Backup] No iCloud backup to offer: ${e.runtimeType}');
-    return false;
-  }
-});
+      try {
+        return await probe().timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('[Backup] No iCloud backup to offer: ${e.runtimeType}');
+        return false;
+      }
+    });
 
 /// Why a restore did not lead to a preview, worded in `build`.
 enum _RestoreFailure {
@@ -66,7 +68,7 @@ enum _RestoreFailure {
   iCloudUnavailable,
   network,
   alreadyOn,
-  other
+  other,
 }
 
 class RestoreBackupScreen extends ConsumerStatefulWidget {
@@ -95,11 +97,10 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
 
   /// The cloud stores this device offers, in picker order.
   List<BackupStoreKind> get _clouds => [
-        for (final k in BackupStoreKind.values)
-          if (k != BackupStoreKind.relay &&
-              _controller.offered.value.contains(k))
-            k,
-      ];
+    for (final k in BackupStoreKind.values)
+      if (k != BackupStoreKind.relay && _controller.offered.value.contains(k))
+        k,
+  ];
 
   @override
   void initState() {
@@ -160,7 +161,9 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
     try {
       if (kind == BackupStoreKind.gdrive &&
           !await signInToGoogle(
-              context, ref.read(googleSignInMethodProvider))) {
+            context,
+            ref.read(googleSignInMethodProvider),
+          )) {
         return;
       }
       if (!mounted || _opToken != token) return;
@@ -187,16 +190,17 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   }
 
   static _RestoreFailure _failureOf(
-          BackupRelayError kind, BackupStoreKind? store) =>
-      switch (kind) {
-        BackupRelayError.notFound => _RestoreFailure.notFound,
-        BackupRelayError.unavailable => _RestoreFailure.unavailable,
-        BackupRelayError.network => _RestoreFailure.network,
-        BackupRelayError.cloudUnavailable ||
-        BackupRelayError.signedOut when store == BackupStoreKind.icloud =>
-          _RestoreFailure.iCloudUnavailable,
-        _ => _RestoreFailure.other,
-      };
+    BackupRelayError kind,
+    BackupStoreKind? store,
+  ) => switch (kind) {
+    BackupRelayError.notFound => _RestoreFailure.notFound,
+    BackupRelayError.unavailable => _RestoreFailure.unavailable,
+    BackupRelayError.network => _RestoreFailure.network,
+    BackupRelayError.cloudUnavailable || BackupRelayError.signedOut
+        when store == BackupStoreKind.icloud =>
+      _RestoreFailure.iCloudUnavailable,
+    _ => _RestoreFailure.other,
+  };
 
   /// Applies the shown preview: the relay's or the cloud store's.
   Future<void> _restore() async {
@@ -233,13 +237,13 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   }
 
   void _back() => setState(() {
-        _opToken++;
-        _busy = false;
-        _preview = null;
-        _cloudPreview = null;
-        _failure = null;
-        _source = null;
-      });
+    _opToken++;
+    _busy = false;
+    _preview = null;
+    _cloudPreview = null;
+    _failure = null;
+    _source = null;
+  });
 
   Future<void> _scan() async {
     var detected = false;
@@ -269,15 +273,15 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   }
 
   String? _failureText(AppLocalizations l10n) => switch (_failure) {
-        null => null,
-        _RestoreFailure.malformed => l10n.backupRestoreMalformed,
-        _RestoreFailure.notFound => l10n.backupRestoreNotFound,
-        _RestoreFailure.unavailable => l10n.backupUnavailable,
-        _RestoreFailure.iCloudUnavailable => l10n.backupICloudUnavailable,
-        _RestoreFailure.network => l10n.backupErrorNetwork,
-        _RestoreFailure.alreadyOn => l10n.backupRestoreAlreadyOn,
-        _RestoreFailure.other => l10n.backupRestoreFailed,
-      };
+    null => null,
+    _RestoreFailure.malformed => l10n.backupRestoreMalformed,
+    _RestoreFailure.notFound => l10n.backupRestoreNotFound,
+    _RestoreFailure.unavailable => l10n.backupUnavailable,
+    _RestoreFailure.iCloudUnavailable => l10n.backupICloudUnavailable,
+    _RestoreFailure.network => l10n.backupErrorNetwork,
+    _RestoreFailure.alreadyOn => l10n.backupRestoreAlreadyOn,
+    _RestoreFailure.other => l10n.backupRestoreFailed,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -291,8 +295,11 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
           // Backup can turn on while this screen is up (pairing joins the
           // group's vault): the status change brings up the explanation.
           child: ListenableBuilder(
-            listenable: Listenable.merge(
-                [relay.status, _controller.active, _controller.offered]),
+            listenable: Listenable.merge([
+              relay.status,
+              _controller.active,
+              _controller.offered,
+            ]),
             builder: (context, _) {
               final relayPreview = _preview;
               final cloudPreview = _cloudPreview;
@@ -302,8 +309,10 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
                 shrinkWrap: true,
                 children: [
                   if (relay.enabled || _controller.active.value != null)
-                    Text(l10n.backupRestoreAlreadyOn,
-                        key: const Key('restore-already-on'))
+                    Text(
+                      l10n.backupRestoreAlreadyOn,
+                      key: const Key('restore-already-on'),
+                    )
                   else if (source == null)
                     ..._entries(l10n)
                   else if (source == BackupStoreKind.relay &&
@@ -342,18 +351,22 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   /// One way in per store this device offers, the recovery key last.
   List<Widget> _entries(AppLocalizations l10n) {
     final error = _failureText(l10n);
-    Widget entry(Key key, IconData icon, String label, VoidCallback onTap,
-            {bool first = false}) =>
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: OutlinedButton.icon(
-            key: key,
-            autofocus: first,
-            icon: Icon(icon),
-            label: Text(label),
-            onPressed: _busy ? null : onTap,
-          ),
-        );
+    Widget entry(
+      Key key,
+      IconData icon,
+      String label,
+      VoidCallback onTap, {
+      bool first = false,
+    }) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: OutlinedButton.icon(
+        key: key,
+        autofocus: first,
+        icon: Icon(icon),
+        label: Text(label),
+        onPressed: _busy ? null : onTap,
+      ),
+    );
     final clouds = _clouds;
     return [
       for (final kind in clouds)
@@ -499,8 +512,10 @@ class RestorePreviewBody extends StatelessWidget {
         .whereType<AccountBackupRecord>()
         .where((r) => !r.deleted)
         .length;
-    final watched =
-        records.whereType<WatchBackupRecord>().where((r) => !r.deleted).length;
+    final watched = records
+        .whereType<WatchBackupRecord>()
+        .where((r) => !r.deleted)
+        .length;
     // No device's part could be read (all unreadable or gone). A device
     // read with no records still has a backup to join.
     final nothing = records.isEmpty && deviceNames.isEmpty;
@@ -508,8 +523,11 @@ class RestorePreviewBody extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(nothing ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
-            size: 40, color: palette.primary),
+        Icon(
+          nothing ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
+          size: 40,
+          color: palette.primary,
+        ),
         const SizedBox(height: 12),
         Text(
           l10n.backupRestoreSummary(sources, watched, deviceNames.length),
@@ -610,9 +628,12 @@ class RestoreFromICloudButton extends ConsumerWidget {
     }
     return TextButton.icon(
       key: const Key('restore-from-icloud'),
-      onPressed: () => context.push(Uri(
+      onPressed: () => context.push(
+        Uri(
           path: restoreBackupLocation,
-          queryParameters: {'store': BackupStoreKind.icloud.name}).toString()),
+          queryParameters: {'store': BackupStoreKind.icloud.name},
+        ).toString(),
+      ),
       icon: const Icon(Icons.cloud_download_rounded),
       label: Text(context.l10n.restoreFromICloud),
     );

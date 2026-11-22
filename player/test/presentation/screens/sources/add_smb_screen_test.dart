@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -39,7 +39,10 @@ class _RecordingNative extends FakeSmbNative {
 
   @override
   Future<List<String>> listShares(
-      String host, int port, SmbCredentials c) async {
+    String host,
+    int port,
+    SmbCredentials c,
+  ) async {
     listed.add((host, port, c));
     if (unreachableHosts.contains(host)) {
       throw BackendUnreachable('no route to $host');
@@ -62,8 +65,11 @@ class _Harness {
 
 int _boxes = 0;
 
-const _attic =
-    DiscoveredSmbServer(name: 'Attic NAS', host: '192.168.1.20', port: 445);
+const _attic = DiscoveredSmbServer(
+  name: 'Attic NAS',
+  host: '192.168.1.20',
+  port: 445,
+);
 
 Future<_Harness> _pump(
   WidgetTester tester, {
@@ -74,9 +80,12 @@ Future<_Harness> _pump(
 }) async {
   var box = reuse?.box;
   if (box == null) {
-    final opened = (await tester.runAsync(() =>
-        Hive.openBox<Map<dynamic, dynamic>>('smb_screen_${_boxes++}',
-            bytes: Uint8List(0))))!;
+    final opened = (await tester.runAsync(
+      () => Hive.openBox<Map<dynamic, dynamic>>(
+        'smb_screen_${_boxes++}',
+        bytes: Uint8List(0),
+      ),
+    ))!;
     addTearDown(() => tester.runAsync(opened.close));
     box = opened;
   }
@@ -95,40 +104,46 @@ Future<_Harness> _pump(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   h.router = GoRouter(
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const Text('home')),
+      GoRoute(path: '/', builder: (_, _) => const Text('home')),
       GoRoute(
-          path: '/s/:id',
-          builder: (_, s) => Text('opened ${s.pathParameters['id']}')),
+        path: '/s/:id',
+        builder: (_, s) => Text('opened ${s.pathParameters['id']}'),
+      ),
       GoRoute(
-          path: '/add',
-          builder: (_, __) => AddSmbScreen(
-                reauthAccountId: reauthAccountId,
-                platform: platform,
-                discoveryTimeout: timeout,
-              )),
+        path: '/add',
+        builder: (_, _) => AddSmbScreen(
+          reauthAccountId: reauthAccountId,
+          platform: platform,
+          discoveryTimeout: timeout,
+        ),
+      ),
     ],
   );
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => h.store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(h.storage)),
-      filesIndexBoxProvider.overrideWithValue(h.box),
-      filesProgressStoreProvider
-          .overrideWithValue(InMemoryPlaybackProgressStore()),
-      mediaNamesProvider.overrideWithValue(FakeMediaNames()),
-      relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-      filesBackendBuilderProvider
-          .overrideWithValue((ref, source) => FakeBackend({})),
-      smbNativeProvider.overrideWithValue(native),
-      smbDiscoveryProvider.overrideWithValue(h.discovery),
-    ],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: h.router,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => h.store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(h.storage)),
+        filesIndexBoxProvider.overrideWithValue(h.box),
+        filesProgressStoreProvider.overrideWithValue(
+          InMemoryPlaybackProgressStore(),
+        ),
+        mediaNamesProvider.overrideWithValue(FakeMediaNames()),
+        relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
+        filesBackendBuilderProvider.overrideWithValue(
+          (ref, source) => FakeBackend({}),
+        ),
+        smbNativeProvider.overrideWithValue(native),
+        smbDiscoveryProvider.overrideWithValue(h.discovery),
+      ],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: h.router,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   unawaited(h.router.push('/add'));
   await tester.pumpAndSettle();
@@ -152,8 +167,9 @@ Future<void> _viaDiscovery(WidgetTester tester, _Harness h) async {
 }
 
 void main() {
-  testWidgets('a discovered server leads to the login with its host filled',
-      (tester) async {
+  testWidgets('a discovered server leads to the login with its host filled', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     expect(find.byKey(const Key('smb-servers')), findsOneWidget);
     await _viaDiscovery(tester, h);
@@ -166,13 +182,17 @@ void main() {
     expect(host, '192.168.1.20');
   });
 
-  testWidgets('endpoints whose host:port text collides get their own rows',
-      (tester) async {
+  testWidgets('endpoints whose host:port text collides get their own rows', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     h.discovery.emit([
       const DiscoveredSmbServer(name: 'Den', host: '2001:db8::1', port: 4455),
       const DiscoveredSmbServer(
-          name: 'Loft', host: '2001:db8::1:4455', port: 445),
+        name: 'Loft',
+        host: '2001:db8::1:4455',
+        port: 445,
+      ),
     ]);
     await tester.pumpAndSettle();
     expect(find.byType(ListTile), findsNWidgets(3)); // two servers + manual
@@ -185,11 +205,14 @@ void main() {
     expect(host, '2001:db8::1:4455');
   });
 
-  testWidgets('the manual row shows its hint and accepts an address',
-      (tester) async {
+  testWidgets('the manual row shows its hint and accepts an address', (
+    tester,
+  ) async {
     final h = await _pump(tester);
-    expect(find.text('Windows PCs usually need to be entered by address.'),
-        findsOneWidget);
+    expect(
+      find.text('Windows PCs usually need to be entered by address.'),
+      findsOneWidget,
+    );
     await _tap(tester, 'smb-manual');
     await _enter(tester, 'smb-host-field', 'nas.example.test');
     await _enter(tester, 'smb-port-field', '4445');
@@ -201,7 +224,9 @@ void main() {
     final (host, port, creds) = h.native.listed.single;
     expect((host, port), ('nas.example.test', 4445));
     expect(
-        (creds.user, creds.password, creds.domain), ('viewer', 'pw', 'HOME'));
+      (creds.user, creds.password, creds.domain),
+      ('viewer', 'pw', 'HOME'),
+    );
     expect(find.byKey(const Key('smb-shares')), findsOneWidget);
   });
 
@@ -215,8 +240,9 @@ void main() {
     expect(find.byKey(const Key('smb-shares')), findsOneWidget);
   });
 
-  testWidgets('a share, folders and kinds save one account with one root',
-      (tester) async {
+  testWidgets('a share, folders and kinds save one account with one root', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     await _viaDiscovery(tester, h);
     await _enter(tester, 'smb-user-field', 'viewer');
@@ -228,19 +254,23 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('smb-kind-/Films')));
     await tester.pumpAndSettle();
-    await tester.tap(find
-        .descendant(
+    await tester.tap(
+      find
+          .descendant(
             of: find.byKey(const ValueKey('files-kind-movies')).last,
-            matching: find.byType(Text))
-        .last);
+            matching: find.byType(Text),
+          )
+          .last,
+    );
     await tester.pumpAndSettle();
     await _tap(tester, 'smb-save-button');
 
     final accountId = smbAccountId(Uri.parse('smb://192.168.1.20/media'));
     final record = (await h.store.load()).accounts.single;
     expect(record.account.id, accountId);
-    final secret = await h.storage
-        .read('${record.account.storageNamespace}/account_token');
+    final secret = await h.storage.read(
+      '${record.account.storageNamespace}/account_token',
+    );
     expect(SmbCredentials.fromJson(secret!).user, 'viewer');
     final roots = {
       for (final r in FileLibraryIndex(h.box, accountId: accountId).roots())
@@ -253,8 +283,9 @@ void main() {
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
   });
 
-  testWidgets('a discovered server names the account with its own name',
-      (tester) async {
+  testWidgets('a discovered server names the account with its own name', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     await _viaDiscovery(tester, h);
     await _tap(tester, 'smb-guest');
@@ -281,8 +312,9 @@ void main() {
     expect(record.account.displayName, '10.0.0.9/media');
   });
 
-  testWidgets('leaving the folder step unsaved closes the account',
-      (tester) async {
+  testWidgets('leaving the folder step unsaved closes the account', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     await _viaDiscovery(tester, h);
     await _tap(tester, 'smb-guest');
@@ -291,8 +323,9 @@ void main() {
 
     h.router.pop();
     await tester.pumpAndSettle();
-    expect(h.native.closedAccounts,
-        [smbAccountId(Uri.parse('smb://192.168.1.20/media'))]);
+    expect(h.native.closedAccounts, [
+      smbAccountId(Uri.parse('smb://192.168.1.20/media')),
+    ]);
   });
 
   group('errors', () {
@@ -316,8 +349,10 @@ void main() {
 
     testWidgets('not found', (tester) async {
       await failing(tester, const BackendNotFound('gone'));
-      expect(find.text('That shared folder no longer exists on this server.'),
-          findsOneWidget);
+      expect(
+        find.text('That shared folder no longer exists on this server.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('access denied', (tester) async {
@@ -325,8 +360,9 @@ void main() {
       expect(find.text("This account can't open that folder."), findsOneWidget);
     });
 
-    testWidgets('a host:port address is split, not read as IPv6',
-        (tester) async {
+    testWidgets('a host:port address is split, not read as IPv6', (
+      tester,
+    ) async {
       for (final (typed, host, port) in [
         ('nas.local:4455', 'nas.local', 4455),
         ('192.168.1.5:445', '192.168.1.5', 445),
@@ -349,8 +385,11 @@ void main() {
         await _enter(tester, 'smb-host-field', typed);
         await _tap(tester, 'smb-guest');
         expect(h.native.listed, isEmpty, reason: typed);
-        expect(find.textContaining('between 1 and 65535'), findsOneWidget,
-            reason: typed);
+        expect(
+          find.textContaining('between 1 and 65535'),
+          findsOneWidget,
+          reason: typed,
+        );
       }
     });
 
@@ -365,20 +404,25 @@ void main() {
       await _tap(tester, 'smb-manual');
       await _enter(tester, 'smb-host-field', '10.0.0.9');
       await _tap(tester, 'smb-guest');
-      expect(find.text('This server has no shared folders you can open.'),
-          findsOneWidget);
+      expect(
+        find.text('This server has no shared folders you can open.'),
+        findsOneWidget,
+      );
       expect(find.byKey(const Key('smb-shares')), findsNothing);
     });
   });
 
   group('discovery empty states', () {
-    testWidgets('an error shows none found, and no iOS hint on android',
-        (tester) async {
+    testWidgets('an error shows none found, and no iOS hint on android', (
+      tester,
+    ) async {
       final h = await _pump(tester);
       h.discovery.fail();
       await tester.pumpAndSettle();
       expect(
-          find.text('No file shares found on this network.'), findsOneWidget);
+        find.text('No file shares found on this network.'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Allow local network access'), findsNothing);
     });
 
@@ -387,7 +431,9 @@ void main() {
       expect(find.text('No file shares found on this network.'), findsNothing);
       await tester.pump(const Duration(seconds: 5));
       expect(
-          find.text('No file shares found on this network.'), findsOneWidget);
+        find.text('No file shares found on this network.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('iOS adds the local network hint', (tester) async {
@@ -395,7 +441,9 @@ void main() {
       h.discovery.fail();
       await tester.pumpAndSettle();
       expect(
-          find.text('No file shares found on this network.'), findsOneWidget);
+        find.text('No file shares found on this network.'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Allow local network access'), findsOneWidget);
     });
   });
@@ -406,8 +454,10 @@ void main() {
     /// Saves the attic share with `/Films`, signed in with password `old`,
     /// optionally marked as needing a new sign-in, then opens the screen
     /// for it again.
-    Future<_Harness> reopen(WidgetTester tester,
-        {required bool needsReauth}) async {
+    Future<_Harness> reopen(
+      WidgetTester tester, {
+      required bool needsReauth,
+    }) async {
       final h = await _pump(tester);
       await _viaDiscovery(tester, h);
       await _enter(tester, 'smb-password-field', 'old');
@@ -419,8 +469,9 @@ void main() {
       await _tap(tester, 'smb-save-button');
       if (needsReauth) {
         final record = (await h.store.load()).accounts.single;
-        await h.store.putAccount(record.copyWith(
-            account: record.account.copyWith(needsReauth: true)));
+        await h.store.putAccount(
+          record.copyWith(account: record.account.copyWith(needsReauth: true)),
+        );
       }
       await tester.pumpWidget(const SizedBox());
       return _pump(tester, reauthAccountId: accountId, reuse: h);
@@ -428,8 +479,9 @@ void main() {
 
     Future<String?> password(_Harness h) async {
       final record = (await h.store.load()).accounts.single;
-      final secret = await h.storage
-          .read('${record.account.storageNamespace}/account_token');
+      final secret = await h.storage.read(
+        '${record.account.storageNamespace}/account_token',
+      );
       return SmbCredentials.fromJson(secret!).password;
     }
 
@@ -439,35 +491,42 @@ void main() {
       await _tap(tester, 'smb-connect-button');
     }
 
-    testWidgets('signing in again keeps the share and replaces the credentials',
-        (tester) async {
-      final h = await reopen(tester, needsReauth: true);
-      expect(find.byKey(const Key('smb-login')), findsOneWidget);
-      expect(find.byKey(const Key('smb-servers')), findsNothing);
-      expect(
+    testWidgets(
+      'signing in again keeps the share and replaces the credentials',
+      (tester) async {
+        final h = await reopen(tester, needsReauth: true);
+        expect(find.byKey(const Key('smb-login')), findsOneWidget);
+        expect(find.byKey(const Key('smb-servers')), findsNothing);
+        expect(
           tester
               .widget<TextField>(find.byKey(const Key('smb-host-field')))
               .controller!
               .text,
-          '192.168.1.20');
+          '192.168.1.20',
+        );
 
-      await signIn(tester, 'new');
-      expect(h.native.listed, isEmpty, reason: 'never lists shares');
-      // The saved share was checked with the new password before saving.
-      final (target, login) = h.native.probeLogins.single;
-      expect((target.host, target.port, target.share),
-          ('192.168.1.20', 445, 'media'));
-      expect((login.user, login.password), ('viewer', 'new'));
+        await signIn(tester, 'new');
+        expect(h.native.listed, isEmpty, reason: 'never lists shares');
+        // The saved share was checked with the new password before saving.
+        final (target, login) = h.native.probeLogins.single;
+        expect(
+          (target.host, target.port, target.share),
+          ('192.168.1.20', 445, 'media'),
+        );
+        expect((login.user, login.password), ('viewer', 'new'));
 
-      expect(find.byKey(const Key('smb-shares')), findsNothing);
-      final record = (await h.store.load()).accounts.single;
-      expect(record.account.id, accountId);
-      expect(record.account.needsReauth, isFalse);
-      expect(await password(h), 'new');
-      expect(
-          FileLibraryIndex(h.box, accountId: accountId).roots(), hasLength(1));
-      expect(find.text('home'), findsOneWidget);
-    });
+        expect(find.byKey(const Key('smb-shares')), findsNothing);
+        final record = (await h.store.load()).accounts.single;
+        expect(record.account.id, accountId);
+        expect(record.account.needsReauth, isFalse);
+        expect(await password(h), 'new');
+        expect(
+          FileLibraryIndex(h.box, accountId: accountId).roots(),
+          hasLength(1),
+        );
+        expect(find.text('home'), findsOneWidget);
+      },
+    );
 
     const twinId = 's0000000000000001';
 
@@ -476,44 +535,49 @@ void main() {
     Future<void> addTwin(_Harness first, {required bool needsReauth}) async {
       final connections =
           (await first.store.load()).accounts.single.servers.single.connections;
-      await first.store.putAccount(SourceAccountRecord(
-        account: ProviderAccount(
-          id: twinId,
-          kind: SourceKind.files,
-          displayName: 'Twin',
-          storageNamespace: SourceSecrets.newStorageNamespace(twinId),
-          activeProfileId: kOwnerProfileId,
-          needsReauth: needsReauth,
-        ),
-        profiles: const [
-          SourceProfile(
+      await first.store.putAccount(
+        SourceAccountRecord(
+          account: ProviderAccount(
+            id: twinId,
+            kind: SourceKind.files,
+            displayName: 'Twin',
+            storageNamespace: SourceSecrets.newStorageNamespace(twinId),
+            activeProfileId: kOwnerProfileId,
+            needsReauth: needsReauth,
+          ),
+          profiles: const [
+            SourceProfile(
               id: kOwnerProfileId,
               accountId: twinId,
               name: 'Owner',
-              isOwner: true),
-        ],
-        servers: [
-          SourceServer(
-            id: twinId,
-            accountId: twinId,
-            profileId: kOwnerProfileId,
-            name: 'Twin',
-            connections: connections,
-          ),
-        ],
-        // Listed after the first share, so a lookup by address finds that.
-        addedAtMs: DateTime(2100).millisecondsSinceEpoch,
-      ));
+              isOwner: true,
+            ),
+          ],
+          servers: [
+            SourceServer(
+              id: twinId,
+              accountId: twinId,
+              profileId: kOwnerProfileId,
+              name: 'Twin',
+              connections: connections,
+            ),
+          ],
+          // Listed after the first share, so a lookup by address finds that.
+          addedAtMs: DateTime(2100).millisecondsSinceEpoch,
+        ),
+      );
     }
 
     Future<String> passwordOf(_Harness h, SourceAccountRecord r) async {
-      final secret =
-          await h.storage.read('${r.account.storageNamespace}/account_token');
+      final secret = await h.storage.read(
+        '${r.account.storageNamespace}/account_token',
+      );
       return SmbCredentials.fromJson(secret!).password;
     }
 
-    testWidgets('signing in again updates the share it was opened for',
-        (tester) async {
+    testWidgets('signing in again updates the share it was opened for', (
+      tester,
+    ) async {
       final first = await reopen(tester, needsReauth: false);
       await addTwin(first, needsReauth: true);
       await tester.pumpWidget(const SizedBox());
@@ -529,8 +593,9 @@ void main() {
       expect(await passwordOf(h, records[accountId]!), 'old');
     });
 
-    testWidgets('adding folders updates the share it was opened for',
-        (tester) async {
+    testWidgets('adding folders updates the share it was opened for', (
+      tester,
+    ) async {
       final first = await reopen(tester, needsReauth: false);
       await addTwin(first, needsReauth: false);
       await tester.pumpWidget(const SizedBox());
@@ -548,13 +613,16 @@ void main() {
       expect(await passwordOf(h, records[twinId]!), 'new');
       expect(await passwordOf(h, records[accountId]!), 'old');
       expect(
-          FileLibraryIndex(h.box, accountId: twinId).roots().map((r) => r.path),
-          ['/Shows']);
+        FileLibraryIndex(h.box, accountId: twinId).roots().map((r) => r.path),
+        ['/Shows'],
+      );
       expect(
-          FileLibraryIndex(h.box, accountId: accountId)
-              .roots()
-              .map((r) => r.path),
-          ['/Films']);
+        FileLibraryIndex(
+          h.box,
+          accountId: accountId,
+        ).roots().map((r) => r.path),
+        ['/Films'],
+      );
       expect(find.text('opened $twinId:owner:$twinId'), findsOneWidget);
     });
 
@@ -570,8 +638,9 @@ void main() {
       expect(await password(h), 'old');
     });
 
-    testWidgets('add folders signs in, then opens the folder picker',
-        (tester) async {
+    testWidgets('add folders signs in, then opens the folder picker', (
+      tester,
+    ) async {
       final h = await reopen(tester, needsReauth: false);
       await signIn(tester, 'new');
 
@@ -602,24 +671,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('smb-shares')), findsOneWidget);
-    expect(h.native.closedAccounts,
-        [smbAccountId(Uri.parse('smb://192.168.1.20/media'))]);
+    expect(h.native.closedAccounts, [
+      smbAccountId(Uri.parse('smb://192.168.1.20/media')),
+    ]);
     // The sign-in is kept: the share opens again without one.
     await _tap(tester, 'smb-share-media');
     expect(find.byKey(const Key('smb-folders')), findsOneWidget);
     expect(h.native.listed, hasLength(1));
   });
 
-  testWidgets('an unreachable advertised address moves on to the next',
-      (tester) async {
+  testWidgets('an unreachable advertised address moves on to the next', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     h.native.unreachableHosts.add('172.17.0.1');
     h.discovery.emit([
       const DiscoveredSmbServer(
-          name: 'Attic NAS',
-          host: '172.17.0.1',
-          port: 445,
-          alternatives: ['192.168.1.20']),
+        name: 'Attic NAS',
+        host: '172.17.0.1',
+        port: 445,
+        alternatives: ['192.168.1.20'],
+      ),
     ]);
     await tester.pumpAndSettle();
     await _tap(tester, 'smb-server-Attic NAS');
@@ -633,20 +705,24 @@ void main() {
 
     final record = (await h.store.load()).accounts.single;
     expect(
-        record.account.id, smbAccountId(Uri.parse('smb://192.168.1.20/media')));
+      record.account.id,
+      smbAccountId(Uri.parse('smb://192.168.1.20/media')),
+    );
   });
 
-  testWidgets('a_later_address_answered_saves_the_first_as_an_alternative',
-      (tester) async {
+  testWidgets('a_later_address_answered_saves_the_first_as_an_alternative', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     h.native.unreachableHosts.add('172.17.0.1');
     h.discovery.emit([
       const DiscoveredSmbServer(
-          name: 'Attic NAS',
-          host: '172.17.0.1',
-          port: 445,
-          alternatives: ['192.168.1.20'],
-          hostname: 'attic.local'),
+        name: 'Attic NAS',
+        host: '172.17.0.1',
+        port: 445,
+        alternatives: ['192.168.1.20'],
+        hostname: 'attic.local',
+      ),
     ]);
     await tester.pumpAndSettle();
     await _tap(tester, 'smb-server-Attic NAS');
@@ -657,19 +733,23 @@ void main() {
     await _tap(tester, 'smb-save-button');
 
     final server = (await h.store.load()).accounts.single.servers.single;
-    expect(server.connections.map((c) => c.uri.host).toList(),
-        ['192.168.1.20', 'attic.local', '172.17.0.1']);
+    expect(server.connections.map((c) => c.uri.host).toList(), [
+      '192.168.1.20',
+      'attic.local',
+      '172.17.0.1',
+    ]);
   });
 
   testWidgets('picked_server_saves_hostname_and_alternatives', (tester) async {
     final h = await _pump(tester);
     h.discovery.emit([
       const DiscoveredSmbServer(
-          name: 'NAS',
-          host: '192.168.1.5',
-          port: 445,
-          alternatives: ['10.0.0.5'],
-          hostname: 'nas.local'),
+        name: 'NAS',
+        host: '192.168.1.5',
+        port: 445,
+        alternatives: ['10.0.0.5'],
+        hostname: 'nas.local',
+      ),
     ]);
     await tester.pumpAndSettle();
     await _tap(tester, 'smb-server-NAS');
@@ -680,8 +760,11 @@ void main() {
     await _tap(tester, 'smb-save-button');
 
     final server = (await h.store.load()).accounts.single.servers.single;
-    expect(server.connections.map((c) => c.uri.host).toList(),
-        ['192.168.1.5', 'nas.local', '10.0.0.5']);
+    expect(server.connections.map((c) => c.uri.host).toList(), [
+      '192.168.1.5',
+      'nas.local',
+      '10.0.0.5',
+    ]);
     expect(server.serviceName, 'NAS');
   });
 
@@ -700,13 +783,16 @@ void main() {
     expect(server.serviceName, isNull);
   });
 
-  testWidgets('signing in again to a missing account cannot connect',
-      (tester) async {
+  testWidgets('signing in again to a missing account cannot connect', (
+    tester,
+  ) async {
     final h = await _pump(tester, reauthAccountId: 'sdeadbeefdeadbeef');
 
     expect(find.byKey(const Key('smb-error')), findsOneWidget);
     expect(
-        find.text('Could not save this share on this device.'), findsOneWidget);
+      find.text('Could not save this share on this device.'),
+      findsOneWidget,
+    );
     for (final key in ['smb-connect-button', 'smb-guest']) {
       final f = find.byKey(Key(key));
       await tester.ensureVisible(f);

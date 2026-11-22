@@ -7,7 +7,7 @@
 // layering and that the poster widgets drive it on hover.
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
@@ -22,8 +22,9 @@ void main() {
     test('hover overrides the screen default; clearHover reverts', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final notifier =
-          container.read(ambientBackdropControllerProvider.notifier);
+      final notifier = container.read(
+        ambientBackdropControllerProvider.notifier,
+      );
 
       notifier.setDefault(const BackdropSource(imageUrl: 'd', id: 'd'));
       expect(container.read(ambientBackdropControllerProvider).id, 'd');
@@ -43,8 +44,9 @@ void main() {
     test('clearHover with no hover set is a no-op', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final notifier =
-          container.read(ambientBackdropControllerProvider.notifier);
+      final notifier = container.read(
+        ambientBackdropControllerProvider.notifier,
+      );
 
       notifier.setDefault(const BackdropSource(imageUrl: 'd', id: 'd'));
       notifier.clearHover();
@@ -54,8 +56,9 @@ void main() {
     test('clearHoverIf clears the override when it still matches', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final notifier =
-          container.read(ambientBackdropControllerProvider.notifier);
+      final notifier = container.read(
+        ambientBackdropControllerProvider.notifier,
+      );
 
       const a = BackdropSource(imageUrl: 'a', id: 'a');
       notifier.setHover(a);
@@ -67,8 +70,7 @@ void main() {
       );
     });
 
-    test(
-        'clearHoverIf leaves a newer, different override untouched '
+    test('clearHoverIf leaves a newer, different override untouched '
         '(regression: scroll-recycling race)', () {
       // A poster unmounting while hovered defers its clear to a post-frame
       // callback (PosterFrame.dispose). During a scroll under a stationary
@@ -81,8 +83,9 @@ void main() {
       // clear, not whatever happens to be there now.
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final notifier =
-          container.read(ambientBackdropControllerProvider.notifier);
+      final notifier = container.read(
+        ambientBackdropControllerProvider.notifier,
+      );
 
       const posterA = BackdropSource(imageUrl: 'a', id: 'a');
       const posterB = BackdropSource(imageUrl: 'b', id: 'b');
@@ -105,14 +108,15 @@ void main() {
   });
 
   group('poster hover drives the backdrop (R5/R9)', () {
-    testWidgets('hovering a card publishes its artwork; off-hover reverts',
-        (tester) async {
+    testWidgets('hovering a card publishes its artwork; off-hover reverts', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         final container = ProviderContainer();
         addTearDown(container.dispose);
         // The shell always watches this provider; keep it alive here so the
         // autoDispose controller doesn't drop the hover state between writes.
-        container.listen(ambientBackdropControllerProvider, (_, __) {});
+        container.listen(ambientBackdropControllerProvider, (_, _) {});
 
         await tester.pumpWidget(
           UncontrolledProviderScope(
@@ -140,8 +144,9 @@ void main() {
         );
         await tester.pump();
 
-        final gesture =
-            await tester.createGesture(kind: PointerDeviceKind.mouse);
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
         await gesture.addPointer(location: Offset.zero);
         addTearDown(gesture.removePointer);
 
@@ -163,11 +168,12 @@ void main() {
       });
     });
 
-    testWidgets('a card with no artwork leaves the backdrop at the default',
-        (tester) async {
+    testWidgets('a card with no artwork leaves the backdrop at the default', (
+      tester,
+    ) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      container.listen(ambientBackdropControllerProvider, (_, __) {});
+      container.listen(ambientBackdropControllerProvider, (_, _) {});
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -178,8 +184,10 @@ void main() {
                 child: SizedBox(
                   width: 130,
                   height: 260,
-                  child:
-                      MediaCard(title: 'No Art', action: MediaCardAction.open),
+                  child: MediaCard(
+                    title: 'No Art',
+                    action: MediaCardAction.open,
+                  ),
                 ),
               ),
             ),
@@ -209,14 +217,14 @@ void main() {
   });
 
   group('default updates are not masked by a matching hover (regression)', () {
-    testWidgets(
-        'a published default is recorded even when it equals the '
+    testWidgets('a published default is recorded even when it equals the '
         'active hover; clearHover then settles on it', (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      container.listen(ambientBackdropControllerProvider, (_, __) {});
-      final notifier =
-          container.read(ambientBackdropControllerProvider.notifier);
+      container.listen(ambientBackdropControllerProvider, (_, _) {});
+      final notifier = container.read(
+        ambientBackdropControllerProvider.notifier,
+      );
 
       const art = BackdropSource(imageUrl: 'u', id: 'a');
 

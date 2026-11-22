@@ -25,25 +25,25 @@ const _device = CastDevice(
 );
 
 DownloadTask _task(String id, String? sourceId) => DownloadTask(
-      id: id,
-      mediaId: 'media-$id',
-      title: 'Quill Harbor',
-      quality: '1080p',
-      status: 'completed',
-      createdAt: DateTime(2026),
-      sourceId: sourceId,
-    );
+  id: id,
+  mediaId: 'media-$id',
+  title: 'Quill Harbor',
+  quality: '1080p',
+  status: 'completed',
+  createdAt: DateTime(2026),
+  sourceId: sourceId,
+);
 
 DownloadedMedia _media(String id, String? sourceId) => DownloadedMedia(
-      id: id,
-      mediaId: 'media-$id',
-      title: 'Quill Harbor',
-      quality: '1080p',
-      filePath: '/tmp/$id.mp4',
-      fileSize: 10,
-      downloadedAt: DateTime(2026),
-      sourceId: sourceId,
-    );
+  id: id,
+  mediaId: 'media-$id',
+  title: 'Quill Harbor',
+  quality: '1080p',
+  filePath: '/tmp/$id.mp4',
+  fileSize: 10,
+  downloadedAt: DateTime(2026),
+  sourceId: sourceId,
+);
 
 void main() {
   const from = preAccountSourceId;
@@ -74,8 +74,9 @@ void main() {
       tasksBox: await Hive.openBox<DownloadTask>('rw_tasks_$boxCounter'),
       mediaBox: await Hive.openBox<DownloadedMedia>('rw_media_$boxCounter'),
     );
-    progressBox =
-        await Hive.openBox<Map<dynamic, dynamic>>('rw_progress_$boxCounter');
+    progressBox = await Hive.openBox<Map<dynamic, dynamic>>(
+      'rw_progress_$boxCounter',
+    );
     progress = HivePlaybackProgressStore(progressBox);
     store = InMemorySourceStore();
     cache = InMemorySourceCache();
@@ -116,8 +117,11 @@ void main() {
       PersistedCastSession.forContent(
         device: _device,
         content: SourceCastContent(
-          item:
-              ItemRef(sourceId: id, kind: ItemKind.movie, externalId: 'item-1'),
+          item: ItemRef(
+            sourceId: id,
+            kind: ItemKind.movie,
+            externalId: 'item-1',
+          ),
           versionId: 'v1',
         ),
         title: 'Quill Harbor',
@@ -140,9 +144,13 @@ void main() {
     String? task(String id) => downloads.getTask(id)!.sourceId;
     String? media(String id) => downloads.getMedia(id)!.sourceId;
     expect(
-        [task('a'), task('b'), task('c')], [to.value, to.value, 'mplex:o:s']);
-    expect([media('a'), media('b'), media('c')],
-        [to.value, to.value, 'mplex:o:s']);
+      [task('a'), task('b'), task('c')],
+      [to.value, to.value, 'mplex:o:s'],
+    );
+    expect(
+      [media('a'), media('b'), media('c')],
+      [to.value, to.value, 'mplex:o:s'],
+    );
   });
 
   test('progress under a bare id is re-keyed', () async {
@@ -155,22 +163,28 @@ void main() {
     expect(moved.isSynced, isFalse);
   });
 
-  test('progress with no sourceId key is moved, position and state kept',
-      () async {
-    await progressBox.put('42', {
-      'mediaId': '42',
-      'mediaType': 'movie',
-      'positionSeconds': 30,
-      'durationSeconds': 1200,
-      'updatedAt': DateTime(2026).toIso8601String(),
-    });
-    expect(progress.all(), hasLength(1), reason: 'reading must not delete it');
-    await rewriter.rewrite(from, to);
-    expect(progressBox.containsKey('42'), isFalse);
-    final moved = progress.get('${to.value}|42')!;
-    expect(moved.positionSeconds, 30);
-    expect(moved.isSynced, isFalse);
-  });
+  test(
+    'progress with no sourceId key is moved, position and state kept',
+    () async {
+      await progressBox.put('42', {
+        'mediaId': '42',
+        'mediaType': 'movie',
+        'positionSeconds': 30,
+        'durationSeconds': 1200,
+        'updatedAt': DateTime(2026).toIso8601String(),
+      });
+      expect(
+        progress.all(),
+        hasLength(1),
+        reason: 'reading must not delete it',
+      );
+      await rewriter.rewrite(from, to);
+      expect(progressBox.containsKey('42'), isFalse);
+      final moved = progress.get('${to.value}|42')!;
+      expect(moved.positionSeconds, 30);
+      expect(moved.isSynced, isFalse);
+    },
+  );
 
   test('all servers choice and active source move', () async {
     await store.setAllServers({from: false, other: true});
@@ -205,28 +219,32 @@ void main() {
     expect(content.versionId, 'v1');
   });
 
-  test('a cast session of another source or legacy kind is untouched',
-      () async {
-    await cast.save(sourceCast(other));
-    await rewriter.rewrite(from, to);
-    expect(((await cast.load())!.content as SourceCastContent).item.sourceId,
-        other);
+  test(
+    'a cast session of another source or legacy kind is untouched',
+    () async {
+      await cast.save(sourceCast(other));
+      await rewriter.rewrite(from, to);
+      expect(
+        ((await cast.load())!.content as SourceCastContent).item.sourceId,
+        other,
+      );
 
-    final legacy = PersistedCastSession(
-      sourceId: other,
-      device: _device,
-      mediaId: 'm1',
-      mediaType: 'movie',
-      fileId: 'f1',
-      title: 'Quill Harbor',
-      position: Duration.zero,
-      routeKind: CastRouteKind.directServer,
-      savedAt: DateTime.utc(2026, 10, 5),
-    );
-    await cast.save(legacy);
-    await rewriter.rewrite(from, to);
-    expect((await cast.load())!.content, isA<MydiaCastContent>());
-  });
+      final legacy = PersistedCastSession(
+        sourceId: other,
+        device: _device,
+        mediaId: 'm1',
+        mediaType: 'movie',
+        fileId: 'f1',
+        title: 'Quill Harbor',
+        position: Duration.zero,
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.utc(2026, 10, 5),
+      );
+      await cast.save(legacy);
+      await rewriter.rewrite(from, to);
+      expect((await cast.load())!.content, isA<MydiaCastContent>());
+    },
+  );
 
   test('null downloads and cast store are skipped', () async {
     final bare = HiveLegacyDataRewriter(

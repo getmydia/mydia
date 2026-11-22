@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/l10n.dart';
 import 'platform_features.dart';
@@ -108,11 +108,7 @@ class PipToggleButton extends StatelessWidget {
   final PipService pipService;
   final VoidCallback? onToggle;
 
-  const PipToggleButton({
-    super.key,
-    required this.pipService,
-    this.onToggle,
-  });
+  const PipToggleButton({super.key, required this.pipService, this.onToggle});
 
   @override
   Widget build(BuildContext context) {

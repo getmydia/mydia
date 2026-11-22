@@ -55,13 +55,16 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'Playback chrome must use only Icons.*_rounded. Found:\n'
+      reason:
+          'Playback chrome must use only Icons.*_rounded. Found:\n'
           '${offenders.join('\n')}',
     );
   });
 
-  test('the scan actually finds source files (guards against a silent pass)',
-      () {
-    expect(_dartFiles(), isNotEmpty);
-  });
+  test(
+    'the scan actually finds source files (guards against a silent pass)',
+    () {
+      expect(_dartFiles(), isNotEmpty);
+    },
+  );
 }

@@ -17,7 +17,7 @@ const _boxName = 'remote_control_settings';
 class RemoteControlSettings {
   final Box<dynamic> _box;
 
-  RemoteControlSettings({required Box<dynamic> box}) : _box = box;
+  RemoteControlSettings({required this._box});
 
   Future<bool> controllableEnabled() async {
     final stored = _box.get(_controllableKey);
@@ -33,8 +33,9 @@ class RemoteControlSettings {
 /// Opens this device's remote-control settings box once and reuses it,
 /// closing it when the provider itself is torn down. Matches
 /// `castSessionStoreProvider` (`core/cast/cast_providers.dart`).
-final remoteControlSettingsProvider =
-    FutureProvider<RemoteControlSettings>((ref) async {
+final remoteControlSettingsProvider = FutureProvider<RemoteControlSettings>((
+  ref,
+) async {
   final box = await Hive.openBox<dynamic>(_boxName);
   ref.onDispose(() => unawaited(box.close()));
   return RemoteControlSettings(box: box);

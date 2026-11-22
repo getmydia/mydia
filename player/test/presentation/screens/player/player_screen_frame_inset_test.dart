@@ -14,7 +14,7 @@
 // live player controller and platform channels this suite does not
 // construct.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
@@ -25,29 +25,26 @@ const Key _childKey = Key('player-frame-child');
 void main() {
   group('PlayerScreen.playerFrame under a reserved window chrome strip', () {
     testWidgets(
-        'the child (the video surface, in production) stays flush with the '
-        'top of the frame, not pushed down by the macOS title bar strip',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: MediaQuery(
-            data: const MediaQueryData(
-              padding: EdgeInsets.only(top: kMacTitleBarOverlap),
-            ),
-            child: PlayerScreen.playerFrame(
-              child: const SizedBox(
-                key: _childKey,
-                height: 100,
-                width: 100,
+      'the child (the video surface, in production) stays flush with the '
+      'top of the frame, not pushed down by the macOS title bar strip',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: MediaQuery(
+              data: const MediaQueryData(
+                padding: EdgeInsets.only(top: kMacTitleBarOverlap),
+              ),
+              child: PlayerScreen.playerFrame(
+                child: const SizedBox(key: _childKey, height: 100, width: 100),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(tester.getRect(find.byKey(_childKey)).top, 0);
-    });
+        expect(tester.getRect(find.byKey(_childKey)).top, 0);
+      },
+    );
   });
 }

@@ -9,7 +9,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
@@ -218,10 +218,12 @@ ScriptedMydiaTransport _link({
     if (request.operation == 'MovieDetail') {
       final hooked = onMovieDetail?.call(request);
       if (hooked != null) return hooked;
-      return movieDetailResponse(files: [
-        mediaFileWithSubtitle(fileId: 'file-a'),
-        mediaFileWithSubtitle(fileId: 'file-b'),
-      ]);
+      return movieDetailResponse(
+        files: [
+          mediaFileWithSubtitle(fileId: 'file-a'),
+          mediaFileWithSubtitle(fileId: 'file-b'),
+        ],
+      );
     }
     if (request.operation == 'MovieSubtitlePreference') {
       final hooked = onPreference?.call(request);
@@ -294,22 +296,24 @@ Future<void> _mount(
     _containerTearDownRegistered = true;
   }
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: _container!,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: PlayerScreen(
-        mediaId: mediaId,
-        mediaType: 'movie',
-        fileId: fileId,
-        title: 'The Long Aurora',
-        session: _sessionFor(fileId, mediaId),
-        createPlayer: () => Player(platformPlayer: player),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: _container!,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: PlayerScreen(
+          mediaId: mediaId,
+          mediaType: 'movie',
+          fileId: fileId,
+          title: 'The Long Aurora',
+          session: _sessionFor(fileId, mediaId),
+          createPlayer: () => Player(platformPlayer: player),
+        ),
       ),
     ),
-  ));
+  );
   await tester.pump();
 
   if (firstMount && waitForOpen) {
@@ -336,22 +340,24 @@ Future<void> _mountWithFactory(
     addTearDown(_container!.dispose);
     _containerTearDownRegistered = true;
   }
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: _container!,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: PlayerScreen(
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: fileId,
-        title: 'The Long Aurora',
-        session: _sessionFor(fileId, 'movie-1'),
-        createPlayer: () => Player(platformPlayer: next()),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: _container!,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: PlayerScreen(
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          fileId: fileId,
+          title: 'The Long Aurora',
+          session: _sessionFor(fileId, 'movie-1'),
+          createPlayer: () => Player(platformPlayer: next()),
+        ),
       ),
     ),
-  ));
+  );
   await tester.pump(const Duration(seconds: 1));
 }
 
@@ -361,7 +367,8 @@ Future<void> _mountWithFactory(
 /// observe these across libraries; the brief's bare `_field` dynamic access
 /// cannot reach library-private members in Dart.
 ({SubtitlePreference? preference, bool appliedForPlayback}) _preferenceStateOf(
-    WidgetTester tester) {
+  WidgetTester tester,
+) {
   final state = tester.state(find.byType(PlayerScreen));
   final binding = state as dynamic;
   return (
@@ -400,8 +407,7 @@ String? _playingFileId(_ProbedPlayer player) {
 Future<void> _pumpUntilSwitched(
   WidgetTester tester,
   bool Function() condition,
-) =>
-    tester.runAsync(() => pumpUntilReal(tester, condition));
+) => tester.runAsync(() => pumpUntilReal(tester, condition));
 
 void main() {
   setUp(() {
@@ -425,18 +431,17 @@ void main() {
     final playing = _playingFileId(player);
 
     // Verdict first so a preference failure does not hide it.
-    expect(
-      playing,
-      'file-b',
-      reason: 'a reused State must load the new file',
-    );
+    expect(playing, 'file-b', reason: 'a reused State must load the new file');
 
     // file-b carries its own preference in `_link()`'s fixture (Japanese, no
     // track title) -- distinct from file-a's (English, with one) -- so this
     // fails if the old file's preference leaked, not merely if none loaded.
     final loaded = preference.preference;
-    expect(loaded, isA<PreferTrack>(),
-        reason: 'file-b must load its own preference');
+    expect(
+      loaded,
+      isA<PreferTrack>(),
+      reason: 'file-b must load its own preference',
+    );
     expect(
       (loaded as PreferTrack?)?.language,
       'jpn',
@@ -449,8 +454,9 @@ void main() {
     );
   });
 
-  testWidgets('the old player is disposed when the file changes',
-      (tester) async {
+  testWidgets('the old player is disposed when the file changes', (
+    tester,
+  ) async {
     final link = _link();
     final players = <_ProbedPlayer>[];
     // A fresh platform player per `createPlayer` call, so the first file's
@@ -465,73 +471,104 @@ void main() {
     await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
     await _mountWithFactory(tester, link, next, fileId: 'file-b');
     await _pumpUntilSwitched(
-        tester, () => players.length == 2 && players[1].opened);
+      tester,
+      () => players.length == 2 && players[1].opened,
+    );
 
-    expect(players.first.disposed, isTrue,
-        reason: 'the first file\'s player must be torn down');
+    expect(
+      players.first.disposed,
+      isTrue,
+      reason: 'the first file\'s player must be torn down',
+    );
     expect(players.last.disposed, isFalse);
     expect(_playingFileId(players.last), 'file-b');
   });
 
   testWidgets(
-      'a load parked inside the media player\'s own open() cannot play or '
-      'double-dispose after the switch', (tester) async {
-    // File A's own `player.open()` -- not any GraphQL step ahead of it --
-    // is what parks here, so this exercises the checks `_openPlayerAndStart`
-    // makes with a `Player` already built and installed into `_player`,
-    // distinct from the `prepareHlsEngine` window ahead of player creation
-    // (no seam reaches that from a widget test: `prepareHlsEngine` is a
-    // no-op `async {}` off the web, see `hls_engine_stub.dart`, so it never
-    // actually suspends here regardless of any gate).
-    final link = _link();
-    final players = <_ProbedPlayer>[];
-    final openGate = Completer<void>();
+    'a load parked inside the media player\'s own open() cannot play or '
+    'double-dispose after the switch',
+    (tester) async {
+      // File A's own `player.open()` -- not any GraphQL step ahead of it --
+      // is what parks here, so this exercises the checks `_openPlayerAndStart`
+      // makes with a `Player` already built and installed into `_player`,
+      // distinct from the `prepareHlsEngine` window ahead of player creation
+      // (no seam reaches that from a widget test: `prepareHlsEngine` is a
+      // no-op `async {}` off the web, see `hls_engine_stub.dart`, so it never
+      // actually suspends here regardless of any gate).
+      final link = _link();
+      final players = <_ProbedPlayer>[];
+      final openGate = Completer<void>();
 
-    // Only the first created player (file A's) parks; file B's opens
-    // normally, the same shape `_mountWithFactory`'s other callers use to
-    // tell one file's player from the next.
-    _ProbedPlayer next() {
-      final p = _ProbedPlayer();
-      if (players.isEmpty) p.openGate = openGate;
-      players.add(p);
-      return p;
-    }
+      // Only the first created player (file A's) parks; file B's opens
+      // normally, the same shape `_mountWithFactory`'s other callers use to
+      // tell one file's player from the next.
+      _ProbedPlayer next() {
+        final p = _ProbedPlayer();
+        if (players.isEmpty) p.openGate = openGate;
+        players.add(p);
+        return p;
+      }
 
-    await _mountWithFactory(tester, link, next, fileId: 'file-a');
-    await pumpUntil(
-        tester, () => players.isNotEmpty && players.first.openStarted);
-    expect(players.first.opened, isFalse,
-        reason: 'sanity: file A\'s open must still be parked');
+      await _mountWithFactory(tester, link, next, fileId: 'file-a');
+      await pumpUntil(
+        tester,
+        () => players.isNotEmpty && players.first.openStarted,
+      );
+      expect(
+        players.first.opened,
+        isFalse,
+        reason: 'sanity: file A\'s open must still be parked',
+      );
 
-    await _mountWithFactory(tester, link, next, fileId: 'file-b');
-    await _pumpUntilSwitched(
-        tester, () => players.length == 2 && players[1].opened);
-    expect(_playingFileId(players.last), 'file-b',
-        reason: 'sanity: the switch must land normally while file A '
-            'is still parked');
+      await _mountWithFactory(tester, link, next, fileId: 'file-b');
+      await _pumpUntilSwitched(
+        tester,
+        () => players.length == 2 && players[1].opened,
+      );
+      expect(
+        _playingFileId(players.last),
+        'file-b',
+        reason:
+            'sanity: the switch must land normally while file A '
+            'is still parked',
+      );
 
-    final playCallsAtSwitch = players.first.playCallCount;
+      final playCallsAtSwitch = players.first.playCallCount;
 
-    // Release file A's parked open and let its now-superseded tail drain.
-    openGate.complete();
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await tester.pump();
+      // Release file A's parked open and let its now-superseded tail drain.
+      openGate.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
 
-    expect(players.first.disposeCallCount, 1,
-        reason: 'the superseded load must leave its own player disposed '
+      expect(
+        players.first.disposeCallCount,
+        1,
+        reason:
+            'the superseded load must leave its own player disposed '
             'exactly once -- never twice (media_kit asserts on that) and '
-            'never zero times (which is the leak this guards against)');
-    expect(players.first.playCallCount, playCallsAtSwitch,
-        reason: 'the superseded load must never play the player it built '
-            'for a file nobody wants anymore');
-    expect(players.last.disposed, isFalse,
-        reason: 'the current player must survive the drain untouched');
-    expect(_playingFileId(players.last), 'file-b');
-  });
+            'never zero times (which is the leak this guards against)',
+      );
+      expect(
+        players.first.playCallCount,
+        playCallsAtSwitch,
+        reason:
+            'the superseded load must never play the player it built '
+            'for a file nobody wants anymore',
+      );
+      expect(
+        players.last.disposed,
+        isFalse,
+        reason: 'the current player must survive the drain untouched',
+      );
+      expect(_playingFileId(players.last), 'file-b');
+    },
+  );
 
-  testWidgets('progress for the old file is saved under the old id',
-      (tester) async {
+  testWidgets('progress for the old file is saved under the old id', (
+    tester,
+  ) async {
     final link = _link();
     final player = _ProbedPlayer();
 
@@ -543,17 +580,21 @@ void main() {
     await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
-    final saves =
-        link.of('UpdateMovieProgress').map((r) => r.variables).toList();
+    final saves = link
+        .of('UpdateMovieProgress')
+        .map((r) => r.variables)
+        .toList();
     expect(
       saves.where(
-          (v) => v['movieId'] == 'movie-1' && v['positionSeconds'] == 30),
+        (v) => v['movieId'] == 'movie-1' && v['positionSeconds'] == 30,
+      ),
       isNotEmpty,
       reason: 'the switch must save file A\'s position against movie-1',
     );
     expect(
       saves.where(
-          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 30),
+        (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 30,
+      ),
       isEmpty,
       reason: 'file A\'s position must never be written to movie-2',
     );
@@ -573,9 +614,12 @@ void main() {
     await player.seek(const Duration(seconds: 4900));
     await tester.pump();
     final state = tester.state(find.byType(PlayerScreen)) as dynamic;
-    // ignore: avoid_dynamic_calls, private State class cannot be named from here
-    expect(state.watchedInvalidationSentForTesting as bool, isTrue,
-        reason: 'sanity: file A must have crossed the watched threshold');
+    expect(
+      // ignore: avoid_dynamic_calls, private State class cannot be named from here
+      state.watchedInvalidationSentForTesting as bool,
+      isTrue,
+      reason: 'sanity: file A must have crossed the watched threshold',
+    );
 
     await _mount(tester, link, player, fileId: 'file-b');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
@@ -586,19 +630,28 @@ void main() {
     expect(state.isDownloadedSourceForTesting as bool, isFalse);
   });
 
-  testWidgets('a load for the old file cannot land after the switch',
-      (tester) async {
+  testWidgets('a load for the old file cannot land after the switch', (
+    tester,
+  ) async {
     // movie-1's preference is held back, which parks file A's whole load:
     // `_fetchProgressAndEpisodes` is awaited before the player is opened.
     final held = Completer<Object>();
-    final link = _link(onPreference: (request) {
-      if (request.variables['id'] != 'movie-1') return null;
-      return held.future;
-    });
+    final link = _link(
+      onPreference: (request) {
+        if (request.variables['id'] != 'movie-1') return null;
+        return held.future;
+      },
+    );
     final player = _ProbedPlayer();
 
-    await _mount(tester, link, player,
-        fileId: 'file-a', mediaId: 'movie-1', waitForOpen: false);
+    await _mount(
+      tester,
+      link,
+      player,
+      fileId: 'file-a',
+      mediaId: 'movie-1',
+      waitForOpen: false,
+    );
     await tester.pump(const Duration(milliseconds: 200));
     expect(player.openedUris, isEmpty, reason: 'sanity: file A is parked');
 
@@ -607,23 +660,29 @@ void main() {
 
     // Release file A's parked load. Its answer carries a file-b entry with a
     // language no other response uses, so a stale write is observable.
-    held.complete(subtitlePreferenceResponse(
-      root: 'movie',
-      id: 'movie-1',
-      preferences: {
-        'file-b': preferredSubtitleObject(mode: 'TRACK', language: 'fre'),
-      },
-    ));
+    held.complete(
+      subtitlePreferenceResponse(
+        root: 'movie',
+        id: 'movie-1',
+        preferences: {
+          'file-b': preferredSubtitleObject(mode: 'TRACK', language: 'fre'),
+        },
+      ),
+    );
     // A plain fake-clock pump cannot resume the parked run: releasing the
     // completer only schedules a microtask, and reaching the rest of the
     // load past it depends on real asynchronous I/O the same way the second
     // `_initializePlayer` does (see `_pumpUntilSwitched`).
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
     await tester.pump();
 
-    expect(player.openedUris.where((u) => u.contains('/file-a/')), isEmpty,
-        reason: 'the superseded load must not go on to open file A');
+    expect(
+      player.openedUris.where((u) => u.contains('/file-a/')),
+      isEmpty,
+      reason: 'the superseded load must not go on to open file A',
+    );
     expect(_playingFileId(player), 'file-b');
     expect(
       (_preferenceStateOf(tester).preference as PreferTrack?)?.language,
@@ -633,152 +692,183 @@ void main() {
   });
 
   testWidgets(
-      'a second switch while the first still awaits its save never credits '
-      'the file in between', (tester) async {
-    // Holds movie-1's own save back, so the movie-1 -> movie-2 switch parks
-    // inside it -- the same shape as the "load cannot land" test above, but
-    // for the save step instead of the load step.
-    final held = Completer<Object>();
-    final link = _link(onMovieProgress: (request) {
-      if (request.variables['movieId'] != 'movie-1') return null;
-      return held.future;
-    });
-    final player = _ProbedPlayer();
+    'a second switch while the first still awaits its save never credits '
+    'the file in between',
+    (tester) async {
+      // Holds movie-1's own save back, so the movie-1 -> movie-2 switch parks
+      // inside it -- the same shape as the "load cannot land" test above, but
+      // for the save step instead of the load step.
+      final held = Completer<Object>();
+      final link = _link(
+        onMovieProgress: (request) {
+          if (request.variables['movieId'] != 'movie-1') return null;
+          return held.future;
+        },
+      );
+      final player = _ProbedPlayer();
 
-    await _mount(tester, link, player, fileId: 'file-a', mediaId: 'movie-1');
-    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
-    await player.seek(const Duration(seconds: 30));
-    await tester.pump();
+      await _mount(tester, link, player, fileId: 'file-a', mediaId: 'movie-1');
+      await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+      await player.seek(const Duration(seconds: 30));
+      await tester.pump();
 
-    // Switch A (movie-1 -> movie-2) starts and parks inside its own save for
-    // movie-1 (held above). `_player` must already be detached by the time
-    // this returns, or switch B below would read movie-1's still-live player
-    // as movie-2's.
-    await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
+      // Switch A (movie-1 -> movie-2) starts and parks inside its own save for
+      // movie-1 (held above). `_player` must already be detached by the time
+      // this returns, or switch B below would read movie-1's still-live player
+      // as movie-2's.
+      await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
 
-    // `ProgressService` throttles any sync attempt for 10 *real* seconds
-    // after the last one it started, regardless of which id that one
-    // targeted -- and switch A's parked save above already started one. Left
-    // alone, switch B's own (would-be erroneous) save silently no-ops on
-    // that throttle before it ever reaches `_player`, passing this test
-    // whether or not the switch itself is correct. Waiting past it is what
-    // makes the assertions below mean anything.
-    await tester
-        .runAsync(() => Future<void>.delayed(const Duration(seconds: 11)));
+      // `ProgressService` throttles any sync attempt for 10 *real* seconds
+      // after the last one it started, regardless of which id that one
+      // targeted -- and switch A's parked save above already started one. Left
+      // alone, switch B's own (would-be erroneous) save silently no-ops on
+      // that throttle before it ever reaches `_player`, passing this test
+      // whether or not the switch itself is correct. Waiting past it is what
+      // makes the assertions below mean anything.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 11)),
+      );
 
-    // Switch B (movie-2 -> movie-3) starts immediately, before A resumes.
-    await _mount(tester, link, player, fileId: 'file-c', mediaId: 'movie-3');
-    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-c');
+      // Switch B (movie-2 -> movie-3) starts immediately, before A resumes.
+      await _mount(tester, link, player, fileId: 'file-c', mediaId: 'movie-3');
+      await _pumpUntilSwitched(
+        tester,
+        () => _playingFileId(player) == 'file-c',
+      );
 
-    // Release A's held save and let its now-superseded tail drain.
-    held.complete(<String, dynamic>{
-      '__typename': 'RootMutationType',
-      'updateMovieProgress': null,
-    });
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await tester.pump();
+      // Release A's held save and let its now-superseded tail drain.
+      held.complete(<String, dynamic>{
+        '__typename': 'RootMutationType',
+        'updateMovieProgress': null,
+      });
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
 
-    final saves =
-        link.of('UpdateMovieProgress').map((r) => r.variables).toList();
-    expect(
-      saves.where(
-          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 30),
-      isEmpty,
-      reason: 'movie-1\'s position must never be written under movie-2, '
-          'the file it was never actually playing',
-    );
-    expect(_playingFileId(player), 'file-c',
-        reason: 'the most recent switch must win');
-    expect(
-      player.openedUris.where((u) => u.contains('/file-b/')),
-      isEmpty,
-      reason: 'a switch superseded before it reloads must never open the '
-          'file it was replacing',
-    );
-  });
-
-  testWidgets(
-      'disposing mid-switch never saves the old file\'s position under the '
-      'new id', (tester) async {
-    // Same hold as above, but this time the screen goes away entirely while
-    // parked, instead of a second switch arriving.
-    final held = Completer<Object>();
-    final link = _link(onMovieProgress: (request) {
-      if (request.variables['movieId'] != 'movie-1') return null;
-      return held.future;
-    });
-    final player = _ProbedPlayer();
-
-    await _mount(tester, link, player, fileId: 'file-a', mediaId: 'movie-1');
-    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
-    // An odd value nothing else in this test produces, so a stale write is
-    // unambiguous.
-    await player.seek(const Duration(seconds: 37));
-    await tester.pump();
-
-    // The switch (movie-1 -> movie-2) starts and parks inside its own save
-    // for movie-1 (held above).
-    await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
-
-    // See the matching comment in the overlapping-switches test above: the
-    // parked save already started `ProgressService`'s 10-real-second
-    // throttle, and without waiting it out, `dispose()`'s own save below
-    // would no-op on the throttle rather than on `_player` being detached --
-    // passing this test whether or not the fix is in place.
-    await tester
-        .runAsync(() => Future<void>.delayed(const Duration(seconds: 11)));
-
-    // The screen is torn down while the switch is still parked.
-    await tester.pumpWidget(const SizedBox());
-
-    // Release the held save and let the (now-orphaned) switch drain.
-    held.complete(<String, dynamic>{
-      '__typename': 'RootMutationType',
-      'updateMovieProgress': null,
-    });
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await tester.pump();
-
-    final saves =
-        link.of('UpdateMovieProgress').map((r) => r.variables).toList();
-    expect(
-      saves.where(
-          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 37),
-      isEmpty,
-      reason: 'dispose() must not find a live player to credit to movie-2, '
-          'the file the switch never actually reached',
-    );
-  });
+      final saves = link
+          .of('UpdateMovieProgress')
+          .map((r) => r.variables)
+          .toList();
+      expect(
+        saves.where(
+          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 30,
+        ),
+        isEmpty,
+        reason:
+            'movie-1\'s position must never be written under movie-2, '
+            'the file it was never actually playing',
+      );
+      expect(
+        _playingFileId(player),
+        'file-c',
+        reason: 'the most recent switch must win',
+      );
+      expect(
+        player.openedUris.where((u) => u.contains('/file-b/')),
+        isEmpty,
+        reason:
+            'a switch superseded before it reloads must never open the '
+            'file it was replacing',
+      );
+    },
+  );
 
   testWidgets(
-      'a failed detail query for the new file must not surface the old '
+    'disposing mid-switch never saves the old file\'s position under the '
+    'new id',
+    (tester) async {
+      // Same hold as above, but this time the screen goes away entirely while
+      // parked, instead of a second switch arriving.
+      final held = Completer<Object>();
+      final link = _link(
+        onMovieProgress: (request) {
+          if (request.variables['movieId'] != 'movie-1') return null;
+          return held.future;
+        },
+      );
+      final player = _ProbedPlayer();
+
+      await _mount(tester, link, player, fileId: 'file-a', mediaId: 'movie-1');
+      await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+      // An odd value nothing else in this test produces, so a stale write is
+      // unambiguous.
+      await player.seek(const Duration(seconds: 37));
+      await tester.pump();
+
+      // The switch (movie-1 -> movie-2) starts and parks inside its own save
+      // for movie-1 (held above).
+      await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
+
+      // See the matching comment in the overlapping-switches test above: the
+      // parked save already started `ProgressService`'s 10-real-second
+      // throttle, and without waiting it out, `dispose()`'s own save below
+      // would no-op on the throttle rather than on `_player` being detached --
+      // passing this test whether or not the fix is in place.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 11)),
+      );
+
+      // The screen is torn down while the switch is still parked.
+      await tester.pumpWidget(const SizedBox());
+
+      // Release the held save and let the (now-orphaned) switch drain.
+      held.complete(<String, dynamic>{
+        '__typename': 'RootMutationType',
+        'updateMovieProgress': null,
+      });
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
+
+      final saves = link
+          .of('UpdateMovieProgress')
+          .map((r) => r.variables)
+          .toList();
+      expect(
+        saves.where(
+          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 37,
+        ),
+        isEmpty,
+        reason:
+            'dispose() must not find a live player to credit to movie-2, '
+            'the file the switch never actually reached',
+      );
+    },
+  );
+
+  testWidgets('a failed detail query for the new file must not surface the old '
       'file\'s resume position or subtitle tracks', (tester) async {
     // File A's detail query answers normally, with its own saved position
     // and subtitle track. File B's answers a plain GraphQL error -- `result
     // .data` comes back null, so `_fetchDetail` never reaches the
     // assignments that would otherwise overwrite what file A left behind.
     var movieDetailCalls = 0;
-    final link = _link(onMovieDetail: (request) {
-      movieDetailCalls++;
-      if (movieDetailCalls == 1) {
-        return movieDetailResponse(
-          positionSeconds: 4200,
-          files: [mediaFileWithSubtitle(fileId: 'file-a')],
-        );
-      }
-      return graphqlError('detail unavailable');
-    });
+    final link = _link(
+      onMovieDetail: (request) {
+        movieDetailCalls++;
+        if (movieDetailCalls == 1) {
+          return movieDetailResponse(
+            positionSeconds: 4200,
+            files: [mediaFileWithSubtitle(fileId: 'file-a')],
+          );
+        }
+        return graphqlError('detail unavailable');
+      },
+    );
     final player = _ProbedPlayer();
 
     await _mount(tester, link, player, fileId: 'file-a');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-a');
 
     final state = tester.state(find.byType(PlayerScreen)) as dynamic;
-    // ignore: avoid_dynamic_calls, private State class cannot be named from here
-    expect(state.savedPositionSecondsForTesting as int?, 4200,
-        reason: 'sanity: file A carries its own saved position');
+    expect(
+      // ignore: avoid_dynamic_calls, private State class cannot be named from here
+      state.savedPositionSecondsForTesting as int?,
+      4200,
+      reason: 'sanity: file A carries its own saved position',
+    );
     expect(
       // ignore: avoid_dynamic_calls, private State class cannot be named from here
       (state.serverSubtitleTracksForTesting as List<Object?>).isNotEmpty,
@@ -789,138 +879,185 @@ void main() {
     await _mount(tester, link, player, fileId: 'file-b');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
-    // ignore: avoid_dynamic_calls, private State class cannot be named from here
-    expect(state.savedPositionSecondsForTesting as int?, isNull,
-        reason: 'file A\'s resume position must not survive a failed '
-            'detail query for file B');
+    expect(
+      // ignore: avoid_dynamic_calls, private State class cannot be named from here
+      state.savedPositionSecondsForTesting as int?,
+      isNull,
+      reason:
+          'file A\'s resume position must not survive a failed '
+          'detail query for file B',
+    );
     expect(
       // ignore: avoid_dynamic_calls, private State class cannot be named from here
       (state.serverSubtitleTracksForTesting as List<Object?>).isEmpty,
       isTrue,
-      reason: 'file A\'s subtitle tracks must not survive a failed detail '
+      reason:
+          'file A\'s subtitle tracks must not survive a failed detail '
           'query for file B',
     );
   });
 
   testWidgets(
-      'a superseded load must not start a cast for the file it left behind',
-      (tester) async {
-    final link = _link();
-    final player = _ProbedPlayer();
-    final castManager = CapturingCastSessionManager();
-    final castManagerGate = Completer<void>();
-    final castManagerRequested = Completer<void>();
+    'a superseded load must not start a cast for the file it left behind',
+    (tester) async {
+      final link = _link();
+      final player = _ProbedPlayer();
+      final castManager = CapturingCastSessionManager();
+      final castManagerGate = Completer<void>();
+      final castManagerRequested = Completer<void>();
 
-    // Built directly, not through `_mount`'s shared container, so the gate
-    // can be threaded onto `castSessionManagerProvider`.
-    _container = buildPlayerScreenContainer(
-      server: link,
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
-      castManager: castManager,
-      proxyService: TrackingLocalProxyService(),
-      castManagerGate: castManagerGate,
-      castManagerRequested: castManagerRequested,
-    );
-    _containerTearDownRegistered = true;
-    addTearDown(_container!.dispose);
+      // Built directly, not through `_mount`'s shared container, so the gate
+      // can be threaded onto `castSessionManagerProvider`.
+      _container = buildPlayerScreenContainer(
+        server: link,
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
+        castManager: castManager,
+        proxyService: TrackingLocalProxyService(),
+        castManagerGate: castManagerGate,
+        castManagerRequested: castManagerRequested,
+      );
+      _containerTearDownRegistered = true;
+      addTearDown(_container!.dispose);
 
-    await _mount(tester, link, player, fileId: 'file-a');
-    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-a');
+      await _mount(tester, link, player, fileId: 'file-a');
+      await _pumpUntilSwitched(
+        tester,
+        () => _playingFileId(player) == 'file-a',
+      );
 
-    // Choosing a cast target now means every later load tries to start a
-    // cast instead of opening a local player.
-    _container!.read(castTargetProvider.notifier).set(testDevice);
+      // Choosing a cast target now means every later load tries to start a
+      // cast instead of opening a local player.
+      _container!.read(castTargetProvider.notifier).set(testDevice);
 
-    // Switch to file B: its own `_castToTargetIfSet` reaches
-    // `castSessionManagerProvider.future` and parks there. Polled for
-    // directly (not a fixed pump duration): the same real asynchronous I/O
-    // `_pumpUntilSwitched` waits out stands between this mount and file B
-    // even reaching that read.
-    await _mount(tester, link, player, fileId: 'file-b');
-    await tester.runAsync(
-        () => pumpUntilReal(tester, () => castManagerRequested.isCompleted));
-    expect(castManager.capturedRequests, isEmpty,
-        reason: 'sanity: file B\'s cast attempt is parked on the gate, '
-            'before it ever reaches startCast');
+      // Switch to file B: its own `_castToTargetIfSet` reaches
+      // `castSessionManagerProvider.future` and parks there. Polled for
+      // directly (not a fixed pump duration): the same real asynchronous I/O
+      // `_pumpUntilSwitched` waits out stands between this mount and file B
+      // even reaching that read.
+      await _mount(tester, link, player, fileId: 'file-b');
+      await tester.runAsync(
+        () => pumpUntilReal(tester, () => castManagerRequested.isCompleted),
+      );
+      expect(
+        castManager.capturedRequests,
+        isEmpty,
+        reason:
+            'sanity: file B\'s cast attempt is parked on the gate, '
+            'before it ever reaches startCast',
+      );
 
-    // Switch again, to file C, while file B's cast attempt is still parked.
-    // `castSessionManagerProvider` caches its one Future, so file C's own
-    // `_castToTargetIfSet` call reads the same still-pending future and
-    // parks on it too (or will, once its own load reaches that point --
-    // either way nothing has called startCast yet).
-    await _mount(tester, link, player, fileId: 'file-c');
-    expect(castManager.capturedRequests, isEmpty,
-        reason: 'sanity: nothing has started a cast while the gate is '
-            'still closed');
+      // Switch again, to file C, while file B's cast attempt is still parked.
+      // `castSessionManagerProvider` caches its one Future, so file C's own
+      // `_castToTargetIfSet` call reads the same still-pending future and
+      // parks on it too (or will, once its own load reaches that point --
+      // either way nothing has called startCast yet).
+      await _mount(tester, link, player, fileId: 'file-c');
+      expect(
+        castManager.capturedRequests,
+        isEmpty,
+        reason:
+            'sanity: nothing has started a cast while the gate is '
+            'still closed',
+      );
 
-    // Release the cast manager. Both parked calls resume from the same
-    // future: file B's (superseded) and file C's (current).
-    castManagerGate.complete();
-    await tester.runAsync(() =>
-        pumpUntilReal(tester, () => castManager.capturedRequests.isNotEmpty));
-    await tester.pump();
+      // Release the cast manager. Both parked calls resume from the same
+      // future: file B's (superseded) and file C's (current).
+      castManagerGate.complete();
+      await tester.runAsync(
+        () => pumpUntilReal(
+          tester,
+          () => castManager.capturedRequests.isNotEmpty,
+        ),
+      );
+      await tester.pump();
 
-    expect(castManager.capturedRequests.length, 1,
-        reason: 'the superseded load (file B) must never reach startCast; '
-            'only the current load may');
-    expect(
-      (castManager.capturedRequests.single.content as MydiaCastContent).fileId,
-      'file-c',
-    );
-  });
+      expect(
+        castManager.capturedRequests.length,
+        1,
+        reason:
+            'the superseded load (file B) must never reach startCast; '
+            'only the current load may',
+      );
+      expect(
+        (castManager.capturedRequests.single.content as MydiaCastContent)
+            .fileId,
+        'file-c',
+      );
+    },
+  );
 
   testWidgets(
-      'a superseded load\'s error must not overwrite the current file\'s '
-      'view', (tester) async {
-    final link = _link();
-    final players = <_ProbedPlayer>[];
-    final disposeGate = Completer<void>();
+    'a superseded load\'s error must not overwrite the current file\'s '
+    'view',
+    (tester) async {
+      final link = _link();
+      final players = <_ProbedPlayer>[];
+      final disposeGate = Completer<void>();
 
-    // Only file B's player (the second created) fails to open and parks on
-    // dispose; file A's and file C's open normally.
-    _ProbedPlayer next() {
-      final p = _ProbedPlayer();
-      if (players.length == 1) {
-        p.openError = Exception('decoder rejected the file');
-        p.disposeGate = disposeGate;
+      // Only file B's player (the second created) fails to open and parks on
+      // dispose; file A's and file C's open normally.
+      _ProbedPlayer next() {
+        final p = _ProbedPlayer();
+        if (players.length == 1) {
+          p.openError = Exception('decoder rejected the file');
+          p.disposeGate = disposeGate;
+        }
+        players.add(p);
+        return p;
       }
-      players.add(p);
-      return p;
-    }
 
-    await _mountWithFactory(tester, link, next, fileId: 'file-a');
-    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+      await _mountWithFactory(tester, link, next, fileId: 'file-a');
+      await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
 
-    // Switch to file B: its player opens, throws, and `_initializePlayer`'s
-    // catch calls `_disposePlayer()`, which parks on `disposeGate` before it
-    // can reach `setState`. Polls for the parked call itself (not a fixed
-    // delay): the same real asynchronous I/O `_pumpUntilSwitched` waits out
-    // stands between this mount and file B's player even reaching `open()`.
-    await _mountWithFactory(tester, link, next, fileId: 'file-b');
-    await tester.runAsync(() => pumpUntilReal(
-        tester, () => players.length == 2 && players[1].disposeStarted));
-    expect(players[1].disposeStarted, isTrue,
-        reason: 'sanity: file B\'s catch reached its parked dispose call');
-    expect(find.text('Failed to load video'), findsNothing,
-        reason: 'sanity: file B\'s catch is parked on disposeGate, before '
-            'it ever reaches setState');
+      // Switch to file B: its player opens, throws, and `_initializePlayer`'s
+      // catch calls `_disposePlayer()`, which parks on `disposeGate` before it
+      // can reach `setState`. Polls for the parked call itself (not a fixed
+      // delay): the same real asynchronous I/O `_pumpUntilSwitched` waits out
+      // stands between this mount and file B's player even reaching `open()`.
+      await _mountWithFactory(tester, link, next, fileId: 'file-b');
+      await tester.runAsync(
+        () => pumpUntilReal(
+          tester,
+          () => players.length == 2 && players[1].disposeStarted,
+        ),
+      );
+      expect(
+        players[1].disposeStarted,
+        isTrue,
+        reason: 'sanity: file B\'s catch reached its parked dispose call',
+      );
+      expect(
+        find.text('Failed to load video'),
+        findsNothing,
+        reason:
+            'sanity: file B\'s catch is parked on disposeGate, before '
+            'it ever reaches setState',
+      );
 
-    // Switch again, to file C, while file B's catch is still parked.
-    await _mountWithFactory(tester, link, next, fileId: 'file-c');
-    await _pumpUntilSwitched(
-        tester, () => players.length == 3 && players[2].opened);
-    expect(_playingFileId(players.last), 'file-c');
+      // Switch again, to file C, while file B's catch is still parked.
+      await _mountWithFactory(tester, link, next, fileId: 'file-c');
+      await _pumpUntilSwitched(
+        tester,
+        () => players.length == 3 && players[2].opened,
+      );
+      expect(_playingFileId(players.last), 'file-c');
 
-    // Release file B's parked dispose and let its now-superseded catch
-    // drain.
-    disposeGate.complete();
-    await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await tester.pump();
+      // Release file B's parked dispose and let its now-superseded catch
+      // drain.
+      disposeGate.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
 
-    expect(find.text('Failed to load video'), findsNothing,
-        reason: 'file B\'s stale error must not replace file C\'s working '
-            'view');
-    expect(_playingFileId(players.last), 'file-c');
-  });
+      expect(
+        find.text('Failed to load video'),
+        findsNothing,
+        reason:
+            'file B\'s stale error must not replace file C\'s working '
+            'view',
+      );
+      expect(_playingFileId(players.last), 'file-c');
+    },
+  );
 }

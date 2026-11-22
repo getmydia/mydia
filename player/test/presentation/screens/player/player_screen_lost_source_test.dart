@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
@@ -86,8 +86,9 @@ class _Decoder extends PlatformPlayer {
   /// What mpv does once it has run out of connection retries: report the
   /// open failure and unload the file.
   void loseSource() {
-    errorController
-        .add('Failed to open http://127.0.0.1:12345/direct/f/stream.');
+    errorController.add(
+      'Failed to open http://127.0.0.1:12345/direct/f/stream.',
+    );
     state = state.copyWith(position: Duration.zero, duration: Duration.zero);
     positionController.add(Duration.zero);
     durationController.add(Duration.zero);
@@ -113,8 +114,13 @@ class _GatedLink extends ScriptedMydiaTransport {
     if (variables.containsKey('strategy') && ++_sessionStarts > 1) {
       await holdSwitchStart?.future;
     }
-    return super.send(query, variables,
-        token: token, deviceProfile: deviceProfile, timeout: timeout);
+    return super.send(
+      query,
+      variables,
+      token: token,
+      deviceProfile: deviceProfile,
+      timeout: timeout,
+    );
   }
 }
 
@@ -165,32 +171,35 @@ Future<void> _mount(
   ProviderContainer container,
   _Decoder decoder,
 ) async {
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: PlayerScreen(
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: 'file-1',
-        title: 'The Long Aurora',
-        session: MydiaPlaybackSession(
-          source: container.read(mediaSourceProvider(testMydiaSourceId))
-              as MydiaSource,
-          item: const ItemRef(
-            sourceId: testMydiaSourceId,
-            kind: ItemKind.movie,
-            externalId: 'movie-1',
-          ),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: PlayerScreen(
+          mediaId: 'movie-1',
+          mediaType: 'movie',
           fileId: 'file-1',
-          proxy: () => container.read(mediaProxyProvider),
+          title: 'The Long Aurora',
+          session: MydiaPlaybackSession(
+            source: container.read(
+              mediaSourceProvider(testMydiaSourceId),
+            ) as MydiaSource,
+            item: const ItemRef(
+              sourceId: testMydiaSourceId,
+              kind: ItemKind.movie,
+              externalId: 'movie-1',
+            ),
+            fileId: 'file-1',
+            proxy: () => container.read(mediaProxyProvider),
+          ),
+          createPlayer: () => Player(platformPlayer: decoder),
         ),
-        createPlayer: () => Player(platformPlayer: decoder),
       ),
     ),
-  ));
+  );
   await tester.pump();
 }
 
@@ -198,7 +207,9 @@ Future<void> _mount(
 /// advanced and 75s is the last good position.
 Future<void> _playTo75(WidgetTester tester, _Decoder decoder) async {
   await pumpUntil(
-      tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+    tester,
+    () => find.byType(PlaybackChrome).evaluate().isNotEmpty,
+  );
   decoder.advanceTo(const Duration(seconds: 60));
   await tester.pump();
   decoder.advanceTo(const Duration(seconds: 75));
@@ -208,7 +219,10 @@ Future<void> _playTo75(WidgetTester tester, _Decoder decoder) async {
 /// Lets a reopen that is already under way land: the new source has to
 /// advance before the switch completes.
 Future<void> _landReopen(
-    WidgetTester tester, _Decoder decoder, int opens) async {
+  WidgetTester tester,
+  _Decoder decoder,
+  int opens,
+) async {
   await pumpUntil(tester, () => decoder.opened.length == opens);
   decoder.advanceTo(const Duration(seconds: 76));
   await tester.pump();
@@ -261,8 +275,9 @@ void main() {
     addTearDown(container.dispose);
   });
 
-  testWidgets('a lost source reopens once at the last good position',
-      (tester) async {
+  testWidgets('a lost source reopens once at the last good position', (
+    tester,
+  ) async {
     await mockHttpResponse(() async {
       await _mount(tester, container, decoder);
       await _playTo75(tester, decoder);
@@ -283,8 +298,9 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('a second loss within the window shows the error page',
-      (tester) async {
+  testWidgets('a second loss within the window shows the error page', (
+    tester,
+  ) async {
     await mockHttpResponse(() async {
       await _mount(tester, container, decoder);
       await _playTo75(tester, decoder);
@@ -323,8 +339,9 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('an SMB listener heal leaves a non-SMB playback alone',
-      (tester) async {
+  testWidgets('an SMB listener heal leaves a non-SMB playback alone', (
+    tester,
+  ) async {
     final smb = FakeSmbNative();
     final smbContainer = buildPlayerScreenContainer(
       server: _server(),
@@ -376,8 +393,9 @@ void main() {
       final source = _smbSource();
       files = FilesMediaSource(
         source: source,
-        backend: FakeBackend(
-            {'${FilesFixture.rootPath}/Copper Valley (2018) 1080p.mkv': 10}),
+        backend: FakeBackend({
+          '${FilesFixture.rootPath}/Copper Valley (2018) 1080p.mkv': 10,
+        }),
         index: f.index,
         progress: f.progress,
         matcher: FileMatcher(
@@ -392,36 +410,47 @@ void main() {
         l10n: () => filesL10n,
       );
       addTearDown(files.dispose);
-      fileKey =
-          fileKeyFor(FilesFixture.rootId, 'Copper Valley (2018) 1080p.mkv');
+      fileKey = fileKeyFor(
+        FilesFixture.rootId,
+        'Copper Valley (2018) 1080p.mkv',
+      );
     }
 
     Future<void> mountSmb(WidgetTester tester) async {
       await tester.runAsync(buildSource);
       final item = ItemRef(
-          sourceId: files.source.id, kind: ItemKind.movie, externalId: '101');
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: smbContainer,
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: toastLayerBuilder,
-          home: PlayerScreen(
-            mediaId: '101',
-            mediaType: 'movie',
-            fileId: fileKey,
-            title: 'Copper Valley',
-            session: FilesPlaybackSession(
-                source: files, item: item, fileId: fileKey),
-            createPlayer: () => Player(platformPlayer: decoder),
+        sourceId: files.source.id,
+        kind: ItemKind.movie,
+        externalId: '101',
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: smbContainer,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: toastLayerBuilder,
+            home: PlayerScreen(
+              mediaId: '101',
+              mediaType: 'movie',
+              fileId: fileKey,
+              title: 'Copper Valley',
+              session: FilesPlaybackSession(
+                source: files,
+                item: item,
+                fileId: fileKey,
+              ),
+              createPlayer: () => Player(platformPlayer: decoder),
+            ),
           ),
         ),
-      ));
+      );
       await tester.pump();
     }
 
-    testWidgets('an SMB listener heal to a new port reopens the file',
-        (tester) async {
+    testWidgets('an SMB listener heal to a new port reopens the file', (
+      tester,
+    ) async {
       await mountSmb(tester);
       await _playTo75(tester, decoder);
       expect(decoder.opened, hasLength(1));
@@ -434,8 +463,11 @@ void main() {
       expect(decoder.opened, hasLength(2));
       expect(decoder.opened.last.start, const Duration(seconds: 75));
       expect(decoder.opened.last.uri, contains('Copper Valley'));
-      expect(proxy.healCalls, proxyHeals,
-          reason: 'an SMB reopen heals its own listener, not the proxy');
+      expect(
+        proxy.healCalls,
+        proxyHeals,
+        reason: 'an SMB reopen heals its own listener, not the proxy',
+      );
       expect(find.byType(PlayerErrorView), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
@@ -475,12 +507,15 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('a heal to a new port before playback advanced is ignored',
-      (tester) async {
+  testWidgets('a heal to a new port before playback advanced is ignored', (
+    tester,
+  ) async {
     await mockHttpResponse(() async {
       await _mount(tester, container, decoder);
       await pumpUntil(
-          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+        tester,
+        () => find.byType(PlaybackChrome).evaluate().isNotEmpty,
+      );
 
       proxy.healEvents.add(ProxyHeal.reboundNewPort);
       await tester.pump();
@@ -494,8 +529,9 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('a lost source during a switch is left to the switch',
-      (tester) async {
+  testWidgets('a lost source during a switch is left to the switch', (
+    tester,
+  ) async {
     final switchStart = Completer<void>();
     addTearDown(() {
       if (!switchStart.isCompleted) switchStart.complete();
@@ -523,8 +559,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
-      expect(proxy.healCalls, healsBefore,
-          reason: 'the loss must not start a reopen of its own');
+      expect(
+        proxy.healCalls,
+        healsBefore,
+        reason: 'the loss must not start a reopen of its own',
+      );
       expect(find.byType(PlayerErrorView), findsNothing);
 
       switchStart.complete();
@@ -533,12 +572,15 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('a lost source before playback started does not reopen',
-      (tester) async {
+  testWidgets('a lost source before playback started does not reopen', (
+    tester,
+  ) async {
     await mockHttpResponse(() async {
       await _mount(tester, container, decoder);
       await pumpUntil(
-          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+        tester,
+        () => find.byType(PlaybackChrome).evaluate().isNotEmpty,
+      );
 
       decoder.loseSource();
       await tester.pump();
@@ -552,53 +594,57 @@ void main() {
   });
 
   testWidgets(
-      'a lost source or heal while casting leaves the local player alone',
-      (tester) async {
-    final sessions = StreamController<CastSession?>();
-    addTearDown(sessions.close);
-    final castingContainer = buildPlayerScreenContainer(
-      server: _server(),
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
-      castManager: CapturingCastSessionManager(),
-      proxyService: proxy,
-      castSessionStream: sessions.stream,
-    );
-    addTearDown(castingContainer.dispose);
+    'a lost source or heal while casting leaves the local player alone',
+    (tester) async {
+      final sessions = StreamController<CastSession?>();
+      addTearDown(sessions.close);
+      final castingContainer = buildPlayerScreenContainer(
+        server: _server(),
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+        castManager: CapturingCastSessionManager(),
+        proxyService: proxy,
+        castSessionStream: sessions.stream,
+      );
+      addTearDown(castingContainer.dispose);
 
-    await mockHttpResponse(() async {
-      await _mount(tester, castingContainer, decoder);
-      await _playTo75(tester, decoder);
-      final healsBefore = proxy.healCalls;
+      await mockHttpResponse(() async {
+        await _mount(tester, castingContainer, decoder);
+        await _playTo75(tester, decoder);
+        final healsBefore = proxy.healCalls;
 
-      sessions.add(const CastSession(
-        device: testDevice,
-        mediaInfo: CastMediaInfo(
-          title: 'The Long Aurora',
-          duration: Duration(seconds: 5400),
-          position: Duration.zero,
-        ),
-        playbackState: CastPlaybackState.playing,
-        connectionState: CastConnectionState.connected,
-      ));
-      await tester.pump();
-      expect(castingContainer.read(isCastingProvider), isTrue);
+        sessions.add(
+          const CastSession(
+            device: testDevice,
+            mediaInfo: CastMediaInfo(
+              title: 'The Long Aurora',
+              duration: Duration(seconds: 5400),
+              position: Duration.zero,
+            ),
+            playbackState: CastPlaybackState.playing,
+            connectionState: CastConnectionState.connected,
+          ),
+        );
+        await tester.pump();
+        expect(castingContainer.read(isCastingProvider), isTrue);
 
-      decoder.loseSource();
-      proxy.healEvents.add(ProxyHeal.reboundNewPort);
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 1));
+        decoder.loseSource();
+        proxy.healEvents.add(ProxyHeal.reboundNewPort);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
 
-      expect(decoder.opened, hasLength(1));
-      expect(proxy.healCalls, healsBefore);
-      expect(find.byType(PlayerErrorView), findsNothing);
+        expect(decoder.opened, hasLength(1));
+        expect(proxy.healCalls, healsBefore);
+        expect(find.byType(PlayerErrorView), findsNothing);
 
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump();
-    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
-  });
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    },
+  );
 
-  testWidgets('a heal to a new port while paused reopens and stays paused',
-      (tester) async {
+  testWidgets('a heal to a new port while paused reopens and stays paused', (
+    tester,
+  ) async {
     await mockHttpResponse(() async {
       await _mount(tester, container, decoder);
       await _playTo75(tester, decoder);
@@ -618,8 +664,9 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('a heal during a switch is replayed once the switch ends',
-      (tester) async {
+  testWidgets('a heal during a switch is replayed once the switch ends', (
+    tester,
+  ) async {
     final switchStart = Completer<void>();
     addTearDown(() {
       if (!switchStart.isCompleted) switchStart.complete();

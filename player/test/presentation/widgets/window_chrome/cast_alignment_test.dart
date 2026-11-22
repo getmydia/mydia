@@ -14,7 +14,7 @@
 // would only prove the test's own copy of the formula, not the screen's
 // wiring to it).
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -133,7 +133,7 @@ void main() {
             icon: Icons.star,
             title: 'Starlit Shelf',
             queryKeys: const [],
-            body: (_, __) => const SizedBox.shrink(),
+            body: (_, _) => const SizedBox.shrink(),
           ),
         );
 
@@ -144,8 +144,9 @@ void main() {
       });
     }
 
-    testWidgets('the row draws into the band on macOS, not below it',
-        (tester) async {
+    testWidgets('the row draws into the band on macOS, not below it', (
+      tester,
+    ) async {
       await pumpWithInsets(
         tester,
         _cases['macOS']!,
@@ -155,7 +156,7 @@ void main() {
           icon: Icons.star,
           title: 'Starlit Shelf',
           queryKeys: const [],
-          body: (_, __) => const SizedBox.shrink(),
+          body: (_, _) => const SizedBox.shrink(),
         ),
       );
 
@@ -173,8 +174,9 @@ void main() {
           extraOverrides: [
             mediaSourceProvider(fakeSourceId)
                 .overrideWithValue(FakeMediaSource()),
-            coreSettingsServiceProvider
-                .overrideWithValue(SettingsService(storage: MockAuthStorage())),
+            coreSettingsServiceProvider.overrideWithValue(
+              SettingsService(storage: MockAuthStorage()),
+            ),
             sourceArtworkProvider.overrideWith((ref, key) async => null),
           ],
           child: const SourceLibraryScreen(library: FakeMediaSource.movies),
@@ -379,18 +381,20 @@ void main() {
     // owns `Scaffold.appBar` itself rather than going through a seam: nothing
     // here reads a GraphQL stream during the build that constructs the row.
     testWidgets(
-        'draws into the band on macOS, with no cast button (there never was '
-        'one)', (tester) async {
-      await pumpWithInsets(
-        tester,
-        _cases['macOS']!,
-        width: _kWidth,
-        child: const DiagnosticsScreen(),
-      );
+      'draws into the band on macOS, with no cast button (there never was '
+      'one)',
+      (tester) async {
+        await pumpWithInsets(
+          tester,
+          _cases['macOS']!,
+          width: _kWidth,
+          child: const DiagnosticsScreen(),
+        );
 
-      expect(find.byKey(WindowTitleRow.castKey), findsNothing);
-      expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);
-    });
+        expect(find.byKey(WindowTitleRow.castKey), findsNothing);
+        expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);
+      },
+    );
   });
 
   group('LoginScreen title row', () {
@@ -398,15 +402,17 @@ void main() {
     // layout has nowhere to host one), so it overlays a bare `WindowTitleRow`
     // instead, just to keep the window draggable and the corners clear.
     // There is no signed-in device yet to cast to, hence no cast button.
-    testWidgets('draws a bare row on macOS with no cast button',
-        (tester) async {
+    testWidgets('draws a bare row on macOS with no cast button', (
+      tester,
+    ) async {
       await pumpWithInsets(
         tester,
         _cases['macOS']!,
         width: _kWidth,
         extraOverrides: [
-          authServiceProvider
-              .overrideWithValue(AuthService(storage: MockAuthStorage())),
+          authServiceProvider.overrideWithValue(
+            AuthService(storage: MockAuthStorage()),
+          ),
         ],
         child: const LoginScreen(),
       );

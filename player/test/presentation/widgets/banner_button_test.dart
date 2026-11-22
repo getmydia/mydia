@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/banner_button.dart';
@@ -32,8 +32,9 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('while loading it spins instead of labelling, and is inert',
-      (tester) async {
+  testWidgets('while loading it spins instead of labelling, and is inert', (
+    tester,
+  ) async {
     var taps = 0;
     await _pump(tester, isLoading: true, onPressed: () => taps++);
 

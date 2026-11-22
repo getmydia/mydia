@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' show Locale;
+import 'package:material_ui/material_ui.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_segment.dart';
 import 'package:player/l10n/l10n.dart';
@@ -107,7 +107,8 @@ void main() {
           duration: duration,
         ),
         isTrue,
-        reason: 'no credits segment was detected, so the fallback window '
+        reason:
+            'no credits segment was detected, so the fallback window '
             'still applies',
       );
       expect(
@@ -117,7 +118,8 @@ void main() {
           duration: duration,
         ),
         isFalse,
-        reason: '40:00 is outside the fallback window on a 45-minute '
+        reason:
+            '40:00 is outside the fallback window on a 45-minute '
             'episode, unlike the old 90% heuristic',
       );
     });

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/nav/sidebar_edit_bar.dart';
@@ -57,8 +57,9 @@ void main() {
     expect(find.text('Done'), findsOneWidget);
   });
 
-  testWidgets('the reset control keeps an accessible tap target',
-      (tester) async {
+  testWidgets('the reset control keeps an accessible tap target', (
+    tester,
+  ) async {
     await _pumpBar(tester, onDone: () {}, onReset: () {});
 
     final tapTargetSize = tester.getSize(find.byTooltip('Reset sidebar'));

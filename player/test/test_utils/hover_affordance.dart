@@ -4,7 +4,7 @@
 // playback. Poster cards in the grids and rails open the title instead, so they
 // offer a click cursor over their tap target and no glyph at all.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The glyphs the player uses to promise playback.
@@ -25,9 +25,9 @@ const playGlyphs = <IconData>[
 
 /// Matches any play-affordance glyph in the tree.
 Finder findPlayGlyph() => find.byWidgetPredicate(
-      (widget) => widget is Icon && playGlyphs.contains(widget.icon),
-      description: 'play affordance glyph',
-    );
+  (widget) => widget is Icon && playGlyphs.contains(widget.icon),
+  description: 'play affordance glyph',
+);
 
 /// The cursor declared by the outermost hover region inside [of].
 ///

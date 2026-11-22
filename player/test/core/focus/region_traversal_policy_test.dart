@@ -7,7 +7,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/focus/region_traversal_policy.dart';
@@ -34,11 +34,13 @@ void main() {
           child: Row(
             children: [
               Focus(
-                  focusNode: left,
-                  child: const SizedBox(width: 50, height: 50)),
+                focusNode: left,
+                child: const SizedBox(width: 50, height: 50),
+              ),
               Focus(
-                  focusNode: right,
-                  child: const SizedBox(width: 50, height: 50)),
+                focusNode: right,
+                child: const SizedBox(width: 50, height: 50),
+              ),
             ],
           ),
         ),
@@ -56,8 +58,9 @@ void main() {
     expect(seen, [TraversalDirection.left]);
   });
 
-  testWidgets('does not consult onExit for a direction it can satisfy',
-      (tester) async {
+  testWidgets('does not consult onExit for a direction it can satisfy', (
+    tester,
+  ) async {
     var calls = 0;
     final policy = RegionTraversalPolicy(
       onExit: (direction) {
@@ -78,11 +81,13 @@ void main() {
           child: Row(
             children: [
               Focus(
-                  focusNode: left,
-                  child: const SizedBox(width: 50, height: 50)),
+                focusNode: left,
+                child: const SizedBox(width: 50, height: 50),
+              ),
               Focus(
-                  focusNode: right,
-                  child: const SizedBox(width: 50, height: 50)),
+                focusNode: right,
+                child: const SizedBox(width: 50, height: 50),
+              ),
             ],
           ),
         ),
@@ -110,7 +115,9 @@ void main() {
         home: FocusTraversalGroup(
           policy: policy,
           child: Focus(
-              focusNode: only, child: const SizedBox(width: 50, height: 50)),
+            focusNode: only,
+            child: const SizedBox(width: 50, height: 50),
+          ),
         ),
       ),
     );
@@ -135,13 +142,10 @@ void main() {
     required List<double> lowerLefts,
   }) {
     Widget node(FocusNode n, double left) => Positioned(
-          left: left,
-          top: 0,
-          child: Focus(
-            focusNode: n,
-            child: const SizedBox(width: 50, height: 50),
-          ),
-        );
+      left: left,
+      top: 0,
+      child: Focus(focusNode: n, child: const SizedBox(width: 50, height: 50)),
+    );
 
     return MaterialApp(
       home: FocusTraversalGroup(
@@ -171,8 +175,9 @@ void main() {
     );
   }
 
-  testWidgets('LEFT with a candidate only in another row goes to onExit',
-      (tester) async {
+  testWidgets('LEFT with a candidate only in another row goes to onExit', (
+    tester,
+  ) async {
     final seen = <TraversalDirection>[];
     final policy = RegionTraversalPolicy(
       onExit: (direction) {
@@ -189,13 +194,15 @@ void main() {
     // The upper node sits left of the lower one. Flutter's own search would
     // fall back to it because nothing in the lower row is to the left, which
     // is the row jump a remote viewer reported.
-    await tester.pumpWidget(twoRows(
-      policy: policy,
-      upper: upper,
-      upperLeft: 0,
-      lower: [lower],
-      lowerLefts: [200],
-    ));
+    await tester.pumpWidget(
+      twoRows(
+        policy: policy,
+        upper: upper,
+        upperLeft: 0,
+        lower: [lower],
+        lowerLefts: [200],
+      ),
+    );
 
     lower.requestFocus();
     await tester.pump();
@@ -208,8 +215,9 @@ void main() {
     expect(lower.hasFocus, isTrue);
   });
 
-  testWidgets('RIGHT at the end of a row stays put when onExit declines',
-      (tester) async {
+  testWidgets('RIGHT at the end of a row stays put when onExit declines', (
+    tester,
+  ) async {
     final seen = <TraversalDirection>[];
     final policy = RegionTraversalPolicy(
       onExit: (direction) {
@@ -223,13 +231,15 @@ void main() {
     addTearDown(upper.dispose);
     addTearDown(lower.dispose);
 
-    await tester.pumpWidget(twoRows(
-      policy: policy,
-      upper: upper,
-      upperLeft: 300,
-      lower: [lower],
-      lowerLefts: [0],
-    ));
+    await tester.pumpWidget(
+      twoRows(
+        policy: policy,
+        upper: upper,
+        upperLeft: 300,
+        lower: [lower],
+        lowerLefts: [0],
+      ),
+    );
 
     lower.requestFocus();
     await tester.pump();
@@ -243,43 +253,47 @@ void main() {
   });
 
   testWidgets(
-      'LEFT still moves within the row when another row is further left',
-      (tester) async {
-    var calls = 0;
-    final policy = RegionTraversalPolicy(
-      onExit: (direction) {
-        calls++;
-        return true;
-      },
-    );
+    'LEFT still moves within the row when another row is further left',
+    (tester) async {
+      var calls = 0;
+      final policy = RegionTraversalPolicy(
+        onExit: (direction) {
+          calls++;
+          return true;
+        },
+      );
 
-    final upper = FocusNode(debugLabel: 'upper');
-    final first = FocusNode(debugLabel: 'lower-first');
-    final second = FocusNode(debugLabel: 'lower-second');
-    addTearDown(upper.dispose);
-    addTearDown(first.dispose);
-    addTearDown(second.dispose);
+      final upper = FocusNode(debugLabel: 'upper');
+      final first = FocusNode(debugLabel: 'lower-first');
+      final second = FocusNode(debugLabel: 'lower-second');
+      addTearDown(upper.dispose);
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
 
-    await tester.pumpWidget(twoRows(
-      policy: policy,
-      upper: upper,
-      upperLeft: 0,
-      lower: [first, second],
-      lowerLefts: [200, 300],
-    ));
+      await tester.pumpWidget(
+        twoRows(
+          policy: policy,
+          upper: upper,
+          upperLeft: 0,
+          lower: [first, second],
+          lowerLefts: [200, 300],
+        ),
+      );
 
-    second.requestFocus();
-    await tester.pump();
+      second.requestFocus();
+      await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
 
-    expect(first.hasFocus, isTrue);
-    expect(calls, 0);
-  });
+      expect(first.hasFocus, isTrue);
+      expect(calls, 0);
+    },
+  );
 
-  testWidgets('UP still picks a node that is not directly above',
-      (tester) async {
+  testWidgets('UP still picks a node that is not directly above', (
+    tester,
+  ) async {
     var calls = 0;
     final policy = RegionTraversalPolicy(
       onExit: (direction) {
@@ -295,13 +309,15 @@ void main() {
 
     // No horizontal overlap, so this is Flutter's diagonal fallback, which
     // vertical moves keep.
-    await tester.pumpWidget(twoRows(
-      policy: policy,
-      upper: upper,
-      upperLeft: 0,
-      lower: [lower],
-      lowerLefts: [200],
-    ));
+    await tester.pumpWidget(
+      twoRows(
+        policy: policy,
+        upper: upper,
+        upperLeft: 0,
+        lower: [lower],
+        lowerLefts: [200],
+      ),
+    );
 
     lower.requestFocus();
     await tester.pump();
@@ -318,18 +334,18 @@ void main() {
     // and `showMediaContextMenu` both build: a `Material` holding a `Column`
     // of same-width focusable rows.
     Widget rowsPage(List<FocusNode> rows) => Material(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final row in rows)
-                Focus(
-                  focusNode: row,
-                  child: const SizedBox(width: 300, height: 48),
-                ),
-            ],
-          ),
-        );
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final row in rows)
+            Focus(
+              focusNode: row,
+              child: const SizedBox(width: 300, height: 48),
+            ),
+        ],
+      ),
+    );
 
     // A region: a FocusTraversalGroup running [policy] around a FocusScope
     // around a nested Navigator, the same shape `AppShell._region` builds
@@ -362,71 +378,83 @@ void main() {
     }
 
     testWidgets(
-        'LEFT inside a real modal bottom sheet stays put and never reaches '
-        'onExit', (tester) async {
-      final seen = <TraversalDirection>[];
-      final policy = RegionTraversalPolicy(onExit: (direction) {
-        seen.add(direction);
-        return true;
-      });
+      'LEFT inside a real modal bottom sheet stays put and never reaches '
+      'onExit',
+      (tester) async {
+        final seen = <TraversalDirection>[];
+        final policy = RegionTraversalPolicy(
+          onExit: (direction) {
+            seen.add(direction);
+            return true;
+          },
+        );
 
-      final regionScope = FocusScopeNode(debugLabel: 'region');
-      final navigatorKey = GlobalKey<NavigatorState>();
-      final rowA = FocusNode(debugLabel: 'sheet-row-a');
-      final rowB = FocusNode(debugLabel: 'sheet-row-b');
-      addTearDown(regionScope.dispose);
-      addTearDown(rowA.dispose);
-      addTearDown(rowB.dispose);
+        final regionScope = FocusScopeNode(debugLabel: 'region');
+        final navigatorKey = GlobalKey<NavigatorState>();
+        final rowA = FocusNode(debugLabel: 'sheet-row-a');
+        final rowB = FocusNode(debugLabel: 'sheet-row-b');
+        addTearDown(regionScope.dispose);
+        addTearDown(rowA.dispose);
+        addTearDown(rowB.dispose);
 
-      late BuildContext pageContext;
+        late BuildContext pageContext;
 
-      await tester.pumpWidget(region(
-        policy: policy,
-        regionScope: regionScope,
-        navigatorKey: navigatorKey,
-        onPageBuilt: (context) => pageContext = context,
-      ));
+        await tester.pumpWidget(
+          region(
+            policy: policy,
+            regionScope: regionScope,
+            navigatorKey: navigatorKey,
+            onPageBuilt: (context) => pageContext = context,
+          ),
+        );
 
-      // The real production shape: `showModalBottomSheet` with the default
-      // `useRootNavigator: false`, attaching to this nested Navigator, the
-      // one that lives inside the content region's own FocusScope, exactly
-      // as it does under `AppShell`.
-      unawaited(showModalBottomSheet<void>(
-        context: pageContext,
-        useRootNavigator: false,
-        builder: (context) => rowsPage([rowA, rowB]),
-      ));
-      await tester.pumpAndSettle();
+        // The real production shape: `showModalBottomSheet` with the default
+        // `useRootNavigator: false`, attaching to this nested Navigator, the
+        // one that lives inside the content region's own FocusScope, exactly
+        // as it does under `AppShell`.
+        unawaited(
+          showModalBottomSheet<void>(
+            context: pageContext,
+            useRootNavigator: false,
+            builder: (context) => rowsPage([rowA, rowB]),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      rowB.requestFocus();
-      await tester.pump();
-      expect(rowB.hasFocus, isTrue);
+        rowB.requestFocus();
+        await tester.pump();
+        expect(rowB.hasFocus, isTrue);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-      await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pump();
 
-      expect(seen, isEmpty,
+        expect(
+          seen,
+          isEmpty,
           reason:
               'a press inside the still-open sheet must not reach the region '
-              'exit');
-      expect(rowB.hasFocus, isTrue);
+              'exit',
+        );
+        expect(rowB.hasFocus, isTrue);
 
-      // Close the sheet so its route (and the Future awaited above) settles
-      // before the test ends; otherwise the still-open sheet's pending
-      // navigation work outlives this test's FocusManager and taints the
-      // next test.
-      navigatorKey.currentState!.pop();
-      await tester.pumpAndSettle();
-    });
+        // Close the sheet so its route (and the Future awaited above) settles
+        // before the test ends; otherwise the still-open sheet's pending
+        // navigation work outlives this test's FocusManager and taints the
+        // next test.
+        navigatorKey.currentState!.pop();
+        await tester.pumpAndSettle();
+      },
+    );
 
-    testWidgets(
-        'LEFT on the region\'s own page, with no popup route above it, '
+    testWidgets('LEFT on the region\'s own page, with no popup route above it, '
         'still calls onExit', (tester) async {
       final seen = <TraversalDirection>[];
-      final policy = RegionTraversalPolicy(onExit: (direction) {
-        seen.add(direction);
-        return true;
-      });
+      final policy = RegionTraversalPolicy(
+        onExit: (direction) {
+          seen.add(direction);
+          return true;
+        },
+      );
 
       final regionScope = FocusScopeNode(debugLabel: 'region');
       final navigatorKey = GlobalKey<NavigatorState>();
@@ -459,8 +487,9 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pump();
 
-      expect(seen, [TraversalDirection.left],
-          reason: 'the guard must not disable the ordinary sidebar handoff');
+      expect(seen, [
+        TraversalDirection.left,
+      ], reason: 'the guard must not disable the ordinary sidebar handoff');
     });
   });
 }

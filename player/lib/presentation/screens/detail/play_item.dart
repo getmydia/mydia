@@ -2,7 +2,7 @@
 /// its place.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -61,11 +61,13 @@ Future<void> playItem(BuildContext context, WidgetRef ref, ItemRef item) async {
     return;
   }
   if (!context.mounted) return;
-  await context.push(sourcePlayerLocation(
-    detail.summary.ref,
-    fileId: fileId,
-    title: detail.summary.title,
-  ));
+  await context.push(
+    sourcePlayerLocation(
+      detail.summary.ref,
+      fileId: fileId,
+      title: detail.summary.title,
+    ),
+  );
   if (!context.mounted) return;
   invalidateSourceItemWrites(ref, item);
 }

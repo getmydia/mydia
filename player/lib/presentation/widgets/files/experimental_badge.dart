@@ -1,6 +1,6 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../l10n/l10n.dart';
 
@@ -30,9 +30,7 @@ class FilesExperimentalNotice extends StatelessWidget {
           Expanded(
             child: Text(
               context.l10n.filesExperimentalNotice,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
+              style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: scheme.onTertiaryContainer),
             ),
           ),

@@ -22,16 +22,15 @@ void main() {
     int durationSeconds = 5400,
     DateTime? updatedAt,
     DateTime? syncedAt,
-  }) =>
-      LocalPlaybackProgress(
-        sourceId: testMydiaSourceId.value,
-        mediaId: mediaId,
-        mediaType: 'movie',
-        positionSeconds: positionSeconds,
-        durationSeconds: durationSeconds,
-        updatedAt: updatedAt ?? DateTime.utc(2026, 8, 2, 12),
-        syncedAt: syncedAt,
-      );
+  }) => LocalPlaybackProgress(
+    sourceId: testMydiaSourceId.value,
+    mediaId: mediaId,
+    mediaType: 'movie',
+    positionSeconds: positionSeconds,
+    durationSeconds: durationSeconds,
+    updatedAt: updatedAt ?? DateTime.utc(2026, 8, 2, 12),
+    syncedAt: syncedAt,
+  );
 
   group('LocalPlaybackProgress', () {
     test('round-trips through a map', () {
@@ -169,51 +168,58 @@ void main() {
       );
     });
 
-    test('a malformed record is discarded rather than crashing the store',
-        () async {
-      await box.put('bad', {'nonsense': true});
+    test(
+      'a malformed record is discarded rather than crashing the store',
+      () async {
+        await box.put('bad', {'nonsense': true});
 
-      final store = HivePlaybackProgressStore(box);
-      expect(store.get('bad'), isNull);
+        final store = HivePlaybackProgressStore(box);
+        expect(store.get('bad'), isNull);
 
-      // No wait needed: Box.delete's keystore mutation happens synchronously
-      // (inside beginTransaction, before the method's first await), and
-      // get()/unsynced() both read that same in-memory keystore. The
-      // unawaited delete's own Future only covers flushing to disk, which
-      // neither assertion below depends on.
-      expect(store.get('bad'), isNull);
-      expect(store.unsynced(), isEmpty);
-    });
+        // No wait needed: Box.delete's keystore mutation happens synchronously
+        // (inside beginTransaction, before the method's first await), and
+        // get()/unsynced() both read that same in-memory keystore. The
+        // unawaited delete's own Future only covers flushing to disk, which
+        // neither assertion below depends on.
+        expect(store.get('bad'), isNull);
+        expect(store.unsynced(), isEmpty);
+      },
+    );
   });
 
   group('all and delete', () {
-    test('in memory: all() lists every record and delete() removes one',
-        () async {
-      final store = InMemoryPlaybackProgressStore();
-      await store.save(progress(mediaId: '10'));
-      expect(store.all().map((r) => r.key), [key('10')]);
-      await store.delete(key('10'));
-      expect(store.all(), isEmpty);
-    });
-
-    test('hive: all() skips unreadable records and delete() removes one',
-        () async {
-      final dir = await Directory.systemTemp.createTemp('playback_all_test');
-      Hive.init(dir.path);
-      try {
-        final box =
-            await Hive.openBox<Map<dynamic, dynamic>>('playback_all_box');
-        final store = HivePlaybackProgressStore(box);
+    test(
+      'in memory: all() lists every record and delete() removes one',
+      () async {
+        final store = InMemoryPlaybackProgressStore();
         await store.save(progress(mediaId: '10'));
-        await box.put('bad', {'nonsense': true});
         expect(store.all().map((r) => r.key), [key('10')]);
         await store.delete(key('10'));
         expect(store.all(), isEmpty);
-      } finally {
-        await Hive.close();
-        await dir.delete(recursive: true);
-      }
-    });
+      },
+    );
+
+    test(
+      'hive: all() skips unreadable records and delete() removes one',
+      () async {
+        final dir = await Directory.systemTemp.createTemp('playback_all_test');
+        Hive.init(dir.path);
+        try {
+          final box = await Hive.openBox<Map<dynamic, dynamic>>(
+            'playback_all_box',
+          );
+          final store = HivePlaybackProgressStore(box);
+          await store.save(progress(mediaId: '10'));
+          await box.put('bad', {'nonsense': true});
+          expect(store.all().map((r) => r.key), [key('10')]);
+          await store.delete(key('10'));
+          expect(store.all(), isEmpty);
+        } finally {
+          await Hive.close();
+          await dir.delete(recursive: true);
+        }
+      },
+    );
   });
 
   group('pickNewerProgress', () {

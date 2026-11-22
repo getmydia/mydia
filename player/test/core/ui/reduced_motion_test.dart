@@ -14,10 +14,7 @@ Widget _wrap({
       disableAnimations: disableAnimations,
       accessibleNavigation: accessibleNavigation,
     ),
-    child: Directionality(
-      textDirection: TextDirection.ltr,
-      child: child,
-    ),
+    child: Directionality(textDirection: TextDirection.ltr, child: child),
   );
 }
 
@@ -37,8 +34,9 @@ class _Probe extends StatelessWidget {
 
 void main() {
   group('ReducedMotion.of', () {
-    testWidgets('returns true when disableAnimations is true (AE4)',
-        (tester) async {
+    testWidgets('returns true when disableAnimations is true (AE4)', (
+      tester,
+    ) async {
       bool? captured;
       await tester.pumpWidget(
         _wrap(
@@ -49,8 +47,7 @@ void main() {
       expect(captured, isTrue);
     });
 
-    testWidgets(
-        'returns true when accessibleNavigation is true and '
+    testWidgets('returns true when accessibleNavigation is true and '
         'disableAnimations is false', (tester) async {
       bool? captured;
       await tester.pumpWidget(
@@ -70,13 +67,14 @@ void main() {
       expect(captured, isFalse);
     });
 
-    testWidgets('rebuilds dependents when MediaQuery flips at runtime',
-        (tester) async {
+    testWidgets('rebuilds dependents when MediaQuery flips at runtime', (
+      tester,
+    ) async {
       final reads = <bool>[];
       Widget build(bool disableAnimations) => _wrap(
-            disableAnimations: disableAnimations,
-            child: _Probe(onBuild: reads.add),
-          );
+        disableAnimations: disableAnimations,
+        child: _Probe(onBuild: reads.add),
+      );
 
       await tester.pumpWidget(build(false));
       expect(reads.last, isFalse);
@@ -88,8 +86,9 @@ void main() {
   });
 
   group('ReducedMotion.duration', () {
-    testWidgets('passes the duration through when motion is allowed',
-        (tester) async {
+    testWidgets('passes the duration through when motion is allowed', (
+      tester,
+    ) async {
       late Duration captured;
       await tester.pumpWidget(
         _wrap(

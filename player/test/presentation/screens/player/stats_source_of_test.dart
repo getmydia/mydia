@@ -7,15 +7,14 @@ PlanInputs _inputs(
   List<CandidateStrategy> candidates, {
   String? hdrFormat,
   int? dvProfile,
-}) =>
-    PlanInputs(
-      candidates: candidates,
-      sourceHdrFormat: hdrFormat,
-      sourceDolbyVisionProfile: dvProfile,
-      isWeb: false,
-      typeSupported: (_) => true,
-      choice: QualityChoice.original,
-    );
+}) => PlanInputs(
+  candidates: candidates,
+  sourceHdrFormat: hdrFormat,
+  sourceDolbyVisionProfile: dvProfile,
+  isWeb: false,
+  typeSupported: (_) => true,
+  choice: QualityChoice.original,
+);
 
 void main() {
   test('container and codec come from the first candidate', () {
@@ -34,7 +33,10 @@ void main() {
     final inputs = _inputs(const [
       CandidateStrategy(strategy: 'TRANSCODE', mime: 'video/mp2t'),
       CandidateStrategy(
-          strategy: 'HLS_COPY', mime: 'video/mp2t', videoCodec: 'h264'),
+        strategy: 'HLS_COPY',
+        mime: 'video/mp2t',
+        videoCodec: 'h264',
+      ),
     ]);
     expect(sourceCodecOf(inputs), 'h264');
     expect(sourceContainerOf(inputs), 'ts');
@@ -42,9 +44,11 @@ void main() {
 
   test('unknown mime and missing inputs read as null', () {
     expect(
-      sourceContainerOf(_inputs(const [
-        CandidateStrategy(strategy: 'DIRECT_PLAY', mime: 'video/quicktime'),
-      ])),
+      sourceContainerOf(
+        _inputs(const [
+          CandidateStrategy(strategy: 'DIRECT_PLAY', mime: 'video/quicktime'),
+        ]),
+      ),
       isNull,
     );
     expect(sourceContainerOf(_inputs(const [])), isNull);
@@ -59,10 +63,10 @@ void main() {
     });
 
     test('keeps a plain format with no profile', () {
-      expect(
-        sourceHdrOf(_inputs(const [], hdrFormat: 'HDR10+')),
-        (format: 'HDR10+', dvProfile: null),
-      );
+      expect(sourceHdrOf(_inputs(const [], hdrFormat: 'HDR10+')), (
+        format: 'HDR10+',
+        dvProfile: null,
+      ));
     });
 
     test('is null for SDR, an empty string and no plan', () {

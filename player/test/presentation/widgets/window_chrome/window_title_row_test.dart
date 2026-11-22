@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_providers.dart';
@@ -80,17 +80,20 @@ Future<void> _pump(
 
 const _mac = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
 final _linux = WindowChromeInsets(
-    height: 36, leading: 0, trailing: linuxButtonGroupReserve(3));
+  height: 36,
+  leading: 0,
+  trailing: linuxButtonGroupReserve(3),
+);
 
 void main() {
-  test(
-      'the Linux button reserve matches the button widget it has to clear, '
+  test('the Linux button reserve matches the button widget it has to clear, '
       'so the two cannot drift apart', () {
     expect(kLinuxWindowButtonExtent, WindowButtonWidget.size + 4);
   });
 
-  testWidgets('on macOS the row is the band, starting at the window top',
-      (tester) async {
+  testWidgets('on macOS the row is the band, starting at the window top', (
+    tester,
+  ) async {
     await _pump(
       tester,
       insets: _mac,
@@ -99,12 +102,15 @@ void main() {
     final row = tester.getRect(find.byType(WindowTitleRow));
     expect(row.top, 0);
     expect(row.height, 40);
-    expect(tester.getRect(find.byKey(const Key('t'))).left,
-        greaterThanOrEqualTo(80));
+    expect(
+      tester.getRect(find.byKey(const Key('t'))).left,
+      greaterThanOrEqualTo(80),
+    );
   });
 
-  testWidgets('cast sits at the shared end gutter, clear of Linux buttons',
-      (tester) async {
+  testWidgets('cast sits at the shared end gutter, clear of Linux buttons', (
+    tester,
+  ) async {
     await _pump(
       tester,
       insets: _linux,
@@ -124,12 +130,14 @@ void main() {
     expect(
       tester.getRect(find.byKey(const Key('a'))).right,
       lessThanOrEqualTo(
-          tester.getRect(find.byKey(WindowTitleRow.castKey)).left),
+        tester.getRect(find.byKey(WindowTitleRow.castKey)).left,
+      ),
     );
   });
 
-  testWidgets('with zero insets it is a toolbar row under the status bar',
-      (tester) async {
+  testWidgets('with zero insets it is a toolbar row under the status bar', (
+    tester,
+  ) async {
     await _pump(
       tester,
       insets: WindowChromeInsets.zero,
@@ -138,14 +146,17 @@ void main() {
       child: const WindowTitleRow(title: Text('Shelf')),
     );
     final cast = tester.getRect(find.byKey(WindowTitleRow.castKey));
-    expect(tester.getRect(find.byType(WindowTitleRow)).height,
-        24 + kToolbarHeight);
+    expect(
+      tester.getRect(find.byType(WindowTitleRow)).height,
+      24 + kToolbarHeight,
+    );
     expect(cast.right, 400 - 8);
     expect(find.byType(WindowDragBand), findsNothing);
   });
 
-  testWidgets('RTL macOS reserves the lights on the physical left',
-      (tester) async {
+  testWidgets('RTL macOS reserves the lights on the physical left', (
+    tester,
+  ) async {
     await _pump(
       tester,
       insets: const WindowChromeInsets(height: 40, leading: 0, trailing: 80),
@@ -175,81 +186,86 @@ void main() {
   });
 
   testWidgets(
-      'on macOS, a pointer-down on empty band space reports it to native '
-      'immediately, without waiting on a double-tap gesture', (tester) async {
-    final previousPlatform = debugDefaultTargetPlatformOverride;
-    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-    try {
-      final controller = FakeWindowController();
-      var calls = 0;
-      await _pump(
-        tester,
-        insets: _mac,
-        child: WindowTitleRow(
-          controller: controller,
-          onBandPointerDown: () => calls++,
-        ),
-      );
+    'on macOS, a pointer-down on empty band space reports it to native '
+    'immediately, without waiting on a double-tap gesture',
+    (tester) async {
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final controller = FakeWindowController();
+        var calls = 0;
+        await _pump(
+          tester,
+          insets: _mac,
+          child: WindowTitleRow(
+            controller: controller,
+            onBandPointerDown: () => calls++,
+          ),
+        );
 
-      // Same point the drag test above uses: empty band space, clear of the
-      // leading inset and the cast button on the trailing edge. A single
-      // down-up is enough: native code, not this widget, decides whether it
-      // was part of a double-click worth acting on.
-      const point = Offset(600, 20);
-      await tester.tapAt(point);
-      await tester.pump();
+        // Same point the drag test above uses: empty band space, clear of the
+        // leading inset and the cast button on the trailing edge. A single
+        // down-up is enough: native code, not this widget, decides whether it
+        // was part of a double-click worth acting on.
+        const point = Offset(600, 20);
+        await tester.tapAt(point);
+        await tester.pump();
 
-      expect(calls, 1);
-      expect(controller.maximizeCalls, 0);
-      expect(controller.unmaximizeCalls, 0);
-    } finally {
-      debugDefaultTargetPlatformOverride = previousPlatform;
-    }
-  });
+        expect(calls, 1);
+        expect(controller.maximizeCalls, 0);
+        expect(controller.unmaximizeCalls, 0);
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
+    },
+  );
 
   testWidgets(
-      'on macOS, a pointer-down on the cast button never reaches the band '
-      'underneath it', (tester) async {
-    final previousPlatform = debugDefaultTargetPlatformOverride;
-    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-    try {
-      final controller = FakeWindowController();
-      var calls = 0;
-      await _pump(
-        tester,
-        insets: _mac,
-        child: WindowTitleRow(
-          controller: controller,
-          onBandPointerDown: () => calls++,
-        ),
-      );
+    'on macOS, a pointer-down on the cast button never reaches the band '
+    'underneath it',
+    (tester) async {
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final controller = FakeWindowController();
+        var calls = 0;
+        await _pump(
+          tester,
+          insets: _mac,
+          child: WindowTitleRow(
+            controller: controller,
+            onBandPointerDown: () => calls++,
+          ),
+        );
 
-      final cast = tester.getCenter(find.byKey(WindowTitleRow.castKey));
-      await tester.tapAt(cast);
-      await tester.pump();
+        final cast = tester.getCenter(find.byKey(WindowTitleRow.castKey));
+        await tester.tapAt(cast);
+        await tester.pump();
 
-      expect(
-        calls,
-        0,
-        reason: 'the Stack hit-test stops at the cast button, so the band '
-            "listener underneath it never sees the button's own down",
-      );
-      expect(controller.maximizeCalls, 0);
-      expect(controller.unmaximizeCalls, 0);
+        expect(
+          calls,
+          0,
+          reason:
+              'the Stack hit-test stops at the cast button, so the band '
+              "listener underneath it never sees the button's own down",
+        );
+        expect(controller.maximizeCalls, 0);
+        expect(controller.unmaximizeCalls, 0);
 
-      // The tap opened the real cast device picker (WindowTitleRow wires
-      // the button to the live pickCastDevice, not a fake), which starts a
-      // real search-timeout Timer and an indeterminate spinner. Pop the
-      // route the tap pushed so it does not outlive the test.
-      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
-      while (navigator.canPop()) {
-        navigator.pop();
+        // The tap opened the real cast device picker (WindowTitleRow wires
+        // the button to the live pickCastDevice, not a fake), which starts a
+        // real search-timeout Timer and an indeterminate spinner. Pop the
+        // route the tap pushed so it does not outlive the test.
+        final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+        while (navigator.canPop()) {
+          navigator.pop();
+        }
+        await tester.pumpAndSettle();
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
       }
-      await tester.pumpAndSettle();
-    } finally {
-      debugDefaultTargetPlatformOverride = previousPlatform;
-    }
-  });
+    },
+  );
 
   testWidgets('showCast: false draws no cast button', (tester) async {
     await _pump(
@@ -261,36 +277,38 @@ void main() {
   });
 
   testWidgets(
-      'with non-zero insets, a tap on the cast button reaches it instead of '
-      'starting a window drag', (tester) async {
-    final controller = FakeWindowController();
-    await _pump(
-      tester,
-      insets: _mac,
-      child: WindowTitleRow(controller: controller),
-    );
+    'with non-zero insets, a tap on the cast button reaches it instead of '
+    'starting a window drag',
+    (tester) async {
+      final controller = FakeWindowController();
+      await _pump(
+        tester,
+        insets: _mac,
+        child: WindowTitleRow(controller: controller),
+      );
 
-    await tester.tap(find.byKey(WindowTitleRow.castKey));
-    await tester.pump();
+      await tester.tap(find.byKey(WindowTitleRow.castKey));
+      await tester.pump();
 
-    expect(
-      find.byType(CastDevicePickerDialog),
-      findsOneWidget,
-      reason: 'the tap reached the cast button and opened its picker',
-    );
-    expect(controller.startDraggingCalls, 0);
+      expect(
+        find.byType(CastDevicePickerDialog),
+        findsOneWidget,
+        reason: 'the tap reached the cast button and opened its picker',
+      );
+      expect(controller.startDraggingCalls, 0);
 
-    // The tap opened the real cast device picker (WindowTitleRow wires the
-    // button to the live pickCastDevice, not a fake), which starts a real
-    // search-timeout Timer and an indeterminate spinner. Pop the route it
-    // pushed so neither outlives the test, mirroring the double-tap test
-    // above.
-    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
-    while (navigator.canPop()) {
-      navigator.pop();
-    }
-    await tester.pumpAndSettle();
-  });
+      // The tap opened the real cast device picker (WindowTitleRow wires the
+      // button to the live pickCastDevice, not a fake), which starts a real
+      // search-timeout Timer and an indeterminate spinner. Pop the route it
+      // pushed so neither outlives the test, mirroring the double-tap test
+      // above.
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      while (navigator.canPop()) {
+        navigator.pop();
+      }
+      await tester.pumpAndSettle();
+    },
+  );
 
   group('WindowTitleBar', () {
     test('preferredSize.height matches the given height', () {
@@ -350,8 +368,11 @@ void main() {
     }) {
       final rect = tester.getRect(find.byKey(key));
       expect(rect.top, greaterThanOrEqualTo(margin), reason: '$key top');
-      expect(rect.bottom, lessThanOrEqualTo(band - margin),
-          reason: '$key bottom');
+      expect(
+        rect.bottom,
+        lessThanOrEqualTo(band - margin),
+        reason: '$key bottom',
+      );
     }
 
     testWidgets('on macOS back and cast clear the band edges', (tester) async {
@@ -359,17 +380,26 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       try {
         await pumpWithBack(tester, _mac);
-        expectClearOfEdges(tester, const Key('lead'),
-            band: _mac.height, margin: 4);
-        expectClearOfEdges(tester, WindowTitleRow.castKey,
-            band: _mac.height, margin: 4);
+        expectClearOfEdges(
+          tester,
+          const Key('lead'),
+          band: _mac.height,
+          margin: 4,
+        );
+        expectClearOfEdges(
+          tester,
+          WindowTitleRow.castKey,
+          band: _mac.height,
+          margin: 4,
+        );
       } finally {
         debugDefaultTargetPlatformOverride = previousPlatform;
       }
     });
 
-    testWidgets('on Linux back and cast sit well inside the band',
-        (tester) async {
+    testWidgets('on Linux back and cast sit well inside the band', (
+      tester,
+    ) async {
       final band = WindowChromeInsets(
         height: kLinuxWindowChromeHeight,
         leading: 0,
@@ -379,17 +409,26 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       try {
         await pumpWithBack(tester, band);
-        expectClearOfEdges(tester, const Key('lead'),
-            band: band.height, margin: 6);
-        expectClearOfEdges(tester, WindowTitleRow.castKey,
-            band: band.height, margin: 6);
+        expectClearOfEdges(
+          tester,
+          const Key('lead'),
+          band: band.height,
+          margin: 6,
+        );
+        expectClearOfEdges(
+          tester,
+          WindowTitleRow.castKey,
+          band: band.height,
+          margin: 6,
+        );
       } finally {
         debugDefaultTargetPlatformOverride = previousPlatform;
       }
     });
 
-    testWidgets('without a band the buttons keep their full size',
-        (tester) async {
+    testWidgets('without a band the buttons keep their full size', (
+      tester,
+    ) async {
       final previousPlatform = debugDefaultTargetPlatformOverride;
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       try {

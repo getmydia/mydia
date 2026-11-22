@@ -12,18 +12,25 @@ import 'mydia_account_harness.dart';
 void main() {
   group('source link', () {
     const urlAccount = MydiaCredentials(
-        instanceId: 'a',
-        accessToken: 'tok-a',
-        serverUrl: 'https://a.example.test');
+      instanceId: 'a',
+      accessToken: 'tok-a',
+      serverUrl: 'https://a.example.test',
+    );
     const p2pAccount = MydiaCredentials(
-        instanceId: 'b', accessToken: 'tok-b', nodeAddr: '{"id":"node-b"}');
+      instanceId: 'b',
+      accessToken: 'tok-b',
+      nodeAddr: '{"id":"node-b"}',
+    );
 
     Future<ProviderContainer> containerWith(
       Map<String, MydiaCredentials> accounts,
     ) async {
-      final h = await mydiaAccountHarness(accounts, overrides: [
-        deviceProfileHolderProvider.overrideWithValue(DeviceProfileHolder()),
-      ]);
+      final h = await mydiaAccountHarness(
+        accounts,
+        overrides: [
+          deviceProfileHolderProvider.overrideWithValue(DeviceProfileHolder()),
+        ],
+      );
       addTearDown(h.container.dispose);
       await h.container.read(sourceRecordsProvider.future);
       return h.container;

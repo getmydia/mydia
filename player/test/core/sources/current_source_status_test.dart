@@ -22,25 +22,31 @@ class _Selected extends SelectedSourceNotifier {
 const _idA = SourceId('acc1:owner:aa11');
 const _idB = SourceId('acc2:owner:bb22');
 
-({ProviderContainer container, FakeMediaSource a, FakeMediaSource b}) _setup(
-    {SourceId? selected = _idA}) {
+({ProviderContainer container, FakeMediaSource a, FakeMediaSource b}) _setup({
+  SourceId? selected = _idA,
+}) {
   final a = FakeMediaSource();
   final b = FakeMediaSource();
-  final container = ProviderContainer(overrides: [
-    selectedSourceIdProvider.overrideWith(() => _Selected(selected)),
-    activeSourceIdProvider
-        .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
-    mediaSourceProvider(_idA).overrideWithValue(a),
-    mediaSourceProvider(_idB).overrideWithValue(b),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      selectedSourceIdProvider.overrideWith(() => _Selected(selected)),
+      activeSourceIdProvider.overrideWith(
+        (ref) => ref.watch(selectedSourceIdProvider),
+      ),
+      mediaSourceProvider(_idA).overrideWithValue(a),
+      mediaSourceProvider(_idB).overrideWithValue(b),
+    ],
+  );
   addTearDown(container.dispose);
   return (container: container, a: a, b: b);
 }
 
 void main() {
   test('statusSourceIdFor: /s/<id> wins, else active', () {
-    expect(statusSourceIdFor('/s/acc2%3Aowner%3Abb22/library/1', active: _idA),
-        _idB);
+    expect(
+      statusSourceIdFor('/s/acc2%3Aowner%3Abb22/library/1', active: _idA),
+      _idB,
+    );
     expect(statusSourceIdFor('/', active: _idB), _idB);
     expect(statusSourceIdFor('/movies', active: _idB), _idB);
     expect(statusSourceIdFor('/'), isNull);
@@ -50,8 +56,11 @@ void main() {
     final t = _setup();
     t.a.setStatus(SourceConnectionStatus.connecting);
     final seen = <SourceConnectionStatus?>[];
-    t.container.listen(currentSourceStatusProvider, (_, next) => seen.add(next),
-        fireImmediately: true);
+    t.container.listen(
+      currentSourceStatusProvider,
+      (_, next) => seen.add(next),
+      fireImmediately: true,
+    );
 
     t.a.setStatus(SourceConnectionStatus.remote);
     t.container.read(currentSourceStatusProvider);
@@ -72,28 +81,35 @@ void main() {
     final files = _FilesSource()..setStatus(SourceConnectionStatus.unreachable);
     final server = FakeMediaSource()
       ..setStatus(SourceConnectionStatus.unreachable);
-    final container = ProviderContainer(overrides: [
-      selectedSourceIdProvider.overrideWith(() => _Selected(_idA)),
-      activeSourceIdProvider
-          .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
-      mediaSourceProvider(_idA).overrideWithValue(files),
-      mediaSourceProvider(_idB).overrideWithValue(server),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        selectedSourceIdProvider.overrideWith(() => _Selected(_idA)),
+        activeSourceIdProvider.overrideWith(
+          (ref) => ref.watch(selectedSourceIdProvider),
+        ),
+        mediaSourceProvider(_idA).overrideWithValue(files),
+        mediaSourceProvider(_idB).overrideWithValue(server),
+      ],
+    );
     addTearDown(container.dispose);
 
     // Still offline, as the banner shows it.
     expect(isOffline(container.read(routeSourceStatusProvider('/'))), isTrue);
     expect(container.read(routeNavigationOfflineProvider('/')), isFalse);
     expect(
-        container.read(
-            routeNavigationOfflineProvider('/s/acc2%3Aowner%3Abb22/library/1')),
-        isTrue);
+      container.read(
+        routeNavigationOfflineProvider('/s/acc2%3Aowner%3Abb22/library/1'),
+      ),
+      isTrue,
+    );
 
     server.setStatus(SourceConnectionStatus.remote);
     expect(
-        container.read(
-            routeNavigationOfflineProvider('/s/acc2%3Aowner%3Abb22/library/1')),
-        isFalse);
+      container.read(
+        routeNavigationOfflineProvider('/s/acc2%3Aowner%3Abb22/library/1'),
+      ),
+      isFalse,
+    );
   });
 
   test('is null with no selection', () {
@@ -104,27 +120,37 @@ void main() {
   test('switching the selection switches the status', () {
     final t = _setup();
     t.b.setStatus(SourceConnectionStatus.unreachable);
-    expect(t.container.read(currentSourceStatusProvider),
-        SourceConnectionStatus.local);
+    expect(
+      t.container.read(currentSourceStatusProvider),
+      SourceConnectionStatus.local,
+    );
 
     t.container.read(selectedSourceIdProvider.notifier).select(_idB);
-    expect(t.container.read(currentSourceStatusProvider),
-        SourceConnectionStatus.unreachable);
+    expect(
+      t.container.read(currentSourceStatusProvider),
+      SourceConnectionStatus.unreachable,
+    );
   });
 
   test('the old source is detached after a switch', () async {
     final a = _Probed();
     final b = _Probed();
-    final container = ProviderContainer(overrides: [
-      selectedSourceIdProvider.overrideWith(() => _Selected(_idA)),
-      activeSourceIdProvider
-          .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
-      mediaSourceProvider(_idA).overrideWithValue(a),
-      mediaSourceProvider(_idB).overrideWithValue(b),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        selectedSourceIdProvider.overrideWith(() => _Selected(_idA)),
+        activeSourceIdProvider.overrideWith(
+          (ref) => ref.watch(selectedSourceIdProvider),
+        ),
+        mediaSourceProvider(_idA).overrideWithValue(a),
+        mediaSourceProvider(_idB).overrideWithValue(b),
+      ],
+    );
     addTearDown(container.dispose);
-    container.listen(currentSourceStatusProvider, (_, __) {},
-        fireImmediately: true);
+    container.listen(
+      currentSourceStatusProvider,
+      (_, _) {},
+      fireImmediately: true,
+    );
     expect(a.notifier.hasListening, isTrue);
     expect(b.notifier.hasListening, isFalse);
 

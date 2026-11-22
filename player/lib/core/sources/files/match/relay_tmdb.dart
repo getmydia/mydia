@@ -21,10 +21,10 @@ class RelayUnavailable implements Exception {
 /// and needs no API key.
 class RelayTmdb {
   RelayTmdb({http.Client? client, String baseUrl = metadataRelayBaseUrl})
-      : _client = client ?? http.Client(),
-        _base = baseUrl.endsWith('/')
-            ? baseUrl.substring(0, baseUrl.length - 1)
-            : baseUrl;
+    : _client = client ?? http.Client(),
+      _base = baseUrl.endsWith('/')
+          ? baseUrl.substring(0, baseUrl.length - 1)
+          : baseUrl;
 
   static const _timeout = Duration(seconds: 20);
 
@@ -77,20 +77,24 @@ class RelayTmdb {
       final s = await _getSeason('/tmdb/tv/shows/$id/$n');
       bySeason[n] = s == null
           ? const []
-          : _guard(() => [
+          : _guard(
+              () => [
                 for (final raw in (s['episodes'] as List? ?? const []))
                   _episode(raw as Map<String, dynamic>, n, showRuntime),
-              ]);
+              ],
+            );
     }
-    return _guard(() => MatchedShow(
-          tmdbId: id,
-          title: j['name'] as String,
-          year: _year(j['first_air_date'] as String?),
-          overview: _text(j['overview']),
-          posterPath: j['poster_path'] as String?,
-          backdropPath: j['backdrop_path'] as String?,
-          seasons: bySeason,
-        ));
+    return _guard(
+      () => MatchedShow(
+        tmdbId: id,
+        title: j['name'] as String,
+        year: _year(j['first_air_date'] as String?),
+        overview: _text(j['overview']),
+        posterPath: j['poster_path'] as String?,
+        backdropPath: j['backdrop_path'] as String?,
+        seasons: bySeason,
+      ),
+    );
   }
 
   MatchedEpisode _episode(Map<String, dynamic> e, int season, int? fallback) =>
@@ -109,23 +113,23 @@ class RelayTmdb {
     String titleKey,
     String originalKey,
     String dateKey,
-  ) =>
-      _guard(() => [
-            for (final raw in (json['results'] as List? ?? const []))
-              TmdbCandidate(
-                id: (raw as Map<String, dynamic>)['id'] as int,
-                title: (raw[titleKey] as String?) ?? '',
-                originalTitle: raw[originalKey] as String?,
-                year: _year(raw[dateKey] as String?),
-                posterPath: raw['poster_path'] as String?,
-              ),
-          ]);
+  ) => _guard(
+    () => [
+      for (final raw in (json['results'] as List? ?? const []))
+        TmdbCandidate(
+          id: (raw as Map<String, dynamic>)['id'] as int,
+          title: (raw[titleKey] as String?) ?? '',
+          originalTitle: raw[originalKey] as String?,
+          year: _year(raw[dateKey] as String?),
+          posterPath: raw['poster_path'] as String?,
+        ),
+    ],
+  );
 
   Future<Map<String, dynamic>> _get(
     String path,
     Map<String, String> query,
-  ) async =>
-      (await _getOrNull(path, query, missingOk: false))!;
+  ) async => (await _getOrNull(path, query, missingOk: false))!;
 
   Future<Map<String, dynamic>?> _getSeason(String path) =>
       _getOrNull(path, const {}, missingOk: true);

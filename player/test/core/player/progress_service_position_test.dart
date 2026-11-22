@@ -10,9 +10,9 @@ void main() {
   late ProgressService service;
 
   List<String> sent() => [
-        for (final c in server.calls)
-          if (c.operation.startsWith('Update')) c.operation,
-      ];
+    for (final c in server.calls)
+      if (c.operation.startsWith('Update')) c.operation,
+  ];
 
   setUp(() {
     server = FakeMydiaTransport();

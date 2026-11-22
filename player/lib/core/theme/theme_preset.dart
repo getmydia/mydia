@@ -25,15 +25,16 @@ enum ThemePreset {
   static List<ThemePreset> availableOn(
     TargetPlatform platform, {
     bool isWeb = kIsWeb,
-  }) =>
-      [
-        for (final p in values)
-          if (p.isAvailableOn(platform, isWeb: isWeb)) p,
-      ];
+  }) => [
+    for (final p in values)
+      if (p.isAvailableOn(platform, isWeb: isWeb)) p,
+  ];
 
   /// The native preset where there is one, else Projection Booth.
-  static ThemePreset defaultFor(TargetPlatform platform,
-      {bool isWeb = kIsWeb}) {
+  static ThemePreset defaultFor(
+    TargetPlatform platform, {
+    bool isWeb = kIsWeb,
+  }) {
     for (final native in const [macos, linux]) {
       if (native.isAvailableOn(platform, isWeb: isWeb)) return native;
     }
@@ -58,12 +59,11 @@ enum ThemePreset {
     Color systemAccent = Palettes.macosDefaultAccent,
     LinuxDesktop linuxDesktop = LinuxDesktop.other,
     Color? linuxAccent,
-  }) =>
-      switch (this) {
-        projectionBooth => Palettes.projectionBooth,
-        oledBlack => Palettes.oledBlack,
-        slate => Palettes.slate,
-        macos => Palettes.macos(systemAccent),
-        linux => Palettes.linux(linuxDesktop, linuxAccent),
-      };
+  }) => switch (this) {
+    projectionBooth => Palettes.projectionBooth,
+    oledBlack => Palettes.oledBlack,
+    slate => Palettes.slate,
+    macos => Palettes.macos(systemAccent),
+    linux => Palettes.linux(linuxDesktop, linuxAccent),
+  };
 }

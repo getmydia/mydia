@@ -33,11 +33,10 @@ class FilesPlaybackSession extends SourcePlaybackSession {
     required FilesMediaSource source,
     required super.item,
     required super.fileId,
-    http.Client? client,
+    this._client,
     this.bridge,
-  })  : _files = source,
-        _client = client,
-        super(source: source);
+  }) : _files = source,
+       super(source: source);
 
   final FilesMediaSource _files;
   final http.Client? _client;
@@ -58,12 +57,12 @@ class FilesPlaybackSession extends SourcePlaybackSession {
 
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) => [
-        CandidateStrategy(
-          strategy: 'DIRECT_PLAY',
-          mime: containerMime(version.container),
-          videoCodec: version.videoCodec,
-        ),
-      ];
+    CandidateStrategy(
+      strategy: 'DIRECT_PLAY',
+      mime: containerMime(version.container),
+      videoCodec: version.videoCodec,
+    ),
+  ];
 
   /// [path] is a backend path. A local file is read; a WebDAV one is fetched
   /// with the backend's auth headers.
@@ -97,36 +96,37 @@ class FilesPlaybackSession extends SourcePlaybackSession {
 
   @override
   ProgressReporter createProgress() => LocalProgressReporter(
-        store: _files.progressStore,
-        item: item,
-        currentItem: () => _files.currentRef(item, fileId),
-        resumeMinSeconds: kFilesResumeMinSeconds,
-        watchedFraction: kFilesWatchedFraction,
-        syncStore: _files.syncStore,
-        syncKeyFor: _files.syncKeyFor,
-        onSyncWrite: _files.onSyncMutation,
-        // The identity playback writes under, which a match made during
-        // playback changes.
-        onChanged: () =>
-            _files.invalidateWatchedFor(_files.currentRef(item, fileId)),
-      );
+    store: _files.progressStore,
+    item: item,
+    currentItem: () => _files.currentRef(item, fileId),
+    resumeMinSeconds: kFilesResumeMinSeconds,
+    watchedFraction: kFilesWatchedFraction,
+    syncStore: _files.syncStore,
+    syncKeyFor: _files.syncKeyFor,
+    onSyncWrite: _files.onSyncMutation,
+    // The identity playback writes under, which a match made during
+    // playback changes.
+    onChanged: () =>
+        _files.invalidateWatchedFor(_files.currentRef(item, fileId)),
+  );
 
   @override
-  FilesStreamResolver createResolver(
-          [ItemDetail? detail, MediaVersion? version]) =>
-      FilesStreamResolver(source: _files, bridge: bridge);
+  FilesStreamResolver createResolver([
+    ItemDetail? detail,
+    MediaVersion? version,
+  ]) => FilesStreamResolver(source: _files, bridge: bridge);
 
   @override
   FilesStreamResolver createReceiverResolver(
     ItemDetail detail,
     MediaVersion version, {
     String? burnSubtitleStreamId,
-  }) =>
-      FilesStreamResolver(source: _files, bridge: bridge, forReceiver: true);
+  }) => FilesStreamResolver(source: _files, bridge: bridge, forReceiver: true);
 
   @override
   Future<List<CastSubtitleTrack>> receiverSubtitles(
-      MediaVersion version) async {
+    MediaVersion version,
+  ) async {
     final key = version.id.isNotEmpty ? version.id : fileId;
     final indexed = _files.indexedFile(key);
     final root = indexed == null ? null : _files.rootFor(indexed);
@@ -137,14 +137,17 @@ class FilesPlaybackSession extends SourcePlaybackSession {
       final s = streams[i];
       final codec = (s.codec ?? 'srt').toLowerCase();
       if ((codec == 'srt' || codec == 'vtt') && s.externalPath != null) {
-        tracks.add(CastSubtitleTrack(
-          trackId: s.id,
-          url: '',
-          label: s.title ??
-              s.language ??
-              currentAppLocalizations().commonSubtitles,
-          language: s.language ?? 'und',
-        ));
+        tracks.add(
+          CastSubtitleTrack(
+            trackId: s.id,
+            url: '',
+            label:
+                s.title ??
+                s.language ??
+                currentAppLocalizations().commonSubtitles,
+            language: s.language ?? 'und',
+          ),
+        );
       }
     }
     return tracks;
@@ -165,14 +168,20 @@ class FilesPlaybackSession extends SourcePlaybackSession {
     try {
       final (_, version) = await pickedVersion();
       if (version != null && !await _fileIsThere(_files, version.id)) {
-        return StreamingUnavailable(PlaybackProblem.fromText(
-            currentAppLocalizations().filesFolderUnavailable));
+        return StreamingUnavailable(
+          PlaybackProblem.fromText(
+            currentAppLocalizations().filesFolderUnavailable,
+          ),
+        );
       }
     } catch (_) {
       // Not a file problem; the base class words it.
     }
     return super.prepareStreaming(
-        owner: owner, onProgress: onProgress, isCurrent: isCurrent);
+      owner: owner,
+      onProgress: onProgress,
+      isCurrent: isCurrent,
+    );
   }
 }
 
@@ -181,8 +190,10 @@ class FilesPlaybackSession extends SourcePlaybackSession {
 String? _backendPathOf(FilesMediaSource source, String fileKey) {
   final IndexedFile? file = source.index.files()[fileKey];
   if (file == null) return null;
-  final root =
-      source.index.roots().where((r) => r.id == file.rootId).firstOrNull;
+  final root = source.index
+      .roots()
+      .where((r) => r.id == file.rootId)
+      .firstOrNull;
   return root == null ? null : filesBackendPath(root, file.path);
 }
 
@@ -231,21 +242,24 @@ class FilesStreamResolver implements StreamResolver {
           final codec = (s.codec ?? 'srt').toLowerCase();
           if ((codec == 'srt' || codec == 'vtt') && s.externalPath != null) {
             try {
-              final playableSub =
-                  await source.backend.playable(s.externalPath!);
+              final playableSub = await source.backend.playable(
+                s.externalPath!,
+              );
               subtitles[s.id] = FilesCastSubtitle(
                 file: playableSub,
                 format: codec,
               );
             } catch (e) {
               debugPrint(
-                  '[FilesPlaybackSession] Could not resolve sidecar subtitle $i: $e');
+                '[FilesPlaybackSession] Could not resolve sidecar subtitle $i: $e',
+              );
             }
           }
         }
       }
-      final mime =
-          indexed == null ? 'video/mp4' : FilesCatalog.mimeOf(indexed.path);
+      final mime = indexed == null
+          ? 'video/mp4'
+          : FilesCatalog.mimeOf(indexed.path);
       final session = await bridge!.openSession(
         media: file,
         mime: mime,

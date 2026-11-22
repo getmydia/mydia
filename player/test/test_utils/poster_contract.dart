@@ -9,7 +9,7 @@
 // restated per widget.
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
@@ -154,8 +154,7 @@ void runPosterDepthContract({
       expect(find.byType(BackdropFilter), findsNothing);
     });
 
-    testWidgets(
-        'under reduced motion the hover accent collapses and the '
+    testWidgets('under reduced motion the hover accent collapses and the '
         'resting shadow stays', (tester) async {
       await tester.pumpWidget(
         posterHost(build(), reduceMotion: true, size: size),

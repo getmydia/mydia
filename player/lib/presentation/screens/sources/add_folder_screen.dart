@@ -4,7 +4,7 @@ library;
 
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -20,13 +20,18 @@ import 'files_library_kind_picker.dart';
 /// and macOS, where folders are plain paths.
 bool get localFoldersSupported =>
     !kIsWeb &&
-    const {TargetPlatform.linux, TargetPlatform.windows, TargetPlatform.macOS}
-        .contains(defaultTargetPlatform);
+    const {
+      TargetPlatform.linux,
+      TargetPlatform.windows,
+      TargetPlatform.macOS,
+    }.contains(defaultTargetPlatform);
 
 /// Opens the system folder picker; null when the viewer cancels. Tests
 /// override it.
 final directoryPickerProvider = Provider<Future<String?> Function()>(
-    (_) => () => file_selector.getDirectoryPath());
+  (_) =>
+      () => file_selector.getDirectoryPath(),
+);
 
 class AddFolderScreen extends ConsumerStatefulWidget {
   const AddFolderScreen({super.key});
@@ -63,7 +68,10 @@ class _AddFolderScreenState extends ConsumerState<AddFolderScreen> {
     final accountName = context.l10n.filesThisDevice;
     try {
       final id = await accounts.addLocalRoot(
-          path: path, kind: _kind, accountName: accountName);
+        path: path,
+        kind: _kind,
+        accountName: accountName,
+      );
       selected.select(id);
       if (!mounted) return;
       context.go(sourceHomeLocation(id));
@@ -88,7 +96,8 @@ class _AddFolderScreenState extends ConsumerState<AddFolderScreen> {
             shrinkWrap: true,
             children: [
               const FilesExperimentalNotice(
-                  key: Key('add-folder-experimental')),
+                key: Key('add-folder-experimental'),
+              ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 key: const Key('add-folder-choose'),
@@ -104,20 +113,24 @@ class _AddFolderScreenState extends ConsumerState<AddFolderScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 16),
-              Text(context.l10n.filesKindLabel,
-                  style: Theme.of(context).textTheme.labelLarge),
+              Text(
+                context.l10n.filesKindLabel,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
               const SizedBox(height: 4),
               FilesLibraryKindPicker(
                 key: const Key('add-folder-kind'),
                 value: _kind,
-                onChanged:
-                    _busy ? null : (kind) => setState(() => _kind = kind),
+                onChanged: _busy
+                    ? null
+                    : (kind) => setState(() => _kind = kind),
               ),
               if (_failed) ...[
                 const SizedBox(height: 16),
-                Text(context.l10n.filesAddFolderFailed,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error)),
+                Text(
+                  context.l10n.filesAddFolderFailed,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ],
               const SizedBox(height: 24),
               FilledButton(
@@ -126,7 +139,8 @@ class _AddFolderScreenState extends ConsumerState<AddFolderScreen> {
                 child: _busy
                     ? const SizedBox.square(
                         dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : Text(context.l10n.filesAddFolderButton),
               ),
             ],

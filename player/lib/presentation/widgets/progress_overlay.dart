@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
 import '../../core/theme/palette.dart';
 
 class ProgressOverlay extends StatelessWidget {
@@ -20,17 +21,11 @@ class ProgressOverlay extends StatelessWidget {
       bottom: 0,
       child: Container(
         height: height,
-        decoration: BoxDecoration(
-          color: palette.surfaceVariant,
-        ),
+        decoration: BoxDecoration(color: palette.surfaceVariant),
         child: FractionallySizedBox(
           alignment: Alignment.centerLeft,
           widthFactor: percentage / 100.0,
-          child: Container(
-            decoration: BoxDecoration(
-              color: palette.primary,
-            ),
-          ),
+          child: Container(decoration: BoxDecoration(color: palette.primary)),
         ),
       ),
     );

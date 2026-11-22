@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -29,45 +29,63 @@ void main() {
   test('builds a Plex session for a Plex source, none for others', () {
     final source = plex.build().source;
     const item = ItemRef(
-        sourceId: fakeSourceId, kind: ItemKind.movie, externalId: '101');
+      sourceId: fakeSourceId,
+      kind: ItemKind.movie,
+      externalId: '101',
+    );
     final proxy = LocalProxyService.forTesting;
-    expect(playbackSessionFor(source, item, '21', proxy: proxy),
-        isA<PlexPlaybackSession>());
-    expect(playbackSessionFor(FakeMediaSource(), item, '21', proxy: proxy),
-        isNull);
+    expect(
+      playbackSessionFor(source, item, '21', proxy: proxy),
+      isA<PlexPlaybackSession>(),
+    );
+    expect(
+      playbackSessionFor(FakeMediaSource(), item, '21', proxy: proxy),
+      isNull,
+    );
   });
 
   test('reads kind, file and title from the location', () {
-    final params = SourcePlayerParams.fromUri(Uri.parse(
-        '/s/x/player/e2?kind=episode&fileId=p9&title=Invented%20Episode'));
+    final params = SourcePlayerParams.fromUri(
+      Uri.parse(
+        '/s/x/player/e2?kind=episode&fileId=p9&title=Invented%20Episode',
+      ),
+    );
     expect(params.kind, ItemKind.episode);
     expect(params.fileId, 'p9');
     expect(params.title, 'Invented Episode');
     expect(params.mediaType, 'episode');
     expect(
-        SourcePlayerParams.fromUri(Uri.parse('/s/x/player/v1?kind=video'))
-            .mediaType,
-        'movie');
+      SourcePlayerParams.fromUri(Uri.parse('/s/x/player/v1?kind=video'))
+          .mediaType,
+      'movie',
+    );
   });
 
   test('reads the show, season and resume point from the location', () {
-    final params = SourcePlayerParams.fromUri(Uri.parse(
+    final params = SourcePlayerParams.fromUri(
+      Uri.parse(
         '/s/x/player/e2?kind=episode&fileId=p9&showId=s1&seasonNumber=1'
-        '&resume=300'));
+        '&resume=300',
+      ),
+    );
     expect(params.showId, 's1');
     expect(params.seasonNumber, 1);
     expect(params.resumeSeconds, 300);
-    final bare =
-        SourcePlayerParams.fromUri(Uri.parse('/s/x/player/e2?fileId=p9'));
+    final bare = SourcePlayerParams.fromUri(
+      Uri.parse('/s/x/player/e2?fileId=p9'),
+    );
     expect(bare.showId, isNull);
     expect(bare.seasonNumber, isNull);
     expect(bare.resumeSeconds, isNull);
   });
 
   test('reads the tracks and autoplay a remote load content carries', () {
-    final params = SourcePlayerParams.fromUri(Uri.parse(
+    final params = SourcePlayerParams.fromUri(
+      Uri.parse(
         '/s/x/player/m1?kind=movie&fileId=p9&audioTrack=a1&subtitleTrack=s2'
-        '&autoplay=false'));
+        '&autoplay=false',
+      ),
+    );
     expect(params.audioTrack, 'a1');
     expect(params.subtitleTrack, 's2');
     expect(params.autoplay, isFalse);
@@ -77,23 +95,29 @@ void main() {
     expect(bare.autoplay, isTrue);
   });
 
-  testWidgets('hands the tracks and autoplay to the player screen',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourcePlayerRoute(
-          sourceId: fakeSourceId,
-          itemId: 'm1',
-          uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=p9&audioTrack=a1'
-              '&subtitleTrack=s2&autoplay=false'),
+  testWidgets('hands the tracks and autoplay to the player screen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(plex.build().source),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourcePlayerRoute(
+            sourceId: fakeSourceId,
+            itemId: 'm1',
+            uri: Uri.parse(
+              '/s/x/player/m1?kind=movie&fileId=p9&audioTrack=a1'
+              '&subtitleTrack=s2&autoplay=false',
+            ),
+          ),
         ),
       ),
-    ));
+    );
     final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
     expect(screen.audioTrack, 'a1');
     expect(screen.subtitleTrack, 's2');
@@ -101,24 +125,29 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('hands the show, season and resume point to the player screen',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourcePlayerRoute(
-          sourceId: fakeSourceId,
-          itemId: 'e2',
-          uri: Uri.parse(
+  testWidgets('hands the show, season and resume point to the player screen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(plex.build().source),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourcePlayerRoute(
+            sourceId: fakeSourceId,
+            itemId: 'e2',
+            uri: Uri.parse(
               '/s/x/player/e2?kind=episode&fileId=p9&showId=s1&seasonNumber=1'
-              '&resume=300'),
+              '&resume=300',
+            ),
+          ),
         ),
       ),
-    ));
+    );
     final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
     expect(screen.showId, 's1');
     expect(screen.seasonNumber, 1);
@@ -127,105 +156,123 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a source with no playback says so instead of crashing',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource())
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourcePlayerRoute(
-          sourceId: fakeSourceId,
-          itemId: 'm1',
-          uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=part-1'),
+  testWidgets('a source with no playback says so instead of crashing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourcePlayerRoute(
+            sourceId: fakeSourceId,
+            itemId: 'm1',
+            uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=part-1'),
+          ),
         ),
       ),
-    ));
+    );
     expect(find.byKey(const Key('source-player-unavailable')), findsOneWidget);
     expect(find.byType(BackButton), findsOneWidget);
     expect(find.byKey(WindowTitleRow.castKey), findsNothing);
   });
 
-  testWidgets('an empty file id is unavailable rather than a blank stream',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourcePlayerRoute(
-          sourceId: fakeSourceId,
-          itemId: 'm1',
-          uri: Uri.parse('/s/x/player/m1?kind=movie'),
+  testWidgets('an empty file id is unavailable rather than a blank stream', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(plex.build().source),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourcePlayerRoute(
+            sourceId: fakeSourceId,
+            itemId: 'm1',
+            uri: Uri.parse('/s/x/player/m1?kind=movie'),
+          ),
         ),
       ),
-    ));
+    );
     expect(find.byKey(const Key('source-player-unavailable')), findsOneWidget);
   });
 
-  testWidgets('navigating to another item in place builds a fresh route state',
-      (tester) async {
-    final router = GoRouter(
-      initialLocation: '/s/x/player/a?fileId=f',
-      routes: [
-        GoRoute(
-          path: '/s/:sourceId/player/:itemId',
-          builder: sourcePlayerRouteBuilder,
+  testWidgets(
+    'navigating to another item in place builds a fresh route state',
+    (tester) async {
+      final router = GoRouter(
+        initialLocation: '/s/x/player/a?fileId=f',
+        routes: [
+          GoRoute(
+            path: '/s/:sourceId/player/:itemId',
+            builder: sourcePlayerRouteBuilder,
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mediaSourceProvider(const SourceId('x'))
+                .overrideWithValue(FakeMediaSource()),
+          ],
+          child: MaterialApp.router(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            routerConfig: router,
+          ),
         ),
-      ],
-    );
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(const SourceId('x'))
-            .overrideWithValue(FakeMediaSource())
-      ],
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        routerConfig: router,
-      ),
-    ));
-    await tester.pumpAndSettle();
-    final first = tester.state(find.byType(SourcePlayerRoute));
+      );
+      await tester.pumpAndSettle();
+      final first = tester.state(find.byType(SourcePlayerRoute));
 
-    router.go('/s/x/player/b?fileId=f');
-    await tester.pumpAndSettle();
-    expect(tester.state(find.byType(SourcePlayerRoute)), isNot(same(first)));
-  });
+      router.go('/s/x/player/b?fileId=f');
+      await tester.pumpAndSettle();
+      expect(tester.state(find.byType(SourcePlayerRoute)), isNot(same(first)));
+    },
+  );
 
   Future<ProviderContainer> pumpRoute(
     WidgetTester tester,
     Map<SourceId, SourceLock> locks,
   ) async {
-    final container = ProviderContainer(overrides: [
-      deviceAuthProvider.overrideWithValue(_AllowAuth()),
-      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-      sourceLocksProvider.overrideWithValue(locks),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        deviceAuthProvider.overrideWithValue(_AllowAuth()),
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+        sourceLocksProvider.overrideWithValue(locks),
+      ],
+    );
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourcePlayerRoute(
-          sourceId: fakeSourceId,
-          itemId: 'm1',
-          uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=part-1'),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourcePlayerRoute(
+            sourceId: fakeSourceId,
+            itemId: 'm1',
+            uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=part-1'),
+          ),
         ),
       ),
-    ));
+    );
     return container;
   }
 
-  testWidgets('playing a locked source holds the lock until the route goes',
-      (tester) async {
-    final container =
-        await pumpRoute(tester, {fakeSourceId: SourceLock.locked});
+  testWidgets('playing a locked source holds the lock until the route goes', (
+    tester,
+  ) async {
+    final container = await pumpRoute(tester, {
+      fakeSourceId: SourceLock.locked,
+    });
     expect(container.read(sourceLockProvider.notifier).holding, isTrue);
 
     await tester.pumpWidget(const SizedBox());
@@ -233,10 +280,12 @@ void main() {
     expect(container.read(sourceLockProvider.notifier).holding, isFalse);
   });
 
-  testWidgets('a deferred relock fires after the frame, not in dispose',
-      (tester) async {
-    final container =
-        await pumpRoute(tester, {fakeSourceId: SourceLock.locked});
+  testWidgets('a deferred relock fires after the frame, not in dispose', (
+    tester,
+  ) async {
+    final container = await pumpRoute(tester, {
+      fakeSourceId: SourceLock.locked,
+    });
     final lock = container.read(sourceLockProvider.notifier);
     await lock.unlockWithDevice();
     expect(container.read(sourceLockProvider), isTrue);

@@ -28,11 +28,11 @@ final _physicalKeys = <LogicalKeyboardKey, PhysicalKeyboardKey>{
 };
 
 KeyDownEvent _keyDown(LogicalKeyboardKey key) => KeyDownEvent(
-      physicalKey: _physicalKeys[key] ??
-          (throw ArgumentError('add $key to _physicalKeys')),
-      logicalKey: key,
-      timeStamp: Duration.zero,
-    );
+  physicalKey:
+      _physicalKeys[key] ?? (throw ArgumentError('add $key to _physicalKeys')),
+  logicalKey: key,
+  timeStamp: Duration.zero,
+);
 
 void main() {
   group('handleEpisodeNavKey', () {
@@ -51,20 +51,21 @@ void main() {
     });
 
     test(
-        'PageUp does nothing (but is still handled) when there is no '
-        'previous episode — matches the in-bar button\'s own disabled state',
-        () {
-      final result = handleEpisodeNavKey(
-        _keyDown(LogicalKeyboardKey.pageUp),
-        hasPreviousEpisode: false,
-        hasNextEpisode: true,
-        onPreviousEpisode: () =>
-            fail('onPreviousEpisode should not fire when there is none'),
-        onNextEpisode: () => fail('onNextEpisode should not fire for PageUp'),
-      );
+      'PageUp does nothing (but is still handled) when there is no '
+      'previous episode — matches the in-bar button\'s own disabled state',
+      () {
+        final result = handleEpisodeNavKey(
+          _keyDown(LogicalKeyboardKey.pageUp),
+          hasPreviousEpisode: false,
+          hasNextEpisode: true,
+          onPreviousEpisode: () =>
+              fail('onPreviousEpisode should not fire when there is none'),
+          onNextEpisode: () => fail('onNextEpisode should not fire for PageUp'),
+        );
 
-      expect(result, KeyEventResult.handled);
-    });
+        expect(result, KeyEventResult.handled);
+      },
+    );
 
     test('PageDown calls onNextEpisode when a next episode exists', () {
       var nextCalls = 0;
@@ -81,8 +82,7 @@ void main() {
       expect(nextCalls, 1);
     });
 
-    test(
-        'PageDown does nothing (but is still handled) when there is no '
+    test('PageDown does nothing (but is still handled) when there is no '
         'next episode', () {
       final result = handleEpisodeNavKey(
         _keyDown(LogicalKeyboardKey.pageDown),

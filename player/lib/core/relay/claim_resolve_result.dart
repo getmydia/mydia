@@ -20,10 +20,7 @@ class ClaimResolveResult {
   /// Null on the v1 fallback path, which carried no instance ID.
   final String? instanceId;
 
-  ClaimResolveResult({
-    required this.nodeAddr,
-    this.instanceId,
-  });
+  ClaimResolveResult({required this.nodeAddr, this.instanceId});
 
   factory ClaimResolveResult.fromV1Json(Map<String, dynamic> json) {
     final nodeAddr = json['node_addr'] as String?;

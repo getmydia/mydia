@@ -63,5 +63,5 @@ class AmbientDismissals extends Notifier<Set<AmbientDismissal>> {
 
 final ambientDismissalsProvider =
     NotifierProvider<AmbientDismissals, Set<AmbientDismissal>>(
-  AmbientDismissals.new,
-);
+      AmbientDismissals.new,
+    );

@@ -18,15 +18,22 @@ void main() {
       'lastViewedAt': 1700086400,
     })!;
     expect(s.sortTitle, 'Lantern Keeper');
-    expect(s.addedAt,
-        DateTime.fromMillisecondsSinceEpoch(1700000000000, isUtc: true));
-    expect(s.lastPlayedAt,
-        DateTime.fromMillisecondsSinceEpoch(1700086400000, isUtc: true));
+    expect(
+      s.addedAt,
+      DateTime.fromMillisecondsSinceEpoch(1700000000000, isUtc: true),
+    );
+    expect(
+      s.lastPlayedAt,
+      DateTime.fromMillisecondsSinceEpoch(1700086400000, isUtc: true),
+    );
   });
 
   test('missing keys stay null', () {
-    final s =
-        plexSummary(sid, {'ratingKey': '1', 'type': 'movie', 'title': 'X'})!;
+    final s = plexSummary(sid, {
+      'ratingKey': '1',
+      'type': 'movie',
+      'title': 'X',
+    })!;
     expect(s.sortTitle, isNull);
     expect(s.addedAt, isNull);
     expect(s.lastPlayedAt, isNull);
@@ -51,13 +58,13 @@ void main() {
           {
             'type': 'commercial',
             'startTimeOffset': 70000,
-            'endTimeOffset': 90000
+            'endTimeOffset': 90000,
           },
           {
             'type': 'credits',
             'startTimeOffset': 1700000,
             'endTimeOffset': 1800000,
-            'final': true
+            'final': true,
           },
           {'type': 'intro', 'startTimeOffset': 5000, 'endTimeOffset': 5000},
           {'type': 'credits'},
@@ -67,9 +74,15 @@ void main() {
       expect(segments, const [
         MediaSegment(type: SegmentType.intro, startMs: 1000, endMs: 61000),
         MediaSegment(
-            type: SegmentType.commercial, startMs: 70000, endMs: 90000),
+          type: SegmentType.commercial,
+          startMs: 70000,
+          endMs: 90000,
+        ),
         MediaSegment(
-            type: SegmentType.credits, startMs: 1700000, endMs: 1800000),
+          type: SegmentType.credits,
+          startMs: 1700000,
+          endMs: 1800000,
+        ),
       ]);
     });
 
@@ -90,18 +103,21 @@ void main() {
         {'id': 'plex://movie/abc'},
       ],
     })!;
-    expect(s.externalIds,
-        const ExternalIds(tmdb: '42', tvdb: '9001', imdb: 'tt0000042'));
+    expect(
+      s.externalIds,
+      const ExternalIds(tmdb: '42', tvdb: '9001', imdb: 'tt0000042'),
+    );
   });
 
   test('missing or malformed Guid reads as none', () {
     expect(plexExternalIds(null), ExternalIds.none);
     expect(
-        plexExternalIds([
-          {'id': 'tmdb://'},
-          {'id': 7},
-          'x'
-        ]),
-        ExternalIds.none);
+      plexExternalIds([
+        {'id': 'tmdb://'},
+        {'id': 7},
+        'x',
+      ]),
+      ExternalIds.none,
+    );
   });
 }

@@ -4,7 +4,7 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,8 +16,9 @@ import 'settings_panes.dart';
 
 /// Whether settings opens as a dialog. A provider rather than a direct
 /// platform check so widget tests, which always run on the host OS, can pick.
-final settingsDialogEnabledProvider =
-    Provider<bool>((ref) => PlatformFeatures.isDesktop);
+final settingsDialogEnabledProvider = Provider<bool>(
+  (ref) => PlatformFeatures.isDesktop,
+);
 
 /// The open dialog's controller, so a second open retargets it.
 SettingsDialogController? _open;
@@ -87,8 +88,7 @@ SettingsCategory? _categoryFor(String route) {
   return switch (route) {
     '/settings' ||
     '/sources/manage' ||
-    '/settings/paired-devices' =>
-      SettingsCategory.connections,
+    '/settings/paired-devices' => SettingsCategory.connections,
     '/settings/diagnostics' => SettingsCategory.diagnostics,
     _ => null,
   };
@@ -99,8 +99,10 @@ SettingsCategory? _categoryFor(String route) {
 bool openSettingsForRoute(BuildContext context, String route) {
   final category = _categoryFor(route);
   if (category == null) return false;
-  if (!ProviderScope.containerOf(context, listen: false)
-      .read(settingsDialogEnabledProvider)) {
+  if (!ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(settingsDialogEnabledProvider)) {
     return false;
   }
   openSettings(
@@ -119,8 +121,10 @@ Future<void> openSettings(
   SettingsCategory initial = SettingsCategory.playback,
   String? connectionsSection,
 }) async {
-  final enabled = ProviderScope.containerOf(context, listen: false)
-      .read(settingsDialogEnabledProvider);
+  final enabled = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(settingsDialogEnabledProvider);
   if (!enabled) {
     final router = GoRouter.of(context);
     switch (initial) {
@@ -131,9 +135,13 @@ Future<void> openSettings(
       case SettingsCategory.diagnostics:
         unawaited(router.push<void>('/settings/diagnostics'));
       case SettingsCategory.connections:
-        unawaited(router.push<void>(connectionsSection == null
-            ? '/sources/manage'
-            : '/sources/manage?section=$connectionsSection'));
+        unawaited(
+          router.push<void>(
+            connectionsSection == null
+                ? '/sources/manage'
+                : '/sources/manage?section=$connectionsSection',
+          ),
+        );
     }
     return;
   }
@@ -147,8 +155,10 @@ Future<void> openSettings(
     return;
   }
 
-  final controller =
-      SettingsDialogController(initial, connectionsSection: connectionsSection);
+  final controller = SettingsDialogController(
+    initial,
+    connectionsSection: connectionsSection,
+  );
   final router = GoRouter.of(context);
   _open = controller;
   try {

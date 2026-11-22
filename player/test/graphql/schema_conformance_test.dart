@@ -47,7 +47,8 @@ void main() {
       expect(
         documents.length,
         greaterThan(20),
-        reason: 'expected to find the player\'s GraphQL documents; '
+        reason:
+            'expected to find the player\'s GraphQL documents; '
             'found ${documents.length}',
       );
 
@@ -74,7 +75,8 @@ void main() {
       expect(
         violations,
         isEmpty,
-        reason: 'GraphQL operations reference root fields the server does not '
+        reason:
+            'GraphQL operations reference root fields the server does not '
             'expose:\n  ${violations.join('\n  ')}',
       );
     });
@@ -90,8 +92,9 @@ void main() {
         "final d = gql(r'''\nquery D { movie(id: \"1\") { id } }\n''');",
       ].join('\n');
 
-      final bodies =
-          _tripleQuoted.allMatches(source).map((m) => m.group(3)!.trim());
+      final bodies = _tripleQuoted
+          .allMatches(source)
+          .map((m) => m.group(3)!.trim());
 
       expect(bodies, hasLength(4));
       expect(bodies.every((body) => body.startsWith('query ')), isTrue);
@@ -108,8 +111,9 @@ void main() {
         '""";',
       ].join('\n');
 
-      final bodies =
-          _tripleQuoted.allMatches(source).map((m) => m.group(3)!.trim());
+      final bodies = _tripleQuoted
+          .allMatches(source)
+          .map((m) => m.group(3)!.trim());
 
       expect(bodies, hasLength(1));
       expect(bodies.single, startsWith('query A'));
@@ -131,8 +135,9 @@ Map<OperationType, Set<String>> _rootFieldsByOperation(DocumentNode schema) {
         rootTypeNames[operation.operation] = operation.type.name.value;
       }
     } else if (definition is ObjectTypeDefinitionNode) {
-      objectFields[definition.name.value] =
-          definition.fields.map((f) => f.name.value).toSet();
+      objectFields[definition.name.value] = definition.fields
+          .map((f) => f.name.value)
+          .toSet();
     }
   }
 
@@ -209,5 +214,7 @@ final RegExp _tripleQuoted = RegExp(
   '[=(]\\s*(r?)(\'\'\'|""")(.*?)\\2',
   dotAll: true,
 );
-final RegExp _graphqlOpener =
-    RegExp(r'^\s*(query|mutation|subscription|fragment)\s', multiLine: false);
+final RegExp _graphqlOpener = RegExp(
+  r'^\s*(query|mutation|subscription|fragment)\s',
+  multiLine: false,
+);

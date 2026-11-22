@@ -6,7 +6,8 @@ import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/native/lib.dart';
 
 /// An [AmbientRosterSource] that answers with a fixed list of node IDs.
-AmbientRosterSource rosterOf(List<String> ids) => () async => ids;
+AmbientRosterSource rosterOf(List<String> ids) =>
+    () async => ids;
 
 /// An [AmbientNodeProbe] that answers per node ID from a swappable script,
 /// keyed exactly like the production probe's argument (see
@@ -71,10 +72,7 @@ void main() {
     });
 
     test('does not hold connections to idle devices', () async {
-      final scripted = ScriptedProbe({
-        'node-tv': null,
-        'node-phone': null,
-      });
+      final scripted = ScriptedProbe({'node-tv': null, 'node-phone': null});
       final targets = AmbientTargets(
         rosterSource: rosterOf(['node-tv', 'node-phone']),
         probe: scripted.call,
@@ -87,25 +85,26 @@ void main() {
     });
 
     test(
-        'caps held connections at three, keeping the first three in roster order',
-        () async {
-      final ids = [for (var i = 0; i < 6; i++) 'node-$i'];
-      final scripted = ScriptedProbe({
-        for (final id in ids) id: playingSnapshot(title: id),
-      });
-      final targets = AmbientTargets(
-        rosterSource: rosterOf(ids),
-        probe: scripted.call,
-      );
-      addTearDown(targets.dispose);
+      'caps held connections at three, keeping the first three in roster order',
+      () async {
+        final ids = [for (var i = 0; i < 6; i++) 'node-$i'];
+        final scripted = ScriptedProbe({
+          for (final id in ids) id: playingSnapshot(title: id),
+        });
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(ids),
+          probe: scripted.call,
+        );
+        addTearDown(targets.dispose);
 
-      await targets.sweep();
+        await targets.sweep();
 
-      final held = await targets.playing.first;
-      // Not just the count: an accidental `.reversed` or set-ordering
-      // change would still pass a length-only assertion.
-      expect(held.map((t) => t.device.id), ['node-0', 'node-1', 'node-2']);
-    });
+        final held = await targets.playing.first;
+        // Not just the count: an accidental `.reversed` or set-ordering
+        // change would still pass a length-only assertion.
+        expect(held.map((t) => t.device.id), ['node-0', 'node-1', 'node-2']);
+      },
+    );
 
     test('drops every held connection when the app backgrounds', () async {
       final scripted = ScriptedProbe({
@@ -126,8 +125,7 @@ void main() {
       expect(await targets.playing.first, isEmpty);
     });
 
-    test(
-        'a 5-second refresh tick probes only the held nodes, not the whole '
+    test('a 5-second refresh tick probes only the held nodes, not the whole '
         'roster', () {
       fakeAsync((async) {
         final ids = [for (var i = 0; i < 6; i++) 'node-$i'];
@@ -155,12 +153,21 @@ void main() {
         expect(scripted.callCounts['node-0'], 2);
         expect(scripted.callCounts['node-1'], 2);
         expect(scripted.callCounts['node-2'], 2);
-        expect(scripted.callCounts['node-3'], 1,
-            reason: 'never held, so never re-dialed');
-        expect(scripted.callCounts['node-4'], 1,
-            reason: 'never held, so never re-dialed');
-        expect(scripted.callCounts['node-5'], 1,
-            reason: 'never held, so never re-dialed');
+        expect(
+          scripted.callCounts['node-3'],
+          1,
+          reason: 'never held, so never re-dialed',
+        );
+        expect(
+          scripted.callCounts['node-4'],
+          1,
+          reason: 'never held, so never re-dialed',
+        );
+        expect(
+          scripted.callCounts['node-5'],
+          1,
+          reason: 'never held, so never re-dialed',
+        );
 
         // fakeAsync tests dispose inside the zone that started the timer —
         // never via `addTearDown`, which would run in real time after this
@@ -171,35 +178,36 @@ void main() {
       });
     });
 
-    test('drops a held target on the next tick once it stops reporting playing',
-        () {
-      fakeAsync((async) {
-        final scripted = ScriptedProbe({
-          'node-tv': playingSnapshot(title: 'Blade Runner'),
-        });
-        final targets = AmbientTargets(
-          rosterSource: rosterOf(['node-tv']),
-          probe: scripted.call,
-        );
-
-        List<AmbientTarget>? latest;
-        targets.playing.listen((held) => latest = held);
-
-        unawaited(targets.sweep());
-        async.flushMicrotasks();
-        expect(latest?.map((t) => t.device.id), ['node-tv']);
-
-        scripted.update({'node-tv': null});
-        async.elapse(const Duration(seconds: 5));
-
-        expect(latest, isEmpty);
-
-        targets.dispose();
-      });
-    });
-
     test(
-        'a device that starts playing mid-poll stays invisible across ticks '
+      'drops a held target on the next tick once it stops reporting playing',
+      () {
+        fakeAsync((async) {
+          final scripted = ScriptedProbe({
+            'node-tv': playingSnapshot(title: 'Blade Runner'),
+          });
+          final targets = AmbientTargets(
+            rosterSource: rosterOf(['node-tv']),
+            probe: scripted.call,
+          );
+
+          List<AmbientTarget>? latest;
+          targets.playing.listen((held) => latest = held);
+
+          unawaited(targets.sweep());
+          async.flushMicrotasks();
+          expect(latest?.map((t) => t.device.id), ['node-tv']);
+
+          scripted.update({'node-tv': null});
+          async.elapse(const Duration(seconds: 5));
+
+          expect(latest, isEmpty);
+
+          targets.dispose();
+        });
+      },
+    );
+
+    test('a device that starts playing mid-poll stays invisible across ticks '
         'until the next sweep', () {
       fakeAsync((async) {
         final scripted = ScriptedProbe({
@@ -226,24 +234,28 @@ void main() {
         });
 
         async.elapse(const Duration(seconds: 5));
-        expect(latest?.map((t) => t.device.id), ['node-tv'],
-            reason: 'membership only changes via sweep(), never mid-poll');
+        expect(latest?.map((t) => t.device.id), [
+          'node-tv',
+        ], reason: 'membership only changes via sweep(), never mid-poll');
 
         async.elapse(const Duration(seconds: 5));
-        expect(latest?.map((t) => t.device.id), ['node-tv'],
-            reason: 'still invisible on a second tick');
+        expect(latest?.map((t) => t.device.id), [
+          'node-tv',
+        ], reason: 'still invisible on a second tick');
 
         // node-phone was never held, so the refresh never dialed it either
         // — the poll genuinely never saw it, not just filtered it out.
-        expect(scripted.callCounts['node-phone'], 1,
-            reason: 'only the original sweep() probed it');
+        expect(
+          scripted.callCounts['node-phone'],
+          1,
+          reason: 'only the original sweep() probed it',
+        );
 
         targets.dispose();
       });
     });
 
-    test(
-        'a sweep() arriving while backgrounded (e.g. the 30-second ambient '
+    test('a sweep() arriving while backgrounded (e.g. the 30-second ambient '
         'resweep timer in cast_providers.dart) does not repopulate held '
         'targets or resume polling', () {
       fakeAsync((async) {
@@ -276,25 +288,35 @@ void main() {
         unawaited(targets.sweep());
         async.flushMicrotasks();
 
-        expect(scripted.callCounts['node-tv'], 1,
-            reason: 'a backgrounded sweep() must not even dial the roster, '
-                'let alone repopulate');
-        expect(latest, isEmpty,
-            reason: 'still dropped: the resweep must not have undone '
-                'onBackground()');
+        expect(
+          scripted.callCounts['node-tv'],
+          1,
+          reason:
+              'a backgrounded sweep() must not even dial the roster, '
+              'let alone repopulate',
+        );
+        expect(
+          latest,
+          isEmpty,
+          reason:
+              'still dropped: the resweep must not have undone '
+              'onBackground()',
+        );
 
         // No poll timer resumed either: elapsing another 5-second tick must
         // not trigger any further probe calls.
         async.elapse(const Duration(seconds: 5));
-        expect(scripted.callCounts['node-tv'], 1,
-            reason: 'no poll timer should have restarted');
+        expect(
+          scripted.callCounts['node-tv'],
+          1,
+          reason: 'no poll timer should have restarted',
+        );
 
         targets.dispose();
       });
     });
 
-    test(
-        'a background transition landing while sweep() awaits the roster '
+    test('a background transition landing while sweep() awaits the roster '
         'fetch must not repopulate held targets', () {
       fakeAsync((async) {
         final rosterGate = Completer<List<String>>();
@@ -325,24 +347,34 @@ void main() {
         rosterGate.complete(['node-tv']);
         async.flushMicrotasks();
 
-        expect(latest, isEmpty,
-            reason: 'a background transition mid-sweep must win over a '
-                'sweep that was already in flight when it landed');
-        expect(scripted.callCounts['node-tv'], isNull,
-            reason: 'the re-check must return before the probe fan-out '
-                'ever dials the roster');
+        expect(
+          latest,
+          isEmpty,
+          reason:
+              'a background transition mid-sweep must win over a '
+              'sweep that was already in flight when it landed',
+        );
+        expect(
+          scripted.callCounts['node-tv'],
+          isNull,
+          reason:
+              'the re-check must return before the probe fan-out '
+              'ever dials the roster',
+        );
 
         // No poll timer was started either.
         async.elapse(const Duration(seconds: 5));
-        expect(scripted.callCounts['node-tv'], isNull,
-            reason: 'no poll timer should have started');
+        expect(
+          scripted.callCounts['node-tv'],
+          isNull,
+          reason: 'no poll timer should have started',
+        );
 
         targets.dispose();
       });
     });
 
-    test(
-        'a background transition landing while sweep() awaits the probe '
+    test('a background transition landing while sweep() awaits the probe '
         'fan-out must not repopulate held targets or restart polling', () {
       fakeAsync((async) {
         final probeGate = Completer<FlutterPlaybackSnapshot?>();
@@ -375,45 +407,54 @@ void main() {
         probeGate.complete(playingSnapshot(title: 'Blade Runner'));
         async.flushMicrotasks();
 
-        expect(latest, isEmpty,
-            reason: 'a background transition mid-probe-fan-out must win '
-                'over the sweep that was already in flight');
+        expect(
+          latest,
+          isEmpty,
+          reason:
+              'a background transition mid-probe-fan-out must win '
+              'over the sweep that was already in flight',
+        );
 
         // No poll timer was restarted: elapsing a 5-second tick must not
         // trigger a further probe call.
         async.elapse(const Duration(seconds: 5));
-        expect(probeCalls, 1,
-            reason: 'no poll timer should have restarted behind the '
-                'backgrounded app');
+        expect(
+          probeCalls,
+          1,
+          reason:
+              'no poll timer should have restarted behind the '
+              'backgrounded app',
+        );
 
         targets.dispose();
       });
     });
 
     test(
-        'never calls probe again after dispose, even after a long elapsed time',
-        () {
-      fakeAsync((async) {
-        final scripted = ScriptedProbe({
-          'node-tv': playingSnapshot(title: 'Blade Runner'),
+      'never calls probe again after dispose, even after a long elapsed time',
+      () {
+        fakeAsync((async) {
+          final scripted = ScriptedProbe({
+            'node-tv': playingSnapshot(title: 'Blade Runner'),
+          });
+          final targets = AmbientTargets(
+            rosterSource: rosterOf(['node-tv']),
+            probe: scripted.call,
+          );
+
+          unawaited(targets.sweep());
+          async.flushMicrotasks();
+          final countAtSweep = scripted.callCounts['node-tv'];
+
+          unawaited(targets.dispose());
+          async.flushMicrotasks();
+
+          async.elapse(const Duration(minutes: 30));
+
+          expect(scripted.callCounts['node-tv'], countAtSweep);
         });
-        final targets = AmbientTargets(
-          rosterSource: rosterOf(['node-tv']),
-          probe: scripted.call,
-        );
-
-        unawaited(targets.sweep());
-        async.flushMicrotasks();
-        final countAtSweep = scripted.callCounts['node-tv'];
-
-        unawaited(targets.dispose());
-        async.flushMicrotasks();
-
-        async.elapse(const Duration(minutes: 30));
-
-        expect(scripted.callCounts['node-tv'], countAtSweep);
-      });
-    });
+      },
+    );
   });
 
   group('AmbientTargets.stopped', () {
@@ -461,8 +502,7 @@ void main() {
       });
     });
 
-    test(
-        'ignores a refresh that was in flight across a background and '
+    test('ignores a refresh that was in flight across a background and '
         'resume', () {
       fakeAsync((async) {
         var pending = false;
@@ -495,8 +535,7 @@ void main() {
       });
     });
 
-    test(
-        'a refresh in flight across a background and resume does not refill '
+    test('a refresh in flight across a background and resume does not refill '
         'the held list', () {
       fakeAsync((async) {
         var pending = false;
@@ -528,27 +567,29 @@ void main() {
       });
     });
 
-    test('ignores a sweep that was in flight across a background and resume',
-        () async {
-      final late = Completer<FlutterPlaybackSnapshot?>();
-      final targets = AmbientTargets(
-        rosterSource: rosterOf(['node-tv']),
-        probe: (nodeId) => late.future,
-      );
-      addTearDown(targets.dispose);
-      final stopped = <String>[];
-      targets.stopped.listen(stopped.add);
+    test(
+      'ignores a sweep that was in flight across a background and resume',
+      () async {
+        final late = Completer<FlutterPlaybackSnapshot?>();
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: (nodeId) => late.future,
+        );
+        addTearDown(targets.dispose);
+        final stopped = <String>[];
+        targets.stopped.listen(stopped.add);
 
-      final sweep = targets.sweep();
-      await Future<void>.delayed(Duration.zero);
-      targets.onBackground();
-      targets.onForeground();
-      late.complete(null);
-      await sweep;
-      await Future<void>.delayed(Duration.zero);
+        final sweep = targets.sweep();
+        await Future<void>.delayed(Duration.zero);
+        targets.onBackground();
+        targets.onForeground();
+        late.complete(null);
+        await sweep;
+        await Future<void>.delayed(Duration.zero);
 
-      expect(stopped, isEmpty);
-    });
+        expect(stopped, isEmpty);
+      },
+    );
 
     test('does not report anything when the app backgrounds', () async {
       final scripted = ScriptedProbe({
@@ -566,9 +607,13 @@ void main() {
       targets.onBackground();
       await Future<void>.delayed(Duration.zero);
 
-      expect(stopped, isEmpty,
-          reason: 'dropping connections on background says nothing about '
-              'whether the player stopped');
+      expect(
+        stopped,
+        isEmpty,
+        reason:
+            'dropping connections on background says nothing about '
+            'whether the player stopped',
+      );
     });
   });
 }

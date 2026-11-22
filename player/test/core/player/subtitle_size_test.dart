@@ -1,5 +1,6 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/app_theme.dart' show kAppFontFamily;
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:player/core/player/subtitle_size.dart';
 
@@ -59,14 +60,22 @@ void main() {
     });
   });
 
-  test('subtitleViewConfigurationFor keeps media_kit style and padding', () {
+  test('subtitleViewConfigurationFor keeps media_kit style and padding, '
+      'in the app font', () {
     const stock = SubtitleViewConfiguration();
-    final config =
-        subtitleViewConfigurationFor(const Size(844, 390), SubtitleSize.large);
+    final config = subtitleViewConfigurationFor(
+      const Size(844, 390),
+      SubtitleSize.large,
+    );
 
-    expect(config.style, stock.style);
+    // media_kit draws subtitles inside Flutter's own Material, which reads
+    // flutter/material's Theme; the app provides material_ui's, so without an
+    // explicit family the text falls back to Roboto.
+    expect(config.style, stock.style.copyWith(fontFamily: kAppFontFamily));
     expect(config.padding, stock.padding);
     expect(
-        config.textScaler!.scale(kSubtitleBaseFontSize), closeTo(22.5, 0.01));
+      config.textScaler!.scale(kSubtitleBaseFontSize),
+      closeTo(22.5, 0.01),
+    );
   });
 }

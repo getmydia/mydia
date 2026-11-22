@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/palette.dart';
@@ -58,8 +58,9 @@ class OsdDialog extends StatelessWidget {
                 child: Padding(
                   padding: contentPadding,
                   child: DefaultTextStyle.merge(
-                    style: (textTheme.bodyMedium ?? const TextStyle())
-                        .copyWith(color: palette.textSecondary),
+                    style: (textTheme.bodyMedium ?? const TextStyle()).copyWith(
+                      color: palette.textSecondary,
+                    ),
                     child: content,
                   ),
                 ),

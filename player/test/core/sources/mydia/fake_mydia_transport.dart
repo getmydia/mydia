@@ -6,16 +6,20 @@ import 'package:player/domain/sources/source_error.dart';
 
 /// Answers by operation name, recording every call.
 class FakeMydiaTransport implements MydiaGqlTransport {
-  final Map<String,
-          FutureOr<Map<String, dynamic>> Function(Map<String, dynamic> vars)>
-      handlers = {};
+  final Map<
+    String,
+    FutureOr<Map<String, dynamic>> Function(Map<String, dynamic> vars)
+  >
+  handlers = {};
   final List<
-      ({
-        String operation,
-        Map<String, dynamic> vars,
-        String? token,
-        String? deviceProfile,
-      })> calls = [];
+    ({
+      String operation,
+      Map<String, dynamic> vars,
+      String? token,
+      String? deviceProfile,
+    })
+  >
+  calls = [];
 
   /// Tokens the server accepts. Any other token answers unauthorized.
   Set<String> validTokens = {'access'};

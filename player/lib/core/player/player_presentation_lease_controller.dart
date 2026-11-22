@@ -27,11 +27,11 @@ class PlayerPresentationLeaseController {
     OrientationApplier? orientationApplier,
     SystemUiModeApplier? systemUiModeApplier,
     DeferredFrameScheduler? deferredFrameScheduler,
-  })  : _applyOrientations =
-            orientationApplier ?? SystemChrome.setPreferredOrientations,
-        _applySystemUiMode =
-            systemUiModeApplier ?? SystemChrome.setEnabledSystemUIMode,
-        _defer = deferredFrameScheduler ?? _deferUntilAfterFrame;
+  }) : _applyOrientations =
+           orientationApplier ?? SystemChrome.setPreferredOrientations,
+       _applySystemUiMode =
+           systemUiModeApplier ?? SystemChrome.setEnabledSystemUIMode,
+       _defer = deferredFrameScheduler ?? _deferUntilAfterFrame;
 
   static const _landscapeOrientations = <DeviceOrientation>[
     DeviceOrientation.landscapeLeft,

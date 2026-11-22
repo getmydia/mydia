@@ -95,8 +95,10 @@ Map<String, Object?> sanitizeReport(Map<String, Object?> report) {
 /// Applies every free-text rule to [input].
 String sanitizeString(String input) {
   var out = redactHomeDirectories(input);
-  out =
-      out.replaceAllMapped(sourceCredentialPattern, (m) => '${m[1]}[REDACTED]');
+  out = out.replaceAllMapped(
+    sourceCredentialPattern,
+    (m) => '${m[1]}[REDACTED]',
+  );
   out = out.replaceAllMapped(_url, _rewriteUrl);
   out = out.replaceAllMapped(
     _hostLookup,
@@ -163,8 +165,9 @@ String _rewriteUrl(Match m) {
   final hostAndPort = at >= 0 ? authority.substring(at + 1) : authority;
 
   final parts = _hostAndPort.firstMatch(hostAndPort);
-  final host =
-      parts == null ? '[HOST]' : '${_redactHost(parts[1]!)}${parts[2] ?? ''}';
+  final host = parts == null
+      ? '[HOST]'
+      : '${_redactHost(parts[1]!)}${parts[2] ?? ''}';
 
   return '$scheme://$userinfo$host$path${query == null ? '' : '?[REDACTED]'}';
 }
@@ -173,7 +176,8 @@ String _rewriteUrl(Match m) {
 // listens. Every other host is the user's.
 String _redactHost(String host) {
   final lower = host.toLowerCase();
-  final kept = lower == 'mydia.dev' ||
+  final kept =
+      lower == 'mydia.dev' ||
       lower.endsWith('.mydia.dev') ||
       lower == 'localhost' ||
       lower == '127.0.0.1' ||

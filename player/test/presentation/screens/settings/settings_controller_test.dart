@@ -14,10 +14,14 @@ void main() {
     // In-memory settings: the real service reads flutter_secure_storage, and
     // an earlier file in a shared isolate can leave a never-completing read of
     // the same key in NativeAuthStorage's static in-flight map.
-    final h = await mydiaAccountHarness(accounts, overrides: [
-      coreSettingsServiceProvider
-          .overrideWithValue(SettingsService(storage: MockAuthStorage())),
-    ]);
+    final h = await mydiaAccountHarness(
+      accounts,
+      overrides: [
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: MockAuthStorage()),
+        ),
+      ],
+    );
     addTearDown(h.container.dispose);
     await h.container.read(sourceRecordsProvider.future);
     return h.container.read(settingsControllerProvider.future);

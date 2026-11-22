@@ -161,10 +161,12 @@ Future<DeviceProfile> _probeMpvProfile() async {
     final codecs = _parseDecoderList(raw);
     if (codecs.isEmpty) return _staticNativeProfile;
 
-    final videoCodecs =
-        codecs.where(_staticNativeProfile.videoCodecs.contains).toList();
-    final audioCodecs =
-        codecs.where(_staticNativeProfile.audioCodecs.contains).toList();
+    final videoCodecs = codecs
+        .where(_staticNativeProfile.videoCodecs.contains)
+        .toList();
+    final audioCodecs = codecs
+        .where(_staticNativeProfile.audioCodecs.contains)
+        .toList();
 
     // A profile that lists containers but no codecs of one kind would tell
     // the server everything of that kind needs transcoding. Whole-profile

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -37,11 +37,11 @@ class QueueItem {
   }
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'id': id,
-        'file_id': fileId,
-        'title': title,
-      };
+    'type': type,
+    'id': id,
+    'file_id': fileId,
+    'title': title,
+  };
 }
 
 /// A player screen that handles queue-based playback for collections.
@@ -51,10 +51,7 @@ class QueueItem {
 class QueuePlayerScreen extends ConsumerStatefulWidget {
   final String itemsParam;
 
-  const QueuePlayerScreen({
-    super.key,
-    required this.itemsParam,
-  });
+  const QueuePlayerScreen({super.key, required this.itemsParam});
 
   @override
   ConsumerState<QueuePlayerScreen> createState() => _QueuePlayerScreenState();
@@ -194,8 +191,9 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
 
     final currentItem = _queue[_currentIndex];
     final sourceId = ref.watch(legacyMydiaSourceIdProvider);
-    final source =
-        sourceId == null ? null : ref.watch(mediaSourceProvider(sourceId));
+    final source = sourceId == null
+        ? null
+        : ref.watch(mediaSourceProvider(sourceId));
     final session = source == null
         ? null
         : playbackSessionFor(
@@ -277,8 +275,11 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
             children: [
               if (hasPrevious)
                 IconButton(
-                  icon: const Icon(Icons.skip_previous,
-                      color: Colors.white, size: 32),
+                  icon: const Icon(
+                    Icons.skip_previous,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                   onPressed: _playPrevious,
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.black.withValues(alpha: 0.7),
@@ -289,8 +290,11 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
               if (hasPrevious && hasNext) const SizedBox(width: 24),
               if (hasNext)
                 IconButton(
-                  icon: const Icon(Icons.skip_next,
-                      color: Colors.white, size: 32),
+                  icon: const Icon(
+                    Icons.skip_next,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                   onPressed: _playNext,
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.black.withValues(alpha: 0.7),
@@ -337,10 +341,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                     const Spacer(),
                     Text(
                       context.l10n.collectionItemCount(_queue.length),
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[400], fontSize: 14),
                     ),
                   ],
                 ),
@@ -366,8 +367,11 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                         ),
                         child: Center(
                           child: isPlaying
-                              ? const Icon(Icons.play_arrow,
-                                  color: Colors.white, size: 24)
+                              ? const Icon(
+                                  Icons.play_arrow,
+                                  color: Colors.white,
+                                  size: 24,
+                                )
                               : Text(
                                   '${index + 1}',
                                   style: const TextStyle(
@@ -381,8 +385,9 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                         item.title,
                         style: TextStyle(
                           color: isPlaying ? Colors.red : Colors.white,
-                          fontWeight:
-                              isPlaying ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isPlaying
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -391,10 +396,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
                         item.type == 'movie'
                             ? context.l10n.queueItemMovie
                             : context.l10n.queueItemEpisode,
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
                       ),
                       onTap: () => _playAtIndex(index),
                       selected: isPlaying,

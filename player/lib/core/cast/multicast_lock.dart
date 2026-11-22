@@ -16,8 +16,7 @@ class MulticastLock {
 
   final MethodChannel _channel;
 
-  const MulticastLock({MethodChannel channel = defaultChannel})
-      : _channel = channel;
+  const MulticastLock({this._channel = defaultChannel});
 
   /// Only Android has (or needs) this concept. Everywhere else both calls are
   /// no-ops, so callers do not have to platform-branch.

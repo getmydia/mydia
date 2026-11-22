@@ -23,28 +23,35 @@ sealed class RemoteControlIntent {
   /// itself and never reach the player.
   static RemoteControlIntent? fromRequest(FlutterRemoteControlRequest request) {
     return switch (request) {
-      FlutterRemoteControlRequest_Play() =>
-        const TransportIntent(TransportAction.play),
-      FlutterRemoteControlRequest_Pause() =>
-        const TransportIntent(TransportAction.pause),
-      FlutterRemoteControlRequest_Stop() =>
-        const TransportIntent(TransportAction.stop),
+      FlutterRemoteControlRequest_Play() => const TransportIntent(
+        TransportAction.play,
+      ),
+      FlutterRemoteControlRequest_Pause() => const TransportIntent(
+        TransportAction.pause,
+      ),
+      FlutterRemoteControlRequest_Stop() => const TransportIntent(
+        TransportAction.stop,
+      ),
       FlutterRemoteControlRequest_Seek(:final positionMs) => TransportIntent(
-          TransportAction.seek,
-          position: Duration(milliseconds: positionMs.toInt()),
-        ),
-      FlutterRemoteControlRequest_SetVolume(:final level) =>
-        VolumeIntent(level: level),
-      FlutterRemoteControlRequest_SetMute(:final muted) =>
-        VolumeIntent(muted: muted),
+        TransportAction.seek,
+        position: Duration(milliseconds: positionMs.toInt()),
+      ),
+      FlutterRemoteControlRequest_SetVolume(:final level) => VolumeIntent(
+        level: level,
+      ),
+      FlutterRemoteControlRequest_SetMute(:final muted) => VolumeIntent(
+        muted: muted,
+      ),
       FlutterRemoteControlRequest_SelectAudioTrack(:final id) =>
         TrackSelectionIntent(kind: TrackKind.audio, trackId: id),
       FlutterRemoteControlRequest_SelectSubtitleTrack(:final id) =>
         TrackSelectionIntent(kind: TrackKind.subtitle, trackId: id),
-      FlutterRemoteControlRequest_NextEpisode() =>
-        const EpisodeStepIntent(EpisodeStep.next),
-      FlutterRemoteControlRequest_PreviousEpisode() =>
-        const EpisodeStepIntent(EpisodeStep.previous),
+      FlutterRemoteControlRequest_NextEpisode() => const EpisodeStepIntent(
+        EpisodeStep.next,
+      ),
+      FlutterRemoteControlRequest_PreviousEpisode() => const EpisodeStepIntent(
+        EpisodeStep.previous,
+      ),
       FlutterRemoteControlRequest_LoadContent(:final field0) =>
         LoadContentIntent(
           mediaItemId: field0.mediaItemId,
@@ -129,13 +136,13 @@ class LoadContentIntent extends RemoteControlIntent {
   });
 
   LoadContentIntent withVia(SourceId via) => LoadContentIntent(
-        mediaItemId: mediaItemId,
-        episodeId: episodeId,
-        startAt: startAt,
-        audioTrack: audioTrack,
-        subtitleTrack: subtitleTrack,
-        autoplay: autoplay,
-        serverInstanceId: serverInstanceId,
-        via: via,
-      );
+    mediaItemId: mediaItemId,
+    episodeId: episodeId,
+    startAt: startAt,
+    audioTrack: audioTrack,
+    subtitleTrack: subtitleTrack,
+    autoplay: autoplay,
+    serverInstanceId: serverInstanceId,
+    via: via,
+  );
 }

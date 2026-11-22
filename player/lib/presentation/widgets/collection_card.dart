@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/layout/breakpoints.dart';
@@ -69,8 +69,9 @@ class _CollectionCardState extends State<CollectionCard> {
             children: [
               Expanded(
                 child: ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(15)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(15),
+                  ),
                   child: _buildPosterCollage(),
                 ),
               ),
@@ -107,8 +108,9 @@ class _CollectionCardState extends State<CollectionCard> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          context.l10n
-                              .collectionItemCount(widget.collection.itemCount),
+                          context.l10n.collectionItemCount(
+                            widget.collection.itemCount,
+                          ),
                           style: TextStyle(
                             fontSize: 12,
                             color: palette.textSecondary,

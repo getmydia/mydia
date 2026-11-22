@@ -16,9 +16,9 @@ class SparkleUpdateBackend implements UpdateBackend {
     Future<void> Function()? checkForUpdates,
     Future<UpdateTrack> Function()? readTrack,
     Future<bool> Function(UpdateTrack track)? writeTrack,
-  })  : _checkForUpdates = checkForUpdates ?? MacOSUpdater.checkForUpdates,
-        _readTrack = readTrack ?? MacOSUpdater.currentTrack,
-        _writeTrack = writeTrack ?? MacOSUpdater.setTrack;
+  }) : _checkForUpdates = checkForUpdates ?? MacOSUpdater.checkForUpdates,
+       _readTrack = readTrack ?? MacOSUpdater.currentTrack,
+       _writeTrack = writeTrack ?? MacOSUpdater.setTrack;
 
   final Future<void> Function() _checkForUpdates;
   final Future<UpdateTrack> Function() _readTrack;

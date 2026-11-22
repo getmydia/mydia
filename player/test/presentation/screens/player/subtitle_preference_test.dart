@@ -9,14 +9,13 @@ SubtitleTrack track(
   String? title,
   bool forced = false,
   bool hearingImpaired = false,
-}) =>
-    SubtitleTrack(
-      id: id,
-      language: language,
-      title: title,
-      forced: forced,
-      hearingImpaired: hearingImpaired,
-    );
+}) => SubtitleTrack(
+  id: id,
+  language: language,
+  title: title,
+  forced: forced,
+  hearingImpaired: hearingImpaired,
+);
 
 void main() {
   group('subtitlePreferenceFrom', () {
@@ -42,25 +41,27 @@ void main() {
   });
 
   group('matchSubtitlePreference', () {
-    test('separates a forced track from full dialogue in the same language',
-        () {
-      final tracks = [
-        track('2', 'eng', title: 'English (Signs & Songs)', forced: true),
-        track('3', 'eng', title: 'English'),
-      ];
+    test(
+      'separates a forced track from full dialogue in the same language',
+      () {
+        final tracks = [
+          track('2', 'eng', title: 'English (Signs & Songs)', forced: true),
+          track('3', 'eng', title: 'English'),
+        ];
 
-      final signs = matchSubtitlePreference(
-        const PreferTrack(language: 'eng', forced: true),
-        tracks,
-      );
-      expect(signs?.id, '2');
+        final signs = matchSubtitlePreference(
+          const PreferTrack(language: 'eng', forced: true),
+          tracks,
+        );
+        expect(signs?.id, '2');
 
-      final dialogue = matchSubtitlePreference(
-        const PreferTrack(language: 'eng'),
-        tracks,
-      );
-      expect(dialogue?.id, '3');
-    });
+        final dialogue = matchSubtitlePreference(
+          const PreferTrack(language: 'eng'),
+          tracks,
+        );
+        expect(dialogue?.id, '3');
+      },
+    );
 
     test('prefers an exact hearing-impaired match', () {
       final tracks = [
@@ -77,7 +78,7 @@ void main() {
 
     test('falls back across a differing hearing-impaired flag', () {
       final tracks = [
-        track('3', 'eng', title: 'English (SDH)', hearingImpaired: true)
+        track('3', 'eng', title: 'English (SDH)', hearingImpaired: true),
       ];
 
       final match = matchSubtitlePreference(
@@ -134,15 +135,20 @@ void main() {
       );
     });
 
-    test('matches across the two-letter and three-letter forms of a language',
-        () {
-      final tracks = [track('2', 'ger', title: 'German')];
+    test(
+      'matches across the two-letter and three-letter forms of a language',
+      () {
+        final tracks = [track('2', 'ger', title: 'German')];
 
-      expect(
-        matchSubtitlePreference(const PreferTrack(language: 'de'), tracks)?.id,
-        '2',
-      );
-    });
+        expect(
+          matchSubtitlePreference(
+            const PreferTrack(language: 'de'),
+            tracks,
+          )?.id,
+          '2',
+        );
+      },
+    );
   });
 
   group('subtitlePreferenceLanguageEquals', () {
@@ -183,52 +189,56 @@ void main() {
       );
     });
 
-    test(
-        'never over a viewer pick, a switch, a carried intent, a repeat, no tracks, or before mpv has probed',
-        () {
+    test('never over a viewer pick, a switch, a carried intent, a repeat, no tracks, or before mpv has probed', () {
       for (final blocked in [
         () => shouldApplySubtitlePreference(
-            viewerChose: true,
-            switchInFlight: false,
-            intentPending: false,
-            alreadyApplied: false,
-            hasTracks: true,
-            awaitingPlayerTracks: false),
+          viewerChose: true,
+          switchInFlight: false,
+          intentPending: false,
+          alreadyApplied: false,
+          hasTracks: true,
+          awaitingPlayerTracks: false,
+        ),
         () => shouldApplySubtitlePreference(
-            viewerChose: false,
-            switchInFlight: true,
-            intentPending: false,
-            alreadyApplied: false,
-            hasTracks: true,
-            awaitingPlayerTracks: false),
+          viewerChose: false,
+          switchInFlight: true,
+          intentPending: false,
+          alreadyApplied: false,
+          hasTracks: true,
+          awaitingPlayerTracks: false,
+        ),
         () => shouldApplySubtitlePreference(
-            viewerChose: false,
-            switchInFlight: false,
-            intentPending: true,
-            alreadyApplied: false,
-            hasTracks: true,
-            awaitingPlayerTracks: false),
+          viewerChose: false,
+          switchInFlight: false,
+          intentPending: true,
+          alreadyApplied: false,
+          hasTracks: true,
+          awaitingPlayerTracks: false,
+        ),
         () => shouldApplySubtitlePreference(
-            viewerChose: false,
-            switchInFlight: false,
-            intentPending: false,
-            alreadyApplied: true,
-            hasTracks: true,
-            awaitingPlayerTracks: false),
+          viewerChose: false,
+          switchInFlight: false,
+          intentPending: false,
+          alreadyApplied: true,
+          hasTracks: true,
+          awaitingPlayerTracks: false,
+        ),
         () => shouldApplySubtitlePreference(
-            viewerChose: false,
-            switchInFlight: false,
-            intentPending: false,
-            alreadyApplied: false,
-            hasTracks: false,
-            awaitingPlayerTracks: false),
+          viewerChose: false,
+          switchInFlight: false,
+          intentPending: false,
+          alreadyApplied: false,
+          hasTracks: false,
+          awaitingPlayerTracks: false,
+        ),
         () => shouldApplySubtitlePreference(
-            viewerChose: false,
-            switchInFlight: false,
-            intentPending: false,
-            alreadyApplied: false,
-            hasTracks: true,
-            awaitingPlayerTracks: true),
+          viewerChose: false,
+          switchInFlight: false,
+          intentPending: false,
+          alreadyApplied: false,
+          hasTracks: true,
+          awaitingPlayerTracks: true,
+        ),
       ]) {
         expect(blocked(), isFalse);
       }
@@ -236,8 +246,12 @@ void main() {
   });
 
   group('preferenceWaitsForMpv', () {
-    const embedded =
-        SubtitleTrack(id: '3', language: 'eng', embedded: true, url: null);
+    const embedded = SubtitleTrack(
+      id: '3',
+      language: 'eng',
+      embedded: true,
+      url: null,
+    );
     const sidecar = SubtitleTrack(
       id: 'side-1',
       language: 'eng',
@@ -250,22 +264,25 @@ void main() {
       bool mpvListedSubtitles = false,
       bool backstopExpired = false,
       SubtitleTrack? target = embedded,
-    }) =>
-        preferenceWaitsForMpv(
-          nativeDirectPlay: nativeDirectPlay,
-          mpvListedSubtitles: mpvListedSubtitles,
-          backstopExpired: backstopExpired,
-          target: target,
-        );
+    }) => preferenceWaitsForMpv(
+      nativeDirectPlay: nativeDirectPlay,
+      mpvListedSubtitles: mpvListedSubtitles,
+      backstopExpired: backstopExpired,
+      target: target,
+    );
 
     test('an embedded server track waits while mpv has listed nothing', () {
       expect(waits(), isTrue);
     });
 
     test('mpv having listed subtitles ends the wait', () {
-      expect(waits(mpvListedSubtitles: true), isFalse,
-          reason: 'mpv listed its tracks and the preferred one is not among '
-              "them by stream index, so the server's copy is the only one");
+      expect(
+        waits(mpvListedSubtitles: true),
+        isFalse,
+        reason:
+            'mpv listed its tracks and the preferred one is not among '
+            "them by stream index, so the server's copy is the only one",
+      );
     });
 
     test('the backstop ends the wait', () {
@@ -295,13 +312,13 @@ void main() {
     // files, and each file's `preferredSubtitle`. Written as raw JSON because
     // that is what the helper reads, for the reason its own dartdoc gives.
     Map<String, dynamic> response(String root, List<Object?> files) => {
-          root: {'id': 'media-1', 'files': files},
-        };
+      root: {'id': 'media-1', 'files': files},
+    };
 
     Map<String, dynamic> file(String id, Object? preferred) => {
-          'id': id,
-          'preferredSubtitle': preferred,
-        };
+      'id': id,
+      'preferredSubtitle': preferred,
+    };
 
     const preferred = {'mode': 'TRACK', 'language': 'eng'};
 
@@ -337,12 +354,18 @@ void main() {
       ]);
 
       for (final missing in [
-        preferredSubtitleJsonForFile({'episode': data['movie']},
-            root: 'movie', fileId: 'file-a'),
+        preferredSubtitleJsonForFile(
+          {'episode': data['movie']},
+          root: 'movie',
+          fileId: 'file-a',
+        ),
         preferredSubtitleJsonForFile(data, root: 'movie', fileId: 'file-b'),
         preferredSubtitleJsonForFile(data, root: 'movie', fileId: 'file-a'),
-        preferredSubtitleJsonForFile({'movie': 'not a root'},
-            root: 'movie', fileId: 'file-a'),
+        preferredSubtitleJsonForFile(
+          {'movie': 'not a root'},
+          root: 'movie',
+          fileId: 'file-a',
+        ),
       ]) {
         expect(missing, isNull);
       }
@@ -350,24 +373,25 @@ void main() {
   });
 
   group('mpvMayStillListSubtitles', () {
-    test('only in native direct play, before mpv lists, inside the backstop',
-        () {
-      bool may({
-        bool nativeDirectPlay = true,
-        bool mpvListedSubtitles = false,
-        bool backstopExpired = false,
-      }) =>
-          mpvMayStillListSubtitles(
-            nativeDirectPlay: nativeDirectPlay,
-            mpvListedSubtitles: mpvListedSubtitles,
-            backstopExpired: backstopExpired,
-          );
+    test(
+      'only in native direct play, before mpv lists, inside the backstop',
+      () {
+        bool may({
+          bool nativeDirectPlay = true,
+          bool mpvListedSubtitles = false,
+          bool backstopExpired = false,
+        }) => mpvMayStillListSubtitles(
+          nativeDirectPlay: nativeDirectPlay,
+          mpvListedSubtitles: mpvListedSubtitles,
+          backstopExpired: backstopExpired,
+        );
 
-      expect(may(), isTrue);
-      expect(may(nativeDirectPlay: false), isFalse);
-      expect(may(mpvListedSubtitles: true), isFalse);
-      expect(may(backstopExpired: true), isFalse);
-    });
+        expect(may(), isTrue);
+        expect(may(nativeDirectPlay: false), isFalse);
+        expect(may(mpvListedSubtitles: true), isFalse);
+        expect(may(backstopExpired: true), isFalse);
+      },
+    );
   });
 
   group('preferenceTarget', () {
@@ -375,7 +399,11 @@ void main() {
     // English; only 5 is SDH.
     final serverTracks = [
       const SubtitleTrack(
-          id: '4', language: 'eng', title: 'Full', embedded: true),
+        id: '4',
+        language: 'eng',
+        title: 'Full',
+        embedded: true,
+      ),
       const SubtitleTrack(
         id: '5',
         language: 'eng',
@@ -420,8 +448,11 @@ void main() {
         tracks: directPlay,
         streamIndexByMpvId: const {},
       );
-      expect(target?.id, startsWith('mk_'),
-          reason: 'never the server embedded track, which is not on screen');
+      expect(
+        target?.id,
+        startsWith('mk_'),
+        reason: 'never the server embedded track, which is not on screen',
+      );
     });
 
     test('streaming: the server track itself is on screen', () {
@@ -450,7 +481,11 @@ void main() {
   group('carriedPreferenceRestore', () {
     final serverTracks = [
       const SubtitleTrack(
-          id: '4', language: 'eng', title: 'Full', embedded: true),
+        id: '4',
+        language: 'eng',
+        title: 'Full',
+        embedded: true,
+      ),
       const SubtitleTrack(id: 'side-1', language: 'fre', title: 'Fan subs'),
     ];
 
@@ -498,8 +533,11 @@ void main() {
             tracks: serverTracks,
             streamIndexByMpvId: const {},
           ),
-          isA<RestoreUnavailable>()
-              .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+          isA<RestoreUnavailable>().having(
+            (r) => r.notice,
+            'notice',
+            SubtitleNotice.notCarried,
+          ),
         );
       }
     });

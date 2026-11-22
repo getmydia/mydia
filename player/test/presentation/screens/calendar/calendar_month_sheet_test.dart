@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -9,35 +9,42 @@ final today = DateTime(2026, 10, 16);
 final windowStart = DateTime(2026, 9, 16);
 final windowEnd = DateTime(2027, 1, 14);
 
-Future<List<DateTime?>> _pump(WidgetTester tester,
-    {DateTime? initialMonth, Size size = const Size(400, 900)}) async {
+Future<List<DateTime?>> _pump(
+  WidgetTester tester, {
+  DateTime? initialMonth,
+  Size size = const Size(400, 900),
+}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   final results = <DateTime?>[];
 
-  await tester.pumpWidget(MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(
-      body: Builder(
-        builder: (context) => TextButton(
-          onPressed: () async => results.add(await showCalendarMonthSheet(
-            context,
-            windowStart: windowStart,
-            windowEnd: windowEnd,
-            daySummaries: {
-              DateTime(2026, 11, 2): false,
-              DateTime(2026, 11, 7): true,
-            },
-            initialMonth: initialMonth ?? DateTime(2026, 11),
-            today: today,
-          )),
-          child: const Text('open'),
+  await tester.pumpWidget(
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => results.add(
+              await showCalendarMonthSheet(
+                context,
+                windowStart: windowStart,
+                windowEnd: windowEnd,
+                daySummaries: {
+                  DateTime(2026, 11, 2): false,
+                  DateTime(2026, 11, 7): true,
+                },
+                initialMonth: initialMonth ?? DateTime(2026, 11),
+                today: today,
+              ),
+            ),
+            child: const Text('open'),
+          ),
         ),
       ),
     ),
-  ));
+  );
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   return results;
@@ -48,20 +55,26 @@ void main() {
     await _pump(tester);
 
     expect(find.text('November 2026'), findsOneWidget);
-    expect(find.byKey(const ValueKey('calendar-sheet-dot-playable-2026-11-07')),
-        findsOneWidget);
     expect(
-        find.byKey(const ValueKey('calendar-sheet-dot-scheduled-2026-11-02')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('calendar-sheet-dot-playable-2026-11-02')),
-        findsNothing);
+      find.byKey(const ValueKey('calendar-sheet-dot-playable-2026-11-07')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('calendar-sheet-dot-scheduled-2026-11-02')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('calendar-sheet-dot-playable-2026-11-02')),
+      findsNothing,
+    );
   });
 
   testWidgets('tapping a day returns it', (tester) async {
     final results = await _pump(tester);
 
-    await tester
-        .tap(find.byKey(const ValueKey('calendar-sheet-day-2026-11-07')));
+    await tester.tap(
+      find.byKey(const ValueKey('calendar-sheet-day-2026-11-07')),
+    );
     await tester.pumpAndSettle();
 
     expect(results, [DateTime(2026, 11, 7)]);
@@ -70,16 +83,18 @@ void main() {
   testWidgets('days outside the window do nothing', (tester) async {
     final results = await _pump(tester, initialMonth: DateTime(2026, 9));
 
-    await tester
-        .tap(find.byKey(const ValueKey('calendar-sheet-day-2026-09-10')));
+    await tester.tap(
+      find.byKey(const ValueKey('calendar-sheet-day-2026-09-10')),
+    );
     await tester.pumpAndSettle();
 
     expect(results, isEmpty);
     expect(find.text('September 2026'), findsOneWidget);
   });
 
-  testWidgets('arrows page within the window and stop at its ends',
-      (tester) async {
+  testWidgets('arrows page within the window and stop at its ends', (
+    tester,
+  ) async {
     await _pump(tester, initialMonth: DateTime(2026, 9));
     expect(find.byKey(const ValueKey('calendar-sheet-prev')), findsNothing);
 
@@ -91,8 +106,9 @@ void main() {
     expect(find.byKey(const ValueKey('calendar-sheet-next')), findsNothing);
   });
 
-  testWidgets('a six-week month fits a TV-sized viewport by scrolling',
-      (tester) async {
+  testWidgets('a six-week month fits a TV-sized viewport by scrolling', (
+    tester,
+  ) async {
     final results = await _pump(tester, size: const Size(960, 540));
     expect(tester.takeException(), isNull);
 

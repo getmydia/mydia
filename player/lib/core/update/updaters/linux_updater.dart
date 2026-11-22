@@ -18,10 +18,11 @@ class LinuxUpdater extends PlatformUpdater {
   LinuxUpdater({
     String Function()? resolveInstallDir,
     Future<void> Function(String url)? openInBrowser,
-  })  : _resolveInstallDir = resolveInstallDir ??
-            (() => File(Platform.resolvedExecutable).parent.path),
-        _openInBrowser =
-            openInBrowser ?? ((url) async => Process.run('xdg-open', [url]));
+  }) : _resolveInstallDir =
+           resolveInstallDir ??
+           (() => File(Platform.resolvedExecutable).parent.path),
+       _openInBrowser =
+           openInBrowser ?? ((url) async => Process.run('xdg-open', [url]));
 
   final String Function() _resolveInstallDir;
   final Future<void> Function(String url) _openInBrowser;
@@ -94,24 +95,34 @@ class LinuxUpdater extends PlatformUpdater {
     extractDirObj.createSync(recursive: true);
 
     debugPrint('[LinuxUpdater] Extracting to $extractDir');
-    final extractResult =
-        await Process.run('tar', ['-xzf', archivePath, '-C', extractDir]);
+    final extractResult = await Process.run('tar', [
+      '-xzf',
+      archivePath,
+      '-C',
+      extractDir,
+    ]);
     if (extractResult.exitCode != 0) {
-      throw UpdateStepFailed(UpdateProblem(UpdateIssue.extractFailed,
-          detail: '${extractResult.stderr}'));
+      throw UpdateStepFailed(
+        UpdateProblem(
+          UpdateIssue.extractFailed,
+          detail: '${extractResult.stderr}',
+        ),
+      );
     }
 
     final execPath = Platform.resolvedExecutable;
 
     // Copy extracted files over current installation
     debugPrint('[LinuxUpdater] Copying files to $installDir');
-    final copyResult = await Process.run(
-      'cp',
-      ['-rf', '$extractDir/.', installDir],
-    );
+    final copyResult = await Process.run('cp', [
+      '-rf',
+      '$extractDir/.',
+      installDir,
+    ]);
     if (copyResult.exitCode != 0) {
-      throw UpdateStepFailed(UpdateProblem(UpdateIssue.copyFailed,
-          detail: '${copyResult.stderr}'));
+      throw UpdateStepFailed(
+        UpdateProblem(UpdateIssue.copyFailed, detail: '${copyResult.stderr}'),
+      );
     }
 
     // Ensure binary is executable
@@ -119,11 +130,7 @@ class LinuxUpdater extends PlatformUpdater {
 
     // Relaunch
     debugPrint('[LinuxUpdater] Relaunching');
-    await Process.start(
-      execPath,
-      [],
-      mode: ProcessStartMode.detached,
-    );
+    await Process.start(execPath, [], mode: ProcessStartMode.detached);
 
     exit(0);
   }

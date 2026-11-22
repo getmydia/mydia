@@ -8,9 +8,9 @@ void main() {
   group('AppImageUpdater.resolveAppImagePath', () {
     test('returns APPIMAGE when set', () {
       expect(
-        AppImageUpdater.resolveAppImagePath(
-          {'APPIMAGE': '/home/u/Apps/Mydia_Player-x86_64.AppImage'},
-        ),
+        AppImageUpdater.resolveAppImagePath({
+          'APPIMAGE': '/home/u/Apps/Mydia_Player-x86_64.AppImage',
+        }),
         '/home/u/Apps/Mydia_Player-x86_64.AppImage',
       );
     });
@@ -40,13 +40,13 @@ void main() {
     ];
 
     AppUpdate update() => AppUpdate(
-          version: '9.9.9',
-          downloadUrl:
-              'https://example.invalid/mydia-player-linux-v9.9.9-x86_64.AppImage',
-          releaseNotesUrl: 'https://example.invalid/releases/9.9.9',
-          releaseTitle: 'v9.9.9',
-          publishedAt: DateTime.utc(2026, 9, 27),
-        );
+      version: '9.9.9',
+      downloadUrl:
+          'https://example.invalid/mydia-player-linux-v9.9.9-x86_64.AppImage',
+      releaseNotesUrl: 'https://example.invalid/releases/9.9.9',
+      releaseTitle: 'v9.9.9',
+      publishedAt: DateTime.utc(2026, 9, 27),
+    );
 
     AppImageUpdater updater({required List<int> Function() bytes}) =>
         AppImageUpdater(
@@ -84,19 +84,21 @@ void main() {
       expect(temp.listSync().map((e) => e.path), [appImage]);
     });
 
-    test('a download that is not an AppImage leaves the original alone',
-        () async {
-      await expectLater(
-        updater(bytes: () => '<html>502</html>'.codeUnits)
-            .applyUpdate(update()),
-        throwsA(isA<AppImageUpdateException>()),
-      );
+    test(
+      'a download that is not an AppImage leaves the original alone',
+      () async {
+        await expectLater(
+          updater(bytes: () => '<html>502</html>'.codeUnits)
+              .applyUpdate(update()),
+          throwsA(isA<AppImageUpdateException>()),
+        );
 
-      expect(File(appImage).readAsStringSync(), 'old build');
-      expect(temp.listSync().map((e) => e.path), [appImage]);
-      expect(launched, isNull);
-      expect(exited, isFalse);
-    });
+        expect(File(appImage).readAsStringSync(), 'old build');
+        expect(temp.listSync().map((e) => e.path), [appImage]);
+        expect(launched, isNull);
+        expect(exited, isFalse);
+      },
+    );
 
     test('a failed download leaves the original alone', () async {
       final failing = AppImageUpdater(
@@ -110,34 +112,39 @@ void main() {
       );
 
       await expectLater(
-          failing.applyUpdate(update()), throwsA(isA<SocketException>()));
+        failing.applyUpdate(update()),
+        throwsA(isA<SocketException>()),
+      );
 
       expect(File(appImage).readAsStringSync(), 'old build');
       expect(temp.listSync().map((e) => e.path), [appImage]);
       expect(exited, isFalse);
     });
 
-    test('an unwritable directory opens the release page without downloading',
-        () async {
-      if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
-        markTestSkipped('running as root, where DAC checks are bypassed');
-        return;
-      }
-      Process.runSync('chmod', ['0555', temp.path]);
-      var downloaded = false;
-      final readOnly = AppImageUpdater(
-        appImagePath: appImage,
-        download: (url, destination, onProgress) async => downloaded = true,
-        openInBrowser: (url) async => opened = url,
-        exitApp: () => exited = true,
-      );
+    test(
+      'an unwritable directory opens the release page without downloading',
+      () async {
+        if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+          markTestSkipped('running as root, where DAC checks are bypassed');
+          return;
+        }
+        Process.runSync('chmod', ['0555', temp.path]);
+        var downloaded = false;
+        final readOnly = AppImageUpdater(
+          appImagePath: appImage,
+          download: (url, destination, onProgress) async => downloaded = true,
+          openInBrowser: (url) async => opened = url,
+          exitApp: () => exited = true,
+        );
 
-      expect(readOnly.canUpdateInPlace, isFalse);
-      await readOnly.applyUpdate(update());
+        expect(readOnly.canUpdateInPlace, isFalse);
+        await readOnly.applyUpdate(update());
 
-      expect(downloaded, isFalse);
-      expect(opened, 'https://example.invalid/releases/9.9.9');
-      expect(exited, isFalse);
-    }, skip: !Platform.isLinux);
+        expect(downloaded, isFalse);
+        expect(opened, 'https://example.invalid/releases/9.9.9');
+        expect(exited, isFalse);
+      },
+      skip: !Platform.isLinux,
+    );
   });
 }

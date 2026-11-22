@@ -20,10 +20,7 @@ class StreamTimeline {
   /// The real full runtime, when the server has told us. Null when unknown.
   final Duration? totalDuration;
 
-  const StreamTimeline({
-    this.startOffset = Duration.zero,
-    this.totalDuration,
-  });
+  const StreamTimeline({this.startOffset = Duration.zero, this.totalDuration});
 
   /// A stream that starts at the beginning with an unknown runtime. Correct for
   /// direct play and offline playback, where the player holds the whole file

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
@@ -65,15 +65,17 @@ class GlassButton extends StatelessWidget {
               label: Text(label),
             );
       return FocusEmphasis(
-        borderRadius:
-            const BorderRadius.all(Radius.circular(AppTheme.radiusButton)),
+        borderRadius: const BorderRadius.all(
+          Radius.circular(AppTheme.radiusButton),
+        ),
         child: button,
       );
     }
     final glassHeight = height ?? LiquidGeometry.buttonMedium;
     final radius = BorderRadius.circular(glassHeight / 2);
-    final foreground =
-        onPressed == null ? context.palette.textDisabled : Colors.white;
+    final foreground = onPressed == null
+        ? context.palette.textDisabled
+        : Colors.white;
     final glass = GlassInteraction(
       enabled: onPressed != null,
       child: GlassSurface.control(

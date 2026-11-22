@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
@@ -88,8 +88,9 @@ void main() {
     expect(metrics.data, isNot(contains('/s')));
   });
 
-  testWidgets('includes the speed segment when the rate is positive',
-      (tester) async {
+  testWidgets('includes the speed segment when the rate is positive', (
+    tester,
+  ) async {
     await _pump(tester, task: _task(), bytesPerSecond: 4718592);
 
     final metrics = tester.widget<Text>(

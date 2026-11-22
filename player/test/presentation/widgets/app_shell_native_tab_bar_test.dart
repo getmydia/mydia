@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,36 +13,44 @@ import '../../test_utils/dock_harness.dart' show kDockNavEntries;
 const _channel = MethodChannel('test/native-tab-bar');
 
 Future<void> _pump(WidgetTester tester, {required bool native}) async {
-  tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(_channel, (call) async => null);
-  addTearDown(() => tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(_channel, null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      nativeTabBarChannelProvider.overrideWith((ref) {
-        final channel = NativeTabBarChannel(channel: _channel);
-        ref.onDispose(channel.dispose);
-        return channel;
-      }),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        bottomNavigationBar: AppShell.mobileBottomBar(
-          native: native,
-          drawerOpen: false,
-          shellCurrent: true,
-          location: '/',
-          entries: kDockNavEntries,
-          isOffline: false,
-          showBackToMydia: false,
-          settingsBadge: null,
-          onNavigate: (_) {},
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    _channel,
+    (call) async => null,
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      _channel,
+      null,
+    ),
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        nativeTabBarChannelProvider.overrideWith((ref) {
+          final channel = NativeTabBarChannel(channel: _channel);
+          ref.onDispose(channel.dispose);
+          return channel;
+        }),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          bottomNavigationBar: AppShell.mobileBottomBar(
+            native: native,
+            drawerOpen: false,
+            shellCurrent: true,
+            location: '/',
+            entries: kDockNavEntries,
+            isOffline: false,
+            showBackToMydia: false,
+            settingsBadge: null,
+            onNavigate: (_) {},
+          ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pump();
 }
 
@@ -60,11 +68,17 @@ void main() {
   });
 
   test('visible only while the shell is current and the drawer is closed', () {
-    expect(AppShell.nativeBarVisible(shellCurrent: true, drawerOpen: false),
-        isTrue);
-    expect(AppShell.nativeBarVisible(shellCurrent: false, drawerOpen: false),
-        isFalse);
-    expect(AppShell.nativeBarVisible(shellCurrent: true, drawerOpen: true),
-        isFalse);
+    expect(
+      AppShell.nativeBarVisible(shellCurrent: true, drawerOpen: false),
+      isTrue,
+    );
+    expect(
+      AppShell.nativeBarVisible(shellCurrent: false, drawerOpen: false),
+      isFalse,
+    );
+    expect(
+      AppShell.nativeBarVisible(shellCurrent: true, drawerOpen: true),
+      isFalse,
+    );
   });
 }

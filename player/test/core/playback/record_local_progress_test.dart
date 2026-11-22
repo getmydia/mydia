@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/domain/sources/item.dart';
+
 import '../../test_utils/mydia_test_source.dart';
 
 void main() {
@@ -25,8 +26,11 @@ void main() {
     expect(saved.positionSeconds, 900);
     expect(saved.durationSeconds, 5400);
     expect(saved.updatedAt, DateTime.utc(2026, 8, 2, 12));
-    expect(saved.syncedAt, isNull,
-        reason: 'a local write is unsynced until the server confirms it');
+    expect(
+      saved.syncedAt,
+      isNull,
+      reason: 'a local write is unsynced until the server confirms it',
+    );
   });
 
   test('recordLocalProgress ignores a zero or unknown duration', () async {
@@ -41,9 +45,13 @@ void main() {
       now: DateTime.utc(2026, 8, 2, 12),
     );
 
-    expect(store.get('${testMydiaSourceId.value}|movie-1'), isNull,
-        reason: 'a percentage against a zero duration is meaningless, and the '
-            'server rejects it too');
+    expect(
+      store.get('${testMydiaSourceId.value}|movie-1'),
+      isNull,
+      reason:
+          'a percentage against a zero duration is meaningless, and the '
+          'server rejects it too',
+    );
   });
 
   test('recordLocalProgress swallows a failing store', () async {

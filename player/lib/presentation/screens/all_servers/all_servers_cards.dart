@@ -1,7 +1,7 @@
 /// Locations and cards for the All servers views.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -65,11 +65,12 @@ class AllServersPoster extends ConsumerWidget {
     final server = ref.watch(allServersNamesProvider)[item.ref.sourceId];
     return SourcePoster(
       key: ValueKey(
-          'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}'),
+        'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}',
+      ),
       item: item,
       subtitle: [
         caption ?? item.year?.toString(),
-        allServersServerLabel(server, extraCopies)
+        allServersServerLabel(server, extraCopies),
       ].whereType<String>().join(' · '),
       onTap: onTap ?? () => context.push(allServersItemLocation(item.ref)),
       onContextMenu: onContextMenu,
@@ -80,7 +81,10 @@ class AllServersPoster extends ConsumerWidget {
 /// The Continue Watching card menu: Details, and Remove from Continue Watching
 /// when the item's server allows it. A removal refreshes the merged list.
 Future<void> showAllServersContinueMenu(
-    BuildContext c, WidgetRef ref, ItemSummary item) async {
+  BuildContext c,
+  WidgetRef ref,
+  ItemSummary item,
+) async {
   final source = ref
       .read(allServersSourcesProvider)
       .where((s) => s.id == item.ref.sourceId)
@@ -94,14 +98,16 @@ Future<void> showAllServersContinueMenu(
     position: position,
     items: [
       PopupMenuItem(
-          key: const Key('all-continue-details'),
-          value: 'details',
-          child: Text(c.l10n.commonDetails)),
+        key: const Key('all-continue-details'),
+        value: 'details',
+        child: Text(c.l10n.commonDetails),
+      ),
       if (removable)
         PopupMenuItem(
-            key: const Key('all-continue-remove'),
-            value: 'remove',
-            child: Text(c.l10n.mediaMenuRemoveFromContinueWatching)),
+          key: const Key('all-continue-remove'),
+          value: 'remove',
+          child: Text(c.l10n.mediaMenuRemoveFromContinueWatching),
+        ),
     ],
   );
   if (choice == null || !c.mounted) return;
@@ -129,6 +135,8 @@ Future<void> showAllServersContinueMenu(
       // Home reads each server's cached rail and stays mounted under the
       // listing.
       invalidateSourceContinueWatchingContainerWrites(
-          container, item.dismissRef);
+        container,
+        item.dismissRef,
+      );
   }
 }

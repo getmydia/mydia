@@ -60,8 +60,8 @@ StatsContext buildStatsContext({
   // codec-only remembered-failure match this branch already fixed.
   final activeFallback =
       lastFallback != null && plan?.reason == PlanReason.fallbackFromFailure
-          ? lastFallback
-          : null;
+      ? lastFallback
+      : null;
   // A delivery fallback is about this source and wins; otherwise the video
   // output falling back is the less obvious fact, and the rarer one.
   final why = activeFallback == null && videoOutputFellBack
@@ -81,8 +81,10 @@ StatsContext buildStatsContext({
   return StatsContext(
     mode: mode,
     qualityLabel: _qualityLabel(selectedQuality, effectiveQuality),
-    quality:
-        StatsQuality(selected: selectedQuality, effective: effectiveQuality),
+    quality: StatsQuality(
+      selected: selectedQuality,
+      effective: effectiveQuality,
+    ),
     duration: duration,
     why: why,
     whyDetail: activeFallback?.detail,
@@ -162,31 +164,34 @@ StatsWhy? _why({
     // Direct play is the obvious case; only `mode == direct` ever reaches
     // it, and that already reads as "nothing to explain".
     PlanReason.directPlayAccepted => null,
-    PlanReason.copyAccepted =>
-      const StatsWhyPlain(StatsWhyKind.containerNotDirect),
-    PlanReason.copyRejectedByMime =>
-      const StatsWhyPlain(StatsWhyKind.copyRejectedByMime),
+    PlanReason.copyAccepted => const StatsWhyPlain(
+      StatsWhyKind.containerNotDirect,
+    ),
+    PlanReason.copyRejectedByMime => const StatsWhyPlain(
+      StatsWhyKind.copyRejectedByMime,
+    ),
     PlanReason.shapeKnownToFail => _shapeKnownToFailWhy(
-        knownFailures,
-        sourceHeight,
-        sourceCodec,
-      ),
+      knownFailures,
+      sourceHeight,
+      sourceCodec,
+    ),
     PlanReason.recentStallOnPath => _recentStallWhy(recentStall, now),
     PlanReason.fixedRungRequested => StatsWhyCapped(selectedQuality),
     // Both mean the server decided this file needs re-encoding for every
     // device, not just this one -- the same generic sentence the plan-blind
     // version of this function always fell back to.
-    PlanReason.noDirectPlayCandidate ||
-    PlanReason.noCopyCandidate =>
+    PlanReason.noDirectPlayCandidate || PlanReason.noCopyCandidate =>
       const StatsWhyPlain(StatsWhyKind.serverReencoding),
-    PlanReason.webNeverDirectPlays =>
-      const StatsWhyPlain(StatsWhyKind.browserReencodes),
+    PlanReason.webNeverDirectPlays => const StatsWhyPlain(
+      StatsWhyKind.browserReencodes,
+    ),
     // Unreachable in practice: `_fallbackToTranscode` sets `lastFallback` in
     // the same breath it sets a plan with this reason, so the
     // `lastFallback != null` branch above always wins first. Kept only so
     // this switch stays exhaustive over `PlanReason`.
-    PlanReason.fallbackFromFailure =>
-      const StatsWhyPlain(StatsWhyKind.switchedEarlier),
+    PlanReason.fallbackFromFailure => const StatsWhyPlain(
+      StatsWhyKind.switchedEarlier,
+    ),
   };
 }
 
@@ -255,26 +260,21 @@ String? _sourceLabel(
   int? bitrateKbps,
   String? container,
 ) {
-  final parts = <String>[
-    if (height != null) '${height}p',
-    if (codec != null) codec,
-  ];
+  final parts = <String>[if (height != null) '${height}p', ?codec];
   if (parts.isEmpty) return null;
   final tail = <String>[
     if (bitrateKbps != null) formatBitrate(bitrateKbps),
-    if (container != null) container,
+    ?container,
   ];
   return [parts.join(' '), ...tail].join(' - ');
 }
 
 String? _videoLabel(VideoTrack? track) {
   if (track == null) return null;
-  final size =
-      track.w != null && track.h != null ? '${track.w}x${track.h}' : null;
-  final head = [
-    if (size != null) size,
-    if (track.codec != null) track.codec!,
-  ].join(' ');
+  final size = track.w != null && track.h != null
+      ? '${track.w}x${track.h}'
+      : null;
+  final head = [?size, if (track.codec != null) track.codec!].join(' ');
   if (head.isEmpty) return null;
   final fps = track.fps;
   if (fps == null) return head;
@@ -292,7 +292,7 @@ String? _audioLabel(AudioTrack? track) {
   // rounds CD audio's 44100 Hz down to a misreported "44 kHz".
   final sampleRateLabel = formatSampleRate(track.samplerate);
   final tail = <String>[
-    if (sampleRateLabel != null) sampleRateLabel,
+    ?sampleRateLabel,
     if (track.language != null && track.language != 'und') track.language!,
   ];
   if (parts.isEmpty && tail.isEmpty) return null;

@@ -67,20 +67,22 @@ void main() {
   });
 
   group('InMemoryFetchLog.clearFamily', () {
-    test('clears every entry for the operation, whatever its variables',
-        () async {
-      final log = InMemoryFetchLog({
-        _collectionItems('c1'): DateTime(2026, 7, 28),
-        _collectionItems('c2'): DateTime(2026, 7, 28),
-        _home: DateTime(2026, 7, 28),
-      });
+    test(
+      'clears every entry for the operation, whatever its variables',
+      () async {
+        final log = InMemoryFetchLog({
+          _collectionItems('c1'): DateTime(2026, 7, 28),
+          _collectionItems('c2'): DateTime(2026, 7, 28),
+          _home: DateTime(2026, 7, 28),
+        });
 
-      await log.clearFamily('CollectionItems');
+        await log.clearFamily('CollectionItems');
 
-      expect(log.lastFetchedAt(_collectionItems('c1')), isNull);
-      expect(log.lastFetchedAt(_collectionItems('c2')), isNull);
-      expect(log.lastFetchedAt(_home), isNotNull);
-    });
+        expect(log.lastFetchedAt(_collectionItems('c1')), isNull);
+        expect(log.lastFetchedAt(_collectionItems('c2')), isNull);
+        expect(log.lastFetchedAt(_home), isNotNull);
+      },
+    );
 
     test('an operation name that prefixes another does not match it', () async {
       final log = InMemoryFetchLog({
@@ -127,20 +129,22 @@ void main() {
       await tempDir.delete(recursive: true);
     });
 
-    test('clears every entry for the operation, whatever its variables',
-        () async {
-      final log = HiveFetchLog(box);
-      final when = DateTime(2026, 7, 28);
-      await log.record(_collectionItems('c1'), when);
-      await log.record(_collectionItems('c2'), when);
-      await log.record(_home, when);
+    test(
+      'clears every entry for the operation, whatever its variables',
+      () async {
+        final log = HiveFetchLog(box);
+        final when = DateTime(2026, 7, 28);
+        await log.record(_collectionItems('c1'), when);
+        await log.record(_collectionItems('c2'), when);
+        await log.record(_home, when);
 
-      await log.clearFamily('CollectionItems');
+        await log.clearFamily('CollectionItems');
 
-      expect(log.lastFetchedAt(_collectionItems('c1')), isNull);
-      expect(log.lastFetchedAt(_collectionItems('c2')), isNull);
-      expect(log.lastFetchedAt(_home), isNotNull);
-    });
+        expect(log.lastFetchedAt(_collectionItems('c1')), isNull);
+        expect(log.lastFetchedAt(_collectionItems('c2')), isNull);
+        expect(log.lastFetchedAt(_home), isNotNull);
+      },
+    );
 
     test('an operation name that prefixes another does not match it', () async {
       // The Hive log matches on the canonical string, so this is the case

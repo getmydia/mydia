@@ -58,8 +58,7 @@ bool shouldOfferUpNext({
 bool shouldBlockAutoPlayNext({
   required bool autoPlayCancelled,
   required bool fromAutoCountdown,
-}) =>
-    fromAutoCountdown && autoPlayCancelled;
+}) => fromAutoCountdown && autoPlayCancelled;
 
 /// The minimal shape [resolveInSeasonNext] and [resolveSeasonPremiere] need
 /// from an episode.
@@ -143,8 +142,10 @@ class UpNextTarget {
       title == null ? episodeCode : '$episodeCode - $title';
 }
 
-UpNextTarget? _toTarget(UpNextCandidate candidate,
-    {required bool crossesSeason}) {
+UpNextTarget? _toTarget(
+  UpNextCandidate candidate, {
+  required bool crossesSeason,
+}) {
   if (candidate.fileIds.isEmpty) return null;
   return UpNextTarget(
     episodeId: candidate.id,

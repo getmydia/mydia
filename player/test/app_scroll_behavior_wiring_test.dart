@@ -5,7 +5,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/app.dart';
@@ -22,20 +22,24 @@ void main() {
     WidgetTester tester, {
     required bool sourcesLoading,
   }) async {
-    final container = ProviderContainer(overrides: [
-      noProgressFlushOverride,
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      sourcesLoadingProvider.overrideWithValue(sourcesLoading),
-      castSessionProvider.overrideWith((ref) => Stream.value(null)),
-      castSessionManagerProvider
-          .overrideWith((ref) => Completer<CastSessionManager>().future),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        noProgressFlushOverride,
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        sourcesLoadingProvider.overrideWithValue(sourcesLoading),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        castSessionManagerProvider.overrideWith(
+          (ref) => Completer<CastSessionManager>().future,
+        ),
+      ],
+    );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MyApp(),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const MyApp()),
+    );
     await tester.pump();
   }
 

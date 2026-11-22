@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/palette.dart';
 import '../../domain/models/watch_status.dart';
@@ -61,18 +61,14 @@ class MediaPoster extends StatelessWidget {
   });
 
   static Widget _placeholder(MydiaPalette p) => ColoredBox(
-        color: p.surfaceVariant,
-        child: Icon(
-          Icons.movie,
-          size: 48,
-          color: p.textSecondary,
-        ),
-      );
+    color: p.surfaceVariant,
+    child: Icon(Icons.movie, size: 48, color: p.textSecondary),
+  );
 
   static Widget _loadingPlaceholder(MydiaPalette p) => ColoredBox(
-        color: p.surfaceVariant,
-        child: const Center(child: CircularProgressIndicator()),
-      );
+    color: p.surfaceVariant,
+    child: const Center(child: CircularProgressIndicator()),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -131,11 +127,7 @@ class MediaPoster extends StatelessWidget {
                     children: [
                       WatchIndicator(status: watchStatus),
                       if (isFavorite)
-                        const Icon(
-                          Icons.favorite,
-                          color: Colors.red,
-                          size: 20,
-                        ),
+                        const Icon(Icons.favorite, color: Colors.red, size: 20),
                     ],
                   ),
                   // Routed through the same callback as the long-press, so the
@@ -153,9 +145,8 @@ class MediaPoster extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -163,9 +154,8 @@ class MediaPoster extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: palette.textSecondary,
-                      ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: palette.textSecondary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

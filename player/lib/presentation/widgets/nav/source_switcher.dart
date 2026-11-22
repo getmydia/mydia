@@ -6,7 +6,7 @@
 /// below belonged to. The list now lives in the picker the header opens.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/lock/source_lock_controller.dart';
@@ -60,12 +60,16 @@ class SourceSwitcher extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(switchableSourcesProvider);
     if (sources.isEmpty) return const SizedBox.shrink();
-    final current =
-        currentFor(sources, location, ref.watch(activeSourceIdProvider));
+    final current = currentFor(
+      sources,
+      location,
+      ref.watch(activeSourceIdProvider),
+    );
 
     final allServers = isAllServersLocation(location);
     // Named only when the account's Plex Home has someone to switch to.
-    final homeUser = current.kind == SourceKind.plex &&
+    final homeUser =
+        current.kind == SourceKind.plex &&
             ref.watch(accountProfilesProvider(current.account.id)).length > 1
         ? current.profile.name
         : null;
@@ -102,15 +106,14 @@ class SourceSwitcher extends ConsumerWidget {
     BuildContext anchorContext,
     WidgetRef ref,
     Source current,
-  ) =>
-      openSourcePicker(
-        anchorContext,
-        ref,
-        location: location,
-        current: current,
-        onNavigate: onNavigate,
-        onSwitchSource: onSwitchSource,
-      );
+  ) => openSourcePicker(
+    anchorContext,
+    ref,
+    location: location,
+    current: current,
+    onNavigate: onNavigate,
+    onSwitchSource: onSwitchSource,
+  );
 }
 
 /// The source the server header names for [location], or null while there
@@ -158,8 +161,10 @@ Future<void> openSourcePicker(
     case PickAllServers():
       (onSwitchSource ?? onNavigate)(allServersRoot);
     case PickSource(:final source) when source.account.needsReauth:
-      onNavigate('/sources/add/${source.kind.name}'
-          '?account=${source.account.id}');
+      onNavigate(
+        '/sources/add/${source.kind.name}'
+        '?account=${source.account.id}',
+      );
     case PickSource(:final source):
       ref.read(selectedSourceIdProvider.notifier).select(source.id);
       (onSwitchSource ?? onNavigate)(sourceHomeLocation(source.id));
@@ -244,8 +249,9 @@ class _RailSwitcher extends StatelessWidget {
                     key: const ValueKey('source-switcher-rail-name'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style:
-                        theme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                    style: theme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if (caption != null)
                     Text(
@@ -302,13 +308,15 @@ class _Header extends StatelessWidget {
     if (source.account.needsReauth) return l10n.navSourceSignInAgain;
     return switch (source.kind) {
       SourceKind.mydia => 'Mydia · ${source.account.displayName}',
-      SourceKind.plex => homeUser == null
-          ? 'Plex · ${source.account.displayName}'
-          : 'Plex · ${source.account.displayName} · $homeUser',
+      SourceKind.plex =>
+        homeUser == null
+            ? 'Plex · ${source.account.displayName}'
+            : 'Plex · ${source.account.displayName} · $homeUser',
       SourceKind.jellyfin => 'Jellyfin · ${source.account.displayName}',
       SourceKind.stash => 'Stash · ${source.account.displayName}',
-      SourceKind.files =>
-        l10n.navSourceFilesCaption(source.account.displayName),
+      SourceKind.files => l10n.navSourceFilesCaption(
+        source.account.displayName,
+      ),
     };
   }
 
@@ -318,105 +326,108 @@ class _Header extends StatelessWidget {
     final palette = context.palette;
     final theme = Theme.of(context).textTheme;
     final needsReauth = !allServers && source.account.needsReauth;
-    final caption =
-        allServers ? null : _caption(context.l10n, source, homeUser);
+    final caption = allServers
+        ? null
+        : _caption(context.l10n, source, homeUser);
     final name = allServers ? context.l10n.navAllServers : source.displayName;
 
     return Semantics(
-        button: true,
-        label: context.l10n.navSwitchServerCurrent(name),
-        child: FocusHighlight(
-          key: const ValueKey('source-switcher-header'),
-          onActivate: open,
-          borderRadius: const BorderRadius.all(Radius.circular(12)),
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: open,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: palette.surfaceVariant.withValues(alpha: 0.35),
-                  borderRadius: const BorderRadius.all(Radius.circular(12)),
-                  border:
-                      Border.all(color: palette.border.withValues(alpha: 0.6)),
+      button: true,
+      label: context.l10n.navSwitchServerCurrent(name),
+      child: FocusHighlight(
+        key: const ValueKey('source-switcher-header'),
+        onActivate: open,
+        borderRadius: const BorderRadius.all(Radius.circular(12)),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: open,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: palette.surfaceVariant.withValues(alpha: 0.35),
+                borderRadius: const BorderRadius.all(Radius.circular(12)),
+                border: Border.all(
+                  color: palette.border.withValues(alpha: 0.6),
                 ),
-                child: Row(
-                  children: [
-                    SourceStatusBuilder(
-                      sourceId: source.id,
-                      builder: (context, rawStatus) {
-                        final status = allServers ? null : rawStatus;
-                        return Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Icon(
-                              allServers
-                                  ? Icons.layers_rounded
-                                  : sourceKindIcon(source.kind),
-                              size: 22,
-                              color: palette.primary,
-                            ),
-                            if (needsReauth)
-                              const Positioned(
-                                top: -4,
-                                right: -4,
-                                child: Icon(
-                                  Icons.error_rounded,
-                                  size: 12,
-                                  color: AppColors.warning,
-                                ),
-                              )
-                            else if (status != null)
-                              Positioned(
-                                top: -2,
-                                right: -2,
-                                child: SourceStatusDot(status),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+              ),
+              child: Row(
+                children: [
+                  SourceStatusBuilder(
+                    sourceId: source.id,
+                    builder: (context, rawStatus) {
+                      final status = allServers ? null : rawStatus;
+                      return Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          Text(
-                            name,
-                            key: const ValueKey('source-switcher-header-name'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w600),
+                          Icon(
+                            allServers
+                                ? Icons.layers_rounded
+                                : sourceKindIcon(source.kind),
+                            size: 22,
+                            color: palette.primary,
                           ),
-                          if (caption != null)
-                            Text(
-                              caption,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.labelSmall?.copyWith(
-                                color: needsReauth
-                                    ? AppColors.warningText
-                                    : palette.textSecondary,
+                          if (needsReauth)
+                            const Positioned(
+                              top: -4,
+                              right: -4,
+                              child: Icon(
+                                Icons.error_rounded,
+                                size: 12,
+                                color: AppColors.warning,
                               ),
+                            )
+                          else if (status != null)
+                            Positioned(
+                              top: -2,
+                              right: -2,
+                              child: SourceStatusDot(status),
                             ),
                         ],
-                      ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name,
+                          key: const ValueKey('source-switcher-header-name'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (caption != null)
+                          Text(
+                            caption,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.labelSmall?.copyWith(
+                              color: needsReauth
+                                  ? AppColors.warningText
+                                  : palette.textSecondary,
+                            ),
+                          ),
+                      ],
                     ),
-                    Icon(
-                      Icons.unfold_more_rounded,
-                      size: 20,
-                      color: palette.textSecondary,
-                    ),
-                  ],
-                ),
+                  ),
+                  Icon(
+                    Icons.unfold_more_rounded,
+                    size: 20,
+                    color: palette.textSecondary,
+                  ),
+                ],
               ),
             ),
           ),
-        ));
+        ),
+      ),
+    );
   }
 }

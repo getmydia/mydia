@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart'
     show PointerDeviceKind, kDoubleTapTimeout;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -105,17 +105,19 @@ void main() {
       );
     });
 
-    test('false in fullscreen Windows, where the window has no chrome to draw',
-        () {
-      expect(
-        shouldShowWindowChrome(
-          isWeb: false,
-          platform: TargetPlatform.windows,
-          isFullscreen: true,
-        ),
-        isFalse,
-      );
-    });
+    test(
+      'false in fullscreen Windows, where the window has no chrome to draw',
+      () {
+        expect(
+          shouldShowWindowChrome(
+            isWeb: false,
+            platform: TargetPlatform.windows,
+            isFullscreen: true,
+          ),
+          isFalse,
+        );
+      },
+    );
 
     for (final platform in [
       TargetPlatform.macOS,
@@ -202,26 +204,29 @@ void main() {
     });
 
     testWidgets(
-        'a drag at the very top edge reaches the app: GTK owns resizing now, '
-        'from the shadow margin outside the view', (tester) async {
-      var dragged = false;
-      await _pump(
-        tester,
-        platform: TargetPlatform.linux,
-        window: FakeWindowController(),
-        child: GestureDetector(
-          onPanStart: (_) => dragged = true,
-          child: const ColoredBox(color: Color(0xFF000000)),
-        ),
-        body: () async {
-          await tester.dragFrom(const Offset(300, 2), const Offset(0, 30));
-          expect(dragged, isTrue);
-        },
-      );
-    });
+      'a drag at the very top edge reaches the app: GTK owns resizing now, '
+      'from the shadow margin outside the view',
+      (tester) async {
+        var dragged = false;
+        await _pump(
+          tester,
+          platform: TargetPlatform.linux,
+          window: FakeWindowController(),
+          child: GestureDetector(
+            onPanStart: (_) => dragged = true,
+            child: const ColoredBox(color: Color(0xFF000000)),
+          ),
+          body: () async {
+            await tester.dragFrom(const Offset(300, 2), const Offset(0, 30));
+            expect(dragged, isTrue);
+          },
+        );
+      },
+    );
 
-    testWidgets('draws no drag band of its own; title rows own dragging',
-        (tester) async {
+    testWidgets('draws no drag band of its own; title rows own dragging', (
+      tester,
+    ) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
@@ -253,8 +258,9 @@ void main() {
       );
     });
 
-    testWidgets('a tap in the middle of the top edge reaches the app',
-        (tester) async {
+    testWidgets('a tap in the middle of the top edge reaches the app', (
+      tester,
+    ) async {
       var tapped = false;
       await _pump(
         tester,
@@ -271,8 +277,9 @@ void main() {
       );
     });
 
-    testWidgets('draws nothing on macOS, which keeps its native buttons',
-        (tester) async {
+    testWidgets('draws nothing on macOS, which keeps its native buttons', (
+      tester,
+    ) async {
       await _pump(
         tester,
         platform: TargetPlatform.macOS,
@@ -284,8 +291,9 @@ void main() {
       );
     });
 
-    testWidgets('always renders its child, chrome or no chrome',
-        (tester) async {
+    testWidgets('always renders its child, chrome or no chrome', (
+      tester,
+    ) async {
       await _pump(
         tester,
         platform: TargetPlatform.macOS,
@@ -306,8 +314,9 @@ void main() {
       );
     });
 
-    testWidgets('hides the buttons while playback chrome is hidden',
-        (tester) async {
+    testWidgets('hides the buttons while playback chrome is hidden', (
+      tester,
+    ) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
@@ -341,57 +350,65 @@ void main() {
       );
     });
 
-    testWidgets('clips the app to the frame radius while floating',
-        (tester) async {
+    testWidgets('clips the app to the frame radius while floating', (
+      tester,
+    ) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
         window: FakeWindowController(),
         body: () async {
-          final clip =
-              tester.widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
-          expect(clip.borderRadius,
-              BorderRadius.circular(kLinuxWindowCornerRadius));
+          final clip = tester.widget<ClipRRect>(
+            find.byKey(DesktopWindowChrome.clipKey),
+          );
+          expect(
+            clip.borderRadius,
+            BorderRadius.circular(kLinuxWindowCornerRadius),
+          );
           expect(clip.clipBehavior, Clip.antiAlias);
         },
       );
     });
 
     testWidgets(
-        'squares the corners when maximized, then tiled, without remounting '
-        'the app underneath', (tester) async {
-      final frameState = ValueNotifier(WindowFrameState.floating);
-      await _pump(
-        tester,
-        platform: TargetPlatform.linux,
-        window: FakeWindowController(),
-        frameState: frameState,
-        child: const _StateProbe(),
-        body: () async {
-          final before = tester.state(find.byType(_StateProbe));
+      'squares the corners when maximized, then tiled, without remounting '
+      'the app underneath',
+      (tester) async {
+        final frameState = ValueNotifier(WindowFrameState.floating);
+        await _pump(
+          tester,
+          platform: TargetPlatform.linux,
+          window: FakeWindowController(),
+          frameState: frameState,
+          child: const _StateProbe(),
+          body: () async {
+            final before = tester.state(find.byType(_StateProbe));
 
-          for (final state in const [
-            WindowFrameState(maximized: true),
-            WindowFrameState(tiled: true),
-          ]) {
-            frameState.value = state;
-            await tester.pump();
+            for (final state in const [
+              WindowFrameState(maximized: true),
+              WindowFrameState(tiled: true),
+            ]) {
+              frameState.value = state;
+              await tester.pump();
 
-            final clip = tester
-                .widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
-            expect(clip.borderRadius, BorderRadius.zero, reason: '$state');
-            expect(clip.clipBehavior, Clip.none, reason: '$state');
-          }
+              final clip = tester.widget<ClipRRect>(
+                find.byKey(DesktopWindowChrome.clipKey),
+              );
+              expect(clip.borderRadius, BorderRadius.zero, reason: '$state');
+              expect(clip.clipBehavior, Clip.none, reason: '$state');
+            }
 
-          expect(
-            tester.state(find.byType(_StateProbe)),
-            same(before),
-            reason: 'toggling the clip must not change the tree shape, or '
-                'every maximize would throw away the whole app state',
-          );
-        },
-      );
-    });
+            expect(
+              tester.state(find.byType(_StateProbe)),
+              same(before),
+              reason:
+                  'toggling the clip must not change the tree shape, or '
+                  'every maximize would throw away the whole app state',
+            );
+          },
+        );
+      },
+    );
 
     testWidgets('no clip on macOS', (tester) async {
       await _pump(
@@ -467,40 +484,42 @@ void main() {
     });
 
     testWidgets(
-        'on Windows, buttons hide when buttonsHidden is true and restore when hovered',
-        (tester) async {
-      final buttonsHidden = ValueNotifier(false);
-      await _pump(
-        tester,
-        platform: TargetPlatform.windows,
-        window: FakeWindowController(),
-        buttonsHidden: buttonsHidden,
-        body: () async {
-          expect(find.byType(WindowButtonWidget), findsNWidgets(3));
+      'on Windows, buttons hide when buttonsHidden is true and restore when hovered',
+      (tester) async {
+        final buttonsHidden = ValueNotifier(false);
+        await _pump(
+          tester,
+          platform: TargetPlatform.windows,
+          window: FakeWindowController(),
+          buttonsHidden: buttonsHidden,
+          body: () async {
+            expect(find.byType(WindowButtonWidget), findsNWidgets(3));
 
-          buttonsHidden.value = true;
-          await tester.pump();
-          expect(find.byType(WindowButtonWidget), findsNothing);
+            buttonsHidden.value = true;
+            await tester.pump();
+            expect(find.byType(WindowButtonWidget), findsNothing);
 
-          final gesture =
-              await tester.createGesture(kind: PointerDeviceKind.mouse);
-          await gesture.addPointer(location: Offset.zero);
-          addTearDown(gesture.removePointer);
+            final gesture = await tester.createGesture(
+              kind: PointerDeviceKind.mouse,
+            );
+            await gesture.addPointer(location: Offset.zero);
+            addTearDown(gesture.removePointer);
 
-          // Move to caption button area at (750, 20)
-          await gesture.moveTo(const Offset(750, 20));
-          await tester.pump();
+            // Move to caption button area at (750, 20)
+            await gesture.moveTo(const Offset(750, 20));
+            await tester.pump();
 
-          expect(find.byType(WindowButtonWidget), findsNWidgets(3));
+            expect(find.byType(WindowButtonWidget), findsNWidgets(3));
 
-          // Move away
-          await gesture.moveTo(const Offset(400, 300));
-          await tester.pump();
+            // Move away
+            await gesture.moveTo(const Offset(400, 300));
+            await tester.pump();
 
-          expect(find.byType(WindowButtonWidget), findsNothing);
-        },
-      );
-    });
+            expect(find.byType(WindowButtonWidget), findsNothing);
+          },
+        );
+      },
+    );
 
     testWidgets('no clip on Windows', (tester) async {
       await _pump(
@@ -508,8 +527,9 @@ void main() {
         platform: TargetPlatform.windows,
         window: FakeWindowController(),
         body: () async {
-          final clip =
-              tester.widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
+          final clip = tester.widget<ClipRRect>(
+            find.byKey(DesktopWindowChrome.clipKey),
+          );
           expect(clip.borderRadius, BorderRadius.zero);
           expect(clip.clipBehavior, Clip.none);
         },
@@ -536,7 +556,8 @@ void main() {
       Future<void> Function(
         FakeWindowController windowController,
         FakeWindowController titleRowController,
-      ) body,
+      )
+      body,
     ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       try {
@@ -547,7 +568,7 @@ void main() {
           end: [
             WindowButton.minimize,
             WindowButton.maximize,
-            WindowButton.close
+            WindowButton.close,
           ],
         );
 
@@ -586,10 +607,10 @@ void main() {
       }
     }
 
-    testWidgets(
-        'a tap on minimize lands immediately, without waiting out '
-        'kDoubleTapTimeout for a competing recognizer underneath',
-        (tester) async {
+    testWidgets('a tap on minimize lands immediately, without waiting out '
+        'kDoubleTapTimeout for a competing recognizer underneath', (
+      tester,
+    ) async {
       await onLinuxOverTitleRow(tester, (windowController, _) async {
         await tester.tap(
           find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
@@ -599,7 +620,8 @@ void main() {
         expect(
           windowController.minimizeCalls,
           1,
-          reason: 'a single pump (not pumpAndSettle, not a kDoubleTapTimeout '
+          reason:
+              'a single pump (not pumpAndSettle, not a kDoubleTapTimeout '
               'wait) must already show the minimize call: nothing below the '
               'button entered the same gesture arena to hold it open',
         );
@@ -607,53 +629,59 @@ void main() {
     });
 
     testWidgets(
-        'a double-tap on maximize never reaches the drag band underneath '
-        'it', (tester) async {
-      await onLinuxOverTitleRow(tester, (_, titleRowController) async {
-        final maximizeButton =
-            find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize));
-        await tester.tap(maximizeButton);
-        await tester.pump(const Duration(milliseconds: 50));
-        await tester.tap(maximizeButton);
-        await tester.pump(kDoubleTapTimeout);
+      'a double-tap on maximize never reaches the drag band underneath '
+      'it',
+      (tester) async {
+        await onLinuxOverTitleRow(tester, (_, titleRowController) async {
+          final maximizeButton = find.byKey(
+            WindowButtonWidget.keyFor(WindowButton.maximize),
+          );
+          await tester.tap(maximizeButton);
+          await tester.pump(const Duration(milliseconds: 50));
+          await tester.tap(maximizeButton);
+          await tester.pump(kDoubleTapTimeout);
 
-        expect(
-          titleRowController.maximizeCalls,
-          0,
-          reason: 'the double-tap belongs to the button, not to '
-              "WindowTitleRow's drag band, so the title row's own "
-              'controller must never see a maximize call from it',
-        );
-        expect(titleRowController.unmaximizeCalls, 0);
-        expect(
-          titleRowController.startDraggingCalls,
-          0,
-          reason: 'two quick taps in place is not a drag either',
-        );
-      });
-    });
+          expect(
+            titleRowController.maximizeCalls,
+            0,
+            reason:
+                'the double-tap belongs to the button, not to '
+                "WindowTitleRow's drag band, so the title row's own "
+                'controller must never see a maximize call from it',
+          );
+          expect(titleRowController.unmaximizeCalls, 0);
+          expect(
+            titleRowController.startDraggingCalls,
+            0,
+            reason: 'two quick taps in place is not a drag either',
+          );
+        });
+      },
+    );
 
     testWidgets(
-        'a drag on empty band space, clear of the corner, still reaches '
-        "the title row's own drag band", (tester) async {
-      await onLinuxOverTitleRow(tester, (_, titleRowController) async {
-        // x=300 is well clear of the end corner's reserved width (the
-        // default layout's three end buttons only occupy the last ~110px),
-        // so this point has nothing above `WindowTitleRow`'s own
-        // `WindowDragBand` to absorb it.
-        await tester.dragFrom(
-          const Offset(300, kLinuxWindowChromeHeight / 2),
-          const Offset(40, 0),
-        );
-        // The drag also arms the drag band's own double-tap recognizer,
-        // which keeps a timer alive waiting for a second tap that never
-        // comes; `flutter_test` fails the test over a pending timer at
-        // teardown.
-        await tester.pump(kDoubleTapTimeout);
+      'a drag on empty band space, clear of the corner, still reaches '
+      "the title row's own drag band",
+      (tester) async {
+        await onLinuxOverTitleRow(tester, (_, titleRowController) async {
+          // x=300 is well clear of the end corner's reserved width (the
+          // default layout's three end buttons only occupy the last ~110px),
+          // so this point has nothing above `WindowTitleRow`'s own
+          // `WindowDragBand` to absorb it.
+          await tester.dragFrom(
+            const Offset(300, kLinuxWindowChromeHeight / 2),
+            const Offset(40, 0),
+          );
+          // The drag also arms the drag band's own double-tap recognizer,
+          // which keeps a timer alive waiting for a second tap that never
+          // comes; `flutter_test` fails the test over a pending timer at
+          // teardown.
+          await tester.pump(kDoubleTapTimeout);
 
-        expect(titleRowController.startDraggingCalls, 1);
-      });
-    });
+          expect(titleRowController.startDraggingCalls, 1);
+        });
+      },
+    );
   });
 }
 

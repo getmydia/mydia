@@ -41,15 +41,18 @@ abstract final class LiquidGlassSupport {
   /// [available] false and every surface on its frosted recipe.
   static Future<void> initialize() async {
     if (!ui.ImageFilter.isShaderFilterSupported) {
-      debugPrint('[LiquidGlass] shader filters unsupported, '
-          'using frosted glass');
+      debugPrint(
+        '[LiquidGlass] shader filters unsupported, '
+        'using frosted glass',
+      );
       return;
     }
     try {
       _program = await ui.FragmentProgram.fromAsset(assetKey);
     } on Object catch (e) {
       debugPrint(
-          '[LiquidGlass] shader failed to load, using frosted glass: $e');
+        '[LiquidGlass] shader failed to load, using frosted glass: $e',
+      );
       _program = null;
     }
   }

@@ -10,23 +10,23 @@ import '../../../domain/models/download_request.dart';
 /// What a download stores for a picture: the URL for a `UrlArt`, the
 /// server path for a source's artwork (resolved with credentials at save time).
 String? artKey(DetailArt? art) => switch (art) {
-      UrlArt(:final url) => url,
-      SourceArt(:final ref) => ref.path,
-      null => null,
-    };
+  UrlArt(:final url) => url,
+  SourceArt(:final ref) => ref.path,
+  null => null,
+};
 
 DownloadMetadata movieDownloadMetadata(MovieView movie) => DownloadMetadata(
-      title: movie.title,
-      mediaType: MediaType.movie,
-      posterUrl: artKey(movie.poster),
-      backdropUrl: artKey(movie.backdrop),
-      overview: movie.overview,
-      runtime: movie.runtime,
-      genres: movie.genres,
-      rating: movie.rating,
-      year: movie.year,
-      contentRating: movie.contentRating,
-    );
+  title: movie.title,
+  mediaType: MediaType.movie,
+  posterUrl: artKey(movie.poster),
+  backdropUrl: artKey(movie.backdrop),
+  overview: movie.overview,
+  runtime: movie.runtime,
+  genres: movie.genres,
+  rating: movie.rating,
+  year: movie.year,
+  contentRating: movie.contentRating,
+);
 
 DownloadMetadata episodeDownloadMetadata(EpisodeView episode) {
   final showTarget = episode.showTarget;

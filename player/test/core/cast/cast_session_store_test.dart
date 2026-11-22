@@ -10,23 +10,23 @@ import 'package:player/domain/models/cast_device.dart';
 
 void main() {
   PersistedCastSession sessionAt(DateTime savedAt) => PersistedCastSession(
-        sourceId: const SourceId('macct'),
-        device: const CastDevice(
-          id: 'd1',
-          name: 'Living Room',
-          protocol: CastProtocolKind.chromecast,
-          host: '192.168.1.50',
-          port: 8009,
-          metadata: {'md': 'Chromecast Ultra'},
-        ),
-        mediaId: 'movie-9',
-        mediaType: 'movie',
-        fileId: 'file-3',
-        title: 'Arrival',
-        position: const Duration(minutes: 12),
-        routeKind: CastRouteKind.directServer,
-        savedAt: savedAt,
-      );
+    sourceId: const SourceId('macct'),
+    device: const CastDevice(
+      id: 'd1',
+      name: 'Living Room',
+      protocol: CastProtocolKind.chromecast,
+      host: '192.168.1.50',
+      port: 8009,
+      metadata: {'md': 'Chromecast Ultra'},
+    ),
+    mediaId: 'movie-9',
+    mediaType: 'movie',
+    fileId: 'file-3',
+    title: 'Arrival',
+    position: const Duration(minutes: 12),
+    routeKind: CastRouteKind.directServer,
+    savedAt: savedAt,
+  );
 
   group('PersistedCastSession', () {
     test('round-trips through a map', () {
@@ -123,14 +123,10 @@ void main() {
         position: Duration.zero,
         routeKind: CastRouteKind.directServer,
         savedAt: DateTime.utc(2026, 8, 15),
-      ).toMap()
-        ..remove('selectedSubtitleTrackId');
+      ).toMap()..remove('selectedSubtitleTrackId');
 
       expect(map.containsKey('selectedSubtitleTrackId'), isFalse);
-      expect(
-        PersistedCastSession.fromMap(map).selectedSubtitleTrackId,
-        isNull,
-      );
+      expect(PersistedCastSession.fromMap(map).selectedSubtitleTrackId, isNull);
     });
 
     test('copyWith replaces the id', () {
@@ -152,17 +148,17 @@ void main() {
       );
 
       expect(
-          session
-              .copyWith(selectedSubtitleTrackId: '3')
-              .selectedSubtitleTrackId,
-          '3');
+        session.copyWith(selectedSubtitleTrackId: '3').selectedSubtitleTrackId,
+        '3',
+      );
       // Omitting the argument must leave the existing choice alone, matching
       // every other field this copyWith carries.
       expect(
-          session
-              .copyWith(position: const Duration(minutes: 1))
-              .selectedSubtitleTrackId,
-          '2');
+        session
+            .copyWith(position: const Duration(minutes: 1))
+            .selectedSubtitleTrackId,
+        '2',
+      );
       // Turning subtitles back off needs an unambiguous way to reach null,
       // since a bare `selectedSubtitleTrackId: null` argument is what "leave
       // unchanged" already looks like.
@@ -242,17 +238,21 @@ void main() {
         legacyMydia: () => const SourceId('macct'),
       ).load();
 
-      expect((loaded?.content as MydiaCastContent).sourceId,
-          const SourceId('macct'));
+      expect(
+        (loaded?.content as MydiaCastContent).sourceId,
+        const SourceId('macct'),
+      );
     });
 
-    test('a record without an instance is dropped when there is no legacy',
-        () async {
-      await box.put('session', legacyRecord());
+    test(
+      'a record without an instance is dropped when there is no legacy',
+      () async {
+        await box.put('session', legacyRecord());
 
-      expect(await HiveCastSessionStore(box).load(), isNull);
-      expect(box.get('session'), isNull);
-    });
+        expect(await HiveCastSessionStore(box).load(), isNull);
+        expect(box.get('session'), isNull);
+      },
+    );
 
     test('load returns null when the stored map is malformed', () async {
       await box.put('session', {'garbage': true});

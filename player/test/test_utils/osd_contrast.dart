@@ -9,7 +9,7 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
@@ -44,9 +44,9 @@ double contrastRatio(Color a, Color b) {
 
 /// The OSD fill composited over a pure-white frame.
 Color get osdWorstCaseBackground => compositeOver(
-      DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),
-      Colors.white,
-    );
+  DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),
+  Colors.white,
+);
 
 /// Contrast of [foreground], which may be translucent, drawn on the OSD
 /// material over a pure-white frame.

@@ -15,12 +15,11 @@ Future<PushedLocations> _pump(
   WidgetTester tester,
   FakeCapableSource source, {
   List<FakeCapableSource> others = const [],
-}) =>
-    pumpListing(
-      tester,
-      ContinueWatchingScreen(sourceId: source.id),
-      sources: [source, ...others],
-    );
+}) => pumpListing(
+  tester,
+  ContinueWatchingScreen(sourceId: source.id),
+  sources: [source, ...others],
+);
 
 Future<void> _removeFirstCard(WidgetTester tester) async {
   await tester.longPress(find.byType(MediaPoster).first);
@@ -30,8 +29,9 @@ Future<void> _removeFirstCard(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('lists what is in progress and plays an item from that source',
-      (tester) async {
+  testWidgets('lists what is in progress and plays an item from that source', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..continueWatchingResult = [_inProgress(1), _inProgress(2)];
     final pushed = await _pump(tester, a);
@@ -47,8 +47,9 @@ void main() {
     expect(played.queryParameters['fileId'], 'part-1');
   });
 
-  testWidgets('shows the listing of the source it is scoped to',
-      (tester) async {
+  testWidgets('shows the listing of the source it is scoped to', (
+    tester,
+  ) async {
     final a = FakeCapableSource()..continueWatchingResult = [_inProgress(1)];
     final b = FakeCapableSource(id: otherSourceId)
       ..continueWatchingResult = [
@@ -61,8 +62,9 @@ void main() {
     expect(a.calls, isNot(contains('continueWatching()')));
   });
 
-  testWidgets('renders the empty state when nothing is in progress',
-      (tester) async {
+  testWidgets('renders the empty state when nothing is in progress', (
+    tester,
+  ) async {
     await _pump(tester, FakeCapableSource());
 
     expect(find.text('Nothing in progress.'), findsOneWidget);
@@ -77,21 +79,23 @@ void main() {
     expect(find.byType(ProgressOverlay), findsOneWidget);
   });
 
-  testWidgets('draws no bar for an item already marked watched',
-      (tester) async {
+  testWidgets('draws no bar for an item already marked watched', (
+    tester,
+  ) async {
     await _pump(
       tester,
       FakeCapableSource()
         ..continueWatchingResult = [
-          fakeMovie(1, watched: true, progress: 3600)
+          fakeMovie(1, watched: true, progress: 3600),
         ],
     );
 
     expect(find.byType(ProgressOverlay), findsNothing);
   });
 
-  testWidgets('removing a card calls the source and takes it off the grid',
-      (tester) async {
+  testWidgets('removing a card calls the source and takes it off the grid', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..continueWatchingResult = [_inProgress(1), _inProgress(2)];
     await _pump(tester, a);
@@ -115,21 +119,27 @@ void main() {
     expect(find.text('Invented Film 1'), findsOneWidget);
     expect(find.text('Invented Film 2'), findsOneWidget);
     expect(
-        find.text('Could not remove from Continue Watching'), findsOneWidget);
+      find.text('Could not remove from Continue Watching'),
+      findsOneWidget,
+    );
   });
 
   ItemSummary episodeOf(ItemSummary base, String id, String title) =>
       ItemSummary(
         ref: ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.episode, externalId: id),
+          sourceId: fakeSourceId,
+          kind: ItemKind.episode,
+          externalId: id,
+        ),
         title: title,
         showRef: fakeShow.ref,
         userState: const UserState(progressSeconds: 60),
         durationSeconds: 1800,
       );
 
-  testWidgets('removing an episode dismisses its show and hides its siblings',
-      (tester) async {
+  testWidgets('removing an episode dismisses its show and hides its siblings', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..continueWatchingResult = [
         episodeOf(fakeMovie(1), 'e1', 'Invented Episode 1'),
@@ -146,8 +156,9 @@ void main() {
     expect(find.text('Invented Film 1'), findsOneWidget);
   });
 
-  testWidgets('a failed episode removal brings every sibling back',
-      (tester) async {
+  testWidgets('a failed episode removal brings every sibling back', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..continueWatchingResult = [
         episodeOf(fakeMovie(1), 'e1', 'Invented Episode 1'),
@@ -162,17 +173,19 @@ void main() {
     expect(find.text('Invented Episode 2'), findsOneWidget);
   });
 
-  testWidgets('an episode poster names its series and its place',
-      (tester) async {
+  testWidgets('an episode poster names its series and its place', (
+    tester,
+  ) async {
     await _pump(
       tester,
       FakeCapableSource()
         ..continueWatchingResult = [
           const ItemSummary(
             ref: ItemRef(
-                sourceId: fakeSourceId,
-                kind: ItemKind.episode,
-                externalId: 'e3'),
+              sourceId: fakeSourceId,
+              kind: ItemKind.episode,
+              externalId: 'e3',
+            ),
             title: 'Invented Episode 3',
             showTitle: 'Invented Series',
             subtitle: 'S1 · E3',
@@ -184,8 +197,9 @@ void main() {
     expect(find.text('Invented Series · S1 · E3'), findsOneWidget);
   });
 
-  testWidgets('the menu offers details, and removal only where allowed',
-      (tester) async {
+  testWidgets('the menu offers details, and removal only where allowed', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..continueWatchingResult = [_inProgress(1)]
       ..removable = false;

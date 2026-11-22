@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,41 +57,46 @@ Future<GoRouter> pumpRouterAt(
   addTearDown(router.dispose);
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      mediaSourceProvider(fakeSourceId)
-          .overrideWithValue(fake ?? FakeMediaSource()),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: MaterialApp.router(
-      routerConfig: router,
-      builder: toastLayerBuilder,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId)
+            .overrideWithValue(fake ?? FakeMediaSource()),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp.router(
+        routerConfig: router,
+        builder: toastLayerBuilder,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return router;
 }
 
 void main() {
-  testWidgets('a source movie on the generic route opens the movie screen',
-      (tester) async {
+  testWidgets('a source movie on the generic route opens the movie screen', (
+    tester,
+  ) async {
     final router = await pumpRouterAt(tester, '/s/$_id/item/movie/m1');
     expect(find.byType(MovieDetailScreen), findsOneWidget);
     expect(find.text('Invented Film 1'), findsWidgets);
     expect(router.state.uri.path, '/s/$_id/movie/m1');
   });
 
-  testWidgets('a source show opens the show screen with its episodes',
-      (tester) async {
+  testWidgets('a source show opens the show screen with its episodes', (
+    tester,
+  ) async {
     await pumpRouterAt(tester, '/s/$_id/show/s1');
     expect(find.byType(ShowDetailScreen), findsOneWidget);
     expect(find.text('Invented Episode 1'), findsOneWidget);
   });
 
-  testWidgets('a source movie is refetched after the player pops',
-      (tester) async {
+  testWidgets('a source movie is refetched after the player pops', (
+    tester,
+  ) async {
     final fake = _CountingSource();
     await pumpRouterAt(
       tester,
@@ -100,7 +105,7 @@ void main() {
       extraRoutes: [
         GoRoute(
           path: '/s/:sourceId/player/:itemId',
-          builder: (_, __) => const Scaffold(body: Text('player stub')),
+          builder: (_, _) => const Scaffold(body: Text('player stub')),
         ),
       ],
     );
@@ -129,23 +134,26 @@ void main() {
     expect(find.byType(SourceErrorView), findsOneWidget);
   });
 
-  testWidgets('a source show on the generic route redirects to the show',
-      (tester) async {
+  testWidgets('a source show on the generic route redirects to the show', (
+    tester,
+  ) async {
     final router = await pumpRouterAt(tester, '/s/$_id/item/show/s1');
     expect(find.byType(ShowDetailScreen), findsOneWidget);
     expect(router.state.uri.path, '/s/$_id/show/s1');
   });
 
-  testWidgets('a source episode on the generic route opens its show',
-      (tester) async {
+  testWidgets('a source episode on the generic route opens its show', (
+    tester,
+  ) async {
     final router = await pumpRouterAt(tester, '/s/$_id/item/episode/e2');
     expect(router.state.uri.path, '/s/$_id/episode/e2');
     expect(find.byType(ShowDetailScreen), findsOneWidget);
     expect(find.text('S1 · E2'), findsOneWidget);
   });
 
-  testWidgets('an episode opens its show with that episode selected',
-      (tester) async {
+  testWidgets('an episode opens its show with that episode selected', (
+    tester,
+  ) async {
     // Without the selection the hero would fall back to the first episode.
     await pumpRouterAt(tester, '/s/$_id/episode/e2');
     expect(find.byType(ShowDetailScreen), findsOneWidget);
@@ -155,8 +163,9 @@ void main() {
 
   // go_router keys a page by its path pattern, so going from one episode to
   // another reuses the page and its State rather than mounting a new one.
-  testWidgets('going to another episode of the same show reselects',
-      (tester) async {
+  testWidgets('going to another episode of the same show reselects', (
+    tester,
+  ) async {
     final router = await pumpRouterAt(tester, '/s/$_id/episode/e1');
     expect(find.text('S1 · E1'), findsOneWidget);
 
@@ -188,8 +197,9 @@ void main() {
     expect(find.byType(SourceItemScreen), findsOneWidget);
   });
 
-  testWidgets('Mydia-only controls are absent on a source movie',
-      (tester) async {
+  testWidgets('Mydia-only controls are absent on a source movie', (
+    tester,
+  ) async {
     await pumpRouterAt(tester, '/s/$_id/movie/m1');
     expect(find.text('Invented Film 1'), findsWidgets);
     expect(find.text('Watched'), findsOneWidget);
@@ -198,16 +208,25 @@ void main() {
     expect(find.text('Favorite'), findsNothing);
   });
 
-  test('sourceItemLocation points at detail routes except video and folder',
-      () {
-    ItemRef ref(ItemKind k) =>
-        ItemRef(sourceId: fakeSourceId, kind: k, externalId: 'x 1');
-    expect(sourceItemLocation(ref(ItemKind.movie)), '/s/$_id/movie/x%201');
-    expect(sourceItemLocation(ref(ItemKind.season)), '/s/$_id/season/x%201');
-    expect(sourceItemLocation(ref(ItemKind.video)), '/s/$_id/item/video/x%201');
-    expect(
-        sourceItemLocation(ref(ItemKind.folder)), '/s/$_id/item/folder/x%201');
-    expect(sourceItemLocation(ref(ItemKind.show)),
-        detailLocation(SourceTarget(ref(ItemKind.show))));
-  });
+  test(
+    'sourceItemLocation points at detail routes except video and folder',
+    () {
+      ItemRef ref(ItemKind k) =>
+          ItemRef(sourceId: fakeSourceId, kind: k, externalId: 'x 1');
+      expect(sourceItemLocation(ref(ItemKind.movie)), '/s/$_id/movie/x%201');
+      expect(sourceItemLocation(ref(ItemKind.season)), '/s/$_id/season/x%201');
+      expect(
+        sourceItemLocation(ref(ItemKind.video)),
+        '/s/$_id/item/video/x%201',
+      );
+      expect(
+        sourceItemLocation(ref(ItemKind.folder)),
+        '/s/$_id/item/folder/x%201',
+      );
+      expect(
+        sourceItemLocation(ref(ItemKind.show)),
+        detailLocation(SourceTarget(ref(ItemKind.show))),
+      );
+    },
+  );
 }

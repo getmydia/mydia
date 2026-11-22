@@ -4,27 +4,35 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import 'frb_generated.dart';
+
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
 /// Parses each path under `root`. Paths that do not parse are omitted.
-List<FfiParsed> parseBatch(
-        {required String root,
-        required List<String> paths,
-        required FfiKind kind}) =>
-    RustLib.instance.api
-        .crateMediaNamesParseBatch(root: root, paths: paths, kind: kind);
+List<FfiParsed> parseBatch({
+  required String root,
+  required List<String> paths,
+  required FfiKind kind,
+}) => RustLib.instance.api.crateMediaNamesParseBatch(
+  root: root,
+  paths: paths,
+  kind: kind,
+);
 
 /// Picks the candidate that best matches the wanted title, or None when no
 /// candidate is confident enough.
-FfiMatch? scoreCandidates(
-        {required String title,
-        int? year,
-        required bool isShow,
-        required List<FfiCandidate> candidates}) =>
-    RustLib.instance.api.crateMediaNamesScoreCandidates(
-        title: title, year: year, isShow: isShow, candidates: candidates);
+FfiMatch? scoreCandidates({
+  required String title,
+  int? year,
+  required bool isShow,
+  required List<FfiCandidate> candidates,
+}) => RustLib.instance.api.crateMediaNamesScoreCandidates(
+  title: title,
+  year: year,
+  isShow: isShow,
+  candidates: candidates,
+);
 
 class FfiCandidate {
   final PlatformInt64 id;
@@ -54,21 +62,13 @@ class FfiCandidate {
           year == other.year;
 }
 
-enum FfiKind {
-  movies,
-  series,
-  mixed,
-  ;
-}
+enum FfiKind { movies, series, mixed }
 
 class FfiMatch {
   final PlatformInt64 id;
   final double confidence;
 
-  const FfiMatch({
-    required this.id,
-    required this.confidence,
-  });
+  const FfiMatch({required this.id, required this.confidence});
 
   @override
   int get hashCode => id.hashCode ^ confidence.hashCode;

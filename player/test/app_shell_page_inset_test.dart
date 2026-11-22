@@ -7,11 +7,12 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'test_utils/no_downloads.dart';
+
 import 'package:player/app.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -22,7 +23,9 @@ import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/router/app_router.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/detail/detail_hero.dart';
+import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/sources/source_search_screen.dart';
+import 'package:player/presentation/widgets/shell_rail_inset.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import 'presentation/screens/sources/fake_media_source.dart';
@@ -36,21 +39,24 @@ Future<(ProviderContainer, GoRouter)> _pumpApp(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(overrides: [
-    noProgressFlushOverride,
-    sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
-    sourcesLoadingProvider.overrideWithValue(false),
-    hasMydiaProvider.overrideWithValue(false),
-    thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
-    mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-    sourceArtworkProvider.overrideWith((ref, key) async => null),
-    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      noProgressFlushOverride,
+      sidebarLayoutStoreProvider.overrideWithValue(
+        InMemorySidebarLayoutStore(),
+      ),
+      sourcesLoadingProvider.overrideWithValue(false),
+      hasMydiaProvider.overrideWithValue(false),
+      thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      sourceArtworkProvider.overrideWith((ref, key) async => null),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+    ],
+  );
   addTearDown(container.dispose);
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: const MyApp(),
-  ));
+  await tester.pumpWidget(
+    UncontrolledProviderScope(container: container, child: const MyApp()),
+  );
   // A frame first: navigating before the router has built its first page
   // never returns.
   await tester.pump(const Duration(milliseconds: 50));
@@ -63,6 +69,19 @@ Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 20; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
+}
+
+/// The product of every fade between [finder]'s widget and the root, i.e.
+/// how opaque it is painted on this frame.
+double _opacityOf(WidgetTester tester, Finder finder) {
+  var opacity = 1.0;
+  tester.element(finder).visitAncestorElements((ancestor) {
+    final widget = ancestor.widget;
+    if (widget is FadeTransition) opacity *= widget.opacity.value;
+    if (widget is Opacity) opacity *= widget.opacity;
+    return true;
+  });
+  return opacity;
 }
 
 void main() {
@@ -79,8 +98,9 @@ void main() {
     );
   });
 
-  testWidgets('a page opened over another never moves it, on any frame',
-      (tester) async {
+  testWidgets('a page opened over another never moves it, on any frame', (
+    tester,
+  ) async {
     final (_, router) = await _pumpApp(tester);
     router.go('/s/$_id/search');
     await _settle(tester);
@@ -90,10 +110,22 @@ void main() {
     final home = tester.getTopLeft(page).dx;
     expect(home, inset, reason: 'an ordinary page is inset by the rail');
 
+    // The route transition slides and fades the page as a whole, so its
+    // window position moves mid-animation by design. What must never change
+    // is its inset inside its own route: the page keeps its geometry while
+    // another opens over it.
+    final route = find.ancestor(
+      of: page,
+      matching: find.byType(ShellPageInset, skipOffstage: false),
+    );
     Future<void> everyFrame() async {
       for (var i = 0; i < 40; i++) {
         await tester.pump(const Duration(milliseconds: 16));
-        expect(tester.getTopLeft(page).dx, home, reason: 'frame $i');
+        expect(
+          tester.getTopLeft(page).dx - tester.getTopLeft(route).dx,
+          inset,
+          reason: 'frame $i',
+        );
       }
     }
 
@@ -107,8 +139,39 @@ void main() {
     expect(tester.getTopLeft(page).dx, home);
   });
 
-  testWidgets(
-      'a detail page paints its art to x=0, its back button beside '
+  testWidgets('switching rail destinations swaps the page with no fade', (
+    tester,
+  ) async {
+    // Destinations replace one another; a cross-fade between them shows the
+    // empty background for a moment on every rail tap.
+    final (_, router) = await _pumpApp(tester);
+    router.go('/s/$_id/search');
+    await _settle(tester);
+
+    router.go('/settings');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    final settings = find.byType(SettingsScreen);
+    expect(settings, findsOneWidget);
+    expect(_opacityOf(tester, settings), 1.0);
+    await _settle(tester);
+  });
+
+  testWidgets('a page pushed over another still fades in', (tester) async {
+    final (_, router) = await _pumpApp(tester);
+    router.go('/s/$_id/search');
+    await _settle(tester);
+
+    unawaited(router.push<void>('/s/$_id/movie/m1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    final art = find.byType(DetailHeroBackground);
+    expect(art, findsOneWidget);
+    expect(_opacityOf(tester, art), lessThan(1.0));
+    await _settle(tester);
+  });
+
+  testWidgets('a detail page paints its art to x=0, its back button beside '
       'the rail', (tester) async {
     final (_, router) = await _pumpApp(tester);
     router.go('/s/$_id/search');
@@ -122,15 +185,19 @@ void main() {
     expect(tester.getTopLeft(art).dy, 0);
 
     final back = tester.getRect(find.byTooltip('Back'));
-    expect(back.left, greaterThanOrEqualTo(inset),
-        reason: 'never under the rail');
+    expect(
+      back.left,
+      greaterThanOrEqualTo(inset),
+      reason: 'never under the rail',
+    );
     // The title row's own gutter, not a second rail inset.
     expect(back.left, lessThan(inset + 40));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('below 600 there is no rail and nothing is inset',
-      (tester) async {
+  testWidgets('below 600 there is no rail and nothing is inset', (
+    tester,
+  ) async {
     // The test font overflows the bottom bar's labels; that is not under test.
     final onError = FlutterError.onError;
     FlutterError.onError = (details) {
@@ -148,7 +215,9 @@ void main() {
     // No rail inset: the drawer's Menu button leads the row, Back follows.
     final menu = tester.getRect(find.byTooltip('Menu'));
     expect(menu.left, lessThan(24));
-    expect(tester.getRect(find.byTooltip('Back')).left,
-        greaterThanOrEqualTo(menu.right));
+    expect(
+      tester.getRect(find.byTooltip('Back')).left,
+      greaterThanOrEqualTo(menu.right),
+    );
   });
 }

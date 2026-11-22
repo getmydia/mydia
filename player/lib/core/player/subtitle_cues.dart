@@ -22,7 +22,8 @@ library;
 import 'package:media_kit/media_kit.dart';
 
 import 'subtitle_cues_stub.dart'
-    if (dart.library.js_interop) 'subtitle_cues_web.dart' as platform;
+    if (dart.library.js_interop) 'subtitle_cues_web.dart'
+    as platform;
 
 /// Draws the cues of the track most recently handed to [player], or stops
 /// drawing any when [enabled] is false.

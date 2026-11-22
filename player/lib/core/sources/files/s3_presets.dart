@@ -15,12 +15,12 @@ enum S3Preset {
   /// The name in the provider list: a brand name, or "Other" worded in
   /// [l10n].
   String label(AppLocalizations l10n) => switch (this) {
-        aws => 'Amazon S3', // l10n-ignore: brand name
-        backblazeB2 => 'Backblaze B2', // l10n-ignore: brand name
-        cloudflareR2 => 'Cloudflare R2', // l10n-ignore: brand name
-        wasabi => 'Wasabi', // l10n-ignore: brand name
-        other => l10n.filesS3ProviderOther,
-      };
+    aws => 'Amazon S3', // l10n-ignore: brand name
+    backblazeB2 => 'Backblaze B2', // l10n-ignore: brand name
+    cloudflareR2 => 'Cloudflare R2', // l10n-ignore: brand name
+    wasabi => 'Wasabi', // l10n-ignore: brand name
+    other => l10n.filesS3ProviderOther,
+  };
 
   /// Whether the viewer types a region. R2 always signs with `auto`.
   bool get needsRegion => this != cloudflareR2;
@@ -34,10 +34,10 @@ enum S3Preset {
   /// The region to start from; null when the viewer must type one (B2,
   /// whose endpoint names it).
   String? get defaultRegion => switch (this) {
-        backblazeB2 => null,
-        cloudflareR2 => 'auto',
-        aws || wasabi || other => 'us-east-1',
-      };
+    backblazeB2 => null,
+    cloudflareR2 => 'auto',
+    aws || wasabi || other => 'us-east-1',
+  };
 
   /// AWS serves only virtual-hosted requests for buckets made since 2020;
   /// every other provider accepts path style.
@@ -68,8 +68,9 @@ enum S3Preset {
 Uri? parseS3Endpoint(String typed) {
   final trimmed = typed.trim();
   if (trimmed.isEmpty) return null;
-  final uri =
-      Uri.tryParse(trimmed.contains('://') ? trimmed : 'https://$trimmed');
+  final uri = Uri.tryParse(
+    trimmed.contains('://') ? trimmed : 'https://$trimmed',
+  );
   if (uri == null || uri.host.isEmpty) return null;
   final scheme = uri.scheme.toLowerCase();
   if (scheme != 'http' && scheme != 'https') return null;

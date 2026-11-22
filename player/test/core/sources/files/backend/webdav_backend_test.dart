@@ -10,11 +10,11 @@ import 'package:player/core/sources/files/backend/webdav_backend.dart';
 import 'package:player/core/sources/files/files_accounts.dart' show webDavBase;
 
 WebDavBackend backend(MockClient client) => WebDavBackend(
-      base: Uri.parse('https://dav.example.com/media/'),
-      user: 'user',
-      password: 'pass',
-      client: client,
-    );
+  base: Uri.parse('https://dav.example.com/media/'),
+  user: 'user',
+  password: 'pass',
+  client: client,
+);
 
 String fixture() =>
     File('test/fixtures/files/webdav_multistatus.xml').readAsStringSync();
@@ -50,15 +50,18 @@ void main() {
     expect(entries[1].modified, DateTime.utc(2026, 11, 1, 12));
     expect(entries[2].path, '/media/Movies/Café Lumière (2015).mkv');
     expect(entries[3].path, '/media/Movies/Harbor Lights.mp4');
-    expect(entries[3].modified,
-        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
+    expect(
+      entries[3].modified,
+      DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    );
   });
 
   test('webdav_server_rs_reply_lists_its_video', () async {
     // webdav-server-rs, as captured: parentheses escaped in hrefs the
     // client sent raw, a split 200/404 propstat on the folder, and both D:
     // and d: bound to DAV:.
-    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+    const xml =
+        '<D:multistatus xmlns:D="DAV:"><D:response>'
         '<D:href>/media/Movies/Amber%20Tide%20%282019%29/</D:href>'
         '<D:propstat><D:prop><d:resourcetype xmlns:d="DAV:"><D:collection>'
         '</D:collection></d:resourcetype><D:getlastmodified>Tue, 20 Oct 2026 '
@@ -73,12 +76,16 @@ void main() {
         '12:30:59 GMT</D:getlastmodified></D:prop><D:status>HTTP/1.1 200 OK'
         '</D:status></D:propstat></D:response></D:multistatus>';
     late http.Request seen;
-    final entries = await backend(MockClient((request) async {
-      seen = request;
-      return http.Response(xml, 207);
-    })).list('/media/Movies/Amber Tide (2019)');
+    final entries = await backend(
+      MockClient((request) async {
+        seen = request;
+        return http.Response(xml, 207);
+      }),
+    ).list('/media/Movies/Amber Tide (2019)');
     expect(
-        Uri.decodeComponent(seen.url.path), '/media/Movies/Amber Tide (2019)/');
+      Uri.decodeComponent(seen.url.path),
+      '/media/Movies/Amber Tide (2019)/',
+    );
     expect(entries, hasLength(1));
     final video = entries.single;
     expect(video.name, 'Amber.Tide.2019.1080p.BluRay.x264.mkv');
@@ -89,7 +96,8 @@ void main() {
 
   test('a_listing_logs_its_shape_not_its_content', () async {
     // Logs are shared; a reply can carry signed URLs.
-    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+    const xml =
+        '<D:multistatus xmlns:D="DAV:"><D:response>'
         '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
         '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
         '</D:status></D:propstat></D:response><D:response>'
@@ -126,21 +134,29 @@ void main() {
 
     // The share's root holds its children: no warning.
     await backend(
-            MockClient((_) async => http.Response(reply('/', '/a.mkv'), 207)))
-        .list('/');
+      MockClient((_) async => http.Response(reply('/', '/a.mkv'), 207)),
+    ).list('/');
     expect(logged.where((l) => l.contains('outside')), isEmpty);
 
-    await backend(MockClient((_) async => http.Response(
-            reply('/media/Movies/', '/elsewhere/a.mkv?sig=SECRET'), 207)))
-        .list('/media/Movies');
-    expect(logged.where((l) => l.contains('1 of 1 entries outside')),
-        hasLength(1));
+    await backend(
+      MockClient(
+        (_) async => http.Response(
+          reply('/media/Movies/', '/elsewhere/a.mkv?sig=SECRET'),
+          207,
+        ),
+      ),
+    ).list('/media/Movies');
+    expect(
+      logged.where((l) => l.contains('1 of 1 entries outside')),
+      hasLength(1),
+    );
     expect(logged.join('\n'), isNot(contains('SECRET')));
   });
 
   test('a_relative_href_query_stays_out_of_the_path', () async {
     // So a signature never reaches the paths the scanner logs.
-    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+    const xml =
+        '<D:multistatus xmlns:D="DAV:"><D:response>'
         '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
         '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
         '</D:status></D:propstat></D:response><D:response>'
@@ -148,15 +164,16 @@ void main() {
         '<D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop>'
         '<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>'
         '</D:multistatus>';
-    final entries =
-        await backend(MockClient((_) async => http.Response(xml, 207)))
-            .list('/media/Movies');
+    final entries = await backend(
+      MockClient((_) async => http.Response(xml, 207)),
+    ).list('/media/Movies');
     expect(entries.single.path, '/media/Movies/Sub/');
     expect(entries.single.isDir, isTrue);
   });
 
   test('a_refused_signed_href_is_logged_without_its_query', () async {
-    const xml = '<D:multistatus xmlns:D="DAV:"><D:response>'
+    const xml =
+        '<D:multistatus xmlns:D="DAV:"><D:response>'
         '<D:href>/media/Movies/</D:href><D:propstat><D:prop><D:resourcetype>'
         '<D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK'
         '</D:status></D:propstat></D:response><D:response>'
@@ -168,12 +185,14 @@ void main() {
     debugPrint = (String? m, {int? wrapWidth}) => logged.add(m ?? '');
     addTearDown(() => debugPrint = original);
 
-    final entries =
-        await backend(MockClient((_) async => http.Response(xml, 207)))
-            .list('/media/Movies');
+    final entries = await backend(
+      MockClient((_) async => http.Response(xml, 207)),
+    ).list('/media/Movies');
     expect(entries.single.unreadable, isTrue);
-    expect(logged.where((l) => l.contains('/media/Movies/a.mkv refused')),
-        hasLength(1));
+    expect(
+      logged.where((l) => l.contains('/media/Movies/a.mkv refused')),
+      hasLength(1),
+    );
     expect(logged.join('\n'), isNot(contains('SECRET')));
   });
 
@@ -185,9 +204,9 @@ void main() {
     expect(p.headers['Authorization'], 'Basic dXNlcjpwYXNz');
   });
 
-  test('non_utf8_percent_name_lists_and_round_trips_through_playable',
-      () async {
-    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+  test('non_utf8_percent_name_lists_and_round_trips_through_playable', () async {
+    const xml =
+        '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         '<D:response><D:href>/media/Movies/</D:href><D:propstat><D:prop>'
         '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
         '</D:propstat></D:response>'
@@ -273,13 +292,20 @@ void main() {
   });
 
   test('well_formed_xml_that_is_not_a_multistatus_is_unreachable', () {
-    final b = backend(MockClient((_) async => http.Response(
-        '<?xml version="1.0"?><html><body>Sign in</body></html>', 200)));
+    final b = backend(
+      MockClient(
+        (_) async => http.Response(
+          '<?xml version="1.0"?><html><body>Sign in</body></html>',
+          200,
+        ),
+      ),
+    );
     expect(b.list('/media/'), throwsA(isA<BackendUnreachable>()));
   });
 
   test('a_denied_file_is_listed_unreadable_and_the_rest_lists', () async {
-    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+    const xml =
+        '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         '<D:response><D:href>/media/</D:href><D:propstat><D:prop>'
         '<D:resourcetype><D:collection/></D:resourcetype></D:prop>'
         '<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>'
@@ -302,7 +328,8 @@ void main() {
   });
 
   test('a_denied_folder_is_listed_unreadable', () async {
-    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+    const xml =
+        '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         '<D:response><D:href>/media/Private/</D:href>'
         '<D:status>HTTP/1.1 403 Forbidden</D:status></D:response>'
         '<D:response><D:href>/media/Typed</D:href><D:propstat><D:prop>'
@@ -318,7 +345,8 @@ void main() {
   });
 
   test('a_404_propstat_for_other_properties_still_lists', () async {
-    const xml = '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
+    const xml =
+        '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
         '<D:response><D:href>/media/A.mkv</D:href>'
         '<D:propstat><D:prop><D:resourcetype/>'
         '<D:getcontentlength>5</D:getcontentlength></D:prop>'
@@ -341,11 +369,11 @@ void main() {
 
   group('collections_are_requested_with_a_trailing_slash', () {
     WebDavBackend slashless(List<http.Request> seen) => WebDavBackend(
-          base: Uri.parse('https://dav.example.com/media'),
-          user: 'user',
-          password: 'pass',
-          client: okClient(onRequest: seen.add),
-        );
+      base: Uri.parse('https://dav.example.com/media'),
+      user: 'user',
+      password: 'pass',
+      client: okClient(onRequest: seen.add),
+    );
 
     test('probe', () async {
       final seen = <http.Request>[];
@@ -379,12 +407,12 @@ void main() {
 
   group('a_server_that_never_answers_times_out_as_unreachable', () {
     WebDavBackend hung(MockClient client) => WebDavBackend(
-          base: Uri.parse('https://dav.example.com/media/'),
-          user: 'user',
-          password: 'pass',
-          client: client,
-          timeout: const Duration(milliseconds: 50),
-        );
+      base: Uri.parse('https://dav.example.com/media/'),
+      user: 'user',
+      password: 'pass',
+      client: client,
+      timeout: const Duration(milliseconds: 50),
+    );
 
     test('no_response_headers', () async {
       final b = hung(MockClient((_) => Completer<http.Response>().future));
@@ -393,8 +421,12 @@ void main() {
     });
 
     test('headers_then_a_body_that_never_ends', () async {
-      final b = hung(MockClient.streaming((_, __) async =>
-          http.StreamedResponse(StreamController<List<int>>().stream, 207)));
+      final b = hung(
+        MockClient.streaming(
+          (_, _) async =>
+              http.StreamedResponse(StreamController<List<int>>().stream, 207),
+        ),
+      );
       await expectLater(b.probe(), throwsA(isA<BackendUnreachable>()));
     });
 

@@ -42,11 +42,13 @@ void main() {
       for (final size in const [
         Size(960, 540),
         Size(1280, 720),
-        Size(400, 800)
+        Size(400, 800),
       ]) {
         expect(
           TvCanvasScale.computeScale(
-              logicalSize: size, directionalPrimary: false),
+            logicalSize: size,
+            directionalPrimary: false,
+          ),
           1.0,
           reason: 'phone and desktop behaviour must not change at $size',
         );

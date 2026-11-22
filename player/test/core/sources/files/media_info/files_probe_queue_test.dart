@@ -71,13 +71,15 @@ class _Rig {
 
   /// Index keys whose cache entry is fresh.
   Set<String> get cached => {
-        for (final file in f.index.files().values)
-          if (cache.get(account, file) != null) file.key,
-      };
+    for (final file in f.index.files().values)
+      if (cache.get(account, file) != null) file.key,
+  };
 }
 
-Future<_Rig> _rig(
-    {bool desktop = true, Source source = filesLocalSource}) async {
+Future<_Rig> _rig({
+  bool desktop = true,
+  Source source = filesLocalSource,
+}) async {
   final f = await FilesFixture.create();
   final relay = FakeFilesRelay();
   final probe = _TrackingProbe();
@@ -103,12 +105,14 @@ Future<_Rig> _rig(
   addTearDown(() {
     if (!disposed) media.dispose();
   });
-  final c = ProviderContainer(overrides: [
-    mediaSourceProvider(source.id).overrideWith((ref) => media),
-    filesMediaInfoCacheProvider.overrideWithValue(cache),
-    filesProbeDesktopProvider.overrideWithValue(desktop),
-    filesProbeIdlePollProvider.overrideWithValue(Duration.zero),
-  ]);
+  final c = ProviderContainer(
+    overrides: [
+      mediaSourceProvider(source.id).overrideWith((ref) => media),
+      filesMediaInfoCacheProvider.overrideWithValue(cache),
+      filesProbeDesktopProvider.overrideWithValue(desktop),
+      filesProbeIdlePollProvider.overrideWithValue(Duration.zero),
+    ],
+  );
   addTearDown(() {
     c.dispose();
     // The source the test disposed itself is not disposed again.
@@ -124,18 +128,20 @@ Future<void> _settle() async {
 }
 
 void main() {
-  test('probes every stale file after enqueue on desktop, one at a time',
-      () async {
-    final r = await _rig();
-    final all = r.f.index.files().keys.toSet();
+  test(
+    'probes every stale file after enqueue on desktop, one at a time',
+    () async {
+      final r = await _rig();
+      final all = r.f.index.files().keys.toSet();
 
-    await r.queue.enqueueStale();
+      await r.queue.enqueueStale();
 
-    expect(r.probe.probed, hasLength(all.length));
-    expect(r.probe.probed.toSet(), hasLength(all.length));
-    expect(r.probe.maxInFlight, 1);
-    expect(r.cached, all);
-  });
+      expect(r.probe.probed, hasLength(all.length));
+      expect(r.probe.probed.toSet(), hasLength(all.length));
+      expect(r.probe.maxInFlight, 1);
+      expect(r.cached, all);
+    },
+  );
 
   test('does nothing when not desktop', () async {
     final r = await _rig(desktop: false);
@@ -169,22 +175,23 @@ void main() {
   });
 
   test(
-      'waits while playingSourceProvider.current is set, resumes after release',
-      () async {
-    final r = await _rig();
-    final playing = r.c.read(playingSourceProvider);
-    final owner = Object();
-    playing.claim(owner, r.id);
+    'waits while playingSourceProvider.current is set, resumes after release',
+    () async {
+      final r = await _rig();
+      final playing = r.c.read(playingSourceProvider);
+      final owner = Object();
+      playing.claim(owner, r.id);
 
-    final run = r.queue.enqueueStale();
-    await _settle();
-    expect(r.probe.probed, isEmpty);
-    expect(r.progress.running, isTrue);
+      final run = r.queue.enqueueStale();
+      await _settle();
+      expect(r.probe.probed, isEmpty);
+      expect(r.progress.running, isTrue);
 
-    playing.release(owner);
-    await run;
-    expect(r.probe.probed, hasLength(r.f.index.files().length));
-  });
+      playing.release(owner);
+      await run;
+      expect(r.probe.probed, hasLength(r.f.index.files().length));
+    },
+  );
 
   test('a second enqueue replaces the pending list', () async {
     final r = await _rig();
@@ -219,25 +226,27 @@ void main() {
     expect(r.progress.running, isFalse);
   });
 
-  test('stops and writes nothing after the source is no longer active',
-      () async {
-    final r = await _rig();
-    final playing = r.c.read(playingSourceProvider);
-    final owner = Object();
-    playing.claim(owner, r.id);
+  test(
+    'stops and writes nothing after the source is no longer active',
+    () async {
+      final r = await _rig();
+      final playing = r.c.read(playingSourceProvider);
+      final owner = Object();
+      playing.claim(owner, r.id);
 
-    final run = r.queue.enqueueStale();
-    await _settle();
-    // The library is removed while the queue waits out playback.
-    r.media.dispose();
-    expect(FilesMediaSource.activeSources, isNot(contains(r.media)));
-    playing.release(owner);
-    await run;
+      final run = r.queue.enqueueStale();
+      await _settle();
+      // The library is removed while the queue waits out playback.
+      r.media.dispose();
+      expect(FilesMediaSource.activeSources, isNot(contains(r.media)));
+      playing.release(owner);
+      await run;
 
-    expect(r.probe.probed, isEmpty);
-    expect(r.cached, isEmpty);
-    expect(r.progress.running, isFalse);
-  });
+      expect(r.probe.probed, isEmpty);
+      expect(r.cached, isEmpty);
+      expect(r.progress.running, isFalse);
+    },
+  );
 
   test('a source removed during the playback wait ends the run', () async {
     final r = await _rig();
@@ -292,10 +301,14 @@ void main() {
     expect(states.first.running, isTrue);
     expect(states.first.total, total);
     expect(states.first.done, 0);
-    expect(states.map((s) => s.done),
-        orderedEquals([...states.map((s) => s.done)]..sort()));
     expect(
-        states.where((s) => s.running).every((s) => s.total == total), isTrue);
+      states.map((s) => s.done),
+      orderedEquals([...states.map((s) => s.done)]..sort()),
+    );
+    expect(
+      states.where((s) => s.running).every((s) => s.total == total),
+      isTrue,
+    );
     expect(states.last.running, isFalse);
     expect((states.last.done, states.last.total), (total, total));
   });

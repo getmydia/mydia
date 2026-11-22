@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -13,55 +13,74 @@ import 'package:player/presentation/widgets/window_chrome/window_title_row.dart'
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/toast_harness.dart';
 
-Future<void> pump(WidgetTester tester,
-    {required LibraryKind kind, required List<MediaSource> sources}) async {
-  final router = GoRouter(routes: [
-    GoRoute(path: '/', builder: (_, __) => AllServersGridScreen(kind: kind)),
-  ]);
+Future<void> pump(
+  WidgetTester tester, {
+  required LibraryKind kind,
+  required List<MediaSource> sources,
+}) async {
+  final router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, _) => AllServersGridScreen(kind: kind),
+      ),
+    ],
+  );
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      allServersSourcesProvider.overrideWithValue(sources),
-      sourcesProvider.overrideWithValue([for (final s in sources) s.source]),
-      allServersNeedSignInProvider.overrideWithValue(const []),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: MaterialApp.router(
-      routerConfig: router,
-      builder: toastLayerBuilder,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        allServersSourcesProvider.overrideWithValue(sources),
+        sourcesProvider.overrideWithValue([for (final s in sources) s.source]),
+        allServersNeedSignInProvider.overrideWithValue(const []),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp.router(
+        routerConfig: router,
+        builder: toastLayerBuilder,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
 const _withReleased = [
   SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
-      id: 'added',
-      name: SortName.recentlyAdded,
-      descendingByDefault: true,
-      shared: SharedSort.added),
+    id: 'added',
+    name: SortName.recentlyAdded,
+    descendingByDefault: true,
+    shared: SharedSort.added,
+  ),
   SortOption(
-      id: 'released',
-      name: SortName.releaseDate,
-      descendingByDefault: true,
-      shared: SharedSort.released),
+    id: 'released',
+    name: SortName.releaseDate,
+    descendingByDefault: true,
+    shared: SharedSort.released,
+  ),
 ];
 
 void main() {
-  testWidgets('interleaves servers and offers the three shared sorts',
-      (t) async {
+  testWidgets('interleaves servers and offers the three shared sorts', (
+    t,
+  ) async {
     final sa = fakeServer('a'), sb = fakeServer('b');
-    final a = FakeMergedSource(sa, sorts: _withReleased, movies: [
-      item(sa, 'apple', sortTitle: 'apple'),
-      item(sa, 'cherry', sortTitle: 'cherry'),
-    ]);
-    final b = FakeMergedSource(sb, sorts: _withReleased, movies: [
-      item(sb, 'banana', sortTitle: 'banana'),
-    ]);
+    final a = FakeMergedSource(
+      sa,
+      sorts: _withReleased,
+      movies: [
+        item(sa, 'apple', sortTitle: 'apple'),
+        item(sa, 'cherry', sortTitle: 'cherry'),
+      ],
+    );
+    final b = FakeMergedSource(
+      sb,
+      sorts: _withReleased,
+      movies: [item(sb, 'banana', sortTitle: 'banana')],
+    );
     await pump(t, kind: LibraryKind.movies, sources: [a, b]);
     for (final s in SharedSort.values) {
       expect(find.byKey(Key('all-grid-sort-${s.name}')), findsOneWidget);
@@ -69,9 +88,12 @@ void main() {
     final xs = [
       for (final entry in [(a, 'apple'), (b, 'banana'), (a, 'cherry')])
         t
-            .getTopLeft(find
-                .byKey(ValueKey('all-poster-${entry.$1.id.value}-${entry.$2}')))
-            .dx
+            .getTopLeft(
+              find.byKey(
+                ValueKey('all-poster-${entry.$1.id.value}-${entry.$2}'),
+              ),
+            )
+            .dx,
     ];
     expect(xs, orderedEquals([...xs]..sort()));
     expect(xs.toSet().length, 3);
@@ -79,9 +101,11 @@ void main() {
 
   testWidgets('sits in the browse bar with the cast button', (t) async {
     final sa = fakeServer('a');
-    final a = FakeMergedSource(sa, sorts: _withReleased, movies: [
-      item(sa, 'apple', sortTitle: 'apple'),
-    ]);
+    final a = FakeMergedSource(
+      sa,
+      sorts: _withReleased,
+      movies: [item(sa, 'apple', sortTitle: 'apple')],
+    );
     await pump(t, kind: LibraryKind.movies, sources: [a]);
     expect(find.byType(AppBar), findsNothing);
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
@@ -90,9 +114,11 @@ void main() {
 
   testWidgets('a sort a server lacks names it in the note', (t) async {
     final sa = fakeServer('a'), sb = fakeServer('b');
-    final a = FakeMergedSource(sa, sorts: _withReleased, movies: [
-      item(sa, 'apple', airDate: '2020-01-01'),
-    ]);
+    final a = FakeMergedSource(
+      sa,
+      sorts: _withReleased,
+      movies: [item(sa, 'apple', airDate: '2020-01-01')],
+    );
     // b has no `released` option.
     final b = FakeMergedSource(sb, movies: [item(sb, 'banana')]);
     await pump(t, kind: LibraryKind.movies, sources: [a, b]);

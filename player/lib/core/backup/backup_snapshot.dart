@@ -44,8 +44,11 @@ const kBackupSubtitleLanguagesKey = 'subtitle_search_languages';
 /// to stop.
 Future<void> Function() watchBackedUpSettings(void Function() onChange) {
   final settings = SettingsService.changes
-      .where((k) =>
-          kBackupSettingKeys.contains(k) || SettingsService.isLibrarySortKey(k))
+      .where(
+        (k) =>
+            kBackupSettingKeys.contains(k) ||
+            SettingsService.isLibrarySortKey(k),
+      )
       .listen((_) => onChange());
   final subtitles = SubtitleLanguagePrefs.changes.listen((_) => onChange());
   return () async {
@@ -71,7 +74,8 @@ const _deletedFingerprint = 'deleted';
 /// A secret's storage key relative to the account namespace, in one of the
 /// three shapes `SourceSecrets` writes.
 final _secretKeyShape = RegExp(
-    r'^(account_token|[A-Za-z0-9_-]+/user_token|[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/token)$');
+  r'^(account_token|[A-Za-z0-9_-]+/user_token|[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/token)$',
+);
 
 enum BackupApplyMode {
   /// A device already in use: watch and pins merge, accounts are offered.
@@ -102,30 +106,18 @@ class ApplyResult {
 /// records back. Free of Riverpod: the provider wires the stores in.
 class BackupSnapshot {
   BackupSnapshot({
-    required PeerSyncStore peerSync,
+    required this._peerSync,
     required AuthStorage authStorage,
-    required BackupMetaStore meta,
-    required Future<SourceSnapshot> Function() loadSources,
-    required Future<void> Function(SourceAccountRecord) putAccount,
-    required SettingsService settings,
-    required Future<List<String>?> Function() loadSubtitleLanguages,
-    required Future<void> Function(List<String>) saveSubtitleLanguages,
-    required Future<void> Function(Set<String> watchKeys, Set<String> pinKeys)
-        onRemoteFilesChanges,
-    required Future<List<LibraryRoot>> Function(String accountId) rootsFor,
-    required Future<void> Function(String accountId, List<LibraryRoot> roots)
-        putRoots,
-  })  : _rootsFor = rootsFor,
-        _putRoots = putRoots,
-        _peerSync = peerSync,
-        _auth = authStorage,
-        _meta = meta,
-        _loadSources = loadSources,
-        _putAccount = putAccount,
-        _settings = settings,
-        _loadSubtitleLanguages = loadSubtitleLanguages,
-        _saveSubtitleLanguages = saveSubtitleLanguages,
-        _onRemoteFilesChanges = onRemoteFilesChanges;
+    required this._meta,
+    required this._loadSources,
+    required this._putAccount,
+    required this._settings,
+    required this._loadSubtitleLanguages,
+    required this._saveSubtitleLanguages,
+    required this._onRemoteFilesChanges,
+    required this._rootsFor,
+    required this._putRoots,
+  }) : _auth = authStorage;
 
   final PeerSyncStore _peerSync;
   final AuthStorage _auth;
@@ -159,9 +151,9 @@ class BackupSnapshot {
     var encoded = await _auth.read(kBackupFingerprintKeyStorageKey);
     if (encoded == null) {
       final random = Random.secure();
-      encoded = base64Url.encode([
-        for (var i = 0; i < 32; i++) random.nextInt(256)
-      ]).replaceAll('=', '');
+      encoded = base64Url
+          .encode([for (var i = 0; i < 32; i++) random.nextInt(256)])
+          .replaceAll('=', '');
       await _auth.write(kBackupFingerprintKeyStorageKey, encoded);
     }
     return Hmac(sha256, base64Url.decode(base64.normalize(encoded)));
@@ -170,36 +162,35 @@ class BackupSnapshot {
   // Collect
 
   Future<List<BackupRecord>> collect({required int nowMs}) async => [
-        ..._collectWatch(),
-        ..._collectPins(),
-        ...await _collectAccounts(nowMs),
-        ...await _collectSettings(nowMs),
-        ...await _collectGroup(nowMs),
-      ];
+    ..._collectWatch(),
+    ..._collectPins(),
+    ...await _collectAccounts(nowMs),
+    ...await _collectSettings(nowMs),
+    ...await _collectGroup(nowMs),
+  ];
 
   Iterable<BackupRecord> _collectWatch() => [
-        for (final MapEntry(:key, :value)
-            in _peerSync.allWatchRecords().entries)
-          WatchBackupRecord(
-            key: key,
-            watched: value.watched,
-            positionSeconds: value.positionSeconds,
-            durationSeconds: value.durationSeconds,
-            updatedAt: value.updatedAt,
-          ),
-      ];
+    for (final MapEntry(:key, :value) in _peerSync.allWatchRecords().entries)
+      WatchBackupRecord(
+        key: key,
+        watched: value.watched,
+        positionSeconds: value.positionSeconds,
+        durationSeconds: value.durationSeconds,
+        updatedAt: value.updatedAt,
+      ),
+  ];
 
   Iterable<BackupRecord> _collectPins() => [
-        for (final MapEntry(:key, :value) in _peerSync.allPinRecords().entries)
-          PinBackupRecord(
-            key: key,
-            groupKey: value.groupKey,
-            isShow: value.isShow,
-            tmdbId: value.tmdbId,
-            pinned: value.pinned,
-            updatedAt: value.updatedAt,
-          ),
-      ];
+    for (final MapEntry(:key, :value) in _peerSync.allPinRecords().entries)
+      PinBackupRecord(
+        key: key,
+        groupKey: value.groupKey,
+        isShow: value.isShow,
+        tmdbId: value.tmdbId,
+        pinned: value.pinned,
+        updatedAt: value.updatedAt,
+      ),
+  ];
 
   Future<List<BackupRecord>> _collectAccounts(int nowMs) async {
     final out = <BackupRecord>[];
@@ -217,36 +208,42 @@ class BackupSnapshot {
           ? const <String, String>{}
           : await _readSecrets(record);
       final key = '${AccountBackupRecord.keyPrefix}$id';
-      out.add(AccountBackupRecord(
-        key: key,
-        recordJson: json,
-        secrets: secrets,
-        updatedAt: await _meta.stamp(
+      out.add(
+        AccountBackupRecord(
+          key: key,
+          recordJson: json,
+          secrets: secrets,
+          updatedAt: await _meta.stamp(
             key,
             await _fingerprint({'recordJson': json, 'secrets': secrets}),
-            nowMs),
-      ));
+            nowMs,
+          ),
+        ),
+      );
     }
     for (final key in _meta.stampedKeys(AccountBackupRecord.keyPrefix)) {
-      if (present
-          .contains(key.substring(AccountBackupRecord.keyPrefix.length))) {
+      if (present.contains(
+        key.substring(AccountBackupRecord.keyPrefix.length),
+      )) {
         continue;
       }
-      out.add(AccountBackupRecord(
-        key: key,
-        recordJson: const {},
-        secrets: const {},
-        updatedAt: await _meta.stamp(key, _deletedFingerprint, nowMs),
-        deleted: true,
-      ));
+      out.add(
+        AccountBackupRecord(
+          key: key,
+          recordJson: const {},
+          secrets: const {},
+          updatedAt: await _meta.stamp(key, _deletedFingerprint, nowMs),
+          deleted: true,
+        ),
+      );
     }
     return out;
   }
 
   /// Roots in id order, so the fingerprint does not depend on index order.
-  static List<Map<String, dynamic>> _rootsJson(List<LibraryRoot> roots) => [
-        for (final r in roots) r.toMap()
-      ]..sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
+  static List<Map<String, dynamic>> _rootsJson(List<LibraryRoot> roots) =>
+      [for (final r in roots) r.toMap()]
+        ..sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
 
   /// The local folders account names paths on this device only.
   static bool _backedUp(ProviderAccount a) =>
@@ -293,8 +290,9 @@ class BackupSnapshot {
         k: await _settings.readStoredValue(k),
     };
     final languages = await _loadSubtitleLanguages();
-    values[kBackupSubtitleLanguagesKey] =
-        languages == null ? null : jsonEncode(languages);
+    values[kBackupSubtitleLanguagesKey] = languages == null
+        ? null
+        : jsonEncode(languages);
 
     final out = <BackupRecord>[];
     for (final MapEntry(:key, :value) in values.entries) {
@@ -302,13 +300,18 @@ class BackupSnapshot {
       // A setting never set is skipped; one cleared after it was backed up
       // is carried as null, so the clear wins over older copies.
       if (value == null && !_meta.hasStamp(recordKey)) continue;
-      out.add(SettingBackupRecord(
-        key: recordKey,
-        settingKey: key,
-        value: value,
-        updatedAt: await _meta.stamp(
-            recordKey, await _fingerprint({'value': value}), nowMs),
-      ));
+      out.add(
+        SettingBackupRecord(
+          key: recordKey,
+          settingKey: key,
+          value: value,
+          updatedAt: await _meta.stamp(
+            recordKey,
+            await _fingerprint({'value': value}),
+            nowMs,
+          ),
+        ),
+      );
     }
     return out;
   }
@@ -322,8 +325,11 @@ class BackupSnapshot {
         key: _groupKey,
         groupSecretB64: secret,
         nodeToSlot: nodes,
-        updatedAt: await _meta.stamp(_groupKey,
-            await _fingerprint({'secret': secret, 'nodeToSlot': nodes}), nowMs),
+        updatedAt: await _meta.stamp(
+          _groupKey,
+          await _fingerprint({'secret': secret, 'nodeToSlot': nodes}),
+          nowMs,
+        ),
       ),
     ];
   }
@@ -359,8 +365,9 @@ class BackupSnapshot {
               key: pinSyncKey(isShow: r.isShow, groupKey: r.groupKey),
               groupKey: r.groupKey,
               isShow: r.isShow,
-              tmdbId:
-                  r.tmdbId == null ? null : PlatformInt64Util.from(r.tmdbId!),
+              tmdbId: r.tmdbId == null
+                  ? null
+                  : PlatformInt64Util.from(r.tmdbId!),
               pinned: r.pinned,
               updatedAtMs: PlatformInt64Util.from(r.updatedAt),
             ),
@@ -370,7 +377,9 @@ class BackupSnapshot {
     if (changes.changedWatchKeys.isNotEmpty ||
         changes.changedPinKeys.isNotEmpty) {
       await _onRemoteFilesChanges(
-          changes.changedWatchKeys, changes.changedPinKeys);
+        changes.changedWatchKeys,
+        changes.changedPinKeys,
+      );
     }
 
     var accountsAdded = 0;
@@ -437,7 +446,8 @@ class BackupSnapshot {
   static PendingAccountOffer? _offerFor(AccountBackupRecord r, String from) {
     try {
       final account = ProviderAccount.fromJson(
-          (r.recordJson['account'] as Map).cast<String, dynamic>());
+        (r.recordJson['account'] as Map).cast<String, dynamic>(),
+      );
       if (account.id != r.accountId) return null;
       return PendingAccountOffer(
         accountId: r.accountId,
@@ -447,8 +457,10 @@ class BackupSnapshot {
         updatedAt: r.updatedAt,
       );
     } catch (e) {
-      debugPrint('[Backup] Unreadable account record ${r.accountId}: '
-          '${e.runtimeType}');
+      debugPrint(
+        '[Backup] Unreadable account record ${r.accountId}: '
+        '${e.runtimeType}',
+      );
       return null;
     }
   }
@@ -471,8 +483,10 @@ class BackupSnapshot {
             ]
           : const [];
     } catch (e) {
-      debugPrint('[Backup] Unreadable account record ${r.accountId}: '
-          '${e.runtimeType}');
+      debugPrint(
+        '[Backup] Unreadable account record ${r.accountId}: '
+        '${e.runtimeType}',
+      );
       return false;
     }
     final account = parsed.account;
@@ -510,9 +524,10 @@ class BackupSnapshot {
       stamped[_rootsJsonKey] = _rootsJson(roots);
     }
     await _meta.setStamp(
-        r.key,
-        await _fingerprint({'recordJson': stamped, 'secrets': secrets}),
-        r.updatedAt);
+      r.key,
+      await _fingerprint({'recordJson': stamped, 'secrets': secrets}),
+      r.updatedAt,
+    );
     await _meta.finishAccount(account.id);
     return true;
   }
@@ -542,7 +557,10 @@ class BackupSnapshot {
       return false;
     }
     await _meta.setStamp(
-        r.key, await _fingerprint({'value': value}), r.updatedAt);
+      r.key,
+      await _fingerprint({'value': value}),
+      r.updatedAt,
+    );
     return true;
   }
 }

@@ -21,7 +21,7 @@ class QualityChoice {
   const QualityChoice._(this.kind, this.rung);
 
   const QualityChoice.fixed(QualityRung rung)
-      : this._(QualityChoiceKind.fixed, rung);
+    : this._(QualityChoiceKind.fixed, rung);
 
   static const auto = QualityChoice._(QualityChoiceKind.auto, null);
   static const original = QualityChoice._(QualityChoiceKind.original, null);
@@ -31,8 +31,8 @@ class QualityChoice {
   factory QualityChoice.fromRung(QualityRung rung) => rung.isAuto
       ? auto
       : rung.isOriginal
-          ? original
-          : QualityChoice.fixed(rung);
+      ? original
+      : QualityChoice.fixed(rung);
 
   final QualityChoiceKind kind;
 
@@ -165,11 +165,11 @@ final class HlsPlan extends PlaybackPlan {
 /// same HLS strategy at the same rung. The reason and the adaptive flag are
 /// ignored; nothing acts on the flag until Auto adapts mid-session.
 bool sameDelivery(PlaybackPlan a, PlaybackPlan b) => switch ((a, b)) {
-      (DirectPlayPlan(), DirectPlayPlan()) => true,
-      (
-        HlsPlan(strategy: final s1, rung: final r1),
-        HlsPlan(strategy: final s2, rung: final r2)
-      ) =>
-        s1 == s2 && r1 == r2,
-      _ => false,
-    };
+  (DirectPlayPlan(), DirectPlayPlan()) => true,
+  (
+    HlsPlan(strategy: final s1, rung: final r1),
+    HlsPlan(strategy: final s2, rung: final r2),
+  ) =>
+    s1 == s2 && r1 == r2,
+  _ => false,
+};

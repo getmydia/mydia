@@ -7,11 +7,11 @@ void main() {
   final at = DateTime.utc(2013, 5, 24);
 
   S3Signer signer() => S3Signer(
-        accessKeyId: akid,
-        secretAccessKey: secret,
-        region: 'us-east-1',
-        clock: () => at,
-      );
+    accessKeyId: akid,
+    secretAccessKey: secret,
+    region: 'us-east-1',
+    clock: () => at,
+  );
 
   test('signs the documented GET object request', () {
     final h = signer().sign(
@@ -59,9 +59,9 @@ void main() {
 
   test('canonical path is not normalized', () {
     String sig(String path) => signer().sign(
-          method: 'GET',
-          uri: Uri(scheme: 'https', host: 'h.example.com', path: path),
-        )['authorization']!;
+      method: 'GET',
+      uri: Uri(scheme: 'https', host: 'h.example.com', path: path),
+    )['authorization']!;
     expect(sig('/a//b/'), isNot(sig('/a/b')));
     expect(
       Uri(scheme: 'https', host: 'h.example.com', path: '/a//b/').path,
@@ -71,14 +71,14 @@ void main() {
 
   test('query parameters are sorted and encoded', () {
     String sig(Map<String, String> q) => signer().sign(
-          method: 'GET',
-          uri: Uri(
-            scheme: 'https',
-            host: 'h.example.com',
-            path: '/',
-            queryParameters: q,
-          ),
-        )['authorization']!;
+      method: 'GET',
+      uri: Uri(
+        scheme: 'https',
+        host: 'h.example.com',
+        path: '/',
+        queryParameters: q,
+      ),
+    )['authorization']!;
     final a = sig({'list-type': '2', 'prefix': 'a b/', 'delimiter': '/'});
     final b = sig({'delimiter': '/', 'prefix': 'a b/', 'list-type': '2'});
     final c = sig({'prefix': 'a b/', 'delimiter': '/', 'list-type': '2'});
@@ -100,14 +100,14 @@ void main() {
     expect(withBody['authorization'], isNot(base['authorization']));
   });
 
-  String sigFor(String url) => signer().sign(
-        method: 'GET',
-        uri: Uri.parse(url),
-      )['authorization']!;
+  String sigFor(String url) =>
+      signer().sign(method: 'GET', uri: Uri.parse(url))['authorization']!;
 
   test('sub-delimiters in the path are signed encoded', () {
-    expect(sigFor('https://h.example.com/b/a+b'),
-        sigFor('https://h.example.com/b/a%2Bb'));
+    expect(
+      sigFor('https://h.example.com/b/a+b'),
+      sigFor('https://h.example.com/b/a%2Bb'),
+    );
     expect(
       sigFor("https://h.example.com/b/a+b&c=d(e)!\$'*,;:@"),
       sigFor(
@@ -127,18 +127,25 @@ void main() {
     // `Uri.host` drops the brackets; the Host header a client sends keeps
     // them, and S3 signs what it receives.
     expect(
-        signer().sign(
-            method: 'GET',
-            uri: Uri.parse('https://[fe80::1]:9000/b/k'))['host'],
-        '[fe80::1]:9000');
+      signer().sign(
+        method: 'GET',
+        uri: Uri.parse('https://[fe80::1]:9000/b/k'),
+      )['host'],
+      '[fe80::1]:9000',
+    );
     expect(
-        signer().sign(
-            method: 'GET', uri: Uri.parse('https://[FE80::1]:443/b/k'))['host'],
-        '[fe80::1]');
+      signer().sign(
+        method: 'GET',
+        uri: Uri.parse('https://[FE80::1]:443/b/k'),
+      )['host'],
+      '[fe80::1]',
+    );
     expect(
-        signer().sign(
-            method: 'GET',
-            uri: Uri.parse('http://192.168.1.5:9000/b/k'))['host'],
-        '192.168.1.5:9000');
+      signer().sign(
+        method: 'GET',
+        uri: Uri.parse('http://192.168.1.5:9000/b/k'),
+      )['host'],
+      '192.168.1.5:9000',
+    );
   });
 }

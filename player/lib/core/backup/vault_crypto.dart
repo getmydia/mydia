@@ -22,8 +22,11 @@ abstract final class VaultCrypto {
   static final _aead = Xchacha20.poly1305Aead();
 
   static List<int> _slotAad(
-          String vaultId, int epoch, String slotId, int seq) =>
-      utf8.encode('mydia/backup/slot/v1|$vaultId|$epoch|$slotId|$seq');
+    String vaultId,
+    int epoch,
+    String slotId,
+    int seq,
+  ) => utf8.encode('mydia/backup/slot/v1|$vaultId|$epoch|$slotId|$seq');
 
   /// Returns `nonce(24) || ciphertext || mac(16)`.
   static Future<Uint8List> sealSlot({
@@ -49,13 +52,12 @@ abstract final class VaultCrypto {
     required String slotId,
     required int seq,
     required List<int> sealed,
-  }) =>
-      _open(
-        sealed,
-        SecretKey(vaultKey),
-        _slotAad(vaultId, epoch, slotId, seq),
-        minLength: _nonceLength + _macLength,
-      );
+  }) => _open(
+    sealed,
+    SecretKey(vaultKey),
+    _slotAad(vaultId, epoch, slotId, seq),
+    minLength: _nonceLength + _macLength,
+  );
 
   static Future<Uint8List> _open(
     List<int> sealed,
@@ -133,8 +135,10 @@ abstract final class VaultCrypto {
       final ephemeralPub = envelope.sublist(0, 32);
       final shared = await X25519().sharedSecretKey(
         keyPair: box,
-        remotePublicKey:
-            SimplePublicKey(ephemeralPub, type: KeyPairType.x25519),
+        remotePublicKey: SimplePublicKey(
+          ephemeralPub,
+          type: KeyPairType.x25519,
+        ),
       );
       final key = await envelopeKey(
         await shared.extractBytes(),

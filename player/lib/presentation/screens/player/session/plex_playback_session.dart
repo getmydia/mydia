@@ -21,23 +21,23 @@ import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 
 List<CandidateStrategy> plexCandidates(MediaVersion v) => [
-      if (v.streamPath != null)
-        CandidateStrategy(
-          strategy: 'DIRECT_PLAY',
-          mime: containerMime(v.container),
-          videoCodec: v.videoCodec,
-        ),
-      CandidateStrategy(
-        strategy: 'HLS_COPY',
-        mime: 'application/x-mpegURL',
-        videoCodec: v.videoCodec,
-      ),
-      const CandidateStrategy(
-        strategy: 'TRANSCODE',
-        mime: 'application/x-mpegURL',
-        videoCodec: 'h264',
-      ),
-    ];
+  if (v.streamPath != null)
+    CandidateStrategy(
+      strategy: 'DIRECT_PLAY',
+      mime: containerMime(v.container),
+      videoCodec: v.videoCodec,
+    ),
+  CandidateStrategy(
+    strategy: 'HLS_COPY',
+    mime: 'application/x-mpegURL',
+    videoCodec: v.videoCodec,
+  ),
+  const CandidateStrategy(
+    strategy: 'TRANSCODE',
+    mime: 'application/x-mpegURL',
+    videoCodec: 'h264',
+  ),
+];
 
 /// The `X-Plex-Client-Profile-Extra` value: transcode HLS to codecs this
 /// device decodes.
@@ -54,10 +54,9 @@ class PlexPlaybackSession extends SourcePlaybackSession {
     required PlexMediaSource source,
     required super.item,
     required super.fileId,
-    DeviceProfile? profile,
-  })  : _plex = source,
-        _profile = profile,
-        super(source: source);
+    this._profile,
+  }) : _plex = source,
+       super(source: source);
 
   final PlexMediaSource _plex;
 
@@ -97,36 +96,36 @@ class PlexPlaybackSession extends SourcePlaybackSession {
     ItemDetail detail,
     MediaVersion version, {
     String? burnSubtitleStreamId,
-  }) =>
-      PlexStreamResolver(
-        client: _plex.client,
-        ratingKey: item.externalId,
-        version: version,
-        mediaIndex: detail.versions.indexOf(version).clamp(0, 1 << 20),
-        playbackId: _playbackId,
-        profile: receiverDeviceProfile,
-        forReceiver: true,
-        burnSubtitleStreamId: burnSubtitleStreamId,
-      );
+  }) => PlexStreamResolver(
+    client: _plex.client,
+    ratingKey: item.externalId,
+    version: version,
+    mediaIndex: detail.versions.indexOf(version).clamp(0, 1 << 20),
+    playbackId: _playbackId,
+    profile: receiverDeviceProfile,
+    forReceiver: true,
+    burnSubtitleStreamId: burnSubtitleStreamId,
+  );
 
   /// Plex has no WebVTT conversion a receiver can fetch, so every track,
   /// image ones included, is offered burned in.
   @override
   Future<List<CastSubtitleTrack>> receiverSubtitles(
-          MediaVersion version) async =>
-      [
-        for (final s in version.streams)
-          if (s.kind == MediaStreamKind.subtitle)
-            CastSubtitleTrack(
-              trackId: s.id,
-              url: '',
-              label: s.title ??
-                  s.language ??
-                  currentAppLocalizations().commonSubtitles,
-              language: s.language ?? 'und',
-              burnedIn: true,
-            ),
-      ];
+    MediaVersion version,
+  ) async => [
+    for (final s in version.streams)
+      if (s.kind == MediaStreamKind.subtitle)
+        CastSubtitleTrack(
+          trackId: s.id,
+          url: '',
+          label:
+              s.title ??
+              s.language ??
+              currentAppLocalizations().commonSubtitles,
+          language: s.language ?? 'und',
+          burnedIn: true,
+        ),
+  ];
 }
 
 class PlexStreamResolver implements StreamResolver {
@@ -166,7 +165,7 @@ class PlexStreamResolver implements StreamResolver {
         'X-Plex-Client-Identifier',
         'X-Plex-Product',
       ])
-        if (all[key] case final value?) key: value,
+        key: ?all[key],
       'X-Plex-Session-Identifier': playbackId,
     };
   }
@@ -179,9 +178,11 @@ class PlexStreamResolver implements StreamResolver {
   }) async {
     switch (plan) {
       case DirectPlayPlan():
-        final path = version.streamPath ??
+        final path =
+            version.streamPath ??
             (throw const SourceException.unsupportedFault(
-                SourceFault.plexNoDirectFile));
+              SourceFault.plexNoDirectFile,
+            ));
         if (forReceiver) {
           return ResolvedStream(
             url: (await client.url(path, await _playerHeaders())).toString(),
@@ -197,8 +198,10 @@ class PlexStreamResolver implements StreamResolver {
         if (burn != null) {
           // The transcoder burns the part's selected subtitle stream, so
           // select it first. Every Plex client's track picker sends this.
-          await client.put('/library/parts/${version.id}',
-              {'subtitleStreamID': burn, 'allParts': '1'});
+          await client.put('/library/parts/${version.id}', {
+            'subtitleStreamID': burn,
+            'allParts': '1',
+          });
         }
         final session = '$playbackId-${_starts++}';
         final height = plan.rung.height;
@@ -228,7 +231,9 @@ class PlexStreamResolver implements StreamResolver {
           'X-Plex-Client-Profile-Extra': plexProfileExtra(profile),
         };
         final decision = await client.container(
-            '/video/:/transcode/universal/decision', query);
+          '/video/:/transcode/universal/decision',
+          query,
+        );
         final code = decision['generalDecisionCode'] as int?;
         if (code != null && code >= 2000 && code < 3000) {
           final text = decision['generalDecisionText'] as String?;
@@ -238,9 +243,10 @@ class PlexStreamResolver implements StreamResolver {
         }
         final headers = await _playerHeaders();
         return ResolvedStream(
-          url: (await client.url('/video/:/transcode/universal/start.m3u8',
-                  forReceiver ? {...query, ...headers} : query))
-              .toString(),
+          url: (await client.url(
+            '/video/:/transcode/universal/start.m3u8',
+            forReceiver ? {...query, ...headers} : query,
+          )).toString(),
           headers: forReceiver ? const {} : headers,
           sessionId: session,
         );
@@ -259,34 +265,37 @@ class PlexProgressReporter extends PeriodicProgressReporter {
   final String ratingKey;
 
   Future<void> _timeline(
-          String state, int positionSeconds, int durationSeconds) =>
-      client.ping('/:/timeline', {
-        'ratingKey': ratingKey,
-        'key': '/library/metadata/$ratingKey',
-        'state': state,
-        'time': '${positionSeconds * 1000}',
-        'duration': '${durationSeconds * 1000}',
-      });
+    String state,
+    int positionSeconds,
+    int durationSeconds,
+  ) => client.ping('/:/timeline', {
+    'ratingKey': ratingKey,
+    'key': '/library/metadata/$ratingKey',
+    'state': state,
+    'time': '${positionSeconds * 1000}',
+    'duration': '${durationSeconds * 1000}',
+  });
 
   @override
   Future<void> sendProgress({
     required int positionSeconds,
     required int durationSeconds,
     required bool paused,
-  }) =>
-      _timeline(
-          paused ? 'paused' : 'playing', positionSeconds, durationSeconds);
+  }) => _timeline(
+    paused ? 'paused' : 'playing',
+    positionSeconds,
+    durationSeconds,
+  );
 
   @override
   Future<void> sendWatched() => client.ping('/:/scrobble', {
-        'identifier': 'com.plexapp.plugins.library',
-        'key': ratingKey,
-      });
+    'identifier': 'com.plexapp.plugins.library',
+    'key': ratingKey,
+  });
 
   @override
   Future<void> sendStopped({
     required int positionSeconds,
     required int durationSeconds,
-  }) =>
-      _timeline('stopped', positionSeconds, durationSeconds);
+  }) => _timeline('stopped', positionSeconds, durationSeconds);
 }

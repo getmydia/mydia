@@ -2,7 +2,7 @@
 /// registered with it, who else is paired, and removing it from this device.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/compatibility/compatibility_provider.dart';
@@ -40,15 +40,19 @@ class ServerCompatibility {
 /// reached: the screen's other sections still work.
 final serverCompatibilityProvider = FutureProvider.autoDispose
     .family<ServerCompatibility, SourceId>((ref, sourceId) async {
-  final playerVersion = await ref.watch(playerVersionProvider.future);
-  final source = ref.watch(mediaSourceProvider(sourceId));
-  final info =
-      source is MydiaSource ? await source.client.fetchCompatibility() : null;
-  return ServerCompatibility(
-    info: info,
-    verdict: evaluateCompatibility(playerVersion: playerVersion, server: info),
-  );
-});
+      final playerVersion = await ref.watch(playerVersionProvider.future);
+      final source = ref.watch(mediaSourceProvider(sourceId));
+      final info = source is MydiaSource
+          ? await source.client.fetchCompatibility()
+          : null;
+      return ServerCompatibility(
+        info: info,
+        verdict: evaluateCompatibility(
+          playerVersion: playerVersion,
+          server: info,
+        ),
+      );
+    });
 
 /// Where the instance is reached: its address, or p2p for a paired server.
 sealed class MydiaInstanceAddress {
@@ -67,15 +71,19 @@ final class MydiaInstanceP2p extends MydiaInstanceAddress {
 
 final mydiaInstanceAddressProvider = FutureProvider.autoDispose
     .family<MydiaInstanceAddress?, SourceId>((ref, sourceId) async {
-  final account =
-      mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
-  if (account == null) return null;
-  final credentials =
-      await readMydiaCredentials(ref.watch(sourceSecretsProvider), account);
-  final url = credentials?.serverUrl;
-  if (url != null) return MydiaInstanceUrl(url);
-  return credentials?.isP2p == true ? const MydiaInstanceP2p() : null;
-});
+      final account = mydiaAccountFor(
+        ref.watch(sourceRecordsProvider).value,
+        sourceId,
+      );
+      if (account == null) return null;
+      final credentials = await readMydiaCredentials(
+        ref.watch(sourceSecretsProvider),
+        account,
+      );
+      final url = credentials?.serverUrl;
+      if (url != null) return MydiaInstanceUrl(url);
+      return credentials?.isP2p == true ? const MydiaInstanceP2p() : null;
+    });
 
 ProviderAccount? mydiaAccountFor(SourceSnapshot? snapshot, SourceId sourceId) {
   for (final r in snapshot?.accounts ?? const <SourceAccountRecord>[]) {
@@ -114,7 +122,9 @@ class MydiaInstanceScreen extends StatelessWidget {
         builder: (context) => Consumer(
           builder: (context, ref, _) {
             final account = mydiaAccountFor(
-                ref.watch(sourceRecordsProvider).value, sourceId);
+              ref.watch(sourceRecordsProvider).value,
+              sourceId,
+            );
             return Scaffold(
               appBar: WindowTitleBar(
                 height: WindowTitleRow.heightOf(context),
@@ -124,7 +134,8 @@ class MydiaInstanceScreen extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 decorate: (row) => ColoredBox(
-                  color: Theme.of(context).appBarTheme.backgroundColor ??
+                  color:
+                      Theme.of(context).appBarTheme.backgroundColor ??
                       context.palette.background,
                   child: row,
                 ),
@@ -176,8 +187,10 @@ class MydiaInstanceBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final account =
-        mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
+    final account = mydiaAccountFor(
+      ref.watch(sourceRecordsProvider).value,
+      sourceId,
+    );
     return account == null
         ? Center(child: Text(context.l10n.sourcesInstanceMissing))
         : ListView(
@@ -192,7 +205,9 @@ class MydiaInstanceBody extends ConsumerWidget {
                       KeyedSubtree(
                         key: const Key('mydia-instance-server'),
                         child: _ServerSection(
-                            sourceId: sourceId, account: account),
+                          sourceId: sourceId,
+                          account: account,
+                        ),
                       ),
                       const SizedBox(height: 18),
                       KeyedSubtree(
@@ -256,9 +271,10 @@ class _ServerSection extends ConsumerWidget {
           key: const Key('mydia-instance-version'),
           icon: Icons.info_outline,
           title: switch (compat) {
-            AsyncData() => version == null
-                ? l10n.sourcesInstanceVersionUnknown
-                : 'v$version',
+            AsyncData() =>
+              version == null
+                  ? l10n.sourcesInstanceVersionUnknown
+                  : 'v$version',
             _ => l10n.sourcesInstanceChecking,
           },
           subtitle: compat.value == null
@@ -277,7 +293,8 @@ class _RegistrationSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(nodeRegistrationsProvider)[sourceId] ??
+    final status =
+        ref.watch(nodeRegistrationsProvider)[sourceId] ??
         const RegistrationIdle();
     return SettingsSection(
       label: context.l10n.sourcesInstanceThisDevice,

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/detail_art_image.dart' show ArtSlot;
 import 'package:player/presentation/screens/detail/detail_hero.dart';
@@ -26,8 +26,9 @@ Widget _hero({double? inset}) {
 }
 
 void main() {
-  testWidgets('the hero title block sits beside the rail, the art does not',
-      (tester) async {
+  testWidgets('the hero title block sits beside the rail, the art does not', (
+    tester,
+  ) async {
     await tester.pumpWidget(_hero(inset: 88));
     expect(tester.getTopLeft(find.byKey(_overlayKey)).dx, 20 + 88);
     expect(tester.getTopLeft(find.byType(DetailHeroBackground)).dx, 0);
@@ -38,8 +39,9 @@ void main() {
     expect(tester.getTopLeft(find.byKey(_overlayKey)).dx, 20);
   });
 
-  testWidgets('ShellPageInset and SliverRailInset inset by the rail',
-      (tester) async {
+  testWidgets('ShellPageInset and SliverRailInset inset by the rail', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: ShellRailInset(
@@ -75,10 +77,14 @@ void main() {
 
   testWidgets('the inset is zero outside the shell', (tester) async {
     double? seen;
-    await tester.pumpWidget(Builder(builder: (context) {
-      seen = ShellRailInset.of(context);
-      return const SizedBox();
-    }));
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          seen = ShellRailInset.of(context);
+          return const SizedBox();
+        },
+      ),
+    );
     expect(seen, 0);
   });
 }

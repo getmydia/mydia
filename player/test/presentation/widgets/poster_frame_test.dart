@@ -2,7 +2,7 @@
 // that contract itself, and it must render the caller's placeholder, persistent
 // overlays, and hover overlay without owning any of their appearance.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/artwork_decode.dart';
@@ -27,8 +27,9 @@ void main() {
   );
 
   group('PosterFrame content', () {
-    testWidgets('renders the placeholder when there is no artwork',
-        (tester) async {
+    testWidgets('renders the placeholder when there is no artwork', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         posterHost(
           const PosterFrame(placeholder: _placeholder),
@@ -39,8 +40,9 @@ void main() {
       expect(find.byIcon(Icons.movie_rounded), findsOneWidget);
     });
 
-    testWidgets('renders persistent overlays above the artwork',
-        (tester) async {
+    testWidgets('renders persistent overlays above the artwork', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         posterHost(
           const PosterFrame(
@@ -75,11 +77,11 @@ void main() {
       // entrance transition contributes incidental widgets to the tree, so a
       // bare find.byType risks matching something outside this widget.
       AnimatedOpacity opacity() => tester.widget<AnimatedOpacity>(
-            find.descendant(
-              of: find.byType(PosterFrame),
-              matching: find.byType(AnimatedOpacity),
-            ),
-          );
+        find.descendant(
+          of: find.byType(PosterFrame),
+          matching: find.byType(AnimatedOpacity),
+        ),
+      );
 
       expect(opacity().opacity, 0.0);
 
@@ -132,54 +134,56 @@ void main() {
     }
 
     testWidgets(
-        "republishes the backdrop when a hovered poster's artwork changes",
-        (tester) async {
+      "republishes the backdrop when a hovered poster's artwork changes",
+      (tester) async {
+        await mockNetworkImages(() async {
+          final container = ProviderContainer();
+          addTearDown(container.dispose);
+          container.listen(ambientBackdropControllerProvider, (_, _) {});
+
+          const urlA = 'https://example.com/a.jpg';
+          const urlB = 'https://example.com/b.jpg';
+
+          await tester.pumpWidget(
+            host(
+              container,
+              const PosterFrame(imageUrl: urlA, placeholder: _placeholder),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await hoverOver(tester, find.byType(PosterFrame));
+
+          expect(
+            container.read(ambientBackdropControllerProvider).imageUrl,
+            urlA,
+          );
+
+          // Same widget type, same position: Flutter reuses the element and
+          // preserves State, exactly like a scrolling grid recycling an item
+          // under a stationary cursor. Neither onEnter nor onExit fires here.
+          await tester.pumpWidget(
+            host(
+              container,
+              const PosterFrame(imageUrl: urlB, placeholder: _placeholder),
+            ),
+          );
+          await tester.pump();
+
+          expect(
+            container.read(ambientBackdropControllerProvider).imageUrl,
+            urlB,
+          );
+        });
+      },
+    );
+
+    testWidgets('clears the backdrop when a hovered poster leaves the tree', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         final container = ProviderContainer();
         addTearDown(container.dispose);
-        container.listen(ambientBackdropControllerProvider, (_, __) {});
-
-        const urlA = 'https://example.com/a.jpg';
-        const urlB = 'https://example.com/b.jpg';
-
-        await tester.pumpWidget(
-          host(
-            container,
-            const PosterFrame(imageUrl: urlA, placeholder: _placeholder),
-          ),
-        );
-        await tester.pumpAndSettle();
-        await hoverOver(tester, find.byType(PosterFrame));
-
-        expect(
-          container.read(ambientBackdropControllerProvider).imageUrl,
-          urlA,
-        );
-
-        // Same widget type, same position: Flutter reuses the element and
-        // preserves State, exactly like a scrolling grid recycling an item
-        // under a stationary cursor. Neither onEnter nor onExit fires here.
-        await tester.pumpWidget(
-          host(
-            container,
-            const PosterFrame(imageUrl: urlB, placeholder: _placeholder),
-          ),
-        );
-        await tester.pump();
-
-        expect(
-          container.read(ambientBackdropControllerProvider).imageUrl,
-          urlB,
-        );
-      });
-    });
-
-    testWidgets('clears the backdrop when a hovered poster leaves the tree',
-        (tester) async {
-      await mockNetworkImages(() async {
-        final container = ProviderContainer();
-        addTearDown(container.dispose);
-        container.listen(ambientBackdropControllerProvider, (_, __) {});
+        container.listen(ambientBackdropControllerProvider, (_, _) {});
 
         const url = 'https://example.com/a.jpg';
 
@@ -192,10 +196,7 @@ void main() {
         await tester.pumpAndSettle();
         await hoverOver(tester, find.byType(PosterFrame));
 
-        expect(
-          container.read(ambientBackdropControllerProvider).imageUrl,
-          url,
-        );
+        expect(container.read(ambientBackdropControllerProvider).imageUrl, url);
 
         // No PosterFrame in this tree at all. MouseRegion's own docs warn
         // onExit may not fire when the region unmounts while hovered, so
@@ -211,51 +212,48 @@ void main() {
     });
 
     testWidgets(
-        "a hovered poster whose artwork becomes null clears the override",
-        (tester) async {
-      await mockNetworkImages(() async {
-        final container = ProviderContainer();
-        addTearDown(container.dispose);
-        container.listen(ambientBackdropControllerProvider, (_, __) {});
+      "a hovered poster whose artwork becomes null clears the override",
+      (tester) async {
+        await mockNetworkImages(() async {
+          final container = ProviderContainer();
+          addTearDown(container.dispose);
+          container.listen(ambientBackdropControllerProvider, (_, _) {});
 
-        const url = 'https://example.com/a.jpg';
+          const url = 'https://example.com/a.jpg';
 
-        await tester.pumpWidget(
-          host(
-            container,
-            const PosterFrame(imageUrl: url, placeholder: _placeholder),
-          ),
-        );
-        await tester.pumpAndSettle();
-        await hoverOver(tester, find.byType(PosterFrame));
+          await tester.pumpWidget(
+            host(
+              container,
+              const PosterFrame(imageUrl: url, placeholder: _placeholder),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await hoverOver(tester, find.byType(PosterFrame));
 
-        expect(
-          container.read(ambientBackdropControllerProvider).imageUrl,
-          url,
-        );
+          expect(
+            container.read(ambientBackdropControllerProvider).imageUrl,
+            url,
+          );
 
-        await tester.pumpWidget(
-          host(
-            container,
-            const PosterFrame(placeholder: _placeholder),
-          ),
-        );
-        await tester.pump();
+          await tester.pumpWidget(
+            host(container, const PosterFrame(placeholder: _placeholder)),
+          );
+          await tester.pump();
 
-        expect(
-          container.read(ambientBackdropControllerProvider),
-          BackdropSource.none,
-        );
-      });
-    });
+          expect(
+            container.read(ambientBackdropControllerProvider),
+            BackdropSource.none,
+          );
+        });
+      },
+    );
 
-    testWidgets(
-        'an artwork-loss update does not wipe a newer override from a '
+    testWidgets('an artwork-loss update does not wipe a newer override from a '
         'different poster (regression: scroll-recycling race)', (tester) async {
       await mockNetworkImages(() async {
         final container = ProviderContainer();
         addTearDown(container.dispose);
-        container.listen(ambientBackdropControllerProvider, (_, __) {});
+        container.listen(ambientBackdropControllerProvider, (_, _) {});
 
         const urlA = 'https://example.com/a.jpg';
         const urlB = 'https://example.com/b.jpg';
@@ -282,9 +280,9 @@ void main() {
         // the active override at the moment the deferred callback below
         // fires, and nothing else touches the controller in between.
         const posterB = BackdropSource(imageUrl: urlB, id: urlB);
-        container.read(ambientBackdropControllerProvider.notifier).setHover(
-              posterB,
-            );
+        container
+            .read(ambientBackdropControllerProvider.notifier)
+            .setHover(posterB);
 
         // Same widget, same position, still hovered: loses its artwork.
         // didUpdateWidget's no-artwork branch schedules a deferred clear of

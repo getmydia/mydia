@@ -19,32 +19,43 @@ void main() {
       expect(target.ref.sourceId, _source);
     });
 
-    test('targets with the same item are equal, across sources they are not',
-        () {
-      expect(SourceTarget(_ref(ItemKind.movie, 'm1')),
-          SourceTarget(_ref(ItemKind.movie, 'm1')));
-      expect(SourceTarget(_ref(ItemKind.movie, 'm1')),
-          isNot(SourceTarget(_ref(ItemKind.show, 'm1'))));
-      expect(
-        SourceTarget(_ref(ItemKind.movie, 'm1')),
-        isNot(const SourceTarget(ItemRef(
-            sourceId: SourceId('d:e:f'),
-            kind: ItemKind.movie,
-            externalId: 'm1'))),
-      );
-    });
+    test(
+      'targets with the same item are equal, across sources they are not',
+      () {
+        expect(
+          SourceTarget(_ref(ItemKind.movie, 'm1')),
+          SourceTarget(_ref(ItemKind.movie, 'm1')),
+        );
+        expect(
+          SourceTarget(_ref(ItemKind.movie, 'm1')),
+          isNot(SourceTarget(_ref(ItemKind.show, 'm1'))),
+        );
+        expect(
+          SourceTarget(_ref(ItemKind.movie, 'm1')),
+          isNot(
+            const SourceTarget(
+              ItemRef(
+                sourceId: SourceId('d:e:f'),
+                kind: ItemKind.movie,
+                externalId: 'm1',
+              ),
+            ),
+          ),
+        );
+      },
+    );
   });
 
   group('EpisodeView', () {
     EpisodeView episode({int? runtime, Progress? progress}) => EpisodeView(
-          target: SourceTarget(_ref(ItemKind.episode, 'e1')),
-          showTitle: 'Invented Series',
-          seasonNumber: 2,
-          episodeNumber: 5,
-          title: 'The Glass Orchard',
-          runtime: runtime,
-          progress: progress,
-        );
+      target: SourceTarget(_ref(ItemKind.episode, 'e1')),
+      showTitle: 'Invented Series',
+      seasonNumber: 2,
+      episodeNumber: 5,
+      title: 'The Glass Orchard',
+      runtime: runtime,
+      progress: progress,
+    );
 
     test('episodeCode pads season and episode', () {
       expect(episode().episodeCode, 'S02E05');
@@ -61,7 +72,10 @@ void main() {
       expect(
         episode(
           progress: const Progress(
-              positionSeconds: 0, percentage: 100, watched: true),
+            positionSeconds: 0,
+            percentage: 100,
+            watched: true,
+          ),
         ).watched,
         isTrue,
       );
@@ -91,7 +105,10 @@ void main() {
       expect(
         movie(
           progress: const Progress(
-              positionSeconds: 60, percentage: 10, watched: false),
+            positionSeconds: 60,
+            percentage: 10,
+            watched: false,
+          ),
         ).hasResumableProgress,
         isTrue,
       );
@@ -101,8 +118,11 @@ void main() {
       expect(movie().lastWatchedAt, isNull);
       expect(
         movie(
-          progress:
-              const Progress(positionSeconds: 0, percentage: 0, watched: true),
+          progress: const Progress(
+            positionSeconds: 0,
+            percentage: 0,
+            watched: true,
+          ),
         ).lastWatchedAt,
         isNull,
       );

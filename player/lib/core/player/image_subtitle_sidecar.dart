@@ -10,7 +10,8 @@
 library;
 
 import 'image_subtitle_sidecar_stub.dart'
-    if (dart.library.io) 'image_subtitle_sidecar_native.dart' as platform;
+    if (dart.library.io) 'image_subtitle_sidecar_native.dart'
+    as platform;
 
 /// How long a pick waits for the server's copy before giving up. The copy
 /// keeps running server-side, so picking the track again later is served
@@ -148,12 +149,11 @@ Future<SidecarFetch> fetchImageSidecar({
   required Uri url,
   required Map<String, String> headers,
   required bool Function() cancelled,
-}) =>
-    platform.fetchImageSidecar(
-      url: url,
-      headers: headers,
-      cancelled: cancelled,
-    );
+}) => platform.fetchImageSidecar(
+  url: url,
+  headers: headers,
+  cancelled: cancelled,
+);
 
 /// Deletes a file [fetchImageSidecar] saved. Never throws.
 Future<void> discardImageSidecar(String path) =>

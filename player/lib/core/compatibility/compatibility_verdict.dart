@@ -24,10 +24,10 @@ class ServerCompatibilityInfo {
 
   /// A server too old to answer the query. Its versions are unknown.
   const ServerCompatibilityInfo.predatesQuery()
-      : version = '',
-        minPlayerVersion = '',
-        recommendedPlayerVersion = '',
-        predatesQuery = true;
+    : version = '',
+      minPlayerVersion = '',
+      recommendedPlayerVersion = '',
+      predatesQuery = true;
 }
 
 /// Whether this player and the connected server can work together.
@@ -103,16 +103,25 @@ CompatibilityVerdict evaluateCompatibility({
     return CompatibilityVerdict.unknown;
   }
 
-  final playerVsMin =
-      VersionComparator.compareCore(playerVersion, server.minPlayerVersion);
+  final playerVsMin = VersionComparator.compareCore(
+    playerVersion,
+    server.minPlayerVersion,
+  );
   final playerVsRecommended = VersionComparator.compareCore(
-      playerVersion, server.recommendedPlayerVersion);
+    playerVersion,
+    server.recommendedPlayerVersion,
+  );
   final serverVsMin = VersionComparator.compareCore(
-      server.version, Compatibility.minServerVersion);
+    server.version,
+    Compatibility.minServerVersion,
+  );
   final serverVsRecommended = VersionComparator.compareCore(
-      server.version, Compatibility.recommendedServerVersion);
+    server.version,
+    Compatibility.recommendedServerVersion,
+  );
 
-  final anyUnparseable = playerVsMin == null ||
+  final anyUnparseable =
+      playerVsMin == null ||
       playerVsRecommended == null ||
       serverVsMin == null ||
       serverVsRecommended == null;

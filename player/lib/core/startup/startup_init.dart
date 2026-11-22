@@ -126,7 +126,9 @@ Future<StartupOutcome> runStartup(
     await guarded('GraphQL cache', steps.hiveCache);
     await guarded('Fetch log', () async => fetchLog = await steps.fetchLog());
     await guarded(
-        'Source cache', () async => sourceCache = await steps.sourceCache());
+      'Source cache',
+      () async => sourceCache = await steps.sourceCache(),
+    );
     timeline.mark('hive');
   }
 

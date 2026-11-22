@@ -43,14 +43,19 @@ void main() {
       switch ('${request.method} ${request.url.path}') {
         case 'POST /api/v2/pins':
           return http.Response(
-              pinBody ?? jsonEncode({'id': 7, 'code': 'QZ4K'}), 201);
+            pinBody ?? jsonEncode({'id': 7, 'code': 'QZ4K'}),
+            201,
+          );
         case 'GET /api/v2/pins/7':
           return http.Response(
-              jsonEncode({'id': 7, 'authToken': pinToken}), 200);
+            jsonEncode({'id': 7, 'authToken': pinToken}),
+            200,
+          );
         case 'GET /api/v2/user':
           return http.Response(
-              jsonEncode({'uuid': 'u1', 'username': 'quill', 'title': 'Quill'}),
-              200);
+            jsonEncode({'uuid': 'u1', 'username': 'quill', 'title': 'Quill'}),
+            200,
+          );
         case 'GET /api/v2/home/users':
           final body = homeUsersBody;
           return body == null
@@ -61,17 +66,25 @@ void main() {
       }
       return http.Response('', 404);
     });
-    container = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),
-      plexIdentityProvider.overrideWith((ref) async => const PlexIdentity(
-          clientIdentifier: 'cid', version: '1', platform: 'Linux')),
-      plexPinPollIntervalProvider
-          .overrideWithValue(const Duration(milliseconds: 10)),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),
+        plexIdentityProvider.overrideWith(
+          (ref) async => const PlexIdentity(
+            clientIdentifier: 'cid',
+            version: '1',
+            platform: 'Linux',
+          ),
+        ),
+        plexPinPollIntervalProvider.overrideWithValue(
+          const Duration(milliseconds: 10),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
-    container.listen(plexSignInProvider(null), (_, __) {});
+    container.listen(plexSignInProvider(null), (_, _) {});
   });
 
   PlexSignInState state() => container.read(plexSignInProvider(null));
@@ -82,15 +95,21 @@ void main() {
     pinBody = jsonEncode({'id': 'x'});
     await controller().start();
     expect(
-        state(),
-        isA<PlexSignInFailed>().having((s) => s.problem, 'problem',
-            const SignInProblem(SignInIssue.plexSignInFailed)));
+      state(),
+      isA<PlexSignInFailed>().having(
+        (s) => s.problem,
+        'problem',
+        const SignInProblem(SignInIssue.plexSignInFailed),
+      ),
+    );
   });
 
   test('shows the code, waits, then offers every server', () async {
     await controller().start();
-    expect(state(),
-        isA<PlexSignInWaiting>().having((s) => s.code, 'code', 'QZ4K'));
+    expect(
+      state(),
+      isA<PlexSignInWaiting>().having((s) => s.code, 'code', 'QZ4K'),
+    );
 
     await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(state(), isA<PlexSignInWaiting>(), reason: 'not yet approved');
@@ -102,55 +121,64 @@ void main() {
     expect(choosing.chosen, {'aa11', 'bb22'});
   });
 
-  test('saves the chosen servers, their tokens, and selects the first',
-      () async {
-    pinToken = 'acct-token';
-    await controller().start();
-    await until(() => state() is PlexSignInChoosing);
-    controller().toggle('bb22');
-    await controller().save();
+  test(
+    'saves the chosen servers, their tokens, and selects the first',
+    () async {
+      pinToken = 'acct-token';
+      await controller().start();
+      await until(() => state() is PlexSignInChoosing);
+      controller().toggle('bb22');
+      await controller().save();
 
-    expect(state(), isA<PlexSignInDone>());
-    final snapshot = await store.load();
-    final record = snapshot.accounts.single;
-    expect(record.account.kind, SourceKind.plex);
-    expect(record.account.displayName, 'quill');
-    expect(record.servers.map((s) => s.id), ['aa11']);
-    expect(
+      expect(state(), isA<PlexSignInDone>());
+      final snapshot = await store.load();
+      final record = snapshot.accounts.single;
+      expect(record.account.kind, SourceKind.plex);
+      expect(record.account.displayName, 'quill');
+      expect(record.servers.map((s) => s.id), ['aa11']);
+      expect(
         await storage.read('${record.account.storageNamespace}/account_token'),
-        'acct-token');
-    expect(
-      await storage.read('${record.account.storageNamespace}/owner/aa11/token'),
-      'server-token-1',
-    );
-    final first = (state() as PlexSignInDone).firstSource;
-    expect(container.read(activeSourceIdProvider), first);
-  });
+        'acct-token',
+      );
+      expect(
+        await storage.read(
+          '${record.account.storageNamespace}/owner/aa11/token',
+        ),
+        'server-token-1',
+      );
+      final first = (state() as PlexSignInDone).firstSource;
+      expect(container.read(activeSourceIdProvider), first);
+    },
+  );
 
-  test('re-auth replaces tokens on the same account and clears the flag',
-      () async {
-    pinToken = 'first';
-    await controller().start();
-    await until(() => state() is PlexSignInChoosing);
-    await controller().save();
-    final accountId = (await store.load()).accounts.single.account.id;
-    await container
-        .read(sourceRecordsProvider.notifier)
-        .markNeedsReauth(accountId, true);
+  test(
+    're-auth replaces tokens on the same account and clears the flag',
+    () async {
+      pinToken = 'first';
+      await controller().start();
+      await until(() => state() is PlexSignInChoosing);
+      await controller().save();
+      final accountId = (await store.load()).accounts.single.account.id;
+      await container
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth(accountId, true);
 
-    container.listen(plexSignInProvider(accountId), (_, __) {});
-    final again = container.read(plexSignInProvider(accountId).notifier);
-    pinToken = 'second';
-    await again.start();
-    await until(() =>
-        container.read(plexSignInProvider(accountId)) is PlexSignInChoosing);
-    await again.save();
+      container.listen(plexSignInProvider(accountId), (_, _) {});
+      final again = container.read(plexSignInProvider(accountId).notifier);
+      pinToken = 'second';
+      await again.start();
+      await until(
+        () =>
+            container.read(plexSignInProvider(accountId)) is PlexSignInChoosing,
+      );
+      await again.save();
 
-    final record = (await store.load()).accounts.single;
-    expect(record.account.id, accountId);
-    expect(record.account.needsReauth, isFalse);
-    expect(await storage.read('source/$accountId/account_token'), 'second');
-  });
+      final record = (await store.load()).accounts.single;
+      expect(record.account.id, accountId);
+      expect(record.account.needsReauth, isFalse);
+      expect(await storage.read('source/$accountId/account_token'), 'second');
+    },
+  );
 
   test('re-auth as the owner drops a stale owner user token', () async {
     pinToken = 'first';
@@ -161,18 +189,17 @@ void main() {
     // Left behind by an earlier switch from a Home user back to the owner.
     await storage.write('source/${account.id}/owner/user_token', 'old');
 
-    container.listen(plexSignInProvider(account.id), (_, __) {});
+    container.listen(plexSignInProvider(account.id), (_, _) {});
     final again = container.read(plexSignInProvider(account.id).notifier);
     pinToken = 'second';
     await again.start();
-    await until(() =>
-        container.read(plexSignInProvider(account.id)) is PlexSignInChoosing);
+    await until(
+      () =>
+          container.read(plexSignInProvider(account.id)) is PlexSignInChoosing,
+    );
     await again.save();
 
-    expect(
-      await SourceSecrets(storage).userToken(account, 'owner'),
-      'second',
-    );
+    expect(await SourceSecrets(storage).userToken(account, 'owner'), 'second');
   });
 
   test('re-auth that drops a server deletes its stored token', () async {
@@ -183,21 +210,27 @@ void main() {
     final accountId = (await store.load()).accounts.single.account.id;
     final record = (await store.load()).accounts.single;
     expect(record.servers.map((s) => s.id), ['aa11', 'bb22']);
-    expect(await storage.read('source/$accountId/owner/bb22/token'),
-        'server-token-2');
+    expect(
+      await storage.read('source/$accountId/owner/bb22/token'),
+      'server-token-2',
+    );
 
-    container.listen(plexSignInProvider(accountId), (_, __) {});
+    container.listen(plexSignInProvider(accountId), (_, _) {});
     final again = container.read(plexSignInProvider(accountId).notifier);
     await again.start();
-    await until(() =>
-        container.read(plexSignInProvider(accountId)) is PlexSignInChoosing);
+    await until(
+      () => container.read(plexSignInProvider(accountId)) is PlexSignInChoosing,
+    );
     again.toggle('bb22');
     await again.save();
 
-    expect((await store.load()).accounts.single.servers.map((s) => s.id),
-        ['aa11']);
-    expect(await storage.read('source/$accountId/owner/aa11/token'),
-        'server-token-1');
+    expect((await store.load()).accounts.single.servers.map((s) => s.id), [
+      'aa11',
+    ]);
+    expect(
+      await storage.read('source/$accountId/owner/aa11/token'),
+      'server-token-1',
+    );
     expect(await storage.read('source/$accountId/owner/bb22/token'), isNull);
   });
 
@@ -211,8 +244,10 @@ void main() {
 
     final record = (await store.load()).accounts.single;
     expect(record.account.activeProfileId, 'owner');
-    expect([for (final p in record.profiles) p.id],
-        ['owner', 'kid0001', 'guest02']);
+    expect(
+      [for (final p in record.profiles) p.id],
+      ['owner', 'kid0001', 'guest02'],
+    );
     expect(record.profiles[1].protected, isTrue);
     expect(record.chosenServerIds, ['aa11']);
   });
@@ -227,30 +262,34 @@ void main() {
     final accountId = saved.account.id;
 
     // As if the viewer had switched to Pip.
-    await store.putAccount(saved.copyWith(
-      account: saved.account.copyWith(activeProfileId: 'kid0001'),
-      servers: [
-        for (final s in saved.servers)
-          if (s.id == 'aa11')
-            SourceServer(
+    await store.putAccount(
+      saved.copyWith(
+        account: saved.account.copyWith(activeProfileId: 'kid0001'),
+        servers: [
+          for (final s in saved.servers)
+            if (s.id == 'aa11')
+              SourceServer(
                 id: 'aa11',
                 accountId: accountId,
                 profileId: 'kid0001',
                 name: s.name,
-                machineIdentifier: 'aa11'),
-      ],
-    ));
+                machineIdentifier: 'aa11',
+              ),
+        ],
+      ),
+    );
     await storage.write('source/$accountId/kid0001/user_token', 'kid-token');
     await storage.write('source/$accountId/kid0001/aa11/token', 'kid-srv');
     container.invalidate(sourceRecordsProvider);
     await container.read(sourceRecordsProvider.future);
 
-    container.listen(plexSignInProvider(accountId), (_, __) {});
+    container.listen(plexSignInProvider(accountId), (_, _) {});
     final again = container.read(plexSignInProvider(accountId).notifier);
     pinToken = 'second';
     await again.start();
-    await until(() =>
-        container.read(plexSignInProvider(accountId)) is PlexSignInChoosing);
+    await until(
+      () => container.read(plexSignInProvider(accountId)) is PlexSignInChoosing,
+    );
     await again.save();
 
     final record = (await store.load()).accounts.single;

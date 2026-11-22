@@ -70,7 +70,9 @@ void main() {
       );
 
       expect(
-          CastDevice.fromJson(dlna.toJson()).protocol, CastProtocolKind.dlna);
+        CastDevice.fromJson(dlna.toJson()).protocol,
+        CastProtocolKind.dlna,
+      );
     });
 
     test('falls back to chromecast for an unknown protocol string', () {

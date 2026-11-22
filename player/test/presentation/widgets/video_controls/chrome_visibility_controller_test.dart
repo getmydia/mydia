@@ -3,26 +3,27 @@
 // an arrow press means "seek" or "move focus". This controller is the handle
 // that lifts out, without moving the state itself.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 Widget _host(ChromeVisibilityController controller) => MaterialApp(
-      home: Scaffold(
-        body: ChromeVisibility(
-          controller: controller,
-          isPlaying: true,
-          isSeeking: false,
-          autoHide: const Duration(days: 1),
-          onWindowButtonsHidden: (_) {},
-          child: const SizedBox.expand(),
-        ),
-      ),
-    );
+  home: Scaffold(
+    body: ChromeVisibility(
+      controller: controller,
+      isPlaying: true,
+      isSeeking: false,
+      autoHide: const Duration(days: 1),
+      onWindowButtonsHidden: (_) {},
+      child: const SizedBox.expand(),
+    ),
+  ),
+);
 
 void main() {
-  testWidgets('starts visible, matching the chrome mounting shown',
-      (tester) async {
+  testWidgets('starts visible, matching the chrome mounting shown', (
+    tester,
+  ) async {
     final controller = ChromeVisibilityController();
     addTearDown(controller.dispose);
 
@@ -70,8 +71,9 @@ void main() {
     expect(notifications, 2);
   });
 
-  testWidgets('is inert once detached, so a late call cannot throw',
-      (tester) async {
+  testWidgets('is inert once detached, so a late call cannot throw', (
+    tester,
+  ) async {
     final controller = ChromeVisibilityController();
     addTearDown(controller.dispose);
 
@@ -117,8 +119,7 @@ void main() {
   // dismiss, since `visible` alone cannot tell "no chrome" from "chrome up
   // and showing" (both read `true`). `blocksBack` is what closes that gap.
   group('blocksBack', () {
-    test(
-        'false while detached, so a back press is never swallowed before '
+    test('false while detached, so a back press is never swallowed before '
         'the chrome exists', () {
       final controller = ChromeVisibilityController();
       addTearDown(controller.dispose);
@@ -147,8 +148,7 @@ void main() {
       expect(controller.blocksBack, isFalse);
     });
 
-    testWidgets(
-        'false again once unmounted, even though visible reports '
+    testWidgets('false again once unmounted, even though visible reports '
         'true again the instant it detaches', (tester) async {
       final controller = ChromeVisibilityController();
       addTearDown(controller.dispose);
@@ -156,9 +156,13 @@ void main() {
       await tester.pumpWidget(_host(controller));
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
 
-      expect(controller.visible, isTrue,
-          reason: 'sanity check: this is exactly the case a bare '
-              '`!visible` gate gets wrong');
+      expect(
+        controller.visible,
+        isTrue,
+        reason:
+            'sanity check: this is exactly the case a bare '
+            '`!visible` gate gets wrong',
+      );
       expect(controller.blocksBack, isFalse);
     });
   });

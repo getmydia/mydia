@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart' show clampDouble;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// One wheel tick's animation. GTK delivers coarse discrete deltas on Linux,
 /// so each tick animates; jumping on every tick reads as teleporting.
@@ -35,7 +35,7 @@ class HorizontalWheelScroll extends StatefulWidget {
   /// or the internally owned one, and must be attached to the scrollable this
   /// returns.
   final Widget Function(BuildContext context, ScrollController controller)
-      builder;
+  builder;
 
   const HorizontalWheelScroll({
     super.key,
@@ -117,8 +117,10 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
     // lets the page take the event.
     if (next == base) return;
 
-    GestureBinding.instance.pointerSignalResolver
-        .register(event, (_) => _glideTo(next));
+    GestureBinding.instance.pointerSignalResolver.register(
+      event,
+      (_) => _glideTo(next),
+    );
   }
 
   void _glideTo(double next) {
@@ -126,11 +128,11 @@ class _HorizontalWheelScrollState extends State<HorizontalWheelScroll> {
     _controller
         .animateTo(next, duration: _glideDuration, curve: _glideCurve)
         .whenComplete(() {
-      // Completes on interruption as well as on completion, so a drag that
-      // cuts a glide short re-bases the next tick off the real offset. The
-      // guard stops a stale completion from clearing a newer target.
-      if (mounted && _target == next) _target = null;
-    });
+          // Completes on interruption as well as on completion, so a drag that
+          // cuts a glide short re-bases the next tick off the real offset. The
+          // guard stops a stale completion from clearing a newer target.
+          if (mounted && _target == next) _target = null;
+        });
   }
 
   @override

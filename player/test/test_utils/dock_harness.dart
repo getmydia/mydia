@@ -6,7 +6,7 @@
 // inside a `Scaffold(extendBody: true)` carrying a real bottomNavigationBar
 // does that value become the dock height, which is what DockInsets reads.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/navigation/source_nav.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -19,24 +19,27 @@ const Key kDockKey = Key('dock-harness-nav');
 /// A realistic full bar, so the dock measures as it does in the app.
 const List<SourceNavEntry> kDockNavEntries = [
   SourceNavEntry(
-      id: 'home',
-      label: 'Home',
-      icon: Icons.home_outlined,
-      selectedIcon: Icons.home_rounded,
-      route: '/s/dock:owner:aa'),
+    id: 'home',
+    label: 'Home',
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home_rounded,
+    route: '/s/dock:owner:aa',
+  ),
   SourceNavEntry(
-      id: 'movies',
-      label: 'Movies',
-      icon: Icons.movie_outlined,
-      selectedIcon: Icons.movie_rounded,
-      route: '/s/dock:owner:aa/library/movies'),
+    id: 'movies',
+    label: 'Movies',
+    icon: Icons.movie_outlined,
+    selectedIcon: Icons.movie_rounded,
+    route: '/s/dock:owner:aa/library/movies',
+  ),
   SourceNavEntry(
-      id: 'settings',
-      label: 'Settings',
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings_rounded,
-      route: '/settings',
-      anchored: true),
+    id: 'settings',
+    label: 'Settings',
+    icon: Icons.settings_outlined,
+    selectedIcon: Icons.settings_rounded,
+    route: '/settings',
+    anchored: true,
+  ),
 ];
 
 /// Wraps [child] in the same shape `AppShell`'s mobile branch builds:
@@ -49,22 +52,25 @@ const List<SourceNavEntry> kDockNavEntries = [
 /// Callers must supply their own `ProviderScope`; `BottomNav` needs one
 /// because `SettingsNavItem` reads a provider for its badge.
 Widget shellScaffold({required Widget child}) => Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBody: true,
-      bottomNavigationBar: KeyedSubtree(
-        key: kDockKey,
-        child: BottomNav(
-            location: '/', onNavigate: (_) {}, entries: kDockNavEntries),
-      ),
-      body: AppShell.contentGutter(child: child),
-    );
+  backgroundColor: Colors.transparent,
+  extendBody: true,
+  bottomNavigationBar: KeyedSubtree(
+    key: kDockKey,
+    child: BottomNav(
+      location: '/',
+      onNavigate: (_) {},
+      entries: kDockNavEntries,
+    ),
+  ),
+  body: AppShell.contentGutter(child: child),
+);
 
 /// [shellScaffold] mounted as the `home` of a plain `MaterialApp`.
 Widget shellHarness({required Widget child}) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: shellScaffold(child: child),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: shellScaffold(child: child),
+);
 
 /// The measured height of the harness's dock, safe-area inset included.
 double dockHeightOf(WidgetTester tester) =>
@@ -83,7 +89,8 @@ void expectClearsDock(WidgetTester tester, Finder lastItem) {
   expect(
     itemBottom,
     lessThanOrEqualTo(dockTop),
-    reason: 'last item bottom ($itemBottom) is under the dock, whose top edge '
+    reason:
+        'last item bottom ($itemBottom) is under the dock, whose top edge '
         'is at $dockTop. The screen is not reserving DockInsets.bottomOf.',
   );
 }

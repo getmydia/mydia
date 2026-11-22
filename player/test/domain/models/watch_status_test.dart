@@ -25,8 +25,10 @@ void main() {
     });
 
     test('coerces an integer percentage to double', () {
-      final status =
-          WatchStatus.fromJson(const {'watched': false, 'percentage': 40});
+      final status = WatchStatus.fromJson(const {
+        'watched': false,
+        'percentage': 40,
+      });
 
       expect(status.percentage, 40.0);
     });

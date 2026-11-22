@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../../core/theme/palette.dart';
 import '../../../widgets/focus_highlight.dart';
@@ -49,12 +49,12 @@ class SettingsRow extends StatelessWidget {
     this.subtitleDotColor,
     required this.onTap,
     this.autofocus = false,
-  })  : _kind = _RowKind.navigation,
-        valueLabel = value,
-        trailing = null,
-        danger = false,
-        toggleValue = false,
-        onChanged = null;
+  }) : _kind = _RowKind.navigation,
+       valueLabel = value,
+       trailing = null,
+       danger = false,
+       toggleValue = false,
+       onChanged = null;
 
   /// A row that flips a boolean.
   ///
@@ -67,14 +67,14 @@ class SettingsRow extends StatelessWidget {
     this.subtitle,
     required bool value,
     required this.onChanged,
-  })  : _kind = _RowKind.toggle,
-        valueLabel = null,
-        trailing = null,
-        onTap = null,
-        danger = false,
-        toggleValue = value,
-        subtitleDotColor = null,
-        autofocus = false;
+  }) : _kind = _RowKind.toggle,
+       valueLabel = null,
+       trailing = null,
+       onTap = null,
+       danger = false,
+       toggleValue = value,
+       subtitleDotColor = null,
+       autofocus = false;
 
   /// A row that does something in place, or that simply states a fact.
   ///
@@ -89,25 +89,28 @@ class SettingsRow extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.danger = false,
-  })  : _kind = _RowKind.action,
-        valueLabel = null,
-        toggleValue = false,
-        onChanged = null,
-        subtitleDotColor = null,
-        autofocus = false;
+  }) : _kind = _RowKind.action,
+       valueLabel = null,
+       toggleValue = false,
+       onChanged = null,
+       subtitleDotColor = null,
+       autofocus = false;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final scheme = Theme.of(context).colorScheme;
     final isToggle = _kind == _RowKind.toggle;
-    final dimmed = (_kind == _RowKind.navigation && onTap == null) ||
+    final dimmed =
+        (_kind == _RowKind.navigation && onTap == null) ||
         (isToggle && onChanged == null);
     final subtitleText = subtitle;
 
     final content = Padding(
-      padding:
-          EdgeInsets.symmetric(horizontal: 16, vertical: isToggle ? 8 : 13),
+      padding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: isToggle ? 8 : 13,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 26),
         child: Row(
@@ -139,10 +142,7 @@ class SettingsRow extends StatelessWidget {
               const SizedBox(width: 12),
               _ValueText(valueLabel!),
             ],
-            if (trailing != null) ...[
-              const SizedBox(width: 12),
-              trailing!,
-            ],
+            if (trailing != null) ...[const SizedBox(width: 12), trailing!],
             if (isToggle) ...[
               const SizedBox(width: 12),
               // The row is the focus target, so the switch stays out of the
@@ -154,11 +154,7 @@ class SettingsRow extends StatelessWidget {
             ],
             if (_kind == _RowKind.navigation) ...[
               const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: palette.textDisabled,
-              ),
+              Icon(Icons.chevron_right, size: 20, color: palette.textDisabled),
             ],
           ],
         ),
@@ -250,11 +246,8 @@ class _Subtitle extends StatelessWidget {
   final String text;
   final Color? dotColor;
 
-  static TextStyle _style(MydiaPalette p) => TextStyle(
-        fontSize: 12.5,
-        height: 1.4,
-        color: p.textSecondary,
-      );
+  static TextStyle _style(MydiaPalette p) =>
+      TextStyle(fontSize: 12.5, height: 1.4, color: p.textSecondary);
 
   @override
   Widget build(BuildContext context) {

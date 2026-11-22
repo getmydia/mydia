@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/player/input_capabilities.dart';
@@ -35,16 +35,13 @@ class PlayerLoadingView extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(
-            color: Colors.red,
-          ),
+          const CircularProgressIndicator(color: Colors.red),
           if (message != null) ...[
             const SizedBox(height: 16),
             Text(
               message!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[400],
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: Colors.grey[400]),
             ),
           ],
         ],
@@ -70,26 +67,20 @@ class PlayerErrorView extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red,
-          ),
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
           const SizedBox(height: 16),
           Text(
             context.l10n.playerLoadFailed,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
               message,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[400],
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: Colors.grey[400]),
               textAlign: TextAlign.center,
             ),
           ),
@@ -156,8 +147,9 @@ class CastPlaceholderView extends StatelessWidget {
     // may be minutes old, so the segment it falls in may not be the one the
     // receiver is playing.
     final castPosition = session.mediaInfo?.position ?? Duration.zero;
-    final skipSegment =
-        isStale || session.isSyncing ? null : segmentAt(castPosition);
+    final skipSegment = isStale || session.isSyncing
+        ? null
+        : segmentAt(castPosition);
     final panelMetrics = PanelMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
       touchPrimary: InputCapabilities.touchPrimary,
@@ -188,17 +180,15 @@ class CastPlaceholderView extends StatelessWidget {
                   isStale
                       ? context.l10n.castBarStaleStatus(device.name)
                       : context.l10n.castBarAmbientStatus(device.name),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                      ),
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(color: Colors.white),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[400],
-                      ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: Colors.grey[400]),
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -266,10 +256,7 @@ class PlayerStatsPanel extends StatelessWidget {
         child: Align(
           alignment: Alignment.topLeft,
           child: Padding(
-            padding: EdgeInsets.only(
-              top: metrics.top,
-              left: metrics.gutter,
-            ),
+            padding: EdgeInsets.only(top: metrics.top, left: metrics.gutter),
             child: ValueListenableBuilder<StatsSample?>(
               valueListenable: collector.samples,
               builder: (context, sample, _) {
@@ -279,8 +266,9 @@ class PlayerStatsPanel extends StatelessWidget {
                   sample: sample,
                   context: ctx,
                   metrics: metrics,
-                  onCopy:
-                      metrics.showButtons ? () => onCopy(sample, ctx) : null,
+                  onCopy: metrics.showButtons
+                      ? () => onCopy(sample, ctx)
+                      : null,
                   onClose: metrics.showButtons ? onClose : null,
                 );
               },

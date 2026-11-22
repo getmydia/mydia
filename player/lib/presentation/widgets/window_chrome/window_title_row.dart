@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/breakpoints.dart';
@@ -90,8 +90,8 @@ class WindowTitleRow extends ConsumerWidget {
   /// existing gutter, so their content column and header edges agree.
   static double endGutter(BuildContext context) =>
       Breakpoints.isDesktop(context)
-          ? Breakpoints.getHorizontalPadding(context) - 8
-          : 8;
+      ? Breakpoints.getHorizontalPadding(context) - 8
+      : 8;
 
   /// Inside the band, icon buttons drop to 32px so they clear its edges: the
   /// macOS band is AppKit's fixed 40px title bar, centred on the traffic
@@ -126,7 +126,7 @@ class WindowTitleRow extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          if (leadingWidget != null) leadingWidget,
+          ?leadingWidget,
           Expanded(
             child: titleWidget == null
                 ? const SizedBox.shrink()
@@ -167,9 +167,7 @@ class WindowTitleRow extends ConsumerWidget {
                         onPointerDown: _onBandPointerDown(),
                       ),
                     ),
-                    Positioned.fill(
-                      child: _compactIconButtons(context, row),
-                    ),
+                    Positioned.fill(child: _compactIconButtons(context, row)),
                   ],
                 ),
         ),

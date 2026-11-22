@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform, visibleForTesting;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -69,10 +69,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _relayUrlFocus = FocusNode();
   final _totpFocus = FocusNode();
   final _tvSettingsFocusNode = FocusNode(debugLabel: 'tv-settings-button');
-  final _closeSettingsFocusNode =
-      FocusNode(debugLabel: 'settings-close-button');
-  final _settingsOverlayScopeNode =
-      FocusScopeNode(debugLabel: 'settings-overlay-scope');
+  final _closeSettingsFocusNode = FocusNode(
+    debugLabel: 'settings-close-button',
+  );
+  final _settingsOverlayScopeNode = FocusScopeNode(
+    debugLabel: 'settings-overlay-scope',
+  );
 
   bool _obscurePassword = true;
   bool _showDirectConnection = false;
@@ -108,13 +110,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       curve: Curves.easeOut,
     );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.05),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
 
     _animationController.forward();
   }
@@ -151,7 +153,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // Not awaited: re-resolving relays takes seconds and the toast below
     // should not wait for it. The notifier catches and logs its own failures.
     unawaited(
-      ref.read(p2pStatusNotifierProvider.notifier).reinitializeWithRelayUrl(
+      ref
+          .read(p2pStatusNotifierProvider.notifier)
+          .reinitializeWithRelayUrl(
             effectiveUrl == defaultRelayUrl ? null : effectiveUrl,
           ),
     );
@@ -218,11 +222,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final qrData = QrPairingData.tryParse(barcode.rawValue!);
     if (qrData == null) {
       // Not a valid Mydia QR code - show error briefly and continue scanning
-      showToast(
-        context,
-        context.l10n.loginInvalidQr,
-        kind: ToastKind.error,
-      );
+      showToast(context, context.l10n.loginInvalidQr, kind: ToastKind.error);
       return;
     }
 
@@ -258,8 +258,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _pairWithQrData(QrPairingData qrData) async {
     final controller = ref.read(loginControllerProvider.notifier);
-    await controller.pairWithQrCode(qrData,
-        reauthAccountId: widget.reauthAccountId);
+    await controller.pairWithQrCode(
+      qrData,
+      reauthAccountId: widget.reauthAccountId,
+    );
 
     await _completePairing();
   }
@@ -285,8 +287,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final controller = ref.read(loginControllerProvider.notifier);
     // No custom relay URL: the claim code resolves through the relay API and
     // iroh's default discovery.
-    await controller.pairWithClaimCode(code,
-        reauthAccountId: widget.reauthAccountId);
+    await controller.pairWithClaimCode(
+      code,
+      reauthAccountId: widget.reauthAccountId,
+    );
 
     await _completePairing();
   }
@@ -376,7 +380,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         return KeyEventResult.ignored;
       },
       child: PopScope(
-        canPop: !_showAdvancedSettings &&
+        canPop:
+            !_showAdvancedSettings &&
             (!InputCapabilities.directionalPrimary ||
                 loginState.isLoading ||
                 _showDirectConnection ||
@@ -606,10 +611,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: palette.primary,
-                        width: 2,
-                      ),
+                      border: Border.all(color: palette.primary, width: 2),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
@@ -719,15 +721,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 5,
-            child: _buildTvLeftCard(loginState, isCompact),
-          ),
+          Expanded(flex: 5, child: _buildTvLeftCard(loginState, isCompact)),
           const SizedBox(width: 20),
-          Expanded(
-            flex: 6,
-            child: _buildTvRightCard(loginState),
-          ),
+          Expanded(flex: 6, child: _buildTvRightCard(loginState)),
         ],
       ),
     );
@@ -752,7 +748,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 fit: BoxFit.scaleDown,
                 child: PinCodeDisplay(
                   code: _claimCodeController.text,
-                  hasError: loginState.error != null &&
+                  hasError:
+                      loginState.error != null &&
                       loginState.mode != ConnectionMode.direct,
                   isLoading: loginState.isLoading,
                 ),
@@ -770,15 +767,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               SizedBox(height: isCompact ? 16 : 20),
               Row(
                 children: [
-                  Expanded(
-                    flex: 3,
-                    child: _buildTvConnectButton(loginState),
-                  ),
+                  Expanded(flex: 3, child: _buildTvConnectButton(loginState)),
                   const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: _buildTvClearButton(loginState),
-                  ),
+                  Expanded(flex: 2, child: _buildTvClearButton(loginState)),
                 ],
               ),
             ] else ...[
@@ -899,9 +890,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       decoration: BoxDecoration(
         color: palette.surfaceVariant.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: palette.border.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: palette.border.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1026,7 +1015,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   Text(
                     context.l10n.loginConnect,
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   const Icon(Icons.link_rounded, size: 18),
@@ -1048,9 +1039,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         style: OutlinedButton.styleFrom(
           foregroundColor: palette.textSecondary,
           disabledForegroundColor: palette.textDisabled,
-          side: BorderSide(
-            color: palette.border.withValues(alpha: 0.3),
-          ),
+          side: BorderSide(color: palette.border.withValues(alpha: 0.3)),
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -1152,9 +1141,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       decoration: BoxDecoration(
         color: palette.surfaceVariant.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: palette.border.withValues(alpha: 0.15),
-        ),
+        border: Border.all(color: palette.border.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
@@ -1254,7 +1241,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Widget _buildClaimCodeContent(LoginState loginState, bool isCompact) {
     final palette = context.palette;
-    final isMobile = defaultTargetPlatform == TargetPlatform.android ||
+    final isMobile =
+        defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     final offersQr = LoginScreen.offersQrScan(
       directionalPrimary: InputCapabilities.directionalPrimary,
@@ -1276,8 +1264,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 isMobile
                     ? context.l10n.loginScanQrCode
                     : context.l10n.loginScanQrWithCamera,
-                style:
-                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: palette.primary,
@@ -1531,8 +1521,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         filled: true,
         fillColor: palette.surfaceVariant.withValues(alpha: 0.4),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         suffixIcon: IconButton(
           icon: const Icon(Icons.content_paste_rounded, size: 18),
           color: palette.textSecondary,
@@ -1558,9 +1550,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: palette.border.withValues(alpha: 0.15),
-          ),
+          borderSide: BorderSide(color: palette.border.withValues(alpha: 0.15)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -1675,17 +1665,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         filled: true,
         fillColor: palette.surfaceVariant.withValues(alpha: 0.4),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: palette.border.withValues(alpha: 0.15),
-          ),
+          borderSide: BorderSide(color: palette.border.withValues(alpha: 0.15)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -1714,8 +1704,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded,
-              color: AppColors.error, size: 16),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.error,
+            size: 16,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -1917,8 +1910,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: palette.surfaceVariant
-                                    .withValues(alpha: 0.25),
+                                color: palette.surfaceVariant.withValues(
+                                  alpha: 0.25,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: palette.border.withValues(alpha: 0.1),
@@ -1930,8 +1924,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   Icon(
                                     Icons.info_outline_rounded,
                                     size: 14,
-                                    color: palette.textSecondary
-                                        .withValues(alpha: 0.7),
+                                    color: palette.textSecondary.withValues(
+                                      alpha: 0.7,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -1940,8 +1935,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       style: TextStyle(
                                         fontSize: 11,
                                         height: 1.35,
-                                        color: palette.textSecondary
-                                            .withValues(alpha: 0.75),
+                                        color: palette.textSecondary.withValues(
+                                          alpha: 0.75,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1959,13 +1955,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               decoration: InputDecoration(
                                 hintText: defaultRelayUrl,
                                 hintStyle: TextStyle(
-                                  color: palette.textDisabled
-                                      .withValues(alpha: 0.5),
+                                  color: palette.textDisabled.withValues(
+                                    alpha: 0.5,
+                                  ),
                                   fontSize: 13,
                                 ),
                                 filled: true,
-                                fillColor: palette.surfaceVariant
-                                    .withValues(alpha: 0.4),
+                                fillColor: palette.surfaceVariant.withValues(
+                                  alpha: 0.4,
+                                ),
                                 isDense: true,
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -1978,8 +1976,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide(
-                                    color:
-                                        palette.border.withValues(alpha: 0.15),
+                                    color: palette.border.withValues(
+                                      alpha: 0.15,
+                                    ),
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
@@ -1989,8 +1988,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     width: 1.5,
                                   ),
                                 ),
-                                suffixIcon: _relayUrlController.text !=
-                                        defaultRelayUrl
+                                suffixIcon:
+                                    _relayUrlController.text != defaultRelayUrl
                                     ? IconButton(
                                         onPressed: _resetRelayUrlToDefault,
                                         icon: Icon(
@@ -2012,8 +2011,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   Icon(
                                     Icons.info_outline,
                                     size: 12,
-                                    color:
-                                        palette.primary.withValues(alpha: 0.7),
+                                    color: palette.primary.withValues(
+                                      alpha: 0.7,
+                                    ),
                                   ),
                                   const SizedBox(width: 6),
                                   Expanded(
@@ -2021,8 +2021,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       context.l10n.loginRelayCustomInUse,
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: palette.primary
-                                            .withValues(alpha: 0.7),
+                                        color: palette.primary.withValues(
+                                          alpha: 0.7,
+                                        ),
                                       ),
                                     ),
                                   ),

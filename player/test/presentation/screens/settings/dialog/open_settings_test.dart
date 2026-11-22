@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,10 +42,10 @@ import '../../connections/fake_peer_sync_service.dart';
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   @override
   P2pStatus build() => const P2pStatus(
-        isInitialized: true,
-        isRelayConnected: false,
-        connectedPeersCount: 0,
-      );
+    isInitialized: true,
+    isRelayConnected: false,
+    connectedPeersCount: 0,
+  );
 }
 
 class _FakeUpdateNotifier extends UpdateNotifier {
@@ -57,10 +57,10 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 class _FakeSettingsController extends SettingsController {
   @override
   Future<UserSettings> build() async => const UserSettings(
-        serverUrl: 'mydia.local:4000',
-        username: 'admin',
-        defaultQuality: '1080p',
-      );
+    serverUrl: 'mydia.local:4000',
+    username: 'admin',
+    defaultQuality: '1080p',
+  );
 }
 
 class _StubRegistration extends NodeRegistrations {
@@ -80,8 +80,10 @@ void main() {
   setUp(() async {
     resetSettingsDialogForTest();
     boxCounter += 1;
-    box = await Hive.openBox<dynamic>('open_settings_$boxCounter',
-        bytes: Uint8List(0));
+    box = await Hive.openBox<dynamic>(
+      'open_settings_$boxCounter',
+      bytes: Uint8List(0),
+    );
   });
   tearDown(() async => box.close());
 
@@ -102,71 +104,82 @@ void main() {
     for (final r in [recordA, recordB]) {
       await store.putAccount(r);
       await writeMydiaCredentials(
-          secrets,
-          r.account,
-          MydiaCredentials(
-            instanceId: r.servers.single.id,
-            accessToken: 'tok',
-            serverUrl: 'https://${r.account.id}.example.test',
-          ));
+        secrets,
+        r.account,
+        MydiaCredentials(
+          instanceId: r.servers.single.id,
+          accessToken: 'tok',
+          serverUrl: 'https://${r.account.id}.example.test',
+        ),
+      );
     }
     Widget stub(String path) => Scaffold(body: Text('at $path'));
-    final router = GoRouter(routes: [
-      GoRoute(
-        path: '/',
-        builder: (_, __) => Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => openSettings(context, initial: initial),
-              child: const Text('open'),
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => openSettings(context, initial: initial),
+                child: const Text('open'),
+              ),
             ),
           ),
         ),
-      ),
-      for (final p in [
-        '/settings',
-        '/settings/diagnostics',
-        '/sources/manage',
-        '/sources/add',
-        '/unlock',
-      ])
-        GoRoute(path: p, builder: (_, __) => stub(p)),
-    ]);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        settingsDialogEnabledProvider.overrideWithValue(dialog),
-        settingsControllerProvider.overrideWith(_FakeSettingsController.new),
-        p2pStatusNotifierProvider.overrideWith(_FakeP2pStatusNotifier.new),
-        updateProvider.overrideWith(_FakeUpdateNotifier.new),
-        ...noHiveOverrides,
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(secrets),
-        remoteControlSettingsProvider
-            .overrideWith((ref) async => RemoteControlSettings(box: box)),
-        nodeRegistrationsProvider.overrideWith(_StubRegistration.new),
-        activeSourceIdProvider.overrideWithValue(testMydiaSourceId),
-        mediaSourceProvider.overrideWith((ref, id) => null),
-        serverCompatibilityProvider.overrideWith((ref, id) async =>
-            const ServerCompatibility(
-                info: null, verdict: CompatibilityVerdict.unknown)),
-        peerSyncStoreProvider.overrideWithValue(peers),
-        peerSyncServiceProvider.overrideWithValue(peerService),
-        peerGroupRosterProvider.overrideWithValue(PeerGroupRoster(
-          store: peers,
-          localNodeId: () => peerService.localNodeId,
-          isPeerConnected: (_) => true,
-        )),
-        connectionsDirectSourceProvider.overrideWithValue(null),
-        if (overview != null)
-          connectionsOverviewProvider.overrideWithValue(overview),
+        for (final p in [
+          '/settings',
+          '/settings/diagnostics',
+          '/sources/manage',
+          '/sources/add',
+          '/unlock',
+        ])
+          GoRoute(path: p, builder: (_, _) => stub(p)),
       ],
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        routerConfig: router,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsDialogEnabledProvider.overrideWithValue(dialog),
+          settingsControllerProvider.overrideWith(_FakeSettingsController.new),
+          p2pStatusNotifierProvider.overrideWith(_FakeP2pStatusNotifier.new),
+          updateProvider.overrideWith(_FakeUpdateNotifier.new),
+          ...noHiveOverrides,
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(secrets),
+          remoteControlSettingsProvider.overrideWith(
+            (ref) async => RemoteControlSettings(box: box),
+          ),
+          nodeRegistrationsProvider.overrideWith(_StubRegistration.new),
+          activeSourceIdProvider.overrideWithValue(testMydiaSourceId),
+          mediaSourceProvider.overrideWith((ref, id) => null),
+          serverCompatibilityProvider.overrideWith(
+            (ref, id) async => const ServerCompatibility(
+              info: null,
+              verdict: CompatibilityVerdict.unknown,
+            ),
+          ),
+          peerSyncStoreProvider.overrideWithValue(peers),
+          peerSyncServiceProvider.overrideWithValue(peerService),
+          peerGroupRosterProvider.overrideWithValue(
+            PeerGroupRoster(
+              store: peers,
+              localNodeId: () => peerService.localNodeId,
+              isPeerConnected: (_) => true,
+            ),
+          ),
+          connectionsDirectSourceProvider.overrideWithValue(null),
+          if (overview != null)
+            connectionsOverviewProvider.overrideWithValue(overview),
+        ],
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          routerConfig: router,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
   }
 
@@ -176,31 +189,37 @@ void main() {
   }
 
   SettingsCategory selected(WidgetTester tester) =>
-      SettingsCategory.values.singleWhere((c) => tester
-          .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
-          .selected);
+      SettingsCategory.values.singleWhere(
+        (c) => tester
+            .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
+            .selected,
+      );
 
   /// The dialog's nav, as a row in the visible pane would find it.
   SettingsNav dialogNav(WidgetTester tester) => SettingsNavScope.of(
-      tester.element(find.byKey(const Key('settings-dialog-close')).first));
+    tester.element(find.byKey(const Key('settings-dialog-close')).first),
+  );
 
-  testWidgets('off desktop, openSettings follows the old routes',
-      (tester) async {
+  testWidgets('off desktop, openSettings follows the old routes', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: false, initial: SettingsCategory.connections);
     await open(tester);
     expect(find.text('at /sources/manage'), findsOneWidget);
     expect(find.byKey(const Key('settings-dialog')), findsNothing);
   });
 
-  testWidgets('off desktop, a bare openSettings still goes to /settings',
-      (tester) async {
+  testWidgets('off desktop, a bare openSettings still goes to /settings', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: false);
     await open(tester);
     expect(find.text('at /settings'), findsOneWidget);
   });
 
-  testWidgets('on desktop, openSettings opens the dialog on the category',
-      (tester) async {
+  testWidgets('on desktop, openSettings opens the dialog on the category', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.about);
     await open(tester);
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
@@ -217,7 +236,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(selected(tester), SettingsCategory.connections);
     expect(
-        find.byKey(const Key('connections-servers-section')), findsOneWidget);
+      find.byKey(const Key('connections-servers-section')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('/settings/paired-devices maps to connections', (tester) async {
@@ -230,23 +251,26 @@ void main() {
 
   // Built per test: [hubDevice] stamps its sync time from the wall clock.
   ConnectionsOverview scrollingOverview() => hubOverview(
-        servers: [
-          for (var i = 0; i < 6; i++) hubServer('s$i', 'Home Mydia $i'),
-        ],
-        devices: [hubDevice('n1', 'Pixel phone', 'android')],
-      );
+    servers: [for (var i = 0; i < 6; i++) hubServer('s$i', 'Home Mydia $i')],
+    devices: [hubDevice('n1', 'Pixel phone', 'android')],
+  );
 
   void expectDevicesInPane(WidgetTester tester) {
     final dialog = tester.getRect(find.byKey(const Key('settings-dialog')));
-    final devices =
-        tester.getRect(find.byKey(const Key('connections-devices-section')));
-    expect(dialog.overlaps(devices), isTrue,
-        reason: 'the devices section is scrolled into the pane');
+    final devices = tester.getRect(
+      find.byKey(const Key('connections-devices-section')),
+    );
+    expect(
+      dialog.overlaps(devices),
+      isTrue,
+      reason: 'the devices section is scrolled into the pane',
+    );
     expect(devices.top, greaterThanOrEqualTo(dialog.top));
   }
 
-  testWidgets('/settings/paired-devices opens the dialog on the devices',
-      (tester) async {
+  testWidgets('/settings/paired-devices opens the dialog on the devices', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, overview: scrollingOverview());
     final context = tester.element(find.text('open'));
     expect(openSettingsForRoute(context, '/settings/paired-devices'), isTrue);
@@ -255,8 +279,9 @@ void main() {
     expectDevicesInPane(tester);
   });
 
-  testWidgets('/settings/paired-devices on an open dialog returns to the hub',
-      (tester) async {
+  testWidgets('/settings/paired-devices on an open dialog returns to the hub', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, overview: scrollingOverview());
     await open(tester);
     dialogNav(tester).openAccount('s0');
@@ -269,16 +294,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(selected(tester), SettingsCategory.connections);
     expect(
-        SettingsDialogScope.of(
-                tester.element(find.byKey(const Key('settings-dialog'))))
-            .paneNavigator(SettingsCategory.connections)
-            ?.canPop(),
-        isFalse);
+      SettingsDialogScope.of(
+        tester.element(find.byKey(const Key('settings-dialog'))),
+      ).paneNavigator(SettingsCategory.connections)?.canPop(),
+      isFalse,
+    );
     expectDevicesInPane(tester);
   });
 
-  testWidgets('a removal that lands after the dialog closed does not throw',
-      (tester) async {
+  testWidgets('a removal that lands after the dialog closed does not throw', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
     final nav = dialogNav(tester);
@@ -293,8 +319,7 @@ void main() {
     expect(nav.instanceRemoved, returnsNormally);
   });
 
-  testWidgets(
-      'a toast asking for Backup & sync after the dialog closed is a '
+  testWidgets('a toast asking for Backup & sync after the dialog closed is a '
       'no-op', (tester) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
@@ -311,8 +336,7 @@ void main() {
     expect(nav.openPairedDevices, returnsNormally);
   });
 
-  testWidgets(
-      'a toast asking for Backup & sync while the dialog closes is a '
+  testWidgets('a toast asking for Backup & sync while the dialog closes is a '
       'no-op', (tester) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
@@ -332,8 +356,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a Backup & sync request maps to the backup category',
-      (tester) async {
+  testWidgets('a Backup & sync request maps to the backup category', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true);
     final context = tester.element(find.text('open'));
     expect(openSettingsForRoute(context, backupRequestLocation()), isTrue);
@@ -351,16 +376,18 @@ void main() {
     expect(find.byKey(const Key('copy-diagnostics')), findsOneWidget);
   });
 
-  testWidgets('openSettingsForRoute ignores other routes and mobile',
-      (tester) async {
+  testWidgets('openSettingsForRoute ignores other routes and mobile', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: false);
     final context = tester.element(find.text('open'));
     expect(openSettingsForRoute(context, '/settings'), isFalse);
     expect(openSettingsForRoute(context, '/downloads'), isFalse);
   });
 
-  testWidgets('the connections pane is the hub under its wide header',
-      (tester) async {
+  testWidgets('the connections pane is the hub under its wide header', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
     final card = find.byType(ConnectionsConstellationCard);
@@ -368,12 +395,16 @@ void main() {
     expect(find.byKey(const Key('connections-this-device')), findsNothing);
     expect(find.byKey(const Key('settings-dialog-close')), findsOneWidget);
     // The card already names the page: the pane header does not repeat it.
-    expect(find.text('Servers & devices'), findsNWidgets(2),
-        reason: 'once in the sidebar, once on the card');
+    expect(
+      find.text('Servers & devices'),
+      findsNWidgets(2),
+      reason: 'once in the sidebar, once on the card',
+    );
   });
 
-  testWidgets('openPairedDevices selects connections and scrolls to devices',
-      (tester) async {
+  testWidgets('openPairedDevices selects connections and scrolls to devices', (
+    tester,
+  ) async {
     await pumpApp(
       tester,
       dialog: true,
@@ -391,18 +422,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(selected(tester), SettingsCategory.connections);
     final dialog = tester.getRect(find.byKey(const Key('settings-dialog')));
-    final devices =
-        tester.getRect(find.byKey(const Key('connections-devices-section')));
-    expect(dialog.overlaps(devices), isTrue,
-        reason: 'the devices section is scrolled into the pane');
-    expect(
-      devices.top,
-      greaterThanOrEqualTo(dialog.top),
+    final devices = tester.getRect(
+      find.byKey(const Key('connections-devices-section')),
     );
+    expect(
+      dialog.overlaps(devices),
+      isTrue,
+      reason: 'the devices section is scrolled into the pane',
+    );
+    expect(devices.top, greaterThanOrEqualTo(dialog.top));
   });
 
-  testWidgets('Backup & sync has its own pane; openBackup selects it',
-      (tester) async {
+  testWidgets('Backup & sync has its own pane; openBackup selects it', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true);
     await open(tester);
     expect(selected(tester), SettingsCategory.playback);
@@ -414,8 +447,9 @@ void main() {
     expect(find.byKey(const Key('backup-switch')), findsOneWidget);
   });
 
-  testWidgets('paired devices is no longer pushed onto playback',
-      (tester) async {
+  testWidgets('paired devices is no longer pushed onto playback', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true);
     await open(tester);
     dialogNav(tester).openPairedDevices();
@@ -425,11 +459,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('settings-dialog-back')), findsNothing);
     expect(
-        SettingsDialogScope.of(
-                tester.element(find.byKey(const Key('settings-dialog'))))
-            .paneNavigator(SettingsCategory.playback)
-            ?.canPop(),
-        isFalse);
+      SettingsDialogScope.of(
+        tester.element(find.byKey(const Key('settings-dialog'))),
+      ).paneNavigator(SettingsCategory.playback)?.canPop(),
+      isFalse,
+    );
   });
 
   /// A Mydia server opens its account, whose gear opens the instance.
@@ -439,14 +473,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(card);
     await tester.pumpAndSettle();
-    expect(find.byKey(Key('manage-lock-${recordA.servers.single.id}')),
-        findsOneWidget);
+    expect(
+      find.byKey(Key('manage-lock-${recordA.servers.single.id}')),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(Key('manage-settings-${recordA.account.id}')));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Servers opens an instance in the pane and back returns',
-      (tester) async {
+  testWidgets('Servers opens an instance in the pane and back returns', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
     await openInstanceFromHub(tester);
@@ -460,8 +497,9 @@ void main() {
     expect(find.byKey(const Key('manage-add')), findsOneWidget);
   });
 
-  testWidgets('Add server closes the dialog, then pushes add-a-server',
-      (tester) async {
+  testWidgets('Add server closes the dialog, then pushes add-a-server', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
     await tester.tap(find.byKey(const Key('manage-add')));
@@ -470,8 +508,9 @@ void main() {
     expect(find.text('at /sources/add'), findsOneWidget);
   });
 
-  testWidgets('the unlock screen opens above the dialog and returns to it',
-      (tester) async {
+  testWidgets('the unlock screen opens above the dialog and returns to it', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
     await tester.ensureVisible(find.byKey(const Key('show-hidden-sources')));
@@ -485,8 +524,9 @@ void main() {
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
   });
 
-  testWidgets('removing the open instance pops back to the hub',
-      (tester) async {
+  testWidgets('removing the open instance pops back to the hub', (
+    tester,
+  ) async {
     await pumpApp(tester, dialog: true, initial: SettingsCategory.connections);
     await open(tester);
     await openInstanceFromHub(tester);
@@ -549,11 +589,17 @@ void main() {
       logicalKey: LogicalKeyboardKey.comma,
       timeStamp: Duration.zero,
     );
-    expect(isSettingsShortcut(down, controlPressed: true, shiftPressed: true),
-        isFalse);
-    expect(isSettingsShortcut(down, controlPressed: true, altPressed: true),
-        isFalse);
-    expect(isSettingsShortcut(down, controlPressed: true, metaPressed: true),
-        isFalse);
+    expect(
+      isSettingsShortcut(down, controlPressed: true, shiftPressed: true),
+      isFalse,
+    );
+    expect(
+      isSettingsShortcut(down, controlPressed: true, altPressed: true),
+      isFalse,
+    );
+    expect(
+      isSettingsShortcut(down, controlPressed: true, metaPressed: true),
+      isFalse,
+    );
   });
 }

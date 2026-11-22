@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../core/player/stream_timeline.dart';
@@ -83,8 +83,9 @@ class _GestureControlsState extends State<GestureControls> {
     final timeline = widget.timeline;
     final currentPosition = timeline.toReal(widget.player.state.position);
     final newPosition = currentPosition - const Duration(seconds: 10);
-    final targetPosition =
-        newPosition < Duration.zero ? Duration.zero : newPosition;
+    final targetPosition = newPosition < Duration.zero
+        ? Duration.zero
+        : newPosition;
 
     widget.onSeekToReal(targetPosition);
     _showSeekFeedback(forward: false);
@@ -255,8 +256,8 @@ class _GestureControlsState extends State<GestureControls> {
                         _volume > 0.5
                             ? Icons.volume_up_rounded
                             : _volume > 0
-                                ? Icons.volume_down_rounded
-                                : Icons.volume_off_rounded,
+                            ? Icons.volume_down_rounded
+                            : Icons.volume_off_rounded,
                         color: Colors.white,
                         size: 24,
                       ),
@@ -268,7 +269,8 @@ class _GestureControlsState extends State<GestureControls> {
                             value: _volume,
                             backgroundColor: Colors.grey[700],
                             valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.white),
+                              Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -320,7 +322,8 @@ class _GestureControlsState extends State<GestureControls> {
                             value: _brightness,
                             backgroundColor: Colors.grey[700],
                             valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.white),
+                              Colors.white,
+                            ),
                           ),
                         ),
                       ),

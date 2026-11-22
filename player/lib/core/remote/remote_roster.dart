@@ -56,11 +56,8 @@ class RemoteRoster implements DeviceRoster {
   List<RemoteDeviceEntry> _lastOnline = const [];
   bool _onlineUnsupported = false;
 
-  RemoteRoster({
-    required MydiaClient client,
-    DateTime Function()? now,
-  })  : _client = client,
-        _now = now ?? DateTime.now;
+  RemoteRoster({required this._client, DateTime Function()? now})
+    : _now = now ?? DateTime.now;
 
   /// Devices that can actually be dialed. A device with no node ID has never
   /// reported one, so it is omitted rather than listed as permanently
@@ -190,12 +187,14 @@ class RemoteRoster implements DeviceRoster {
         .where((d) => (d['nodeId'] as String?)?.isNotEmpty ?? false)
         .where((d) => d['isRevoked'] != true)
         .where((d) => keep == null || keep(d))
-        .map((d) => RemoteDeviceEntry(
-              id: d['id'] as String,
-              deviceName: d['deviceName'] as String,
-              platform: d['platform'] as String,
-              nodeId: d['nodeId'] as String,
-            ))
+        .map(
+          (d) => RemoteDeviceEntry(
+            id: d['id'] as String,
+            deviceName: d['deviceName'] as String,
+            platform: d['platform'] as String,
+            nodeId: d['nodeId'] as String,
+          ),
+        )
         .toList(growable: false);
   }
 }

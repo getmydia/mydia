@@ -1,5 +1,5 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/toast/toaster.dart';
 
@@ -18,16 +18,18 @@ Future<BuildContext> _pumpLayer(
   tester.view.physicalSize = const Size(800, 600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        disableAnimations: reduceMotion,
-        accessibleNavigation: accessibleNavigation,
+  await tester.pumpWidget(
+    MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          disableAnimations: reduceMotion,
+          accessibleNavigation: accessibleNavigation,
+        ),
+        child: toastLayerBuilder(context, child),
       ),
-      child: toastLayerBuilder(context, child),
+      home: const Scaffold(body: SizedBox.expand(key: _body)),
     ),
-    home: const Scaffold(body: SizedBox.expand(key: _body)),
-  ));
+  );
   return tester.element(find.byKey(_body));
 }
 
@@ -38,23 +40,32 @@ Future<void> _settleMotion(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('Toaster.of without a layer names what is missing',
-      (tester) async {
-    await tester
-        .pumpWidget(const MaterialApp(home: SizedBox.expand(key: _body)));
+  testWidgets('Toaster.of without a layer names what is missing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: SizedBox.expand(key: _body)),
+    );
     final context = tester.element(find.byKey(_body));
     expect(
       () => Toaster.of(context),
-      throwsA(isA<FlutterError>()
-          .having((e) => e.message, 'message', contains('No ToastLayer found'))
-          // The hint names the one builder that fixes the call: losing it
-          // would leave the reader with a complaint and no way out.
-          .having((e) => e.message, 'hint', contains('toastLayerBuilder'))),
+      throwsA(
+        isA<FlutterError>()
+            .having(
+              (e) => e.message,
+              'message',
+              contains('No ToastLayer found'),
+            )
+            // The hint names the one builder that fixes the call: losing it
+            // would leave the reader with a complaint and no way out.
+            .having((e) => e.message, 'hint', contains('toastLayerBuilder')),
+      ),
     );
   });
 
-  testWidgets('shows a toast, then removes it after its duration',
-      (tester) async {
+  testWidgets('shows a toast, then removes it after its duration', (
+    tester,
+  ) async {
     final context = await _pumpLayer(tester);
     showToast(context, 'Saved');
     await _settleMotion(tester);
@@ -83,8 +94,9 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('rests 24px above the bottom, centred, with nothing in the way',
-      (tester) async {
+  testWidgets('rests 24px above the bottom, centred, with nothing in the way', (
+    tester,
+  ) async {
     final context = await _pumpLayer(tester);
     showToast(context, 'Saved');
     await tester.pumpAndSettle();
@@ -103,8 +115,9 @@ void main() {
     expect(find.text('Second'), findsOneWidget);
   });
 
-  testWidgets("closing a replaced toast's handle leaves the current one",
-      (tester) async {
+  testWidgets("closing a replaced toast's handle leaves the current one", (
+    tester,
+  ) async {
     final context = await _pumpLayer(tester);
     final first = showToast(context, 'First');
     await _settleMotion(tester);
@@ -117,8 +130,11 @@ void main() {
 
   testWidgets('progress stays until its handle closes it', (tester) async {
     final context = await _pumpLayer(tester);
-    final loading =
-        showToast(context, 'Loading subtitle...', kind: ToastKind.progress);
+    final loading = showToast(
+      context,
+      'Loading subtitle...',
+      kind: ToastKind.progress,
+    );
     await tester.pump();
     await tester.pump(const Duration(seconds: 10));
     expect(find.text('Loading subtitle...'), findsOneWidget);
@@ -136,8 +152,9 @@ void main() {
     expect(find.text('Loading subtitle...'), findsNothing);
   });
 
-  testWidgets('hovering pauses the timer and leaving restarts it',
-      (tester) async {
+  testWidgets('hovering pauses the timer and leaving restarts it', (
+    tester,
+  ) async {
     final context = await _pumpLayer(tester);
     showToast(context, 'Saved');
     await _settleMotion(tester);
@@ -173,18 +190,25 @@ void main() {
     showToast(context, 'Saved');
     await _settleMotion(tester);
     await tester.timedDrag(
-        _pill, const Offset(0, 10), const Duration(seconds: 1));
+      _pill,
+      const Offset(0, 10),
+      const Duration(seconds: 1),
+    );
     await _settleMotion(tester);
     expect(find.text('Saved'), findsOneWidget);
   });
 
-  testWidgets('an action runs its callback and closes the toast',
-      (tester) async {
+  testWidgets('an action runs its callback and closes the toast', (
+    tester,
+  ) async {
     final context = await _pumpLayer(tester);
     var ran = false;
-    showToast(context, 'Denied',
-        kind: ToastKind.error,
-        action: ToastAction(label: 'Settings', onPressed: () => ran = true));
+    showToast(
+      context,
+      'Denied',
+      kind: ToastKind.error,
+      action: ToastAction(label: 'Settings', onPressed: () => ran = true),
+    );
     await _settleMotion(tester);
     await tester.tap(find.byKey(const Key('toast-action')));
     await _settleMotion(tester);
@@ -192,12 +216,16 @@ void main() {
     expect(find.text('Denied'), findsNothing);
   });
 
-  testWidgets('with a screen reader an action toast waits to be dismissed',
-      (tester) async {
+  testWidgets('with a screen reader an action toast waits to be dismissed', (
+    tester,
+  ) async {
     final context = await _pumpLayer(tester, accessibleNavigation: true);
-    showToast(context, 'Denied',
-        kind: ToastKind.error,
-        action: ToastAction(label: 'Settings', onPressed: () {}));
+    showToast(
+      context,
+      'Denied',
+      kind: ToastKind.error,
+      action: ToastAction(label: 'Settings', onPressed: () {}),
+    );
     await tester.pump();
     await tester.pump(const Duration(minutes: 1));
     expect(find.text('Denied'), findsOneWidget);
@@ -205,8 +233,11 @@ void main() {
 
   testWidgets('the toast never takes focus', (tester) async {
     final context = await _pumpLayer(tester);
-    showToast(context, 'Denied',
-        action: ToastAction(label: 'Settings', onPressed: () {}));
+    showToast(
+      context,
+      'Denied',
+      action: ToastAction(label: 'Settings', onPressed: () {}),
+    );
     await _settleMotion(tester);
     final node = Focus.of(tester.element(find.text('Settings')));
     expect(node.canRequestFocus, isFalse);
@@ -235,8 +266,11 @@ void main() {
   testWidgets('a toast outlives the route that showed it', (tester) async {
     final context = await _pumpLayer(tester);
     showToast(context, 'Saved');
-    Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(body: SizedBox.expand())));
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: SizedBox.expand()),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Saved'), findsOneWidget);
   });
@@ -246,17 +280,19 @@ void main() {
     tester.view.physicalSize = const Size(800, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(MaterialApp(
-      builder: toastLayerBuilder,
-      home: Scaffold(
-        body: GestureDetector(
-          key: _body,
-          behavior: HitTestBehavior.opaque,
-          onTap: () => tapped = true,
-          child: const SizedBox.expand(),
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: toastLayerBuilder,
+        home: Scaffold(
+          body: GestureDetector(
+            key: _body,
+            behavior: HitTestBehavior.opaque,
+            onTap: () => tapped = true,
+            child: const SizedBox.expand(),
+          ),
         ),
       ),
-    ));
+    );
     showToast(tester.element(find.byKey(_body)), 'Saved');
     await tester.pumpAndSettle();
     // Same height as the pill, far to its left: inside the toast region's

@@ -21,7 +21,8 @@ class _Harness {
     if (loggedAt != null) log = InMemoryFetchLog({_key: loggedAt});
     if (!identical(cached, _none)) {
       unawaited(
-          cache.write(_key, cached, _now.subtract(const Duration(hours: 1))));
+        cache.write(_key, cached, _now.subtract(const Duration(hours: 1))),
+      );
     }
   }
 
@@ -84,7 +85,9 @@ void main() {
 
   test('fresh entry: emits it, refreshes, then emits the answer', () async {
     final h = _Harness(
-        loggedAt: _now.subtract(const Duration(minutes: 1)), cached: 'old');
+      loggedAt: _now.subtract(const Duration(minutes: 1)),
+      cached: 'old',
+    );
     h.watcher;
     await pumpEventQueue();
     expect(h.values, ['old']);
@@ -98,7 +101,9 @@ void main() {
 
   test('an unchanged answer emits once and still stamps the log', () async {
     final h = _Harness(
-        loggedAt: _now.subtract(const Duration(hours: 2)), cached: 'same');
+      loggedAt: _now.subtract(const Duration(hours: 2)),
+      cached: 'same',
+    );
     h.watcher;
     await pumpEventQueue();
     expect(h.values, ['same']);
@@ -113,7 +118,9 @@ void main() {
 
   test('a changed answer after a cached emission emits twice', () async {
     final h = _Harness(
-        loggedAt: _now.subtract(const Duration(hours: 2)), cached: 'old');
+      loggedAt: _now.subtract(const Duration(hours: 2)),
+      cached: 'old',
+    );
     h.watcher;
     await pumpEventQueue();
     await h.answer('new');
@@ -122,7 +129,9 @@ void main() {
 
   test('stale entry: emits it and reports stale until the answer', () async {
     final h = _Harness(
-        loggedAt: _now.subtract(const Duration(hours: 2)), cached: 'old');
+      loggedAt: _now.subtract(const Duration(hours: 2)),
+      cached: 'old',
+    );
     h.watcher;
     await pumpEventQueue();
     expect(h.values, ['old']);
@@ -149,8 +158,11 @@ void main() {
     expect(h.values, ['old']);
     expect(h.errors, isEmpty);
     expect(h.freshness.last.refreshFailed, isTrue);
-    expect(h.freshness.last.fetchedAt, isNotNull,
-        reason: 'the banner needs a time to show');
+    expect(
+      h.freshness.last.fetchedAt,
+      isNotNull,
+      reason: 'the banner needs a time to show',
+    );
   });
 
   test('a failed refresh keeps the data and leaves the log alone', () async {
@@ -176,7 +188,9 @@ void main() {
 
   test('an undecodable entry is dropped and the mount goes cold', () async {
     final h = _Harness(
-        loggedAt: _now.subtract(const Duration(minutes: 1)), cached: 42);
+      loggedAt: _now.subtract(const Duration(minutes: 1)),
+      cached: 42,
+    );
     h.watcher;
     await pumpEventQueue();
     expect(h.values, isEmpty);
@@ -214,41 +228,45 @@ void main() {
     expect(h.values, ['a', 'b']);
   });
 
-  test('a pending refetch completes when the watcher closes mid-fetch',
-      () async {
-    final h = _Harness();
-    h.watcher;
-    await pumpEventQueue();
-    var done = false;
-    unawaited(h.watcher.refetch().then((_) => done = true));
-    await pumpEventQueue();
-    await h.watcher.close();
-    await pumpEventQueue();
-    expect(done, isTrue);
-    expect(h.fetches, 1);
-  });
+  test(
+    'a pending refetch completes when the watcher closes mid-fetch',
+    () async {
+      final h = _Harness();
+      h.watcher;
+      await pumpEventQueue();
+      var done = false;
+      unawaited(h.watcher.refetch().then((_) => done = true));
+      await pumpEventQueue();
+      await h.watcher.close();
+      await pumpEventQueue();
+      expect(done, isTrue);
+      expect(h.fetches, 1);
+    },
+  );
 
-  test('a failing cache write still emits and leaves the log unstamped',
-      () async {
-    final log = InMemoryFetchLog();
-    final values = <String>[];
-    final next = Completer<String>();
-    final watcher = SourceWatcher<String>(
-      key: _key,
-      fetch: () => next.future,
-      cache: _ThrowingWriteCache(),
-      fetchLog: log,
-      encode: (v) => v,
-      decode: (json) => json! as String,
-      clock: () => _now,
-    )..stream.listen(values.add);
-    await pumpEventQueue();
-    next.complete('fresh');
-    await pumpEventQueue();
-    expect(values, ['fresh']);
-    expect(log.lastFetchedAt(_key), isNull);
-    await watcher.close();
-  });
+  test(
+    'a failing cache write still emits and leaves the log unstamped',
+    () async {
+      final log = InMemoryFetchLog();
+      final values = <String>[];
+      final next = Completer<String>();
+      final watcher = SourceWatcher<String>(
+        key: _key,
+        fetch: () => next.future,
+        cache: _ThrowingWriteCache(),
+        fetchLog: log,
+        encode: (v) => v,
+        decode: (json) => json! as String,
+        clock: () => _now,
+      )..stream.listen(values.add);
+      await pumpEventQueue();
+      next.complete('fresh');
+      await pumpEventQueue();
+      expect(values, ['fresh']);
+      expect(log.lastFetchedAt(_key), isNull);
+      await watcher.close();
+    },
+  );
 
   test('refetchAutomatically honours canRefetch', () async {
     final h = _Harness();

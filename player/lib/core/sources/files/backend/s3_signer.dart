@@ -12,7 +12,8 @@ const _algorithm = 'AWS4-HMAC-SHA256';
 String s3UriEncode(String s, {required bool encodeSlash}) {
   final out = StringBuffer();
   for (final b in utf8.encode(s)) {
-    final unreserved = (b >= 0x41 && b <= 0x5a) ||
+    final unreserved =
+        (b >= 0x41 && b <= 0x5a) ||
         (b >= 0x61 && b <= 0x7a) ||
         (b >= 0x30 && b <= 0x39) ||
         b == 0x2d ||
@@ -87,7 +88,8 @@ class S3Signer {
 
     final scope = '$dateStamp/$region/$service/aws4_request';
     final signature = _signature(canonicalRequest, amzDate, dateStamp, scope);
-    out['authorization'] = '$_algorithm Credential=$accessKeyId/$scope,'
+    out['authorization'] =
+        '$_algorithm Credential=$accessKeyId/$scope,'
         'SignedHeaders=$signedHeaders,Signature=$signature';
     return out;
   }

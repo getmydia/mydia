@@ -28,12 +28,12 @@ class NativeTab {
   final bool enabled;
 
   Map<String, Object?> toMap() => {
-        'id': id,
-        'title': title,
-        'symbol': symbol,
-        'badge': badge,
-        'enabled': enabled,
-      };
+    'id': id,
+    'title': title,
+    'symbol': symbol,
+    'badge': badge,
+    'enabled': enabled,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -74,12 +74,12 @@ class NativeAccessory {
   final bool? playing;
 
   Map<String, Object?> toMap() => {
-        'title': title,
-        'subtitle': subtitle,
-        'artwork': artwork,
-        'symbol': symbol,
-        'playing': playing,
-      };
+    'title': title,
+    'subtitle': subtitle,
+    'artwork': artwork,
+    'symbol': symbol,
+    'playing': playing,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -142,20 +142,20 @@ class NativeInsets {
 
   /// Reads the map the iPad and macOS send, or the bare bottom the iPhone sends.
   static NativeInsets? fromChannel(Object? value) => switch (value) {
-        num() => NativeInsets(bottom: value.toDouble()),
-        {'top': num top, 'leading': num leading, 'bottom': num bottom} =>
-          NativeInsets(
-            top: top.toDouble(),
-            leading: leading.toDouble(),
-            bottom: bottom.toDouble(),
-            reportsChrome: value.containsKey('chromeLeading'),
-            chromeLeading: switch (value['chromeLeading']) {
-              num chrome => chrome.toDouble(),
-              _ => 0,
-            },
-          ),
-        _ => null,
-      };
+    num() => NativeInsets(bottom: value.toDouble()),
+    {'top': num top, 'leading': num leading, 'bottom': num bottom} =>
+      NativeInsets(
+        top: top.toDouble(),
+        leading: leading.toDouble(),
+        bottom: bottom.toDouble(),
+        reportsChrome: value.containsKey('chromeLeading'),
+        chromeLeading: switch (value['chromeLeading']) {
+          num chrome => chrome.toDouble(),
+          _ => 0,
+        },
+      ),
+    _ => null,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -220,7 +220,7 @@ final class NativeGlassAccessibilityChanged extends NativeTabBarEvent {
 /// side is logged and swallowed: the bar is chrome, never a reason to crash.
 class NativeTabBarChannel {
   NativeTabBarChannel({MethodChannel? channel})
-      : _channel = channel ?? NativeTabBarSupport.channel {
+    : _channel = channel ?? NativeTabBarSupport.channel {
     _channel.setMethodCallHandler(_onCall);
   }
 
@@ -364,7 +364,8 @@ class NativeTabBarChannel {
   // A sentinel no real accessory equals, so a failed send is retried even
   // when the failed value was null (which otherwise means "none sent").
   static const _unsentAccessory = NativeAccessory(
-      title: '\u0000unsent'); // l10n-ignore: sentinel, never shown
+    title: '\u0000unsent', // l10n-ignore: sentinel, never shown
+  );
 
   void dispose() {
     _channel.setMethodCallHandler(null);
@@ -399,22 +400,24 @@ class NativeTabBarChannel {
     final NativeTabBarEvent? event = switch (call.method) {
       'tabSelected' when arguments is String => NativeTabSelected(arguments),
       'insetsChanged' => switch (NativeInsets.fromChannel(arguments)) {
-          final insets? => NativeInsetsChanged(insets),
-          null => null,
-        },
+        final insets? => NativeInsetsChanged(insets),
+        null => null,
+      },
       'layoutChanged' => switch (arguments) {
-          {'sidebar': bool sidebar} => NativeLayoutChanged(sidebar: sidebar),
-          _ => null,
-        },
+        {'sidebar': bool sidebar} => NativeLayoutChanged(sidebar: sidebar),
+        _ => null,
+      },
       'accessoryTapped' => const NativeAccessoryTapped(),
       'accessoryPlayPause' => const NativeAccessoryPlayPause(),
-      'systemAccentChanged' when arguments is int =>
-        NativeSystemAccentChanged(Color(arguments)),
-      'glassAccessibilityChanged' => switch (
-            GlassAccessibility.fromChannel(arguments)) {
-          final value? => NativeGlassAccessibilityChanged(value),
-          null => null,
-        },
+      'systemAccentChanged' when arguments is int => NativeSystemAccentChanged(
+        Color(arguments),
+      ),
+      'glassAccessibilityChanged' => switch (GlassAccessibility.fromChannel(
+        arguments,
+      )) {
+        final value? => NativeGlassAccessibilityChanged(value),
+        null => null,
+      },
       _ => null,
     };
     if (event == null) {

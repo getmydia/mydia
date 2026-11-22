@@ -52,24 +52,23 @@ void main() {
 
   group('selectableTracks', () {
     test('keeps image tracks in direct play', () {
-      final tracks = selectableTracks(
-        [textTrack, imageTrack],
-        isDirectPlay: true,
-      );
+      final tracks = selectableTracks([
+        textTrack,
+        imageTrack,
+      ], isDirectPlay: true);
       expect(tracks, contains(imageTrack));
     });
 
     test('hides non-deliverable tracks when streaming', () {
-      final tracks = selectableTracks(
-        [textTrack, imageTrack],
-        isDirectPlay: false,
-      );
+      final tracks = selectableTracks([
+        textTrack,
+        imageTrack,
+      ], isDirectPlay: false);
       expect(tracks, isNot(contains(imageTrack)));
       expect(tracks, contains(textTrack));
     });
 
-    test(
-        'keeps deliverable tracks when streaming even before content has '
+    test('keeps deliverable tracks when streaming even before content has '
         'been fetched', () {
       // `content` is resolved lazily, at selection time, over the
       // SubtitleContent query -- it is never populated at this stage. A
@@ -107,10 +106,7 @@ void main() {
     });
 
     test('reads a bitmap from its format, not from deliverable', () {
-      expect(
-        selectableTracks([oldServerDvb], isDirectPlay: false),
-        isEmpty,
-      );
+      expect(selectableTracks([oldServerDvb], isDirectPlay: false), isEmpty);
       expect(
         selectableTracks(
           [oldServerDvb],
@@ -149,8 +145,7 @@ void main() {
       expect(tracks, [mkTrack, textTrack]);
     });
 
-    test(
-        'falls back to the server list when media_kit has probed nothing '
+    test('falls back to the server list when media_kit has probed nothing '
         'yet in direct play', () {
       // mpv discovers tracks asynchronously while it probes, and on a remote
       // file the probe routinely outruns the fixed 500ms sample after
@@ -187,10 +182,10 @@ void main() {
       // `_syncSelectedSubtitleTrack` bumps `_subtitleSelectionGeneration`,
       // and a bump discards whatever selection the viewer has in flight.
       List<SubtitleTrack> derive() => resolveSubtitleTracks(
-            serverTracks: [textTrack, embeddedTextTrack],
-            mpvTracks: [mkTrack],
-            isDirectPlay: true,
-          );
+        serverTracks: [textTrack, embeddedTextTrack],
+        mpvTracks: [mkTrack],
+        isDirectPlay: true,
+      );
 
       expect(listEquals(derive(), derive()), isTrue);
     });
@@ -205,18 +200,20 @@ void main() {
       expect(tracks, [textTrack, embeddedTextTrack, imageTrack]);
     });
 
-    test('keeps bitmap tracks out of the direct-play fallback, even on native',
-        () {
-      // There is no HLS session to fetch a sidecar from in direct play;
-      // mpv's own list brings the bitmap tracks once it has probed.
-      final tracks = resolveSubtitleTracks(
-        serverTracks: [textTrack, imageTrack],
-        mpvTracks: const [],
-        isDirectPlay: true,
-        imageSidecars: true,
-      );
-      expect(tracks, [textTrack]);
-    });
+    test(
+      'keeps bitmap tracks out of the direct-play fallback, even on native',
+      () {
+        // There is no HLS session to fetch a sidecar from in direct play;
+        // mpv's own list brings the bitmap tracks once it has probed.
+        final tracks = resolveSubtitleTracks(
+          serverTracks: [textTrack, imageTrack],
+          mpvTracks: const [],
+          isDirectPlay: true,
+          imageSidecars: true,
+        );
+        expect(tracks, [textTrack]);
+      },
+    );
   });
 
   group('shouldApplySubtitleSelection', () {
@@ -248,8 +245,7 @@ void main() {
       );
     });
 
-    test(
-        'discards when the screen was unmounted while the selection was '
+    test('discards when the screen was unmounted while the selection was '
         'in flight', () {
       expect(
         shouldApplySubtitleSelection(
@@ -262,8 +258,7 @@ void main() {
       );
     });
 
-    test(
-        'discards when the player disappeared while the selection was '
+    test('discards when the player disappeared while the selection was '
         'in flight', () {
       // e.g. casting ended and _restartLocalPlayback cleared the player
       // without unmounting the screen, so `mounted` alone would not have
@@ -288,10 +283,16 @@ void main() {
   });
 
   group('shouldStartSubtitleSelection', () {
-    final trackX =
-        const SubtitleTrack(id: 'x', language: 'eng', embedded: true);
-    final trackY =
-        const SubtitleTrack(id: 'y', language: 'fra', embedded: true);
+    final trackX = const SubtitleTrack(
+      id: 'x',
+      language: 'eng',
+      embedded: true,
+    );
+    final trackY = const SubtitleTrack(
+      id: 'y',
+      language: 'fra',
+      embedded: true,
+    );
 
     test('an Off tapped with no attempt in flight starts one', () {
       // The whole point of the type. `null` pending means idle, not "Off is
@@ -329,17 +330,19 @@ void main() {
       );
     });
 
-    test('picking a different track from the one in flight starts an attempt',
-        () {
-      expect(
-        shouldStartSubtitleSelection(
-          requested: TargetTrack(trackY),
-          pending: TargetTrack(trackX),
-          mounted: true,
-        ),
-        isTrue,
-      );
-    });
+    test(
+      'picking a different track from the one in flight starts an attempt',
+      () {
+        expect(
+          shouldStartSubtitleSelection(
+            requested: TargetTrack(trackY),
+            pending: TargetTrack(trackX),
+            mounted: true,
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('an unmounted screen starts nothing', () {
       expect(
@@ -354,8 +357,7 @@ void main() {
   });
 
   group('pendingSubtitleSelectionAfterFailure', () {
-    test(
-        'falls back to null when nothing is applied and this attempt is '
+    test('falls back to null when nothing is applied and this attempt is '
         'still current', () {
       expect(
         pendingSubtitleSelectionAfterFailure(
@@ -380,8 +382,7 @@ void main() {
       );
     });
 
-    test(
-        'leaves pending untouched when a newer attempt has already '
+    test('leaves pending untouched when a newer attempt has already '
         'superseded this one', () {
       // A superseded attempt must not clobber the newer request's own
       // target -- `currentPending` here stands in for whatever that newer
@@ -563,16 +564,20 @@ void main() {
 
   group('subtitleDelayNudgeNotice', () {
     test('reports the delay plainly when it applies immediately', () {
-      final notice =
-          subtitleDelayNudgeNotice(totalMs: 100, appliesImmediately: true);
+      final notice = subtitleDelayNudgeNotice(
+        totalMs: 100,
+        appliesImmediately: true,
+      );
       expect(notice.kind, SubtitleDelayNoticeKind.adjusted);
       expect(notice.totalMs, 100);
     });
 
     test('carries a negative total as it is', () {
       expect(
-        subtitleDelayNudgeNotice(totalMs: -200, appliesImmediately: true)
-            .totalMs,
+        subtitleDelayNudgeNotice(
+          totalMs: -200,
+          appliesImmediately: true,
+        ).totalMs,
         -200,
       );
     });
@@ -618,8 +623,7 @@ void main() {
   });
 
   group('failed-fetch retry (regression coverage)', () {
-    test(
-        'a track whose fetch failed can be requested again, instead of '
+    test('a track whose fetch failed can be requested again, instead of '
         'silently matching stale pending state', () {
       // Reproduces the exact regression a second review round caught: T1
       // is requested, its fetch fails while nothing else has superseded
@@ -642,8 +646,11 @@ void main() {
         currentPending: pending,
         appliedTarget: null,
       );
-      expect(pending, isNull,
-          reason: 'pending must not still be T1 after its own fetch failed');
+      expect(
+        pending,
+        isNull,
+        reason: 'pending must not still be T1 after its own fetch failed',
+      );
 
       // 3. The viewer taps T1 again. It must be recognised as a fresh
       //    attempt, not a no-op against the stale pending value from step 1.
@@ -654,7 +661,8 @@ void main() {
           mounted: true,
         ),
         isTrue,
-        reason: 're-tapping the same track after its fetch failed must '
+        reason:
+            're-tapping the same track after its fetch failed must '
             'start a new attempt',
       );
     });
@@ -867,8 +875,11 @@ void main() {
   group('subAddedMpvTracks', () {
     const full = SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full');
     const signs = SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Signs');
-    const fetchedFull =
-        SubtitleTrack(id: 'mk_3', language: 'eng', title: 'Full');
+    const fetchedFull = SubtitleTrack(
+      id: 'mk_3',
+      language: 'eng',
+      title: 'Full',
+    );
     const addedFull = (mpvId: 'mk_3', serverId: '4');
 
     test("the entries mpv selected for each sub-add are the added files", () {
@@ -884,8 +895,11 @@ void main() {
     test('a container track is never taken for one, whatever its label', () {
       // mpv has not listed the added file yet, and the container's last
       // track carries the very label the added file was given.
-      const fullLast =
-          SubtitleTrack(id: 'mk_2', language: 'eng', title: 'Full');
+      const fullLast = SubtitleTrack(
+        id: 'mk_2',
+        language: 'eng',
+        title: 'Full',
+      );
       expect(
         subAddedMpvTracks(
           mpvTracks: const [signs, fullLast],
@@ -900,8 +914,11 @@ void main() {
     });
 
     test('several added files are each matched by their own id', () {
-      const fetchedSigns =
-          SubtitleTrack(id: 'mk_4', language: 'eng', title: 'Signs');
+      const fetchedSigns = SubtitleTrack(
+        id: 'mk_4',
+        language: 'eng',
+        title: 'Signs',
+      );
       const addedSigns = (mpvId: 'mk_4', serverId: '5');
       expect(
         subAddedMpvTracks(
@@ -916,10 +933,17 @@ void main() {
   group('presentSubAddedAsServerTracks', () {
     const full = SubtitleTrack(id: 'mk_1', language: 'eng', title: 'Full');
     const signs = SubtitleTrack(id: 'mk_2', language: 'jpn', title: 'Signs');
-    const serverFull =
-        SubtitleTrack(id: '4', language: 'eng', title: 'Full', embedded: true);
-    const serverSidecar =
-        SubtitleTrack(id: 'side-1', language: 'eng', title: 'Fan');
+    const serverFull = SubtitleTrack(
+      id: '4',
+      language: 'eng',
+      title: 'Full',
+      embedded: true,
+    );
+    const serverSidecar = SubtitleTrack(
+      id: 'side-1',
+      language: 'eng',
+      title: 'Fan',
+    );
     const serverTracks = [serverFull, serverSidecar];
 
     test("an embedded server track takes its added file's row", () {
@@ -1015,17 +1039,19 @@ void main() {
       }
     });
 
-    test('an embedded text track is delivered by the server in a transcode',
-        () {
-      expect(
-        resolveSubtitleIntent(
-          intent: const IntentTrack(serverEnglish),
-          tracks: streamingList,
-          streamIndexByMpvId: const {},
-        ),
-        isA<RestoreTrack>().having((r) => r.track, 'track', serverEnglish),
-      );
-    });
+    test(
+      'an embedded text track is delivered by the server in a transcode',
+      () {
+        expect(
+          resolveSubtitleIntent(
+            intent: const IntentTrack(serverEnglish),
+            tracks: streamingList,
+            streamIndexByMpvId: const {},
+          ),
+          isA<RestoreTrack>().having((r) => r.track, 'track', serverEnglish),
+        );
+      },
+    );
 
     test('an embedded track becomes mpv\'s own track in direct play', () {
       expect(
@@ -1046,7 +1072,10 @@ void main() {
           streamIndexByMpvId: const {},
         ),
         isA<RestoreUnavailable>().having(
-            (r) => r.notice, 'notice', SubtitleNotice.imageOnlyAtOriginal),
+          (r) => r.notice,
+          'notice',
+          SubtitleNotice.imageOnlyAtOriginal,
+        ),
       );
     });
 
@@ -1081,8 +1110,11 @@ void main() {
           tracks: directPlayList,
           streamIndexByMpvId: const {},
         ),
-        isA<RestoreUnavailable>()
-            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+        isA<RestoreUnavailable>().having(
+          (r) => r.notice,
+          'notice',
+          SubtitleNotice.notCarried,
+        ),
       );
     });
 
@@ -1105,8 +1137,11 @@ void main() {
           tracks: streamingList,
           streamIndexByMpvId: const {},
         ),
-        isA<RestoreUnavailable>()
-            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+        isA<RestoreUnavailable>().having(
+          (r) => r.notice,
+          'notice',
+          SubtitleNotice.notCarried,
+        ),
       );
     });
 
@@ -1117,8 +1152,11 @@ void main() {
           tracks: streamingList,
           streamIndexByMpvId: const {},
         ),
-        isA<RestoreUnavailable>()
-            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+        isA<RestoreUnavailable>().having(
+          (r) => r.notice,
+          'notice',
+          SubtitleNotice.notCarried,
+        ),
       );
     });
 
@@ -1130,8 +1168,11 @@ void main() {
           tracks: streamingList,
           streamIndexByMpvId: const {},
         ),
-        isA<RestoreUnavailable>()
-            .having((r) => r.notice, 'notice', SubtitleNotice.notCarried),
+        isA<RestoreUnavailable>().having(
+          (r) => r.notice,
+          'notice',
+          SubtitleNotice.notCarried,
+        ),
       );
     });
   });
@@ -1140,22 +1181,30 @@ void main() {
     test('syncs only when no switch and no carried choice is pending', () {
       expect(
         shouldSyncSubtitleSelectionFromPlayer(
-            switchInFlight: false, intentPending: false),
+          switchInFlight: false,
+          intentPending: false,
+        ),
         isTrue,
       );
       expect(
         shouldSyncSubtitleSelectionFromPlayer(
-            switchInFlight: true, intentPending: false),
+          switchInFlight: true,
+          intentPending: false,
+        ),
         isFalse,
       );
       expect(
         shouldSyncSubtitleSelectionFromPlayer(
-            switchInFlight: false, intentPending: true),
+          switchInFlight: false,
+          intentPending: true,
+        ),
         isFalse,
       );
       expect(
         shouldSyncSubtitleSelectionFromPlayer(
-            switchInFlight: true, intentPending: true),
+          switchInFlight: true,
+          intentPending: true,
+        ),
         isFalse,
       );
     });
@@ -1198,10 +1247,7 @@ void main() {
 
     test('clears the intent once Off is actually applied', () {
       expect(
-        subtitleRestoreConsumed(
-          restore: const RestoreOff(),
-          selected: null,
-        ),
+        subtitleRestoreConsumed(restore: const RestoreOff(), selected: null),
         isTrue,
       );
     });
@@ -1276,13 +1322,19 @@ void main() {
     test('a sidecar or an unread index has no twin', () {
       const sidecar = SubtitleTrack(id: 'a1b2', language: 'eng');
       expect(
-        nativeTwinOf(sidecar,
-            tracks: mpvTracks, streamIndexByMpvId: const {'1': 5}),
+        nativeTwinOf(
+          sidecar,
+          tracks: mpvTracks,
+          streamIndexByMpvId: const {'1': 5},
+        ),
         isNull,
       );
       expect(
-        nativeTwinOf(serverEnglish,
-            tracks: mpvTracks, streamIndexByMpvId: const {}),
+        nativeTwinOf(
+          serverEnglish,
+          tracks: mpvTracks,
+          streamIndexByMpvId: const {},
+        ),
         isNull,
       );
     });

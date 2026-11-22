@@ -9,7 +9,7 @@
 // on the video starts playback, and that the tap cannot fall through to the
 // seek gestures underneath.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/tap_to_play_overlay.dart';
@@ -78,13 +78,15 @@ void main() {
     expect(
       plays,
       1,
-      reason: 'the whole picture is the target — asking a viewer to find a '
+      reason:
+          'the whole picture is the target — asking a viewer to find a '
           'glyph is the friction this overlay exists to remove',
     );
     expect(
       underlayTaps,
       0,
-      reason: 'a tap that reaches the gesture controls underneath would seek '
+      reason:
+          'a tap that reaches the gesture controls underneath would seek '
           'a video that has not started',
     );
   });
@@ -96,7 +98,8 @@ void main() {
     expect(
       find.textContaining('browser'),
       findsOneWidget,
-      reason: 'naming the browser as the thing holding playback up is what '
+      reason:
+          'naming the browser as the thing holding playback up is what '
           'keeps this from reading as another failure',
     );
   });

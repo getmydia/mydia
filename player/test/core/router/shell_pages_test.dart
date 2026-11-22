@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/router/shell_pages.dart';
@@ -12,32 +12,25 @@ Future<void> _pump(WidgetTester tester, String location) async {
         GoRoute(
           path: '/plain',
           name: 'favorites',
-          builder: (_, __) => const SizedBox(key: Key('plain')),
+          builder: (_, _) => const SizedBox(key: Key('plain')),
         ),
         GoRoute(
           path: '/home',
           name: 'source_root',
-          builder: (_, __) => const SizedBox(key: Key('home')),
+          builder: (_, _) => const SizedBox(key: Key('home')),
         ),
         GoRoute(
           path: '/movie',
           name: 'source_movie_detail',
-          builder: (_, __) => const SizedBox(key: Key('movie')),
+          builder: (_, _) => const SizedBox(key: Key('movie')),
         ),
-        GoRoute(
-          path: '/moved',
-          name: 'moved',
-          redirect: (_, __) => '/plain',
-        ),
+        GoRoute(path: '/moved', name: 'moved', redirect: (_, _) => '/plain'),
       ]),
     ],
   );
   addTearDown(router.dispose);
   await tester.pumpWidget(
-    ShellRailInset(
-      left: 112,
-      child: MaterialApp.router(routerConfig: router),
-    ),
+    ShellRailInset(left: 112, child: MaterialApp.router(routerConfig: router)),
   );
   await tester.pumpAndSettle();
 }
@@ -55,8 +48,9 @@ void main() {
     );
   });
 
-  testWidgets('Home and the detail pages are left to inset themselves',
-      (tester) async {
+  testWidgets('Home and the detail pages are left to inset themselves', (
+    tester,
+  ) async {
     for (final (location, key) in const [
       ('/home', 'home'),
       ('/movie', 'movie'),

@@ -11,10 +11,10 @@ const _p = SourceId('plex1:owner:pp');
 final _layout = SidebarLayout.defaults.reconcile(downloadSupported: true);
 
 Library _lib(SourceId s, String id, LibraryKind k, String title) => Library(
-      ref: LibraryRef(sourceId: s, id: id),
-      title: title,
-      kind: k,
-    );
+  ref: LibraryRef(sourceId: s, id: id),
+  title: title,
+  kind: k,
+);
 
 const _mydiaCaps = {
   SourceCapability.searchable,
@@ -30,17 +30,17 @@ const _mydiaCaps = {
 void main() {
   test('two Mydia instances get identical entries under their own ids', () {
     List<String> ids(SourceId s) => [
-          for (final e in resolveSourceNav(
-            layout: _layout,
-            source: s,
-            capabilities: _mydiaCaps,
-            libraries: [
-              _lib(s, 'movies', LibraryKind.movies, 'Movies'),
-              _lib(s, 'shows', LibraryKind.shows, 'TV Shows'),
-            ],
-          ))
-            e.id,
-        ];
+      for (final e in resolveSourceNav(
+        layout: _layout,
+        source: s,
+        capabilities: _mydiaCaps,
+        libraries: [
+          _lib(s, 'movies', LibraryKind.movies, 'Movies'),
+          _lib(s, 'shows', LibraryKind.shows, 'TV Shows'),
+        ],
+      ))
+        e.id,
+    ];
     expect(ids(_m), ids(const SourceId('mb:owner:bb')));
     expect(ids(_m), containsAll(['calendar', 'collections', 'favorites']));
   });
@@ -62,8 +62,10 @@ void main() {
     final ids = [for (final e in nav) e.id];
     expect(ids, isNot(contains('calendar')));
     expect(ids, isNot(contains('collections')));
-    expect(nav.firstWhere((e) => e.id == 'movies').route,
-        '/s/plex1:owner:pp/library/1');
+    expect(
+      nav.firstWhere((e) => e.id == 'movies').route,
+      '/s/plex1:owner:pp/library/1',
+    );
     expect(ids.indexOf('library-3'), ids.indexOf('shows') + 1);
   });
 
@@ -95,8 +97,10 @@ void main() {
   });
 
   test('reads the source id out of a location', () {
-    expect(sourceIdFromLocation('/s/acc1:owner:aa11/library/movies'),
-        'acc1:owner:aa11');
+    expect(
+      sourceIdFromLocation('/s/acc1:owner:aa11/library/movies'),
+      'acc1:owner:aa11',
+    );
     expect(sourceIdFromLocation('/s/acc1:owner:aa11'), 'acc1:owner:aa11');
     expect(sourceIdFromLocation('/movies'), isNull);
     expect(sourceIdFromLocation('/s/%E0%A4%A/library'), isNull);

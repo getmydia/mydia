@@ -107,10 +107,13 @@ class StatsMetrics {
     // (`touchTargets`, `maxWidth`, `compactTransport`), thread the real
     // `touchPrimary` through `StatsMetrics.resolve` rather than assuming
     // false here.
-    final available = viewport.height -
+    final available =
+        viewport.height -
         topInset -
-        PanelMetrics.resolve(width: viewport.width, touchPrimary: false)
-            .cornerInsetBottom;
+        PanelMetrics.resolve(
+          width: viewport.width,
+          touchPrimary: false,
+        ).cornerInsetBottom;
 
     // A focusable copy/close button in the panel would join D-pad
     // traversal and fight the OSD's own focus scope. That hazard is about

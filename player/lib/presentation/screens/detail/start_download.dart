@@ -24,11 +24,15 @@ Future<void> startItemDownload(
     showToast(context, context.l10n.detailAlreadyDownloaded);
     return;
   }
-  final downloadable =
-      ref.read(mediaSourceProvider(item.sourceId))?.as<Downloadable>();
+  final downloadable = ref
+      .read(mediaSourceProvider(item.sourceId))
+      ?.as<Downloadable>();
   if (downloadable == null) {
-    showToast(context, context.l10n.commonDownloadServerUnavailable,
-        kind: ToastKind.error);
+    showToast(
+      context,
+      context.l10n.commonDownloadServerUnavailable,
+      kind: ToastKind.error,
+    );
     return;
   }
 
@@ -40,22 +44,30 @@ Future<void> startItemDownload(
   if (option == null || !context.mounted) return;
 
   try {
-    await manager.start(DownloadRequest(
-      ref: item,
-      optionId: option.resolution,
-      metadata: metadata,
-      expectedBytes: option.actualSize ??
-          (option.estimatedSize > 0 ? option.estimatedSize : null),
-    ));
+    await manager.start(
+      DownloadRequest(
+        ref: item,
+        optionId: option.resolution,
+        metadata: metadata,
+        expectedBytes:
+            option.actualSize ??
+            (option.estimatedSize > 0 ? option.estimatedSize : null),
+      ),
+    );
     if (context.mounted) {
-      showToast(context, context.l10n.detailDownloadStarted,
-          kind: ToastKind.success);
+      showToast(
+        context,
+        context.l10n.detailDownloadStarted,
+        kind: ToastKind.success,
+      );
     }
   } catch (e) {
     if (context.mounted) {
-      showToast(context,
-          context.l10n.detailDownloadFailed(context.l10n.failureDetail(e)),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.detailDownloadFailed(context.l10n.failureDetail(e)),
+        kind: ToastKind.error,
+      );
     }
   }
 }

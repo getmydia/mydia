@@ -79,8 +79,10 @@ void runSlotTransportContract(
       await b.writeOwn(_payload('Bedroom'));
       final next = await a.list(cursor: listing.cursor);
       expect(next, isNotNull);
-      expect(next!.slots.map((s) => s.slotId),
-          containsAll([a.ownSlotId, b.ownSlotId]));
+      expect(
+        next!.slots.map((s) => s.slotId),
+        containsAll([a.ownSlotId, b.ownSlotId]),
+      );
     });
 
     contractTest('read_roundtrips_payload', () async {
@@ -104,13 +106,19 @@ void runSlotTransportContract(
     contractTest('oversize_write_throws_tooLarge', () async {
       final rng = Random.secure();
       final noise = base64.encode(
-          List<int>.generate(4 * 1024 * 1024 + 4096, (_) => rng.nextInt(256)));
+        List<int>.generate(4 * 1024 * 1024 + 4096, (_) => rng.nextInt(256)),
+      );
       final big = _payload('Living Room', value: noise);
       expect(big.encode().length, greaterThan(4194304));
       await expectLater(
         a.writeOwn(big),
-        throwsA(isA<BackupRelayException>()
-            .having((e) => e.kind, 'kind', BackupRelayError.tooLarge)),
+        throwsA(
+          isA<BackupRelayException>().having(
+            (e) => e.kind,
+            'kind',
+            BackupRelayError.tooLarge,
+          ),
+        ),
       );
     });
   });

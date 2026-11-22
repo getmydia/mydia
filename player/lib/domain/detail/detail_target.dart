@@ -22,12 +22,12 @@ sealed class DetailTarget {
 
 /// Null for a kind the detail screens do not show (video, folder).
 DetailKind? detailKindOf(ItemKind kind) => switch (kind) {
-      ItemKind.movie => DetailKind.movie,
-      ItemKind.show => DetailKind.show,
-      ItemKind.season => DetailKind.season,
-      ItemKind.episode => DetailKind.episode,
-      ItemKind.video || ItemKind.folder => null,
-    };
+  ItemKind.movie => DetailKind.movie,
+  ItemKind.show => DetailKind.show,
+  ItemKind.season => DetailKind.season,
+  ItemKind.episode => DetailKind.episode,
+  ItemKind.video || ItemKind.folder => null,
+};
 
 final class SourceTarget extends DetailTarget {
   const SourceTarget(this.ref);

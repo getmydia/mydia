@@ -49,8 +49,8 @@ String? legacyLocation(
       : (mydia.length == 1 ? mydia.single : null);
   String move(List<String> rest, [Map<String, List<String>>? q]) =>
       target == null
-          ? '/sources/manage'
-          : build(['s', target.value, ...rest], q);
+      ? '/sources/manage'
+      : build(['s', target.value, ...rest], q);
 
   if (seg.isEmpty) {
     if (allServers) return allServersRoot;
@@ -71,13 +71,13 @@ String? legacyLocation(
     case [final kind, final id] when _details.contains(kind):
       return move([kind, id]);
     case ['player', final type, final id] when type != 'queue':
-      return move([
-        'player',
-        id
-      ], {
-        ...?query,
-        'kind': [type]
-      });
+      return move(
+        ['player', id],
+        {
+          ...?query,
+          'kind': [type],
+        },
+      );
     case ['settings', 'devices']:
       return target == null
           ? '/sources/manage'

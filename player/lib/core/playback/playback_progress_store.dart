@@ -146,7 +146,8 @@ class InMemoryPlaybackProgressStore implements PlaybackProgressStore {
     );
   }
 
-  final localWins = serverPositionSeconds == null ||
+  final localWins =
+      serverPositionSeconds == null ||
       serverLastWatchedAt == null ||
       !serverLastWatchedAt.isAfter(local.updatedAt);
 
@@ -181,14 +182,16 @@ Future<void> recordLocalProgress({
   if (position < Duration.zero) return;
 
   try {
-    await store.save(LocalPlaybackProgress(
-      sourceId: item.sourceId.value,
-      mediaId: item.externalId,
-      mediaType: mediaType,
-      positionSeconds: position.inSeconds,
-      durationSeconds: duration.inSeconds,
-      updatedAt: now,
-    ));
+    await store.save(
+      LocalPlaybackProgress(
+        sourceId: item.sourceId.value,
+        mediaId: item.externalId,
+        mediaType: mediaType,
+        positionSeconds: position.inSeconds,
+        durationSeconds: duration.inSeconds,
+        updatedAt: now,
+      ),
+    );
   } catch (e) {
     debugPrint('[PlaybackProgressStore] Ignoring failed local write: $e');
   }
@@ -241,13 +244,15 @@ Future<void> saveDownloadedProgress({
         : await progressService.syncMoviePosition(mediaId, position, duration);
   } catch (e) {
     debugPrint(
-        '[PlaybackProgressStore] Server save for $mediaId failed, leaving it unsynced: $e');
+      '[PlaybackProgressStore] Server save for $mediaId failed, leaving it unsynced: $e',
+    );
     return;
   }
 
   if (!accepted) {
     debugPrint(
-        '[PlaybackProgressStore] Server did not accept $mediaId, leaving it unsynced');
+      '[PlaybackProgressStore] Server did not accept $mediaId, leaving it unsynced',
+    );
     return;
   }
 
@@ -290,7 +295,8 @@ Future<int> flushSourceProgress({
         ref,
         positionSeconds: record.positionSeconds,
         durationSeconds: record.durationSeconds,
-        watched: record.durationSeconds > 0 &&
+        watched:
+            record.durationSeconds > 0 &&
             record.positionSeconds / record.durationSeconds >=
                 ProgressService.watchedThreshold,
       );

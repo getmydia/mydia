@@ -91,34 +91,39 @@ class _Recorder {
   void onGaveUp(Object error) => gaveUp.add(error);
 
   Future<void> run() => applyQualityChoice(
-        selected: _selected,
-        previous: _previous,
-        adopt: adopt,
-        remember: remember,
-        restart: restart,
-        stillActive: stillActive,
-        onGaveUp: onGaveUp,
-      );
+    selected: _selected,
+    previous: _previous,
+    adopt: adopt,
+    remember: remember,
+    restart: restart,
+    stillActive: stillActive,
+    onGaveUp: onGaveUp,
+  );
 }
 
 void main() {
-  test('a choice that works adopts it, remembers it, and restarts once',
-      () async {
-    final recorder = _Recorder();
-
-    await recorder.run();
-
-    expect(recorder.adoptedRungs, [_selected]);
-    expect(recorder.remembered, [_selected]);
-    expect(recorder.restarts.map((c) => c.rung), [_selected]);
-    expect(recorder.restarts.single.isFallback, isFalse,
-        reason: 'the first attempt is what the viewer asked for, and is told '
-            'so; only the rollback is a fallback');
-    expect(recorder.gaveUp, isEmpty);
-  });
-
   test(
-      'adopts in memory before restarting, and remembers only after the '
+    'a choice that works adopts it, remembers it, and restarts once',
+    () async {
+      final recorder = _Recorder();
+
+      await recorder.run();
+
+      expect(recorder.adoptedRungs, [_selected]);
+      expect(recorder.remembered, [_selected]);
+      expect(recorder.restarts.map((c) => c.rung), [_selected]);
+      expect(
+        recorder.restarts.single.isFallback,
+        isFalse,
+        reason:
+            'the first attempt is what the viewer asked for, and is told '
+            'so; only the rollback is a fallback',
+      );
+      expect(recorder.gaveUp, isEmpty);
+    },
+  );
+
+  test('adopts in memory before restarting, and remembers only after the '
       'restart lands', () async {
     // Ordering is load-bearing rather than cosmetic. `_resolveQualityForFile`
     // carries the in-memory rung into the session it negotiates, so a restart
@@ -143,28 +148,33 @@ void main() {
     expect(order, ['adopt:720p', 'restart:720p', 'remember:720p']);
   });
 
-  test('remember runs only after a successful restart, never before it',
-      () async {
-    final recorder = _Recorder();
-    var rememberedBeforeRestart = <QualityRung>[];
+  test(
+    'remember runs only after a successful restart, never before it',
+    () async {
+      final recorder = _Recorder();
+      var rememberedBeforeRestart = <QualityRung>[];
 
-    await applyQualityChoice(
-      selected: _selected,
-      previous: _previous,
-      adopt: recorder.adopt,
-      remember: recorder.remember,
-      restart: (rung, {required bool isFallback}) async {
-        rememberedBeforeRestart = List.of(recorder.remembered);
-        return recorder.restart(rung, isFallback: isFallback);
-      },
-      stillActive: recorder.stillActive,
-      onGaveUp: recorder.onGaveUp,
-    );
+      await applyQualityChoice(
+        selected: _selected,
+        previous: _previous,
+        adopt: recorder.adopt,
+        remember: recorder.remember,
+        restart: (rung, {required bool isFallback}) async {
+          rememberedBeforeRestart = List.of(recorder.remembered);
+          return recorder.restart(rung, isFallback: isFallback);
+        },
+        stillActive: recorder.stillActive,
+        onGaveUp: recorder.onGaveUp,
+      );
 
-    expect(rememberedBeforeRestart, isEmpty,
-        reason: 'nothing is persisted until the restart has reported success');
-    expect(recorder.remembered, [_selected]);
-  });
+      expect(
+        rememberedBeforeRestart,
+        isEmpty,
+        reason: 'nothing is persisted until the restart has reported success',
+      );
+      expect(recorder.remembered, [_selected]);
+    },
+  );
 
   test('a restart still gets the chosen rung when persistence fails', () async {
     // The regression this split exists for. The choice used to reach the
@@ -176,34 +186,53 @@ void main() {
     await recorder.run();
 
     expect(recorder.remembered, isEmpty, reason: 'the write threw');
-    expect(recorder.restarts.map((c) => c.rung), [_selected],
-        reason: 'the restart happens anyway; losing the preference for next '
-            'time is not a reason to abandon this playback');
-    expect(recorder.inEffectAtRestart, [_selected],
-        reason: 'and it runs with the chosen rung in effect, not the old one');
+    expect(
+      recorder.restarts.map((c) => c.rung),
+      [_selected],
+      reason:
+          'the restart happens anyway; losing the preference for next '
+          'time is not a reason to abandon this playback',
+    );
+    expect(recorder.inEffectAtRestart, [
+      _selected,
+    ], reason: 'and it runs with the chosen rung in effect, not the old one');
     expect(recorder.gaveUp, isEmpty);
   });
 
-  test('a failing choice restores the previous rung and retries once',
-      () async {
-    final recorder = _Recorder(failing: {0});
+  test(
+    'a failing choice restores the previous rung and retries once',
+    () async {
+      final recorder = _Recorder(failing: {0});
 
-    await recorder.run();
+      await recorder.run();
 
-    expect(recorder.adoptedRungs, [_selected, _previous],
-        reason: 'the rung that was working has to be back in effect, or the '
-            'retry re-requests the failing one');
-    expect(recorder.remembered, [_previous],
-        reason: 'the failed restart never put `_selected` into effect, so '
+      expect(
+        recorder.adoptedRungs,
+        [_selected, _previous],
+        reason:
+            'the rung that was working has to be back in effect, or the '
+            'retry re-requests the failing one',
+      );
+      expect(
+        recorder.remembered,
+        [_previous],
+        reason:
+            'the failed restart never put `_selected` into effect, so '
             'there is nothing about it worth remembering; the rollback that '
-            'did land is the only thing worth keeping');
-    expect(recorder.restarts.map((c) => c.rung), [_selected, _previous]);
-    expect(recorder.inEffectAtRestart, [_selected, _previous]);
-    expect(recorder.restarts.last.isFallback, isTrue);
-    expect(recorder.gaveUp, isEmpty,
-        reason: 'the rollback succeeded, so the viewer keeps watching and '
-            'never sees the error screen');
-  });
+            'did land is the only thing worth keeping',
+      );
+      expect(recorder.restarts.map((c) => c.rung), [_selected, _previous]);
+      expect(recorder.inEffectAtRestart, [_selected, _previous]);
+      expect(recorder.restarts.last.isFallback, isTrue);
+      expect(
+        recorder.gaveUp,
+        isEmpty,
+        reason:
+            'the rollback succeeded, so the viewer keeps watching and '
+            'never sees the error screen',
+      );
+    },
+  );
 
   test('the rollback survives a storage failure too', () async {
     final recorder = _Recorder(failing: {0}, storageFails: true);
@@ -211,14 +240,17 @@ void main() {
     await recorder.run();
 
     expect(recorder.restarts.map((c) => c.rung), [_selected, _previous]);
-    expect(recorder.inEffectAtRestart, [_selected, _previous],
-        reason: 'an unwritable keyring must not strand the viewer at a rung '
-            'that could not be served');
+    expect(
+      recorder.inEffectAtRestart,
+      [_selected, _previous],
+      reason:
+          'an unwritable keyring must not strand the viewer at a rung '
+          'that could not be served',
+    );
     expect(recorder.gaveUp, isEmpty);
   });
 
-  test(
-      'a restart that reports false is abandoned quietly: no persist, no '
+  test('a restart that reports false is abandoned quietly: no persist, no '
       'rollback, no giving up', () async {
     // Another source switch (a fallback, a seek restart) took over while
     // this one was mid-flight; `restart` says so by returning `false`
@@ -228,36 +260,54 @@ void main() {
 
     await recorder.run();
 
-    expect(recorder.restarts, hasLength(1),
-        reason: 'no rollback: the first attempt was not a failure, just '
-            'pre-empted');
+    expect(
+      recorder.restarts,
+      hasLength(1),
+      reason:
+          'no rollback: the first attempt was not a failure, just '
+          'pre-empted',
+    );
     expect(recorder.remembered, isEmpty);
     expect(recorder.gaveUp, isEmpty);
   });
 
-  test('a rollback that reports false persists nothing and does not give up',
-      () async {
-    final recorder = _Recorder(failing: {0}, abandoned: {1});
+  test(
+    'a rollback that reports false persists nothing and does not give up',
+    () async {
+      final recorder = _Recorder(failing: {0}, abandoned: {1});
 
-    await recorder.run();
+      await recorder.run();
 
-    expect(recorder.restarts, hasLength(2));
-    expect(recorder.remembered, isEmpty,
-        reason: 'neither the failed first attempt nor the pre-empted '
-            'rollback ever took effect');
-    expect(recorder.gaveUp, isEmpty,
-        reason: 'the rollback was pre-empted, not a second failure; there is '
-            'nothing to show an error for');
-  });
+      expect(recorder.restarts, hasLength(2));
+      expect(
+        recorder.remembered,
+        isEmpty,
+        reason:
+            'neither the failed first attempt nor the pre-empted '
+            'rollback ever took effect',
+      );
+      expect(
+        recorder.gaveUp,
+        isEmpty,
+        reason:
+            'the rollback was pre-empted, not a second failure; there is '
+            'nothing to show an error for',
+      );
+    },
+  );
 
   test('a second failure gives up instead of retrying again', () async {
     final recorder = _Recorder(failing: {0, 1});
 
     await recorder.run();
 
-    expect(recorder.restarts, hasLength(2),
-        reason: 'exactly two teardowns, ever: another one would only cost '
-            'the viewer more time before showing them the same error');
+    expect(
+      recorder.restarts,
+      hasLength(2),
+      reason:
+          'exactly two teardowns, ever: another one would only cost '
+          'the viewer more time before showing them the same error',
+    );
     expect(recorder.gaveUp, hasLength(1));
     expect(recorder.gaveUp.single, isA<StateError>());
   });
@@ -284,30 +334,36 @@ void main() {
     expect(recorder.gaveUp, isEmpty);
   });
 
-  test('stops before giving up when the caller disappears mid-rollback',
-      () async {
-    final recorder = _Recorder(failing: {0, 1});
-    // Still alive for the rollback decision, gone by the time it has failed.
-    var checks = 0;
-    await applyQualityChoice(
-      selected: _selected,
-      previous: _previous,
-      adopt: recorder.adopt,
-      remember: recorder.remember,
-      restart: recorder.restart,
-      stillActive: () => ++checks == 1,
-      onGaveUp: recorder.onGaveUp,
-    );
+  test(
+    'stops before giving up when the caller disappears mid-rollback',
+    () async {
+      final recorder = _Recorder(failing: {0, 1});
+      // Still alive for the rollback decision, gone by the time it has failed.
+      var checks = 0;
+      await applyQualityChoice(
+        selected: _selected,
+        previous: _previous,
+        adopt: recorder.adopt,
+        remember: recorder.remember,
+        restart: recorder.restart,
+        stillActive: () => ++checks == 1,
+        onGaveUp: recorder.onGaveUp,
+      );
 
-    expect(recorder.restarts, hasLength(2));
-    expect(recorder.gaveUp, isEmpty,
-        reason: 'no error screen to put it on; the widget is gone');
-  });
+      expect(recorder.restarts, hasLength(2));
+      expect(
+        recorder.gaveUp,
+        isEmpty,
+        reason: 'no error screen to put it on; the widget is gone',
+      );
+    },
+  );
 
   group('qualityPickNeedsReopen', () {
     const directPlay = DirectPlayPlan(reason: PlanReason.directPlayAccepted);
-    const otherDirectPlay =
-        DirectPlayPlan(reason: PlanReason.fallbackFromFailure);
+    const otherDirectPlay = DirectPlayPlan(
+      reason: PlanReason.fallbackFromFailure,
+    );
     const copy720 = HlsPlan(
       strategy: HlsStrategy.copy,
       rung: QualityRung.original,

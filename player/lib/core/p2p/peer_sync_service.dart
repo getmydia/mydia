@@ -38,10 +38,7 @@ abstract interface class PeerSyncTransport {
     String peer,
     FlutterPeerSyncRequest req,
   );
-  Future<void> respondToPeerSync(
-    String requestId,
-    FlutterPeerSyncResponse res,
-  );
+  Future<void> respondToPeerSync(String requestId, FlutterPeerSyncResponse res);
   bool isConnectedToPeer(String peer);
 }
 
@@ -81,15 +78,13 @@ class P2pPeerSyncTransport implements PeerSyncTransport {
   Future<FlutterPeerSyncResponse> sendPeerSync(
     String peer,
     FlutterPeerSyncRequest req,
-  ) =>
-      _p2pService.sendPeerSync(peer, req);
+  ) => _p2pService.sendPeerSync(peer, req);
 
   @override
   Future<void> respondToPeerSync(
     String requestId,
     FlutterPeerSyncResponse res,
-  ) =>
-      _p2pService.respondToPeerSync(requestId, res);
+  ) => _p2pService.respondToPeerSync(requestId, res);
 
   @override
   bool isConnectedToPeer(String peer) => _p2pService.isConnectedToPeer(peer);
@@ -99,22 +94,30 @@ class P2pPeerSyncTransport implements PeerSyncTransport {
 /// returns its id, or null. No relay write may start after [deadline]
 /// (wall clock): the host has replied without the vault by then.
 typedef JoinerBackupKeysHook = Future<String?> Function(
-    String nodeId, String signerB64, String boxB64, DateTime deadline);
+  String nodeId,
+  String signerB64,
+  String boxB64,
+  DateTime deadline,
+);
 
 /// A device was revoked from the group: [deviceName] is its roster name,
 /// null when it was not in the roster.
 typedef PeerRevokedHook = Future<void> Function(
-    String nodeId, String? deviceName);
+  String nodeId,
+  String? deviceName,
+);
 
 /// Host: the cloud store this device backs up to (`icloud` or `gdrive`) and
 /// its account label (the Google email; null for iCloud), or null when it
 /// backs up to the relay or not at all.
-typedef CloudStoreForPairHook = Future<({String store, String? account})?>
-    Function();
+typedef CloudStoreForPairHook =
+    Future<({String store, String? account})?> Function();
 
 /// Joiner: the host backs up to the cloud store [store] as [account].
 typedef CloudStoreHintHook = Future<void> Function(
-    String store, String? account);
+  String store,
+  String? account,
+);
 
 /// The cloud backup's part in pairing, as [PeerSyncService] takes it. All
 /// null when backup is not offered (web).
@@ -158,43 +161,24 @@ class ActivePairingOffer {
 
 class PeerSyncService {
   PeerSyncService({
-    required PeerSyncStore store,
-    required AuthStorage authStorage,
-    required PeerSyncTransport transport,
-    required RelayApiClient relayClient,
-    required String deviceName,
-    required String platform,
-    Future<String> Function()? resolveDeviceName,
-    Future<void> Function(
-      Set<String> changedWatchKeys,
-      Set<String> changedPinKeys,
-    )? onRemoteChangesApplied,
-    void Function(PeerMember joinedPeer)? onPeerPaired,
+    required this._store,
+    required this._authStorage,
+    required this._transport,
+    required this._relayClient,
+    required this._deviceName,
+    required this._platform,
+    this._resolveDeviceName,
+    this._onRemoteChangesApplied,
+    this._onPeerPaired,
     DateTime Function()? clock,
-    Future<({String signer, String box})?> Function()? backupKeysForPair,
-    JoinerBackupKeysHook? onJoinerBackupKeys,
-    Future<void> Function(String vaultId)? onJoinedVault,
-    PeerRevokedHook? onPeerRevoked,
-    CloudStoreForPairHook? cloudStoreForPair,
-    CloudStoreHintHook? onCloudStoreHint,
-    Duration backupHookTimeout = backupAdmitTimeout,
-  })  : _backupHookTimeout = backupHookTimeout,
-        _backupKeysForPair = backupKeysForPair,
-        _onJoinerBackupKeys = onJoinerBackupKeys,
-        _onJoinedVault = onJoinedVault,
-        _onPeerRevoked = onPeerRevoked,
-        _cloudStoreForPair = cloudStoreForPair,
-        _onCloudStoreHint = onCloudStoreHint,
-        _store = store,
-        _authStorage = authStorage,
-        _transport = transport,
-        _relayClient = relayClient,
-        _deviceName = deviceName,
-        _platform = platform,
-        _resolveDeviceName = resolveDeviceName,
-        _onRemoteChangesApplied = onRemoteChangesApplied,
-        _onPeerPaired = onPeerPaired,
-        _clock = clock ?? DateTime.now;
+    this._backupKeysForPair,
+    this._onJoinerBackupKeys,
+    this._onJoinedVault,
+    this._onPeerRevoked,
+    this._cloudStoreForPair,
+    this._onCloudStoreHint,
+    this._backupHookTimeout = backupAdmitTimeout,
+  }) : _clock = clock ?? DateTime.now;
 
   final PeerSyncStore _store;
   final AuthStorage _authStorage;
@@ -208,7 +192,8 @@ class PeerSyncService {
   final Future<void> Function(
     Set<String> changedWatchKeys,
     Set<String> changedPinKeys,
-  )? _onRemoteChangesApplied;
+  )?
+  _onRemoteChangesApplied;
   final void Function(PeerMember joinedPeer)? _onPeerPaired;
   final DateTime Function() _clock;
 
@@ -268,11 +253,10 @@ class PeerSyncService {
   bool get isPaired =>
       _secret != null &&
       _store.members().values.any(
-            (m) =>
-                !m.revoked &&
-                m.nodeId.toLowerCase() !=
-                    (_transport.nodeId?.toLowerCase() ?? ''),
-          );
+        (m) =>
+            !m.revoked &&
+            m.nodeId.toLowerCase() != (_transport.nodeId?.toLowerCase() ?? ''),
+      );
 
   String? get groupId => _secret?.groupId;
 
@@ -309,7 +293,9 @@ class PeerSyncService {
               existing.copyWith(
                 deviceName: _deviceName,
                 updatedAt: max(
-                    _clock().millisecondsSinceEpoch, existing.updatedAt + 1),
+                  _clock().millisecondsSinceEpoch,
+                  existing.updatedAt + 1,
+                ),
               ),
             );
           }
@@ -317,8 +303,9 @@ class PeerSyncService {
       }
     } catch (_) {}
 
-    _inboundSub ??=
-        _transport.onPeerSyncRequest.listen(_handleInboundPeerSyncRequest);
+    _inboundSub ??= _transport.onPeerSyncRequest.listen(
+      _handleInboundPeerSyncRequest,
+    );
     _peerConnectedSub ??= _transport.onPeerConnected.listen((_) {
       unawaited(syncAll());
     });
@@ -349,8 +336,10 @@ class PeerSyncService {
 
   static String _generateCode([Random? random]) {
     final r = random ?? Random.secure();
-    return List.generate(6, (_) => _alphabet[r.nextInt(_alphabet.length)])
-        .join();
+    return List.generate(
+      6,
+      (_) => _alphabet[r.nextInt(_alphabet.length)],
+    ).join();
   }
 
   Future<PeerGroupSecret> _ensureSecret() async {
@@ -364,7 +353,9 @@ class PeerSyncService {
     }
     final generated = PeerGroupSecret.generate();
     await _authStorage.write(
-        PeerGroupSecret.storageKey, generated.toBase64Url());
+      PeerGroupSecret.storageKey,
+      generated.toBase64Url(),
+    );
     _secret = generated;
     return generated;
   }
@@ -382,17 +373,19 @@ class PeerSyncService {
     if (localNodeId != null) {
       final existing = _store.member(localNodeId);
       if (existing == null || existing.revoked) {
-        await _store.putMember(PeerMember(
-          nodeId: localNodeId,
-          deviceName: _deviceName,
-          platform: _platform,
-          endpointAddrJson: nodeAddr,
-          updatedAt: max(
-            _clock().millisecondsSinceEpoch,
-            (existing?.updatedAt ?? 0) + 1,
+        await _store.putMember(
+          PeerMember(
+            nodeId: localNodeId,
+            deviceName: _deviceName,
+            platform: _platform,
+            endpointAddrJson: nodeAddr,
+            updatedAt: max(
+              _clock().millisecondsSinceEpoch,
+              (existing?.updatedAt ?? 0) + 1,
+            ),
+            revoked: false,
           ),
-          revoked: false,
-        ));
+        );
       }
     }
 
@@ -494,8 +487,10 @@ class PeerSyncService {
     try {
       backupKeys = await _backupKeysForPair?.call();
     } catch (e) {
-      debugPrint('[PeerSyncService] No backup keys to pair with: '
-          '${e.runtimeType}');
+      debugPrint(
+        '[PeerSyncService] No backup keys to pair with: '
+        '${e.runtimeType}',
+      );
     }
     final req = FlutterPeerSyncRequest.pair(
       claimCode: claimCode,
@@ -523,14 +518,19 @@ class PeerSyncService {
     final nowMs = _clock().millisecondsSinceEpoch;
     final localNodeId = _transport.nodeId;
     if (localNodeId != null) {
-      await _store.putMember(PeerMember(
-        nodeId: localNodeId,
-        deviceName: _deviceName,
-        platform: _platform,
-        endpointAddrJson: localNodeAddr,
-        updatedAt: max(nowMs, (_store.member(localNodeId)?.updatedAt ?? 0) + 1),
-        revoked: false,
-      ));
+      await _store.putMember(
+        PeerMember(
+          nodeId: localNodeId,
+          deviceName: _deviceName,
+          platform: _platform,
+          endpointAddrJson: localNodeAddr,
+          updatedAt: max(
+            nowMs,
+            (_store.member(localNodeId)?.updatedAt ?? 0) + 1,
+          ),
+          revoked: false,
+        ),
+      );
     }
 
     await _store.mergeRoster(
@@ -561,8 +561,10 @@ class PeerSyncService {
       try {
         await _onJoinedVault?.call(vaultId).timeout(_backupHookTimeout);
       } catch (e) {
-        debugPrint('[PeerSyncService] Group backup not joined: '
-            '${e.runtimeType}');
+        debugPrint(
+          '[PeerSyncService] Group backup not joined: '
+          '${e.runtimeType}',
+        );
       }
     }
     // The group backs up to a cloud store: this device signs in to join,
@@ -574,8 +576,10 @@ class PeerSyncService {
             ?.call(store, res.backupAccount)
             .timeout(_backupHookTimeout);
       } catch (e) {
-        debugPrint('[PeerSyncService] Backup store hint not kept: '
-            '${e.runtimeType}');
+        debugPrint(
+          '[PeerSyncService] Backup store hint not kept: '
+          '${e.runtimeType}',
+        );
       }
     }
   }
@@ -672,8 +676,10 @@ class PeerSyncService {
       try {
         cloudStore = await storeHook().timeout(_backupHookTimeout);
       } catch (e) {
-        debugPrint('[PeerSyncService] No backup store for the joiner: '
-            '${e.runtimeType}');
+        debugPrint(
+          '[PeerSyncService] No backup store for the joiner: '
+          '${e.runtimeType}',
+        );
       }
       // This device left the group while the hook ran: no pairing to finish.
       if (_stale(generation)) return _rejectLeftGroup(request.requestId);
@@ -691,22 +697,33 @@ class PeerSyncService {
         admit != null) {
       final generation = _generation;
       try {
-        vaultId = await admit(request.peer, backupSigner, backupBox,
-                DateTime.now().add(_backupHookTimeout))
-            .timeout(_backupHookTimeout);
+        vaultId = await admit(
+          request.peer,
+          backupSigner,
+          backupBox,
+          DateTime.now().add(_backupHookTimeout),
+        ).timeout(_backupHookTimeout);
       } catch (e) {
-        debugPrint('[PeerSyncService] Joiner not added to the backup: '
-            '${e.runtimeType}');
+        debugPrint(
+          '[PeerSyncService] Joiner not added to the backup: '
+          '${e.runtimeType}',
+        );
       }
       // This device left the group while the add ran: no pairing to finish.
       if (_stale(generation)) return _rejectLeftGroup(request.requestId);
     }
 
     final rosterWire = _store.members().values.map((m) => m.toWire()).toList();
-    final watchWire =
-        _store.allWatchRecords().values.map((w) => w.toWire()).toList();
-    final pinWire =
-        _store.allPinRecords().values.map((p) => p.toWire()).toList();
+    final watchWire = _store
+        .allWatchRecords()
+        .values
+        .map((w) => w.toWire())
+        .toList();
+    final pinWire = _store
+        .allPinRecords()
+        .values
+        .map((p) => p.toWire())
+        .toList();
 
     await _transport.respondToPeerSync(
       request.requestId,
@@ -738,9 +755,9 @@ class PeerSyncService {
   ) async {
     final generation = _generation;
     Future<void> reject() => _transport.respondToPeerSync(
-          request.requestId,
-          const FlutterPeerSyncResponse.notAuthorized(),
-        );
+      request.requestId,
+      const FlutterPeerSyncResponse.notAuthorized(),
+    );
 
     if (!authorizes(request.peer, req.authProof)) return reject();
 
@@ -1018,20 +1035,21 @@ class PeerSyncService {
   Future<void> revokePeer(String nodeId) async {
     final nowMs = _clock().millisecondsSinceEpoch;
     final current = _store.member(nodeId);
-    final updated = (current ??
-            PeerMember(
-              nodeId: nodeId,
-              deviceName: 'Unknown',
-              platform: 'unknown',
-              updatedAt: nowMs,
+    final updated =
+        (current ??
+                PeerMember(
+                  nodeId: nodeId,
+                  deviceName: 'Unknown',
+                  platform: 'unknown',
+                  updatedAt: nowMs,
+                  revoked: true,
+                ))
+            .copyWith(
               revoked: true,
-            ))
-        .copyWith(
-      revoked: true,
-      // Later than the stored record even when that one carries a time ahead
-      // of this clock, or the store would keep the member active.
-      updatedAt: max(nowMs, (current?.updatedAt ?? 0) + 1),
-    );
+              // Later than the stored record even when that one carries a time ahead
+              // of this clock, or the store would keep the member active.
+              updatedAt: max(nowMs, (current?.updatedAt ?? 0) + 1),
+            );
     await _store.putMember(updated);
     await syncAll(ignoreCooldown: true);
     _notifyStateChanged();
@@ -1043,8 +1061,10 @@ class PeerSyncService {
           ?.call(nodeId, current?.deviceName)
           .timeout(_backupHookTimeout);
     } catch (e) {
-      debugPrint('[PeerSyncService] Revocation not recorded for the backup: '
-          '${e.runtimeType}');
+      debugPrint(
+        '[PeerSyncService] Revocation not recorded for the backup: '
+        '${e.runtimeType}',
+      );
     }
   }
 
@@ -1068,9 +1088,9 @@ class PeerSyncService {
                     revoked: true,
                   ))
               .copyWith(
-            revoked: true,
-            updatedAt: max(nowMs, (current?.updatedAt ?? 0) + 1),
-          ),
+                revoked: true,
+                updatedAt: max(nowMs, (current?.updatedAt ?? 0) + 1),
+              ),
         );
       }
 
@@ -1165,43 +1185,45 @@ Future<void> applyRemoteFilesChanges({
 
 final Provider<PeerSyncService> peerSyncServiceProvider =
     Provider<PeerSyncService>((ref) {
-  final store = ref.watch(peerSyncStoreProvider);
-  final authStorage = getAuthStorage();
-  final p2p = ref.watch(p2pServiceProvider);
-  final transport = P2pPeerSyncTransport(p2p);
-  final relay = RelayApiClient();
-  final backup = ref.watch(backupPairingHooksProvider);
+      final store = ref.watch(peerSyncStoreProvider);
+      final authStorage = getAuthStorage();
+      final p2p = ref.watch(p2pServiceProvider);
+      final transport = P2pPeerSyncTransport(p2p);
+      final relay = RelayApiClient();
+      final backup = ref.watch(backupPairingHooksProvider);
 
-  final service = PeerSyncService(
-    store: store,
-    authStorage: authStorage,
-    transport: transport,
-    relayClient: relay,
-    deviceName: 'Mydia Player',
-    platform: DeviceInfoService().getPlatform(),
-    onRemoteChangesApplied: (changedWatchKeys, changedPinKeys) =>
-        applyRemoteFilesChanges(
-      store: store,
-      sources: FilesMediaSource.activeSources.toList(),
-      changedWatchKeys: changedWatchKeys,
-      changedPinKeys: changedPinKeys,
-    ),
-    backupKeysForPair: backup.backupKeysForPair,
-    onJoinerBackupKeys: backup.onJoinerBackupKeys,
-    onJoinedVault: backup.onJoinedVault,
-    onPeerRevoked: backup.onPeerRevoked,
-    cloudStoreForPair: backup.cloudStoreForPair,
-    onCloudStoreHint: backup.onCloudStoreHint,
-  );
+      final service = PeerSyncService(
+        store: store,
+        authStorage: authStorage,
+        transport: transport,
+        relayClient: relay,
+        deviceName: 'Mydia Player',
+        platform: DeviceInfoService().getPlatform(),
+        onRemoteChangesApplied: (changedWatchKeys, changedPinKeys) =>
+            applyRemoteFilesChanges(
+              store: store,
+              sources: FilesMediaSource.activeSources.toList(),
+              changedWatchKeys: changedWatchKeys,
+              changedPinKeys: changedPinKeys,
+            ),
+        backupKeysForPair: backup.backupKeysForPair,
+        onJoinerBackupKeys: backup.onJoinerBackupKeys,
+        onJoinedVault: backup.onJoinedVault,
+        onPeerRevoked: backup.onPeerRevoked,
+        cloudStoreForPair: backup.cloudStoreForPair,
+        onCloudStoreHint: backup.onCloudStoreHint,
+      );
 
-  final refreshSub = ref.watch(connectionRefreshBusProvider).events.listen((_) {
-    unawaited(service.syncAll(ignoreCooldown: true));
-  });
+      final refreshSub = ref.watch(connectionRefreshBusProvider).events.listen((
+        _,
+      ) {
+        unawaited(service.syncAll(ignoreCooldown: true));
+      });
 
-  ref.onDispose(() {
-    refreshSub.cancel();
-    service.dispose();
-  });
+      ref.onDispose(() {
+        refreshSub.cancel();
+        service.dispose();
+      });
 
-  return service;
-});
+      return service;
+    });

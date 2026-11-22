@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -16,8 +16,9 @@ void main() {
   });
 
   group('TvKeypad', () {
-    testWidgets('renders all 31 valid characters and action keys',
-        (tester) async {
+    testWidgets('renders all 31 valid characters and action keys', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -48,8 +49,9 @@ void main() {
       }
     });
 
-    testWidgets('tapping a character key calls onCharacterPressed',
-        (tester) async {
+    testWidgets('tapping a character key calls onCharacterPressed', (
+      tester,
+    ) async {
       String? pressedChar;
       await tester.pumpWidget(
         MaterialApp(
@@ -71,8 +73,9 @@ void main() {
       expect(pressedChar, equals('K'));
     });
 
-    testWidgets('tapping delete and clear keys calls corresponding callbacks',
-        (tester) async {
+    testWidgets('tapping delete and clear keys calls corresponding callbacks', (
+      tester,
+    ) async {
       bool deleted = false;
       bool cleared = false;
 

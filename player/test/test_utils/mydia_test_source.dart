@@ -20,9 +20,17 @@ const testMydiaSource = Source(
     activeProfileId: 'owner',
   ),
   profile: SourceProfile(
-      id: 'owner', accountId: 'macct', name: 'Owner', isOwner: true),
+    id: 'owner',
+    accountId: 'macct',
+    name: 'Owner',
+    isOwner: true,
+  ),
   server: SourceServer(
-      id: 'inst-1', accountId: 'macct', profileId: 'owner', name: 'Harborview'),
+    id: 'inst-1',
+    accountId: 'macct',
+    profileId: 'owner',
+    name: 'Harborview',
+  ),
 );
 
 /// [testMydiaSource]'s id.
@@ -34,34 +42,40 @@ ItemRef testMydiaRef(ItemKind kind, String id) =>
 /// A [MydiaSource] over [transport], as [testMydiaSource] with [accountId].
 MydiaSource testMydiaSourceOver(
   MydiaGqlTransport transport, {
-  MydiaCredentials creds =
-      const MydiaCredentials(instanceId: 'test', accessToken: 'access'),
+  MydiaCredentials creds = const MydiaCredentials(
+    instanceId: 'test',
+    accessToken: 'access',
+  ),
   String accountId = 'macct',
-}) =>
-    MydiaSource(
-      source: Source(
-        account: ProviderAccount(
-          id: accountId,
-          kind: SourceKind.mydia,
-          displayName: 'Harborview',
-          storageNamespace: 'source/$accountId',
-          activeProfileId: 'owner',
-        ),
-        profile: SourceProfile(
-            id: 'owner', accountId: accountId, name: 'Owner', isOwner: true),
-        server: SourceServer(
-            id: 'inst-1',
-            accountId: accountId,
-            profileId: 'owner',
-            name: 'Harborview'),
-      ),
-      client: fakeMydiaClient(transport, creds: creds),
-    );
+}) => MydiaSource(
+  source: Source(
+    account: ProviderAccount(
+      id: accountId,
+      kind: SourceKind.mydia,
+      displayName: 'Harborview',
+      storageNamespace: 'source/$accountId',
+      activeProfileId: 'owner',
+    ),
+    profile: SourceProfile(
+      id: 'owner',
+      accountId: accountId,
+      name: 'Owner',
+      isOwner: true,
+    ),
+    server: SourceServer(
+      id: 'inst-1',
+      accountId: accountId,
+      profileId: 'owner',
+      name: 'Harborview',
+    ),
+  ),
+  client: fakeMydiaClient(transport, creds: creds),
+);
 
 /// [testMydiaSource] as the account record the store holds.
 SourceAccountRecord testMydiaRecord() => SourceAccountRecord(
-      account: testMydiaSource.account,
-      profiles: [testMydiaSource.profile],
-      servers: [testMydiaSource.server],
-      addedAtMs: 1,
-    );
+  account: testMydiaSource.account,
+  profiles: [testMydiaSource.profile],
+  servers: [testMydiaSource.server],
+  addedAtMs: 1,
+);

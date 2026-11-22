@@ -145,29 +145,31 @@ void main() {
     );
   });
 
-  test('reports tampering distinctly when a blob fetches but will not open',
-      () async {
-    final client = MockClient(
-      (_) async => http.Response(
-        jsonEncode({'sealed': 'a-blob-that-will-not-open'}),
-        200,
-        headers: {'content-type': 'application/json'},
-      ),
-    );
+  test(
+    'reports tampering distinctly when a blob fetches but will not open',
+    () async {
+      final client = MockClient(
+        (_) async => http.Response(
+          jsonEncode({'sealed': 'a-blob-that-will-not-open'}),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      );
 
-    final api = RelayApiClient(
-      baseUrl: relayUrl,
-      client: client,
-      pairingKeys: fakeFactory,
-    );
+      final api = RelayApiClient(
+        baseUrl: relayUrl,
+        client: client,
+        pairingKeys: fakeFactory,
+      );
 
-    // Distinct from "invalid code": a wrong code cannot produce a lookup hit,
-    // so a hit that will not open means the stored blob was altered.
-    expect(
-      () => api.resolveClaimCode('K7RPM2'),
-      throwsA(isA<TamperedClaimException>()),
-    );
-  });
+      // Distinct from "invalid code": a wrong code cannot produce a lookup hit,
+      // so a hit that will not open means the stored blob was altered.
+      expect(
+        () => api.resolveClaimCode('K7RPM2'),
+        throwsA(isA<TamperedClaimException>()),
+      );
+    },
+  );
 
   group('publishClaimCode', () {
     test('posts lookup_key and sealed to /pairing/v2/claim', () async {

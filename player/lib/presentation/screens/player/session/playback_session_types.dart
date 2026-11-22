@@ -148,7 +148,7 @@ enum PlaybackFeature {
 typedef ScrubThumbnailSource = ({
   String serverUrl,
   String token,
-  bool isP2PMode
+  bool isP2PMode,
 });
 
 /// Everything the screen needs to stream, from whichever server.

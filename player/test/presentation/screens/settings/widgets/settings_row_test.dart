@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,7 +6,9 @@ import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 Future<void> _pump(WidgetTester tester, Widget row) async {
   await tester.pumpWidget(
-    MaterialApp(home: Scaffold(body: ListView(children: [row]))),
+    MaterialApp(
+      home: Scaffold(body: ListView(children: [row])),
+    ),
   );
   await tester.pump();
 }
@@ -25,8 +27,9 @@ FocusNode _node(WidgetTester tester, String title) {
 void main() {
   _focusTests();
   group('SettingsRow.navigation', () {
-    testWidgets('shows its title, subtitle, and trailing value',
-        (tester) async {
+    testWidgets('shows its title, subtitle, and trailing value', (
+      tester,
+    ) async {
       await _pump(
         tester,
         SettingsRow.navigation(
@@ -39,14 +42,17 @@ void main() {
       );
 
       expect(find.text('Default quality'), findsOneWidget);
-      expect(find.text('Used when a title has no saved preference'),
-          findsOneWidget);
+      expect(
+        find.text('Used when a title has no saved preference'),
+        findsOneWidget,
+      );
       expect(find.text('1080p'), findsOneWidget);
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     });
 
-    testWidgets('draws a status dot before the subtitle when given a colour',
-        (tester) async {
+    testWidgets('draws a status dot before the subtitle when given a colour', (
+      tester,
+    ) async {
       await _pump(
         tester,
         SettingsRow.navigation(
@@ -81,8 +87,9 @@ void main() {
       expect(find.byKey(const Key('settings-row-status-dot')), findsNothing);
     });
 
-    testWidgets('draws no dot when there is no subtitle to sit beside',
-        (tester) async {
+    testWidgets('draws no dot when there is no subtitle to sit beside', (
+      tester,
+    ) async {
       await _pump(
         tester,
         SettingsRow.navigation(
@@ -172,8 +179,9 @@ void main() {
   });
 
   group('SettingsRow.action', () {
-    testWidgets('renders a trailing widget instead of a chevron',
-        (tester) async {
+    testWidgets('renders a trailing widget instead of a chevron', (
+      tester,
+    ) async {
       await _pump(
         tester,
         SettingsRow.action(
@@ -188,8 +196,9 @@ void main() {
       expect(find.byIcon(Icons.chevron_right), findsNothing);
     });
 
-    testWidgets('a danger row tints its title with the error colour',
-        (tester) async {
+    testWidgets('a danger row tints its title with the error colour', (
+      tester,
+    ) async {
       await _pump(
         tester,
         SettingsRow.action(
@@ -206,8 +215,9 @@ void main() {
       expect(title.style?.color, Theme.of(context).colorScheme.error);
     });
 
-    testWidgets('a null onTap makes the row inert but not dimmed',
-        (tester) async {
+    testWidgets('a null onTap makes the row inert but not dimmed', (
+      tester,
+    ) async {
       // Diagnostics is built almost entirely from informational action rows.
       // Dimming those would make a healthy screen look broken, which is why
       // `.action` and `.navigation` treat a null onTap differently.
@@ -255,8 +265,9 @@ void _focusTests() {
       expect(taps, 2);
     });
 
-    testWidgets('a navigation row with null onTap is not focusable',
-        (tester) async {
+    testWidgets('a navigation row with null onTap is not focusable', (
+      tester,
+    ) async {
       await _pump(
         tester,
         const SettingsRow.navigation(
@@ -316,15 +327,14 @@ void _focusTests() {
       expect(
         find.descendant(
           of: find.ancestor(
-              of: find.text('Second'), matching: find.byType(FocusHighlight)),
+            of: find.text('Second'),
+            matching: find.byType(FocusHighlight),
+          ),
           matching: find.text('Second'),
         ),
         findsOneWidget,
       );
-      expect(
-        _node(tester, 'Second').hasPrimaryFocus,
-        isTrue,
-      );
+      expect(_node(tester, 'Second').hasPrimaryFocus, isTrue);
     });
 
     testWidgets('a disabled toggle row is not focusable', (tester) async {

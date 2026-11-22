@@ -100,8 +100,9 @@ class ExcludeCastBarPageInset extends StatelessWidget {
           ? media
           : media.copyWith(
               padding: media.padding.copyWith(bottom: extents.basePadding),
-              viewPadding:
-                  media.viewPadding.copyWith(bottom: extents.baseViewPadding),
+              viewPadding: media.viewPadding.copyWith(
+                bottom: extents.baseViewPadding,
+              ),
             ),
       child: child,
     );
@@ -140,9 +141,9 @@ class _ReportedExtentState extends State<ReportedExtent> {
 
   /// The dimension currently selected out of [_measuredSize].
   double get _measured => switch (widget.axis) {
-        Axis.vertical => _measuredSize?.height ?? 0,
-        Axis.horizontal => _measuredSize?.width ?? 0,
-      };
+    Axis.vertical => _measuredSize?.height ?? 0,
+    Axis.horizontal => _measuredSize?.width ?? 0,
+  };
 
   void _onLayout(Size size) {
     _measuredSize = size;
@@ -287,8 +288,9 @@ class _SizeProbe extends SingleChildRenderObjectWidget {
 
   @override
   void updateRenderObject(
-          BuildContext context, _RenderSizeProbe renderObject) =>
-      renderObject.onSize = onSize;
+    BuildContext context,
+    _RenderSizeProbe renderObject,
+  ) => renderObject.onSize = onSize;
 }
 
 class _RenderSizeProbe extends RenderProxyBox {

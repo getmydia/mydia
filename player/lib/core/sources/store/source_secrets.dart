@@ -21,8 +21,10 @@ class SourceSecrets {
       '${account.storageNamespace}/account_token';
 
   static String _serverKey(
-          ProviderAccount account, String profileId, String serverId) =>
-      '${account.storageNamespace}/$profileId/$serverId/token';
+    ProviderAccount account,
+    String profileId,
+    String serverId,
+  ) => '${account.storageNamespace}/$profileId/$serverId/token';
 
   static String _userKey(ProviderAccount account, String profileId) =>
       '${account.storageNamespace}/$profileId/user_token';
@@ -48,31 +50,32 @@ class SourceSecrets {
   }
 
   Future<void> writeUserToken(
-          ProviderAccount account, String profileId, String token) =>
-      _storage.write(_userKey(account, profileId), token);
+    ProviderAccount account,
+    String profileId,
+    String token,
+  ) => _storage.write(_userKey(account, profileId), token);
 
   Future<void> deleteUserToken(ProviderAccount account, String profileId) =>
       _storage.delete(_userKey(account, profileId));
 
   /// A Plex server's own access token. Stash has none; it uses the account
   /// token.
-  Future<String?> serverToken(Source source) => _storage
-      .read(_serverKey(source.account, source.profile.id, source.server.id));
+  Future<String?> serverToken(Source source) => _storage.read(
+    _serverKey(source.account, source.profile.id, source.server.id),
+  );
 
   Future<void> writeServerToken({
     required ProviderAccount account,
     required String profileId,
     required String serverId,
     required String token,
-  }) =>
-      _storage.write(_serverKey(account, profileId, serverId), token);
+  }) => _storage.write(_serverKey(account, profileId, serverId), token);
 
   Future<void> deleteServerToken({
     required ProviderAccount account,
     required String profileId,
     required String serverId,
-  }) =>
-      _storage.delete(_serverKey(account, profileId, serverId));
+  }) => _storage.delete(_serverKey(account, profileId, serverId));
 
   Future<void> deleteAll(SourceAccountRecord record) async {
     await _storage.delete(_accountKey(record.account));
@@ -91,8 +94,9 @@ class SourceSecrets {
       }
     }
     for (final server in record.servers) {
-      await _storage
-          .delete(_serverKey(record.account, server.profileId, server.id));
+      await _storage.delete(
+        _serverKey(record.account, server.profileId, server.id),
+      );
     }
   }
 }

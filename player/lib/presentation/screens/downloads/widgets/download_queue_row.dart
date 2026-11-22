@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/downloads/download_providers.dart';
@@ -52,9 +52,7 @@ class DownloadQueueRow extends ConsumerWidget {
               Expanded(
                 child: Text(
                   task.title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
+                  style: Theme.of(context).textTheme.bodyMedium
                       ?.copyWith(fontWeight: FontWeight.w500),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -122,10 +120,7 @@ class DownloadQueueRow extends ConsumerWidget {
           key: const ValueKey('download-queue-row-metrics'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 11,
-            color: context.palette.textSecondary,
-          ),
+          style: TextStyle(fontSize: 11, color: context.palette.textSecondary),
         );
       },
     );

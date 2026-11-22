@@ -4,7 +4,7 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/p2p/p2p_service.dart';
@@ -70,11 +70,11 @@ class AddServerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TextButton.icon(
-        key: const Key('manage-add'),
-        onPressed: onPressed,
-        icon: const Icon(Icons.add),
-        label: Text(context.l10n.navAddServer),
-      );
+    key: const Key('manage-add'),
+    onPressed: onPressed,
+    icon: const Icon(Icons.add),
+    label: Text(context.l10n.navAddServer),
+  );
 }
 
 /// The account detail content, without a `Scaffold`: the mobile page and the
@@ -97,7 +97,9 @@ class AccountDetailBody extends ConsumerWidget {
       padding: padding,
       children: [
         AccountControls(
-            record: record, unlocked: ref.watch(sourceLockProvider)),
+          record: record,
+          unlocked: ref.watch(sourceLockProvider),
+        ),
       ],
     );
   }
@@ -111,9 +113,9 @@ class AccountDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => ConnectionsRouteScaffold(
-        title: _recordFor(ref, accountId)?.account.displayName ?? '',
-        body: AccountDetailBody(accountId: accountId),
-      );
+    title: _recordFor(ref, accountId)?.account.displayName ?? '',
+    body: AccountDetailBody(accountId: accountId),
+  );
 }
 
 SourceAccountRecord? _recordFor(WidgetRef ref, String accountId) => ref
@@ -131,16 +133,15 @@ class _AllServersSwitch extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => SwitchListTile(
-        key: ValueKey('manage-all-servers-${source.id.value}'),
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        title: Text(context.l10n.sourcesIncludeInAll),
-        value:
-            includedInAllServers(source, ref.watch(allServersChoicesProvider)),
-        onChanged: (on) => ref
-            .read(sourceRecordsProvider.notifier)
-            .setIncludedInAllServers(source.id, on),
-      );
+    key: ValueKey('manage-all-servers-${source.id.value}'),
+    dense: true,
+    contentPadding: EdgeInsets.zero,
+    title: Text(context.l10n.sourcesIncludeInAll),
+    value: includedInAllServers(source, ref.watch(allServersChoicesProvider)),
+    onChanged: (on) => ref
+        .read(sourceRecordsProvider.notifier)
+        .setIncludedInAllServers(source.id, on),
+  );
 }
 
 /// A files account's folders, each removable, and a Rescan of them all.
@@ -185,8 +186,12 @@ class _FilesRootsState extends ConsumerState<_FilesRoots> {
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.folder_rounded),
             title: Text(root.title),
-            subtitle: Text(context.l10n.filesManageRootSubtitle(
-                filesLibraryKindLabel(context.l10n, root.kind), root.path)),
+            subtitle: Text(
+              context.l10n.filesManageRootSubtitle(
+                filesLibraryKindLabel(context.l10n, root.kind),
+                root.path,
+              ),
+            ),
             trailing: IconButton(
               key: ValueKey('manage-remove-root-${root.id}'),
               tooltip: context.l10n.filesManageRemoveFolder,
@@ -198,12 +203,14 @@ class _FilesRootsState extends ConsumerState<_FilesRoots> {
           key: ValueKey('manage-rescan-${source.account.id}'),
           onPressed: scanning || roots.isEmpty
               ? null
-              : () => unawaited(ref
+              : () => unawaited(
+                  ref
                       .read(filesScanProvider(source.id).notifier)
                       .rescan()
                       .catchError((Object e) {
-                    debugPrint('[Sources] Rescan failed: $e');
-                  })),
+                        debugPrint('[Sources] Rescan failed: $e');
+                      }),
+                ),
           // A disabled Rescan alone reads as broken: while a scan runs, the
           // button says how far it has got.
           icon: scanning
@@ -212,9 +219,11 @@ class _FilesRootsState extends ConsumerState<_FilesRoots> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.refresh_rounded),
-          label: Text(scanning
-              ? filesScanProgressText(context.l10n, scan)
-              : context.l10n.filesManageRescan),
+          label: Text(
+            scanning
+                ? filesScanProgressText(context.l10n, scan)
+                : context.l10n.filesManageRescan,
+          ),
         ),
       ],
     );
@@ -225,8 +234,11 @@ class _FilesRootsState extends ConsumerState<_FilesRoots> {
 /// reauth and remove actions, plus the gear to a Mydia instance's settings.
 /// The account detail page hosts it, on mobile and in the dialog.
 class AccountControls extends ConsumerWidget {
-  const AccountControls(
-      {super.key, required this.record, required this.unlocked});
+  const AccountControls({
+    super.key,
+    required this.record,
+    required this.unlocked,
+  });
 
   final SourceAccountRecord record;
   final bool unlocked;
@@ -259,17 +271,17 @@ class AccountControls extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(account.displayName,
-            style: Theme.of(context).textTheme.titleMedium),
         Text(
-            switch (account.kind) {
-              SourceKind.plex => context.l10n.sourcesAccountPlex,
-              SourceKind.stash => context.l10n.sourcesAccountStash,
-              SourceKind.jellyfin => context.l10n.sourcesAccountJellyfin,
-              SourceKind.mydia => context.l10n.sourcesAccountMydia,
-              SourceKind.files => context.l10n.sourcesAccountFiles,
-            },
-            style: Theme.of(context).textTheme.bodySmall),
+          account.displayName,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        Text(switch (account.kind) {
+          SourceKind.plex => context.l10n.sourcesAccountPlex,
+          SourceKind.stash => context.l10n.sourcesAccountStash,
+          SourceKind.jellyfin => context.l10n.sourcesAccountJellyfin,
+          SourceKind.mydia => context.l10n.sourcesAccountMydia,
+          SourceKind.files => context.l10n.sourcesAccountFiles,
+        }, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         for (final server in record.servers)
           if (unlocked || record.lockOf(server.id) != SourceLock.hidden) ...[
@@ -281,8 +293,8 @@ class AccountControls extends ConsumerWidget {
               subtitle: server.gone
                   ? Text(context.l10n.sourcesServerGone)
                   : (!server.presence
-                      ? Text(context.l10n.commonOffline)
-                      : null),
+                        ? Text(context.l10n.commonOffline)
+                        : null),
               trailing: IconButton(
                 key: Key('manage-lock-${server.id}'),
                 tooltip: context.l10n.sourcesLockTooltip,
@@ -313,8 +325,9 @@ class AccountControls extends ConsumerWidget {
                 key: Key('manage-settings-${account.id}'),
                 tooltip: context.l10n.settingsTitle,
                 icon: const Icon(Icons.settings_rounded),
-                onPressed: () => SettingsNavScope.of(context)
-                    .openInstance(mydiaSourceIdOf(record)),
+                onPressed: () =>
+                    SettingsNavScope.of(context)
+                        .openInstance(mydiaSourceIdOf(record)),
               ),
             if (account.kind == SourceKind.plex && record.profiles.length > 1)
               OutlinedButton(

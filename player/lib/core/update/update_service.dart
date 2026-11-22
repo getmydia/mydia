@@ -19,7 +19,7 @@ class UpdateService {
   );
 
   UpdateService({UpdateFeedClient? client})
-      : _client = client ?? UpdateFeedClient();
+    : _client = client ?? UpdateFeedClient();
 
   /// Checks for an available update on [track], respecting the 24-hour rate
   /// limit.
@@ -49,12 +49,14 @@ class UpdateService {
 
     if (VersionComparator.isNewer(currentVersion, entry.version)) {
       debugPrint(
-          '[UpdateService] ${track.wireName} update available: ${entry.version} (current: $currentVersion)');
+        '[UpdateService] ${track.wireName} update available: ${entry.version} (current: $currentVersion)',
+      );
       return entry.toAppUpdate();
     }
 
     debugPrint(
-        '[UpdateService] No update needed (current: $currentVersion, ${track.wireName}: ${entry.version})');
+      '[UpdateService] No update needed (current: $currentVersion, ${track.wireName}: ${entry.version})',
+    );
     return null;
   }
 

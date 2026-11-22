@@ -5,7 +5,9 @@ void main() {
   group('CastCapabilities', () {
     test('any is false only when both protocols are unavailable', () {
       expect(
-          const CastCapabilities(chromecast: false, dlna: false).any, isFalse);
+        const CastCapabilities(chromecast: false, dlna: false).any,
+        isFalse,
+      );
       expect(const CastCapabilities(chromecast: true, dlna: false).any, isTrue);
       expect(const CastCapabilities(chromecast: false, dlna: true).any, isTrue);
     });
@@ -36,8 +38,11 @@ void main() {
     // and it can only be exercised for every platform via the injected form —
     // `forCurrentPlatform` can only ever answer for the host running tests.
     test('web loses both protocols even if the iOS flag is somehow set', () {
-      final capabilities =
-          CastCapabilities.forPlatform(isWeb: true, isIOS: true, isTv: false);
+      final capabilities = CastCapabilities.forPlatform(
+        isWeb: true,
+        isIOS: true,
+        isTv: false,
+      );
 
       expect(capabilities.chromecast, isFalse);
       expect(capabilities.dlna, isFalse);
@@ -45,16 +50,22 @@ void main() {
     });
 
     test('iOS keeps Chromecast and loses DLNA', () {
-      final capabilities =
-          CastCapabilities.forPlatform(isWeb: false, isIOS: true, isTv: false);
+      final capabilities = CastCapabilities.forPlatform(
+        isWeb: false,
+        isIOS: true,
+        isTv: false,
+      );
 
       expect(capabilities.chromecast, isTrue);
       expect(capabilities.dlna, isFalse);
     });
 
     test('everything else gets both', () {
-      final capabilities =
-          CastCapabilities.forPlatform(isWeb: false, isIOS: false, isTv: false);
+      final capabilities = CastCapabilities.forPlatform(
+        isWeb: false,
+        isIOS: false,
+        isTv: false,
+      );
 
       expect(capabilities.chromecast, isTrue);
       expect(capabilities.dlna, isTrue);
@@ -64,8 +75,11 @@ void main() {
     // cast receiver. Sending a cast from it has nowhere sensible to go, so it
     // gets no cast affordance at all.
     test('a television loses both protocols', () {
-      final capabilities =
-          CastCapabilities.forPlatform(isWeb: false, isIOS: false, isTv: true);
+      final capabilities = CastCapabilities.forPlatform(
+        isWeb: false,
+        isIOS: false,
+        isTv: true,
+      );
 
       expect(capabilities.chromecast, isFalse);
       expect(capabilities.dlna, isFalse);

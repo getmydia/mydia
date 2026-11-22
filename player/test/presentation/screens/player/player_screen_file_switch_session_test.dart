@@ -36,12 +36,12 @@ class _RecordingSizer implements PlayerWindowSizer {
 Future<void> _pumpUntilSwitched(
   WidgetTester tester,
   bool Function() condition,
-) =>
-    tester.runAsync(() => pumpUntilReal(tester, condition));
+) => tester.runAsync(() => pumpUntilReal(tester, condition));
 
 void main() {
-  testWidgets('a file switch ends the old session and keeps the screen',
-      (tester) async {
+  testWidgets('a file switch ends the old session and keeps the screen', (
+    tester,
+  ) async {
     var sessions = 0;
     final server = ScriptedMydiaTransport((request, index) {
       if (request.operation == 'MovieDetail') return movieDetailResponse();
@@ -83,29 +83,46 @@ void main() {
     Iterable<Object?> endedIds() =>
         server.of('EndStreamingSession').map((r) => r.variables['sessionId']);
 
-    await mockHttpResponse(
-      () async {
-        await pumpPlayerScreen(tester, container,
-            fileId: 'file-a', createWindowSizer: () => sizer);
-        await pumpUntil(tester, () => sessions == 1);
-        await tester.pump(const Duration(seconds: 1));
+    await mockHttpResponse(() async {
+      await pumpPlayerScreen(
+        tester,
+        container,
+        fileId: 'file-a',
+        createWindowSizer: () => sizer,
+      );
+      await pumpUntil(tester, () => sessions == 1);
+      await tester.pump(const Duration(seconds: 1));
 
-        await pumpPlayerScreen(tester, container,
-            fileId: 'file-b', createWindowSizer: () => sizer);
-        await _pumpUntilSwitched(tester, () => sessions == 2);
-        await tester.pump(const Duration(seconds: 1));
+      await pumpPlayerScreen(
+        tester,
+        container,
+        fileId: 'file-b',
+        createWindowSizer: () => sizer,
+      );
+      await _pumpUntilSwitched(tester, () => sessions == 2);
+      await tester.pump(const Duration(seconds: 1));
 
-        expect(endedIds(), contains('sess-1'),
-            reason: 'the old file\'s session must be ended on the server');
-        expect(endedIds(), isNot(contains('sess-2')),
-            reason: 'the new file\'s session must still be live');
-        expect(sizer.attaches, 1);
-        expect(sizer.detaches, 0,
-            reason: 'a file switch must not hand the window back');
-        expect(proxyService.stopped, isFalse,
-            reason: 'the switch must not release the proxy hold');
-      },
-      responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
-    );
+      expect(
+        endedIds(),
+        contains('sess-1'),
+        reason: 'the old file\'s session must be ended on the server',
+      );
+      expect(
+        endedIds(),
+        isNot(contains('sess-2')),
+        reason: 'the new file\'s session must still be live',
+      );
+      expect(sizer.attaches, 1);
+      expect(
+        sizer.detaches,
+        0,
+        reason: 'a file switch must not hand the window back',
+      );
+      expect(
+        proxyService.stopped,
+        isFalse,
+        reason: 'the switch must not release the proxy hold',
+      );
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 }

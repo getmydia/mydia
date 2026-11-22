@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/linux_desktop.dart';
@@ -38,8 +38,10 @@ Future<ThemePreset?> showThemePresetPicker(
                     autofocus: preset == current,
                     leading: _Swatch(preset: preset),
                     title: Text(
-                      context.l10n
-                          .themePresetName(preset, linuxDesktop: linuxDesktop),
+                      context.l10n.themePresetName(
+                        preset,
+                        linuxDesktop: linuxDesktop,
+                      ),
                       style: TextStyle(
                         color: palette.textPrimary,
                         fontWeight: preset == current

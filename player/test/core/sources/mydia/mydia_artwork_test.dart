@@ -30,33 +30,41 @@ void main() {
   tearDown(() => proxy.shutdown());
 
   MydiaSource source(MydiaCredentials creds) => MydiaSource(
-        source: guest,
-        client: MydiaClient(
-          transport: FakeMydiaTransport(),
-          load: () async => creds,
-          save: (_) async {},
-          onUnauthorized: () {},
-        ),
-        proxy: () => proxy,
+    source: guest,
+    client: MydiaClient(
+      transport: FakeMydiaTransport(),
+      load: () async => creds,
+      save: (_) async {},
+      onUnauthorized: () {},
+    ),
+    proxy: () => proxy,
+  );
+
+  test(
+    'over HTTP a hosted poster is the server URL plus its path, no header',
+    () async {
+      final req = await source(_http).artwork(_hosted, width: 300);
+      expect(
+        req!.url,
+        'https://media.example/generated/posters/abc-0123abcd.png',
       );
+      expect(req.headers, isEmpty);
+      expect(req.cacheKey, contains('/generated/posters/abc-0123abcd.png|300'));
+    },
+  );
 
-  test('over HTTP a hosted poster is the server URL plus its path, no header',
-      () async {
-    final req = await source(_http).artwork(_hosted, width: 300);
-    expect(
-        req!.url, 'https://media.example/generated/posters/abc-0123abcd.png');
-    expect(req.headers, isEmpty);
-    expect(req.cacheKey, contains('/generated/posters/abc-0123abcd.png|300'));
-  });
-
-  test('over p2p a hosted poster goes through the proxy artwork route',
-      () async {
-    final req = await source(_p2p).artwork(_hosted, width: 300);
-    expect(req!.url,
-        MediaRoutes.artwork(proxy.targetBaseUrl('mguest'), 'abc-0123abcd.png'));
-    expect(req.headers, isEmpty);
-    expect(proxy.isRunning, isTrue);
-  });
+  test(
+    'over p2p a hosted poster goes through the proxy artwork route',
+    () async {
+      final req = await source(_p2p).artwork(_hosted, width: 300);
+      expect(
+        req!.url,
+        MediaRoutes.artwork(proxy.targetBaseUrl('mguest'), 'abc-0123abcd.png'),
+      );
+      expect(req.headers, isEmpty);
+      expect(proxy.isRunning, isTrue);
+    },
+  );
 
   test('disposing releases the hold a p2p poster took', () async {
     final s = source(_p2p);
@@ -101,8 +109,11 @@ void main() {
       '/generated/posters/abc-0123abcd.gif',
       '/generated/posters/abc-0123abcd.png\n',
     ]) {
-      expect(await source(_http).artwork(ArtworkRef(path), width: 300), isNull,
-          reason: path);
+      expect(
+        await source(_http).artwork(ArtworkRef(path), width: 300),
+        isNull,
+        reason: path,
+      );
     }
   });
 }

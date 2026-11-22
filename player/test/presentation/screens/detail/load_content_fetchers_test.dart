@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -17,17 +17,19 @@ Future<void> _pump(WidgetTester tester) async {
       versions: const [MediaVersion(id: 'file-9', container: 'mkv')],
     ),
   );
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-    ],
-    child: MaterialApp(
-      home: Consumer(builder: (context, ref, _) {
-        _ref = ref;
-        return const SizedBox();
-      }),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(source)],
+      child: MaterialApp(
+        home: Consumer(
+          builder: (context, ref, _) {
+            _ref = ref;
+            return const SizedBox();
+          },
+        ),
+      ),
     ),
-  ));
+  );
 }
 
 void main() {
@@ -37,7 +39,10 @@ void main() {
     final detail = await fetchLoadContentItem(
       _ref,
       const ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e1'),
+        sourceId: fakeSourceId,
+        kind: ItemKind.episode,
+        externalId: 'e1',
+      ),
     );
 
     expect(detail.summary.title, 'Copper Weather');

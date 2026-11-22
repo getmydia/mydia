@@ -79,8 +79,7 @@ void main() {
       expect(isPlayerVolumeMuted(null), isFalse);
     });
 
-    test(
-        'the mute-via-volume-snap round trip: describe() sees exactly what '
+    test('the mute-via-volume-snap round trip: describe() sees exactly what '
         'setMuted just set', () {
       expect(isPlayerVolumeMuted(remoteControlMuteVolume(true)), isTrue);
       expect(isPlayerVolumeMuted(remoteControlMuteVolume(false)), isFalse);
@@ -94,32 +93,35 @@ void main() {
     });
 
     test(
-        'a remote-supplied id absent from the list resolves to null, not a throw',
-        () {
-      final found = findTrackById(['eng', 'spa'], 'jpn', idOf: (s) => s);
-      expect(found, isNull);
-    });
+      'a remote-supplied id absent from the list resolves to null, not a throw',
+      () {
+        final found = findTrackById(['eng', 'spa'], 'jpn', idOf: (s) => s);
+        expect(found, isNull);
+      },
+    );
 
     test('an empty track list resolves to null', () {
       final found = findTrackById(<String>[], 'eng', idOf: (s) => s);
       expect(found, isNull);
     });
 
-    test('works against the real domain type selectTrack actually searches',
-        () {
-      // Not just a generic-with-strings smoke test: this is the exact call
-      // shape `selectTrack`'s audio branch makes against `_audioTracks`.
-      const tracks = [
-        FlutterTrackInfo(id: 'a1', label: 'English'),
-        FlutterTrackInfo(id: 'a2', label: 'Spanish'),
-      ];
+    test(
+      'works against the real domain type selectTrack actually searches',
+      () {
+        // Not just a generic-with-strings smoke test: this is the exact call
+        // shape `selectTrack`'s audio branch makes against `_audioTracks`.
+        const tracks = [
+          FlutterTrackInfo(id: 'a1', label: 'English'),
+          FlutterTrackInfo(id: 'a2', label: 'Spanish'),
+        ];
 
-      final found = findTrackById(tracks, 'a2', idOf: (t) => t.id);
-      expect(found?.label, 'Spanish');
+        final found = findTrackById(tracks, 'a2', idOf: (t) => t.id);
+        expect(found?.label, 'Spanish');
 
-      final missing = findTrackById(tracks, 'a3', idOf: (t) => t.id);
-      expect(missing, isNull);
-    });
+        final missing = findTrackById(tracks, 'a3', idOf: (t) => t.id);
+        expect(missing, isNull);
+      },
+    );
   });
 
   group('remoteControlPlaybackState', () {
@@ -135,18 +137,20 @@ void main() {
       expect(state, FlutterPlaybackState.error);
     });
 
-    test('the screen still loading wins over a live player that is playing',
-        () {
-      final state = remoteControlPlaybackState(
-        hasError: false,
-        isLoading: true,
-        hasPlayer: true,
-        buffering: false,
-        completed: true,
-        playing: true,
-      );
-      expect(state, FlutterPlaybackState.loading);
-    });
+    test(
+      'the screen still loading wins over a live player that is playing',
+      () {
+        final state = remoteControlPlaybackState(
+          hasError: false,
+          isLoading: true,
+          hasPlayer: true,
+          buffering: false,
+          completed: true,
+          playing: true,
+        );
+        expect(state, FlutterPlaybackState.loading);
+      },
+    );
 
     test('no player mounted at all reads as loading', () {
       final state = remoteControlPlaybackState(
@@ -160,34 +164,37 @@ void main() {
       expect(state, FlutterPlaybackState.loading);
     });
 
-    test('buffering wins over playing, since media_kit can report both at once',
-        () {
-      final state = remoteControlPlaybackState(
-        hasError: false,
-        isLoading: false,
-        hasPlayer: true,
-        buffering: true,
-        completed: false,
-        playing: true,
-      );
-      expect(state, FlutterPlaybackState.buffering);
-    });
-
-    test('completed wins over playing, for a file media_kit has already ended',
-        () {
-      final state = remoteControlPlaybackState(
-        hasError: false,
-        isLoading: false,
-        hasPlayer: true,
-        buffering: false,
-        completed: true,
-        playing: true,
-      );
-      expect(state, FlutterPlaybackState.ended);
-    });
+    test(
+      'buffering wins over playing, since media_kit can report both at once',
+      () {
+        final state = remoteControlPlaybackState(
+          hasError: false,
+          isLoading: false,
+          hasPlayer: true,
+          buffering: true,
+          completed: false,
+          playing: true,
+        );
+        expect(state, FlutterPlaybackState.buffering);
+      },
+    );
 
     test(
-        'a live, unbuffered, uncompleted player reports playing or paused '
+      'completed wins over playing, for a file media_kit has already ended',
+      () {
+        final state = remoteControlPlaybackState(
+          hasError: false,
+          isLoading: false,
+          hasPlayer: true,
+          buffering: false,
+          completed: true,
+          playing: true,
+        );
+        expect(state, FlutterPlaybackState.ended);
+      },
+    );
+
+    test('a live, unbuffered, uncompleted player reports playing or paused '
         'off the playing flag alone', () {
       final playing = remoteControlPlaybackState(
         hasError: false,

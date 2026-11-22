@@ -42,15 +42,20 @@ class ReporterCastProgressSink implements CastProgressSink {
     required Duration duration,
     required bool paused,
   }) async {
-    final sync =
-        ProgressService.resolveSync(position, duration, StreamTimeline.zero);
+    final sync = ProgressService.resolveSync(
+      position,
+      duration,
+      StreamTimeline.zero,
+    );
     if (sync == null || _stopped) return;
     _last = sync;
-    await _guard(() => _reporter.sendProgress(
-          positionSeconds: sync.positionSeconds,
-          durationSeconds: sync.durationSeconds,
-          paused: paused,
-        ));
+    await _guard(
+      () => _reporter.sendProgress(
+        positionSeconds: sync.positionSeconds,
+        durationSeconds: sync.durationSeconds,
+        paused: paused,
+      ),
+    );
     if (!_watchedSent &&
         ProgressService.isWatchedAt(position, duration, StreamTimeline.zero)) {
       _watchedSent = await _guard(_reporter.sendWatched);
@@ -62,10 +67,12 @@ class ReporterCastProgressSink implements CastProgressSink {
     final last = _last;
     if (_stopped || last == null) return;
     _stopped = true;
-    await _guard(() => _reporter.sendStopped(
-          positionSeconds: last.positionSeconds,
-          durationSeconds: last.durationSeconds,
-        ));
+    await _guard(
+      () => _reporter.sendStopped(
+        positionSeconds: last.positionSeconds,
+        durationSeconds: last.durationSeconds,
+      ),
+    );
   }
 
   /// The manager fires reports without awaiting them, so a network blip must
@@ -103,4 +110,5 @@ abstract interface class SourceCastBinding {
 /// Builds the binding for [SourceCastContent]. Throws `CastBackendException`
 /// when the source is gone, needs signing in again, or is locked.
 typedef SourceCastBinder = Future<SourceCastBinding> Function(
-    SourceCastContent content);
+  SourceCastContent content,
+);

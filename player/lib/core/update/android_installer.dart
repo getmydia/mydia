@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 /// Method channel to ApkInstaller.kt.
 ///
 /// Exposed rather than private so tests can mock it, matching kSparkleChannel.
-const MethodChannel kInstallerChannel =
-    MethodChannel('dev.mydia.player/installer');
+const MethodChannel kInstallerChannel = MethodChannel(
+  'dev.mydia.player/installer',
+);
 
 /// The host side is not present, which is every platform but Android.
 class InstallerUnavailable implements Exception {
@@ -32,8 +33,7 @@ class InstallerFailed implements Exception {
 
 /// Installs an APK through Android's package installer.
 class AndroidInstaller {
-  const AndroidInstaller({MethodChannel channel = kInstallerChannel})
-      : _channel = channel;
+  const AndroidInstaller({this._channel = kInstallerChannel});
 
   final MethodChannel _channel;
 

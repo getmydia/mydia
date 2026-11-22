@@ -10,8 +10,8 @@ class FakeBackend implements FileSystemBackend {
     Map<String, int> files, {
     Map<String, DateTime> modified = const {},
     this.probeFailure,
-  })  : _sizes = Map.of(files),
-        _modified = Map.of(modified);
+  }) : _sizes = Map.of(files),
+       _modified = Map.of(modified);
 
   static final defaultModified = DateTime.fromMillisecondsSinceEpoch(
     1700000000000,

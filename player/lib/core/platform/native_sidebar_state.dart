@@ -22,10 +22,12 @@ class NativeSidebarRegular extends Notifier<bool> {
       }
     });
     ref.onDispose(events.cancel);
-    unawaited(channel.queryLayout().then((answer) {
-      // An event is newer than the answer to a question asked before it.
-      if (answer != null && !eventSeen && ref.mounted) state = answer;
-    }));
+    unawaited(
+      channel.queryLayout().then((answer) {
+        // An event is newer than the answer to a question asked before it.
+        if (answer != null && !eventSeen && ref.mounted) state = answer;
+      }),
+    );
     // A full-screen iPad is regular, so the first frame shows the sidebar.
     return true;
   }
@@ -40,8 +42,9 @@ final nativeSidebarRegularProvider =
 class NativeSidebarInsets extends Notifier<NativeInsets?> {
   @override
   NativeInsets? build() {
-    final events =
-        ref.watch(nativeTabBarChannelProvider).events.listen((event) {
+    final events = ref.watch(nativeTabBarChannelProvider).events.listen((
+      event,
+    ) {
       if (event is NativeInsetsChanged &&
           (!event.insets.isZero || event.insets.reportsChrome)) {
         state = event.insets;
@@ -54,4 +57,5 @@ class NativeSidebarInsets extends Notifier<NativeInsets?> {
 
 final nativeSidebarInsetsProvider =
     NotifierProvider<NativeSidebarInsets, NativeInsets?>(
-        NativeSidebarInsets.new);
+      NativeSidebarInsets.new,
+    );

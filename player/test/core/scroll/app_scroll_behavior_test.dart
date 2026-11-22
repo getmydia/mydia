@@ -4,24 +4,19 @@
 // really is what was broken.
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/scroll/app_scroll_behavior.dart';
 
-Widget _host({
-  required ScrollController controller,
-  ScrollBehavior? behavior,
-}) {
+Widget _host({required ScrollController controller, ScrollBehavior? behavior}) {
   return MaterialApp(
     scrollBehavior: behavior,
     home: Scaffold(
       body: ListView.builder(
         controller: controller,
         itemCount: 50,
-        itemBuilder: (context, i) => SizedBox(
-          height: 100,
-          child: Text('row $i'),
-        ),
+        itemBuilder: (context, i) =>
+            SizedBox(height: 100, child: Text('row $i')),
       ),
     ),
   );
@@ -38,8 +33,9 @@ void main() {
     );
   });
 
-  testWidgets('a mouse drag scrolls a list under AppScrollBehavior',
-      (tester) async {
+  testWidgets('a mouse drag scrolls a list under AppScrollBehavior', (
+    tester,
+  ) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);
 
@@ -57,8 +53,9 @@ void main() {
     expect(controller.offset, greaterThan(0));
   });
 
-  testWidgets('the same drag does nothing under the stock behavior',
-      (tester) async {
+  testWidgets('the same drag does nothing under the stock behavior', (
+    tester,
+  ) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);
 
@@ -71,8 +68,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(controller.offset, 0,
-        reason: 'this is the bug the override fixes; if this ever passes, '
-            'Flutter changed its defaults and the override may be redundant');
+    expect(
+      controller.offset,
+      0,
+      reason:
+          'this is the bug the override fixes; if this ever passes, '
+          'Flutter changed its defaults and the override may be redundant',
+    );
   });
 }

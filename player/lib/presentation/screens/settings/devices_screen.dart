@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
@@ -39,9 +40,7 @@ class DevicesSection extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: scheme.error,
-            ),
+            style: TextButton.styleFrom(foregroundColor: scheme.error),
             child: Text(l10n.settingsDevicesRevoke),
           ),
         ],
@@ -131,11 +130,7 @@ class DeviceCard extends StatelessWidget {
   final RemoteDevice device;
   final VoidCallback onRevoke;
 
-  const DeviceCard({
-    super.key,
-    required this.device,
-    required this.onRevoke,
-  });
+  const DeviceCard({super.key, required this.device, required this.onRevoke});
 
   @override
   Widget build(BuildContext context) {
@@ -181,23 +176,21 @@ class DeviceCard extends StatelessWidget {
                       children: [
                         Text(
                           device.deviceName,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: device.isRevoked
-                                        ? scheme.onSurfaceVariant
-                                        : scheme.onSurface,
-                                  ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: device.isRevoked
+                                    ? scheme.onSurfaceVariant
+                                    : scheme.onSurface,
+                              ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
                           _formatPlatform(device.platform),
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -248,7 +241,8 @@ class DeviceCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: scheme.error,
                       side: BorderSide(
-                          color: scheme.error.withValues(alpha: 0.5)),
+                        color: scheme.error.withValues(alpha: 0.5),
+                      ),
                     ),
                   ),
                 ),
@@ -298,15 +292,15 @@ class _StatusBadge extends StatelessWidget {
     final color = device.isRevoked
         ? scheme.error
         : device.isRecentlyActive
-            ? AppColors.success
-            : scheme.onSurfaceVariant;
+        ? AppColors.success
+        : scheme.onSurfaceVariant;
 
     final l10n = context.l10n;
     final text = device.isRevoked
         ? l10n.settingsDevicesStatusRevoked
         : device.isRecentlyActive
-            ? l10n.settingsDevicesStatusActive
-            : l10n.settingsDevicesStatusInactive;
+        ? l10n.settingsDevicesStatusActive
+        : l10n.settingsDevicesStatusInactive;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -316,11 +310,8 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-            ),
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: color, fontWeight: FontWeight.w600, fontSize: 11),
       ),
     );
   }
@@ -343,11 +334,7 @@ class _InfoRow extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: scheme.onSurfaceVariant,
-        ),
+        Icon(icon, size: 16, color: scheme.onSurfaceVariant),
         const SizedBox(width: 6),
         Expanded(
           child: Column(
@@ -355,17 +342,15 @@ class _InfoRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant, fontSize: 11),
               ),
               Text(
                 value,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -405,17 +390,15 @@ class _EmptyView extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               context.l10n.settingsDevicesEmptyTitle,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               context.l10n.settingsDevicesEmptyBody,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
           ],
@@ -455,17 +438,15 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               context.l10n.settingsDevicesLoadFailed,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               error,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
           ],

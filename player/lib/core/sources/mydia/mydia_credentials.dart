@@ -66,34 +66,33 @@ class MydiaCredentials {
   }
 
   Map<String, dynamic> toJson() => {
-        'instanceId': instanceId,
-        'accessToken': accessToken,
-        if (instanceName != null) 'instanceName': instanceName,
-        if (mediaToken != null) 'mediaToken': mediaToken,
-        if (mediaTokenExpiry != null)
-          'mediaTokenExpiry': mediaTokenExpiry!.toIso8601String(),
-        if (deviceToken != null) 'deviceToken': deviceToken,
-        if (serverUrl != null) 'serverUrl': serverUrl,
-        if (nodeAddr != null) 'nodeAddr': nodeAddr,
-        if (username != null) 'username': username,
-      };
+    'instanceId': instanceId,
+    'accessToken': accessToken,
+    if (instanceName != null) 'instanceName': instanceName,
+    if (mediaToken != null) 'mediaToken': mediaToken,
+    if (mediaTokenExpiry != null)
+      'mediaTokenExpiry': mediaTokenExpiry!.toIso8601String(),
+    if (deviceToken != null) 'deviceToken': deviceToken,
+    if (serverUrl != null) 'serverUrl': serverUrl,
+    if (nodeAddr != null) 'nodeAddr': nodeAddr,
+    if (username != null) 'username': username,
+  };
 
   MydiaCredentials copyWith({
     String? accessToken,
     String? mediaToken,
     DateTime? mediaTokenExpiry,
-  }) =>
-      MydiaCredentials(
-        instanceId: instanceId,
-        accessToken: accessToken ?? this.accessToken,
-        instanceName: instanceName,
-        mediaToken: mediaToken ?? this.mediaToken,
-        mediaTokenExpiry: mediaTokenExpiry ?? this.mediaTokenExpiry,
-        deviceToken: deviceToken,
-        serverUrl: serverUrl,
-        nodeAddr: nodeAddr,
-        username: username,
-      );
+  }) => MydiaCredentials(
+    instanceId: instanceId,
+    accessToken: accessToken ?? this.accessToken,
+    instanceName: instanceName,
+    mediaToken: mediaToken ?? this.mediaToken,
+    mediaTokenExpiry: mediaTokenExpiry ?? this.mediaTokenExpiry,
+    deviceToken: deviceToken,
+    serverUrl: serverUrl,
+    nodeAddr: nodeAddr,
+    username: username,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -110,16 +109,16 @@ class MydiaCredentials {
 
   @override
   int get hashCode => Object.hash(
-        instanceId,
-        accessToken,
-        instanceName,
-        mediaToken,
-        mediaTokenExpiry,
-        deviceToken,
-        serverUrl,
-        nodeAddr,
-        username,
-      );
+    instanceId,
+    accessToken,
+    instanceName,
+    mediaToken,
+    mediaTokenExpiry,
+    deviceToken,
+    serverUrl,
+    nodeAddr,
+    username,
+  );
 }
 
 /// Scheme, lowercased host and port, with no trailing slash, so the same

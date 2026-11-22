@@ -18,8 +18,9 @@ class LegacyMacVideoOutput extends _$LegacyMacVideoOutput {
 
   @override
   Future<bool> build() async {
-    final stored =
-        await ref.read(coreSettingsServiceProvider).getLegacyMacVideoOutput();
+    final stored = await ref
+        .read(coreSettingsServiceProvider)
+        .getLegacyMacVideoOutput();
     return _chosen ?? stored;
   }
 

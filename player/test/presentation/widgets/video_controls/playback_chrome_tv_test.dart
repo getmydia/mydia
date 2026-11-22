@@ -5,7 +5,7 @@
 // Requires --dart-define=MYDIA_FORCE_TV=true. Without it the file skips
 // itself; CI runs it in the "Run television-tier tests" step.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/input_capabilities.dart';
@@ -42,10 +42,10 @@ void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
-          'flag (bool.fromEnvironment), so this file is a deliberate no-op '
-          'unless the whole test process is compiled with that define. CI '
-          'runs it explicitly in the "Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
+            'flag (bool.fromEnvironment), so this file is a deliberate no-op '
+            'unless the whole test process is compiled with that define. CI '
+            'runs it explicitly in the "Run television-tier tests" step.';
 
   group('PlaybackChrome on the remote tier (requires MYDIA_FORCE_TV=true)', () {
     late Player player;
@@ -85,8 +85,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('drops Back, Cast, the volume controls and Fullscreen',
-        (tester) async {
+    testWidgets('drops Back, Cast, the volume controls and Fullscreen', (
+      tester,
+    ) async {
       await pumpChrome(tester);
 
       expect(find.byKey(ChromeTopBar.backKey), findsNothing);
@@ -96,8 +97,9 @@ void main() {
       expect(find.byKey(SecondaryCluster.fullscreenKey), findsNothing);
     });
 
-    testWidgets('keeps the title, the transport and the track controls',
-        (tester) async {
+    testWidgets('keeps the title, the transport and the track controls', (
+      tester,
+    ) async {
       await pumpChrome(tester);
 
       expect(find.byKey(ChromeTopBar.titleKey), findsOneWidget);
@@ -111,8 +113,9 @@ void main() {
     testWidgets('hands ChromeVisibility the remote auto-hide', (tester) async {
       await pumpChrome(tester);
 
-      final visibility =
-          tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+      final visibility = tester.widget<ChromeVisibility>(
+        find.byType(ChromeVisibility),
+      );
       expect(visibility.autoHide, ChromeVisibility.remoteAutoHide);
       expect(visibility.restartOnKeyActivity, isTrue);
     });

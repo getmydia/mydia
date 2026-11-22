@@ -3,7 +3,7 @@
 /// without a widget tree.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/sources/media_source.dart';
 import '../../core/sources/source.dart';
@@ -72,8 +72,17 @@ class SourceNavEntry {
       other.shortLabel == shortLabel;
 
   @override
-  int get hashCode => Object.hash(id, label, libraryKind, libraryScenes, icon,
-      selectedIcon, route, anchored, shortLabel);
+  int get hashCode => Object.hash(
+    id,
+    label,
+    libraryKind,
+    libraryScenes,
+    icon,
+    selectedIcon,
+    route,
+    anchored,
+    shortLabel,
+  );
 }
 
 /// The source id in a `/s/<id>/...` location, or null elsewhere.
@@ -95,36 +104,36 @@ String? sourceIdFromLocation(String location) {
 /// The entries that belong to the app, not to a source: Downloads and
 /// Settings. They are all a viewer has when no source exists.
 List<SourceNavEntry> anchoredNavEntries(List<NavDestination> layout) => [
-      for (final d in layout)
-        if (d.isAnchored && d.id != 'search')
-          SourceNavEntry(
-            id: d.id,
-            icon: d.icon,
-            selectedIcon: d.selectedIcon,
-            route: d.route,
-            anchored: true,
-          ),
-    ];
+  for (final d in layout)
+    if (d.isAnchored && d.id != 'search')
+      SourceNavEntry(
+        id: d.id,
+        icon: d.icon,
+        selectedIcon: d.selectedIcon,
+        route: d.route,
+        anchored: true,
+      ),
+];
 
 /// The viewer's sidebar layout, resolved against the merged All servers
 /// views. Rows with no merged view (Calendar, Unwatched, saved filters) are
 /// left out here and still show on a single server.
 List<SourceNavEntry> resolveAllServersNav(List<NavDestination> layout) {
   String? routeFor(NavDestination d) => switch (d) {
-        FilterDestination() => null,
-        BuiltinDestination() => switch (d.id) {
-            'search' => allServersSearchLocation,
-            'home' => allServersRoot,
-            'continue_watching' => allServersContinueWatchingLocation,
-            'movies' => allServersMoviesLocation,
-            'shows' => allServersShowsLocation,
-            'recently_added' => allServersRecentlyAddedLocation,
-            'favorites' => allServersFavoritesLocation,
-            'collections' => allServersCollectionsLocation,
-            'downloads' || 'settings' => d.route,
-            _ => null,
-          },
-      };
+    FilterDestination() => null,
+    BuiltinDestination() => switch (d.id) {
+      'search' => allServersSearchLocation,
+      'home' => allServersRoot,
+      'continue_watching' => allServersContinueWatchingLocation,
+      'movies' => allServersMoviesLocation,
+      'shows' => allServersShowsLocation,
+      'recently_added' => allServersRecentlyAddedLocation,
+      'favorites' => allServersFavoritesLocation,
+      'collections' => allServersCollectionsLocation,
+      'downloads' || 'settings' => d.route,
+      _ => null,
+    },
+  };
   return [
     for (final d in layout)
       if (routeFor(d) case final route?)
@@ -157,48 +166,59 @@ List<SourceNavEntry> resolveSourceNav({
       capabilities.contains(needs) ? sourceListingLocation(source, l) : null;
 
   String? routeFor(NavDestination d) => switch (d) {
-        FilterDestination() =>
-          capabilities.contains(SourceCapability.savedFilters)
-              ? filterLocation(source, d.id)
-              : null,
-        BuiltinDestination() => switch (d.id) {
-            'search' => capabilities.contains(SourceCapability.searchable)
-                ? sourceSearchLocation(source)
-                : null,
-            'home' => sourceHomeLocation(source),
-            'continue_watching' => listing(SourceListing.continueWatching,
-                SourceCapability.continueWatching),
-            'movies' =>
-              movies == null ? null : sourceLibraryLocation(movies.ref),
-            'shows' => shows == null ? null : sourceLibraryLocation(shows.ref),
-            'calendar' =>
-              listing(SourceListing.calendar, SourceCapability.calendar),
-            'recently_added' => listing(
-                SourceListing.recentlyAdded, SourceCapability.recentlyAdded),
-            'unwatched' => listing(
-                SourceListing.unwatched, SourceCapability.unwatchedListing),
-            'favorites' => listing(
-                SourceListing.favorites, SourceCapability.favoritesListing),
-            'collections' =>
-              listing(SourceListing.collections, SourceCapability.collections),
-            'downloads' || 'settings' => d.route,
-            _ => null,
-          },
-      };
+    FilterDestination() =>
+      capabilities.contains(SourceCapability.savedFilters)
+          ? filterLocation(source, d.id)
+          : null,
+    BuiltinDestination() => switch (d.id) {
+      'search' =>
+        capabilities.contains(SourceCapability.searchable)
+            ? sourceSearchLocation(source)
+            : null,
+      'home' => sourceHomeLocation(source),
+      'continue_watching' => listing(
+        SourceListing.continueWatching,
+        SourceCapability.continueWatching,
+      ),
+      'movies' => movies == null ? null : sourceLibraryLocation(movies.ref),
+      'shows' => shows == null ? null : sourceLibraryLocation(shows.ref),
+      'calendar' => listing(SourceListing.calendar, SourceCapability.calendar),
+      'recently_added' => listing(
+        SourceListing.recentlyAdded,
+        SourceCapability.recentlyAdded,
+      ),
+      'unwatched' => listing(
+        SourceListing.unwatched,
+        SourceCapability.unwatchedListing,
+      ),
+      'favorites' => listing(
+        SourceListing.favorites,
+        SourceCapability.favoritesListing,
+      ),
+      'collections' => listing(
+        SourceListing.collections,
+        SourceCapability.collections,
+      ),
+      'downloads' || 'settings' => d.route,
+      _ => null,
+    },
+  };
 
   final entries = <SourceNavEntry>[];
   var afterLibraries = -1;
   for (final d in layout) {
     final route = routeFor(d);
     if (route == null) continue;
-    entries.add(SourceNavEntry(
-      id: d.id,
-      icon: d.icon,
-      selectedIcon: d.selectedIcon,
-      route: route,
-      anchored: d.isAnchored,
-      shortLabel: d.id == 'shows',
-    ));
+    entries.add(
+      SourceNavEntry(
+        id: d.id,
+        icon: d.icon,
+        selectedIcon: d.selectedIcon,
+        route: route,
+        anchored: d.isAnchored,
+        shortLabel: d.id == 'shows',
+      ),
+    );
     if (d.id == 'shows' || (d.id == 'movies' && afterLibraries == -1)) {
       afterLibraries = entries.length;
     }

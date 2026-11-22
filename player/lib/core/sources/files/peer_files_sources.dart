@@ -43,7 +43,8 @@ String peerFilesHostAccountId(String localAccountId) =>
 /// neither lends nor borrows, and when the copies' box failed to open.
 final peerFilesAccountsProvider =
     NotifierProvider<_PeerFilesAccounts, List<PeerSharedAccount>>(
-        _PeerFilesAccounts.new);
+      _PeerFilesAccounts.new,
+    );
 
 class _PeerFilesAccounts extends Notifier<List<PeerSharedAccount>> {
   @override
@@ -64,8 +65,12 @@ class _PeerFilesAccounts extends Notifier<List<PeerSharedAccount>> {
       // A host that lends nothing any more needs no proxy target. One still
       // lending keeps its target, and with it any playback in progress.
       for (final nodeId in gone) {
-        unawaited(PeerFilesBackend.releaseHost(
-            nodeId, () => ref.read(mediaProxyProvider)));
+        unawaited(
+          PeerFilesBackend.releaseHost(
+            nodeId,
+            () => ref.read(mediaProxyProvider),
+          ),
+        );
       }
     }
 
@@ -83,7 +88,8 @@ class _PeerFilesAccounts extends Notifier<List<PeerSharedAccount>> {
 /// The node id of each paired player as it connects. A seam so tests can
 /// connect a host.
 final peerConnectedProvider = Provider<Stream<String>>(
-    (ref) => ref.watch(p2pServiceProvider).onPeerConnected);
+  (ref) => ref.watch(p2pServiceProvider).onPeerConnected,
+);
 
 /// How long a pull to refresh waits for the hosts it asks. A host that has
 /// not answered by then finishes in the background, and its new copy
@@ -116,9 +122,11 @@ Future<void> refreshPeerFilesSources(
 
 /// One source per lent account, labelled with the lending device's name
 /// and the account's, as "Living Room TV · Movies".
-final peerFilesSourcesProvider = Provider<List<Source>>((ref) => [
-      for (final a in ref.watch(peerFilesAccountsProvider)) peerFilesSource(a),
-    ]);
+final peerFilesSourcesProvider = Provider<List<Source>>(
+  (ref) => [
+    for (final a in ref.watch(peerFilesAccountsProvider)) peerFilesSource(a),
+  ],
+);
 
 Source peerFilesSource(PeerSharedAccount shared) {
   final id = shared.localAccountId;
@@ -153,8 +161,10 @@ Source peerFilesSource(PeerSharedAccount shared) {
 /// on every change to the store, so a fetch that lands a new copy rebuilds
 /// whatever reads this on it; an unchanged copy is the same instance and
 /// rebuilds nothing.
-final peerFilesIndexProvider =
-    Provider.family<FileLibraryIndex, String>((ref, localAccountId) {
+final peerFilesIndexProvider = Provider.family<FileLibraryIndex, String>((
+  ref,
+  localAccountId,
+) {
   final store = ref.watch(peerFilesStoreProvider);
   void changed() => ref.invalidateSelf();
   store.changes.addListener(changed);

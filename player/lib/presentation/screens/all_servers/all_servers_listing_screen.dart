@@ -2,7 +2,7 @@
 /// every included server.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/focus/focus_memory.dart';
@@ -48,17 +48,16 @@ class _AllServersListingScreenState
       };
 
   String get _title => switch (widget.listing) {
-        AllServersListing.continueWatching =>
-          context.l10n.nextUpContinueWatching,
-        AllServersListing.recentlyAdded => context.l10n.navRecentlyAdded,
-        AllServersListing.favorites => context.l10n.navFavorites,
-      };
+    AllServersListing.continueWatching => context.l10n.nextUpContinueWatching,
+    AllServersListing.recentlyAdded => context.l10n.navRecentlyAdded,
+    AllServersListing.favorites => context.l10n.navFavorites,
+  };
 
   bool _keeps(ItemSummary i) => switch (_kind) {
-        null => true,
-        LibraryKind.movies => isMovieRow(i),
-        _ => !isMovieRow(i),
-      };
+    null => true,
+    LibraryKind.movies => isMovieRow(i),
+    _ => !isMovieRow(i),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +67,7 @@ class _AllServersListingScreenState
     final merged = result.value;
     final items = [
       for (final i in stillIncluded(names, merged?.value ?? const []))
-        if (_keeps(i)) i
+        if (_keeps(i)) i,
     ];
     void retry() => ref.invalidate(provider);
 
@@ -115,42 +114,45 @@ class _AllServersListingScreenState
             AllServersBanner(unavailable: merged.unavailable, onRetry: retry),
           Expanded(
             child: switch (result) {
-              AsyncError(:final error) when merged == null =>
-                SourceErrorView(error: error, onRetry: retry),
-              _ when merged == null =>
-                const Center(child: CircularProgressIndicator()),
+              AsyncError(:final error) when merged == null => SourceErrorView(
+                error: error,
+                onRetry: retry,
+              ),
+              _ when merged == null => const Center(
+                child: CircularProgressIndicator(),
+              ),
               _ when items.isEmpty => SourceEmptyState(
-                  key: const Key('all-listing-empty'),
-                  title: context.l10n.allServersNothingHere,
-                ),
+                key: const Key('all-listing-empty'),
+                title: context.l10n.allServersNothingHere,
+              ),
               _ => RefreshIndicator(
-                  onRefresh: () async {
-                    ref.invalidate(provider);
-                    await ref.read(provider.future);
+                onRefresh: () async {
+                  ref.invalidate(provider);
+                  await ref.read(provider.future);
+                },
+                child: BrowseGrid(
+                  key: const Key('all-listing-grid'),
+                  scrollTopPadding: 8,
+                  itemCount: items.length,
+                  itemId: (index) => items[index].ref,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    final resuming =
+                        widget.listing == AllServersListing.continueWatching;
+                    return AllServersPoster(
+                      item: item,
+                      extraCopies: merged.extraCopies[item.ref] ?? 0,
+                      caption: resuming ? showEpisodeCaption(item) : null,
+                      onTap: resuming
+                          ? () => playItem(context, ref, item.ref)
+                          : null,
+                      onContextMenu: resuming
+                          ? (c) => showAllServersContinueMenu(c, ref, item)
+                          : null,
+                    );
                   },
-                  child: BrowseGrid(
-                    key: const Key('all-listing-grid'),
-                    scrollTopPadding: 8,
-                    itemCount: items.length,
-                    itemId: (index) => items[index].ref,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      final resuming =
-                          widget.listing == AllServersListing.continueWatching;
-                      return AllServersPoster(
-                        item: item,
-                        extraCopies: merged.extraCopies[item.ref] ?? 0,
-                        caption: resuming ? showEpisodeCaption(item) : null,
-                        onTap: resuming
-                            ? () => playItem(context, ref, item.ref)
-                            : null,
-                        onContextMenu: resuming
-                            ? (c) => showAllServersContinueMenu(c, ref, item)
-                            : null,
-                      );
-                    },
-                  ),
                 ),
+              ),
             },
           ),
         ],

@@ -72,7 +72,7 @@
 //      pin down.)
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -145,8 +145,8 @@ class _FakeTargetPlayer implements RemotePlayerBinding {
   _FakeTargetPlayer({
     required this.mediaItemId,
     required this.title,
-    required Duration duration,
-  }) : _duration = duration;
+    required this._duration,
+  });
 
   final String mediaItemId;
   final String title;
@@ -183,8 +183,9 @@ class _FakeTargetPlayer implements RemotePlayerBinding {
 
   @override
   Future<void> seek(Duration to) async {
-    _position =
-        to < Duration.zero ? Duration.zero : (to > _duration ? _duration : to);
+    _position = to < Duration.zero
+        ? Duration.zero
+        : (to > _duration ? _duration : to);
   }
 
   @override
@@ -201,27 +202,27 @@ class _FakeTargetPlayer implements RemotePlayerBinding {
 
   @override
   FlutterPlaybackSnapshot describe(int sequence) => FlutterPlaybackSnapshot(
-        state: _state,
-        mediaItemId: mediaItemId,
-        episodeId: null,
-        title: title,
-        subtitle: null,
-        imageUrl: null,
-        positionMs: BigInt.from(_position.inMilliseconds),
-        durationMs: BigInt.from(_duration.inMilliseconds),
-        volume: 1.0,
-        muted: false,
-        audioTracks: const [],
-        subtitleTracks: const [],
-        selectedAudio: null,
-        selectedSubtitle: null,
-        capabilities: const FlutterTargetCapabilities(
-          volume: true,
-          trackSelection: true,
-          nextPrevious: false,
-        ),
-        sequence: BigInt.from(sequence),
-      );
+    state: _state,
+    mediaItemId: mediaItemId,
+    episodeId: null,
+    title: title,
+    subtitle: null,
+    imageUrl: null,
+    positionMs: BigInt.from(_position.inMilliseconds),
+    durationMs: BigInt.from(_duration.inMilliseconds),
+    volume: 1.0,
+    muted: false,
+    audioTracks: const [],
+    subtitleTracks: const [],
+    selectedAudio: null,
+    selectedSubtitle: null,
+    capabilities: const FlutterTargetCapabilities(
+      volume: true,
+      trackSelection: true,
+      nextPrevious: false,
+    ),
+    sequence: BigInt.from(sequence),
+  );
 }
 
 /// The E2E-seeded movie, fetched by title rather than assumed at a fixed id.
@@ -264,7 +265,8 @@ Future<_TestMovie> _fetchTestMovie(E2eApiClient api) async {
     }
   }
   throw StateError(
-      'No E2E test movie with a file found — is scripts/e2e/seed.sh wired up?');
+    'No E2E test movie with a file found — is scripts/e2e/seed.sh wired up?',
+  );
 }
 
 /// Retries claim-code generation the same way `p2p_streaming_test.dart`
@@ -279,7 +281,8 @@ Future<String> _generateClaimCode(E2eApiClient api, String label) async {
     } catch (error) {
       if (attempt == maxAttempts) rethrow;
       debugPrint(
-          '[RemoteControlE2E] $label claim code attempt $attempt failed: $error');
+        '[RemoteControlE2E] $label claim code attempt $attempt failed: $error',
+      );
       await Future<void>.delayed(const Duration(seconds: 2));
     }
   }
@@ -313,8 +316,11 @@ Future<void> _pairPlayerA(
   await waitForLoginScreen(tester);
 
   final textField = find.byType(TextFormField).first;
-  expect(textField, findsOneWidget,
-      reason: 'Should find the claim code input field');
+  expect(
+    textField,
+    findsOneWidget,
+    reason: 'Should find the claim code input field',
+  );
   await tester.enterText(textField, claimCode.replaceAll('-', ''));
   await tester.pump(const Duration(milliseconds: 300));
 
@@ -355,20 +361,25 @@ Future<void> _openPickerAndWaitForDevice(
     if (found) return;
 
     debugPrint(
-        '[RemoteControlE2E] B not in picker on sweep $attempt/$maxAttempts, retrying');
+      '[RemoteControlE2E] B not in picker on sweep $attempt/$maxAttempts, retrying',
+    );
     final closeButton = find.widgetWithText(TextButton, 'Close');
     if (closeButton.evaluate().isNotEmpty) {
       await tester.tap(closeButton);
       await tester.pump(const Duration(milliseconds: 300));
     }
   }
-  fail('Player B ($nodeId) never appeared in the cast picker '
-      'after $maxAttempts sweeps');
+  fail(
+    'Player B ($nodeId) never appeared in the cast picker '
+    'after $maxAttempts sweeps',
+  );
 }
 
 ProviderContainer _containerOf(WidgetTester tester) =>
-    ProviderScope.containerOf(tester.element(find.byType(MyApp)),
-        listen: false);
+    ProviderScope.containerOf(
+      tester.element(find.byType(MyApp)),
+      listen: false,
+    );
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -400,9 +411,12 @@ void main() {
       claimCode: bClaimCode,
       deviceName: 'Player B (E2E target)',
     );
-    expect(bResult.success, isTrue,
-        reason:
-            'Player B failed to pair: ${bResult.failure?.kind.name} ${bResult.failure?.detail}');
+    expect(
+      bResult.success,
+      isTrue,
+      reason:
+          'Player B failed to pair: ${bResult.failure?.kind.name} ${bResult.failure?.detail}',
+    );
 
     final bNodeId = bP2p.nodeId;
     expect(bNodeId, isNotNull, reason: 'Player B has no node ID after pairing');
@@ -412,8 +426,10 @@ void main() {
       accessToken: bResult.credentials!.accessToken,
     );
     final bClient = MydiaClient(
-      transport:
-          HttpMydiaTransport(serverUrl: adminApi.mydiaUrl, http: SourceHttp()),
+      transport: HttpMydiaTransport(
+        serverUrl: adminApi.mydiaUrl,
+        http: SourceHttp(),
+      ),
       load: () async => bCredentials,
       save: (_) async {},
       onUnauthorized: () {},
@@ -423,8 +439,11 @@ void main() {
       documentNodeMutationRegisterDeviceNode,
       Variables$Mutation$RegisterDeviceNode(nodeId: bNodeId!).toJson(),
     );
-    expect((bRegistration['registerDeviceNode'] as Map?)?['nodeId'], bNodeId,
-        reason: 'Player B node registration failed');
+    expect(
+      (bRegistration['registerDeviceNode'] as Map?)?['nodeId'],
+      bNodeId,
+      reason: 'Player B node registration failed',
+    );
 
     final targetController = RemoteTargetController();
     final receiver = RemoteControlReceiver(
@@ -434,8 +453,9 @@ void main() {
       onIntent: (intent, _) => targetController.submit(intent),
       respond: bP2p.respondToControl,
     );
-    final controlSub = bP2p.onControlRequest
-        .listen((request) => unawaited(receiver.handle(request)));
+    final controlSub = bP2p.onControlRequest.listen(
+      (request) => unawaited(receiver.handle(request)),
+    );
 
     addTearDown(() async {
       await controlSub.cancel();
@@ -493,8 +513,10 @@ void main() {
     // still at the placeholder zero (CI failed exactly that way). Holding a
     // listener for the whole test keeps the provider live, the way a mounted
     // cast bar keeps it live in the real app.
-    final castSessionListener =
-        container.listen(castSessionProvider, (_, __) {});
+    final castSessionListener = container.listen(
+      castSessionProvider,
+      (_, _) {},
+    );
     addTearDown(castSessionListener.close);
 
     final aNodeId = container.read(p2pServiceProvider).nodeId;
@@ -508,8 +530,11 @@ void main() {
     await container.read(p2pServiceProvider).addAddressHint(bNodeAddr!);
 
     expect(aNodeId, isNotNull, reason: 'Player A has no node ID after pairing');
-    expect(aNodeId, isNot(equals(bNodeId)),
-        reason: 'A and B must be distinct node identities');
+    expect(
+      aNodeId,
+      isNot(equals(bNodeId)),
+      reason: 'A and B must be distinct node identities',
+    );
 
     // Step 1: confirm both node IDs actually reached the server, not just
     // this process's own view of them. A plain async poll rather than
@@ -539,35 +564,38 @@ void main() {
       }
       await Future<void>.delayed(const Duration(seconds: 1));
     }
-    expect(bothRegistered, isTrue,
-        reason: 'Both A and B node IDs should be registered on the server');
+    expect(
+      bothRegistered,
+      isTrue,
+      reason: 'Both A and B node IDs should be registered on the server',
+    );
 
     // --- Step 3: open the picker on A, assert B appears with what it's
     // playing ---
     await _openPickerAndWaitForDevice(tester, bNodeId);
 
-    final deviceTile =
-        tester.widget<ListTile>(find.byKey(Key('cast-device-$bNodeId')));
+    final deviceTile = tester.widget<ListTile>(
+      find.byKey(Key('cast-device-$bNodeId')),
+    );
     final subtitle = deviceTile.subtitle;
     expect(subtitle, isA<Text>());
-    expect((subtitle as Text).data, equals(movie.title),
-        reason: "Picker should show what B is playing, session-agnostically");
+    expect(
+      (subtitle as Text).data,
+      equals(movie.title),
+      reason: "Picker should show what B is playing, session-agnostically",
+    );
 
     // --- Step 4: select B, assert A adopts rather than restarts ---
     await tester.tap(find.byKey(Key('cast-device-$bNodeId')));
     await tester.pump(const Duration(milliseconds: 300));
 
-    final adopted = await _pumpUntil(
-      tester,
-      () {
-        final session = container.read(castSessionProvider).value;
-        return session != null &&
-            session.device.id == bNodeId &&
-            session.mediaInfo != null &&
-            session.mediaInfo!.duration > Duration.zero;
-      },
-      timeout: const Duration(seconds: 20),
-    );
+    final adopted = await _pumpUntil(tester, () {
+      final session = container.read(castSessionProvider).value;
+      return session != null &&
+          session.device.id == bNodeId &&
+          session.mediaInfo != null &&
+          session.mediaInfo!.duration > Duration.zero;
+    }, timeout: const Duration(seconds: 20));
     expect(adopted, isTrue, reason: "A never adopted B's live session");
 
     final adoptedSession = container.read(castSessionProvider).value!;
@@ -584,8 +612,10 @@ void main() {
       greaterThanOrEqualTo(const Duration(milliseconds: 500)),
       reason: 'Adoption must not reset position to (near) zero',
     );
-    expect(adoptedSession.mediaInfo!.position,
-        lessThanOrEqualTo(_realMovieDuration));
+    expect(
+      adoptedSession.mediaInfo!.position,
+      lessThanOrEqualTo(_realMovieDuration),
+    );
 
     // --- Step 5: pause from A, assert B is paused ---
     await tester.tap(find.byKey(const Key('cast-bar-play-pause')));
@@ -622,27 +652,33 @@ void main() {
           const Duration(milliseconds: 200),
       timeout: const Duration(seconds: 10),
     );
-    expect(sought, isTrue,
-        reason: "B's position did not follow A's seek "
-            '(expected ~${expectedSeekTarget.inMilliseconds}ms, '
-            'got ${fakePlayer.currentPosition.inMilliseconds}ms; '
-            'was paused at ${pausedPosition.inMilliseconds}ms)');
+    expect(
+      sought,
+      isTrue,
+      reason:
+          "B's position did not follow A's seek "
+          '(expected ~${expectedSeekTarget.inMilliseconds}ms, '
+          'got ${fakePlayer.currentPosition.inMilliseconds}ms; '
+          'was paused at ${pausedPosition.inMilliseconds}ms)',
+    );
 
     // Wait for A's own cached snapshot to reflect the seek too — `pullToLocal`
     // below reads *A's* last snapshot, not B's directly.
-    final aSawSeek = await _pumpUntil(
-      tester,
-      () {
-        final position =
-            container.read(castSessionProvider).value?.mediaInfo?.position;
-        return position != null &&
-            (position - expectedSeekTarget).abs() <=
-                const Duration(milliseconds: 200);
-      },
-      timeout: const Duration(seconds: 10),
+    final aSawSeek = await _pumpUntil(tester, () {
+      final position = container
+          .read(castSessionProvider)
+          .value
+          ?.mediaInfo
+          ?.position;
+      return position != null &&
+          (position - expectedSeekTarget).abs() <=
+              const Duration(milliseconds: 200);
+    }, timeout: const Duration(seconds: 10));
+    expect(
+      aSawSeek,
+      isTrue,
+      reason: "A's own cached position never caught up to the seek",
     );
-    expect(aSawSeek, isTrue,
-        reason: "A's own cached position never caught up to the seek");
 
     // --- Step 7: pull playback back to A ---
     await tester.tap(find.byKey(const Key('cast-bar-pull')));
@@ -652,27 +688,40 @@ void main() {
       () => fakePlayer.currentState == FlutterPlaybackState.idle,
       timeout: const Duration(seconds: 10),
     );
-    expect(stopped, isTrue,
-        reason: 'B never stopped after A pulled playback back');
+    expect(
+      stopped,
+      isTrue,
+      reason: 'B never stopped after A pulled playback back',
+    );
 
     final resumed = await _pumpUntil(
       tester,
       () => find.byType(PlayerScreen).evaluate().isNotEmpty,
       timeout: const Duration(seconds: 30),
     );
-    expect(resumed, isTrue,
-        reason: 'A never opened a local player after pulling playback back');
+    expect(
+      resumed,
+      isTrue,
+      reason: 'A never opened a local player after pulling playback back',
+    );
 
     final playerScreen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
     expect(playerScreen.mediaId, equals(movie.id));
     final resumeSeconds = playerScreen.resumeSeconds;
-    expect(resumeSeconds, isNotNull,
-        reason: 'A should resume with an explicit position, not from scratch');
+    expect(
+      resumeSeconds,
+      isNotNull,
+      reason: 'A should resume with an explicit position, not from scratch',
+    );
     // Not a restart at zero, and specifically at (or immediately below,
     // depending on integer-second truncation) the position pulled from B.
-    expect(resumeSeconds, inInclusiveRange(4, 5),
-        reason: 'A should resume locally at the position pulled from B '
-            '(expected ~${expectedSeekTarget.inSeconds}s, got ${resumeSeconds}s)');
+    expect(
+      resumeSeconds,
+      inInclusiveRange(4, 5),
+      reason:
+          'A should resume locally at the position pulled from B '
+          '(expected ~${expectedSeekTarget.inSeconds}s, got ${resumeSeconds}s)',
+    );
 
     // Cleanup, matching the existing integration tests' pattern: replace the
     // app widget to stop pending async work before the test function

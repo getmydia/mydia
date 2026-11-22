@@ -66,11 +66,14 @@ class SourceHttp {
     Duration timeout = defaultTimeout,
     Set<int> passThrough = const {},
   }) async {
-    final response = await send(method, url,
-        headers: {'Accept': 'application/json', ...headers},
-        body: body,
-        timeout: timeout,
-        passThrough: passThrough);
+    final response = await send(
+      method,
+      url,
+      headers: {'Accept': 'application/json', ...headers},
+      body: body,
+      timeout: timeout,
+      passThrough: passThrough,
+    );
     try {
       return jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {

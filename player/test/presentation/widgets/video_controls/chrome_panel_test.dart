@@ -1,6 +1,6 @@
 import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
@@ -112,8 +112,7 @@ void main() {
     });
 
     group('touchPrimary', () {
-      test(
-          'a landscape phone browser gets the enlarged seek target, which it '
+      test('a landscape phone browser gets the enlarged seek target, which it '
           'previously missed: it sits around 800px and so landed in the '
           'tablet tier with a 32px-high scrubber', () {
         final metrics = PanelMetrics.resolve(width: 800, touchPrimary: true);
@@ -134,8 +133,7 @@ void main() {
         );
       });
 
-      test(
-          'touch does NOT collapse the transport, so a landscape phone keeps '
+      test('touch does NOT collapse the transport, so a landscape phone keeps '
           'its episode-nav buttons — the regression the compactTransport '
           'split exists to prevent', () {
         final metrics = PanelMetrics.resolve(width: 800, touchPrimary: true);
@@ -157,32 +155,30 @@ void main() {
       Widget? volume,
       double transportWidth = 200,
       double secondaryWidth = 120,
-    }) =>
-        MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                const Positioned.fill(child: ColoredBox(color: Colors.white)),
-                ChromePanel(
-                  metrics: metrics,
-                  transport: SizedBox(
-                    key: const Key('t'),
-                    width: transportWidth,
-                    height: 48,
-                  ),
-                  scrubber:
-                      const SizedBox(key: Key('s'), width: 300, height: 32),
-                  volume: volume,
-                  secondary: SizedBox(
-                    key: const Key('x'),
-                    width: secondaryWidth,
-                    height: 40,
-                  ),
-                ),
-              ],
+    }) => MaterialApp(
+      home: Scaffold(
+        body: Stack(
+          children: [
+            const Positioned.fill(child: ColoredBox(color: Colors.white)),
+            ChromePanel(
+              metrics: metrics,
+              transport: SizedBox(
+                key: const Key('t'),
+                width: transportWidth,
+                height: 48,
+              ),
+              scrubber: const SizedBox(key: Key('s'), width: 300, height: 32),
+              volume: volume,
+              secondary: SizedBox(
+                key: const Key('x'),
+                width: secondaryWidth,
+                height: 40,
+              ),
             ),
-          ),
-        );
+          ],
+        ),
+      ),
+    );
 
     testWidgets('renders the player glass material', (tester) async {
       await tester.pumpWidget(host(PanelMetrics.forWidth(1600)));
@@ -299,10 +295,16 @@ void main() {
                   width: 300,
                   child: ChromePanel(
                     metrics: PanelMetrics.forWidth(1600),
-                    transport:
-                        const SizedBox(key: Key('t'), width: 60, height: 48),
-                    scrubber:
-                        const SizedBox(key: Key('s'), width: 60, height: 32),
+                    transport: const SizedBox(
+                      key: Key('t'),
+                      width: 60,
+                      height: 48,
+                    ),
+                    scrubber: const SizedBox(
+                      key: Key('s'),
+                      width: 60,
+                      height: 32,
+                    ),
                   ),
                 ),
               ),
@@ -334,47 +336,46 @@ void main() {
     // slot at a given width?) — the latter is `chrome_panel_overflow_test
     // .dart`'s job, across a much finer-grained width matrix.
     for (final width in <double>[320, 360, 400, 480, 599, 600, 900, 1600]) {
-      testWidgets(
-        'the transport group is optically centered on the panel at '
-        '${width}px, even when the side groups are empty or lopsided',
-        (tester) async {
-          final metrics = PanelMetrics.forWidth(width);
+      testWidgets('the transport group is optically centered on the panel at '
+          '${width}px, even when the side groups are empty or lopsided', (
+        tester,
+      ) async {
+        final metrics = PanelMetrics.forWidth(width);
 
-          // Empty sides: transport centre should equal panel centre.
-          await tester.pumpWidget(
-            host(metrics, transportWidth: 48, secondaryWidth: 40),
-          );
-          var panelRect = tester.getRect(find.byType(ChromePanel));
-          var transportRect = tester.getRect(find.byKey(const Key('t')));
-          expect(
-            transportRect.center.dx,
-            closeTo(panelRect.center.dx, 0.5),
-            reason: 'empty sides at ${width}px',
-          );
+        // Empty sides: transport centre should equal panel centre.
+        await tester.pumpWidget(
+          host(metrics, transportWidth: 48, secondaryWidth: 40),
+        );
+        var panelRect = tester.getRect(find.byType(ChromePanel));
+        var transportRect = tester.getRect(find.byKey(const Key('t')));
+        expect(
+          transportRect.center.dx,
+          closeTo(panelRect.center.dx, 0.5),
+          reason: 'empty sides at ${width}px',
+        );
 
-          // Lopsided sides: a wider volume cluster against a narrower
-          // secondary cluster (still small enough to fit at every tested
-          // width, including the narrowest mobile one). Equal-flex Expanded
-          // groups should still keep the transport centred because each
-          // side gets equal width regardless of its content's intrinsic
-          // size.
-          await tester.pumpWidget(
-            host(
-              metrics,
-              transportWidth: 48,
-              secondaryWidth: 40,
-              volume: const SizedBox(key: Key('v'), width: 60, height: 40),
-            ),
-          );
-          panelRect = tester.getRect(find.byType(ChromePanel));
-          transportRect = tester.getRect(find.byKey(const Key('t')));
-          expect(
-            transportRect.center.dx,
-            closeTo(panelRect.center.dx, 0.5),
-            reason: 'lopsided sides at ${width}px',
-          );
-        },
-      );
+        // Lopsided sides: a wider volume cluster against a narrower
+        // secondary cluster (still small enough to fit at every tested
+        // width, including the narrowest mobile one). Equal-flex Expanded
+        // groups should still keep the transport centred because each
+        // side gets equal width regardless of its content's intrinsic
+        // size.
+        await tester.pumpWidget(
+          host(
+            metrics,
+            transportWidth: 48,
+            secondaryWidth: 40,
+            volume: const SizedBox(key: Key('v'), width: 60, height: 40),
+          ),
+        );
+        panelRect = tester.getRect(find.byType(ChromePanel));
+        transportRect = tester.getRect(find.byKey(const Key('t')));
+        expect(
+          transportRect.center.dx,
+          closeTo(panelRect.center.dx, 0.5),
+          reason: 'lopsided sides at ${width}px',
+        );
+      });
     }
 
     testWidgets(
@@ -418,26 +419,30 @@ void main() {
         final probe = _InitProbe(onInit: () => initCount++);
 
         // Desktop: showVolume true.
-        await tester
-            .pumpWidget(host(PanelMetrics.forWidth(1600), volume: probe));
+        await tester.pumpWidget(
+          host(PanelMetrics.forWidth(1600), volume: probe),
+        );
         expect(initCount, 1);
         expect(find.byKey(const Key('v')), findsOneWidget);
 
         // Cross below the mobile breakpoint: showVolume flips to false, but
         // the SAME probe widget instance is still supplied by the caller.
-        await tester
-            .pumpWidget(host(PanelMetrics.forWidth(400), volume: probe));
+        await tester.pumpWidget(
+          host(PanelMetrics.forWidth(400), volume: probe),
+        );
         expect(
           initCount,
           1,
-          reason: 'volume widget must stay mounted (not rebuilt) when '
+          reason:
+              'volume widget must stay mounted (not rebuilt) when '
               'showVolume flips false, so its State (e.g. VolumeCluster\'s '
               '_lastVolume) survives',
         );
 
         // Cross back above: showVolume flips true again.
-        await tester
-            .pumpWidget(host(PanelMetrics.forWidth(1600), volume: probe));
+        await tester.pumpWidget(
+          host(PanelMetrics.forWidth(1600), volume: probe),
+        );
         expect(initCount, 1);
       },
     );

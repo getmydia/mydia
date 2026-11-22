@@ -3,11 +3,8 @@ import 'package:player/core/player/best_file.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/sources/item.dart';
 
-MediaFile _file(String id, String resolution) => MediaFile(
-      id: id,
-      resolution: resolution,
-      directPlaySupported: true,
-    );
+MediaFile _file(String id, String resolution) =>
+    MediaFile(id: id, resolution: resolution, directPlaySupported: true);
 
 void main() {
   group('pickBestFile', () {
@@ -41,13 +38,15 @@ void main() {
       expect(await pickBestVersionId(versions, 1600), 'hd');
     });
 
-    test('a version the server says is not direct-playable loses a tie',
-        () async {
-      const versions = [
-        MediaVersion(id: 'no', height: 1080, directPlaySupported: false),
-        MediaVersion(id: 'yes', height: 1080),
-      ];
-      expect(await pickBestVersionId(versions, 1600), 'yes');
-    });
+    test(
+      'a version the server says is not direct-playable loses a tie',
+      () async {
+        const versions = [
+          MediaVersion(id: 'no', height: 1080, directPlaySupported: false),
+          MediaVersion(id: 'yes', height: 1080),
+        ];
+        expect(await pickBestVersionId(versions, 1600), 'yes');
+      },
+    );
   });
 }

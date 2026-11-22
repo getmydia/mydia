@@ -50,7 +50,7 @@ class _FlutterSecureStorageBackend implements SecretBackend {
 class NativeAuthStorage
     implements AuthStorage, StrictAuthRead, SharedAuthBacking {
   NativeAuthStorage({SecretBackend? backend})
-      : _backend = backend ?? const _FlutterSecureStorageBackend();
+    : _backend = backend ?? const _FlutterSecureStorageBackend();
 
   final SecretBackend _backend;
 

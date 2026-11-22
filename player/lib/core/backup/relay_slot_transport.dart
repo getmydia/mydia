@@ -19,16 +19,12 @@ import 'vault_crypto.dart';
 class RelaySlotTransport implements SlotTransport {
   RelaySlotTransport({
     required BackupRelayClient relay,
-    required BackupVaultStateStore store,
-    required BackupIdentity identity,
-    required BackupVaultState state,
-    required int Function() nowMs,
-  })  : _relay = relay,
-        _ops = BackupVaultOps(relay),
-        _store = store,
-        _identity = identity,
-        _state = state,
-        _nowMs = nowMs;
+    required this._store,
+    required this._identity,
+    required this._state,
+    required this._nowMs,
+  }) : _relay = relay,
+       _ops = BackupVaultOps(relay);
 
   /// The relay's slot size cap; a larger sealed slot is never sent.
   static const maxSlotBytes = 4194304;
@@ -75,8 +71,11 @@ class RelaySlotTransport implements SlotTransport {
   /// catches the own seq up to what the relay stores.
   @override
   Future<SlotListing?> list({String? cursor}) async {
-    final m =
-        await _relay.manifest(_state.vaultId, _identity.signer, etag: cursor);
+    final m = await _relay.manifest(
+      _state.vaultId,
+      _identity.signer,
+      etag: cursor,
+    );
     if (m == null) return null;
     _emit(m);
     final hook = beforeAdopt;
@@ -117,7 +116,11 @@ class RelaySlotTransport implements SlotTransport {
       throw StateError('slot ${slot.slotId} is not in the last listing');
     }
     final payload = await _ops.readSlot(
-        _state.vaultId, _identity.signer, s, _state.keysByEpoch);
+      _state.vaultId,
+      _identity.signer,
+      s,
+      _state.keysByEpoch,
+    );
     if (payload == null) {
       throw FormatException('slot ${slot.slotId} is unreadable');
     }
@@ -132,7 +135,7 @@ class RelaySlotTransport implements SlotTransport {
   Future<void> writeOwn(BackupPayload payload) async {
     final plaintext = payload.encode();
     var state = _state;
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       final seq = state.ownSeq + 1;
       final sealed = await VaultCrypto.sealSlot(
         vaultKey: state.keysByEpoch[state.epoch]!,
@@ -148,9 +151,13 @@ class RelaySlotTransport implements SlotTransport {
       final int newSeq;
       try {
         newSeq = await _relay.putSlot(
-            state.vaultId, _identity.signer, ownSlotId, sealed,
-            ifMatch: state.ownSeq == 0 ? null : state.ownSeq,
-            epoch: state.epoch);
+          state.vaultId,
+          _identity.signer,
+          ownSlotId,
+          sealed,
+          ifMatch: state.ownSeq == 0 ? null : state.ownSeq,
+          epoch: state.epoch,
+        );
       } on BackupRelayException catch (e) {
         if (attempt > 0 ||
             (e.kind != BackupRelayError.preconditionFailed &&

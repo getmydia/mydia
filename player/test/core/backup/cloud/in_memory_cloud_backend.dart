@@ -19,9 +19,11 @@ class InMemoryCloudStore {
 
 /// Fake [CloudBackend] over an [InMemoryCloudStore].
 class InMemoryCloudBackend implements CloudBackend {
-  InMemoryCloudBackend(this.store,
-      {this.kind = CloudStoreKind.gdrive,
-      this.accountLabel = 'ana@example.com'});
+  InMemoryCloudBackend(
+    this.store, {
+    this.kind = CloudStoreKind.gdrive,
+    this.accountLabel = 'ana@example.com',
+  });
 
   final InMemoryCloudStore store;
 
@@ -69,15 +71,18 @@ class InMemoryCloudBackend implements CloudBackend {
     _maybeFail();
     final current = '${store.counter}';
     if (cursor == current) return null;
-    return CloudListing(cursor: current, slots: [
-      for (final id in store.bytes.keys.toList()..sort())
-        SlotInfo(
-          slotId: id,
-          version: '${store.versions[id]}',
-          deviceName: store.names[id],
-          size: store.bytes[id]!.length,
-        ),
-    ]);
+    return CloudListing(
+      cursor: current,
+      slots: [
+        for (final id in store.bytes.keys.toList()..sort())
+          SlotInfo(
+            slotId: id,
+            version: '${store.versions[id]}',
+            deviceName: store.names[id],
+            size: store.bytes[id]!.length,
+          ),
+      ],
+    );
   }
 
   @override
@@ -90,8 +95,12 @@ class InMemoryCloudBackend implements CloudBackend {
   }
 
   @override
-  Future<void> writeBytes(String slotId, List<int> bytes,
-      {required String deviceName, required String platform}) async {
+  Future<void> writeBytes(
+    String slotId,
+    List<int> bytes, {
+    required String deviceName,
+    required String platform,
+  }) async {
     _maybeFail();
     store.bytes[slotId] = List.of(bytes);
     store.names[slotId] = deviceName;

@@ -113,11 +113,7 @@ class MediaFileSelector {
   }
 
   /// Score a single file. Higher is better.
-  static double _score(
-    MediaFile file,
-    DeviceContext context,
-    int maxTarget,
-  ) {
+  static double _score(MediaFile file, DeviceContext context, int maxTarget) {
     double score = 0;
     final pixels = parseToPixels(file.resolution);
 

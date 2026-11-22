@@ -39,12 +39,12 @@ const _account = ProviderAccount(
 );
 
 SourceServer _server(String id) => SourceServer(
-      id: id,
-      accountId: 'acc1',
-      profileId: 'owner',
-      name: id,
-      machineIdentifier: id,
-    );
+  id: id,
+  accountId: 'acc1',
+  profileId: 'owner',
+  name: id,
+  machineIdentifier: id,
+);
 
 final _record = SourceAccountRecord(
   account: _account,
@@ -55,12 +55,24 @@ final _record = SourceAccountRecord(
   addedAtMs: 0,
 );
 
-const _pip =
-    PlexHomeUser(uuid: 'kid0001', title: 'Pip', admin: false, protected: true);
+const _pip = PlexHomeUser(
+  uuid: 'kid0001',
+  title: 'Pip',
+  admin: false,
+  protected: true,
+);
 const _wren = PlexHomeUser(
-    uuid: 'guest02', title: 'Wren', admin: false, protected: false);
-const _quill =
-    PlexHomeUser(uuid: 'u1', title: 'Quill', admin: true, protected: false);
+  uuid: 'guest02',
+  title: 'Wren',
+  admin: false,
+  protected: false,
+);
+const _quill = PlexHomeUser(
+  uuid: 'u1',
+  title: 'Quill',
+  admin: true,
+  protected: false,
+);
 
 void main() {
   late _FailingStore store;
@@ -88,10 +100,11 @@ void main() {
           'kid-token' => http.Response(kidResourcesJson, 200),
           'guest-token' => http.Response(guestResourcesJson, 200),
           'owner-switched' when ownerSeesOnlyAttic => http.Response(
-              '[{"name": "Attic", "provides": "server", '
-              '"clientIdentifier": "aa11", "owned": true, "presence": true, '
-              '"accessToken": "server-token-1", "connections": []}]',
-              200),
+            '[{"name": "Attic", "provides": "server", '
+            '"clientIdentifier": "aa11", "owned": true, "presence": true, '
+            '"accessToken": "server-token-1", "connections": []}]',
+            200,
+          ),
           _ => http.Response(resourcesJson, 200),
         };
     }
@@ -106,14 +119,22 @@ void main() {
     await storage.write('source/acc1/account_token', 'acct');
     await storage.write('source/acc1/owner/aa11/token', 'server-token-1');
     await storage.write('source/acc1/owner/bb22/token', 'server-token-2');
-    container = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      sourceHttpProvider.overrideWithValue(
-          SourceHttp(client: MockClient((r) async => route(r)))),
-      plexIdentityProvider.overrideWith((ref) async => const PlexIdentity(
-          clientIdentifier: 'cid', version: '1', platform: 'Linux')),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        sourceHttpProvider.overrideWithValue(
+          SourceHttp(client: MockClient((r) async => route(r))),
+        ),
+        plexIdentityProvider.overrideWith(
+          (ref) async => const PlexIdentity(
+            clientIdentifier: 'cid',
+            version: '1',
+            platform: 'Linux',
+          ),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     await container.read(sourceRecordsProvider.future);
   });
@@ -133,50 +154,80 @@ void main() {
   });
 
   test('switching to a protected user swaps servers and tokens', () async {
-    final next = await (await switcher())
-        .switchTo(_account, _pip, pin: '1234', serverId: 'bb22');
+    final next = await (await switcher()).switchTo(
+      _account,
+      _pip,
+      pin: '1234',
+      serverId: 'bb22',
+    );
 
-    expect(next, const SourceId('acc1:kid0001:aa11'),
-        reason: 'Pip cannot see bb22, so the first server is next');
+    expect(
+      next,
+      const SourceId('acc1:kid0001:aa11'),
+      reason: 'Pip cannot see bb22, so the first server is next',
+    );
     final record = await stored();
     expect(record.account.activeProfileId, 'kid0001');
-    expect([for (final s in record.servers) (s.id, s.profileId)],
-        [('aa11', 'kid0001')]);
+    expect(
+      [for (final s in record.servers) (s.id, s.profileId)],
+      [('aa11', 'kid0001')],
+    );
     expect(record.chosenServers, ['aa11', 'bb22']);
     expect(record.profiles.any((p) => p.id == 'kid0001'), isTrue);
 
     expect(await storage.read('source/acc1/kid0001/user_token'), 'kid-token');
-    expect(await storage.read('source/acc1/kid0001/aa11/token'),
-        'kid-server-token');
+    expect(
+      await storage.read('source/acc1/kid0001/aa11/token'),
+      'kid-server-token',
+    );
     expect(await storage.read('source/acc1/owner/aa11/token'), isNull);
     expect(await storage.read('source/acc1/owner/bb22/token'), isNull);
-    expect(await storage.read('source/acc1/account_token'), 'acct',
-        reason: 'the admin token stays for the next switch');
+    expect(
+      await storage.read('source/acc1/account_token'),
+      'acct',
+      reason: 'the admin token stays for the next switch',
+    );
   });
 
   test('the same server follows when the new user can see it', () async {
-    final next = await (await switcher())
-        .switchTo(_account, _pip, pin: '1234', serverId: 'aa11');
+    final next = await (await switcher()).switchTo(
+      _account,
+      _pip,
+      pin: '1234',
+      serverId: 'aa11',
+    );
     expect(next, const SourceId('acc1:kid0001:aa11'));
   });
 
   test('a wrong PIN changes nothing', () async {
     await expectLater(
       (await switcher()).switchTo(_account, _pip, pin: '0000'),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.wrongPin)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.wrongPin,
+        ),
+      ),
     );
     expect((await stored()).account.activeProfileId, 'owner');
     expect(
-        await storage.read('source/acc1/owner/aa11/token'), 'server-token-1');
+      await storage.read('source/acc1/owner/aa11/token'),
+      'server-token-1',
+    );
     expect(await storage.read('source/acc1/kid0001/user_token'), isNull);
   });
 
   test('a user who sees none of the chosen servers is refused', () async {
     await expectLater(
       (await switcher()).switchTo(_account, _wren),
-      throwsA(isA<SourceException>()
-          .having((e) => e.fault, 'fault', SourceFault.plexNoServersForUser)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.fault,
+          'fault',
+          SourceFault.plexNoServersForUser,
+        ),
+      ),
     );
     expect((await stored()).account.activeProfileId, 'owner');
     expect(await storage.read('source/acc1/guest02/user_token'), isNull);
@@ -193,23 +244,31 @@ void main() {
     expect(record.account.activeProfileId, 'owner');
     expect([for (final s in record.servers) s.id], ['aa11', 'bb22']);
     expect(
-        await storage.read('source/acc1/owner/user_token'), 'owner-switched');
+      await storage.read('source/acc1/owner/user_token'),
+      'owner-switched',
+    );
     expect(
-        await storage.read('source/acc1/owner/bb22/token'), 'server-token-2');
+      await storage.read('source/acc1/owner/bb22/token'),
+      'server-token-2',
+    );
     expect(await storage.read('source/acc1/kid0001/user_token'), isNull);
     expect(await storage.read('source/acc1/kid0001/aa11/token'), isNull);
   });
 
-  test('re-switching to the active user drops tokens of servers they lost',
-      () async {
-    ownerSeesOnlyAttic = true;
-    await (await switcher()).switchTo(_account, _quill);
+  test(
+    're-switching to the active user drops tokens of servers they lost',
+    () async {
+      ownerSeesOnlyAttic = true;
+      await (await switcher()).switchTo(_account, _quill);
 
-    expect(await storage.read('source/acc1/owner/bb22/token'), isNull);
-    expect(await storage.read('source/acc1/owner/aa11/token'), isNotNull);
-    expect(
-        await storage.read('source/acc1/owner/user_token'), 'owner-switched');
-  });
+      expect(await storage.read('source/acc1/owner/bb22/token'), isNull);
+      expect(await storage.read('source/acc1/owner/aa11/token'), isNotNull);
+      expect(
+        await storage.read('source/acc1/owner/user_token'),
+        'owner-switched',
+      );
+    },
+  );
 
   test('a failed record write removes the new tokens', () async {
     store.fail = true;
@@ -222,6 +281,8 @@ void main() {
     expect(await storage.read('source/acc1/kid0001/user_token'), isNull);
     expect(await storage.read('source/acc1/kid0001/aa11/token'), isNull);
     expect(
-        await storage.read('source/acc1/owner/aa11/token'), 'server-token-1');
+      await storage.read('source/acc1/owner/aa11/token'),
+      'server-token-1',
+    );
   });
 }

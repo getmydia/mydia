@@ -15,7 +15,7 @@
 // (several Hive-backed), which is expensive to satisfy just to check where
 // the first content sliver lands.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -86,8 +86,7 @@ Future<void> _pumpHarness(
 }
 
 void main() {
-  testWidgets(
-      'the first content sliver starts at the header bottom plus the '
+  testWidgets('the first content sliver starts at the header bottom plus the '
       'storage gap, under macOS insets', (tester) async {
     const macOS = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
     await _pumpHarness(tester, insets: macOS, statusBar: 0);
@@ -102,15 +101,11 @@ void main() {
     expect(markerTop, headerBottom + DownloadsScreen.storageSectionGap);
   });
 
-  testWidgets(
-      'the first content sliver starts at the header bottom plus the '
-      'storage gap, with a 24px status bar and no window chrome',
-      (tester) async {
-    await _pumpHarness(
-      tester,
-      insets: WindowChromeInsets.zero,
-      statusBar: 24,
-    );
+  testWidgets('the first content sliver starts at the header bottom plus the '
+      'storage gap, with a 24px status bar and no window chrome', (
+    tester,
+  ) async {
+    await _pumpHarness(tester, insets: WindowChromeInsets.zero, statusBar: 24);
 
     final headerBottom = tester.getRect(find.byType(WindowTitleRow)).bottom;
     final markerTop = tester.getRect(find.byKey(_markerKey)).top;

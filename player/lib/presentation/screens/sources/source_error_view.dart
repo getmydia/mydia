@@ -1,6 +1,6 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/sources/source.dart';
@@ -24,8 +24,9 @@ class SourceErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sourceError =
-        error is SourceException ? error as SourceException : null;
+    final sourceError = error is SourceException
+        ? error as SourceException
+        : null;
     final unauthorized = sourceError?.kind == SourceErrorKind.unauthorized;
     final account = this.account;
     return Center(
@@ -48,7 +49,8 @@ class SourceErrorView extends StatelessWidget {
                 key: const Key('source-error-sign-in'),
                 autofocus: true,
                 onPressed: () => context.push(
-                    '/sources/add/${account.kind.name}?account=${account.id}'),
+                  '/sources/add/${account.kind.name}?account=${account.id}',
+                ),
                 child: Text(context.l10n.navSourceSignInAgain),
               )
             else

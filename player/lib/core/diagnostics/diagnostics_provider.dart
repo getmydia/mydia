@@ -18,13 +18,15 @@ final Provider<DiagnosticsSettings> diagnosticsSettingsProvider =
 
 /// Null where there is no on-disk log: web, tests that pump the whole app,
 /// or a store that failed to open. `main()` overrides it.
-final Provider<LogUploader?> logUploaderProvider =
-    Provider<LogUploader?>((ref) => null);
+final Provider<LogUploader?> logUploaderProvider = Provider<LogUploader?>(
+  (ref) => null,
+);
 
 final AsyncNotifierProvider<DiagnosticsController, DiagnosticsState>
-    diagnosticsProvider =
+diagnosticsProvider =
     AsyncNotifierProvider<DiagnosticsController, DiagnosticsState>(
-        DiagnosticsController.new);
+      DiagnosticsController.new,
+    );
 
 class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
   // Serializes setCrashes() and setLogs(), so their storage writes,
@@ -64,7 +66,8 @@ class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
       _enqueue(() => _update((s) => s.copyWith(logs: on)));
 
   Future<void> _update(
-      DiagnosticsState Function(DiagnosticsState current) change) async {
+    DiagnosticsState Function(DiagnosticsState current) change,
+  ) async {
     // build() may still be awaiting its own load() when this call was made.
     // Waiting for it here, rather than reading `state` immediately, means
     // this change is layered on top of the state build() loaded instead of
@@ -87,8 +90,10 @@ class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
     return uploader.sendReport(note: note);
   }
 
-  Future<void> _apply(DiagnosticsState next,
-      {required bool resetCursor}) async {
+  Future<void> _apply(
+    DiagnosticsState next, {
+    required bool resetCursor,
+  }) async {
     ref.read(crashReporterProvider).applyConsent(next.crashes);
     final uploader = ref.read(logUploaderProvider);
     if (uploader == null) return;

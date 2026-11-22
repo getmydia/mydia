@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,8 +39,10 @@ class _Popup extends PopupRoute<void> {
   Duration get transitionDuration => Duration.zero;
   @override
   Widget buildPage(
-          BuildContext context, Animation<double> a, Animation<double> b) =>
-      const SizedBox();
+    BuildContext context,
+    Animation<double> a,
+    Animation<double> b,
+  ) => const SizedBox();
 }
 
 class _ShellLike extends StatefulWidget {
@@ -75,8 +77,9 @@ class _ShellLikeState extends State<_ShellLike> {
     final route = ModalRoute.of(context);
     final shellCurrent = route?.isCurrent ?? true;
     final covered = widget.observer.isCovered(route);
-    widget.visibleLog.add(AppShell.nativeBarVisible(
-        shellCurrent: shellCurrent, drawerOpen: false));
+    widget.visibleLog.add(
+      AppShell.nativeBarVisible(shellCurrent: shellCurrent, drawerOpen: false),
+    );
     return ReportedNativeBar(
       shown: AppShell.nativeBarReported(native: true, coveredByPage: covered),
       child: Scaffold(
@@ -120,48 +123,59 @@ Future<List<bool>> _pump(WidgetTester tester) async {
   final observer = PageCoverObserver();
   addTearDown(observer.dispose);
   const channel = MethodChannel(_name);
-  tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(channel, (_) async => null);
-  addTearDown(() => tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(channel, null));
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    channel,
+    (_) async => null,
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      null,
+    ),
+  );
 
-  final container = ProviderContainer(overrides: [
-    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    hasMydiaProvider.overrideWithValue(true),
-    castSessionProvider.overrideWith((ref) => Stream.value(null)),
-    nativeTabBarChannelProvider.overrideWith((ref) {
-      final c = NativeTabBarChannel(channel: channel);
-      ref.onDispose(c.dispose);
-      return c;
-    }),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      hasMydiaProvider.overrideWithValue(true),
+      castSessionProvider.overrideWith((ref) => Stream.value(null)),
+      nativeTabBarChannelProvider.overrideWith((ref) {
+        final c = NativeTabBarChannel(channel: channel);
+        ref.onDispose(c.dispose);
+        return c;
+      }),
+    ],
+  );
   addTearDown(container.dispose);
 
-  final router = GoRouter(observers: [
-    observer
-  ], routes: [
-    GoRoute(
-      path: '/',
-      builder: (_, __) =>
-          _ShellLike(observer: observer, visibleLog: visibleLog),
-    ),
-    GoRoute(
-      path: '/page',
-      builder: (_, __) => const Scaffold(body: Text('a page')),
-    ),
-  ]);
+  final router = GoRouter(
+    observers: [observer],
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, _) =>
+            _ShellLike(observer: observer, visibleLog: visibleLog),
+      ),
+      GoRoute(
+        path: '/page',
+        builder: (_, _) => const Scaffold(body: Text('a page')),
+      ),
+    ],
+  );
   addTearDown(router.dispose);
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: router,
-      builder: (context, child) =>
-          CastBarLayer(child: child ?? const SizedBox.shrink()),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+        builder: (context, child) =>
+            CastBarLayer(child: child ?? const SizedBox.shrink()),
+      ),
     ),
-  ));
+  );
   container.read(castTargetProvider.notifier).set(_device);
   await tester.pump();
   return visibleLog;
@@ -189,7 +203,9 @@ void main() {
 
     test('a page under a popup still covers', () {
       expect(
-          PageCoverObserver.coveredByPage(shell, [shell, page, popup]), isTrue);
+        PageCoverObserver.coveredByPage(shell, [shell, page, popup]),
+        isTrue,
+      );
     });
   });
 
@@ -199,8 +215,9 @@ void main() {
       expect(find.byType(CastMiniController), findsNothing);
     });
 
-    testWidgets('a dialog hides the native bar but keeps the pill away',
-        (tester) async {
+    testWidgets('a dialog hides the native bar but keeps the pill away', (
+      tester,
+    ) async {
       final log = await _pump(tester);
       expect(log.last, isTrue);
 
@@ -259,44 +276,49 @@ void main() {
     Future<ShellPopupObserver> pumpNested(WidgetTester tester) async {
       final observer = ShellPopupObserver();
       addTearDown(observer.dispose);
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Navigator(
-          observers: [observer],
-          onGenerateRoute: (_) => MaterialPageRoute<void>(
-            builder: (_) => Scaffold(
-              body: Builder(
-                builder: (context) => Column(children: [
-                  ElevatedButton(
-                    key: const Key('dialog'),
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      useRootNavigator: false,
-                      builder: (_) => const AlertDialog(title: Text('Hi')),
-                    ),
-                    child: const Text('dialog'),
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Navigator(
+            observers: [observer],
+            onGenerateRoute: (_) => MaterialPageRoute<void>(
+              builder: (_) => Scaffold(
+                body: Builder(
+                  builder: (context) => Column(
+                    children: [
+                      ElevatedButton(
+                        key: const Key('dialog'),
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          useRootNavigator: false,
+                          builder: (_) => const AlertDialog(title: Text('Hi')),
+                        ),
+                        child: const Text('dialog'),
+                      ),
+                      ElevatedButton(
+                        key: const Key('sheet'),
+                        onPressed: () => showModalBottomSheet<void>(
+                          context: context,
+                          builder: (_) => const SizedBox(height: 100),
+                        ),
+                        child: const Text('sheet'),
+                      ),
+                    ],
                   ),
-                  ElevatedButton(
-                    key: const Key('sheet'),
-                    onPressed: () => showModalBottomSheet<void>(
-                      context: context,
-                      builder: (_) => const SizedBox(height: 100),
-                    ),
-                    child: const Text('sheet'),
-                  ),
-                ]),
+                ),
               ),
             ),
           ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
       return observer;
     }
 
-    testWidgets('a dialog on the shell navigator is a popup until popped',
-        (tester) async {
+    testWidgets('a dialog on the shell navigator is a popup until popped', (
+      tester,
+    ) async {
       final observer = await pumpNested(tester);
       expect(observer.hasPopup, isFalse);
 
@@ -312,29 +334,37 @@ void main() {
       expect(observer.hasPopup, isFalse);
     });
 
-    testWidgets('a bottom sheet on the shell navigator is a popup until popped',
-        (tester) async {
-      final observer = await pumpNested(tester);
+    testWidgets(
+      'a bottom sheet on the shell navigator is a popup until popped',
+      (tester) async {
+        final observer = await pumpNested(tester);
 
-      await tester.tap(find.byKey(const Key('sheet')));
-      await tester.pumpAndSettle();
-      expect(observer.hasPopup, isTrue);
+        await tester.tap(find.byKey(const Key('sheet')));
+        await tester.pumpAndSettle();
+        expect(observer.hasPopup, isTrue);
 
-      await tester.tapAt(const Offset(2, 2));
-      await tester.pumpAndSettle();
-      expect(observer.hasPopup, isFalse);
-    });
+        await tester.tapAt(const Offset(2, 2));
+        await tester.pumpAndSettle();
+        expect(observer.hasPopup, isFalse);
+      },
+    );
   });
 
   test('nativeBarVisible is false while a popup is on the shell navigator', () {
     expect(
       AppShell.nativeBarVisible(
-          shellCurrent: true, drawerOpen: false, shellPopup: true),
+        shellCurrent: true,
+        drawerOpen: false,
+        shellPopup: true,
+      ),
       isFalse,
     );
     expect(
       AppShell.nativeBarVisible(
-          shellCurrent: true, drawerOpen: false, shellPopup: false),
+        shellCurrent: true,
+        drawerOpen: false,
+        shellPopup: false,
+      ),
       isTrue,
     );
   });

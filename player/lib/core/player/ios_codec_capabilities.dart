@@ -57,8 +57,10 @@ Future<DeviceProfile> applyIosHardwareDecode(
         if (raw[codec] is bool) codec: raw[codec] as bool,
     };
   } catch (error) {
-    debugPrint('iOS decode probe failed, leaving codec claims '
-        'unconstrained: $error');
+    debugPrint(
+      'iOS decode probe failed, leaving codec claims '
+      'unconstrained: $error',
+    );
     return profile;
   }
 
@@ -80,8 +82,9 @@ Future<DeviceProfile> applyIosHardwareDecode(
 
   return DeviceProfile(
     containers: profile.containers,
-    videoCodecs:
-        profile.videoCodecs.where((c) => !removed.contains(c)).toList(),
+    videoCodecs: profile.videoCodecs
+        .where((c) => !removed.contains(c))
+        .toList(),
     audioCodecs: profile.audioCodecs,
     hdrFormats: profile.hdrFormats,
     codecProfiles: profile.codecProfiles,

@@ -10,8 +10,9 @@ void main() {
   ProviderContainer containerWith(MockAuthStorage storage) {
     final container = ProviderContainer(
       overrides: [
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: storage)),
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: storage),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -23,19 +24,13 @@ void main() {
     await SettingsService(storage: storage).setStatsOverlayEnabled(true);
     final container = containerWith(storage);
 
-    expect(
-      await container.read(statsOverlayEnabledProvider.future),
-      isTrue,
-    );
+    expect(await container.read(statsOverlayEnabledProvider.future), isTrue);
   });
 
   test('resolves false when nothing is stored', () async {
     final container = containerWith(MockAuthStorage());
 
-    expect(
-      await container.read(statsOverlayEnabledProvider.future),
-      isFalse,
-    );
+    expect(await container.read(statsOverlayEnabledProvider.future), isFalse);
   });
 
   // The switch and the panel are on screen together on desktop, so the
@@ -45,8 +40,9 @@ void main() {
     final container = containerWith(storage);
     await container.read(statsOverlayEnabledProvider.future);
 
-    final pending =
-        container.read(statsOverlayEnabledProvider.notifier).set(true);
+    final pending = container
+        .read(statsOverlayEnabledProvider.notifier)
+        .set(true);
 
     expect(container.read(statsOverlayEnabledProvider).value, isTrue);
     await pending;
@@ -57,15 +53,17 @@ void main() {
   // error: both call sites (the quality sheet and the settings row) discard
   // the returned future. The optimistic state is not rolled back either --
   // that is the documented behaviour this test is not reopening.
-  test('a throwing write does not escape set, and the state stays flipped',
-      () async {
-    final storage = MockAuthStorage()..failAllWrites = true;
-    final container = containerWith(storage);
-    await container.read(statsOverlayEnabledProvider.future);
+  test(
+    'a throwing write does not escape set, and the state stays flipped',
+    () async {
+      final storage = MockAuthStorage()..failAllWrites = true;
+      final container = containerWith(storage);
+      await container.read(statsOverlayEnabledProvider.future);
 
-    await container.read(statsOverlayEnabledProvider.notifier).set(true);
+      await container.read(statsOverlayEnabledProvider.notifier).set(true);
 
-    expect(container.read(statsOverlayEnabledProvider).value, isTrue);
-    expect(storage.contents.containsKey('stats_overlay_enabled'), isFalse);
-  });
+      expect(container.read(statsOverlayEnabledProvider).value, isTrue);
+      expect(storage.contents.containsKey('stats_overlay_enabled'), isFalse);
+    },
+  );
 }

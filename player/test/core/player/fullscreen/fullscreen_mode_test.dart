@@ -30,8 +30,7 @@ void main() {
       );
     });
 
-    test(
-        'falls back to the video element when the document cannot go '
+    test('falls back to the video element when the document cannot go '
         'fullscreen — iPhone Safari below iOS 26, and any iframe without '
         'allow="fullscreen"', () {
       expect(
@@ -104,10 +103,7 @@ void main() {
     test('the native desktop mode is not a web route and never demotes', () {
       for (final mode in [FullscreenMode.osWindow]) {
         expect(
-          demoteWebMode(
-            current: mode,
-            videoElementFullscreenSupported: false,
-          ),
+          demoteWebMode(current: mode, videoElementFullscreenSupported: false),
           mode,
         );
       }

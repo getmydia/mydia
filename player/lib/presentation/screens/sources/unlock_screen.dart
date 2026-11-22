@@ -3,7 +3,7 @@
 /// a device with nothing hidden at all.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -82,8 +82,9 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   Future<void> _tryDevice() async {
     if (_prompting) return;
     setState(() => _prompting = true);
-    final result =
-        await ref.read(sourceLockProvider.notifier).unlockWithDevice();
+    final result = await ref
+        .read(sourceLockProvider.notifier)
+        .unlockWithDevice();
     if (!mounted) return;
     setState(() => _prompting = false);
     switch (result) {
@@ -103,8 +104,9 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   }
 
   Future<String?> _tryPin(String pin) async {
-    final result =
-        await ref.read(sourceLockProvider.notifier).unlockWithPin(pin);
+    final result = await ref
+        .read(sourceLockProvider.notifier)
+        .unlockWithPin(pin);
     if (!mounted) return null;
     switch (result) {
       case PinAccepted():
@@ -162,11 +164,15 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
               children: [
                 const Icon(Icons.lock_rounded, size: 48),
                 const SizedBox(height: 16),
-                Text(context.l10n.sourcesUnlock,
-                    style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  context.l10n.sourcesUnlock,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 8),
-                Text(context.l10n.sourcesUnlockBody,
-                    textAlign: TextAlign.center),
+                Text(
+                  context.l10n.sourcesUnlockBody,
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 24),
                 if (_showPin)
                   PinPad(onSubmit: _tryPin)

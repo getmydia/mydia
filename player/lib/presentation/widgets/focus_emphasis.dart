@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/palette.dart';
@@ -74,9 +74,11 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
     if (!mounted || !_focused) return;
     // A page already scrolling has somewhere to be (picking an episode
     // carries the page back to its hero); a reveal now would cut that short.
-    for (var s = Scrollable.maybeOf(context);
-        s != null;
-        s = Scrollable.maybeOf(s.context)) {
+    for (
+      var s = Scrollable.maybeOf(context);
+      s != null;
+      s = Scrollable.maybeOf(s.context)
+    ) {
       if (s.position.isScrollingNotifier.value) return;
     }
     final box = context.findRenderObject();

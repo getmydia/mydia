@@ -24,9 +24,9 @@ bool isStubLocale(Locale locale, {Set<String> stubs = stubLanguageCodes}) =>
 
 /// The shipped locales a viewer can choose: everything but the stubs.
 List<Locale> get pickableLocales => [
-      for (final l in AppLocalizations.supportedLocales)
-        if (!isStubLocale(l)) l,
-    ];
+  for (final l in AppLocalizations.supportedLocales)
+    if (!isStubLocale(l)) l,
+];
 
 /// Picks the shipped locale for the device's preferred [device] locales, for
 /// `MaterialApp.localeListResolutionCallback`. This is Flutter's own

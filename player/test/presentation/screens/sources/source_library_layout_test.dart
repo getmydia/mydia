@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not re-exported by the main `flutter_riverpod.dart` barrel in
 // Riverpod 3.x; it lives in the `misc.dart` sub-library.
@@ -54,8 +54,10 @@ Future<void> pumpLibrary(
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
-  tester.view.padding =
-      FakeViewPadding(top: kStatusBarTop, bottom: bottomInset);
+  tester.view.padding = FakeViewPadding(
+    top: kStatusBarTop,
+    bottom: bottomInset,
+  );
   addTearDown(tester.view.reset);
 
   final screen = SourceLibraryScreen(library: library);
@@ -65,10 +67,12 @@ Future<void> pumpLibrary(
         mediaSourceProvider(fakeSourceId)
             .overrideWithValue(FakeMediaSource(movieCount: itemCount)),
         sourceArtworkProvider.overrideWith((ref, key) async => null),
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: MockAuthStorage())),
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: MockAuthStorage()),
+        ),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
         ...extraOverrides,
       ],
       child: wrap == null
@@ -117,20 +121,18 @@ class _PinnedFreshnessRegistry extends FreshnessRegistry {
 }
 
 List<Override> refreshingOverrides() => [
-      // `FreshnessHeader` renders nothing at all when the source is
-      // unreachable, so the status is pinned for the in-flight line to show.
-      currentSourceStatusProvider
-          .overrideWithValue(SourceConnectionStatus.remote),
-      freshnessRegistryProvider.overrideWith(
-        () => _PinnedFreshnessRegistry({
-          SourceKeys.browse(FakeMediaSource.movies, const BrowseQuery()):
-              Freshness(
-            fetchedAt: DateTime(2026, 8, 4),
-            isRefreshing: true,
-          ),
-        }),
+  // `FreshnessHeader` renders nothing at all when the source is
+  // unreachable, so the status is pinned for the in-flight line to show.
+  currentSourceStatusProvider.overrideWithValue(SourceConnectionStatus.remote),
+  freshnessRegistryProvider.overrideWith(
+    () => _PinnedFreshnessRegistry({
+      SourceKeys.browse(FakeMediaSource.movies, const BrowseQuery()): Freshness(
+        fetchedAt: DateTime(2026, 8, 4),
+        isRefreshing: true,
       ),
-    ];
+    }),
+  ),
+];
 
 void main() {
   testWidgets('grid starts just below the app bar on desktop', (tester) async {
@@ -155,8 +157,9 @@ void main() {
     expect(firstPosterTop(tester), appBarBottom(tester) + kContentGap);
   });
 
-  testWidgets('list view starts at the same offset as the grid',
-      (tester) async {
+  testWidgets('list view starts at the same offset as the grid', (
+    tester,
+  ) async {
     await pumpLibrary(tester, size: kDesktopSize);
 
     final gridTop = tester.widget<GridView>(find.byType(GridView)).padding;
@@ -183,8 +186,9 @@ void main() {
     expect(firstPosterTop(tester), appBarBottom(tester) + kContentGap);
   });
 
-  testWidgets('the grid still scrolls while the refresh line shows',
-      (tester) async {
+  testWidgets('the grid still scrolls while the refresh line shows', (
+    tester,
+  ) async {
     await pumpLibrary(
       tester,
       size: kDesktopSize,

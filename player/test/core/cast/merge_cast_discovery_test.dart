@@ -16,8 +16,7 @@ class _ScriptedDiscoveryBackend extends FakeCastBackend {
   Stream<List<CastDevice>> startDiscovery({
     required CastCapabilities capabilities,
     Duration timeout = const Duration(seconds: 10),
-  }) =>
-      source;
+  }) => source;
 }
 
 void main() {
@@ -38,7 +37,7 @@ void main() {
     mergeCastDiscovery(
       [
         _ScriptedDiscoveryBackend(a.stream),
-        _ScriptedDiscoveryBackend(b.stream)
+        _ScriptedDiscoveryBackend(b.stream),
       ],
       capabilities: const CastCapabilities.full(),
     ).listen(seen.add, onDone: () => done = true);

@@ -53,5 +53,5 @@ class UpdateDismissalNotifier extends AsyncNotifier<Set<String>> {
 /// Update versions the user has dismissed.
 final updateDismissalProvider =
     AsyncNotifierProvider<UpdateDismissalNotifier, Set<String>>(
-  UpdateDismissalNotifier.new,
-);
+      UpdateDismissalNotifier.new,
+    );

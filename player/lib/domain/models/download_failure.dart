@@ -62,18 +62,18 @@ class DownloadFailure {
   /// A failure from a source, keeping its kind, the fault the app recognised
   /// and the server's own words.
   factory DownloadFailure.fromSource(SourceException e) => DownloadFailure(
-        DownloadFailureCode.source,
-        sourceKind: e.kind,
-        fault: e.fault,
-        detail: e.fault == null ? e.message : e.detail,
-      );
+    DownloadFailureCode.source,
+    sourceKind: e.kind,
+    fault: e.fault,
+    detail: e.fault == null ? e.message : e.detail,
+  );
 
   /// Text with no known cause: shown verbatim.
   const DownloadFailure.text(String this.detail)
-      : code = DownloadFailureCode.unknown,
-        count = null,
-        sourceKind = null,
-        fault = null;
+    : code = DownloadFailureCode.unknown,
+      count = null,
+      sourceKind = null,
+      fault = null;
 
   final DownloadFailureCode code;
 
@@ -87,7 +87,8 @@ class DownloadFailure {
 
   /// The persisted form: `dlf:<code>|<count>|<kind>|<fault>|<detail>`. Names
   /// rather than indexes, so reordering an enum cannot change a stored row.
-  String encode() => '$_prefix${code.name}|${count ?? ''}|'
+  String encode() =>
+      '$_prefix${code.name}|${count ?? ''}|'
       '${sourceKind?.name ?? ''}|${fault?.name ?? ''}|${detail ?? ''}';
 
   /// Reads a persisted error. Anything not written by [encode], such as a

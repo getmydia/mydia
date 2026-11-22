@@ -8,7 +8,6 @@ Future<SidecarFetch> fetchImageSidecar({
   required Uri url,
   required Map<String, String> headers,
   required bool Function() cancelled,
-}) async =>
-    const SidecarUnsupported();
+}) async => const SidecarUnsupported();
 
 Future<void> discardImageSidecar(String path) async {}

@@ -4,46 +4,63 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import 'frb_generated.dart';
+
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-Future<List<FfiSmbEntry>> smbList(
-        {required FfiSmbTarget target,
-        required FfiSmbCredentials creds,
-        required String dir}) =>
-    RustLib.instance.api
-        .crateSmbSmbList(target: target, creds: creds, dir: dir);
+Future<List<FfiSmbEntry>> smbList({
+  required FfiSmbTarget target,
+  required FfiSmbCredentials creds,
+  required String dir,
+}) => RustLib.instance.api.crateSmbSmbList(
+  target: target,
+  creds: creds,
+  dir: dir,
+);
 
 /// `None` when the path does not exist.
-Future<FfiSmbEntry?> smbStat(
-        {required FfiSmbTarget target,
-        required FfiSmbCredentials creds,
-        required String path}) =>
-    RustLib.instance.api
-        .crateSmbSmbStat(target: target, creds: creds, path: path);
+Future<FfiSmbEntry?> smbStat({
+  required FfiSmbTarget target,
+  required FfiSmbCredentials creds,
+  required String path,
+}) => RustLib.instance.api.crateSmbSmbStat(
+  target: target,
+  creds: creds,
+  path: path,
+);
 
 /// Succeeds when the share is reachable and `root` is a readable directory.
-Future<void> smbProbe(
-        {required FfiSmbTarget target,
-        required FfiSmbCredentials creds,
-        required String root}) =>
-    RustLib.instance.api
-        .crateSmbSmbProbe(target: target, creds: creds, root: root);
+Future<void> smbProbe({
+  required FfiSmbTarget target,
+  required FfiSmbCredentials creds,
+  required String root,
+}) => RustLib.instance.api.crateSmbSmbProbe(
+  target: target,
+  creds: creds,
+  root: root,
+);
 
-Future<List<String>> smbListShares(
-        {required String host,
-        required int port,
-        required FfiSmbCredentials creds}) =>
-    RustLib.instance.api
-        .crateSmbSmbListShares(host: host, port: port, creds: creds);
+Future<List<String>> smbListShares({
+  required String host,
+  required int port,
+  required FfiSmbCredentials creds,
+}) => RustLib.instance.api.crateSmbSmbListShares(
+  host: host,
+  port: port,
+  creds: creds,
+);
 
 /// Starts the loopback server on first use and returns the URL for `path`.
-Future<String> smbOpen(
-        {required String accountId,
-        required FfiSmbTarget target,
-        required FfiSmbCredentials creds,
-        required String path}) =>
-    RustLib.instance.api.crateSmbSmbOpen(
-        accountId: accountId, target: target, creds: creds, path: path);
+Future<String> smbOpen({
+  required String accountId,
+  required FfiSmbTarget target,
+  required FfiSmbCredentials creds,
+  required String path,
+}) => RustLib.instance.api.crateSmbSmbOpen(
+  accountId: accountId,
+  target: target,
+  creds: creds,
+  path: path,
+);
 
 /// Forgets the account's playback URLs and closes their connections.
 Future<void> smbCloseAccount({required String accountId}) =>
@@ -53,12 +70,7 @@ Future<void> smbCloseAccount({required String accountId}) =>
 Future<FfiHeal> smbHealListener() =>
     RustLib.instance.api.crateSmbSmbHealListener();
 
-enum FfiHeal {
-  healthy,
-  reboundSamePort,
-  reboundNewPort,
-  ;
-}
+enum FfiHeal { healthy, reboundSamePort, reboundNewPort }
 
 class FfiSmbCredentials {
   final String user;
@@ -128,10 +140,7 @@ class FfiSmbError implements FrbException {
   final FfiSmbErrorKind kind;
   final String message;
 
-  const FfiSmbError({
-    required this.kind,
-    required this.message,
-  });
+  const FfiSmbError({required this.kind, required this.message});
 
   @override
   int get hashCode => kind.hashCode ^ message.hashCode;
@@ -155,7 +164,6 @@ enum FfiSmbErrorKind {
   smb1Only,
   unsupported,
   other,
-  ;
 }
 
 class FfiSmbTarget {

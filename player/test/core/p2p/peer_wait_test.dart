@@ -76,8 +76,7 @@ void main() {
     expect(await result, isTrue);
   });
 
-  test(
-      'a matching event does not succeed the wait while the peer is '
+  test('a matching event does not succeed the wait while the peer is '
       'reported disconnected', () async {
     final events = StreamController<String>.broadcast();
     var connected = false;
@@ -97,8 +96,7 @@ void main() {
     await events.close();
   });
 
-  test(
-      'succeeds on a later matching event once the peer is actually '
+  test('succeeds on a later matching event once the peer is actually '
       'connected', () async {
     final events = StreamController<String>.broadcast();
     var connected = false;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -39,10 +39,12 @@ class FilterScreen extends ConsumerWidget {
       ),
       data: (layout) {
         final destination = layout.filters[filterId];
-        final saved =
-            ref.watch(mediaSourceProvider(sourceId))?.as<SavedFilters>();
-        final query =
-            destination == null ? null : saved?.filterQuery(destination.filter);
+        final saved = ref
+            .watch(mediaSourceProvider(sourceId))
+            ?.as<SavedFilters>();
+        final query = destination == null
+            ? null
+            : saved?.filterQuery(destination.filter);
         if (destination == null || query == null) {
           return const Scaffold(
             backgroundColor: Colors.transparent,
@@ -107,9 +109,8 @@ class _FilterNotFoundBody extends StatelessWidget {
           children: [
             Text(
               context.l10n.filterNotFound,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),

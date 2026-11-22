@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -18,42 +18,50 @@ import 'package:player/presentation/widgets/source_artwork.dart';
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/toast_harness.dart';
 
-Future<List<String>> pump(WidgetTester tester, List<MediaSource> sources,
-    {required AllServersListing listing,
-    LibraryKind? kind,
-    List<Override> extra = const []}) async {
+Future<List<String>> pump(
+  WidgetTester tester,
+  List<MediaSource> sources, {
+  required AllServersListing listing,
+  LibraryKind? kind,
+  List<Override> extra = const [],
+}) async {
   final pushed = <String>[];
-  final router = GoRouter(routes: [
-    GoRoute(
-      path: '/s/:id/:kind/:item',
-      builder: (_, s) {
-        pushed.add(s.uri.toString());
-        return const SizedBox();
-      },
-    ),
-    GoRoute(
-      path: '/',
-      builder: (_, __) => AllServersListingScreen(listing: listing, kind: kind),
-    ),
-  ]);
+  final router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/s/:id/:kind/:item',
+        builder: (_, s) {
+          pushed.add(s.uri.toString());
+          return const SizedBox();
+        },
+      ),
+      GoRoute(
+        path: '/',
+        builder: (_, _) =>
+            AllServersListingScreen(listing: listing, kind: kind),
+      ),
+    ],
+  );
   await tester.binding.setSurfaceSize(const Size(1280, 1800));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      allServersSourcesProvider.overrideWithValue(sources),
-      sourcesProvider.overrideWithValue([for (final s in sources) s.source]),
-      for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
-      allServersNeedSignInProvider.overrideWithValue(const []),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ...extra,
-    ],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: router,
-      builder: toastLayerBuilder,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        allServersSourcesProvider.overrideWithValue(sources),
+        sourcesProvider.overrideWithValue([for (final s in sources) s.source]),
+        for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
+        allServersNeedSignInProvider.overrideWithValue(const []),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ...extra,
+      ],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+        builder: toastLayerBuilder,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return pushed;
 }
@@ -74,19 +82,26 @@ const shared = ExternalIds(tmdb: '1');
 void main() {
   testWidgets('recently added filters by kind and dedupes', (t) async {
     final sa = fakeServer('a'), sb = fakeServer('b');
-    await pump(
-        t,
-        [
-          FakeMergedSource(sa, recent: [
-            item(sa, 'm1', addedAt: DateTime.utc(2024, 1, 2), ids: shared),
-            item(sa, 's1',
-                kind: ItemKind.show, addedAt: DateTime.utc(2024, 1, 1)),
-          ]),
-          FakeMergedSource(sb, recent: [
-            item(sb, 'm1', addedAt: DateTime.utc(2024, 1, 1), ids: shared),
-          ]),
+    await pump(t, [
+      FakeMergedSource(
+        sa,
+        recent: [
+          item(sa, 'm1', addedAt: DateTime.utc(2024, 1, 2), ids: shared),
+          item(
+            sa,
+            's1',
+            kind: ItemKind.show,
+            addedAt: DateTime.utc(2024, 1, 1),
+          ),
         ],
-        listing: AllServersListing.recentlyAdded);
+      ),
+      FakeMergedSource(
+        sb,
+        recent: [
+          item(sb, 'm1', addedAt: DateTime.utc(2024, 1, 1), ids: shared),
+        ],
+      ),
+    ], listing: AllServersListing.recentlyAdded);
     expect(find.byKey(const Key('all-listing-grid')), findsOneWidget);
     expect(find.byType(AllServersPoster), findsNWidgets(2));
     await t.tap(find.byKey(const Key('all-listing-kind-movies')));
@@ -99,18 +114,17 @@ void main() {
     expect(find.textContaining('+1'), findsNothing);
   });
 
-  testWidgets('shows an empty message when the chosen kind has no items',
-      (t) async {
+  testWidgets('shows an empty message when the chosen kind has no items', (
+    t,
+  ) async {
     final sa = fakeServer('a');
-    await pump(
-        t,
-        [
-          FakeMergedSource(sa, recent: [
-            item(sa, 'm1', addedAt: DateTime.utc(2024, 1, 2)),
-          ]),
-          FakeMergedSource(fakeServer('b')),
-        ],
-        listing: AllServersListing.recentlyAdded);
+    await pump(t, [
+      FakeMergedSource(
+        sa,
+        recent: [item(sa, 'm1', addedAt: DateTime.utc(2024, 1, 2))],
+      ),
+      FakeMergedSource(fakeServer('b')),
+    ], listing: AllServersListing.recentlyAdded);
     expect(find.byKey(const Key('all-listing-empty')), findsNothing);
     await t.tap(find.byKey(const Key('all-listing-kind-shows')));
     await t.pumpAndSettle();
@@ -120,50 +134,55 @@ void main() {
 
   testWidgets('the kind argument picks the starting filter', (t) async {
     final sa = fakeServer('a');
-    final a = FakeMergedSource(sa, recent: [
-      item(sa, 'm1', addedAt: DateTime.utc(2024, 1, 2)),
-      item(sa, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024, 1, 1)),
-    ]);
-    await pump(t, [a, FakeMergedSource(fakeServer('b'))],
-        listing: AllServersListing.recentlyAdded, kind: LibraryKind.shows);
+    final a = FakeMergedSource(
+      sa,
+      recent: [
+        item(sa, 'm1', addedAt: DateTime.utc(2024, 1, 2)),
+        item(sa, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024, 1, 1)),
+      ],
+    );
+    await pump(
+      t,
+      [a, FakeMergedSource(fakeServer('b'))],
+      listing: AllServersListing.recentlyAdded,
+      kind: LibraryKind.shows,
+    );
     expect(find.byType(AllServersPoster), findsOneWidget);
     expect(find.byKey(ValueKey('all-poster-${a.id.value}-s1')), findsOneWidget);
   });
 
   testWidgets('continue watching has no kind chips', (t) async {
     final s = fakeServer('a');
-    await pump(
-        t,
-        [
-          FakeMergedSource(s, resuming: [
-            item(s, 'r1', lastPlayedAt: DateTime.utc(2024, 1, 1)),
-          ]),
-          FakeMergedSource(fakeServer('b')),
-        ],
-        listing: AllServersListing.continueWatching);
+    await pump(t, [
+      FakeMergedSource(
+        s,
+        resuming: [item(s, 'r1', lastPlayedAt: DateTime.utc(2024, 1, 1))],
+      ),
+      FakeMergedSource(fakeServer('b')),
+    ], listing: AllServersListing.continueWatching);
     expect(find.byType(AllServersPoster), findsOneWidget);
     expect(find.byKey(const Key('all-listing-kind-all')), findsNothing);
   });
 
   testWidgets('favorites lists every server\'s favourites', (t) async {
     final a = fakeServer('a'), b = fakeServer('b');
-    await pump(
-        t,
-        [
-          FakeMergedSource(a, favs: [item(a, 'f1')]),
-          FakeMergedSource(b, favs: [item(b, 'f2')]),
-        ],
-        listing: AllServersListing.favorites);
+    await pump(t, [
+      FakeMergedSource(a, favs: [item(a, 'f1')]),
+      FakeMergedSource(b, favs: [item(b, 'f2')]),
+    ], listing: AllServersListing.favorites);
     expect(find.byType(AllServersPoster), findsNWidgets(2));
   });
 
   testWidgets('Continue Watching plays on tap', (t) async {
     final s = fakeServer('a');
-    final a = FakeMergedSource(s, resuming: [
-      item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)),
-    ]);
-    final pushed = await pump(t, [a, FakeMergedSource(fakeServer('b'))],
-        listing: AllServersListing.continueWatching);
+    final a = FakeMergedSource(
+      s,
+      resuming: [item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1))],
+    );
+    final pushed = await pump(t, [
+      a,
+      FakeMergedSource(fakeServer('b')),
+    ], listing: AllServersListing.continueWatching);
     await t.tap(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
     await t.pumpAndSettle();
     expect(Uri.parse(pushed.last).path, '/s/${a.id.value}/player/a1');
@@ -171,11 +190,14 @@ void main() {
 
   testWidgets('Continue Watching long press offers Details', (t) async {
     final s = fakeServer('a');
-    final a = FakeMergedSource(s, resuming: [
-      item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)),
-    ]);
-    final pushed = await pump(t, [a, FakeMergedSource(fakeServer('b'))],
-        listing: AllServersListing.continueWatching);
+    final a = FakeMergedSource(
+      s,
+      resuming: [item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1))],
+    );
+    final pushed = await pump(t, [
+      a,
+      FakeMergedSource(fakeServer('b')),
+    ], listing: AllServersListing.continueWatching);
     await t.longPress(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('all-continue-details')));
@@ -184,31 +206,41 @@ void main() {
     expect(Uri.parse(pushed.last).path, isNot(contains('/player/')));
   });
 
-  testWidgets('removing from Continue Watching refreshes the source\'s row',
-      (t) async {
+  testWidgets('removing from Continue Watching refreshes the source\'s row', (
+    t,
+  ) async {
     final s = fakeServer('a');
-    final a = FakeMergedSource(s, resuming: [
-      item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)),
-    ]);
+    final a = FakeMergedSource(
+      s,
+      resuming: [item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1))],
+    );
     final recorder = _RecordingInvalidator();
-    await pump(t, [a, FakeMergedSource(fakeServer('b'))],
-        listing: AllServersListing.continueWatching,
-        extra: [invalidatorProvider.overrideWithValue(recorder)]);
+    await pump(
+      t,
+      [a, FakeMergedSource(fakeServer('b'))],
+      listing: AllServersListing.continueWatching,
+      extra: [invalidatorProvider.overrideWithValue(recorder)],
+    );
     await t.longPress(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('all-continue-remove')));
     await t.pumpAndSettle();
-    expect(recorder.calls.expand((c) => c),
-        containsAll(SourceRules.continueWatchingRemoved(a.id)));
+    expect(
+      recorder.calls.expand((c) => c),
+      containsAll(SourceRules.continueWatchingRemoved(a.id)),
+    );
   });
 
   testWidgets('Recently Added still opens the item', (t) async {
     final s = fakeServer('a');
-    final a = FakeMergedSource(s, recent: [
-      item(s, 'm1', addedAt: DateTime.utc(2024, 1, 2)),
-    ]);
-    final pushed = await pump(t, [a, FakeMergedSource(fakeServer('b'))],
-        listing: AllServersListing.recentlyAdded);
+    final a = FakeMergedSource(
+      s,
+      recent: [item(s, 'm1', addedAt: DateTime.utc(2024, 1, 2))],
+    );
+    final pushed = await pump(t, [
+      a,
+      FakeMergedSource(fakeServer('b')),
+    ], listing: AllServersListing.recentlyAdded);
     await t.tap(find.byKey(ValueKey('all-poster-${a.id.value}-m1')));
     await t.pumpAndSettle();
     expect(pushed.last, startsWith('/s/${a.id.value}/'));

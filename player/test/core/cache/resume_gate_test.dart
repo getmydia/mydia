@@ -47,8 +47,11 @@ void main() {
     test('inactive is not a pause: a later resume does not trigger', () {
       final gate = ResumeGate();
 
-      final duringInactive =
-          applyAppLifecycleState(gate, AppLifecycleState.inactive, base);
+      final duringInactive = applyAppLifecycleState(
+        gate,
+        AppLifecycleState.inactive,
+        base,
+      );
       final onResume = applyAppLifecycleState(
         gate,
         AppLifecycleState.resumed,
@@ -75,8 +78,11 @@ void main() {
     test('paused then resumed past the threshold triggers a refresh', () {
       final gate = ResumeGate();
 
-      final duringPause =
-          applyAppLifecycleState(gate, AppLifecycleState.paused, base);
+      final duringPause = applyAppLifecycleState(
+        gate,
+        AppLifecycleState.paused,
+        base,
+      );
       final onResume = applyAppLifecycleState(
         gate,
         AppLifecycleState.resumed,

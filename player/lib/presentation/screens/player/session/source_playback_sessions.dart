@@ -33,38 +33,40 @@ PlaybackSession? playbackSessionFor(
   String? showId,
   int? seasonNumber,
   FilesCastBridge Function()? bridge,
-}) =>
-    switch (source) {
-      PlexMediaSource() => PlexPlaybackSession(
-          source: source,
-          item: item,
-          fileId: fileId,
-          profile: DeviceProfileHolder.instance.profile,
-        ),
-      StashMediaSource() =>
-        StashPlaybackSession(source: source, item: item, fileId: fileId),
-      JellyfinMediaSource() => JellyfinPlaybackSession(
-          source: source,
-          item: item,
-          fileId: fileId,
-          profile: DeviceProfileHolder.instance.profile,
-        ),
-      FilesMediaSource() => FilesPlaybackSession(
-          source: source,
-          item: item,
-          fileId: fileId,
-          bridge: bridge?.call(),
-        ),
-      MydiaSource() => MydiaPlaybackSession(
-          source: source,
-          item: item,
-          fileId: fileId,
-          showId: showId,
-          seasonNumber: seasonNumber,
-          proxy: proxy,
-        ),
-      _ => null,
-    };
+}) => switch (source) {
+  PlexMediaSource() => PlexPlaybackSession(
+    source: source,
+    item: item,
+    fileId: fileId,
+    profile: DeviceProfileHolder.instance.profile,
+  ),
+  StashMediaSource() => StashPlaybackSession(
+    source: source,
+    item: item,
+    fileId: fileId,
+  ),
+  JellyfinMediaSource() => JellyfinPlaybackSession(
+    source: source,
+    item: item,
+    fileId: fileId,
+    profile: DeviceProfileHolder.instance.profile,
+  ),
+  FilesMediaSource() => FilesPlaybackSession(
+    source: source,
+    item: item,
+    fileId: fileId,
+    bridge: bridge?.call(),
+  ),
+  MydiaSource() => MydiaPlaybackSession(
+    source: source,
+    item: item,
+    fileId: fileId,
+    showId: showId,
+    seasonNumber: seasonNumber,
+    proxy: proxy,
+  ),
+  _ => null,
+};
 
 /// Whether [source] is a files source backed by an SMB share, the only kind
 /// whose URLs ride the SMB loopback listener.

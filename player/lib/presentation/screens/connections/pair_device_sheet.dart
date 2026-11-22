@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -50,9 +50,7 @@ Future<void> showPairDeviceSheet(
   }
   return showDialog<void>(
     context: context,
-    builder: (_) => GlassDialog(
-      content: SizedBox(width: 420, child: sheet),
-    ),
+    builder: (_) => GlassDialog(content: SizedBox(width: 420, child: sheet)),
   );
 }
 
@@ -81,12 +79,12 @@ class PairingQrCode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => QrImageView(
-        data: data,
-        size: 160,
-        backgroundColor: Colors.white,
-        eyeStyle: const QrEyeStyle(color: Colors.black),
-        dataModuleStyle: const QrDataModuleStyle(color: Colors.black),
-      );
+    data: data,
+    size: 160,
+    backgroundColor: Colors.white,
+    eyeStyle: const QrEyeStyle(color: Colors.black),
+    dataModuleStyle: const QrDataModuleStyle(color: Colors.black),
+  );
 }
 
 class PairDeviceSheet extends ConsumerStatefulWidget {
@@ -117,8 +115,9 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
     super.initState();
     _service = ref.read(peerSyncServiceProvider);
     // Fires only on the side that showed the code.
-    _pairedSub = _service.onPeerPaired
-        .listen((peer) => _announcePaired(peer.deviceName));
+    _pairedSub = _service.onPeerPaired.listen(
+      (peer) => _announcePaired(peer.deviceName),
+    );
     _stateSub = _service.onStateChanged.listen((_) {
       if (mounted) setState(() {});
     });
@@ -166,9 +165,10 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
         .read(peerGroupRosterProvider)
         .activeMembers()
         .fold<PeerMember?>(
-            null,
-            (latest, m) =>
-                latest == null || m.updatedAt > latest.updatedAt ? m : latest);
+          null,
+          (latest, m) =>
+              latest == null || m.updatedAt > latest.updatedAt ? m : latest,
+        );
     _announcePaired(newest?.deviceName);
   }
 
@@ -368,13 +368,10 @@ class _PairDeviceSheetState extends ConsumerState<PairDeviceSheet> {
                   color: theme.colorScheme.errorContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  switch (_failure!) {
-                    _PairingFailure.offer => l10n.pairedDevicesOfferFailed,
-                    _PairingFailure.pairing => l10n.pairedDevicesPairingFailed,
-                  },
-                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
-                ),
+                child: Text(switch (_failure!) {
+                  _PairingFailure.offer => l10n.pairedDevicesOfferFailed,
+                  _PairingFailure.pairing => l10n.pairedDevicesPairingFailed,
+                }, style: TextStyle(color: theme.colorScheme.onErrorContainer)),
               ),
               const SizedBox(height: 16),
             ],

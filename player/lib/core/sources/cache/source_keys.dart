@@ -53,16 +53,14 @@ abstract final class SourceKeys {
   static QueryKey libraries(SourceId id) =>
       QueryKey(operation(id, SourceOps.libraries));
 
-  static QueryKey browse(LibraryRef library, BrowseQuery query) => QueryKey(
-        operation(library.sourceId, SourceOps.browse),
-        {
-          'library': library.id,
-          'sortId': query.sortId,
-          'descending': query.descending,
-          'filterIds': query.filterIds.toList()..sort(),
-          'pageSize': query.pageSize,
-        },
-      );
+  static QueryKey browse(LibraryRef library, BrowseQuery query) =>
+      QueryKey(operation(library.sourceId, SourceOps.browse), {
+        'library': library.id,
+        'sortId': query.sortId,
+        'descending': query.descending,
+        'filterIds': query.filterIds.toList()..sort(),
+        'pageSize': query.pageSize,
+      });
 
   static QueryKey item(ItemRef ref) => _ofItem(SourceOps.item, ref);
 
@@ -80,8 +78,10 @@ abstract final class SourceKeys {
       QueryKey(operation(id, SourceOps.collectionItems), {'id': collectionId});
 
   static QueryKey calendar(SourceId id, DateTime start, DateTime end) =>
-      QueryKey(operation(id, SourceOps.calendar),
-          {'start': isoDate(start), 'end': isoDate(end)});
+      QueryKey(operation(id, SourceOps.calendar), {
+        'start': isoDate(start),
+        'end': isoDate(end),
+      });
 
   static QueryKey unwatched(SourceId id) =>
       QueryKey(operation(id, SourceOps.unwatched));
@@ -106,7 +106,7 @@ abstract final class SourceKeys {
       FamilyTarget(operation(id, op));
 
   static QueryKey _ofItem(String op, ItemRef ref) => QueryKey(
-        operation(ref.sourceId, op),
-        {'kind': ref.kind.name, 'id': ref.externalId},
-      );
+    operation(ref.sourceId, op),
+    {'kind': ref.kind.name, 'id': ref.externalId},
+  );
 }

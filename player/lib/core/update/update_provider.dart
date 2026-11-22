@@ -29,7 +29,8 @@ typedef UpdateBackendFactory = Future<UpdateBackend?> Function({
 });
 
 final updateBackendFactoryProvider = Provider<UpdateBackendFactory>(
-  (ref) => ({required String currentVersion}) async => createUpdateBackend(
+  (ref) =>
+      ({required String currentVersion}) async => createUpdateBackend(
         await UpdateHost.currentAsync(),
         currentVersion: currentVersion,
       ),
@@ -40,7 +41,8 @@ final updateBackendFactoryProvider = Provider<UpdateBackendFactory>(
 /// so mocking its platform channel in one test file leaves every later file in
 /// the same isolate with a working read, and a real update check behind it.
 final installedVersionReaderProvider = Provider<Future<String> Function()>(
-  (ref) => () async => (await PackageInfo.fromPlatform()).version,
+  (ref) =>
+      () async => (await PackageInfo.fromPlatform()).version,
 );
 
 /// Whether Android will let this app install a package right now. Overridden
@@ -53,8 +55,9 @@ final installPermissionCheckProvider = Provider<Future<bool> Function()>(
 /// having granted the permission. The sentence names the toggle as Android
 /// labels it, since "Allow from this source" alone does not say what is being
 /// allowed.
-const UpdateProblem _installPermissionStillDenied =
-    UpdateProblem(UpdateIssue.installPermissionStillDenied);
+const UpdateProblem _installPermissionStillDenied = UpdateProblem(
+  UpdateIssue.installPermissionStillDenied,
+);
 
 /// A track the viewer chose that has no builds here. [macos] selects the
 /// macOS wording.
@@ -175,8 +178,9 @@ class UpdateState {
     bool clearTrackUrl = false,
   }) {
     return UpdateState(
-      availableUpdate:
-          clearUpdate ? null : (availableUpdate ?? this.availableUpdate),
+      availableUpdate: clearUpdate
+          ? null
+          : (availableUpdate ?? this.availableUpdate),
       currentVersion: currentVersion ?? this.currentVersion,
       manualCheck: manualCheck ?? this.manualCheck,
       isChecking: isChecking ?? this.isChecking,
@@ -309,8 +313,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
     final backend = _backend;
     if (backend == null || !ref.mounted || state.isChecking) return;
 
-    state =
-        state.copyWith(isChecking: true, clearError: true, clearNotice: true);
+    state = state.copyWith(
+      isChecking: true,
+      clearError: true,
+      clearNotice: true,
+    );
     try {
       await backend.refresh(force: true);
       if (!ref.mounted) return;
@@ -356,29 +363,31 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
     state = switch (outcome) {
       UpdateInstalled(:final restartRequired) => state.copyWith(
-          isApplying: false,
-          restartRequired: restartRequired,
-          clearUpdate: true,
-        ),
+        isApplying: false,
+        restartRequired: restartRequired,
+        clearUpdate: true,
+      ),
       AlreadyUpToDate() => state.copyWith(
-          isApplying: false,
-          notice: UpdateNotice.upToDate,
-          clearUpdate: true,
-        ),
+        isApplying: false,
+        notice: UpdateNotice.upToDate,
+        clearUpdate: true,
+      ),
       UpdateUnsupported(:final problem, :final needsInstallPermission) =>
         _unsupported(problem, needsInstallPermission),
-      UpdateFailed(:final problem) =>
-        state.copyWith(isApplying: false, error: problem),
+      UpdateFailed(:final problem) => state.copyWith(
+        isApplying: false,
+        error: problem,
+      ),
       // The backend has already handed this off somewhere outside the app
       // (Android's own confirmation dialog, Sparkle's window) and holds no
       // pending update of its own to retry. Leaving availableUpdate set
       // would draw the same "Update Now" row right back, inviting a second
       // download while the first is still waiting on the user.
       UpdateDeferred() => state.copyWith(
-          isApplying: false,
-          notice: UpdateNotice.handedOff,
-          clearUpdate: true,
-        ),
+        isApplying: false,
+        notice: UpdateNotice.handedOff,
+        clearUpdate: true,
+      ),
     };
   }
 
@@ -468,28 +477,28 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
     state = switch (outcome) {
       TrackSwitchApplied() => state.copyWith(
-          currentTrack: backend.currentTrack,
-          clearError: true,
-          clearNotice: true,
-          // Instructions (and any link) from an earlier deferred switch no
-          // longer apply.
-          clearTrackNotice: true,
-          clearTrackUrl: true,
-        ),
+        currentTrack: backend.currentTrack,
+        clearError: true,
+        clearNotice: true,
+        // Instructions (and any link) from an earlier deferred switch no
+        // longer apply.
+        clearTrackNotice: true,
+        clearTrackUrl: true,
+      ),
       TrackSwitchDeferred(:final instructions, :final url) => state.copyWith(
-          trackNotice: instructions,
-          trackUrl: url,
-          // A url of null must actually clear a stale one from an earlier
-          // deferred switch, not fall through to it: copyWith's `??` keeps
-          // the old value on a null argument, which is right for a value
-          // that was not asked to change, but wrong here since this switch
-          // is deciding trackUrl fresh every time.
-          clearTrackUrl: url == null,
-        ),
+        trackNotice: instructions,
+        trackUrl: url,
+        // A url of null must actually clear a stale one from an earlier
+        // deferred switch, not fall through to it: copyWith's `??` keeps
+        // the old value on a null argument, which is right for a value
+        // that was not asked to change, but wrong here since this switch
+        // is deciding trackUrl fresh every time.
+        clearTrackUrl: url == null,
+      ),
       TrackSwitchNotPublished(:final track, :final macos) => state.copyWith(
-          clearError: true,
-          trackNotPublished: TrackNotPublished(track, macos: macos),
-        ),
+        clearError: true,
+        trackNotPublished: TrackNotPublished(track, macos: macos),
+      ),
       TrackSwitchUnsupported(:final problem) => state.copyWith(error: problem),
     };
   }

@@ -94,10 +94,8 @@ Future<T> mockHttpResponse<T>(
 }) {
   return HttpOverrides.runZoned(
     body,
-    createHttpClient: (_) => _MockHttpClient(
-      responseBody: responseBody,
-      statusCode: statusCode,
-    ),
+    createHttpClient: (_) =>
+        _MockHttpClient(responseBody: responseBody, statusCode: statusCode),
   );
 }
 
@@ -123,9 +121,9 @@ class _MockHttpClient implements HttpClient {
   String? userAgent;
 
   Future<HttpClientRequest> _request() async => _MockHttpClientRequest(
-        responseBody: responseBody,
-        statusCode: statusCode,
-      );
+    responseBody: responseBody,
+    statusCode: statusCode,
+  );
 
   @override
   Future<HttpClientRequest> getUrl(Uri url) => _request();
@@ -166,9 +164,9 @@ class _MockHttpClientRequest implements HttpClientRequest {
 
   @override
   Future<HttpClientResponse> close() async => _MockHttpClientResponse(
-        responseBody: responseBody,
-        statusCode: statusCode,
-      );
+    responseBody: responseBody,
+    statusCode: statusCode,
+  );
 
   @override
   Future<void> addStream(Stream<List<int>> stream) async {
@@ -236,11 +234,7 @@ class _MockHttpHeaders implements HttpHeaders {
   void forEach(void Function(String name, List<String> values) action) {}
 
   @override
-  void set(
-    String name,
-    Object value, {
-    bool preserveHeaderCase = false,
-  }) {}
+  void set(String name, Object value, {bool preserveHeaderCase = false}) {}
 
   @override
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

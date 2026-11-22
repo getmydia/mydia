@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'airplay_service.dart';
 import '../../domain/models/airplay_device.dart';
 
@@ -19,7 +20,9 @@ final airPlayServiceProvider = Provider<AirPlayService>((ref) {
 });
 
 /// Provider for the stream of available AirPlay devices.
-final availableAirPlayDevicesProvider = StreamProvider<List<AirPlayDevice>>((ref) {
+final availableAirPlayDevicesProvider = StreamProvider<List<AirPlayDevice>>((
+  ref,
+) {
   final service = ref.watch(airPlayServiceProvider);
   return service.devicesStream;
 });

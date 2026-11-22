@@ -119,16 +119,18 @@ void main() {
     });
 
     test('carries every field the results tile renders', () {
-      final candidate = SubtitleCandidate.fromGraphQL(result(
-        language: 'es',
-        releaseName: 'Movie.2020.HI.srt',
-        format: 'vtt',
-        rating: 6.5,
-        downloadCount: 12,
-        hearingImpaired: true,
-        hashMatch: false,
-        providerName: 'My OpenSubtitles',
-      ));
+      final candidate = SubtitleCandidate.fromGraphQL(
+        result(
+          language: 'es',
+          releaseName: 'Movie.2020.HI.srt',
+          format: 'vtt',
+          rating: 6.5,
+          downloadCount: 12,
+          hearingImpaired: true,
+          hashMatch: false,
+          providerName: 'My OpenSubtitles',
+        ),
+      );
 
       expect(candidate.language, 'es');
       expect(candidate.releaseName, 'Movie.2020.HI.srt');
@@ -140,21 +142,21 @@ void main() {
       expect(candidate.providerName, 'My OpenSubtitles');
     });
 
-    test('keeps the optional fields null rather than substituting defaults',
-        () {
-      // A provider that reports no rating must not read as a zero-rated
-      // subtitle: the tile hides the figure when it is null and would show
-      // a misleading "0.0" otherwise.
-      final candidate = SubtitleCandidate.fromGraphQL(result(
-        releaseName: null,
-        rating: null,
-        downloadCount: null,
-      ));
+    test(
+      'keeps the optional fields null rather than substituting defaults',
+      () {
+        // A provider that reports no rating must not read as a zero-rated
+        // subtitle: the tile hides the figure when it is null and would show
+        // a misleading "0.0" otherwise.
+        final candidate = SubtitleCandidate.fromGraphQL(
+          result(releaseName: null, rating: null, downloadCount: null),
+        );
 
-      expect(candidate.releaseName, isNull);
-      expect(candidate.rating, isNull);
-      expect(candidate.downloadCount, isNull);
-    });
+        expect(candidate.releaseName, isNull);
+        expect(candidate.rating, isNull);
+        expect(candidate.downloadCount, isNull);
+      },
+    );
   });
 
   group('SubtitleProviderStatus.fromGraphQL', () {

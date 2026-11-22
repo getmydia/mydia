@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'media_filter.dart';
 
@@ -94,10 +94,10 @@ class FilterDestination extends NavDestination {
       location == route || location.startsWith('$route/');
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'label': label,
-        'filter': filter.toJson(),
-      };
+    'id': id,
+    'label': label,
+    'filter': filter.toJson(),
+  };
 
   factory FilterDestination.fromJson(Map<String, dynamic> json) {
     return FilterDestination(
@@ -143,7 +143,7 @@ const List<BuiltinDestination> builtinDestinations = [
       '/recently-added',
       '/unwatched',
       '/favorites',
-      '/collections'
+      '/collections',
     ],
   ),
   BuiltinDestination(

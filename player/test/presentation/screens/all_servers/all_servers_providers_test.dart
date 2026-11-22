@@ -16,41 +16,58 @@ import '../../../domain/merged/fake_merged_source.dart';
 const _sorts = [
   SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
-      id: 'added',
-      name: SortName.recentlyAdded,
-      descendingByDefault: true,
-      shared: SharedSort.added),
+    id: 'added',
+    name: SortName.recentlyAdded,
+    descendingByDefault: true,
+    shared: SharedSort.added,
+  ),
   SortOption(
-      id: 'released',
-      name: SortName.releaseDate,
-      descendingByDefault: true,
-      shared: SharedSort.released),
+    id: 'released',
+    name: SortName.releaseDate,
+    descendingByDefault: true,
+    shared: SharedSort.released,
+  ),
 ];
 
 /// More than one build's worth, so `hasMore` stays true after the first load.
 FakeMergedSource bigServer() {
   final s = fakeServer('a');
-  return FakeMergedSource(s, sorts: _sorts, movies: [
-    for (var i = 0; i < 130; i++)
-      item(s, 'm${i.toString().padLeft(3, '0')}',
-          sortTitle: 'm${i.toString().padLeft(3, '0')}'),
-  ]);
+  return FakeMergedSource(
+    s,
+    sorts: _sorts,
+    movies: [
+      for (var i = 0; i < 130; i++)
+        item(
+          s,
+          'm${i.toString().padLeft(3, '0')}',
+          sortTitle: 'm${i.toString().padLeft(3, '0')}',
+        ),
+    ],
+  );
 }
 
-ProviderContainer containerFor(FakeMergedSource source,
-    {MergedLibraryReader? reader}) {
-  final c = ProviderContainer(overrides: [
-    allServersSourcesProvider.overrideWithValue([source]),
-    if (reader != null) allServersReaderProvider.overrideWithValue(reader),
-  ]);
+ProviderContainer containerFor(
+  FakeMergedSource source, {
+  MergedLibraryReader? reader,
+}) {
+  final c = ProviderContainer(
+    overrides: [
+      allServersSourcesProvider.overrideWithValue([source]),
+      if (reader != null) allServersReaderProvider.overrideWithValue(reader),
+    ],
+  );
   addTearDown(c.dispose);
   return c;
 }
 
 class ThrowingGrid extends MergedGrid {
   ThrowingGrid()
-      : super(const [],
-            sort: SharedSort.title, descending: false, timeout: Duration.zero);
+    : super(
+        const [],
+        sort: SharedSort.title,
+        descending: false,
+        timeout: Duration.zero,
+      );
 
   int calls = 0;
   @override
@@ -64,8 +81,10 @@ class ThrowingGrid extends MergedGrid {
 
 class IncludedHolder extends Notifier<List<FakeMergedSource>> {
   @override
-  List<FakeMergedSource> build() =>
-      [bigServer(), FakeMergedSource(fakeServer('b'))];
+  List<FakeMergedSource> build() => [
+    bigServer(),
+    FakeMergedSource(fakeServer('b')),
+  ];
 
   void set(List<FakeMergedSource> next) => state = next;
 }
@@ -78,9 +97,11 @@ class ScriptedReader implements MergedLibraryReader {
   final completers = <String, Completer<MergedResult<MergedSearch>>>{};
 
   @override
-  Future<MergedGrid> grid(LibraryKind kind, SharedSort sort,
-          {bool? descending}) async =>
-      gridFor!();
+  Future<MergedGrid> grid(
+    LibraryKind kind,
+    SharedSort sort, {
+    bool? descending,
+  }) async => gridFor!();
 
   @override
   Future<MergedResult<MergedSearch>> search(String query) {
@@ -99,8 +120,10 @@ void main() {
     test('a sort change while loadMore is in flight wins', () async {
       final src = bigServer();
       final c = containerFor(src);
-      final sub =
-          c.listen(allServersGridProvider(LibraryKind.movies), (_, __) {});
+      final sub = c.listen(
+        allServersGridProvider(LibraryKind.movies),
+        (_, _) {},
+      );
       addTearDown(sub.close);
       final p = allServersGridProvider(LibraryKind.movies);
       await c.read(p.future);
@@ -123,10 +146,12 @@ void main() {
 
     test('loadMore failure clears loadingMore', () async {
       final grid = ThrowingGrid();
-      final c = containerFor(bigServer(),
-          reader: ScriptedReader(gridFor: () => grid));
+      final c = containerFor(
+        bigServer(),
+        reader: ScriptedReader(gridFor: () => grid),
+      );
       final p = allServersGridProvider(LibraryKind.movies);
-      final sub = c.listen(p, (_, __) {});
+      final sub = c.listen(p, (_, _) {});
       addTearDown(sub.close);
       await c.read(p.future);
       await c.read(p.notifier).loadMore();
@@ -135,37 +160,39 @@ void main() {
       expect(s.hasMore, isTrue);
     });
 
-    test('two quick setSort calls end on the second and page that sort',
-        () async {
-      final src = bigServer();
-      final c = containerFor(src);
-      final p = allServersGridProvider(LibraryKind.movies);
-      final sub = c.listen(p, (_, __) {});
-      addTearDown(sub.close);
-      await c.read(p.future);
+    test(
+      'two quick setSort calls end on the second and page that sort',
+      () async {
+        final src = bigServer();
+        final c = containerFor(src);
+        final p = allServersGridProvider(LibraryKind.movies);
+        final sub = c.listen(p, (_, _) {});
+        addTearDown(sub.close);
+        await c.read(p.future);
 
-      src.gate = Completer<void>();
-      c.read(p.notifier).setSort(SharedSort.added);
-      await settle();
-      c.read(p.notifier).setSort(SharedSort.released);
-      await settle();
-      src.gate!.complete();
-      await settle();
-      await c.read(p.future);
-      await settle();
+        src.gate = Completer<void>();
+        c.read(p.notifier).setSort(SharedSort.added);
+        await settle();
+        c.read(p.notifier).setSort(SharedSort.released);
+        await settle();
+        src.gate!.complete();
+        await settle();
+        await c.read(p.future);
+        await settle();
 
-      expect(c.read(p).requireValue.sort, SharedSort.released);
-      await c.read(p.notifier).loadMore();
-      final s = c.read(p).requireValue;
-      expect(s.sort, SharedSort.released);
-      expect(s.items.length, 120);
-    });
+        expect(c.read(p).requireValue.sort, SharedSort.released);
+        await c.read(p.notifier).loadMore();
+        final s = c.read(p).requireValue;
+        expect(s.sort, SharedSort.released);
+        expect(s.items.length, 120);
+      },
+    );
 
     test('loadMore does nothing while a reload is pending', () async {
       final src = bigServer();
       final c = containerFor(src);
       final p = allServersGridProvider(LibraryKind.movies);
-      final sub = c.listen(p, (_, __) {});
+      final sub = c.listen(p, (_, _) {});
       addTearDown(sub.close);
       await c.read(p.future);
 
@@ -183,9 +210,11 @@ void main() {
   group('search notifier', () {
     MergedResult<MergedSearch> result(String title) {
       final s = fakeServer('a');
-      return MergedResult(MergedSearch({
-        MergedSection.movies: [item(s, title, kind: ItemKind.movie)],
-      }));
+      return MergedResult(
+        MergedSearch({
+          MergedSection.movies: [item(s, title, kind: ItemKind.movie)],
+        }),
+      );
     }
 
     Future<void> debounce() =>
@@ -194,7 +223,7 @@ void main() {
     test('a slow earlier search does not overwrite a newer query', () async {
       final reader = ScriptedReader();
       final c = containerFor(bigServer(), reader: reader);
-      final sub = c.listen(allServersSearchProvider, (_, __) {});
+      final sub = c.listen(allServersSearchProvider, (_, _) {});
       addTearDown(sub.close);
       final n = c.read(allServersSearchProvider.notifier);
 
@@ -208,20 +237,25 @@ void main() {
       await settle();
 
       final shown = c.read(allServersSearchProvider)!.requireValue;
-      expect(shown.value.sections[MergedSection.movies]!.single.ref.externalId,
-          'two');
+      expect(
+        shown.value.sections[MergedSection.movies]!.single.ref.externalId,
+        'two',
+      );
     });
 
     test('changing the included servers clears the shown results', () async {
       final reader = ScriptedReader();
       final holder = NotifierProvider<IncludedHolder, List<FakeMergedSource>>(
-          IncludedHolder.new);
-      final c = ProviderContainer(overrides: [
-        allServersSourcesProvider.overrideWith((ref) => ref.watch(holder)),
-        allServersReaderProvider.overrideWithValue(reader),
-      ]);
+        IncludedHolder.new,
+      );
+      final c = ProviderContainer(
+        overrides: [
+          allServersSourcesProvider.overrideWith((ref) => ref.watch(holder)),
+          allServersReaderProvider.overrideWithValue(reader),
+        ],
+      );
       addTearDown(c.dispose);
-      final sub = c.listen(allServersSearchProvider, (_, __) {});
+      final sub = c.listen(allServersSearchProvider, (_, _) {});
       addTearDown(sub.close);
       final n = c.read(allServersSearchProvider.notifier);
 
@@ -236,32 +270,35 @@ void main() {
       expect(c.read(allServersSearchProvider), isNull);
     });
 
-    test('retry reruns the last query once, without a second debounced run',
-        () async {
-      final reader = ScriptedReader();
-      final c = containerFor(bigServer(), reader: reader);
-      final sub = c.listen(allServersSearchProvider, (_, __) {});
-      addTearDown(sub.close);
-      final n = c.read(allServersSearchProvider.notifier);
+    test(
+      'retry reruns the last query once, without a second debounced run',
+      () async {
+        final reader = ScriptedReader();
+        final c = containerFor(bigServer(), reader: reader);
+        final sub = c.listen(allServersSearchProvider, (_, _) {});
+        addTearDown(sub.close);
+        final n = c.read(allServersSearchProvider.notifier);
 
-      n.query('x');
-      await debounce();
-      expect(reader.searches, ['x']);
-      n.retry();
-      expect(reader.searches, ['x', 'x']);
+        n.query('x');
+        await debounce();
+        expect(reader.searches, ['x']);
+        n.retry();
+        expect(reader.searches, ['x', 'x']);
 
-      n.query('y');
-      n.retry();
-      await debounce();
-      expect(reader.searches, ['x', 'x', 'y']);
-    });
+        n.query('y');
+        n.retry();
+        await debounce();
+        expect(reader.searches, ['x', 'x', 'y']);
+      },
+    );
   });
 
   test('stillIncluded drops items from a server that left the set', () {
     final a = fakeServer('a'), b = fakeServer('b');
     final items = [item(a, 'a1'), item(b, 'b1'), item(a, 'a2')];
     expect(
-        stillIncluded({a.id: 'Server a'}, items).map((i) => i.ref.externalId),
-        ['a1', 'a2']);
+      stillIncluded({a.id: 'Server a'}, items).map((i) => i.ref.externalId),
+      ['a1', 'a2'],
+    );
   });
 }

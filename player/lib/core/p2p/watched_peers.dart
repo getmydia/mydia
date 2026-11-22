@@ -11,16 +11,12 @@ import 'package:flutter/foundation.dart' show debugPrint;
 /// are ignored.
 class WatchedPeers {
   WatchedPeers({
-    required String? Function(String peer) nodeIdFor,
-    required bool Function(String nodeId) isConnected,
-    required Future<void> Function(String endpointAddrJson) dial,
-    int maxAttempts = 3,
-    Duration delay = const Duration(seconds: 2),
-  })  : _nodeIdFor = nodeIdFor,
-        _isConnected = isConnected,
-        _dial = dial,
-        _maxAttempts = maxAttempts,
-        _delay = delay;
+    required this._nodeIdFor,
+    required this._isConnected,
+    required this._dial,
+    this._maxAttempts = 3,
+    this._delay = const Duration(seconds: 2),
+  });
 
   final String? Function(String peer) _nodeIdFor;
   final bool Function(String nodeId) _isConnected;
@@ -77,14 +73,18 @@ class WatchedPeers {
 
   void _schedule(String nodeId, _WatchedPeer peer) {
     if (peer.attempts >= _maxAttempts) {
-      debugPrint('[P2P] Auto-reconnect attempts exhausted for $nodeId '
-          '(${peer.attempts}/$_maxAttempts)');
+      debugPrint(
+        '[P2P] Auto-reconnect attempts exhausted for $nodeId '
+        '(${peer.attempts}/$_maxAttempts)',
+      );
       return;
     }
     peer.timer?.cancel();
     peer.attempts++;
-    debugPrint('[P2P] Scheduling auto-reconnect to $nodeId, attempt '
-        '${peer.attempts}/$_maxAttempts in ${_delay.inSeconds}s');
+    debugPrint(
+      '[P2P] Scheduling auto-reconnect to $nodeId, attempt '
+      '${peer.attempts}/$_maxAttempts in ${_delay.inSeconds}s',
+    );
 
     peer.timer = Timer(_delay, () async {
       // Unwatched, or replaced by a later watch, while the timer ran.

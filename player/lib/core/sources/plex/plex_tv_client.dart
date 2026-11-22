@@ -40,13 +40,14 @@ class PlexHomeUser {
   });
 
   factory PlexHomeUser.fromJson(Map<String, dynamic> json) => PlexHomeUser(
-        uuid: json['uuid'] as String? ?? '',
-        title: json['title'] as String? ??
-            json['username'] as String? ??
-            'Plex user', // l10n-ignore: name for a Home user plex.tv left unnamed
-        admin: json['admin'] as bool? ?? false,
-        protected: json['protected'] as bool? ?? false,
-      );
+    uuid: json['uuid'] as String? ?? '',
+    title:
+        json['title'] as String? ??
+        json['username'] as String? ??
+        'Plex user', // l10n-ignore: name for a Home user plex.tv left unnamed
+    admin: json['admin'] as bool? ?? false,
+    protected: json['protected'] as bool? ?? false,
+  );
 
   final String uuid;
   final String title;
@@ -62,12 +63,12 @@ class PlexHomeUser {
   String get profileId => admin ? kOwnerProfileId : uuid;
 
   SourceProfile toProfile(String accountId) => SourceProfile(
-        id: profileId,
-        accountId: accountId,
-        name: title,
-        isOwner: admin,
-        protected: protected,
-      );
+    id: profileId,
+    accountId: accountId,
+    name: title,
+    isOwner: admin,
+    protected: protected,
+  );
 }
 
 @immutable
@@ -83,22 +84,22 @@ class PlexResource {
   });
 
   factory PlexResource.fromJson(Map<String, dynamic> json) => PlexResource(
-        name: json['name'] as String? ?? 'Plex server',
-        clientIdentifier: json['clientIdentifier'] as String,
-        owned: json['owned'] as bool? ?? false,
-        presence: json['presence'] as bool? ?? false,
-        accessToken: json['accessToken'] as String? ?? '',
-        httpsRequired: json['httpsRequired'] as bool? ?? false,
-        connections: [
-          for (final c in json['connections'] as List? ?? const [])
-            if ((c as Map)['uri'] is String)
-              ServerConnection(
-                uri: Uri.parse(c['uri'] as String),
-                local: c['local'] as bool? ?? false,
-                relay: c['relay'] as bool? ?? false,
-              ),
-        ],
-      );
+    name: json['name'] as String? ?? 'Plex server',
+    clientIdentifier: json['clientIdentifier'] as String,
+    owned: json['owned'] as bool? ?? false,
+    presence: json['presence'] as bool? ?? false,
+    accessToken: json['accessToken'] as String? ?? '',
+    httpsRequired: json['httpsRequired'] as bool? ?? false,
+    connections: [
+      for (final c in json['connections'] as List? ?? const [])
+        if ((c as Map)['uri'] is String)
+          ServerConnection(
+            uri: Uri.parse(c['uri'] as String),
+            local: c['local'] as bool? ?? false,
+            relay: c['relay'] as bool? ?? false,
+          ),
+    ],
+  );
 
   final String name;
   final String clientIdentifier;
@@ -113,28 +114,22 @@ class PlexResource {
   SourceServer toServer({
     required String accountId,
     required String profileId,
-  }) =>
-      SourceServer(
-        id: clientIdentifier,
-        accountId: accountId,
-        profileId: profileId,
-        name: name,
-        machineIdentifier: clientIdentifier,
-        owned: owned,
-        presence: presence,
-        httpsRequired: httpsRequired,
-        connections: connections,
-      );
+  }) => SourceServer(
+    id: clientIdentifier,
+    accountId: accountId,
+    profileId: profileId,
+    name: name,
+    machineIdentifier: clientIdentifier,
+    owned: owned,
+    presence: presence,
+    httpsRequired: httpsRequired,
+    connections: connections,
+  );
 }
 
 class PlexTvClient {
-  PlexTvClient({
-    required SourceHttp http,
-    required PlexIdentity identity,
-    Uri? base,
-  })  : _http = http,
-        _identity = identity,
-        _base = base ?? Uri.parse('https://plex.tv');
+  PlexTvClient({required this._http, required this._identity, Uri? base})
+    : _base = base ?? Uri.parse('https://plex.tv');
 
   /// Where the viewer types the code. It accepts only the short code a
   /// non-strong PIN produces.
@@ -152,10 +147,7 @@ class PlexTvClient {
     final json = await _http.json(
       method,
       _base.replace(path: path),
-      headers: {
-        ..._identity.headers,
-        if (token != null) 'X-Plex-Token': token,
-      },
+      headers: {..._identity.headers, 'X-Plex-Token': ?token},
     );
     if (json is! Map) {
       throw const SourceException.fault(SourceFault.plexTvUnexpected);
@@ -214,8 +206,11 @@ class PlexTvClient {
   /// The plex.tv token of Home user [uuid]. plex.tv checks [pin] for a
   /// protected user; a refusal of a call that sent one is
   /// [SourceErrorKind.wrongPin].
-  Future<String> switchUser(String adminToken, String uuid,
-      {String? pin}) async {
+  Future<String> switchUser(
+    String adminToken,
+    String uuid, {
+    String? pin,
+  }) async {
     final response = await _http.send(
       'POST',
       _base.replace(
@@ -252,11 +247,14 @@ class PlexTvClient {
   Future<List<PlexResource>> servers(String token) async {
     final json = await _http.json(
       'GET',
-      _base.replace(path: '/api/v2/resources', queryParameters: const {
-        'includeHttps': '1',
-        'includeRelay': '1',
-        'includeIPv6': '1',
-      }),
+      _base.replace(
+        path: '/api/v2/resources',
+        queryParameters: const {
+          'includeHttps': '1',
+          'includeRelay': '1',
+          'includeIPv6': '1',
+        },
+      ),
       headers: {..._identity.headers, 'X-Plex-Token': token},
     );
     if (json is! List) {

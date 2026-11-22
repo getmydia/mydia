@@ -18,20 +18,18 @@ void main() {
   group('isTitleBarReachable', () {
     test('a window sitting well inside a display is reachable', () {
       expect(
-        isTitleBarReachable(
-          const Rect.fromLTWH(100, 100, 1200, 800),
-          const [primary],
-        ),
+        isTitleBarReachable(const Rect.fromLTWH(100, 100, 1200, 800), const [
+          primary,
+        ]),
         isTrue,
       );
     });
 
     test('a window on a display that is no longer attached is not', () {
       expect(
-        isTitleBarReachable(
-          const Rect.fromLTWH(2100, 100, 1200, 800),
-          const [primary],
-        ),
+        isTitleBarReachable(const Rect.fromLTWH(2100, 100, 1200, 800), const [
+          primary,
+        ]),
         isFalse,
       );
     });
@@ -42,10 +40,9 @@ void main() {
       // the title bar strip spans y -30..10, entirely above the work area, so
       // there is nothing to grab and the user cannot drag it back.
       expect(
-        isTitleBarReachable(
-          const Rect.fromLTWH(100, -30, 1200, 800),
-          const [primary],
-        ),
+        isTitleBarReachable(const Rect.fromLTWH(100, -30, 1200, 800), const [
+          primary,
+        ]),
         isFalse,
       );
     });
@@ -53,20 +50,19 @@ void main() {
     test('a sliver of title bar is not enough to grab', () {
       // 40px of width poking onto the display is below the 100px threshold.
       expect(
-        isTitleBarReachable(
-          const Rect.fromLTWH(1880, 100, 1200, 800),
-          const [primary],
-        ),
+        isTitleBarReachable(const Rect.fromLTWH(1880, 100, 1200, 800), const [
+          primary,
+        ]),
         isFalse,
       );
     });
 
     test('a window reachable on a secondary display is reachable', () {
       expect(
-        isTitleBarReachable(
-          const Rect.fromLTWH(2100, 100, 1200, 800),
-          const [primary, secondary],
-        ),
+        isTitleBarReachable(const Rect.fromLTWH(2100, 100, 1200, 800), const [
+          primary,
+          secondary,
+        ]),
         isTrue,
       );
     });
@@ -244,17 +240,19 @@ void main() {
 
     test('falls back to the primary when the centre is nowhere', () {
       expect(
-        areaContaining(
-          const Rect.fromLTWH(9000, 9000, 100, 100),
-          const [primary, secondary],
-        )?.bounds,
+        areaContaining(const Rect.fromLTWH(9000, 9000, 100, 100), const [
+          primary,
+          secondary,
+        ])?.bounds,
         primary.bounds,
       );
     });
 
     test('returns null when there are no displays', () {
-      expect(areaContaining(const Rect.fromLTWH(0, 0, 100, 100), const []),
-          isNull);
+      expect(
+        areaContaining(const Rect.fromLTWH(0, 0, 100, 100), const []),
+        isNull,
+      );
     });
   });
 }

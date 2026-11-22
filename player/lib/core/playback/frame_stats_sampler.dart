@@ -8,7 +8,8 @@ import 'package:media_kit/media_kit.dart';
 
 import 'frame_stats_sampler_stub.dart'
     if (dart.library.io) 'frame_stats_sampler_native.dart'
-    if (dart.library.js_interop) 'frame_stats_sampler_web.dart' as platform;
+    if (dart.library.js_interop) 'frame_stats_sampler_web.dart'
+    as platform;
 import 'health_sample.dart';
 
 abstract class FrameStatsSampler {

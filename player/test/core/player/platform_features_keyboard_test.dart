@@ -22,8 +22,7 @@ void main() {
       );
     });
 
-    test(
-        'true on web, even though isDesktop is false there — the actual '
+    test('true on web, even though isDesktop is false there — the actual '
         'defect this fixes: a narrowed desktop *or web* window loses the '
         'in-bar episode-nav buttons (viewport-width-gated, not platform-'
         'gated), and web previously had no keyboard fallback either', () {
@@ -46,15 +45,17 @@ void main() {
       );
     });
 
-    test('the real getter matches the pure predicate on this (non-web) host',
-        () {
-      expect(
-        PlatformFeatures.supportsKeyboardShortcuts,
-        PlatformFeatures.computeSupportsKeyboardShortcuts(
-          isDesktop: PlatformFeatures.isDesktop,
-          isWeb: PlatformFeatures.isWeb,
-        ),
-      );
-    });
+    test(
+      'the real getter matches the pure predicate on this (non-web) host',
+      () {
+        expect(
+          PlatformFeatures.supportsKeyboardShortcuts,
+          PlatformFeatures.computeSupportsKeyboardShortcuts(
+            isDesktop: PlatformFeatures.isDesktop,
+            isWeb: PlatformFeatures.isWeb,
+          ),
+        );
+      },
+    );
   });
 }

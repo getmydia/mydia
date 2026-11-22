@@ -186,8 +186,8 @@ List<StatsRow> statsRows(
       value: pill == null
           ? StatsModeValue(context.mode)
           : context.quality == null
-              ? StatsText(context.qualityLabel)
-              : StatsQualityValue(context.quality!),
+          ? StatsText(context.qualityLabel)
+          : StatsQualityValue(context.quality!),
       pill: pill,
     ),
     if (context.why != null)
@@ -211,10 +211,7 @@ List<StatsRow> statsRows(
     if (!compact && context.decoderLabel != null)
       StatsRow(
         id: StatsRowId.decoder,
-        value: StatsDecoderValue(
-          context.decoderLabel!,
-          context.hardwareDecode,
-        ),
+        value: StatsDecoderValue(context.decoderLabel!, context.hardwareDecode),
       ),
     if (!compact && context.audioLabel != null)
       StatsRow(id: StatsRowId.audio, value: StatsText(context.audioLabel!)),
@@ -323,11 +320,11 @@ PlaybackMode? _pill(PlaybackMode mode) =>
     mode == PlaybackMode.localFile ? null : mode;
 
 String _modeLabel(PlaybackMode mode) => switch (mode) {
-      PlaybackMode.direct => 'Direct play',
-      PlaybackMode.copy => 'Stream copy',
-      PlaybackMode.transcode => 'Transcode',
-      PlaybackMode.localFile => 'Local file',
-    };
+  PlaybackMode.direct => 'Direct play',
+  PlaybackMode.copy => 'Stream copy',
+  PlaybackMode.transcode => 'Transcode',
+  PlaybackMode.localFile => 'Local file',
+};
 
 String _decoder(StatsContext context) {
   final hardware = context.hardwareDecode;

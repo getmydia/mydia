@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
@@ -60,11 +60,11 @@ class _WindowButtonWidgetState extends State<WindowButtonWidget> {
       _isWindows ? BorderRadius.zero : BorderRadius.circular(6);
 
   IconData get _icon => switch (widget.button) {
-        WindowButton.minimize => Icons.remove,
-        WindowButton.maximize =>
-          widget.isMaximized ? Icons.filter_none : Icons.crop_square,
-        WindowButton.close => Icons.close,
-      };
+    WindowButton.minimize => Icons.remove,
+    WindowButton.maximize =>
+      widget.isMaximized ? Icons.filter_none : Icons.crop_square,
+    WindowButton.close => Icons.close,
+  };
 
   /// Close goes red on hover (#E81123 on Windows Fluent, AppColors.error on Linux).
   /// The other two take a subtle fill (0x1AFFFFFF on Windows, surfaceVariant on Linux).
@@ -88,12 +88,13 @@ class _WindowButtonWidgetState extends State<WindowButtonWidget> {
   }
 
   String get _tooltip => switch (widget.button) {
-        WindowButton.minimize => context.l10n.windowMinimize,
-        WindowButton.maximize => widget.isMaximized
-            ? context.l10n.windowRestore
-            : context.l10n.windowMaximize,
-        WindowButton.close => context.l10n.commonClose,
-      };
+    WindowButton.minimize => context.l10n.windowMinimize,
+    WindowButton.maximize =>
+      widget.isMaximized
+          ? context.l10n.windowRestore
+          : context.l10n.windowMaximize,
+    WindowButton.close => context.l10n.commonClose,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -114,11 +115,7 @@ class _WindowButtonWidgetState extends State<WindowButtonWidget> {
               color: _hovered ? _hoverColor : Colors.transparent,
               borderRadius: _borderRadius,
             ),
-            child: Icon(
-              _icon,
-              size: _iconSize,
-              color: _iconColor,
-            ),
+            child: Icon(_icon, size: _iconSize, color: _iconColor),
           ),
         ),
       ),

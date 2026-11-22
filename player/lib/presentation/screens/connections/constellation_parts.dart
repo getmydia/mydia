@@ -50,8 +50,9 @@ class _ServerNode extends StatelessWidget {
         Positioned(
           right: -3,
           top: -3,
-          child:
-              _StatusDot(color: connectionStatusColor(server.status, palette)),
+          child: _StatusDot(
+            color: connectionStatusColor(server.status, palette),
+          ),
         ),
       ],
     );
@@ -310,7 +311,9 @@ class _DashedOutlinePainter extends CustomPainter {
       final step = metric.length / count;
       for (var i = 0; i < count; i++) {
         canvas.drawPath(
-            metric.extractPath(i * step, i * step + step * 0.55), paint);
+          metric.extractPath(i * step, i * step + step * 0.55),
+          paint,
+        );
       }
     }
   }

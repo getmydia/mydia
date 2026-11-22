@@ -26,8 +26,11 @@ class _GatedSource extends FakeMediaSource {
   bool reverseFirstPage = false;
 
   @override
-  Future<Page<ItemSummary>> browse(LibraryRef library, BrowseQuery query,
-      {Cursor? cursor}) async {
+  Future<Page<ItemSummary>> browse(
+    LibraryRef library,
+    BrowseQuery query, {
+    Cursor? cursor,
+  }) async {
     if (cursor != null) {
       await gate.future;
       if (followUpError case final e?) throw e;
@@ -47,8 +50,11 @@ class _RefetchGatedSource extends _GatedSource {
   Completer<void>? firstPageHold;
 
   @override
-  Future<Page<ItemSummary>> browse(LibraryRef library, BrowseQuery query,
-      {Cursor? cursor}) async {
+  Future<Page<ItemSummary>> browse(
+    LibraryRef library,
+    BrowseQuery query, {
+    Cursor? cursor,
+  }) async {
     if (cursor == null) await firstPageHold?.future;
     return super.browse(library, query, cursor: cursor);
   }
@@ -59,13 +65,15 @@ void main() {
   const defaultPages = LibraryPages(movies, BrowseQuery());
   final provider = sourcePagesProvider(defaultPages);
 
-  ProviderContainer containerFor(FakeMediaSource source,
-      [SourcePages pages = defaultPages]) {
-    final container = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-    ]);
+  ProviderContainer containerFor(
+    FakeMediaSource source, [
+    SourcePages pages = defaultPages,
+  ]) {
+    final container = ProviderContainer(
+      overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(source)],
+    );
     addTearDown(container.dispose);
-    container.listen(sourcePagesProvider(pages), (_, __) {});
+    container.listen(sourcePagesProvider(pages), (_, _) {});
     return container;
   }
 
@@ -105,31 +113,33 @@ void main() {
     expect(container.read(provider).requireValue.loadingMore, isFalse);
   });
 
-  test('a fresh page 1 that lands after paging does not collapse the list',
-      () async {
-    final source = _RefetchGatedSource();
-    final container = containerFor(source);
-    await container.read(provider.future);
-    final notifier = container.read(provider.notifier);
+  test(
+    'a fresh page 1 that lands after paging does not collapse the list',
+    () async {
+      final source = _RefetchGatedSource();
+      final container = containerFor(source);
+      await container.read(provider.future);
+      final notifier = container.read(provider.notifier);
 
-    source.gate.complete();
-    await notifier.loadMore();
-    expect(container.read(provider).requireValue.items, hasLength(120));
+      source.gate.complete();
+      await notifier.loadMore();
+      expect(container.read(provider).requireValue.items, hasLength(120));
 
-    // An automatic refetch is declined once paged...
-    final registry = container.read(watcherRegistryProvider);
-    final watcher = registry.find(defaultPages.key)!;
-    expect(await watcher.refetchAutomatically(), isFalse);
+      // An automatic refetch is declined once paged...
+      final registry = container.read(watcherRegistryProvider);
+      final watcher = registry.find(defaultPages.key)!;
+      expect(await watcher.refetchAutomatically(), isFalse);
 
-    // ...and a user refetch's page 1 does not replace the paged list.
-    source.firstPageHold = Completer<void>();
-    final refetch = (watcher as SourceWatcher).refetch();
-    await pumpEventQueue();
-    source.firstPageHold!.complete();
-    await refetch;
-    await pumpEventQueue();
-    expect(container.read(provider).requireValue.items, hasLength(120));
-  });
+      // ...and a user refetch's page 1 does not replace the paged list.
+      source.firstPageHold = Completer<void>();
+      final refetch = (watcher as SourceWatcher).refetch();
+      await pumpEventQueue();
+      source.firstPageHold!.complete();
+      await refetch;
+      await pumpEventQueue();
+      expect(container.read(provider).requireValue.items, hasLength(120));
+    },
+  );
 
   test('a failed loadMore leaves page 1 refreshable', () async {
     final source = _GatedSource()..followUpError = StateError('boom');
@@ -141,17 +151,21 @@ void main() {
     await loading;
     expect(container.read(provider).requireValue.items, hasLength(60));
 
-    final watcher =
-        container.read(watcherRegistryProvider).find(defaultPages.key)!;
+    final watcher = container
+        .read(watcherRegistryProvider)
+        .find(defaultPages.key)!;
     expect(await watcher.refetchAutomatically(), isTrue);
 
     source.reverseFirstPage = true;
     var emissions = 0;
-    container.listen(provider, (_, __) => emissions++);
+    container.listen(provider, (_, _) => emissions++);
     await (watcher as SourceWatcher).refetch();
     await pumpEventQueue();
-    expect(emissions, greaterThan(0),
-        reason: 'a refetched page 1 must reach the list again');
+    expect(
+      emissions,
+      greaterThan(0),
+      reason: 'a refetched page 1 must reach the list again',
+    );
   });
 
   test('a different query is a different list on its own watcher', () async {
@@ -162,12 +176,15 @@ void main() {
     await container.read(provider.notifier).loadMore();
 
     const added = LibraryPages(movies, BrowseQuery(sortId: 'added'));
-    container.listen(sourcePagesProvider(added), (_, __) {});
+    container.listen(sourcePagesProvider(added), (_, _) {});
     final state = await container.read(sourcePagesProvider(added).future);
     expect(state.items, hasLength(60));
     expect(container.read(watcherRegistryProvider).find(added.key), isNotNull);
-    expect(container.read(provider).requireValue.items, hasLength(120),
-        reason: 'the first query keeps its pages');
+    expect(
+      container.read(provider).requireValue.items,
+      hasLength(120),
+      reason: 'the first query keeps its pages',
+    );
   });
 
   test('a watched-state invalidation after loadMore keeps the pages', () async {
@@ -184,23 +201,29 @@ void main() {
     expect(container.read(provider).requireValue.items, before);
   });
 
-  test('a failed page 2 resets the guard, so an invalidation refetches page 1',
-      () async {
-    final source = _GatedSource()..followUpError = StateError('boom');
-    final container = containerFor(source);
-    await container.read(provider.future);
-    expect(
-        container.read(provider).requireValue.items.first.ref.externalId, 'm1');
-    final loading = container.read(provider.notifier).loadMore();
-    source.gate.complete();
-    await loading;
+  test(
+    'a failed page 2 resets the guard, so an invalidation refetches page 1',
+    () async {
+      final source = _GatedSource()..followUpError = StateError('boom');
+      final container = containerFor(source);
+      await container.read(provider.future);
+      expect(
+        container.read(provider).requireValue.items.first.ref.externalId,
+        'm1',
+      );
+      final loading = container.read(provider.notifier).loadMore();
+      source.gate.complete();
+      await loading;
 
-    source.reverseFirstPage = true;
-    await invalidateWatched(container);
+      source.reverseFirstPage = true;
+      await invalidateWatched(container);
 
-    expect(container.read(provider).requireValue.items.first.ref.externalId,
-        'm60');
-  });
+      expect(
+        container.read(provider).requireValue.items.first.ref.externalId,
+        'm60',
+      );
+    },
+  );
 
   group('UnwatchedPages', () {
     ItemSummary at(int n) => fakeMovie(n);
@@ -226,65 +249,84 @@ void main() {
       expect(state.items.map((i) => i.ref.externalId), ['m1', 'm2', 'm3']);
       expect(state.nextCursor, isNull);
       expect(state.total, 3);
-      expect(source.calls, ['unwatched(null)', 'unwatched(1)', 'unwatched(2)'],
-          reason: 'no fourth request once the cursor ran out');
+      expect(source.calls, [
+        'unwatched(null)',
+        'unwatched(1)',
+        'unwatched(2)',
+      ], reason: 'no fourth request once the cursor ran out');
     });
   });
 
-  test('FavoritePages and CollectionPages page through their capability',
-      () async {
-    final source = FakeCapableSource()
-      ..favoritePages = [
-        Page(items: [fakeMovie(1)], nextCursor: const Cursor('1')),
-        Page(items: [fakeMovie(2)]),
-      ]
-      ..collectionItemPages = [
-        Page(items: [fakeMovie(3)])
-      ];
-    const favorites = FavoritePages(fakeSourceId);
-    const collection = CollectionPages(fakeSourceId, 'c1');
-    final container = containerFor(source, favorites);
-    container.listen(sourcePagesProvider(collection), (_, __) {});
+  test(
+    'FavoritePages and CollectionPages page through their capability',
+    () async {
+      final source = FakeCapableSource()
+        ..favoritePages = [
+          Page(items: [fakeMovie(1)], nextCursor: const Cursor('1')),
+          Page(items: [fakeMovie(2)]),
+        ]
+        ..collectionItemPages = [
+          Page(items: [fakeMovie(3)]),
+        ];
+      const favorites = FavoritePages(fakeSourceId);
+      const collection = CollectionPages(fakeSourceId, 'c1');
+      final container = containerFor(source, favorites);
+      container.listen(sourcePagesProvider(collection), (_, _) {});
 
-    await container.read(sourcePagesProvider(favorites).future);
-    await container.read(sourcePagesProvider(favorites).notifier).loadMore();
-    final collected =
-        await container.read(sourcePagesProvider(collection).future);
+      await container.read(sourcePagesProvider(favorites).future);
+      await container.read(sourcePagesProvider(favorites).notifier).loadMore();
+      final collected = await container.read(
+        sourcePagesProvider(collection).future,
+      );
 
-    expect(
+      expect(
         container
             .read(sourcePagesProvider(favorites))
             .requireValue
             .items
             .map((i) => i.ref.externalId),
-        ['m1', 'm2']);
-    expect(collected.items.single.ref.externalId, 'm3');
-    expect(source.calls, contains('collectionItems(c1, null)'));
-  });
+        ['m1', 'm2'],
+      );
+      expect(collected.items.single.ref.externalId, 'm3');
+      expect(source.calls, contains('collectionItems(c1, null)'));
+    },
+  );
 
   test('pages are equal when their keys are', () {
-    expect(const LibraryPages(movies, BrowseQuery()),
-        const LibraryPages(movies, BrowseQuery()));
-    expect(const LibraryPages(movies, BrowseQuery()).hashCode,
-        const LibraryPages(movies, BrowseQuery()).hashCode);
-    expect(const LibraryPages(movies, BrowseQuery()),
-        isNot(const LibraryPages(movies, BrowseQuery(sortId: 'added'))));
-    expect(const UnwatchedPages(fakeSourceId),
-        isNot(const FavoritePages(fakeSourceId)));
-    expect(const CollectionPages(fakeSourceId, 'a'),
-        isNot(const CollectionPages(fakeSourceId, 'b')));
+    expect(
+      const LibraryPages(movies, BrowseQuery()),
+      const LibraryPages(movies, BrowseQuery()),
+    );
+    expect(
+      const LibraryPages(movies, BrowseQuery()).hashCode,
+      const LibraryPages(movies, BrowseQuery()).hashCode,
+    );
+    expect(
+      const LibraryPages(movies, BrowseQuery()),
+      isNot(const LibraryPages(movies, BrowseQuery(sortId: 'added'))),
+    );
+    expect(
+      const UnwatchedPages(fakeSourceId),
+      isNot(const FavoritePages(fakeSourceId)),
+    );
+    expect(
+      const CollectionPages(fakeSourceId, 'a'),
+      isNot(const CollectionPages(fakeSourceId, 'b')),
+    );
   });
 
   test('the library query is remembered per library', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     final query = libraryQueryProvider(movies);
-    container.listen(query, (_, __) {});
+    container.listen(query, (_, _) {});
     expect(container.read(query), const BrowseQuery());
     container.read(query.notifier).set(const BrowseQuery(sortId: 'added'));
     expect(container.read(query).sortId, 'added');
-    expect(container.read(libraryQueryProvider(FakeMediaSource.shows)),
-        const BrowseQuery());
+    expect(
+      container.read(libraryQueryProvider(FakeMediaSource.shows)),
+      const BrowseQuery(),
+    );
   });
 
   test('SourceKeys.browse is the key of LibraryPages', () {

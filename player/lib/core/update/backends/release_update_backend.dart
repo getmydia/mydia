@@ -15,20 +15,17 @@ import '../update_track_store.dart';
 /// tarball. Wraps the existing UpdateService and PlatformUpdater unchanged.
 class ReleaseUpdateBackend implements UpdateBackend {
   ReleaseUpdateBackend({
-    required PlatformUpdater updater,
-    required String currentVersion,
+    required this._updater,
+    required this._currentVersion,
     UpdateService? service,
     UpdateTrackStore? trackStore,
-    Set<UpdateTrack> availableTracks = const {
+    this._availableTracks = const {
       UpdateTrack.stable,
       UpdateTrack.beta,
       UpdateTrack.dev,
     },
-  })  : _updater = updater,
-        _currentVersion = currentVersion,
-        _service = service ?? UpdateService(),
-        _trackStore = trackStore ?? UpdateTrackStore(),
-        _availableTracks = availableTracks;
+  }) : _service = service ?? UpdateService(),
+       _trackStore = trackStore ?? UpdateTrackStore();
 
   final PlatformUpdater _updater;
   final String _currentVersion;
@@ -74,7 +71,8 @@ class ReleaseUpdateBackend implements UpdateBackend {
       await _trackStore.write(track);
     } catch (e) {
       return TrackSwitchUnsupported(
-          UpdateProblem(UpdateIssue.saveChoiceFailed, detail: '$e'));
+        UpdateProblem(UpdateIssue.saveChoiceFailed, detail: '$e'),
+      );
     }
 
     _track = track;
@@ -120,7 +118,8 @@ class ReleaseUpdateBackend implements UpdateBackend {
       } catch (e) {
         if (_latest == null) {
           return UpdateFailed(
-              UpdateProblem(UpdateIssue.checkFailed, detail: '$e'));
+            UpdateProblem(UpdateIssue.checkFailed, detail: '$e'),
+          );
         }
         debugPrint('[ReleaseUpdateBackend] Check failed, using held: $e');
       }
@@ -150,12 +149,14 @@ class ReleaseUpdateBackend implements UpdateBackend {
       );
     } on InstallerUnavailable {
       return const UpdateUnsupported(
-          UpdateProblem(UpdateIssue.installerUnavailable));
+        UpdateProblem(UpdateIssue.installerUnavailable),
+      );
     } on UpdateStepFailed catch (e) {
       return UpdateFailed(e.problem);
     } on InstallerFailed catch (e) {
       return UpdateFailed(
-          UpdateProblem(UpdateIssue.installFailed, detail: e.detail));
+        UpdateProblem(UpdateIssue.installFailed, detail: e.detail),
+      );
     } catch (e) {
       return UpdateFailed(UpdateProblem.text(e.toString()));
     }

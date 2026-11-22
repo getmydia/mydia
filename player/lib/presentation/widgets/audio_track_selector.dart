@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/palette.dart';
 import '../../domain/models/audio_track.dart';
@@ -15,10 +15,8 @@ Future<AudioTrack?> showAudioTrackSelector(
 ) async {
   return showOsdBottomSheet<AudioTrack?>(
     context: context,
-    builder: (context) => AudioTrackSelectorSheet(
-      tracks: tracks,
-      currentTrack: currentTrack,
-    ),
+    builder: (context) =>
+        AudioTrackSelectorSheet(tracks: tracks, currentTrack: currentTrack),
   );
 }
 
@@ -49,9 +47,9 @@ class AudioTrackSelectorSheet extends StatelessWidget {
               child: Text(
                 context.l10n.audioTracksTitle,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: palette.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: palette.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(height: 16),

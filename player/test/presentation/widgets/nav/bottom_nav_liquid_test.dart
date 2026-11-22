@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -31,31 +31,34 @@ Future<void> _pump(
   tester.view.physicalSize = const Size(400, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(ProviderScope(
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(textScaler: TextScaler.linear(textScale)),
-        child: child!,
-      ),
-      home: Scaffold(
-        bottomNavigationBar: BottomNav(
-          location: '/s/x',
-          onNavigate: (_) {},
-          entries: const [_home, _movies],
+  await tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          bottomNavigationBar: BottomNav(
+            location: '/s/x',
+            onNavigate: (_) {},
+            entries: const [_home, _movies],
+          ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('Liquid Glass: a 62 tall capsule with a 54 tall selection pill',
-      (tester) async {
+  testWidgets('Liquid Glass: a 62 tall capsule with a 54 tall selection pill', (
+    tester,
+  ) async {
     await _pump(tester, liquid: true);
     final glass = find.byType(GlassSurface);
     expect(tester.getSize(glass).height, 62);
@@ -65,10 +68,12 @@ void main() {
     );
     final items = find.byType(NavItem);
     expect(tester.getSize(items.first).height, 54);
-    final pill = tester.widget<AnimatedContainer>(find.descendant(
-      of: items.first,
-      matching: find.byType(AnimatedContainer),
-    ));
+    final pill = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: items.first,
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
     final decoration = pill.decoration! as BoxDecoration;
     expect(decoration.borderRadius, BorderRadius.circular(27));
     // Inset 4 on every side of the row.
@@ -87,17 +92,12 @@ void main() {
     expect(tester.getSize(find.byType(GlassSurface)).height, isNot(62));
   });
 
-  testWidgets('Liquid Glass: a large text scale grows the bar, no overflow',
-      (tester) async {
+  testWidgets('Liquid Glass: a large text scale grows the bar, no overflow', (
+    tester,
+  ) async {
     await _pump(tester, liquid: true, textScale: 3.0);
     expect(tester.takeException(), isNull);
-    expect(
-      tester.getSize(find.byType(GlassSurface)).height,
-      greaterThan(62),
-    );
-    expect(
-      tester.getSize(find.byType(NavItem).first).height,
-      greaterThan(54),
-    );
+    expect(tester.getSize(find.byType(GlassSurface)).height, greaterThan(62));
+    expect(tester.getSize(find.byType(NavItem).first).height, greaterThan(54));
   });
 }

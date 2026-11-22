@@ -144,8 +144,9 @@ void main() {
 
       test('updates peerConnectionType', () {
         const original = P2pStatus.initial();
-        final updated =
-            original.copyWith(peerConnectionType: P2pConnectionType.direct);
+        final updated = original.copyWith(
+          peerConnectionType: P2pConnectionType.direct,
+        );
 
         expect(updated.peerConnectionType, equals(P2pConnectionType.direct));
       });

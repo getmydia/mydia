@@ -3,7 +3,7 @@
 /// switching to Diagnostics and back keeps your place.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -24,17 +24,17 @@ enum SettingsCategory {
 
   /// The sidebar label, which is also the category's root page title.
   String label(AppLocalizations l10n) => switch (this) {
-        connections => l10n.connectionsTitle,
-        backup => l10n.backupSectionTitle,
-        playback => l10n.settingsPlayback,
-        diagnostics => l10n.settingsDiagnostics,
-        about => l10n.settingsAbout,
-      };
+    connections => l10n.connectionsTitle,
+    backup => l10n.backupSectionTitle,
+    playback => l10n.settingsPlayback,
+    diagnostics => l10n.settingsDiagnostics,
+    about => l10n.settingsAbout,
+  };
 }
 
 class SettingsDialogController extends ValueNotifier<SettingsCategory> {
   SettingsDialogController(super.initial, {String? connectionsSection})
-      : connectionsSection = ValueNotifier<String?>(connectionsSection);
+    : connectionsSection = ValueNotifier<String?>(connectionsSection);
 
   /// A section the connections pane should scroll to (`'devices'`). Set
   /// before the dialog opens, the pane takes it as it mounts; set while it
@@ -103,9 +103,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
   /// A section lives on the hub: back to its root, then show the pane.
   void _sectionRequested() {
     if (widget.controller.connectionsSection.value == null) return;
-    _navigators[SettingsCategory.connections]!
-        .currentState
-        ?.popUntil((route) => route.isFirst);
+    _navigators[SettingsCategory.connections]!.currentState?.popUntil(
+      (route) => route.isFirst,
+    );
     widget.controller.value = SettingsCategory.connections;
   }
 
@@ -125,7 +125,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final window = MediaQuery.sizeOf(context);
-    final compact = window.width < kSettingsDialogCompactBelow.width ||
+    final compact =
+        window.width < kSettingsDialogCompactBelow.width ||
         window.height < kSettingsDialogCompactBelow.height;
     final inset = compact ? 0.0 : kSettingsDialogInset;
     final size = Size(
@@ -145,13 +146,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
         backgroundColor: palette.background,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(compact ? 0 : AppTheme.radiusCard),
+          borderRadius: BorderRadius.circular(
+            compact ? 0 : AppTheme.radiusCard,
+          ),
         ),
         child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.escape): _escape,
-          },
+          bindings: {const SingleActivator(LogicalKeyboardKey.escape): _escape},
           child: Focus(
             autofocus: true,
             child: SizedBox.fromSize(
@@ -166,7 +166,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     onSelect: (c) => widget.controller.value = c,
                   ),
                   VerticalDivider(
-                      width: 1, thickness: 1, color: palette.divider),
+                    width: 1,
+                    thickness: 1,
+                    color: palette.divider,
+                  ),
                   Expanded(
                     child: IndexedStack(
                       index: selected.index,
@@ -188,7 +191,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Widget _pane(BuildContext context, SettingsCategory category) {
     final navigator = Navigator(
       key: _navigators[category],
-      onGenerateInitialRoutes: (_, __) => [
+      onGenerateInitialRoutes: (_, _) => [
         MaterialPageRoute<void>(builder: (_) => widget.rootPage(category)),
       ],
     );
@@ -228,8 +231,8 @@ class SettingsDialogScope extends InheritedWidget {
   final ValueNotifier<String?> connectionsSection;
 
   static SettingsDialogScope of(BuildContext context) {
-    final scope =
-        context.dependOnInheritedWidgetOfExactType<SettingsDialogScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<SettingsDialogScope>();
     assert(scope != null, 'SettingsDialogScope.of outside a SettingsDialog');
     return scope!;
   }
@@ -278,10 +281,10 @@ class SettingsPane extends StatelessWidget {
                 Expanded(
                   child: switch (title) {
                     final title? => Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleLarge,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     null => const SizedBox.shrink(),
                   },
                 ),

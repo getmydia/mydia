@@ -49,22 +49,30 @@ class QuickConnectCode {
 
 class JellyfinAuth {
   JellyfinAuth({
-    required SourceHttp http,
+    required this._http,
     required this.base,
     required this.identity,
-  }) : _http = http;
+  });
 
   final SourceHttp _http;
   final Uri base;
   final JellyfinIdentity identity;
 
-  Map<String, String> get _headers =>
-      {'Authorization': identity.authorization()};
+  Map<String, String> get _headers => {
+    'Authorization': identity.authorization(),
+  };
 
-  Future<Object?> _call(String method, String path,
-          {Map<String, String>? query, Object? body}) =>
-      _http.json(method, jellyfinUnder(base, path, query),
-          headers: _headers, body: body);
+  Future<Object?> _call(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+  }) => _http.json(
+    method,
+    jellyfinUnder(base, path, query),
+    headers: _headers,
+    body: body,
+  );
 
   /// False when the server says so or cannot say: the password form is
   /// always there to fall back to.
@@ -88,19 +96,32 @@ class JellyfinAuth {
 
   /// Throws `SourceException.notFound()` once the code has expired.
   Future<bool> quickConnectApproved(String secret) async {
-    final json =
-        await _call('GET', '/QuickConnect/Connect', query: {'secret': secret});
+    final json = await _call(
+      'GET',
+      '/QuickConnect/Connect',
+      query: {'secret': secret},
+    );
     return json is Map && json['Authenticated'] == true;
   }
 
-  Future<JellyfinSession> withQuickConnect(String secret) async =>
-      _session(await _call('POST', '/Users/AuthenticateWithQuickConnect',
-          body: {'Secret': secret}));
+  Future<JellyfinSession> withQuickConnect(String secret) async => _session(
+    await _call(
+      'POST',
+      '/Users/AuthenticateWithQuickConnect',
+      body: {'Secret': secret},
+    ),
+  );
 
   Future<JellyfinSession> withPassword(
-          String username, String password) async =>
-      _session(await _call('POST', '/Users/AuthenticateByName',
-          body: {'Username': username, 'Pw': password}));
+    String username,
+    String password,
+  ) async => _session(
+    await _call(
+      'POST',
+      '/Users/AuthenticateByName',
+      body: {'Username': username, 'Pw': password},
+    ),
+  );
 
   JellyfinSession _session(Object? json) => json is Map
       ? JellyfinSession.fromJson(json.cast<String, dynamic>())

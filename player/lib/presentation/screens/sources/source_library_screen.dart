@@ -1,6 +1,6 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -42,8 +42,9 @@ enum _ViewMode { grid, list }
 /// Remembered sorts decoded this session, by `<sourceId>/<libraryId>`. A key
 /// present with a null value means storage held nothing. Lives for the app
 /// session, so only the first visit to a library can wait on storage.
-final rememberedSortsProvider =
-    Provider<Map<String, BrowseQuery?>>((ref) => {});
+final rememberedSortsProvider = Provider<Map<String, BrowseQuery?>>(
+  (ref) => {},
+);
 
 SortOption? _sortOption(Library info, BrowseQuery query) {
   final options = info.sortOptions;
@@ -132,8 +133,9 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
   late bool _loadingSort = _remembers && !_cache.containsKey(_sortKey);
 
   /// Sorts already read this session, so a repeat visit needs no storage.
-  late final Map<String, BrowseQuery?> _cache =
-      ref.read(rememberedSortsProvider);
+  late final Map<String, BrowseQuery?> _cache = ref.read(
+    rememberedSortsProvider,
+  );
 
   /// The query a first build starts from: a saved filter's, else the
   /// remembered sort when this session already knows it.
@@ -207,9 +209,11 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
     };
     if (kind == null) return;
     final option = _sortOption(info, query);
-    final field = SortField.fromWireName(query.sortId ?? option?.id ?? '') ??
+    final field =
+        SortField.fromWireName(query.sortId ?? option?.id ?? '') ??
         LibrarySort.defaultSort.field;
-    final descending = query.descending ??
+    final descending =
+        query.descending ??
         option?.descendingByDefault ??
         LibrarySort.defaultSort.direction == SortDirection.desc;
     showFilterEditor(
@@ -256,7 +260,8 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
     final isShows = info?.kind == LibraryKind.shows;
     final sort = info == null ? null : _sortOption(info, query);
     final descending = query.descending ?? sort?.descendingByDefault ?? false;
-    final canSaveFilter = info != null &&
+    final canSaveFilter =
+        info != null &&
         widget.canSaveAsFilter &&
         info.kind != LibraryKind.videos &&
         (ref
@@ -309,7 +314,8 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
           ),
           tooltip: context.l10n.sourcesLibraryToggleView,
           onPressed: () => setState(
-              () => _viewMode = isList ? _ViewMode.grid : _ViewMode.list),
+            () => _viewMode = isList ? _ViewMode.grid : _ViewMode.list,
+          ),
         ),
         if (canSaveFilter)
           PopupMenuButton<String>(
@@ -338,11 +344,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
       ],
       secondRow: info == null
           ? null
-          : _ChipRow(
-              info: info,
-              query: query,
-              onChanged: _setQuery,
-            ),
+          : _ChipRow(info: info, query: query, onChanged: _setQuery),
       onRefresh: () async {
         // A library a paired player lends refetches the host's index first,
         // so the browse below reads the new copy.
@@ -351,57 +353,51 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
         await ref.read(invalidatorProvider).invalidate([key.target]);
       },
       body: (context, scrollTopPadding) => _withScanBanner(
-          scrollTopPadding,
-          (scrollTopPadding) => switch (browse) {
-                AsyncData(:final value) when value.items.isEmpty => _EmptyState(
-                    title: isShows
-                        ? context.l10n.sourcesLibraryEmptyShows
-                        : context.l10n.sourcesLibraryEmptyMovies,
-                    icon: isShows
-                        ? Icons.live_tv_rounded
-                        : Icons.movie_filter_rounded,
-                  ),
-                AsyncData(:final value) =>
-                  NotificationListener<ScrollNotification>(
-                    onNotification: (n) {
-                      if (n.metrics.extentAfter < 800) {
-                        ref
-                            .read(sourcePagesProvider(pages).notifier)
-                            .loadMore();
-                      }
-                      return false;
+        scrollTopPadding,
+        (scrollTopPadding) => switch (browse) {
+          AsyncData(:final value) when value.items.isEmpty => _EmptyState(
+            title: isShows
+                ? context.l10n.sourcesLibraryEmptyShows
+                : context.l10n.sourcesLibraryEmptyMovies,
+            icon: isShows ? Icons.live_tv_rounded : Icons.movie_filter_rounded,
+          ),
+          AsyncData(:final value) => NotificationListener<ScrollNotification>(
+            onNotification: (n) {
+              if (n.metrics.extentAfter < 800) {
+                ref.read(sourcePagesProvider(pages).notifier).loadMore();
+              }
+              return false;
+            },
+            child: isList
+                ? _ItemList(
+                    items: value.items,
+                    scrollTopPadding: scrollTopPadding,
+                  )
+                : BrowseGrid(
+                    scrollTopPadding: scrollTopPadding,
+                    itemCount: value.items.length,
+                    itemId: (index) => value.items[index].ref,
+                    itemBuilder: (context, index) {
+                      final item = value.items[index];
+                      return SourcePoster(
+                        key: ValueKey('source-poster-${item.ref.externalId}'),
+                        item: item,
+                        onTap: () => context.push(sourceItemLocation(item.ref)),
+                      );
                     },
-                    child: isList
-                        ? _ItemList(
-                            items: value.items,
-                            scrollTopPadding: scrollTopPadding,
-                          )
-                        : BrowseGrid(
-                            scrollTopPadding: scrollTopPadding,
-                            itemCount: value.items.length,
-                            itemId: (index) => value.items[index].ref,
-                            itemBuilder: (context, index) {
-                              final item = value.items[index];
-                              return SourcePoster(
-                                key: ValueKey(
-                                    'source-poster-${item.ref.externalId}'),
-                                item: item,
-                                onTap: () =>
-                                    context.push(sourceItemLocation(item.ref)),
-                              );
-                            },
-                          ),
                   ),
-                AsyncError(:final error) => SourceErrorView(
-                    error: error,
-                    account: ref
-                        .watch(mediaSourceProvider(library.sourceId))
-                        ?.source
-                        .account,
-                    onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
-                  ),
-                _ => const Center(child: CircularProgressIndicator()),
-              }),
+          ),
+          AsyncError(:final error) => SourceErrorView(
+            error: error,
+            account: ref
+                .watch(mediaSourceProvider(library.sourceId))
+                ?.source
+                .account,
+            onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
+          ),
+          _ => const Center(child: CircularProgressIndicator()),
+        },
+      ),
     );
   }
 
@@ -414,8 +410,10 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
     final sourceId = widget.library.sourceId;
     final source = ref.watch(mediaSourceProvider(sourceId));
     if (source?.kind != SourceKind.files ||
-        !filesScanBannerShows(ref.watch(filesScanProvider(sourceId)),
-            probe: ref.watch(filesProbeQueueProvider(sourceId)))) {
+        !filesScanBannerShows(
+          ref.watch(filesScanProvider(sourceId)),
+          probe: ref.watch(filesProbeQueueProvider(sourceId)),
+        )) {
       return KeyedSubtree(key: _contentKey, child: content(top));
     }
     return Column(
@@ -425,7 +423,9 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
           color: context.palette.surface,
           child: FilesScanBanner(sourceId: sourceId),
         ),
-        Expanded(child: KeyedSubtree(key: _contentKey, child: content(0))),
+        Expanded(
+          child: KeyedSubtree(key: _contentKey, child: content(0)),
+        ),
       ],
     );
   }
@@ -461,14 +461,17 @@ class _ChipRow extends StatelessWidget {
                   child: GlassChip(
                     chipKey: Key('source-sort-${option.id}'),
                     label: Text(context.l10n.sortName(option.name)),
-                    selected: (query.sortId ?? info.sortOptions.first.id) ==
+                    selected:
+                        (query.sortId ?? info.sortOptions.first.id) ==
                         option.id,
                     // A new sort starts in its own default direction.
-                    onSelected: (_) => onChanged(BrowseQuery(
-                      sortId: option.id,
-                      filterIds: query.filterIds,
-                      pageSize: query.pageSize,
-                    )),
+                    onSelected: (_) => onChanged(
+                      BrowseQuery(
+                        sortId: option.id,
+                        filterIds: query.filterIds,
+                        pageSize: query.pageSize,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -483,11 +486,13 @@ class _ChipRow extends StatelessWidget {
                     chipKey: Key('source-filter-${filter.id}'),
                     label: Text(context.l10n.filterOptionName(filter)),
                     selected: query.filterIds.contains(filter.id),
-                    onSelected: (on) => onChanged(query.copyWith(
-                      filterIds: on
-                          ? {...query.filterIds, filter.id}
-                          : ({...query.filterIds}..remove(filter.id)),
-                    )),
+                    onSelected: (on) => onChanged(
+                      query.copyWith(
+                        filterIds: on
+                            ? {...query.filterIds, filter.id}
+                            : ({...query.filterIds}..remove(filter.id)),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -510,8 +515,12 @@ class _ItemList extends StatelessWidget {
     final directional = InputCapabilities.directionalPrimary;
     final list = ListView.builder(
       key: const Key('source-library-list'),
-      padding: EdgeInsets.fromLTRB(horizontalPadding, scrollTopPadding,
-          horizontalPadding, DockInsets.bottomOf(context)),
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        scrollTopPadding,
+        horizontalPadding,
+        DockInsets.bottomOf(context),
+      ),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final row = _ListRow(item: items[index]);
@@ -586,10 +595,8 @@ class _ListRow extends StatelessWidget {
                     children: [
                       Text(
                         item.title,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -597,10 +604,8 @@ class _ListRow extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           caption,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: palette.textSecondary,
-                                  ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: palette.textSecondary),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -660,17 +665,15 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               context.l10n.sourcesLibraryEmptyHint,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],

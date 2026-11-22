@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
@@ -28,14 +28,16 @@ class ToastPill extends StatelessWidget {
   static Color fill(MydiaPalette p) =>
       p.surfaceHigh.withValues(alpha: DepthTokens.chromeFillOpacity);
 
-  static const BorderRadius _radius =
-      BorderRadius.all(Radius.circular(ToastMetrics.radius));
+  static const BorderRadius _radius = BorderRadius.all(
+    Radius.circular(ToastMetrics.radius),
+  );
 
   /// Liquid Glass: a capsule. The pill is held at [liquidMinHeight] so its
   /// radius is half its height for a single line.
   static const double liquidMinHeight = 48;
-  static const BorderRadius liquidRadius =
-      BorderRadius.all(Radius.circular(liquidMinHeight / 2));
+  static const BorderRadius liquidRadius = BorderRadius.all(
+    Radius.circular(liquidMinHeight / 2),
+  );
 
   static const double _padHorizontal = 16;
   static const double _padVertical = 12;
@@ -127,15 +129,17 @@ class ToastPill extends StatelessWidget {
                             const SizedBox(width: 12),
                             ConstrainedBox(
                               constraints: const BoxConstraints(
-                                  maxWidth: _maxActionWidth),
+                                maxWidth: _maxActionWidth,
+                              ),
                               child: TextButton(
                                 key: const Key('toast-action'),
                                 onPressed: onAction,
                                 style: TextButton.styleFrom(
                                   foregroundColor: palette.primary,
                                   minimumSize: const Size(0, 32),
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
                                   tapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                 ),
@@ -167,11 +171,17 @@ class ToastPill extends StatelessWidget {
         if (icon == null) return null;
         return Icon(icon, size: 18, color: palette.textSecondary);
       case ToastKind.success:
-        return const Icon(Icons.check_circle_rounded,
-            size: 18, color: AppColors.success);
+        return const Icon(
+          Icons.check_circle_rounded,
+          size: 18,
+          color: AppColors.success,
+        );
       case ToastKind.error:
-        return const Icon(Icons.error_rounded,
-            size: 18, color: AppColors.error);
+        return const Icon(
+          Icons.error_rounded,
+          size: 18,
+          color: AppColors.error,
+        );
       case ToastKind.progress:
         return SizedBox(
           width: 16,

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,49 +26,60 @@ const _name = 'test/all-servers-switch';
 const _channel = MethodChannel(_name);
 
 SourceAccountRecord _record(String id) => SourceAccountRecord(
-      account: ProviderAccount(
-        id: id,
-        kind: SourceKind.plex,
-        displayName: 'Server $id',
-        storageNamespace: 'source/$id',
-        activeProfileId: 'owner',
-      ),
-      profiles: [
-        SourceProfile(id: 'owner', accountId: id, name: 'Owner', isOwner: true),
-      ],
-      servers: [
-        SourceServer(
-            id: 's1',
-            accountId: id,
-            profileId: 'owner',
-            name: 'Server $id',
-            machineIdentifier: 's1'),
-      ],
-      addedAtMs: 1700000000000,
-    );
+  account: ProviderAccount(
+    id: id,
+    kind: SourceKind.plex,
+    displayName: 'Server $id',
+    storageNamespace: 'source/$id',
+    activeProfileId: 'owner',
+  ),
+  profiles: [
+    SourceProfile(id: 'owner', accountId: id, name: 'Owner', isOwner: true),
+  ],
+  servers: [
+    SourceServer(
+      id: 's1',
+      accountId: id,
+      profileId: 'owner',
+      name: 'Server $id',
+      machineIdentifier: 's1',
+    ),
+  ],
+  addedAtMs: 1700000000000,
+);
 
 SourceId _idOf(String account) => SourceId('$account:owner:s1');
 
 /// Real records, sources and active-source providers; only the per-source
 /// connections are faked.
-Future<ProviderContainer> _container(WidgetTester tester,
-    {bool routerLike = false}) async {
+Future<ProviderContainer> _container(
+  WidgetTester tester, {
+  bool routerLike = false,
+}) async {
   final store = InMemorySourceStore();
   await store.putAccount(_record('a'));
   await store.putAccount(_record('b'));
   final fakes = <SourceId, FakeMergedSource>{};
-  final container = ProviderContainer(overrides: [
-    nativeTabBarChannelProvider.overrideWith((ref) {
-      final channel = NativeTabBarChannel(channel: _channel);
-      ref.onDispose(channel.dispose);
-      return channel;
-    }),
-    sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
-    sourceStoreProvider.overrideWith((ref) async => store),
-    sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-    mediaSourceProvider.overrideWith((ref, id) => fakes.putIfAbsent(
-        id, () => FakeMergedSource(fakeServer(id.value.split(':').first)))),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      nativeTabBarChannelProvider.overrideWith((ref) {
+        final channel = NativeTabBarChannel(channel: _channel);
+        ref.onDispose(channel.dispose);
+        return channel;
+      }),
+      sidebarLayoutStoreProvider.overrideWithValue(
+        InMemorySidebarLayoutStore(),
+      ),
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
+      mediaSourceProvider.overrideWith(
+        (ref, id) => fakes.putIfAbsent(
+          id,
+          () => FakeMergedSource(fakeServer(id.value.split(':').first)),
+        ),
+      ),
+    ],
+  );
   addTearDown(container.dispose);
   await container.read(sourceRecordsProvider.future);
   if (routerLike) {
@@ -84,12 +95,12 @@ Future<ProviderContainer> _container(WidgetTester tester,
       container.read(allServersChoicesProvider);
     }
 
-    container.listen(thirdPartySourcesProvider, (_, __) => redirect());
-    container.listen(sourcesLoadingProvider, (_, __) => redirect());
-    container.listen(selectedSourceIdProvider, (_, __) => redirect());
-    container.listen(legacyMydiaSourceIdProvider, (_, __) => redirect());
-    container.listen(mydiaSourceIdsProvider, (_, __) => redirect());
-    container.listen(gatedSourceIdsProvider, (_, __) => redirect());
+    container.listen(thirdPartySourcesProvider, (_, _) => redirect());
+    container.listen(sourcesLoadingProvider, (_, _) => redirect());
+    container.listen(selectedSourceIdProvider, (_, _) => redirect());
+    container.listen(legacyMydiaSourceIdProvider, (_, _) => redirect());
+    container.listen(mydiaSourceIdsProvider, (_, _) => redirect());
+    container.listen(gatedSourceIdsProvider, (_, _) => redirect());
   }
   return container;
 }
@@ -99,10 +110,16 @@ void _size(WidgetTester tester) {
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(_channel, (call) async => null);
-  addTearDown(() => tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(_channel, null));
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    _channel,
+    (call) async => null,
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      _channel,
+      null,
+    ),
+  );
 }
 
 /// What AppShell does on every build: `_isOfflineMode` watches the route's
@@ -118,37 +135,43 @@ class _ShellProbe extends ConsumerWidget {
 }
 
 void main() {
-  testWidgets('native sidebar: tapping a server row on All servers',
-      (tester) async {
+  testWidgets('native sidebar: tapping a server row on All servers', (
+    tester,
+  ) async {
     _size(tester);
     final container = await _container(tester, routerLike: true);
     final navigated = <String>[];
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: Column(children: [
-            const _ShellProbe(),
-            Expanded(
-              child: NativeSidebarHost(
-                location: allServersRoot,
-                onNavigate: navigated.add,
-                visible: true,
-                isOffline: false,
-              ),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Column(
+              children: [
+                const _ShellProbe(),
+                Expanded(
+                  child: NativeSidebarHost(
+                    location: allServersRoot,
+                    onNavigate: navigated.add,
+                    visible: true,
+                    isOffline: false,
+                  ),
+                ),
+              ],
             ),
-          ]),
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
       _name,
       const StandardMethodCodec().encodeMethodCall(
-          MethodCall('tabSelected', serverItemId(_idOf('b')))),
+        MethodCall('tabSelected', serverItemId(_idOf('b'))),
+      ),
       (_) {},
     );
     await tester.pumpAndSettle();
@@ -158,28 +181,34 @@ void main() {
     expect(navigated, [sourceHomeLocation(_idOf('b'))]);
   });
 
-  testWidgets('flutter rail: tapping a server row on All servers',
-      (tester) async {
+  testWidgets('flutter rail: tapping a server row on All servers', (
+    tester,
+  ) async {
     _size(tester);
     final container = await _container(tester, routerLike: true);
     final navigated = <String>[];
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: Column(children: [
-            const _ShellProbe(),
-            AllServersServerRows(onNavigate: navigated.add),
-          ]),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Column(
+              children: [
+                const _ShellProbe(),
+                AllServersServerRows(onNavigate: navigated.add),
+              ],
+            ),
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
-    await tester
-        .tap(find.byKey(ValueKey('all-server-row-${_idOf('b').value}')));
+    await tester.tap(
+      find.byKey(ValueKey('all-server-row-${_idOf('b').value}')),
+    );
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

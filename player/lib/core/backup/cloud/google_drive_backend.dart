@@ -17,12 +17,10 @@ import 'google_auth.dart';
 /// `slotId` and `deviceName`.
 class GoogleDriveBackend implements CloudBackend {
   GoogleDriveBackend({
-    required GoogleAuth auth,
-    required http.Client client,
-    required BackupMetaStore meta,
-  })  : _auth = auth,
-        _client = client,
-        _meta = meta;
+    required this._auth,
+    required this._client,
+    required this._meta,
+  });
 
   static const _filesUrl = 'https://www.googleapis.com/drive/v3/files';
   static const _uploadUrl = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -54,17 +52,20 @@ class GoogleDriveBackend implements CloudBackend {
     final files = <Map<String, dynamic>>[];
     String? pageToken;
     do {
-      final uri = Uri.parse(_filesUrl).replace(queryParameters: {
-        'spaces': 'appDataFolder',
-        'fields': _listFields,
-        'pageSize': '100',
-        if (pageToken != null) 'pageToken': pageToken,
-      });
+      final uri = Uri.parse(_filesUrl).replace(
+        queryParameters: {
+          'spaces': 'appDataFolder',
+          'fields': _listFields,
+          'pageSize': '100',
+          'pageToken': ?pageToken,
+        },
+      );
       final r = await _send('GET', uri);
       _expectOk(r);
       final json = _decodeObject(r.body);
       files.addAll(
-          (json['files'] as List? ?? const []).cast<Map<String, dynamic>>());
+        (json['files'] as List? ?? const []).cast<Map<String, dynamic>>(),
+      );
       pageToken = json['nextPageToken'] as String?;
     } while (pageToken != null);
 
@@ -88,8 +89,8 @@ class GoogleDriveBackend implements CloudBackend {
         slotId: slotId,
         version: '$fileId:${f['version']}',
         deviceName: props?['deviceName'] as String?,
-        updatedAtMs:
-            DateTime.tryParse('${f['modifiedTime']}')?.millisecondsSinceEpoch,
+        updatedAtMs: DateTime.tryParse('${f['modifiedTime']}')
+            ?.millisecondsSinceEpoch,
         size: int.tryParse('${f['size']}'),
       );
       final seen = newest[slotId];
@@ -117,8 +118,8 @@ class GoogleDriveBackend implements CloudBackend {
       id = _fileIds[slotId];
     }
     if (id == null) throw const BackupRelayException(BackupRelayError.notFound);
-    final uri =
-        Uri.parse('$_filesUrl/$id').replace(queryParameters: {'alt': 'media'});
+    final uri = Uri.parse('$_filesUrl/$id')
+        .replace(queryParameters: {'alt': 'media'});
     final r = await _send('GET', uri);
     if (r.statusCode == 404) {
       _fileIds.remove(slotId);
@@ -129,8 +130,12 @@ class GoogleDriveBackend implements CloudBackend {
   }
 
   @override
-  Future<void> writeBytes(String slotId, List<int> bytes,
-      {required String deviceName, required String platform}) async {
+  Future<void> writeBytes(
+    String slotId,
+    List<int> bytes, {
+    required String deviceName,
+    required String platform,
+  }) async {
     final cached = _meta.gdriveOwnFileId;
     if (cached != null) {
       final r = await _upload('PATCH', cached, slotId, bytes, deviceName);
@@ -192,8 +197,13 @@ class GoogleDriveBackend implements CloudBackend {
     _fileIds.clear();
   }
 
-  Future<http.Response> _upload(String method, String? fileId, String slotId,
-      List<int> bytes, String deviceName) {
+  Future<http.Response> _upload(
+    String method,
+    String? fileId,
+    String slotId,
+    List<int> bytes,
+    String deviceName,
+  ) {
     final boundary =
         'mydia-${Random.secure().nextInt(1 << 32).toRadixString(36)}'
         '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
@@ -203,23 +213,33 @@ class GoogleDriveBackend implements CloudBackend {
       'appProperties': {'slotId': slotId, 'deviceName': deviceName},
     });
     final body = <int>[
-      ...utf8.encode('--$boundary\r\n'
-          'Content-Type: application/json; charset=UTF-8\r\n\r\n'
-          '$metadata\r\n'
-          '--$boundary\r\n'
-          'Content-Type: application/gzip\r\n\r\n'),
+      ...utf8.encode(
+        '--$boundary\r\n'
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n'
+        '$metadata\r\n'
+        '--$boundary\r\n'
+        'Content-Type: application/gzip\r\n\r\n',
+      ),
       ...bytes,
       ...utf8.encode('\r\n--$boundary--\r\n'),
     ];
     final uri = Uri.parse(fileId == null ? _uploadUrl : '$_uploadUrl/$fileId')
         .replace(queryParameters: {'uploadType': 'multipart'});
-    return _send(method, uri,
-        body: body, contentType: 'multipart/related; boundary=$boundary');
+    return _send(
+      method,
+      uri,
+      body: body,
+      contentType: 'multipart/related; boundary=$boundary',
+    );
   }
 
   /// Sends one request; a 401 is retried once with a refreshed token.
-  Future<http.Response> _send(String method, Uri uri,
-      {List<int>? body, String? contentType}) async {
+  Future<http.Response> _send(
+    String method,
+    Uri uri, {
+    List<int>? body,
+    String? contentType,
+  }) async {
     var r = await _once(method, uri, body, contentType, false);
     if (r.statusCode == 401) {
       r = await _once(method, uri, body, contentType, true);
@@ -230,8 +250,13 @@ class GoogleDriveBackend implements CloudBackend {
     return r;
   }
 
-  Future<http.Response> _once(String method, Uri uri, List<int>? body,
-      String? contentType, bool forceRefresh) async {
+  Future<http.Response> _once(
+    String method,
+    Uri uri,
+    List<int>? body,
+    String? contentType,
+    bool forceRefresh,
+  ) async {
     final token = await _auth.accessToken(forceRefresh: forceRefresh);
     final req = http.Request(method, uri)
       ..headers['Authorization'] = 'Bearer $token';
@@ -266,9 +291,10 @@ class GoogleDriveBackend implements CloudBackend {
 
   BackupRelayException _errorFor(http.Response r) {
     final secs = int.tryParse(r.headers['retry-after'] ?? '');
-    BackupRelayException rateLimited() =>
-        BackupRelayException(BackupRelayError.rateLimited,
-            retryAfterMs: secs == null ? null : secs * 1000);
+    BackupRelayException rateLimited() => BackupRelayException(
+      BackupRelayError.rateLimited,
+      retryAfterMs: secs == null ? null : secs * 1000,
+    );
     switch (r.statusCode) {
       case 404:
         return const BackupRelayException(BackupRelayError.notFound);
@@ -288,8 +314,10 @@ class GoogleDriveBackend implements CloudBackend {
         // instead of backing off on a server error forever.
         if (reasons.contains('insufficientPermissions') ||
             reasons.contains('ACCESS_TOKEN_SCOPE_INSUFFICIENT')) {
-          return const BackupRelayException(BackupRelayError.signedOut,
-              code: googleScopeMissingCode);
+          return const BackupRelayException(
+            BackupRelayError.signedOut,
+            code: googleScopeMissingCode,
+          );
         }
         return const BackupRelayException(BackupRelayError.server);
       default:

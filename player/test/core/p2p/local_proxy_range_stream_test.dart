@@ -219,30 +219,32 @@ void main() {
   });
 
   group('read-ahead', () {
-    test('keeps downloading a direct stream the client stopped reading',
-        () async {
-      const total = 8 * 1024 * 1024;
-      final upstream = serve(
-        FakeRangeStream(
-          header: fakeRangeHeader(contentLength: total),
-          totalBytes: total,
-        ),
-      );
-      final client = await RawRangeClient.open(
-        proxy.port,
-        '/t/macct/direct/file-1/stream',
-      );
-      await client.waitForBytes(64 * 1024);
+    test(
+      'keeps downloading a direct stream the client stopped reading',
+      () async {
+        const total = 8 * 1024 * 1024;
+        final upstream = serve(
+          FakeRangeStream(
+            header: fakeRangeHeader(contentLength: total),
+            totalBytes: total,
+          ),
+        );
+        final client = await RawRangeClient.open(
+          proxy.port,
+          '/t/macct/direct/file-1/stream',
+        );
+        await client.waitForBytes(64 * 1024);
 
-      client.stopReading();
+        client.stopReading();
 
-      await waitUntil(
-        () => upstream.pulledBytes == total,
-        timeout: const Duration(seconds: 20),
-      );
-      await waitUntil(() => spoolFiles().single.lengthSync() == total);
-      client.hangUp();
-    });
+        await waitUntil(
+          () => upstream.pulledBytes == total,
+          timeout: const Duration(seconds: 20),
+        );
+        await waitUntil(() => spoolFiles().single.lengthSync() == total);
+        client.hangUp();
+      },
+    );
 
     test('streams without read-ahead when the disk is nearly full', () async {
       diskSpace = const DiskSpace(free: 1 << 30, total: 1 << 40);

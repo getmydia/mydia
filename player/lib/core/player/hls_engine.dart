@@ -28,7 +28,9 @@
 library;
 
 import 'package:media_kit/media_kit.dart' show Player;
-import 'hls_engine_stub.dart' if (dart.library.js_interop) 'hls_engine_web.dart'
+
+import 'hls_engine_stub.dart'
+    if (dart.library.js_interop) 'hls_engine_web.dart'
     as platform;
 
 /// The vendored hls.js, relative to the document base (`/player/`).

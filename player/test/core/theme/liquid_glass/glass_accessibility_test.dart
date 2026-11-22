@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,8 +18,9 @@ void main() {
   Future<void> fromNative(String method, Object? arguments) =>
       messenger.handlePlatformMessage(
         _name,
-        const StandardMethodCodec()
-            .encodeMethodCall(MethodCall(method, arguments)),
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall(method, arguments),
+        ),
         (_) {},
       );
 
@@ -39,10 +40,13 @@ void main() {
   }
 
   ProviderContainer container() {
-    final c = ProviderContainer(overrides: [
-      nativeTabBarChannelProvider
-          .overrideWith((ref) => NativeTabBarChannel(channel: _channel)),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        nativeTabBarChannelProvider.overrideWith(
+          (ref) => NativeTabBarChannel(channel: _channel),
+        ),
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
@@ -54,8 +58,10 @@ void main() {
 
   test('fromChannel parses the map and rejects anything else', () {
     expect(
-      GlassAccessibility.fromChannel(
-          {'reduceTransparency': true, 'increaseContrast': false}),
+      GlassAccessibility.fromChannel({
+        'reduceTransparency': true,
+        'increaseContrast': false,
+      }),
       const GlassAccessibility(reduceTransparency: true),
     );
     expect(GlassAccessibility.fromChannel(null), isNull);
@@ -86,18 +92,22 @@ void main() {
       return call.method == 'glassAccessibility' ? answer : null;
     });
     final c = container();
-    final sub = c.listen(glassAccessibilityProvider, (_, __) {});
+    final sub = c.listen(glassAccessibilityProvider, (_, _) {});
     addTearDown(sub.close);
     c.read(glassAccessibilityProvider);
     await Future<void>.delayed(Duration.zero);
-    expect(c.read(glassAccessibilityProvider),
-        const GlassAccessibility(increaseContrast: true));
+    expect(
+      c.read(glassAccessibilityProvider),
+      const GlassAccessibility(increaseContrast: true),
+    );
 
     answer = {'reduceTransparency': true, 'increaseContrast': false};
     suspendAndResume();
     await Future<void>.delayed(Duration.zero);
-    expect(c.read(glassAccessibilityProvider),
-        const GlassAccessibility(reduceTransparency: true));
+    expect(
+      c.read(glassAccessibilityProvider),
+      const GlassAccessibility(reduceTransparency: true),
+    );
   });
 
   test('on Apple it takes the queried flags, then follows pushes', () async {
@@ -108,55 +118,73 @@ void main() {
           : null;
     });
     final c = container();
-    final sub = c.listen(glassAccessibilityProvider, (_, __) {});
+    final sub = c.listen(glassAccessibilityProvider, (_, _) {});
     addTearDown(sub.close);
     expect(c.read(glassAccessibilityProvider), GlassAccessibility.none);
     await Future<void>.delayed(Duration.zero);
-    expect(c.read(glassAccessibilityProvider),
-        const GlassAccessibility(increaseContrast: true));
+    expect(
+      c.read(glassAccessibilityProvider),
+      const GlassAccessibility(increaseContrast: true),
+    );
 
-    await fromNative('glassAccessibilityChanged',
-        {'reduceTransparency': true, 'increaseContrast': true});
+    await fromNative('glassAccessibilityChanged', {
+      'reduceTransparency': true,
+      'increaseContrast': true,
+    });
     expect(
       c.read(glassAccessibilityProvider),
       const GlassAccessibility(
-          reduceTransparency: true, increaseContrast: true),
+        reduceTransparency: true,
+        increaseContrast: true,
+      ),
     );
   });
 
-  test('a push that lands while a query is in flight beats the late reply',
-      () async {
-    GlassAccessibilityNotifier.debugIsApple = true;
-    final reply = Completer<void>();
-    messenger.setMockMethodCallHandler(_channel, (call) async {
-      if (call.method != 'glassAccessibility') return null;
-      await reply.future;
-      return {'reduceTransparency': false, 'increaseContrast': false};
-    });
-    final c = container();
-    final sub = c.listen(glassAccessibilityProvider, (_, __) {});
-    addTearDown(sub.close);
-    c.read(glassAccessibilityProvider);
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'a push that lands while a query is in flight beats the late reply',
+    () async {
+      GlassAccessibilityNotifier.debugIsApple = true;
+      final reply = Completer<void>();
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        if (call.method != 'glassAccessibility') return null;
+        await reply.future;
+        return {'reduceTransparency': false, 'increaseContrast': false};
+      });
+      final c = container();
+      final sub = c.listen(glassAccessibilityProvider, (_, _) {});
+      addTearDown(sub.close);
+      c.read(glassAccessibilityProvider);
+      await Future<void>.delayed(Duration.zero);
 
-    await fromNative('glassAccessibilityChanged',
-        {'reduceTransparency': true, 'increaseContrast': false});
-    expect(c.read(glassAccessibilityProvider),
-        const GlassAccessibility(reduceTransparency: true));
+      await fromNative('glassAccessibilityChanged', {
+        'reduceTransparency': true,
+        'increaseContrast': false,
+      });
+      expect(
+        c.read(glassAccessibilityProvider),
+        const GlassAccessibility(reduceTransparency: true),
+      );
 
-    reply.complete();
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
-    expect(c.read(glassAccessibilityProvider),
-        const GlassAccessibility(reduceTransparency: true));
-  });
+      reply.complete();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        c.read(glassAccessibilityProvider),
+        const GlassAccessibility(reduceTransparency: true),
+      );
+    },
+  );
 
   testWidgets('the scope defaults to none', (tester) async {
     late GlassAccessibility seen;
-    await tester.pumpWidget(Builder(builder: (context) {
-      seen = GlassAccessibilityScope.of(context);
-      return const SizedBox();
-    }));
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          seen = GlassAccessibilityScope.of(context);
+          return const SizedBox();
+        },
+      ),
+    );
     expect(seen, GlassAccessibility.none);
   });
 }

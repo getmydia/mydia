@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, listEquals;
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/app_menu/now_playing.dart';
 import '../../../core/media_session/playing_source.dart';
 import '../../../core/config/web_config.dart' show isInstanceHostedWeb;
@@ -250,9 +251,9 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// screen, which needs a live player controller and platform channels.
   @visibleForTesting
   static Widget playerFrame({required Widget child}) => Scaffold(
-        backgroundColor: Colors.black,
-        body: SafeArea(top: false, child: child),
-      );
+    backgroundColor: Colors.black,
+    body: SafeArea(top: false, child: child),
+  );
 
   /// Stands in for the platform fullscreen backend while a test is mounted.
   ///
@@ -279,8 +280,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
   static bool wantsKeyHandling({
     required bool supportsKeyboardShortcuts,
     required bool directionalPrimary,
-  }) =>
-      supportsKeyboardShortcuts || directionalPrimary;
+  }) => supportsKeyboardShortcuts || directionalPrimary;
 
   /// Whether the player route takes the presentation lease at all: system
   /// bars hidden for the whole session on native mobile.
@@ -291,8 +291,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
   static bool wantsImmersivePresentation({
     required bool isMobile,
     required bool directionalPrimary,
-  }) =>
-      isMobile && !directionalPrimary;
+  }) => isMobile && !directionalPrimary;
 
   /// Whether to pin the display to landscape on entering playback.
   ///
@@ -331,12 +330,11 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required LogicalKeyboardKey key,
     required bool directionalPrimary,
     required bool chromeVisible,
-  }) =>
-      arrowIntentFor(
-        key: key,
-        directionalPrimary: directionalPrimary,
-        chromeVisible: chromeVisible,
-      );
+  }) => arrowIntentFor(
+    key: key,
+    directionalPrimary: directionalPrimary,
+    chromeVisible: chromeVisible,
+  );
 
   /// Resolves a Back press for this input tier and state.
   ///
@@ -348,12 +346,11 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required bool directionalPrimary,
     required bool scrubActive,
     required bool chromeBlocksBack,
-  }) =>
-      backActionFor(
-        directionalPrimary: directionalPrimary,
-        scrubActive: scrubActive,
-        chromeBlocksBack: chromeBlocksBack,
-      );
+  }) => backActionFor(
+    directionalPrimary: directionalPrimary,
+    scrubActive: scrubActive,
+    chromeBlocksBack: chromeBlocksBack,
+  );
 }
 
 /// Thrown by [_PlayerScreenState._openPlayerAndStart] when the load it is
@@ -803,9 +800,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (epoch != _tracksSettleEpoch) return;
         _embeddedPreferenceBackstopExpired = true;
         if (_preferenceWaitingForMpv) {
-          debugPrint('[PlayerScreen] mpv listed no subtitles '
-              '${embeddedPreferenceBackstop.inSeconds}s after the first '
-              "frame; applying the subtitle preference from the server");
+          debugPrint(
+            '[PlayerScreen] mpv listed no subtitles '
+            '${embeddedPreferenceBackstop.inSeconds}s after the first '
+            "frame; applying the subtitle preference from the server",
+          );
         }
         _resumePreferenceWaitingForMpv();
       });
@@ -832,8 +831,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       target: target,
     );
     if (waits && !_preferenceWaitingForMpv) {
-      debugPrint('[PlayerScreen] Subtitle preference waits for mpv to list '
-          'embedded ${target?.title ?? target?.language}');
+      debugPrint(
+        '[PlayerScreen] Subtitle preference waits for mpv to list '
+        'embedded ${target?.title ?? target?.language}',
+      );
     }
     _preferenceWaitingForMpv = waits;
     return waits;
@@ -848,8 +849,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       backstopExpired: _embeddedPreferenceBackstopExpired,
     );
     if (waits && !_preferenceWaitingForMpv) {
-      debugPrint('[PlayerScreen] Carried subtitle preference matches nothing '
-          'yet; waiting for mpv to list subtitles');
+      debugPrint(
+        '[PlayerScreen] Carried subtitle preference matches nothing '
+        'yet; waiting for mpv to list subtitles',
+      );
     }
     _preferenceWaitingForMpv = waits;
     return waits;
@@ -1196,10 +1199,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     fetchSeason: (season) => _session.seasonEpisodes(season),
     isDownloaded: (episodeId) async {
       final manager = await ref.read(downloadManagerProvider.future);
-      return manager.getDownloaded(ItemRef(
+      return manager.getDownloaded(
+            ItemRef(
               sourceId: _session.item.sourceId,
               kind: ItemKind.episode,
-              externalId: episodeId)) !=
+              externalId: episodeId,
+            ),
+          ) !=
           null;
     },
     navigate: _navigateToEpisode,
@@ -1288,8 +1294,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _remoteTargetController = ref.read(remoteTargetControllerProvider);
     _remoteTargetController.attachPlayer(this);
     _nowPlaying = ref.read(nowPlayingPublisherProvider)..claim(this);
-    final localPlaybackNotifier =
-        ref.read(localPlaybackActiveProvider.notifier);
+    final localPlaybackNotifier = ref.read(
+      localPlaybackActiveProvider.notifier,
+    );
     _localPlaybackNotifier = localPlaybackNotifier;
     Future.microtask(() {
       if (mounted) {
@@ -1550,14 +1557,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// ffprobe's, and guessing one would show the wrong subtitle instead of
   /// none.
   List<CastSubtitleTrack> _castSubtitleTracks() => _subtitleTracks
-      .where((track) =>
-          track.deliverable && CastSubtitleTrack.isServableTrackId(track.id))
-      .map((track) => CastSubtitleTrack(
-            trackId: track.id,
-            url: track.url ?? '',
-            label: context.l10n.subtitleTrackName(track),
-            language: track.language,
-          ))
+      .where(
+        (track) =>
+            track.deliverable && CastSubtitleTrack.isServableTrackId(track.id),
+      )
+      .map(
+        (track) => CastSubtitleTrack(
+          trackId: track.id,
+          url: track.url ?? '',
+          label: context.l10n.subtitleTrackName(track),
+          language: track.language,
+        ),
+      )
       .toList();
 
   /// Start on the receiver instead of locally, when a device was chosen
@@ -1655,12 +1666,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
       if (mounted) {
         if (e is CastBackendException) {
-          showCastErrorToast(context, e,
-              ref: ref,
-              isMydiaTarget: target.protocol == CastProtocolKind.mydia);
+          showCastErrorToast(
+            context,
+            e,
+            ref: ref,
+            isMydiaTarget: target.protocol == CastProtocolKind.mydia,
+          );
         } else {
-          showToast(context, context.l10n.castStartFailed('$e'),
-              kind: ToastKind.error);
+          showToast(
+            context,
+            context.l10n.castStartFailed('$e'),
+            kind: ToastKind.error,
+          );
         }
       }
       return false;
@@ -1758,7 +1775,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final downloadedMedia = kIsWeb
           ? null
           : (await ref.read(downloadManagerProvider.future))
-              .getDownloaded(_session.item);
+                .getDownloaded(_session.item);
       if (!_isCurrentLoad(gen)) return;
 
       // In offline mode, only downloaded content can be played
@@ -1772,13 +1789,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           return;
         }
 
-        final offlinePath =
-            await _resolveDownloadedFilePath(downloadedMedia.filePath);
+        final offlinePath = await _resolveDownloadedFilePath(
+          downloadedMedia.filePath,
+        );
         if (!_isCurrentLoad(gen)) return;
         if (offlinePath == null) {
           setState(() {
-            _error =
-                (l10n) => l10n.playbackIssueText(PlaybackIssue.downloadMissing);
+            _error = (l10n) =>
+                l10n.playbackIssueText(PlaybackIssue.downloadMissing);
             _isLoading = false;
           });
           return;
@@ -1810,10 +1828,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _savedDurationSeconds = localProgress?.durationSeconds;
         _totalDuration =
             _savedDurationSeconds != null && _savedDurationSeconds! > 0
-                ? Duration(seconds: _savedDurationSeconds!)
-                : (downloadedMedia.runtime != null
-                    ? Duration(minutes: downloadedMedia.runtime!)
-                    : null);
+            ? Duration(seconds: _savedDurationSeconds!)
+            : (downloadedMedia.runtime != null
+                  ? Duration(minutes: downloadedMedia.runtime!)
+                  : null);
 
         final plan = await resolveResumePlan(
           savedPositionSeconds: _savedPositionSeconds,
@@ -1828,8 +1846,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (plan == null) return;
         if (!_isCurrentLoad(gen)) return;
 
-        if (await _castToTargetIfSet(plan,
-            fileId: widget.fileId, loadGeneration: gen)) {
+        if (await _castToTargetIfSet(
+          plan,
+          fileId: widget.fileId,
+          loadGeneration: gen,
+        )) {
           return;
         }
         if (!_isCurrentLoad(gen)) return;
@@ -1846,8 +1867,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // In online mode, if content is downloaded locally, play it directly
       // without requiring network for streaming
       if (downloadedMedia != null && !kIsWeb) {
-        final localPath =
-            await _resolveDownloadedFilePath(downloadedMedia.filePath);
+        final localPath = await _resolveDownloadedFilePath(
+          downloadedMedia.filePath,
+        );
         if (!_isCurrentLoad(gen)) return;
         if (localPath != null) {
           debugPrint('Playing from local file: $localPath');
@@ -1871,8 +1893,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
           _isDownloadedSource = true;
           try {
-            _progressStore =
-                await ref.read(playbackProgressStoreProvider.future);
+            _progressStore = await ref.read(
+              playbackProgressStoreProvider.future,
+            );
           } catch (e) {
             debugPrint('Could not open local progress store: $e');
           }
@@ -1913,8 +1936,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (plan == null) return;
           if (!_isCurrentLoad(gen)) return;
 
-          if (await _castToTargetIfSet(plan,
-              fileId: widget.fileId, loadGeneration: gen)) {
+          if (await _castToTargetIfSet(
+            plan,
+            fileId: widget.fileId,
+            loadGeneration: gen,
+          )) {
             return;
           }
           if (!_isCurrentLoad(gen)) return;
@@ -1977,8 +2003,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Fetch streaming candidates to determine optimal strategy
       if (mounted) {
         setState(() {
-          _loadingStep =
-              const LoadingStep(LoadingStepKind.checkingCompatibility);
+          _loadingStep = const LoadingStep(
+            LoadingStepKind.checkingCompatibility,
+          );
         });
       }
 
@@ -2040,7 +2067,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // missing P2P server address.
       final playFileId = usesServerRankedFile
           ? offer?.fileId ??
-              (throw const PlaybackIssueException(PlaybackIssue.noFileOffered))
+                (throw const PlaybackIssueException(
+                  PlaybackIssue.noFileOffered,
+                ))
           : widget.fileId;
 
       await _resolveQualityForFile(offer, gen);
@@ -2087,11 +2116,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
       final playbackPlan = planPlayback(inputs);
       // The one line that turns "it picked the wrong path" into a lookup.
-      debugPrint('[PlayerScreen] Plan: ${playbackPlan.describe()} '
-          'shape=${inputs.shape.videoCodec}/${inputs.shape.heightBucket} '
-          'bitrateKbps=${inputs.fileBitrateKbps} '
-          'path=${linkPath?.name ?? 'unknown'} '
-          'stallCeilingKbps=${inputs.recentStall?.ceilingKbps}');
+      debugPrint(
+        '[PlayerScreen] Plan: ${playbackPlan.describe()} '
+        'shape=${inputs.shape.videoCodec}/${inputs.shape.heightBucket} '
+        'bitrateKbps=${inputs.fileBitrateKbps} '
+        'path=${linkPath?.name ?? 'unknown'} '
+        'stallCeilingKbps=${inputs.recentStall?.ceilingKbps}',
+      );
       _playTimeline?.mark('planned');
       _plan = playbackPlan;
       _planInputs = inputs;
@@ -2131,8 +2162,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (plan == null) return;
       if (!_isCurrentLoad(gen)) return;
 
-      if (await _castToTargetIfSet(plan,
-          fileId: playFileId, loadGeneration: gen)) {
+      if (await _castToTargetIfSet(
+        plan,
+        fileId: playFileId,
+        loadGeneration: gen,
+      )) {
         return;
       }
       if (!_isCurrentLoad(gen)) return;
@@ -2215,8 +2249,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// failures are worded, anything else keeps the old `toString` text.
   static String _loadFailureText(AppLocalizations l10n, Object e) =>
       e is SourceException || e is PlaybackIssueException
-          ? l10n.playbackFailureText(e)
-          : e.toString();
+      ? l10n.playbackFailureText(e)
+      : e.toString();
 
   /// The real runtime, from the most trustworthy source available.
   Duration? _resolveRealDuration(PlaybackOffer? offer) {
@@ -2326,8 +2360,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Same bookkeeping `_openPlayerAndStart` does for a new player: nothing
     // this source has done has been observed yet.
-    final playerTarget =
-        source.seekOnOpen ? source.timeline.toPlayer(at) : Duration.zero;
+    final playerTarget = source.seekOnOpen
+        ? source.timeline.toPlayer(at)
+        : Duration.zero;
     _playbackAdvanced = false;
     _furthestPosition = playerTarget;
     final opening = mediaStartingAt(
@@ -2374,12 +2409,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // identity check and mark a newer, still-probing file settled. The
     // epoch `_beginTracksSettle` handed this wait is what tells the two
     // apart.
-    unawaited(awaitRealTracks(
-      current: player.state.tracks,
-      updates: player.stream.tracks,
-    ).then((_) {
-      if (_settleTracks(tracksSettleEpoch, player)) _detectTracks();
-    }));
+    unawaited(
+      awaitRealTracks(
+        current: player.state.tracks,
+        updates: player.stream.tracks,
+      ).then((_) {
+        if (_settleTracks(tracksSettleEpoch, player)) _detectTracks();
+      }),
+    );
     return player.stream.position;
   }
 
@@ -2404,8 +2441,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  Future<bool> _runSwitchSource(PlaybackPlan plan,
-      {required Duration at}) async {
+  Future<bool> _runSwitchSource(
+    PlaybackPlan plan, {
+    required Duration at,
+  }) async {
     if (_switchingSource) return false;
     final playback = _playback;
     final player = _player;
@@ -2470,7 +2509,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // Derived again for the mode just adopted: `_attachSource` detected
         // tracks while `_isDirectPlay` still described the old source.
         _applySubtitleTracks(
-            _player?.state.tracks.subtitle ?? const <SubtitleTrack>[]);
+          _player?.state.tracks.subtitle ?? const <SubtitleTrack>[],
+        );
         // Nothing is applied on the new file yet. The restore below sets
         // this once the carried choice actually takes effect.
         if (_subtitleIntentAcrossSwitch != null) _selectedSubtitleTrack = null;
@@ -2496,8 +2536,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final pending = _pendingSubtitleSelection;
     final selected = pending is TargetTrack ? pending.track : null;
     final mpvId = selected == null ? null : mpvIdOfSubtitleTrack(selected.id);
-    final streamIndex =
-        mpvId == null ? null : (await subtitleStreamIndices(player))[mpvId];
+    final streamIndex = mpvId == null
+        ? null
+        : (await subtitleStreamIndices(player))[mpvId];
     return subtitleIntentBeforeSwitch(
       selected: selected,
       viewerChose: _subtitleChosenThisPlayback,
@@ -2580,7 +2621,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     if (subtitleRestoreConsumed(
-        restore: restore, selected: _selectedSubtitleTrack)) {
+      restore: restore,
+      selected: _selectedSubtitleTrack,
+    )) {
       _subtitleIntentAcrossSwitch = null;
     }
   }
@@ -2679,18 +2722,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _preferenceAppliedForPlayback = false;
         await _applySubtitlePreference();
       } else {
-        debugPrint('[PlayerScreen] Gave up re-applying the subtitle '
-            'preference after $_preferenceApplyRetries retries');
+        debugPrint(
+          '[PlayerScreen] Gave up re-applying the subtitle '
+          'preference after $_preferenceApplyRetries retries',
+        );
       }
     }
 
     if (generation == _subtitleSelectionGeneration &&
         _selectedSubtitleTrack?.id == target?.id) {
-      debugPrint(target == null
-          ? '[PlayerScreen] Subtitle preference applied: Off'
-          : '[PlayerScreen] Subtitle preference applied: '
-              '${target.title ?? target.language} via '
-              '${isMpvNativeSubtitleTrackId(target.id) ? 'mpv' : 'server'}');
+      debugPrint(
+        target == null
+            ? '[PlayerScreen] Subtitle preference applied: Off'
+            : '[PlayerScreen] Subtitle preference applied: '
+                  '${target.title ?? target.language} via '
+                  '${isMpvNativeSubtitleTrackId(target.id) ? 'mpv' : 'server'}',
+      );
     }
   }
 
@@ -2758,8 +2805,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
     _monitor = monitor;
     _policy = policy;
-    _healthSubscription =
-        monitor.samples.listen((sample) => _onHealthSample(sample, policy));
+    _healthSubscription = monitor.samples.listen(
+      (sample) => _onHealthSample(sample, policy),
+    );
     monitor.start();
     debugPrint('[PlayerScreen] Verifying ${kind.name} source');
   }
@@ -2788,13 +2836,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     collector.start();
     // The headroom is read from the plugin's own stream, so the panel's
     // cadence is the collector's and no timer is added.
-    _displaySubscription = _surfaceBinding?.surface.display.listen(
-      (info) {
-        _edrHeadroom = info.edrHeadroom;
-        _edrPotentialHeadroom = info.potentialHeadroom;
-      },
-      onError: (Object e) => debugPrint('[PlayerScreen] display stream: $e'),
-    );
+    _displaySubscription = _surfaceBinding?.surface.display.listen((info) {
+      _edrHeadroom = info.edrHeadroom;
+      _edrPotentialHeadroom = info.potentialHeadroom;
+    }, onError: (Object e) => debugPrint('[PlayerScreen] display stream: $e'));
   }
 
   void _stopStatsCollector() {
@@ -2845,8 +2890,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       sourceHeight: inputs.sourceHeight,
       throughputKbps: throughput,
     );
-    debugPrint('[PlayerScreen] Falling back to ${plan.describe()}: '
-        '${action.reason.name} at ${position.inSeconds}s (${action.detail})');
+    debugPrint(
+      '[PlayerScreen] Falling back to ${plan.describe()}: '
+      '${action.reason.name} at ${position.inSeconds}s (${action.detail})',
+    );
 
     final memory = _memory;
     final serverKey = _serverKey;
@@ -2871,8 +2918,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               fileBitrateKbps: inputs.fileBitrateKbps,
             );
             if (path != null && ceiling != null) {
-              await memory.recordStall(serverKey, path, ceiling,
-                  now: DateTime.now());
+              await memory.recordStall(
+                serverKey,
+                path,
+                ceiling,
+                now: DateTime.now(),
+              );
             }
         }
       } catch (e) {
@@ -2910,8 +2961,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // itself (every caller keeps the same `Player`, not just this one),
       // so it is not repeated here.
       if (switched) {
-        _lastFallback =
-            StatsFallback(reason: action.reason, detail: action.detail);
+        _lastFallback = StatsFallback(
+          reason: action.reason,
+          detail: action.detail,
+        );
       }
     } catch (e) {
       debugPrint('[PlayerScreen] Fallback failed: $e');
@@ -2925,8 +2978,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// [message] words the toast once the State is known to be mounted, so a
   /// caller after an `await` never reads `context` for nothing.
-  void _showToast(String Function(AppLocalizations l10n) message,
-      {ToastKind kind = ToastKind.info}) {
+  void _showToast(
+    String Function(AppLocalizations l10n) message, {
+    ToastKind kind = ToastKind.info,
+  }) {
     if (!mounted) return;
     showToast(context, message(context.l10n), kind: kind);
   }
@@ -2951,8 +3006,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `_loadAutoSkipPreference` treats the same failure.
   Future<QualityRung> _storedDefaultQuality() async {
     try {
-      final storedKey =
-          await ref.read(settingsServiceProvider).getDefaultQuality();
+      final storedKey = await ref
+          .read(settingsServiceProvider)
+          .getDefaultQuality();
       return QualityRung.fromStorageKey(storedKey) ?? QualityRung.auto;
     } catch (e) {
       debugPrint('[PlayerScreen] Could not read default quality: $e');
@@ -3190,8 +3246,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await _errorSubscription?.cancel();
     _errorSubscription = player.stream.error.listen(_onPlaybackError);
     await _nowPlayingSubscription?.cancel();
-    _nowPlayingSubscription =
-        player.stream.playing.listen((_) => _publishNowPlaying());
+    _nowPlayingSubscription = player.stream.playing.listen(
+      (_) => _publishNowPlaying(),
+    );
 
     await _cancelMediaSessionSubscriptions();
     void announce(Object? _) => _remoteTargetController.notifyChanged();
@@ -3344,7 +3401,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!tracksReady && !kIsWeb) {
       // Timing out on web is the expected path, not worth logging every time.
       debugPrint(
-          '[PlayerScreen] No tracks reported before the cap; continuing');
+        '[PlayerScreen] No tracks reported before the cap; continuing',
+      );
     }
     _playTimeline?.mark('tracks_ready');
 
@@ -3401,8 +3459,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final progress = _progressService;
     if (progress != null) {
       progress.timeline = _timeline;
-      progress.start(player,
-          mediaType: widget.mediaType, mediaId: widget.mediaId);
+      progress.start(
+        player,
+        mediaType: widget.mediaType,
+        mediaId: widget.mediaId,
+      );
     }
 
     // Listen for playback completion
@@ -3723,7 +3784,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // own is still the one `sub-add`ed and showing once mpv's list replaces
       // the server's. Matching on `_subtitleTracks` alone adopted nothing,
       // and the selection was lost at the next source switch.
-      applied = _serverSubtitleTracks.where(showing).firstOrNull ??
+      applied =
+          _serverSubtitleTracks.where(showing).firstOrNull ??
           _subtitleTracks.where(showing).firstOrNull;
     }
 
@@ -3761,9 +3823,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       unawaited(_subtitleDelay.onTrackChanged());
     }
 
-    debugPrint('[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
-        '${_subtitleTracks.length} subtitle tracks '
-        '(directPlay=$_isDirectPlay)');
+    debugPrint(
+      '[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
+      '${_subtitleTracks.length} subtitle tracks '
+      '(directPlay=$_isDirectPlay)',
+    );
   }
 
   /// Rebuild [_subtitleTracks] from [_serverSubtitleTracks] and whatever
@@ -3921,14 +3985,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// [issue] words the failure when the app itself knows the reason, [error]
   /// when a reopen threw; [message] is mpv's own text otherwise.
-  void _showLostSourceError(String message,
-      {PlaybackIssue? issue, Object? error}) {
+  void _showLostSourceError(
+    String message, {
+    PlaybackIssue? issue,
+    Object? error,
+  }) {
     setState(() {
       _error = (l10n) => issue != null
           ? l10n.playbackIssueText(issue)
           : error != null
-              ? playbackErrorMessage(l10n, _loadFailureText(l10n, error))
-              : playbackErrorMessage(l10n, message);
+          ? playbackErrorMessage(l10n, _loadFailureText(l10n, error))
+          : playbackErrorMessage(l10n, message);
       _isLoading = false;
     });
     _remoteTargetController.notifyChanged();
@@ -3947,16 +4014,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
     // Only here is the player still loaded, so whether the viewer had paused
     // is reliable; a lost source cannot say.
-    _reopenLostSource('Media proxy moved to a new port', // l10n-ignore log text
-        keepPaused: !_player!.state.playing,
-        issue: PlaybackIssue.proxyMoved);
+    _reopenLostSource(
+      'Media proxy moved to a new port', // l10n-ignore log text
+      keepPaused: !_player!.state.playing,
+      issue: PlaybackIssue.proxyMoved,
+    );
   }
 
   /// Reopens the current file at [_lastGoodPosition] on the same plan, once
   /// per [_lostSourceWindow]; a second loss inside it shows the error page
   /// with its Retry.
-  void _reopenLostSource(String message,
-      {bool keepPaused = false, PlaybackIssue? issue}) {
+  void _reopenLostSource(
+    String message, {
+    bool keepPaused = false,
+    PlaybackIssue? issue,
+  }) {
     if (_reopeningLostSource) return;
     // A file change in flight has no player to recover and owns the outcome;
     // an error here would land on the incoming file. `_player` and not
@@ -3967,15 +4039,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // start audio under the cast. `_restartLocalPlayback` resumes local
     // playback once casting stops.
     if (ref.read(isCastingProvider)) {
-      debugPrint('[PlayerScreen] Lost source while casting; '
-          'not reopening the local player');
+      debugPrint(
+        '[PlayerScreen] Lost source while casting; '
+        'not reopening the local player',
+      );
       return;
     }
     // A quality change, seek restart or fallback is already replacing the
     // source and owns the outcome; reopening under it would race it.
     if (_switchingSource) {
-      debugPrint('[PlayerScreen] Lost source during a switch; '
-          'leaving it to the switch');
+      debugPrint(
+        '[PlayerScreen] Lost source during a switch; '
+        'leaving it to the switch',
+      );
       return;
     }
     final plan = _plan;
@@ -3997,8 +4073,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _reopeningLostSourceGeneration = _loadGeneration;
     _pendingProxyHeal = false;
     _lastLostSourceReopen = now;
-    debugPrint('[PlayerScreen] Reopening after lost source at '
-        '${at.inSeconds}s: $message');
+    debugPrint(
+      '[PlayerScreen] Reopening after lost source at '
+      '${at.inSeconds}s: $message',
+    );
     // Navigation can reuse this State for another file while the heal or the
     // switch is pending; nothing here may then touch the new file.
     final gen = _loadGeneration;
@@ -4175,21 +4253,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `_fetchSeasonEpisodes` would load the wrong list, the controller's
     // current index would resolve to -1, and up-next would be dead for that
     // entire season.
-    context.go(_session.episodeLocation(
-      episodeId: episodeId,
-      fileId: fileId,
-      title: title,
-      seasonNumber: seasonNumber,
-      showId: _showId,
-    ));
+    context.go(
+      _session.episodeLocation(
+        episodeId: episodeId,
+        fileId: fileId,
+        title: title,
+        seasonNumber: seasonNumber,
+        showId: _showId,
+      ),
+    );
   }
 
   /// Saves the current position under this widget's own identity; see
   /// [_saveProgressFor].
-  Future<void> _saveProgress() => _saveProgressFor(
-        mediaType: widget.mediaType,
-        mediaId: widget.mediaId,
-      );
+  Future<void> _saveProgress() =>
+      _saveProgressFor(mediaType: widget.mediaType, mediaId: widget.mediaId);
 
   /// Saves the current position against [mediaType]/[mediaId] rather than
   /// `widget`'s own, so a caller mid-switch can still credit the file being
@@ -4246,8 +4324,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         now: now,
       );
       if (progressService == null || !_session.reachable) return;
-      await progressService.save(player,
-          mediaType: mediaType, mediaId: mediaId);
+      await progressService.save(
+        player,
+        mediaType: mediaType,
+        mediaId: mediaId,
+      );
       // A third-party reporter swallows its own failures, so a save that
       // returns is the best signal there is; the flush covers the rest.
       try {
@@ -4366,24 +4447,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     int generation,
     SubtitleTrack track, {
     String? serverId,
-  }) =>
-      _switchGate.pass(() => _canApplySubtitleSelection(generation), () async {
-        final player = _player;
-        if (player == null) return;
-        bool stillThisPick() =>
-            _canApplySubtitleSelection(generation) &&
-            identical(_player, player);
-        final subAdd = track.data || track.uri;
-        final sidBefore = subAdd ? await selectedMpvSubtitleId(player) : null;
-        if (subAdd && !stillThisPick()) return;
-        _monitor?.noteInterruption();
-        await player.setSubtitleTrack(track);
-        if (!subAdd || !stillThisPick()) return;
-        final sid = await selectedMpvSubtitleId(player);
-        if (sid == null || sid == sidBefore || !stillThisPick()) return;
-        _subAddedSubtitles.add((mpvId: 'mk_$sid', serverId: serverId));
-        _refreshSubtitleTracks();
-      });
+  }) => _switchGate.pass(
+    () => _canApplySubtitleSelection(generation),
+    () async {
+      final player = _player;
+      if (player == null) return;
+      bool stillThisPick() =>
+          _canApplySubtitleSelection(generation) && identical(_player, player);
+      final subAdd = track.data || track.uri;
+      final sidBefore = subAdd ? await selectedMpvSubtitleId(player) : null;
+      if (subAdd && !stillThisPick()) return;
+      _monitor?.noteInterruption();
+      await player.setSubtitleTrack(track);
+      if (!subAdd || !stillThisPick()) return;
+      final sid = await selectedMpvSubtitleId(player);
+      if (sid == null || sid == sidBefore || !stillThisPick()) return;
+      _subAddedSubtitles.add((mpvId: 'mk_$sid', serverId: serverId));
+      _refreshSubtitleTracks();
+    },
+  );
 
   /// Hands the browser the cues of whatever was just applied, or stops it
   /// drawing when subtitles went off.
@@ -4485,8 +4567,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (outcome is SubtitleTrackSelectionCancelled) return;
 
     final selected = outcome is SubtitleTrackPicked ? outcome.track : null;
-    final requested =
-        selected == null ? const TargetOff() : TargetTrack(selected);
+    final requested = selected == null
+        ? const TargetOff()
+        : TargetTrack(selected);
 
     if (!shouldStartSubtitleSelection(
       requested: requested,
@@ -4568,8 +4651,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // instead of silently matching stale state. See
     // [_pendingSubtitleSelection]'s dartdoc for why the sheet's comparison
     // uses this field and not [_selectedSubtitleTrack].
-    _pendingSubtitleSelection =
-        selected == null ? const TargetOff() : TargetTrack(selected);
+    _pendingSubtitleSelection = selected == null
+        ? const TargetOff()
+        : TargetTrack(selected);
 
     // See [_subtitleSelectionGeneration]'s dartdoc for why this is bumped
     // unconditionally, before the no-player bailout below, rather than
@@ -4658,8 +4742,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ? null
           : Toaster.of(context).show(
               preparingImage
-                  ? context.l10n
-                      .subtitleNoticeText(SubtitleNotice.preparingImage)
+                  ? context.l10n.subtitleNoticeText(
+                      SubtitleNotice.preparingImage,
+                    )
                   : context.l10n.playerLoadingSubtitle,
               kind: ToastKind.progress,
               duration: preparingImage ? kImageSidecarTimeLimit : null,
@@ -4689,7 +4774,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       if (mkTrack == null) {
         debugPrint(
-            '[PlayerScreen] No media_kit track found for: ${selected.id}');
+          '[PlayerScreen] No media_kit track found for: ${selected.id}',
+        );
         // The ordinary failure path — a dropped connection, a server error,
         // an empty extraction — and it must leave a retry possible: reset
         // the pending target back to whatever's actually applied so a
@@ -4705,8 +4791,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ? loadFailedNotice
             : resolved.failure;
         if (failure != null) {
-          showToast(context, context.l10n.subtitleNoticeText(failure),
-              kind: ToastKind.error);
+          showToast(
+            context,
+            context.l10n.subtitleNoticeText(failure),
+            kind: ToastKind.error,
+          );
         }
         return generation;
       }
@@ -4723,8 +4812,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!await _setSubtitleTrack(
             generation,
             mkTrack,
-            serverId:
-                isMpvNativeSubtitleTrackId(selected.id) ? null : selected.id,
+            serverId: isMpvNativeSubtitleTrackId(selected.id)
+                ? null
+                : selected.id,
           ) ||
           !_canApplySubtitleSelection(generation)) {
         _resetPendingSubtitleSelection(generation);
@@ -4734,7 +4824,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _showSubtitleCues(enabled: true);
       await _subtitleDelay.onTrackChanged(keepNudge: keepNudge);
       debugPrint(
-          '[PlayerScreen] Set subtitle track: ${selected.title ?? selected.language}');
+        '[PlayerScreen] Set subtitle track: ${selected.title ?? selected.language}',
+      );
     } finally {
       _resetPendingSubtitleSelection(generation);
     }
@@ -4915,7 +5006,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return (track: null, failure: null);
       case SidecarUnsupported() || SidecarFailed():
         debugPrint(
-            '[PlayerScreen] Bitmap subtitle ${track.id} unavailable: $fetch');
+          '[PlayerScreen] Bitmap subtitle ${track.id} unavailable: $fetch',
+        );
         return (track: null, failure: imageSidecarFailureNotice(fetch));
     }
   }
@@ -4927,10 +5019,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Future<SubtitleTrack?> _fetchTextSubtitleTrack(
     app_models.SubtitleTrack track,
   ) {
-    return _subtitleBodyFetches[track.id] ??=
-        _fetchSubtitleBody(track).whenComplete(() {
-      _subtitleBodyFetches.remove(track.id);
-    });
+    return _subtitleBodyFetches[track.id] ??= _fetchSubtitleBody(track)
+        .whenComplete(() {
+          _subtitleBodyFetches.remove(track.id);
+        });
   }
 
   /// Fetches [track]'s body over GraphQL and caches it in
@@ -4970,10 +5062,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (mkTrack != null) {
         await _setAudioTrack(player, mkTrack);
         debugPrint(
-            '[PlayerScreen] Set audio track: ${selected.title ?? selected.language}');
+          '[PlayerScreen] Set audio track: ${selected.title ?? selected.language}',
+        );
       } else {
         debugPrint(
-            '[PlayerScreen] No media_kit track found for: ${selected.id}');
+          '[PlayerScreen] No media_kit track found for: ${selected.id}',
+        );
       }
 
       // Applied to this playback above; remembered here so the next episode
@@ -5064,8 +5158,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _subtitlePreferenceWrite = _subtitlePreferenceWrite
         .then((_) => _writeSubtitlePreference(queued))
         .catchError((Object e) {
-      debugPrint('[PlayerScreen] Could not remember subtitle preference: $e');
-    });
+          debugPrint(
+            '[PlayerScreen] Could not remember subtitle preference: $e',
+          );
+        });
     return _subtitlePreferenceWrite;
   }
 
@@ -5088,7 +5184,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// server track list, so running it for a pick that has already been
   /// dropped would translate one file's track against another file's list.
   Future<void> _writeSubtitlePreference(
-      _QueuedSubtitlePreference queued) async {
+    _QueuedSubtitlePreference queued,
+  ) async {
     final track = queued.track;
 
     // The pick has to be the one actually showing. [_applySubtitleSelection]
@@ -5111,8 +5208,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (!_session.canWrite) return;
 
-    final resolved =
-        track == null ? null : await _serverSideSubtitleTrack(track);
+    final resolved = track == null
+        ? null
+        : await _serverSideSubtitleTrack(track);
 
     // Re-checked after the await, not only before it. By now a later pick may
     // have won, and its own queued write is behind this one: sending this
@@ -5239,25 +5337,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       restart: (rung, {required bool isFallback}) async {
         final inputs = _planInputs;
         if (inputs == null) return false;
-        final plan =
-            planPlayback(inputs.copyWith(choice: QualityChoice.fromRung(rung)));
+        final plan = planPlayback(
+          inputs.copyWith(choice: QualityChoice.fromRung(rung)),
+        );
         final current = _plan;
         if (!qualityPickNeedsReopen(
-            next: plan, current: current, isFallback: isFallback)) {
+          next: plan,
+          current: current,
+          isFallback: isFallback,
+        )) {
           // Auto and Original both direct play this file, say: the choice
           // changes and the bytes do not, so there is nothing to reopen. Only
           // on the viewer's first attempt: a rollback always reopens, since
           // the attempt it undoes may have already moved the player onto
           // failing media before it threw, leaving the recorded plan stale.
-          debugPrint('[PlayerScreen] Quality change: ${plan.describe()} '
-              '(already playing)');
+          debugPrint(
+            '[PlayerScreen] Quality change: ${plan.describe()} '
+            '(already playing)',
+          );
           if (mounted) setState(() => _plan = plan);
           return true;
         }
         debugPrint('[PlayerScreen] Quality change: ${plan.describe()}');
-        _showToast((l10n) => isFallback
-            ? l10n.playerReturningQuality(l10n.qualityName(rung))
-            : l10n.playerSwitchingQuality(l10n.qualityName(rung)));
+        _showToast(
+          (l10n) => isFallback
+              ? l10n.playerReturningQuality(l10n.qualityName(rung))
+              : l10n.playerSwitchingQuality(l10n.qualityName(rung)),
+        );
         return _switchSource(plan, at: position);
       },
       stillActive: () => mounted,
@@ -5279,7 +5385,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final inputs = _planInputs;
     if (inputs == null) return l10n.qualityAutoPreference;
     return l10n.autoDeliverySubtitle(
-        planPlayback(inputs.copyWith(choice: QualityChoice.auto)));
+      planPlayback(inputs.copyWith(choice: QualityChoice.auto)),
+    );
   }
 
   /// The picker's note when the server delivered less than was asked.
@@ -5768,16 +5875,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           : playerVolumeToRemoteControlVolume(player.state.volume),
       muted: isPlayerVolumeMuted(player?.state.volume),
       audioTracks: _audioTracks
-          .map((t) => FlutterTrackInfo(
+          .map(
+            (t) => FlutterTrackInfo(
               id: t.id,
               label: context.l10n.audioTrackName(t),
-              language: t.language))
+              language: t.language,
+            ),
+          )
           .toList(),
       subtitleTracks: _subtitleTracks
-          .map((t) => FlutterTrackInfo(
+          .map(
+            (t) => FlutterTrackInfo(
               id: t.id,
               label: context.l10n.subtitleTrackName(t),
-              language: t.language))
+              language: t.language,
+            ),
+          )
           .toList(),
       selectedAudio: _selectedAudioTrack?.id,
       selectedSubtitle: _selectedSubtitleTrack?.id,
@@ -5969,10 +6082,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final frame = PlayerScreen.playerFrame(child: body);
 
     BackAction backAction() => PlayerScreen.resolveBackAction(
-          directionalPrimary: InputCapabilities.directionalPrimary,
-          scrubActive: _scrub.active,
-          chromeBlocksBack: _chromeVisibility.blocksBack,
-        );
+      directionalPrimary: InputCapabilities.directionalPrimary,
+      scrubActive: _scrub.active,
+      chromeBlocksBack: _chromeVisibility.blocksBack,
+    );
 
     return ListenableBuilder(
       listenable: Listenable.merge([_chromeVisibility, _scrub]),
@@ -6146,8 +6259,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (_isLoading) {
       final step = _loadingStep;
-      final loading = _withCastAffordance(PlayerLoadingView(
-          message: step == null ? null : context.l10n.loadingStepText(step)));
+      final loading = _withCastAffordance(
+        PlayerLoadingView(
+          message: step == null ? null : context.l10n.loadingStepText(step),
+        ),
+      );
       // The surface's view has to exist while loading: attach waits for it,
       // and attach comes before `open`.
       if (surfaceBinding == null) return loading;
@@ -6168,11 +6284,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final videoController = _videoController;
     if (videoController == null && surfaceBinding == null) {
       return _withCastAffordance(
-        const Center(
-          child: CircularProgressIndicator(
-            color: Colors.red,
-          ),
-        ),
+        const Center(child: CircularProgressIndicator(color: Colors.red)),
       );
     }
 
@@ -6199,10 +6311,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // (a local file, no plan yet, or a lossy source with no adaptive
       // ladder), matching how audio disables itself at zero tracks
       // rather than opening a one-item menu.
-      onQualityTap: qualityControlAvailable(
-              localFile: _isDownloadedSource,
-              plan: _plan,
-              sourceHeight: _planInputs?.sourceHeight)
+      onQualityTap:
+          qualityControlAvailable(
+            localFile: _isDownloadedSource,
+            plan: _plan,
+            sourceHeight: _planInputs?.sourceHeight,
+          )
           ? _showQualitySelector
           : null,
       // Null where no fullscreen route exists, which hides the button
@@ -6224,8 +6338,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       selectedSubtitleLabel: _selectedSubtitleTrack == null
           ? null
           : context.l10n.subtitleTrackName(_selectedSubtitleTrack!),
-      selectedQualityLabel: context.l10n.qualityName(qualityControlRung(
-          selected: _selectedQuality, effective: _effectiveQuality)),
+      selectedQualityLabel: context.l10n.qualityName(
+        qualityControlRung(
+          selected: _selectedQuality,
+          effective: _effectiveQuality,
+        ),
+      ),
     );
 
     // Video widget fills available space with black background
@@ -6241,10 +6359,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             child: LayoutBuilder(
               builder: (context, constraints) => Video(
                 subtitleViewConfiguration: subtitleViewConfigurationFor(
-                    constraints.biggest, subtitleSize),
+                  constraints.biggest,
+                  subtitleSize,
+                ),
                 controller: videoController!,
-                controls: (state) => chrome(state.widget.controller.player,
-                    VideoStateSubtitleLift(state)),
+                controls: (state) => chrome(
+                  state.widget.controller.player,
+                  VideoStateSubtitleLift(state),
+                ),
                 fill: Colors.black,
                 fit: _scaling.boxFit,
               ),
@@ -6282,8 +6404,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               stream: player.stream.position,
               initialData: player.state.position,
               builder: (context, snapshot) {
-                final position =
-                    _timeline.toReal(snapshot.data ?? Duration.zero);
+                final position = _timeline.toReal(
+                  snapshot.data ?? Duration.zero,
+                );
                 final segment = _segmentSkipper.segmentAt(position);
                 if (segment == null) return const SizedBox.shrink();
 
@@ -6357,8 +6480,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     // A session without a Mydia connection is plain HTTP: do not read the
     // p2p providers just to describe a link it is not using.
-    final usesMydia =
-        _session.features.contains(PlaybackFeature.mydiaConnection);
+    final usesMydia = _session.features.contains(
+      PlaybackFeature.mydiaConnection,
+    );
     final status = usesMydia ? ref.read(p2pStatusNotifierProvider) : null;
     final isP2P = usesMydia && _streamViaP2p;
     final summary = ConnectionSummary.from(
@@ -6385,8 +6509,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       audioTrack: player?.state.track.audio,
       linkLabel: status == null
           ? context.l10n.connectionLabel(summary)
-          : context.l10n.statsLinkPeers(context.l10n.connectionLabel(summary),
-              status.connectedPeersCount),
+          : context.l10n.statsLinkPeers(
+              context.l10n.connectionLabel(summary),
+              status.connectedPeersCount,
+            ),
       linkHealthy: status == null || !status.isRelayConnected,
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
@@ -6394,8 +6520,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Null until the plugin reports the screen: an unmeasured headroom is
       // not SDR, and the row keeps its plain wording until it is known.
       outputHeadroom: _surfaceBinding == null ? null : _edrHeadroom,
-      outputPotentialHeadroom:
-          _surfaceBinding == null ? null : _edrPotentialHeadroom,
+      outputPotentialHeadroom: _surfaceBinding == null
+          ? null
+          : _edrPotentialHeadroom,
     );
   }
 
@@ -6421,16 +6548,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Mydia ids; its receiver subtitles come from the source, not from the
   /// local track list.
   CastContent _castContent(String fileId) => switch (_session) {
-        final SourcePlaybackSession s =>
-          SourceCastContent(item: s.item, versionId: s.fileId),
-        _ => MydiaCastContent(
-            sourceId: _session.item.sourceId,
-            fileId: fileId,
-            mediaId: widget.mediaId,
-            mediaType: widget.mediaType,
-            showId: _showId,
-          ),
-      };
+    final SourcePlaybackSession s => SourceCastContent(
+      item: s.item,
+      versionId: s.fileId,
+    ),
+    _ => MydiaCastContent(
+      sourceId: _session.item.sourceId,
+      fileId: fileId,
+      mediaId: widget.mediaId,
+      mediaType: widget.mediaType,
+      showId: _showId,
+    ),
+  };
 
   /// Show the cast device picker dialog, then hand the selected device to
   /// [CastSessionManager] to resolve a route and start playback.
@@ -6442,8 +6571,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
       final player = _player;
-      final startPosition =
-          player == null ? null : _timeline.toReal(player.state.position);
+      final startPosition = player == null
+          ? null
+          : _timeline.toReal(player.state.position);
 
       final offeredSubtitles = _castSubtitleTracks();
       final localSelection = _selectedSubtitleTrack;
@@ -6455,7 +6585,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // receiver was never offered. `CastSessionManager` already treats an
       // unmatched id as off, but sending one we know won't match is
       // incoherent regardless of what the manager does with it.
-      final selectedSubtitleTrackId = localSelection != null &&
+      final selectedSubtitleTrackId =
+          localSelection != null &&
               offeredSubtitles.any((t) => t.trackId == localSelection.id)
           ? localSelection.id
           : null;
@@ -6481,8 +6612,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             // from the candidates metadata), falling back to whatever the
             // local player managed to work out.
             duration: _knownCastDuration(),
-            subtitles:
-                _session is SourcePlaybackSession ? const [] : offeredSubtitles,
+            subtitles: _session is SourcePlaybackSession
+                ? const []
+                : offeredSubtitles,
             selectedSubtitleTrackId: receiverSubtitleId,
           ),
         ),
@@ -6494,8 +6626,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showCastErrorToast(context, e,
-          ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
+      showCastErrorToast(
+        context,
+        e,
+        ref: ref,
+        isMydiaTarget: device.protocol == CastProtocolKind.mydia,
+      );
     } catch (e) {
       // Anything that isn't a CastBackendException: the session manager
       // itself resolving (Hive, GraphQL client), or a non-typed failure from
@@ -6503,8 +6639,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // failures would close the picker with no toast and no log.
       debugPrint('[PlayerScreen] Unexpected error starting cast: $e');
       if (!mounted) return;
-      showToast(context, context.l10n.castStartFailed('$e'),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.castStartFailed('$e'),
+        kind: ToastKind.error,
+      );
     }
   }
 

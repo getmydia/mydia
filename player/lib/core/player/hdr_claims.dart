@@ -32,6 +32,6 @@ List<String> webHdrFormats({
   if (!highDynamicRange) return const [];
   return [
     if (pq) ...['hdr10+', 'hdr10'],
-    if (hlg) 'hlg'
+    if (hlg) 'hlg',
   ];
 }

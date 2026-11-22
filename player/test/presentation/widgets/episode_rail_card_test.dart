@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
@@ -19,13 +19,12 @@ EpisodeView _episode({
   Progress? progress,
   String? thumbnailUrl = 'https://example.test/thumb.jpg',
   String? overview,
-}) =>
-    testEpisodeView(
-      overview: overview,
-      hasFile: hasFile,
-      thumbnailUrl: thumbnailUrl,
-      progress: progress,
-    );
+}) => testEpisodeView(
+  overview: overview,
+  hasFile: hasFile,
+  thumbnailUrl: thumbnailUrl,
+  progress: progress,
+);
 
 Future<void> _pump(
   WidgetTester tester,
@@ -60,25 +59,27 @@ Future<void> _pump(
 
 void main() {
   testWidgets(
-      'AE1: fully-watched episode shows a checkmark and no progress bar',
-      (tester) async {
-    await _pump(
-      tester,
-      _episode(
-        progress: const Progress(
-          positionSeconds: 0,
-          percentage: 0,
-          watched: true,
+    'AE1: fully-watched episode shows a checkmark and no progress bar',
+    (tester) async {
+      await _pump(
+        tester,
+        _episode(
+          progress: const Progress(
+            positionSeconds: 0,
+            percentage: 0,
+            watched: true,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
-    expect(find.byType(FractionallySizedBox), findsNothing);
-  });
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+      expect(find.byType(FractionallySizedBox), findsNothing);
+    },
+  );
 
-  testWidgets('AE2: in-progress episode shows a ~40% bar and no checkmark',
-      (tester) async {
+  testWidgets('AE2: in-progress episode shows a ~40% bar and no checkmark', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _episode(
@@ -98,37 +99,36 @@ void main() {
   });
 
   testWidgets(
-      'null progress renders neither bar nor checkmark and does not throw',
-      (tester) async {
-    await _pump(tester, _episode(progress: null));
+    'null progress renders neither bar nor checkmark and does not throw',
+    (tester) async {
+      await _pump(tester, _episode(progress: null));
 
-    expect(find.byIcon(Icons.check_rounded), findsNothing);
-    expect(find.byType(FractionallySizedBox), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+      expect(find.byType(FractionallySizedBox), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
-      'AE3: a no-file episode is dimmed/unavailable and does not navigate',
-      (tester) async {
-    var tapped = false;
-    await _pump(
-      tester,
-      _episode(hasFile: false),
-      onTap: () => tapped = true,
-    );
+    'AE3: a no-file episode is dimmed/unavailable and does not navigate',
+    (tester) async {
+      var tapped = false;
+      await _pump(tester, _episode(hasFile: false), onTap: () => tapped = true);
 
-    // Visually distinct: dimmed via Opacity + an "unavailable" badge.
-    expect(find.byType(Opacity), findsWidgets);
-    expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+      // Visually distinct: dimmed via Opacity + an "unavailable" badge.
+      expect(find.byType(Opacity), findsWidgets);
+      expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
 
-    // Tapping the card must not invoke navigation (no onTap wired for no-file).
-    await tester.tap(find.byType(EpisodeRailCard));
-    await tester.pump();
-    expect(tapped, isFalse);
-  });
+      // Tapping the card must not invoke navigation (no onTap wired for no-file).
+      await tester.tap(find.byType(EpisodeRailCard));
+      await tester.pump();
+      expect(tapped, isFalse);
+    },
+  );
 
-  testWidgets('renders episode code and title but never the overview',
-      (tester) async {
+  testWidgets('renders episode code and title but never the overview', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _episode(overview: 'A secret synopsis that should not appear.'),
@@ -151,15 +151,17 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('shows the placeholder when the thumbnail URL is null',
-      (tester) async {
+  testWidgets('shows the placeholder when the thumbnail URL is null', (
+    tester,
+  ) async {
     await _pump(tester, _episode(thumbnailUrl: null));
 
     expect(find.byIcon(Icons.tv_rounded), findsOneWidget);
   });
 
-  testWidgets('selected draws a highlighted border, unselected does not',
-      (tester) async {
+  testWidgets('selected draws a highlighted border, unselected does not', (
+    tester,
+  ) async {
     await _pump(tester, _episode(), selected: true);
 
     final container = tester.widget<Container>(
@@ -183,21 +185,23 @@ void main() {
   });
 
   testWidgets(
-      'offers no play glyph at rest or on hover, because tapping a rail card '
-      'selects the episode into the hero rather than playing it',
-      (tester) async {
-    await _pump(tester, _episode());
-    await tester.pumpAndSettle();
+    'offers no play glyph at rest or on hover, because tapping a rail card '
+    'selects the episode into the hero rather than playing it',
+    (tester) async {
+      await _pump(tester, _episode());
+      await tester.pumpAndSettle();
 
-    expect(findPlayGlyph(), findsNothing);
+      expect(findPlayGlyph(), findsNothing);
 
-    await hoverOver(tester, find.byType(EpisodeRailCard));
+      await hoverOver(tester, find.byType(EpisodeRailCard));
 
-    expect(findPlayGlyph(), findsNothing);
-  });
+      expect(findPlayGlyph(), findsNothing);
+    },
+  );
 
-  testWidgets('hover previews the selection ring on an unselected card',
-      (tester) async {
+  testWidgets('hover previews the selection ring on an unselected card', (
+    tester,
+  ) async {
     await _pump(tester, _episode());
     await tester.pumpAndSettle();
 
@@ -213,8 +217,9 @@ void main() {
     expect(tester.widget<AnimatedOpacity>(ring).opacity, 1.0);
   });
 
-  testWidgets('an already-selected card previews nothing on hover',
-      (tester) async {
+  testWidgets('an already-selected card previews nothing on hover', (
+    tester,
+  ) async {
     await _pump(tester, _episode(), selected: true);
     await tester.pumpAndSettle();
 
@@ -225,8 +230,9 @@ void main() {
   });
 
   group('EpisodeRailCard watch state', () {
-    testWidgets('draws an unwatched dot on an episode never played',
-        (tester) async {
+    testWidgets('draws an unwatched dot on an episode never played', (
+      tester,
+    ) async {
       await _pump(tester, _episode(progress: null));
 
       expect(find.byKey(WatchIndicator.dotKey), findsOneWidget);
@@ -256,8 +262,9 @@ void main() {
       expect(find.byKey(WatchIndicator.dotKey), findsNothing);
     });
 
-    testWidgets('draws no dot while the episode is part-played',
-        (tester) async {
+    testWidgets('draws no dot while the episode is part-played', (
+      tester,
+    ) async {
       await _pump(
         tester,
         _episode(

@@ -127,6 +127,20 @@ Branches from master after PR 1 merges.
 - `./dev player glass-diff` (the pre-commit hook requires it because the glass
   widgets change). Expected result: no visual difference.
 
+### Found while migrating
+
+- material_ui and cupertino_ui declare their own `MaterialLocalizations` and
+  `CupertinoLocalizations`. gen-l10n still emits flutter_localizations'
+  delegates, so `appLocalizationsDelegates` lists the new packages' delegates
+  itself rather than spreading the generated list, and `lib/l10n/gen/` is
+  excluded from analysis like the other generated code.
+- go_router 18 recognizes only material_ui's `MaterialApp`. On Flutter's, every
+  route had been a `NoTransitionPage` since 2026-08-29; after the migration the
+  FadeForwards transitions `app_theme.dart` configures run again (chosen over
+  keeping routes static).
+- The tall formatter moves line-anchored markers (`// ignore:`,
+  `// l10n-ignore`) off the lines they guard, so they are moved back by hand.
+
 ### Verification
 
 Full player test suite, `flutter analyze` clean, every platform workflow green,

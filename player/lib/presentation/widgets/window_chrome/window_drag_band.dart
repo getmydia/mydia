@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/window/window_controller.dart';
 import '../../../core/window/window_maximized.dart';
@@ -24,10 +24,10 @@ class WindowDragBand extends StatelessWidget {
     super.key,
     required this.controller,
     required this.height,
-    ValueListenable<bool>? maximized,
+    this._maximized,
     this.onDoubleTap,
     this.onPointerDown,
-  }) : _maximized = maximized;
+  });
 
   final WindowController controller;
   final double height;
@@ -80,12 +80,12 @@ class WindowDragBand extends StatelessWidget {
             onDoubleTap: reportsPointerDown
                 ? null
                 : onDoubleTap ??
-                    () => _run(
-                          isMaximized
-                              ? controller.unmaximize()
-                              : controller.maximize(),
-                          'double-tap maximize',
-                        ),
+                      () => _run(
+                        isMaximized
+                            ? controller.unmaximize()
+                            : controller.maximize(),
+                        'double-tap maximize',
+                      ),
           ),
         ),
       ),

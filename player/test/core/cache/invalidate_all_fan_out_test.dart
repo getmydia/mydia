@@ -41,8 +41,10 @@ void main() {
     final registry = WatcherRegistry()
       ..register(slowKey, _Watcher(slowKey, log, gate: stall))
       ..register(fastKey, _Watcher(fastKey, log));
-    final invalidator =
-        Invalidator(registry: registry, fetchLog: InMemoryFetchLog());
+    final invalidator = Invalidator(
+      registry: registry,
+      fetchLog: InMemoryFetchLog(),
+    );
 
     final done = invalidator.invalidateAll();
     await pumpEventQueue();
@@ -60,8 +62,10 @@ void main() {
     final registry = WatcherRegistry()
       ..register(itemKey, _Watcher(itemKey, log, gate: first))
       ..register(browseKey, _Watcher(browseKey, log));
-    final done = Invalidator(registry: registry, fetchLog: InMemoryFetchLog())
-        .invalidateAll();
+    final done = Invalidator(
+      registry: registry,
+      fetchLog: InMemoryFetchLog(),
+    ).invalidateAll();
     await pumpEventQueue();
     expect(log, ['start a:o:s/item']);
     first.complete();

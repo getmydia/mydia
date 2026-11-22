@@ -22,8 +22,9 @@ final playerVersionProvider = FutureProvider<String>((ref) async {
 });
 
 /// The box recording which nudges the user has dismissed.
-final compatibilityDismissalBoxProvider =
-    FutureProvider<Box<bool>>((ref) async {
+final compatibilityDismissalBoxProvider = FutureProvider<Box<bool>>((
+  ref,
+) async {
   return Hive.openBox<bool>(compatibilityDismissalBoxName);
 });
 
@@ -69,12 +70,12 @@ class CompatibilityState {
       '${verdict.name}:$playerVersion:${serverVersion ?? 'unknown'}';
 
   CompatibilityState copyWith({bool? dismissed}) => CompatibilityState(
-        verdict: verdict,
-        playerVersion: playerVersion,
-        serverVersion: serverVersion,
-        requiredVersion: requiredVersion,
-        dismissed: dismissed ?? this.dismissed,
-      );
+    verdict: verdict,
+    playerVersion: playerVersion,
+    serverVersion: serverVersion,
+    requiredVersion: requiredVersion,
+    dismissed: dismissed ?? this.dismissed,
+  );
 }
 
 /// Compares this player against the connected server and exposes the verdict.
@@ -99,8 +100,9 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
     final state = CompatibilityState(
       verdict: verdict,
       playerVersion: playerVersion,
-      serverVersion:
-          server == null || server.predatesQuery ? null : server.version,
+      serverVersion: server == null || server.predatesQuery
+          ? null
+          : server.version,
       requiredVersion: _floorFor(verdict, server),
     );
 
@@ -185,5 +187,5 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
 /// The connected server's compatibility with this player.
 final compatibilityProvider =
     AsyncNotifierProvider<CompatibilityNotifier, CompatibilityState>(
-  CompatibilityNotifier.new,
-);
+      CompatibilityNotifier.new,
+    );

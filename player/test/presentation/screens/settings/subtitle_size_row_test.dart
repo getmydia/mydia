@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/settings_providers.dart';
@@ -9,16 +9,17 @@ import 'package:player/presentation/screens/settings/widgets/subtitle_size_row.d
 import '../../../test_utils/mock_auth_storage.dart';
 
 Widget _host(MockAuthStorage storage) => ProviderScope(
-      overrides: [
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: storage)),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: SubtitleSizeSettingsRow()),
-      ),
-    );
+  overrides: [
+    coreSettingsServiceProvider.overrideWithValue(
+      SettingsService(storage: storage),
+    ),
+  ],
+  child: const MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: SubtitleSizeSettingsRow()),
+  ),
+);
 
 void main() {
   testWidgets('shows Medium by default', (tester) async {

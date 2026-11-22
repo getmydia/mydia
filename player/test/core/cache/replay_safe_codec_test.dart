@@ -142,26 +142,27 @@ void main() {
     expect(source.debugGetOpenHandleStackTraces(), hasLength(1));
   });
 
-  test('dispose during the first decode drops the frame when it lands',
-      () async {
-    final delegate = _FakeCodec(source)..gate = Completer<void>();
-    final codec = ReplaySafeCodec(delegate);
+  test(
+    'dispose during the first decode drops the frame when it lands',
+    () async {
+      final delegate = _FakeCodec(source)..gate = Completer<void>();
+      final codec = ReplaySafeCodec(delegate);
 
-    final pending = codec.getNextFrame();
-    codec.dispose();
-    delegate.gate!.complete();
+      final pending = codec.getNextFrame();
+      codec.dispose();
+      delegate.gate!.complete();
 
-    await expectLater(pending, throwsStateError);
-    expect(source.debugGetOpenHandleStackTraces(), hasLength(1));
-  });
+      await expectLater(pending, throwsStateError);
+      expect(source.debugGetOpenHandleStackTraces(), hasLength(1));
+    },
+  );
 
   test('replaySafeDecode wraps the codec the decoder returns', () async {
     final delegate = _FakeCodec(source);
     Future<ui.Codec> decode(
       ui.ImmutableBuffer buffer, {
       ui.TargetImageSizeCallback? getTargetSize,
-    }) async =>
-        delegate;
+    }) async => delegate;
     final ImageDecoderCallback wrapped = replaySafeDecode(decode);
     final buffer = await ui.ImmutableBuffer.fromUint8List(
       Uint8List.fromList(const [0]),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/player/platform_features.dart';
@@ -44,8 +44,10 @@ class SettingsBadge extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final updatePending =
-        settingsUpdatePending(ref, supportedOverride: supportedOverride);
+    final updatePending = settingsUpdatePending(
+      ref,
+      supportedOverride: supportedOverride,
+    );
 
     return ConnectionStatusDot(
       location: location,

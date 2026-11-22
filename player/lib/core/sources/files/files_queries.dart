@@ -86,9 +86,9 @@ class FilesShow {
 
   /// Every (season, episode) with a file, in viewing order, specials last.
   List<(int, int)> get episodeKeys => [
-        for (final s in seasonNumbers)
-          for (final e in seasons[s]!.keys.toList()..sort()) (s, e),
-      ];
+    for (final s in seasonNumbers)
+      for (final e in seasons[s]!.keys.toList()..sort()) (s, e),
+  ];
 
   MatchedEpisode? episodeMeta(int season, int episode) {
     for (final e in meta?.seasons[season] ?? const <MatchedEpisode>[]) {
@@ -227,17 +227,22 @@ class FilesCatalog {
       if (!isShow) {
         movies
             .putIfAbsent(
+              base,
+              () => FilesMovie(
                 base,
-                () => FilesMovie(
-                    base, tmdbId == null ? null : index.movie(tmdbId), first))
+                tmdbId == null ? null : index.movie(tmdbId),
+                first,
+              ),
+            )
             .files
             .addAll(files);
         continue;
       }
       final show = shows.putIfAbsent(
-          base,
-          () => FilesShow(
-              base, tmdbId == null ? null : index.show(tmdbId), first));
+        base,
+        () =>
+            FilesShow(base, tmdbId == null ? null : index.show(tmdbId), first),
+      );
       for (final f in files) {
         final p = f.parsed!;
         final s = p.season;
@@ -394,8 +399,9 @@ class FilesCatalog {
       sortTitle: filesSortTitle(title),
       addedAt: m.addedAt,
       lastPlayedAt: progressOf(id)?.updatedAt,
-      externalIds:
-          meta == null ? ExternalIds.none : ExternalIds(tmdb: '${meta.tmdbId}'),
+      externalIds: meta == null
+          ? ExternalIds.none
+          : ExternalIds(tmdb: '${meta.tmdbId}'),
     );
   }
 
@@ -414,8 +420,9 @@ class FilesCatalog {
       overview: meta?.overview,
       sortTitle: filesSortTitle(title),
       addedAt: s.addedAt,
-      externalIds:
-          meta == null ? ExternalIds.none : ExternalIds(tmdb: '${meta.tmdbId}'),
+      externalIds: meta == null
+          ? ExternalIds.none
+          : ExternalIds(tmdb: '${meta.tmdbId}'),
     );
   }
 
@@ -465,8 +472,9 @@ class FilesCatalog {
       overview: meta?.overview,
       airDate: meta?.airDate,
       defaultVersionId: files.first.key,
-      addedAt:
-          files.map((f) => f.firstSeen).reduce((a, b) => a.isBefore(b) ? a : b),
+      addedAt: files
+          .map((f) => f.firstSeen)
+          .reduce((a, b) => a.isBefore(b) ? a : b),
       lastPlayedAt: progressOf(id)?.updatedAt,
       showRef: ref(ItemKind.show, showId(s.base)),
     );
@@ -487,9 +495,9 @@ class FilesCatalog {
   }
 
   ItemSummary folderSummary(String rootId, String dir) => ItemSummary(
-        ref: ref(ItemKind.folder, folderId(rootId, dir)),
-        title: dir.isEmpty ? roots[rootId]!.title : _nameOf(dir),
-      );
+    ref: ref(ItemKind.folder, folderId(rootId, dir)),
+    title: dir.isEmpty ? roots[rootId]!.title : _nameOf(dir),
+  );
 
   /// The summary of a movie, episode or loose file by its id, or null.
   ItemSummary? playableSummary(String id) {
@@ -514,15 +522,15 @@ class FilesCatalog {
   // Details
 
   List<MediaVersion> versionsOf(List<IndexedFile> files, {int? minutes}) => [
-        for (final f in files)
-          MediaVersion(
-            id: f.key,
-            container: _ext(_nameOf(f.path)),
-            sizeBytes: f.size,
-            durationSeconds: _seconds(minutes),
-            streams: _sidecars(f),
-          ),
-      ];
+    for (final f in files)
+      MediaVersion(
+        id: f.key,
+        container: _ext(_nameOf(f.path)),
+        sizeBytes: f.size,
+        durationSeconds: _seconds(minutes),
+        streams: _sidecars(f),
+      ),
+  ];
 
   List<MediaStreamInfo> _sidecars(IndexedFile f) {
     final root = roots[f.rootId];
@@ -530,10 +538,7 @@ class FilesCatalog {
     return sidecarStreams(root, f);
   }
 
-  static List<MediaStreamInfo> sidecarStreams(
-    LibraryRoot root,
-    IndexedFile f,
-  ) {
+  static List<MediaStreamInfo> sidecarStreams(LibraryRoot root, IndexedFile f) {
     final stem = _stem(_nameOf(f.path));
     return [
       for (final (i, path) in f.sidecars.indexed)
@@ -542,7 +547,11 @@ class FilesCatalog {
   }
 
   static MediaStreamInfo _sidecarStatic(
-      int i, LibraryRoot root, String path, String stem) {
+    int i,
+    LibraryRoot root,
+    String path,
+    String stem,
+  ) {
     final name = _nameOf(path);
     // `Movie.en.forced.srt`: the parts between the stem and the extension.
     final middle = _stem(name).length > stem.length
@@ -622,8 +631,10 @@ class FilesCatalog {
         return ItemDetail(
           summary: summary,
           overview: summary.overview,
-          versions:
-              versionsOf(files, minutes: s.episodeMeta(n, e)?.runtimeMinutes),
+          versions: versionsOf(
+            files,
+            minutes: s.episodeMeta(n, e)?.runtimeMinutes,
+          ),
           show: ref(ItemKind.show, showId(s.base)),
           season: ref(ItemKind.season, seasonId(s.base, n)),
           showPoster: _art(s.meta?.posterPath),
@@ -687,21 +698,22 @@ class FilesCatalog {
 
   /// Movies and shows with a file under [rootId].
   List<ItemSummary> itemsUnder(String rootId) => [
-        for (final m in movies.values)
-          if (m.files.any((f) => f.rootId == rootId)) movieSummary(m),
-        for (final s in shows.values)
-          if (s.files.any((f) => f.rootId == rootId)) showSummary(s),
-      ];
+    for (final m in movies.values)
+      if (m.files.any((f) => f.rootId == rootId)) movieSummary(m),
+    for (final s in shows.values)
+      if (s.files.any((f) => f.rootId == rootId)) showSummary(s),
+  ];
 
   /// Every movie and show.
   List<ItemSummary> allTitles() => [
-        for (final m in movies.values) movieSummary(m),
-        for (final s in shows.values) showSummary(s),
-      ];
+    for (final m in movies.values) movieSummary(m),
+    for (final s in shows.values) showSummary(s),
+  ];
 
   /// Roots holding a file no movie or show claims.
-  Set<String> get rootsWithUnmatched =>
-      {for (final f in unmatched.values) f.rootId};
+  Set<String> get rootsWithUnmatched => {
+    for (final f in unmatched.values) f.rootId,
+  };
 
   /// The episode to play next in [s]: the first unwatched one after the last
   /// watched, specials left out; the first episode when none is watched.

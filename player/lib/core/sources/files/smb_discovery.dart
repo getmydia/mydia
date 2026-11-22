@@ -65,8 +65,9 @@ abstract interface class SmbDiscovery {
   Stream<List<DiscoveredSmbServer>> browse();
 }
 
-final smbDiscoveryProvider =
-    Provider<SmbDiscovery>((_) => BonsoirSmbDiscovery());
+final smbDiscoveryProvider = Provider<SmbDiscovery>(
+  (_) => BonsoirSmbDiscovery(),
+);
 
 /// One browse: the event stream plus the calls that drive it.
 class _BrowseSession {
@@ -95,11 +96,11 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
     Future<void> Function()? stop,
     Future<void> Function(BonsoirService service)? resolve,
   }) : _open = (() async => _BrowseSession(
-              events: events,
-              start: start ?? () async {},
-              stop: stop ?? () async {},
-              resolve: resolve ?? (_) async {},
-            ));
+         events: events,
+         start: start ?? () async {},
+         stop: stop ?? () async {},
+         resolve: resolve ?? (_) async {},
+       ));
 
   final Future<_BrowseSession> Function() _open;
 
@@ -150,11 +151,15 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
           // others, and the browse, carry on.
           final s = session;
           if (s != null) {
-            unawaited(Future.sync(() => s.resolve(event.service))
-                .catchError((Object e) {
-              debugPrint('[BonsoirSmbDiscovery] Could not resolve '
-                  '${event.service.name}: $e');
-            }));
+            unawaited(
+              Future.sync(() => s.resolve(event.service))
+                  .catchError((Object e) {
+                    debugPrint(
+                      '[BonsoirSmbDiscovery] Could not resolve '
+                      '${event.service.name}: $e',
+                    );
+                  }),
+            );
           }
         case BonsoirDiscoveryServiceResolvedEvent():
           final server = _serverFrom(event.service);
@@ -260,9 +265,8 @@ class BonsoirSmbDiscovery implements SmbDiscovery {
     BonsoirService service,
     DiscoveredSmbServer server,
   ) {
-    final advertised = {
-      for (final a in service.hostAddresses) a.trim(),
-    }..remove('');
+    final advertised = {for (final a in service.hostAddresses) a.trim()}
+      ..remove('');
     final key = advertised.isEmpty ? server.addresses : advertised.toList();
     return ((key..sort()).join(' '), server.port);
   }

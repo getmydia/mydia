@@ -6,8 +6,7 @@ import 'fake_window_controller.dart';
 
 void main() {
   group('WindowFullscreenController', () {
-    test(
-        'seeds from the window, so a window already fullscreen at startup '
+    test('seeds from the window, so a window already fullscreen at startup '
         'does not report windowed until the first event', () async {
       final signal = ValueNotifier(false);
       final controller = WindowFullscreenController(
@@ -63,18 +62,19 @@ void main() {
     });
 
     test(
-        'a seed that throws leaves the signal at its default rather than '
-        'propagating, since startup must not fail over window chrome',
-        () async {
-      final signal = ValueNotifier(false);
-      final controller = WindowFullscreenController(
-        window: _ThrowingFullScreenController(),
-        signal: signal,
-      );
+      'a seed that throws leaves the signal at its default rather than '
+      'propagating, since startup must not fail over window chrome',
+      () async {
+        final signal = ValueNotifier(false);
+        final controller = WindowFullscreenController(
+          window: _ThrowingFullScreenController(),
+          signal: signal,
+        );
 
-      await expectLater(controller.seed(), completes);
-      expect(signal.value, isFalse);
-    });
+        await expectLater(controller.seed(), completes);
+        expect(signal.value, isFalse);
+      },
+    );
   });
 }
 

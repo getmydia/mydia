@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:player/core/theme/ambient_tint/tint_extraction.dart';
@@ -10,10 +10,8 @@ List<int> _flat(int argb, [int count = 4096]) => List<int>.filled(count, argb);
 
 Future<MemoryImage> _png(Color color) async {
   final recorder = ui.PictureRecorder();
-  Canvas(recorder).drawRect(
-    const Rect.fromLTWH(0, 0, 64, 36),
-    Paint()..color = color,
-  );
+  Canvas(recorder)
+      .drawRect(const Rect.fromLTWH(0, 0, 64, 36), Paint()..color = color);
   final image = await recorder.endRecording().toImage(64, 36);
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
   return MemoryImage(bytes!.buffer.asUint8List());
@@ -49,8 +47,9 @@ void main() {
     expect(seed, isNull);
   });
 
-  testWidgets('a stalled decode times out and lets go of the stream',
-      (tester) async {
+  testWidgets('a stalled decode times out and lets go of the stream', (
+    tester,
+  ) async {
     final stalled = _StalledImage();
     final seed = await tester.runAsync(
       () => extractTint(stalled, timeout: const Duration(milliseconds: 50)),

@@ -5,20 +5,23 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/sources/item.dart';
+
 import '../../test_utils/mydia_test_source.dart';
 
-DownloadTask _task(
-        {String? sourceId, String? itemKind, String mediaType = 'movie'}) =>
-    DownloadTask(
-      id: 't1',
-      mediaId: '42',
-      title: 'Quill Harbor',
-      quality: 'original',
-      mediaType: mediaType,
-      createdAt: DateTime(2026, 1, 1),
-      sourceId: sourceId,
-      itemKind: itemKind,
-    );
+DownloadTask _task({
+  String? sourceId,
+  String? itemKind,
+  String mediaType = 'movie',
+}) => DownloadTask(
+  id: 't1',
+  mediaId: '42',
+  title: 'Quill Harbor',
+  quality: 'original',
+  mediaType: mediaType,
+  createdAt: DateTime(2026, 1, 1),
+  sourceId: sourceId,
+  itemKind: itemKind,
+);
 
 void main() {
   test('a record with no source id reads as pre-account', () {
@@ -30,11 +33,13 @@ void main() {
     final task = _task(sourceId: testMydiaSourceId.value, mediaType: 'episode');
     expect(task.source, testMydiaSourceId);
     expect(
-        task.itemRef,
-        const ItemRef(
-            sourceId: testMydiaSourceId,
-            kind: ItemKind.episode,
-            externalId: '42'));
+      task.itemRef,
+      const ItemRef(
+        sourceId: testMydiaSourceId,
+        kind: ItemKind.episode,
+        externalId: '42',
+      ),
+    );
   });
 
   test('a stored kind wins over mediaType', () {
@@ -46,25 +51,35 @@ void main() {
   test('matches compares source and id, not kind', () {
     final task = _task(sourceId: 'acc1:owner:aa11');
     expect(
-        task.matches(const ItemRef(
-            sourceId: SourceId('acc1:owner:aa11'),
-            kind: ItemKind.episode,
-            externalId: '42')),
-        isTrue);
+      task.matches(
+        const ItemRef(
+          sourceId: SourceId('acc1:owner:aa11'),
+          kind: ItemKind.episode,
+          externalId: '42',
+        ),
+      ),
+      isTrue,
+    );
     expect(
-        task.matches(const ItemRef(
-            sourceId: testMydiaSourceId,
-            kind: ItemKind.movie,
-            externalId: '42')),
-        isFalse);
+      task.matches(
+        const ItemRef(
+          sourceId: testMydiaSourceId,
+          kind: ItemKind.movie,
+          externalId: '42',
+        ),
+      ),
+      isFalse,
+    );
   });
 
   test('fromTask carries the source fields across', () {
     final media = DownloadedMedia.fromTask(
-        _task(sourceId: 'acc1:owner:aa11', itemKind: 'video').copyWith(
-            filePath: '/d/a.mkv',
-            fileSize: 10,
-            posterPath: '/d/a.mkv.poster.jpg'));
+      _task(sourceId: 'acc1:owner:aa11', itemKind: 'video').copyWith(
+        filePath: '/d/a.mkv',
+        fileSize: 10,
+        posterPath: '/d/a.mkv.poster.jpg',
+      ),
+    );
     expect(media.source, const SourceId('acc1:owner:aa11'));
     expect(media.itemRef.kind, ItemKind.video);
     expect(media.posterPath, '/d/a.mkv.poster.jpg');

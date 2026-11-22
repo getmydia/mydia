@@ -9,7 +9,8 @@ void main() {
   setUp(() async {
     Hive.init('./.dart_tool/test_hive_sidebar');
     box = await Hive.openBox<Map<dynamic, dynamic>>(
-        HiveSidebarLayoutStore.boxName);
+      HiveSidebarLayoutStore.boxName,
+    );
     await box.clear();
   });
 

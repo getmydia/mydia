@@ -51,10 +51,7 @@ void main() {
     ]) {
       test('$platform keeps the media_kit default', () {
         // `mediacodec` is an Android-only decoder name.
-        final config = videoControllerConfigurationFor(
-          platform,
-          isWeb: false,
-        );
+        final config = videoControllerConfigurationFor(platform, isWeb: false);
 
         expect(config.hwdec, isNull);
       });
@@ -75,8 +72,10 @@ void main() {
 
   group('sdrTonemapMpvOptionsFor', () {
     test('the texture applies the pinned options', () {
-      expect(sdrTonemapMpvOptionsFor(VideoOutputPath.texture),
-          sdrTonemapMpvOptions);
+      expect(
+        sdrTonemapMpvOptionsFor(VideoOutputPath.texture),
+        sdrTonemapMpvOptions,
+      );
     });
 
     test('the macOS surface leaves tone mapping to libplacebo', () {

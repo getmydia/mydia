@@ -24,8 +24,10 @@ void main() {
 
     test('ignores parameters and case', () {
       expect(
-        hidesNativeHls('APPLICATION/X-MPEGURL; codecs="avc1.4d401f"',
-            hlsJsUsable: true),
+        hidesNativeHls(
+          'APPLICATION/X-MPEGURL; codecs="avc1.4d401f"',
+          hlsJsUsable: true,
+        ),
         isTrue,
       );
     });
@@ -38,8 +40,11 @@ void main() {
         'audio/mpeg',
         '',
       ]) {
-        expect(hidesNativeHls(type, hlsJsUsable: true), isFalse,
-            reason: 'should not touch $type');
+        expect(
+          hidesNativeHls(type, hlsJsUsable: true),
+          isFalse,
+          reason: 'should not touch $type',
+        );
       }
     });
 

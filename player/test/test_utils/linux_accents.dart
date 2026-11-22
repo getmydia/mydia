@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' show Color;
+import 'package:material_ui/material_ui.dart' show Color;
 
 /// Accents a Linux desktop can report, including the extremes a custom
 /// accent picker allows. Each desktop's stock accent is covered separately

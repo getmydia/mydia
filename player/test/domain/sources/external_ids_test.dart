@@ -3,8 +3,11 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
 
 void main() {
-  const ref =
-      ItemRef(sourceId: SourceId('a'), kind: ItemKind.movie, externalId: '1');
+  const ref = ItemRef(
+    sourceId: SourceId('a'),
+    kind: ItemKind.movie,
+    externalId: '1',
+  );
 
   test('round-trips ids through cache JSON', () {
     const item = ItemSummary(

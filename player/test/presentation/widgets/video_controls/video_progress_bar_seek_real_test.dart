@@ -13,7 +13,7 @@
 // `DynamicLibrary.open` synchronously), unavailable under `flutter test` —
 // same reasoning as `gesture_chrome_composition_test.dart`'s fake.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/stream_timeline.dart';
@@ -39,10 +39,10 @@ class _FakePlatformPlayer extends PlatformPlayer {
 }
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(
-        body: Center(child: SizedBox(width: 400, child: child)),
-      ),
-    );
+  home: Scaffold(
+    body: Center(child: SizedBox(width: 400, child: child)),
+  ),
+);
 
 void main() {
   group('VideoProgressBar real-coordinate seek wiring', () {
@@ -65,77 +65,99 @@ void main() {
     tearDown(() => player.dispose());
 
     testWidgets(
-        'committing a scrub calls onSeekToReal with a real position, not '
-        'the player-local one', (tester) async {
-      Duration? seekTarget;
-      var seekCount = 0;
+      'committing a scrub calls onSeekToReal with a real position, not '
+      'the player-local one',
+      (tester) async {
+        Duration? seekTarget;
+        var seekCount = 0;
 
-      await tester.pumpWidget(_host(VideoProgressBar(
-        player: player,
-        // startOffset=600s, resolved runtime=1200s: the player's own 300s
-        // duration must never leak into this computation.
-        timeline: const StreamTimeline(
-          startOffset: Duration(seconds: 600),
-          totalDuration: Duration(seconds: 1200),
-        ),
-        onSeekToReal: (target) async {
-          seekTarget = target;
-          seekCount++;
-        },
-      )));
-      await tester.pump();
+        await tester.pumpWidget(
+          _host(
+            VideoProgressBar(
+              player: player,
+              // startOffset=600s, resolved runtime=1200s: the player's own 300s
+              // duration must never leak into this computation.
+              timeline: const StreamTimeline(
+                startOffset: Duration(seconds: 600),
+                totalDuration: Duration(seconds: 1200),
+              ),
+              onSeekToReal: (target) async {
+                seekTarget = target;
+                seekCount++;
+              },
+            ),
+          ),
+        );
+        await tester.pump();
 
-      final rect = tester.getRect(find.byType(VideoProgressBar));
-      await tester.tapAt(Offset(rect.left + rect.width * 0.5, rect.center.dy));
-      await tester.pump();
+        final rect = tester.getRect(find.byType(VideoProgressBar));
+        await tester.tapAt(
+          Offset(rect.left + rect.width * 0.5, rect.center.dy),
+        );
+        await tester.pump();
 
-      expect(seekCount, 1);
-      expect(
-        seekTarget,
-        const Duration(seconds: 600),
-        reason: 'the midpoint of a resolved 1200s runtime is real position '
-            "600s — half of the player's own partial 300s duration (150s) "
-            'would prove the real-coordinate translation regressed',
-      );
-    });
+        expect(seekCount, 1);
+        expect(
+          seekTarget,
+          const Duration(seconds: 600),
+          reason:
+              'the midpoint of a resolved 1200s runtime is real position '
+              "600s — half of the player's own partial 300s duration (150s) "
+              'would prove the real-coordinate translation regressed',
+        );
+      },
+    );
 
     testWidgets(
-        'dragging without releasing never calls onSeekToReal — only the '
-        'commit at drag end does', (tester) async {
-      var seekCount = 0;
+      'dragging without releasing never calls onSeekToReal — only the '
+      'commit at drag end does',
+      (tester) async {
+        var seekCount = 0;
 
-      await tester.pumpWidget(_host(VideoProgressBar(
-        player: player,
-        timeline: const StreamTimeline(
-          startOffset: Duration(seconds: 600),
-          totalDuration: Duration(seconds: 1200),
-        ),
-        onSeekToReal: (_) async => seekCount++,
-      )));
-      await tester.pump();
+        await tester.pumpWidget(
+          _host(
+            VideoProgressBar(
+              player: player,
+              timeline: const StreamTimeline(
+                startOffset: Duration(seconds: 600),
+                totalDuration: Duration(seconds: 1200),
+              ),
+              onSeekToReal: (_) async => seekCount++,
+            ),
+          ),
+        );
+        await tester.pump();
 
-      final rect = tester.getRect(find.byType(VideoProgressBar));
-      final gesture = await tester.startGesture(
-        Offset(rect.left + rect.width * 0.1, rect.center.dy),
-      );
-      addTearDown(() => gesture.removePointer());
+        final rect = tester.getRect(find.byType(VideoProgressBar));
+        final gesture = await tester.startGesture(
+          Offset(rect.left + rect.width * 0.1, rect.center.dy),
+        );
+        addTearDown(() => gesture.removePointer());
 
-      // Clears touch slop and starts the drag.
-      await gesture.moveBy(const Offset(40, 0));
-      await tester.pump();
-      await gesture.moveBy(const Offset(80, 0));
-      await tester.pump();
+        // Clears touch slop and starts the drag.
+        await gesture.moveBy(const Offset(40, 0));
+        await tester.pump();
+        await gesture.moveBy(const Offset(80, 0));
+        await tester.pump();
 
-      expect(seekCount, 0,
-          reason: 'a restart per drag frame would spawn FFmpeg processes '
+        expect(
+          seekCount,
+          0,
+          reason:
+              'a restart per drag frame would spawn FFmpeg processes '
               'faster than the server reaps them — onSeekToReal must only '
-              'fire on commit, never on the live drag updates');
+              'fire on commit, never on the live drag updates',
+        );
 
-      await gesture.up();
-      await tester.pump();
+        await gesture.up();
+        await tester.pump();
 
-      expect(seekCount, 1,
-          reason: 'the commit at drag end must fire exactly once');
-    });
+        expect(
+          seekCount,
+          1,
+          reason: 'the commit at drag end must fire exactly once',
+        );
+      },
+    );
   });
 }

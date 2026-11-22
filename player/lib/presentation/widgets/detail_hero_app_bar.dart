@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/layout/breakpoints.dart';
@@ -61,14 +61,14 @@ SliverAppBar detailHeroAppBar({
           // pages: menu first, then back.
           leading:
               Breakpoints.isMobile(context) && SourceDrawerButton.shellHasDrawer
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SourceDrawerButton(color: Colors.white),
-                        back,
-                      ],
-                    )
-                  : back,
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SourceDrawerButton(color: Colors.white),
+                    back,
+                  ],
+                )
+              : back,
         ),
       ),
     ),

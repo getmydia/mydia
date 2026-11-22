@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
 import '../../domain/models/airplay_device.dart';
 
 /// Service for managing AirPlay device discovery and playback on iOS.
@@ -8,8 +10,9 @@ import '../../domain/models/airplay_device.dart';
 /// This service uses a platform channel to communicate with native iOS code
 /// that integrates AVRoutePickerView for AirPlay device selection.
 class AirPlayService {
-  static const MethodChannel _channel =
-      MethodChannel('com.mydia.player/airplay');
+  static const MethodChannel _channel = MethodChannel(
+    'com.mydia.player/airplay',
+  );
 
   final _devicesController = StreamController<List<AirPlayDevice>>.broadcast();
   final _sessionController = StreamController<AirPlaySession?>.broadcast();
@@ -62,10 +65,7 @@ class AirPlayService {
       _progressTimer = null;
     } else {
       // Connected to a device
-      final device = AirPlayDevice(
-        id: routeName,
-        name: routeName,
-      );
+      final device = AirPlayDevice(id: routeName, name: routeName);
 
       _currentSession = AirPlaySession(
         device: device,
@@ -100,9 +100,7 @@ class AirPlayService {
         _progressTimer = null;
     }
 
-    _currentSession = _currentSession!.copyWith(
-      playbackState: playbackState,
-    );
+    _currentSession = _currentSession!.copyWith(playbackState: playbackState);
 
     _sessionController.add(_currentSession);
   }

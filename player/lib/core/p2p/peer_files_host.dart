@@ -50,7 +50,7 @@ int _nowMs() => DateTime.now().millisecondsSinceEpoch;
 
 class HivePeerFilesRevisions implements PeerFilesRevisions {
   HivePeerFilesRevisions(this._box, {int Function() nowMs = _nowMs})
-      : _now = nowMs;
+    : _now = nowMs;
 
   static const boxName = 'peer_files_revisions';
 
@@ -89,13 +89,13 @@ final _peerAccountId = RegExp(r'^p[0-9a-f]{12}_');
 /// This player's own Files accounts, never one it borrowed from a peer.
 /// What dedupe compares against, hidden or not.
 List<SourceAccountRecord> sharedFilesAccounts(
-        Iterable<SourceAccountRecord> accounts) =>
-    [
-      for (final a in accounts)
-        if (a.account.kind == SourceKind.files &&
-            !_peerAccountId.hasMatch(a.account.id))
-          a,
-    ];
+  Iterable<SourceAccountRecord> accounts,
+) => [
+  for (final a in accounts)
+    if (a.account.kind == SourceKind.files &&
+        !_peerAccountId.hasMatch(a.account.id))
+      a,
+];
 
 /// Whether [record] has a server hidden behind the app lock.
 bool hasHiddenServer(SourceAccountRecord record) =>
@@ -106,11 +106,11 @@ bool hasHiddenServer(SourceAccountRecord record) =>
 /// locked, so it is never lent, locked or not: a paired device has no app
 /// lock of this device's to respect.
 List<SourceAccountRecord> lentFilesAccounts(
-        Iterable<SourceAccountRecord> accounts) =>
-    [
-      for (final a in sharedFilesAccounts(accounts))
-        if (!hasHiddenServer(a)) a,
-    ];
+  Iterable<SourceAccountRecord> accounts,
+) => [
+  for (final a in sharedFilesAccounts(accounts))
+    if (!hasHiddenServer(a)) a,
+];
 
 /// The wire kind of a files account: `local`, `smb`, `s3` or `webdav`.
 String filesAccountKind(String accountId) {
@@ -132,13 +132,12 @@ String filesAccountKind(String accountId) {
 String? filesDedupeKey(SourceAccountRecord record) {
   final id = record.account.id;
   if (id == kFilesLocalAccountId) return null;
-  final connections = [
-    for (final s in record.servers) ...s.connections,
-  ];
+  final connections = [for (final s in record.servers) ...s.connections];
   if (connections.isEmpty) return null;
   if (isSmbAccountId(id)) {
-    final named =
-        connections.where((c) => !isIpLiteral(c.uri.host)).firstOrNull;
+    final named = connections
+        .where((c) => !isIpLiteral(c.uri.host))
+        .firstOrNull;
     return normalizeSmbUrl((named ?? connections.first).uri);
   }
   // A damaged S3 record has no key rather than failing the whole manifest.
@@ -154,20 +153,14 @@ String? filesDedupeKey(SourceAccountRecord record) {
 /// path a read names is authorized here once, when Rust asks for its grant.
 class PeerFilesHost {
   PeerFilesHost({
-    required PeerFilesTransport transport,
-    required PeerSyncService sync,
-    required PeerFilesRevisions revisions,
-    required List<SourceAccountRecord> Function() accounts,
-    required FileLibraryIndex Function(String accountId) indexFor,
-    required FileSystemBackend? Function(String accountId) backendFor,
-    int pageBudget = peerFilesPageBudget,
-  })  : _transport = transport,
-        _sync = sync,
-        _revisions = revisions,
-        _accounts = accounts,
-        _indexFor = indexFor,
-        _backendFor = backendFor,
-        _pageBudget = pageBudget;
+    required this._transport,
+    required this._sync,
+    required this._revisions,
+    required this._accounts,
+    required this._indexFor,
+    required this._backendFor,
+    this._pageBudget = peerFilesPageBudget,
+  });
 
   final PeerFilesTransport _transport;
   final PeerSyncService _sync;
@@ -255,15 +248,15 @@ class PeerFilesHost {
 
   /// The accounts a `Manifest` lists, each with its revision and dedupe key.
   List<FlutterWireSharedAccount> manifestAccounts() => [
-        for (final a in lentFilesAccounts(_accounts()))
-          FlutterWireSharedAccount(
-            accountId: a.account.id,
-            kind: filesAccountKind(a.account.id),
-            name: a.account.displayName,
-            dedupeKey: filesDedupeKey(a),
-            revision: BigInt.from(_revisions.revision(a.account.id)),
-          ),
-      ];
+    for (final a in lentFilesAccounts(_accounts()))
+      FlutterWireSharedAccount(
+        accountId: a.account.id,
+        kind: filesAccountKind(a.account.id),
+        name: a.account.displayName,
+        dedupeKey: filesDedupeKey(a),
+        revision: BigInt.from(_revisions.revision(a.account.id)),
+      ),
+  ];
 
   SourceAccountRecord? _shared(String accountId) =>
       lentFilesAccounts(_accounts())
@@ -303,11 +296,11 @@ class PeerFilesHost {
         if (!_sync.authorizes(request.peer, authProof)) return refused;
         return FlutterPeerFilesResponse.manifest(accounts: manifestAccounts());
       case FlutterPeerFilesRequest_IndexPage(
-          :final authProof,
-          :final accountId,
-          :final revision,
-          :final cursor,
-        ):
+        :final authProof,
+        :final accountId,
+        :final revision,
+        :final cursor,
+      ):
         if (!_sync.authorizes(request.peer, authProof)) return refused;
         // An account no longer lent reads as changed: the viewer fetches
         // the manifest again and finds it gone.
@@ -319,8 +312,11 @@ class PeerFilesHost {
         if (start == null || start < 0) return stale;
         // No await between the revision check and the read: a bump cannot
         // land in between.
-        final slice =
-            indexPageFrom(_indexFor(accountId), start, budget: _pageBudget);
+        final slice = indexPageFrom(
+          _indexFor(accountId),
+          start,
+          budget: _pageBudget,
+        );
         return FlutterPeerFilesResponse.indexPage(
           page: slice.page,
           nextCursor: slice.next?.toString(),
@@ -341,8 +337,10 @@ class PeerFilesHost {
     try {
       await _transport.respondPeerFileGrant(request.requestId, answer);
     } catch (e) {
-      debugPrint('[PeerFilesHost] Answering grant ${request.requestId} '
-          'failed: $e');
+      debugPrint(
+        '[PeerFilesHost] Answering grant ${request.requestId} '
+        'failed: $e',
+      );
     }
   }
 
@@ -351,7 +349,9 @@ class PeerFilesHost {
   /// backend cannot be built or reached: the file is there, its share is
   /// not answering.
   Future<FlutterPeerFileGrantAnswer> _grantFor(
-      String accountId, String path) async {
+    String accountId,
+    String path,
+  ) async {
     const notShared = FlutterPeerFileGrantAnswer.notShared();
     const failed = FlutterPeerFileGrantAnswer.failed();
     if (_sync.activeMemberIds().isEmpty) return notShared;
@@ -372,7 +372,8 @@ class PeerFilesHost {
       return notShared;
     } on BackendFailure catch (e) {
       debugPrint(
-          '[PeerFilesHost] No grant for a read in $accountId: ${e.runtimeType}');
+        '[PeerFilesHost] No grant for a read in $accountId: ${e.runtimeType}',
+      );
       return failed;
     }
   }
@@ -414,7 +415,8 @@ class PeerFilesHost {
 final peerFilesRevisionsProvider = Provider<PeerFilesRevisions>((ref) {
   if (Hive.isBoxOpen(HivePeerFilesRevisions.boxName)) {
     return HivePeerFilesRevisions(
-        Hive.box<int>(HivePeerFilesRevisions.boxName));
+      Hive.box<int>(HivePeerFilesRevisions.boxName),
+    );
   }
   return InMemoryPeerFilesRevisions();
 });
@@ -433,8 +435,9 @@ final peerFilesHostProvider = Provider<PeerFilesHost>((ref) {
     // to open, say): the read is then answered 502.
     backendFor: (id) {
       final record = stored().where((a) => a.account.id == id).firstOrNull;
-      final source =
-          record?.sources.where((s) => s.profile.isOwner).firstOrNull;
+      final source = record?.sources
+          .where((s) => s.profile.isOwner)
+          .firstOrNull;
       if (source == null) return null;
       final media = ref.read(mediaSourceProvider(source.id));
       return media is FilesMediaSource ? media.backend : null;

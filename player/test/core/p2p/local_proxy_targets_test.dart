@@ -23,10 +23,10 @@ void main() {
   setUp(() {
     p2p = TestP2pService()
       ..onSendHlsRequest = (_) async => testHlsResponse(
-            status: HttpStatus.ok,
-            contentType: 'application/vnd.apple.mpegurl',
-            data: utf8.encode('#EXTM3U\n'),
-          );
+        status: HttpStatus.ok,
+        contentType: 'application/vnd.apple.mpegurl',
+        data: utf8.encode('#EXTM3U\n'),
+      );
     proxy = LocalProxyService(p2p);
   });
 
@@ -47,27 +47,41 @@ void main() {
     await proxy.start(owner: download, targetPeer: 'peer-a', target: a);
 
     expect(proxy.targetBaseUrl(a), '${proxy.baseUrl}/t/$a');
-    expect(proxy.buildHlsUrl('s1', target: a),
-        '${proxy.baseUrl}/t/$a/hls/s1/index.m3u8');
+    expect(
+      proxy.buildHlsUrl('s1', target: a),
+      '${proxy.baseUrl}/t/$a/hls/s1/index.m3u8',
+    );
   });
 
   test('a path without a target prefix is not served', () async {
     await proxy.start(owner: download, targetPeer: 'peer-a', target: a);
 
     expect(
-        await get('${proxy.baseUrl}/hls/s1/index.m3u8'), HttpStatus.notFound);
+      await get('${proxy.baseUrl}/hls/s1/index.m3u8'),
+      HttpStatus.notFound,
+    );
     expect(await get('${proxy.baseUrl}/t/$a'), HttpStatus.notFound);
     expect(p2p.calls, isEmpty);
   });
 
   test('each target reaches its own peer with its own token', () async {
     await proxy.start(
-        owner: download, targetPeer: 'peer-a', authToken: 'tok-a', target: a);
+      owner: download,
+      targetPeer: 'peer-a',
+      authToken: 'tok-a',
+      target: a,
+    );
     await proxy.start(
-        owner: playback, targetPeer: 'peer-b', authToken: 'tok-b', target: b);
+      owner: playback,
+      targetPeer: 'peer-b',
+      authToken: 'tok-b',
+      target: b,
+    );
 
-    expect(await get(MediaRoutes.hls(proxy.targetBaseUrl(b), 's2')),
-        HttpStatus.ok);
+    expect(
+      await get(MediaRoutes.hls(proxy.targetBaseUrl(b), 's2')),
+      HttpStatus.ok,
+    );
     expect(await get(proxy.buildHlsUrl('s1', target: a)), HttpStatus.ok);
 
     expect(p2p.calls.map((c) => (c.peer, c.authToken, c.sessionId)), [
@@ -93,8 +107,10 @@ void main() {
 
     expect(proxy.isRunning, isTrue);
     expect(await get(proxy.buildHlsUrl('s1', target: a)), HttpStatus.ok);
-    expect(await get(MediaRoutes.hls('${proxy.baseUrl}/t/$b', 's2')),
-        HttpStatus.serviceUnavailable);
+    expect(
+      await get(MediaRoutes.hls('${proxy.baseUrl}/t/$b', 's2')),
+      HttpStatus.serviceUnavailable,
+    );
   });
 
   test('the server stops when the last target is released', () async {
@@ -136,8 +152,10 @@ void main() {
 
     expect(proxy.isRunning, isTrue);
     expect(await get(proxy.buildHlsUrl('s1', target: a)), HttpStatus.ok);
-    expect(await get(MediaRoutes.hls('${proxy.baseUrl}/t/$b', 's2')),
-        HttpStatus.serviceUnavailable);
+    expect(
+      await get(MediaRoutes.hls('${proxy.baseUrl}/t/$b', 's2')),
+      HttpStatus.serviceUnavailable,
+    );
   });
 
   test('release from an owner that holds nothing is a no-op', () async {
@@ -160,8 +178,10 @@ void main() {
   test('an unknown target answers 503', () async {
     await proxy.start(owner: download, targetPeer: 'peer-a', target: a);
 
-    expect(await get(MediaRoutes.hls('${proxy.baseUrl}/t/nobody', 's1')),
-        HttpStatus.serviceUnavailable);
+    expect(
+      await get(MediaRoutes.hls('${proxy.baseUrl}/t/nobody', 's1')),
+      HttpStatus.serviceUnavailable,
+    );
     expect(p2p.calls, isEmpty);
   });
 
@@ -188,7 +208,11 @@ void main() {
 
   test('a joiner keeps the target alive after its starter stops', () async {
     await proxy.start(
-        owner: playback, targetPeer: 'peer-a', authToken: 'tok-a', target: a);
+      owner: playback,
+      targetPeer: 'peer-a',
+      authToken: 'tok-a',
+      target: a,
+    );
 
     expect(proxy.joinTarget(download, target: a), isTrue);
     await proxy.stop(playback, target: a);
@@ -202,18 +226,23 @@ void main() {
     expect(proxy.isRunning, isFalse);
   });
 
-  test('joinTarget refuses a target that is not served, and holds nothing',
-      () async {
-    expect(proxy.joinTarget(download, target: a), isFalse);
-    expect(proxy.hasOwners, isFalse);
+  test(
+    'joinTarget refuses a target that is not served, and holds nothing',
+    () async {
+      expect(proxy.joinTarget(download, target: a), isFalse);
+      expect(proxy.hasOwners, isFalse);
 
-    await proxy.start(owner: playback, targetPeer: 'peer-b', target: b);
-    expect(proxy.joinTarget(download, target: a), isFalse);
+      await proxy.start(owner: playback, targetPeer: 'peer-b', target: b);
+      expect(proxy.joinTarget(download, target: a), isFalse);
 
-    await proxy.stop(playback, target: b);
-    expect(proxy.isRunning, isFalse,
-        reason: 'a refused join must not leave a lease behind');
-  });
+      await proxy.stop(playback, target: b);
+      expect(
+        proxy.isRunning,
+        isFalse,
+        reason: 'a refused join must not leave a lease behind',
+      );
+    },
+  );
 
   test('one owner holding two targets releases them independently', () async {
     await proxy.start(owner: playback, targetPeer: 'peer-a', target: a);
@@ -227,39 +256,46 @@ void main() {
     expect(proxy.isRunning, isFalse);
   });
 
-  test('joinTarget waits for the bind rather than claiming a port-0 proxy',
-      () async {
-    final starting =
-        proxy.start(owner: playback, targetPeer: 'peer-a', target: a);
+  test(
+    'joinTarget waits for the bind rather than claiming a port-0 proxy',
+    () async {
+      final starting = proxy.start(
+        owner: playback,
+        targetPeer: 'peer-a',
+        target: a,
+      );
 
-    expect(proxy.joinTarget(download, target: a), isFalse);
-    expect(proxy.isRunning, isFalse);
-    expect(proxy.port, 0);
+      expect(proxy.joinTarget(download, target: a), isFalse);
+      expect(proxy.isRunning, isFalse);
+      expect(proxy.port, 0);
 
-    await starting;
-    expect(proxy.joinTarget(download, target: a), isTrue);
+      await starting;
+      expect(proxy.joinTarget(download, target: a), isTrue);
 
-    await proxy.stop(playback, target: a);
-    expect(proxy.isRunning, isTrue);
-    await proxy.stop(download, target: a);
-    expect(proxy.isRunning, isFalse);
-  });
+      await proxy.stop(playback, target: a);
+      expect(proxy.isRunning, isTrue);
+      await proxy.stop(download, target: a);
+      expect(proxy.isRunning, isFalse);
+    },
+  );
 
-  test('concurrent starts for one target share a single bound server',
-      () async {
-    await Future.wait([
-      proxy.start(owner: playback, targetPeer: 'peer-a', target: a),
-      proxy.start(owner: download, targetPeer: 'peer-a', target: a),
-    ]);
-    final port = proxy.port;
-    expect(port, isNot(0));
+  test(
+    'concurrent starts for one target share a single bound server',
+    () async {
+      await Future.wait([
+        proxy.start(owner: playback, targetPeer: 'peer-a', target: a),
+        proxy.start(owner: download, targetPeer: 'peer-a', target: a),
+      ]);
+      final port = proxy.port;
+      expect(port, isNot(0));
 
-    await proxy.stop(playback, target: a);
-    expect(proxy.isRunning, isTrue);
-    expect(proxy.port, port);
-    expect(await get(proxy.buildHlsUrl('s1', target: a)), HttpStatus.ok);
+      await proxy.stop(playback, target: a);
+      expect(proxy.isRunning, isTrue);
+      expect(proxy.port, port);
+      expect(await get(proxy.buildHlsUrl('s1', target: a)), HttpStatus.ok);
 
-    await proxy.stop(download, target: a);
-    expect(proxy.isRunning, isFalse);
-  });
+      await proxy.stop(download, target: a);
+      expect(proxy.isRunning, isFalse);
+    },
+  );
 }

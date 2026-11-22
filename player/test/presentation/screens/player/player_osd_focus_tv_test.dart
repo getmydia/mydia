@@ -6,7 +6,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
@@ -163,7 +163,9 @@ Future<void> _mountPlayingScreen(WidgetTester tester) async {
   );
   // `pumpUntil`, not `pumpAndSettle`: the loading spinner never settles.
   await pumpUntil(
-      tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+    tester,
+    () => find.byType(PlaybackChrome).evaluate().isNotEmpty,
+  );
 }
 
 /// Waits for the OSD to be fully on screen, then for it to auto-hide itself.
@@ -204,14 +206,15 @@ void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
-          'flag (bool.fromEnvironment), so this file is a deliberate no-op '
-          'unless the whole test process is compiled with that define. CI '
-          'runs it explicitly in the "Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
+            'flag (bool.fromEnvironment), so this file is a deliberate no-op '
+            'unless the whole test process is compiled with that define. CI '
+            'runs it explicitly in the "Run television-tier tests" step.';
 
   group('OSD focus ownership (requires MYDIA_FORCE_TV=true)', () {
-    testWidgets('a supplied node owns focus on the play/pause button',
-        (tester) async {
+    testWidgets('a supplied node owns focus on the play/pause button', (
+      tester,
+    ) async {
       final playPause = FocusNode(debugLabel: 'osd-play-pause');
       addTearDown(playPause.dispose);
 
@@ -248,8 +251,9 @@ void main() {
       );
     });
 
-    testWidgets('ControlButton still works with no supplied node',
-        (tester) async {
+    testWidgets('ControlButton still works with no supplied node', (
+      tester,
+    ) async {
       var taps = 0;
       await tester.pumpWidget(
         MaterialApp(
@@ -257,7 +261,9 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: ControlButton(
-                icon: Icons.play_arrow_rounded, onTap: () => taps++),
+              icon: Icons.play_arrow_rounded,
+              onTap: () => taps++,
+            ),
           ),
         ),
       );
@@ -267,8 +273,7 @@ void main() {
       expect(taps, 1);
     });
 
-    testWidgets(
-        'hiding notifies the controller, which is what the player '
+    testWidgets('hiding notifies the controller, which is what the player '
         'listens to in order to take focus back', (tester) async {
       // The restore hangs off this notification, so it is the one dependency
       // of that logic that can be pinned without mounting PlayerScreen.
@@ -302,8 +307,7 @@ void main() {
       expect(notifications, greaterThan(0));
     });
 
-    testWidgets(
-        'revealing the OSD lands focus on play/pause, and the '
+    testWidgets('revealing the OSD lands focus on play/pause, and the '
         'auto-hide hands it back to the player', (tester) async {
       await _mountPlayingScreen(tester);
       final playerSurface = _playerSurfaceNode(tester);
@@ -314,7 +318,8 @@ void main() {
       expect(
         _chromeOpacity(tester),
         0.0,
-        reason: 'the chrome must be hidden for the reveal to be what moves '
+        reason:
+            'the chrome must be hidden for the reveal to be what moves '
             'focus; with it visible an arrow press traverses instead',
       );
 
@@ -324,7 +329,8 @@ void main() {
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
         'osd-play-pause',
-        reason: 'revealing the OSD must land the viewer on a real, ringed '
+        reason:
+            'revealing the OSD must land the viewer on a real, ringed '
             'control, not leave focus on the player node that paints nothing',
       );
 
@@ -345,13 +351,13 @@ void main() {
       expect(
         FocusManager.instance.primaryFocus,
         same(playerSurface),
-        reason: 'an auto-hidden OSD must hand focus back to the player so a '
+        reason:
+            'an auto-hidden OSD must hand focus back to the player so a '
             'later press cannot activate an invisible control',
       );
     });
 
-    testWidgets(
-        'the auto-hide restores focus from any chrome control, '
+    testWidgets('the auto-hide restores focus from any chrome control, '
         'not just play/pause', (tester) async {
       // Every chrome control is a focus stop under `ArrowIntent.traverse`, so
       // the viewer can be parked on, say, the subtitles button when the OSD
@@ -378,7 +384,8 @@ void main() {
       expect(
         traversed?.debugLabel,
         'ControlButton',
-        reason: 'the arrow must move focus to a sibling chrome control for '
+        reason:
+            'the arrow must move focus to a sibling chrome control for '
             'this test to exercise the restore from somewhere other than '
             'play/pause',
       );
@@ -390,13 +397,13 @@ void main() {
       expect(
         FocusManager.instance.primaryFocus,
         same(playerSurface),
-        reason: 'focus must come back from whatever chrome control held it, '
+        reason:
+            'focus must come back from whatever chrome control held it, '
             'not only from play/pause',
       );
     });
 
-    testWidgets(
-        'OK reveals the OSD when it is on screen but nothing in it '
+    testWidgets('OK reveals the OSD when it is on screen but nothing in it '
         'is focused', (tester) async {
       // Reachable without touching an arrow key: the remote's own play/pause
       // key calls `_chromeVisibility.show()` and moves no focus, leaving the
@@ -425,51 +432,61 @@ void main() {
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
         'osd-play-pause',
-        reason: 'OK over a visible but unfocused OSD must land on a control '
+        reason:
+            'OK over a visible but unfocused OSD must land on a control '
             'rather than doing nothing at all',
       );
     });
 
     testWidgets(
-        'D-pad presses keep the OSD up while playing, and it hides once '
-        'they stop', (tester) async {
-      // The reported defect: moving between OSD controls during playback,
-      // the OSD hid mid-navigation because arrow presses never restarted
-      // its countdown.
-      await _mountPlayingScreen(tester);
-      await _waitForChromeToHide(tester);
+      'D-pad presses keep the OSD up while playing, and it hides once '
+      'they stop',
+      (tester) async {
+        // The reported defect: moving between OSD controls during playback,
+        // the OSD hid mid-navigation because arrow presses never restarted
+        // its countdown.
+        await _mountPlayingScreen(tester);
+        await _waitForChromeToHide(tester);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump();
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'osd-play-pause');
-
-      // Twelve seconds of navigation, one press every three: well over the
-      // hide delay in total, never a gap as long as it. Alternating keeps
-      // focus moving without walking off the end of the row.
-      for (var i = 0; i < 4; i++) {
-        await tester.sendKeyEvent(i.isEven
-            ? LogicalKeyboardKey.arrowRight
-            : LogicalKeyboardKey.arrowLeft);
-        await tester.pump(const Duration(seconds: 3));
-        // A second frame: the hide's reverse fade does not reach 0.0 on the
-        // frame the timer fires, and the next arrow press would re-reveal the
-        // OSD anyway (LEFT/RIGHT seek while it is hidden, and seeking shows
-        // it), so without this the miss is invisible to the assertion.
-        await tester.pump(const Duration(milliseconds: 300));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
         expect(
-          _chromeOpacity(tester),
-          1.0,
-          reason: 'the OSD hid while the viewer was moving between its '
-              'controls (after press ${i + 1})',
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'osd-play-pause',
         );
-      }
 
-      await _waitForChromeToHide(tester);
-      expect(_chromeOpacity(tester), 0.0);
-    });
+        // Twelve seconds of navigation, one press every three: well over the
+        // hide delay in total, never a gap as long as it. Alternating keeps
+        // focus moving without walking off the end of the row.
+        for (var i = 0; i < 4; i++) {
+          await tester.sendKeyEvent(
+            i.isEven
+                ? LogicalKeyboardKey.arrowRight
+                : LogicalKeyboardKey.arrowLeft,
+          );
+          await tester.pump(const Duration(seconds: 3));
+          // A second frame: the hide's reverse fade does not reach 0.0 on the
+          // frame the timer fires, and the next arrow press would re-reveal the
+          // OSD anyway (LEFT/RIGHT seek while it is hidden, and seeking shows
+          // it), so without this the miss is invisible to the assertion.
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            _chromeOpacity(tester),
+            1.0,
+            reason:
+                'the OSD hid while the viewer was moving between its '
+                'controls (after press ${i + 1})',
+          );
+        }
 
-    testWidgets('repeated OK on a focused control keeps the OSD up',
-        (tester) async {
+        await _waitForChromeToHide(tester);
+        expect(_chromeOpacity(tester), 0.0);
+      },
+    );
+
+    testWidgets('repeated OK on a focused control keeps the OSD up', (
+      tester,
+    ) async {
       // OK on a focused control is consumed by that control and never
       // reaches the screen's key handler, so only a keyboard-level listener
       // can see it.
@@ -498,7 +515,8 @@ void main() {
         expect(
           _chromeOpacity(tester),
           1.0,
-          reason: 'the OSD hid while the viewer kept pressing OK '
+          reason:
+              'the OSD hid while the viewer kept pressing OK '
               '(after press ${i + 1})',
         );
       }
@@ -517,8 +535,7 @@ void main() {
     // has nothing to replay, and only the remembered control can bring UP
     // back to where the viewer was.
 
-    testWidgets(
-        'UP from the scrubber returns to the third transport control, '
+    testWidgets('UP from the scrubber returns to the third transport control, '
         'not the button geometry ranks nearest', (tester) async {
       await _mountPlayingScreen(tester);
       await _waitForChromeToHide(tester);
@@ -536,13 +553,13 @@ void main() {
       expect(
         _focusedControlKey(),
         TransportSurface.forward10Key,
-        reason: 'UP from the scrubber must land on the control the viewer '
+        reason:
+            'UP from the scrubber must land on the control the viewer '
             'last used, not the one geometry ranks nearest',
       );
     });
 
-    testWidgets(
-        'UP after a first scrub lands on play/pause when the bar has '
+    testWidgets('UP after a first scrub lands on play/pause when the bar has '
         'nothing to remember', (tester) async {
       // Playback starts, the OSD auto-hides, and the first press is a scrub:
       // the control bar has never held focus. Its lowest index is -10s here
@@ -555,8 +572,7 @@ void main() {
       expect(_focusedControlKey(), TransportSurface.playPauseKey);
     });
 
-    testWidgets(
-        'UP from the scrubber returns to a track button, across the '
+    testWidgets('UP from the scrubber returns to a track button, across the '
         'transport', (tester) async {
       await _mountPlayingScreen(tester);
       await _waitForChromeToHide(tester);
@@ -577,7 +593,8 @@ void main() {
       expect(
         _focusedControlKey(),
         SecondaryCluster.audioKey,
-        reason: 'the transport and the track buttons are one row; UP must '
+        reason:
+            'the transport and the track buttons are one row; UP must '
             'return to the track button, not stop in the transport',
       );
     });

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/connection/connection_summary.dart';
@@ -44,8 +44,9 @@ class ConnectionStatusDot extends ConsumerWidget {
     );
     final color = connectionToneColor(summary.tone);
     final tooltip = updatePending
-        ? context.l10n
-            .connectionUpdateAvailable(context.l10n.connectionLabel(summary))
+        ? context.l10n.connectionUpdateAvailable(
+            context.l10n.connectionLabel(summary),
+          )
         : context.l10n.connectionLabel(summary);
 
     // Pulse only while re-establishing a link that was previously up. A first
@@ -163,10 +164,7 @@ class _PulsingDotState extends State<_PulsingDot>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: widget.color,
-                border: Border.all(
-                  color: palette.surface,
-                  width: 1.5,
-                ),
+                border: Border.all(color: palette.surface, width: 1.5),
                 boxShadow: [
                   BoxShadow(
                     color: widget.color.withValues(alpha: 0.4),
@@ -176,11 +174,7 @@ class _PulsingDotState extends State<_PulsingDot>
                 ],
               ),
               child: widget.updatePending
-                  ? Icon(
-                      Icons.arrow_upward,
-                      size: 9,
-                      color: palette.surface,
-                    )
+                  ? Icon(Icons.arrow_upward, size: 9, color: palette.surface)
                   : null,
             ),
           );

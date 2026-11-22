@@ -38,7 +38,8 @@ import 'media_names.dart';
 import 'peer_files_sources.dart' show isPeerFilesSource;
 
 typedef FilesInvalidate = Future<void> Function(
-    Iterable<InvalidationTarget> targets);
+  Iterable<InvalidationTarget> targets,
+);
 
 /// TMDB image sizes, smallest first.
 const _posterBuckets = [92, 154, 185, 342, 500, 780];
@@ -66,33 +67,22 @@ class FilesMediaSource extends MediaSource
     required this.source,
     required this.backend,
     required this.index,
-    required PlaybackProgressStore progress,
+    required this._progress,
     required this.matcher,
-    required RelayTmdb tmdb,
-    PeerSyncStore? syncStore,
-    void Function()? onSyncMutation,
-    void Function()? onReauthNeeded,
-    FilesInvalidate? invalidate,
+    required this._tmdb,
+    this._syncStore,
+    this._onSyncMutation,
+    this._onReauthNeeded,
+    this._invalidate,
     AppLocalizations Function()? l10n,
-    void Function()? onDispose,
+    this._onDispose,
     String? syncAccountId,
-    String Function()? peerDeviceName,
-    void Function(String nodeId)? onPeerFilesChanged,
-    MediaProbe? probe,
-    FilesMediaInfoCache? mediaInfoCache,
-  })  : _peerDeviceName = peerDeviceName,
-        _probe = probe,
-        _mediaInfoCache = mediaInfoCache,
-        _onPeerFilesChanged = onPeerFilesChanged,
-        syncAccountId = syncAccountId ?? source.account.id,
-        _progress = progress,
-        _tmdb = tmdb,
-        _syncStore = syncStore,
-        _onSyncMutation = onSyncMutation,
-        _onReauthNeeded = onReauthNeeded,
-        _invalidate = invalidate,
-        _l10n = l10n ?? currentAppLocalizations,
-        _onDispose = onDispose {
+    this._peerDeviceName,
+    this._onPeerFilesChanged,
+    this._probe,
+    this._mediaInfoCache,
+  }) : syncAccountId = syncAccountId ?? source.account.id,
+       _l10n = l10n ?? currentAppLocalizations {
     _activeSources.add(this);
   }
 
@@ -142,10 +132,10 @@ class FilesMediaSource extends MediaSource
   void Function()? get onSyncMutation => _onSyncMutation;
 
   String? syncKeyFor(ItemRef ref) => syncKeyForFilesItem(
-        accountId: syncAccountId,
-        externalId: ref.externalId,
-        isEpisode: ref.kind == ItemKind.episode,
-      );
+    accountId: syncAccountId,
+    externalId: ref.externalId,
+    isEpisode: ref.kind == ItemKind.episode,
+  );
 
   /// The store this source reads positions from; playback writes through it.
   PlaybackProgressStore get progressStore => _progress;
@@ -177,17 +167,17 @@ class FilesMediaSource extends MediaSource
   /// this source, and the libraries, since Folders comes and goes with
   /// unmatched files.
   static Set<InvalidationTarget> groupLandedTargets(SourceId id) => {
-        for (final op in const [
-          SourceOps.libraries,
-          SourceOps.browse,
-          SourceOps.item,
-          SourceOps.children,
-          SourceOps.continueWatching,
-          SourceOps.recentlyAdded,
-          SourceOps.unwatched,
-        ])
-          SourceKeys.family(id, op),
-      };
+    for (final op in const [
+      SourceOps.libraries,
+      SourceOps.browse,
+      SourceOps.item,
+      SourceOps.children,
+      SourceOps.continueWatching,
+      SourceOps.recentlyAdded,
+      SourceOps.unwatched,
+    ])
+      SourceKeys.family(id, op),
+  };
 
   bool get _isNetworkShare => source.account.id != kFilesLocalAccountId;
 
@@ -199,18 +189,18 @@ class FilesMediaSource extends MediaSource
 
   @override
   Set<SourceCapability> get capabilities => {
-        SourceCapability.progressReporting,
-        SourceCapability.watchedState,
-        SourceCapability.searchable,
-        SourceCapability.continueWatching,
-        SourceCapability.nextUp,
-        SourceCapability.recentlyAdded,
-        SourceCapability.unwatchedListing,
-        SourceCapability.matchEditing,
-        SourceCapability.castable,
-        SourceCapability.mediaInfo,
-        if (_downloadable) SourceCapability.downloadable,
-      };
+    SourceCapability.progressReporting,
+    SourceCapability.watchedState,
+    SourceCapability.searchable,
+    SourceCapability.continueWatching,
+    SourceCapability.nextUp,
+    SourceCapability.recentlyAdded,
+    SourceCapability.unwatchedListing,
+    SourceCapability.matchEditing,
+    SourceCapability.castable,
+    SourceCapability.mediaInfo,
+    if (_downloadable) SourceCapability.downloadable,
+  };
 
   @override
   SourceConnectionStatus get connection => _status.value;
@@ -256,13 +246,13 @@ class FilesMediaSource extends MediaSource
   }
 
   FilesCatalog _catalog() => FilesCatalog.read(
-        sourceId: id,
-        index: index,
-        progress: _progress,
-        l10n: _l10n(),
-        syncStore: _syncStore,
-        accountId: syncAccountId,
-      );
+    sourceId: id,
+    index: index,
+    progress: _progress,
+    l10n: _l10n(),
+    syncStore: _syncStore,
+    accountId: syncAccountId,
+  );
 
   IndexedFile? indexedFile(String fileKey) => index.files()[fileKey];
 
@@ -302,19 +292,25 @@ class FilesMediaSource extends MediaSource
     switch (e) {
       case BackendNotFound():
         refresh();
-        return SourceException.fault(SourceFault.peerFilesFileGone,
-            detail: device);
+        return SourceException.fault(
+          SourceFault.peerFilesFileGone,
+          detail: device,
+        );
       case BackendUnauthorized() || BackendPermissionLost():
         refresh();
         return const SourceException.unauthorized();
       case BackendUnreachable(status: 502):
         // The host answered, so it is connected: the status stays as is.
-        return SourceException.fault(SourceFault.peerFilesShareDown,
-            detail: device);
+        return SourceException.fault(
+          SourceFault.peerFilesShareDown,
+          detail: device,
+        );
       case BackendUnreachable():
         reportReachability(e);
-        return SourceException.fault(SourceFault.peerFilesHostUnreachable,
-            detail: device);
+        return SourceException.fault(
+          SourceFault.peerFilesHostUnreachable,
+          detail: device,
+        );
     }
   }
 
@@ -341,7 +337,10 @@ class FilesMediaSource extends MediaSource
           kind: LibraryKind.videos,
           sortOptions: const [
             SortOption(
-                id: 'title', name: SortName.title, shared: SharedSort.title),
+              id: 'title',
+              name: SortName.title,
+              shared: SharedSort.title,
+            ),
           ],
         ),
     ];
@@ -537,8 +536,9 @@ class FilesMediaSource extends MediaSource
         final tmdbId = rec.key.substring('tmdb:movie:'.length);
         if (catalog.movies.containsKey(tmdbId)) {
           final mediaId = movieId(tmdbId);
-          candidates[mediaId] =
-              DateTime.fromMillisecondsSinceEpoch(rec.updatedAt);
+          candidates[mediaId] = DateTime.fromMillisecondsSinceEpoch(
+            rec.updatedAt,
+          );
         }
       } else if (rec.key.startsWith('tmdb:ep:')) {
         final parts = rec.key.split(':');
@@ -551,8 +551,9 @@ class FilesMediaSource extends MediaSource
               (catalog.shows[tmdbId]?.seasons[season]?.containsKey(episode) ??
                   false)) {
             final mediaId = episodeId(tmdbId, season, episode);
-            candidates[mediaId] =
-                DateTime.fromMillisecondsSinceEpoch(rec.updatedAt);
+            candidates[mediaId] = DateTime.fromMillisecondsSinceEpoch(
+              rec.updatedAt,
+            );
           }
         }
       } else if (rec.key.startsWith('file:')) {
@@ -561,8 +562,9 @@ class FilesMediaSource extends MediaSource
           final fileKey = parts[2];
           if (catalog.unmatched.containsKey(fileKey)) {
             final mediaId = unmatchedFileId(fileKey);
-            candidates[mediaId] =
-                DateTime.fromMillisecondsSinceEpoch(rec.updatedAt);
+            candidates[mediaId] = DateTime.fromMillisecondsSinceEpoch(
+              rec.updatedAt,
+            );
           }
         }
       }
@@ -627,10 +629,11 @@ class FilesMediaSource extends MediaSource
   // RecentlyAdded
 
   @override
-  Future<List<ItemSummary>> recentlyAdded() async =>
-      sortFilesItems(_catalog().allTitles(), 'added', descending: true)
-          .take(_rowLimit)
-          .toList();
+  Future<List<ItemSummary>> recentlyAdded() async => sortFilesItems(
+    _catalog().allTitles(),
+    'added',
+    descending: true,
+  ).take(_rowLimit).toList();
 
   // UnwatchedListing
 
@@ -641,8 +644,10 @@ class FilesMediaSource extends MediaSource
         if (!i.userState.watched) i,
     ];
     return filesPage(
-        sortFilesItems(items, 'added', descending: true), _pageOf50,
-        cursor: cursor);
+      sortFilesItems(items, 'added', descending: true),
+      _pageOf50,
+      cursor: cursor,
+    );
   }
 
   // MatchEditing
@@ -734,7 +739,7 @@ class FilesMediaSource extends MediaSource
     final detail = await this.item(item);
     final version = versionId != null
         ? (detail.versions.where((v) => v.id == versionId).firstOrNull ??
-            detail.versions.firstOrNull)
+              detail.versions.firstOrNull)
         : downloadVersion(detail);
     return version == null ? const [] : [originalOption(version)];
   }
@@ -742,9 +747,11 @@ class FilesMediaSource extends MediaSource
   @override
   Future<DownloadPlan> resolve(ItemRef ref, String optionId) async {
     final detail = await item(ref);
-    final version = downloadVersion(detail) ??
+    final version =
+        downloadVersion(detail) ??
         (throw const SourceException.unsupportedFault(
-            SourceFault.noFileToDownload));
+          SourceFault.noFileToDownload,
+        ));
     return _resolveVersion(version);
   }
 
@@ -756,10 +763,11 @@ class FilesMediaSource extends MediaSource
     final detail = await this.item(item);
     final version =
         detail.versions.where((v) => v.id == versionId).firstOrNull ??
-            detail.versions.firstOrNull;
+        detail.versions.firstOrNull;
     if (version == null) {
       throw const SourceException.unsupportedFault(
-          SourceFault.noFileToDownload);
+        SourceFault.noFileToDownload,
+      );
     }
     return _resolveVersion(version);
   }
@@ -768,7 +776,8 @@ class FilesMediaSource extends MediaSource
     final path = backendPathOfFileKey(version.id);
     if (path == null) {
       throw const SourceException.unsupportedFault(
-          SourceFault.noFileToDownload);
+        SourceFault.noFileToDownload,
+      );
     }
     try {
       final stat = await backend.stat(path);
@@ -787,12 +796,11 @@ class FilesMediaSource extends MediaSource
   }
 
   SourceException _backendException(BackendFailure e) => switch (e) {
-        BackendUnauthorized() ||
-        BackendPermissionLost() =>
-          const SourceException.unauthorized(),
-        BackendNotFound() => const SourceException.notFound(),
-        BackendUnreachable() => const SourceException.unreachable(),
-      };
+    BackendUnauthorized() ||
+    BackendPermissionLost() => const SourceException.unauthorized(),
+    BackendNotFound() => const SourceException.notFound(),
+    BackendUnreachable() => const SourceException.unreachable(),
+  };
 
   // MediaInfo
 
@@ -804,7 +812,8 @@ class FilesMediaSource extends MediaSource
       final file = indexedFile(version.id);
       final root = file == null ? null : rootFor(file);
       if (file == null || root == null) continue;
-      final probe = _mediaInfoCache?.get(source.account.id, file) ??
+      final probe =
+          _mediaInfoCache?.get(source.account.id, file) ??
           await probeFileKey(file.key);
       out.add(filesMediaFileInfo(file: file, root: root, probe: probe));
     }
@@ -879,8 +888,11 @@ extension FilesDownloadableExtension on Downloadable {
     DownloadOption option,
   ) {
     if (this is FilesMediaSource) {
-      return (this as FilesMediaSource)
-          .prepareDownload(item, versionId, option);
+      return (this as FilesMediaSource).prepareDownload(
+        item,
+        versionId,
+        option,
+      );
     }
     throw UnsupportedError('Only supported on FilesMediaSource');
   }

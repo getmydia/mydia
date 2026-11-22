@@ -11,15 +11,17 @@ final testOwner = Object();
 
 void main() {
   group('LocalProxyService LAN access', () {
-    test('resolveLanAddress returns a non-loopback IPv4 address or null',
-        () async {
-      final address = await LocalProxyService.resolveLanAddress();
+    test(
+      'resolveLanAddress returns a non-loopback IPv4 address or null',
+      () async {
+        final address = await LocalProxyService.resolveLanAddress();
 
-      if (address != null) {
-        expect(address, isNot(startsWith('127.')));
-        expect(address.split('.').length, 4);
-      }
-    });
+        if (address != null) {
+          expect(address, isNot(startsWith('127.')));
+          expect(address.split('.').length, 4);
+        }
+      },
+    );
 
     test('lanBaseUrl is null and isLanAccessible false before enabling', () {
       final service = LocalProxyService.forTesting();
@@ -31,7 +33,10 @@ void main() {
     test('buildHlsUrl uses loopback with no token prefix by default', () async {
       final service = LocalProxyService.forTesting();
       await service.start(
-          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
+        owner: testOwner,
+        targetPeer: 'peer-1',
+        target: 'macct',
+      );
       addTearDown(service.shutdown);
 
       final url = service.buildHlsUrl('sess-1', target: 'macct');
@@ -41,11 +46,13 @@ void main() {
       expect(url, isNot(contains('/g/')));
     });
 
-    test('enabling LAN access exposes a token-prefixed non-loopback URL',
-        () async {
+    test('enabling LAN access exposes a token-prefixed non-loopback URL', () async {
       final service = LocalProxyService.forTesting();
       await service.start(
-          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
+        owner: testOwner,
+        targetPeer: 'peer-1',
+        target: 'macct',
+      );
       addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
@@ -65,99 +72,144 @@ void main() {
     // A start that overlapped the rebind used to return with the old
     // loopback server, which the rebind then closed: its URL was dead on
     // arrival.
-    test('a start during a LAN rebind builds its URL on the rebound server',
-        () async {
-      final service = LocalProxyService.forTesting();
-      await service.start(
-          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
-      addTearDown(service.shutdown);
+    test(
+      'a start during a LAN rebind builds its URL on the rebound server',
+      () async {
+        final service = LocalProxyService.forTesting();
+        await service.start(
+          owner: testOwner,
+          targetPeer: 'peer-1',
+          target: 'macct',
+        );
+        addTearDown(service.shutdown);
 
-      final rebinding = service.setLanAccess(true);
-      await service.start(
-          owner: Object(), targetPeer: 'peer-1', target: 'macct');
-      final url = service.buildHlsUrl('sess-1', target: 'macct');
-      await rebinding;
+        final rebinding = service.setLanAccess(true);
+        await service.start(
+          owner: Object(),
+          targetPeer: 'peer-1',
+          target: 'macct',
+        );
+        final url = service.buildHlsUrl('sess-1', target: 'macct');
+        await rebinding;
 
-      expect(Uri.parse(url).port, service.port);
-      if (service.isLanAccessible) expect(url, startsWith(service.lanBaseUrl!));
-    });
+        expect(Uri.parse(url).port, service.port);
+        if (service.isLanAccessible) {
+          expect(url, startsWith(service.lanBaseUrl!));
+        }
+      },
+    );
 
-    test('a failed LAN bind does not leave the proxy claiming LAN access',
-        () async {
-      if (await LocalProxyService.resolveLanAddress() == null) return;
-      var binds = 0;
-      final service = LocalProxyService(P2pService(), bind: (address, port) {
-        if (++binds == 2) throw const SocketException('no sockets');
-        return HttpServer.bind(address, port);
-      });
-      await service.start(
-          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
-      addTearDown(service.shutdown);
+    test(
+      'a failed LAN bind does not leave the proxy claiming LAN access',
+      () async {
+        if (await LocalProxyService.resolveLanAddress() == null) return;
+        var binds = 0;
+        final service = LocalProxyService(
+          P2pService(),
+          bind: (address, port) {
+            if (++binds == 2) throw const SocketException('no sockets');
+            return HttpServer.bind(address, port);
+          },
+        );
+        await service.start(
+          owner: testOwner,
+          targetPeer: 'peer-1',
+          target: 'macct',
+        );
+        addTearDown(service.shutdown);
 
-      await expectLater(
-          service.setLanAccess(true), throwsA(isA<SocketException>()));
-      await service.start(
-          owner: Object(), targetPeer: 'peer-1', target: 'macct');
+        await expectLater(
+          service.setLanAccess(true),
+          throwsA(isA<SocketException>()),
+        );
+        await service.start(
+          owner: Object(),
+          targetPeer: 'peer-1',
+          target: 'macct',
+        );
 
-      expect(service.isLanAccessible, isFalse);
-      expect(service.lanBaseUrl, isNull);
-    });
+        expect(service.isLanAccessible, isFalse);
+        expect(service.lanBaseUrl, isNull);
+      },
+    );
 
-    test('a failed heal does not leave the proxy claiming LAN access',
-        () async {
-      if (await LocalProxyService.resolveLanAddress() == null) return;
-      var binds = 0;
-      final service = LocalProxyService(P2pService(), bind: (address, port) {
-        // start and the LAN rebind bind; every bind after that fails.
-        if (++binds > 2) throw const SocketException('no sockets');
-        return HttpServer.bind(address, port);
-      });
-      await service.start(
-          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
-      addTearDown(service.shutdown);
-      await service.setLanAccess(true);
-      expect(service.isLanAccessible, isTrue);
+    test(
+      'a failed heal does not leave the proxy claiming LAN access',
+      () async {
+        if (await LocalProxyService.resolveLanAddress() == null) return;
+        var binds = 0;
+        final service = LocalProxyService(
+          P2pService(),
+          bind: (address, port) {
+            // start and the LAN rebind bind; every bind after that fails.
+            if (++binds > 2) throw const SocketException('no sockets');
+            return HttpServer.bind(address, port);
+          },
+        );
+        await service.start(
+          owner: testOwner,
+          targetPeer: 'peer-1',
+          target: 'macct',
+        );
+        addTearDown(service.shutdown);
+        await service.setLanAccess(true);
+        expect(service.isLanAccessible, isTrue);
 
-      await service.debugDropListener();
-      await expectLater(
-          service.healListener(), throwsA(isA<SocketException>()));
-      binds = 0;
-      await service.start(
-          owner: Object(), targetPeer: 'peer-1', target: 'macct');
+        await service.debugDropListener();
+        await expectLater(
+          service.healListener(),
+          throwsA(isA<SocketException>()),
+        );
+        binds = 0;
+        await service.start(
+          owner: Object(),
+          targetPeer: 'peer-1',
+          target: 'macct',
+        );
 
-      expect(service.isLanAccessible, isFalse);
-      expect(service.lanBaseUrl, isNull);
-    });
+        expect(service.isLanAccessible, isFalse);
+        expect(service.lanBaseUrl, isNull);
+      },
+    );
 
-    test('requests without the token prefix are rejected when LAN-exposed',
-        () async {
-      final service = LocalProxyService.forTesting();
-      await service.start(
-          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
-      addTearDown(service.shutdown);
+    test(
+      'requests without the token prefix are rejected when LAN-exposed',
+      () async {
+        final service = LocalProxyService.forTesting();
+        await service.start(
+          owner: testOwner,
+          targetPeer: 'peer-1',
+          target: 'macct',
+        );
+        addTearDown(service.shutdown);
 
-      await service.setLanAccess(true);
-      if (!service.isLanAccessible) return;
+        await service.setLanAccess(true);
+        if (!service.isLanAccessible) return;
 
-      final response = await service.debugHandlePath('/hls/sess-1/index.m3u8');
+        final response = await service.debugHandlePath(
+          '/hls/sess-1/index.m3u8',
+        );
 
-      expect(response, 403);
-    });
+        expect(response, 403);
+      },
+    );
 
-    test('enabling LAN access on a proxy that was never started stays closed',
-        () async {
-      // `isLanAccessible` used to guard a different set of fields than
-      // `lanBaseUrl`, so this left the service claiming LAN reachability with
-      // no listener at all — and the cast error message then told the user to
-      // open "port 0" in their firewall.
-      final service = LocalProxyService.forTesting();
+    test(
+      'enabling LAN access on a proxy that was never started stays closed',
+      () async {
+        // `isLanAccessible` used to guard a different set of fields than
+        // `lanBaseUrl`, so this left the service claiming LAN reachability with
+        // no listener at all — and the cast error message then told the user to
+        // open "port 0" in their firewall.
+        final service = LocalProxyService.forTesting();
 
-      await service.setLanAccess(true);
+        await service.setLanAccess(true);
 
-      expect(service.isLanAccessible, isFalse);
-      expect(service.lanBaseUrl, isNull);
-      expect(service.port, 0);
-    });
+        expect(service.isLanAccessible, isFalse);
+        expect(service.lanBaseUrl, isNull);
+        expect(service.port, 0);
+      },
+    );
 
     test('a VPN or container interface is never advertised to a receiver', () {
       for (final name in const [
@@ -170,8 +222,11 @@ void main() {
         'wg0',
         'vmnet8',
       ]) {
-        expect(LocalProxyService.isNonLanInterface(name), isTrue,
-            reason: '$name is not reachable from a TV');
+        expect(
+          LocalProxyService.isNonLanInterface(name),
+          isTrue,
+          reason: '$name is not reachable from a TV',
+        );
       }
 
       for (final name in const ['en0', 'eth0', 'wlan0', 'wlp3s0']) {
@@ -193,7 +248,10 @@ void main() {
     test('disabling LAN access returns the proxy to loopback', () async {
       final service = LocalProxyService.forTesting();
       await service.start(
-          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
+        owner: testOwner,
+        targetPeer: 'peer-1',
+        target: 'macct',
+      );
       addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
@@ -202,7 +260,9 @@ void main() {
       expect(service.isLanAccessible, isFalse);
       expect(service.lanBaseUrl, isNull);
       expect(
-          service.buildHlsUrl('s', target: 'macct').contains('/g/'), isFalse);
+        service.buildHlsUrl('s', target: 'macct').contains('/g/'),
+        isFalse,
+      );
     });
   });
 }

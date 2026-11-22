@@ -2,7 +2,7 @@
 /// asking for a PIN when the user has one.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/plex/plex_providers.dart';
@@ -23,13 +23,15 @@ Future<void> showPlexHomeSheet(
   required ProviderAccount account,
   String? serverId,
   required ValueChanged<SourceId> onSwitched,
-}) =>
-    showGlassSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _PlexHomeSheet(
-          account: account, serverId: serverId, onSwitched: onSwitched),
-    );
+}) => showGlassSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  builder: (_) => _PlexHomeSheet(
+    account: account,
+    serverId: serverId,
+    onSwitched: onSwitched,
+  ),
+);
 
 class _PlexHomeSheet extends ConsumerStatefulWidget {
   const _PlexHomeSheet({
@@ -74,22 +76,29 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
     SourceId? next;
     Object? failure;
     Future<void> run(String? pin) async {
-      next = await switcher.switchTo(widget.account, user,
-          pin: pin, serverId: widget.serverId);
+      next = await switcher.switchTo(
+        widget.account,
+        user,
+        pin: pin,
+        serverId: widget.serverId,
+      );
     }
 
     if (user.protected) {
-      final done = await showPlexPinDialog(context, userName: user.title,
-          submit: (pin) async {
-        try {
-          await run(pin);
-        } on SourceException catch (e) {
-          return l10n.sourceError(e);
-        } catch (e) {
-          failure = e;
-        }
-        return null;
-      });
+      final done = await showPlexPinDialog(
+        context,
+        userName: user.title,
+        submit: (pin) async {
+          try {
+            await run(pin);
+          } on SourceException catch (e) {
+            return l10n.sourceError(e);
+          } catch (e) {
+            failure = e;
+          }
+          return null;
+        },
+      );
       if (!done) {
         if (mounted) setState(() => _busy = false);
         return;
@@ -131,7 +140,8 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final activeId = ref
+    final activeId =
+        ref
             .watch(sourcesProvider)
             .where((s) => s.account.id == widget.account.id)
             .firstOrNull
@@ -184,9 +194,11 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
                         key: Key('plex-home-user-${user.profileId}'),
                         enabled: !_busy,
                         leading: CircleAvatar(
-                          child: Text(user.title.isEmpty
-                              ? '?'
-                              : user.title.characters.first.toUpperCase()),
+                          child: Text(
+                            user.title.isEmpty
+                                ? '?'
+                                : user.title.characters.first.toUpperCase(),
+                          ),
                         ),
                         title: Text(user.title),
                         selected: user.profileId == activeId,

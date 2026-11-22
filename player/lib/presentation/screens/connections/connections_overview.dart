@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/p2p/p2p_service.dart';
@@ -62,7 +62,15 @@ class ConnectionServer {
 
   @override
   int get hashCode => Object.hash(
-      record, kind, name, host, serverCount, status, locked, inAllServers);
+    record,
+    kind,
+    name,
+    host,
+    serverCount,
+    status,
+    locked,
+    inAllServers,
+  );
 }
 
 @immutable
@@ -130,13 +138,14 @@ class ConnectionsOverview {
 
   @override
   int get hashCode => Object.hash(
-      localName,
-      localPlatform,
-      Object.hashAll(servers),
-      Object.hashAll(devices),
-      isPaired,
-      serversFailed,
-      serversLoading);
+    localName,
+    localPlatform,
+    Object.hashAll(servers),
+    Object.hashAll(devices),
+    isPaired,
+    serversFailed,
+    serversLoading,
+  );
 }
 
 IconData connectionPlatformIcon(String platform) {
@@ -178,7 +187,8 @@ final connectionsOverviewProvider = Provider<ConnectionsOverview>((ref) {
   switch (records) {
     case AsyncData(:final value):
       for (final r in value.accounts) {
-        final hidden = r.servers.isNotEmpty &&
+        final hidden =
+            r.servers.isNotEmpty &&
             r.servers.every((sv) => r.lockOf(sv.id) == SourceLock.hidden);
         if (!unlocked && hidden) continue;
         servers.add(_serverOf(r, choices));
@@ -219,7 +229,7 @@ final connectionsOverviewProvider = Provider<ConnectionsOverview>((ref) {
 ConnectionServer _serverOf(SourceAccountRecord r, Map<SourceId, bool> choices) {
   final live = [
     for (final s in r.servers)
-      if (!s.gone) s
+      if (!s.gone) s,
   ];
   final ConnectionStatus status;
   if (r.account.needsReauth) {

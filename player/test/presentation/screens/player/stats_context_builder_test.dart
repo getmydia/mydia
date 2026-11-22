@@ -80,9 +80,7 @@ void main() {
       lastFallback: null,
       // Not `const`: FailureKey overrides `==`, so a const set literal
       // fails constant evaluation ("does not have a primitive equality").
-      knownFailures: {
-        const FailureKey(videoCodec: 'hevc', heightBucket: 2160),
-      },
+      knownFailures: {const FailureKey(videoCodec: 'hevc', heightBucket: 2160)},
       sourceHeight: 2160,
       sourceCodec: 'hevc',
       sourceBitrateKbps: 14200,
@@ -131,10 +129,7 @@ void main() {
     );
 
     expect(context.why, const StatsWhyFallback(FailureReason.bandwidth));
-    expect(
-      context.whyDetail,
-      'bandwidth: buffer drained for 4 samples',
-    );
+    expect(context.whyDetail, 'bandwidth: buffer drained for 4 samples');
   });
 
   // The bug this gate fixes: a fallback from earlier this session must not
@@ -142,8 +137,7 @@ void main() {
   // unrelated reason (here, a manual quality cap), the Why row has to
   // report *that* plan, not the stale fallback message, and the clipboard's
   // detail line must not carry the stale fallback either.
-  test(
-      'stale fallback data is omitted once the plan has moved on to a '
+  test('stale fallback data is omitted once the plan has moved on to a '
       'different reason', () {
     final context = buildStatsContext(
       plan: const HlsPlan(
@@ -265,8 +259,7 @@ void main() {
   // and consulted `knownFailures` for every Auto/Original transcode) this
   // exact fixture -- same codec, mismatched height bucket, a non-decode
   // reason -- would have returned 'Remembered decode failure on hevc'.
-  test(
-      'a mismatched-resolution memory entry does not narrate an unrelated '
+  test('a mismatched-resolution memory entry does not narrate an unrelated '
       'bandwidth transcode', () {
     final context = buildStatsContext(
       plan: const HlsPlan(
@@ -284,9 +277,7 @@ void main() {
       // 1080p, not the 2160p this file actually is. `FailureKey` and
       // `FileShape` key on codec plus height bucket together, so this must
       // not match.
-      knownFailures: {
-        const FailureKey(videoCodec: 'hevc', heightBucket: 1080),
-      },
+      knownFailures: {const FailureKey(videoCodec: 'hevc', heightBucket: 1080)},
       sourceHeight: 2160,
       sourceCodec: 'hevc',
       sourceBitrateKbps: 14200,
@@ -304,39 +295,33 @@ void main() {
   test('a recent stall says how long ago it happened', () {
     final now = DateTime.utc(2026, 9, 18, 12);
     StatsContext build(Duration ago) => buildStatsContext(
-          plan: const HlsPlan(
-            strategy: HlsStrategy.transcode,
-            rung: _r720,
-            adaptive: true,
-            reason: PlanReason.recentStallOnPath,
-          ),
-          isDownloadedSource: false,
-          selectedQuality: QualityRung.auto,
-          effectiveQuality: _r720,
-          duration: const Duration(minutes: 90),
-          lastFallback: null,
-          knownFailures: const {},
-          sourceHeight: 2160,
-          sourceCodec: 'hevc',
-          sourceBitrateKbps: 14200,
-          sourceContainer: 'mkv',
-          videoTrack: null,
-          audioTrack: null,
-          linkLabel: 'Connected through a relay - 1 peer',
-          linkHealthy: false,
-          recentStall: StallRecord(ceilingKbps: 6000, at: now.subtract(ago)),
-          now: now,
-        );
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: _r720,
+        adaptive: true,
+        reason: PlanReason.recentStallOnPath,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.auto,
+      effectiveQuality: _r720,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 2160,
+      sourceCodec: 'hevc',
+      sourceBitrateKbps: 14200,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'Connected through a relay - 1 peer',
+      linkHealthy: false,
+      recentStall: StallRecord(ceilingKbps: 6000, at: now.subtract(ago)),
+      now: now,
+    );
 
-    expect(
-      build(const Duration(minutes: 12)).why,
-      const StatsWhyStalled(12),
-    );
+    expect(build(const Duration(minutes: 12)).why, const StatsWhyStalled(12));
     // Under a minute still reads as a minute, never "0 min ago".
-    expect(
-      build(const Duration(seconds: 20)).why,
-      const StatsWhyStalled(1),
-    );
+    expect(build(const Duration(seconds: 20)).why, const StatsWhyStalled(1));
   });
 
   test('a browser MIME rejection explains the re-encode', () {
@@ -425,33 +410,35 @@ void main() {
     expect(context.why, const StatsWhyPlain(StatsWhyKind.serverReencoding));
   });
 
-  test('web reads its own inherent limit, not a file or connection problem',
-      () {
-    final context = buildStatsContext(
-      plan: const HlsPlan(
-        strategy: HlsStrategy.transcode,
-        rung: QualityRung.original,
-        adaptive: false,
-        reason: PlanReason.webNeverDirectPlays,
-      ),
-      isDownloadedSource: false,
-      selectedQuality: QualityRung.auto,
-      effectiveQuality: null,
-      duration: const Duration(minutes: 90),
-      lastFallback: null,
-      knownFailures: const {},
-      sourceHeight: 1080,
-      sourceCodec: 'h264',
-      sourceBitrateKbps: 8000,
-      sourceContainer: 'mkv',
-      videoTrack: null,
-      audioTrack: null,
-      linkLabel: 'direct p2p - 1 peer',
-      linkHealthy: true,
-    );
+  test(
+    'web reads its own inherent limit, not a file or connection problem',
+    () {
+      final context = buildStatsContext(
+        plan: const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: QualityRung.original,
+          adaptive: false,
+          reason: PlanReason.webNeverDirectPlays,
+        ),
+        isDownloadedSource: false,
+        selectedQuality: QualityRung.auto,
+        effectiveQuality: null,
+        duration: const Duration(minutes: 90),
+        lastFallback: null,
+        knownFailures: const {},
+        sourceHeight: 1080,
+        sourceCodec: 'h264',
+        sourceBitrateKbps: 8000,
+        sourceContainer: 'mkv',
+        videoTrack: null,
+        audioTrack: null,
+        linkLabel: 'direct p2p - 1 peer',
+        linkHealthy: true,
+      );
 
-    expect(context.why, const StatsWhyPlain(StatsWhyKind.browserReencodes));
-  });
+      expect(context.why, const StatsWhyPlain(StatsWhyKind.browserReencodes));
+    },
+  );
 
   // Also unreachable in a real session: `_fallbackToTranscode` sets
   // `lastFallback` in the same breath as a plan carrying this reason, so
@@ -592,25 +579,24 @@ void main() {
       required PlaybackPlan? plan,
       bool downloaded = false,
       ({String format, int? dvProfile})? sourceHdr,
-    }) =>
-        buildStatsContext(
-          plan: plan,
-          isDownloadedSource: downloaded,
-          selectedQuality: QualityRung.original,
-          effectiveQuality: null,
-          duration: const Duration(minutes: 90),
-          lastFallback: null,
-          knownFailures: const {},
-          sourceHeight: 2160,
-          sourceCodec: 'hevc',
-          sourceBitrateKbps: 14200,
-          sourceContainer: 'mkv',
-          videoTrack: null,
-          audioTrack: null,
-          linkLabel: null,
-          linkHealthy: true,
-          sourceHdr: sourceHdr,
-        );
+    }) => buildStatsContext(
+      plan: plan,
+      isDownloadedSource: downloaded,
+      selectedQuality: QualityRung.original,
+      effectiveQuality: null,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 2160,
+      sourceCodec: 'hevc',
+      sourceBitrateKbps: 14200,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: null,
+      linkHealthy: true,
+      sourceHdr: sourceHdr,
+    );
 
     test('HDR10 on direct play is tonemapped by the player', () {
       final context = build(
@@ -623,22 +609,24 @@ void main() {
       );
     });
 
-    test('Dolby Vision profile 8 on a transcode is tonemapped by the server',
-        () {
-      final context = build(
-        plan: const HlsPlan(
-          strategy: HlsStrategy.transcode,
-          rung: _r1080,
-          adaptive: true,
-          reason: PlanReason.shapeKnownToFail,
-        ),
-        sourceHdr: (format: 'Dolby Vision', dvProfile: 8),
-      );
-      expect(
-        context.hdr,
-        const StatsHdr(format: 'Dolby Vision 8', by: HdrTonemapper.server),
-      );
-    });
+    test(
+      'Dolby Vision profile 8 on a transcode is tonemapped by the server',
+      () {
+        final context = build(
+          plan: const HlsPlan(
+            strategy: HlsStrategy.transcode,
+            rung: _r1080,
+            adaptive: true,
+            reason: PlanReason.shapeKnownToFail,
+          ),
+          sourceHdr: (format: 'Dolby Vision', dvProfile: 8),
+        );
+        expect(
+          context.hdr,
+          const StatsHdr(format: 'Dolby Vision 8', by: HdrTonemapper.server),
+        );
+      },
+    );
 
     test('Dolby Vision profile 5 on a transcode names no tonemapper', () {
       final context = build(

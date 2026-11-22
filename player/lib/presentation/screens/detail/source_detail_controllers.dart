@@ -40,7 +40,9 @@ MediaSource _source(Ref ref, SourceId id) =>
 /// StateError; once [buildRef] is stale that error belongs to nobody, so it
 /// becomes null. While the build is current every error still surfaces.
 Future<T?> _awaitWhileCurrent<T>(
-    Ref buildRef, Future<T> Function() load) async {
+  Ref buildRef,
+  Future<T> Function() load,
+) async {
   try {
     return await load();
   } catch (_) {
@@ -56,7 +58,8 @@ StateError _staleBuild() => StateError('the build was replaced while loading');
 /// The capability [T] of [item]'s source, read without watching so it is safe
 /// at write time. Throws when the source has gone or lacks it.
 T _capability<T extends Object>(Ref ref, ItemRef item) {
-  final source = ref.read(mediaSourceProvider(item.sourceId)) ??
+  final source =
+      ref.read(mediaSourceProvider(item.sourceId)) ??
       (throw const SourceException.notFound());
   return source.as<T>() ?? (throw StateError('the source does not support $T'));
 }
@@ -71,9 +74,11 @@ void Function() _invalidator(Ref ref, ItemRef item) {
 /// The favorite rule, captured the same way as [_invalidator].
 void Function() _favoriteInvalidator(Ref ref, ItemRef item) {
   final container = ref.container;
-  return () => unawaited(container
-      .read(invalidatorProvider)
-      .invalidate(SourceRules.favoriteChanged(item.sourceId)));
+  return () => unawaited(
+    container
+        .read(invalidatorProvider)
+        .invalidate(SourceRules.favoriteChanged(item.sourceId)),
+  );
 }
 
 /// Progress or watched state of [item] changed, here or in the player. The
@@ -108,7 +113,9 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
     final buildRef = ref;
     final source = _source(ref, item.sourceId);
     final detail = await _awaitWhileCurrent(
-        buildRef, () => ref.watch(sourceItemProvider(item).future));
+      buildRef,
+      () => ref.watch(sourceItemProvider(item).future),
+    );
     if (detail == null) return;
     // Cast and trailer arrive with the item on both servers, so there is no
     // second fetch to yield after this one.
@@ -282,8 +289,10 @@ class SourceSeasonNotifier extends AsyncNotifier<List<EpisodeView>>
       throw const SourceException.notFound();
     }
     _season = seasonTarget.ref;
-    final children = await _awaitWhileCurrent(buildRef,
-        () => ref.watch(sourceChildrenProvider(seasonTarget.ref).future));
+    final children = await _awaitWhileCurrent(
+      buildRef,
+      () => ref.watch(sourceChildrenProvider(seasonTarget.ref).future),
+    );
     if (children == null) throw _staleBuild();
     final features = sourceFeatures(source);
     final poster = head.poster;
@@ -332,27 +341,22 @@ class SourceSeasonNotifier extends AsyncNotifier<List<EpisodeView>>
       EpisodeWatchedAction.watched => ([episode], true),
       EpisodeWatchedAction.unwatched => ([episode], false),
       EpisodeWatchedAction.thisAndPrevious => (
-          [
-            for (final e in loaded)
-              if (e.episodeNumber <= episode.episodeNumber) e,
-          ],
-          true,
-        ),
+        [
+          for (final e in loaded)
+            if (e.episodeNumber <= episode.episodeNumber) e,
+        ],
+        true,
+      ),
     };
     final ids = {for (final e in targets) e.target};
-    await _write(
-      loaded,
-      (e) => ids.contains(e.target),
-      watched,
-      () async {
-        for (final e in targets) {
-          final target = e.target;
-          if (target is SourceTarget) {
-            await watchedState.setWatched(target.ref, watched);
-          }
+    await _write(loaded, (e) => ids.contains(e.target), watched, () async {
+      for (final e in targets) {
+        final target = e.target;
+        if (target is SourceTarget) {
+          await watchedState.setWatched(target.ref, watched);
         }
-      },
-    );
+      }
+    });
   }
 
   @override
@@ -389,7 +393,9 @@ class SourceEpisodeNotifier extends AsyncNotifier<EpisodeView>
     final buildRef = ref;
     final source = _source(ref, item.sourceId);
     final detail = await _awaitWhileCurrent(
-        buildRef, () => ref.watch(sourceItemProvider(item).future));
+      buildRef,
+      () => ref.watch(sourceItemProvider(item).future),
+    );
     if (detail == null) throw _staleBuild();
     return episodeViewFromSourceDetail(
       detail,
@@ -412,27 +418,27 @@ final sourceShowProvider = StreamNotifierProvider.autoDispose
 
 final sourceSeasonProvider = AsyncNotifierProvider.autoDispose
     .family<SourceSeasonNotifier, List<EpisodeView>, SourceSeasonKey>(
-        SourceSeasonNotifier.new);
+      SourceSeasonNotifier.new,
+    );
 
 final sourceEpisodeProvider = AsyncNotifierProvider.autoDispose
     .family<SourceEpisodeNotifier, EpisodeView, ItemRef>(
-        SourceEpisodeNotifier.new);
+      SourceEpisodeNotifier.new,
+    );
 
 /// Empty for a source without the capability. No automatic retry: a failed
 /// rail stays hidden rather than polling a down server.
-final sourceSimilarProvider =
-    StreamProvider.autoDispose.family<List<ItemSummary>, ItemRef>(
-  (ref, item) {
-    final similar =
-        ref.watch(mediaSourceProvider(item.sourceId))?.as<Similar>();
-    if (similar == null) return Stream.value(const []);
-    return createSourceWatcher(
-      ref,
-      key: SourceKeys.similar(item),
-      fetch: () => similar.similar(item),
-      encode: encodeSummaries,
-      decode: decodeSummaries,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
+final sourceSimilarProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, ItemRef>((ref, item) {
+      final similar = ref
+          .watch(mediaSourceProvider(item.sourceId))
+          ?.as<Similar>();
+      if (similar == null) return Stream.value(const []);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.similar(item),
+        fetch: () => similar.similar(item),
+        encode: encodeSummaries,
+        decode: decodeSummaries,
+      ).stream;
+    }, retry: (_, _) => null);

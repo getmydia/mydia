@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
 import '../../core/theme/palette.dart';
 import '../../l10n/l10n.dart';
 import 'focus_highlight.dart';
@@ -185,8 +186,9 @@ class TvKeypad extends StatelessWidget {
                   Icon(
                     icon,
                     size: 16,
-                    color:
-                        enabled ? palette.textSecondary : palette.textDisabled,
+                    color: enabled
+                        ? palette.textSecondary
+                        : palette.textDisabled,
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -194,8 +196,9 @@ class TvKeypad extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color:
-                          enabled ? palette.textPrimary : palette.textDisabled,
+                      color: enabled
+                          ? palette.textPrimary
+                          : palette.textDisabled,
                     ),
                   ),
                 ],

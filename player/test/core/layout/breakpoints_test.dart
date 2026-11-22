@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/breakpoints.dart';
 
@@ -42,19 +42,20 @@ void main() {
       }
     });
 
-    testWidgets('card width increases mobile → tablet → desktop',
-        (tester) async {
+    testWidgets('card width increases mobile → tablet → desktop', (
+      tester,
+    ) async {
       // Read each size immediately after its pump — re-pumping deactivates the
       // previous probe context and its MediaQuery.
       final mobileWidth0 = Breakpoints.getEpisodeCardSize(
-              await _contextAtWidth(tester, mobileWidth))
-          .width;
+        await _contextAtWidth(tester, mobileWidth),
+      ).width;
       final tabletWidth0 = Breakpoints.getEpisodeCardSize(
-              await _contextAtWidth(tester, tabletWidth))
-          .width;
+        await _contextAtWidth(tester, tabletWidth),
+      ).width;
       final desktopWidth0 = Breakpoints.getEpisodeCardSize(
-              await _contextAtWidth(tester, desktopWidth))
-          .width;
+        await _contextAtWidth(tester, desktopWidth),
+      ).width;
 
       expect(mobileWidth0, lessThan(tabletWidth0));
       expect(tabletWidth0, lessThan(desktopWidth0));
@@ -63,24 +64,26 @@ void main() {
 
   group('Breakpoints.getEpisodeRailHeight', () {
     testWidgets(
-        'exceeds the card height at each tier (room for the label strip)',
-        (tester) async {
-      for (final width in [mobileWidth, tabletWidth, desktopWidth]) {
-        final context = await _contextAtWidth(tester, width);
-        final railHeight = Breakpoints.getEpisodeRailHeight(context);
-        final cardHeight = Breakpoints.getEpisodeCardSize(context).height;
-        expect(
-          railHeight,
-          greaterThan(cardHeight),
-          reason: 'rail height should exceed card height at width $width',
-        );
-      }
-    });
+      'exceeds the card height at each tier (room for the label strip)',
+      (tester) async {
+        for (final width in [mobileWidth, tabletWidth, desktopWidth]) {
+          final context = await _contextAtWidth(tester, width);
+          final railHeight = Breakpoints.getEpisodeRailHeight(context);
+          final cardHeight = Breakpoints.getEpisodeCardSize(context).height;
+          expect(
+            railHeight,
+            greaterThan(cardHeight),
+            reason: 'rail height should exceed card height at width $width',
+          );
+        }
+      },
+    );
   });
 
   group('getDownloadedEpisodeRailHeight', () {
-    testWidgets('exceeds the episode rail height at every breakpoint',
-        (tester) async {
+    testWidgets('exceeds the episode rail height at every breakpoint', (
+      tester,
+    ) async {
       for (final width in <double>[400, 800, 1400]) {
         late double downloadsHeight;
         late double showHeight;
@@ -90,8 +93,9 @@ void main() {
             data: MediaQueryData(size: Size(width, 900)),
             child: Builder(
               builder: (context) {
-                downloadsHeight =
-                    Breakpoints.getDownloadedEpisodeRailHeight(context);
+                downloadsHeight = Breakpoints.getDownloadedEpisodeRailHeight(
+                  context,
+                );
                 showHeight = Breakpoints.getEpisodeRailHeight(context);
                 return const SizedBox.shrink();
               },

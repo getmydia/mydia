@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,7 +32,10 @@ class _Harness {
       calls.lastWhere((c) => c.method == method).arguments;
 
   Future<void> fromNative(
-      WidgetTester tester, String method, Object? args) async {
+    WidgetTester tester,
+    String method,
+    Object? args,
+  ) async {
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
       _name,
       const StandardMethodCodec().encodeMethodCall(MethodCall(method, args)),
@@ -53,56 +56,70 @@ Future<_Harness> _pump(
 
   final calls = <MethodCall>[];
   final navigated = <String>[];
-  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel,
-      (call) async {
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (
+    call,
+  ) async {
     calls.add(call);
     return null;
   });
-  addTearDown(() => tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(_channel, null));
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      _channel,
+      null,
+    ),
+  );
 
   final media = FakeMediaSource();
   final other = FakeMediaSource(id: _otherId);
-  final container = ProviderContainer(overrides: [
-    nativeTabBarChannelProvider.overrideWith((ref) {
-      final channel = NativeTabBarChannel(channel: _channel);
-      ref.onDispose(channel.dispose);
-      return channel;
-    }),
-    sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
-    // Two servers, so the switcher (and its picker) has a choice to offer.
-    sourcesProvider.overrideWithValue([media.source, other.source]),
-    hasMydiaProvider.overrideWithValue(false),
-    mediaSourceProvider(fakeSourceId).overrideWithValue(media),
-    mediaSourceProvider(_otherId).overrideWithValue(other),
-    allServersSourcesProvider.overrideWithValue([media, other]),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      nativeTabBarChannelProvider.overrideWith((ref) {
+        final channel = NativeTabBarChannel(channel: _channel);
+        ref.onDispose(channel.dispose);
+        return channel;
+      }),
+      sidebarLayoutStoreProvider.overrideWithValue(
+        InMemorySidebarLayoutStore(),
+      ),
+      // Two servers, so the switcher (and its picker) has a choice to offer.
+      sourcesProvider.overrideWithValue([media.source, other.source]),
+      hasMydiaProvider.overrideWithValue(false),
+      mediaSourceProvider(fakeSourceId).overrideWithValue(media),
+      mediaSourceProvider(_otherId).overrideWithValue(other),
+      allServersSourcesProvider.overrideWithValue([media, other]),
+    ],
+  );
   addTearDown(container.dispose);
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: NativeSidebarHost(
-          location: location,
-          onNavigate: navigated.add,
-          visible: true,
-          isOffline: false,
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: NativeSidebarHost(
+            location: location,
+            onNavigate: navigated.add,
+            visible: true,
+            isOffline: false,
+          ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return _Harness(calls, navigated, container);
 }
 
 void main() {
-  testWidgets('sends the sidebar, the selection and visibility',
-      (tester) async {
-    final h =
-        await _pump(tester, location: '/s/acc1:owner:aa11/library/movies');
+  testWidgets('sends the sidebar, the selection and visibility', (
+    tester,
+  ) async {
+    final h = await _pump(
+      tester,
+      location: '/s/acc1:owner:aa11/library/movies',
+    );
     // Order varies: the first build can precede the nav entries settling.
     expect(h.methods, containsAll(['setSidebar', 'select', 'setVisible']));
     final payload = h.last('setSidebar') as Map;

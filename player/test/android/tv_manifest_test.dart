@@ -15,31 +15,35 @@ void main() {
   late String manifest;
 
   setUpAll(() {
-    manifest =
-        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    manifest = File('android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
   });
 
-  test('declares leanback as an optional feature, so one bundle serves both',
-      () {
-    expect(
-      manifest,
-      contains(
-        '<uses-feature android:name="android.software.leanback" '
-        'android:required="false"/>',
-      ),
-    );
-  });
+  test(
+    'declares leanback as an optional feature, so one bundle serves both',
+    () {
+      expect(
+        manifest,
+        contains(
+          '<uses-feature android:name="android.software.leanback" '
+          'android:required="false"/>',
+        ),
+      );
+    },
+  );
 
-  test('declares touchscreen optional, without which Google TV filters the app',
-      () {
-    expect(
-      manifest,
-      contains(
-        '<uses-feature android:name="android.hardware.touchscreen" '
-        'android:required="false"/>',
-      ),
-    );
-  });
+  test(
+    'declares touchscreen optional, without which Google TV filters the app',
+    () {
+      expect(
+        manifest,
+        contains(
+          '<uses-feature android:name="android.hardware.touchscreen" '
+          'android:required="false"/>',
+        ),
+      );
+    },
+  );
 
   test('MainActivity carries the leanback launcher category', () {
     expect(
@@ -57,8 +61,10 @@ void main() {
     );
   });
 
-  test('declares a banner, which the leanback launcher requires to draw a tile',
-      () {
-    expect(manifest, contains('android:banner="@drawable/tv_banner"'));
-  });
+  test(
+    'declares a banner, which the leanback launcher requires to draw a tile',
+    () {
+      expect(manifest, contains('android:banner="@drawable/tv_banner"'));
+    },
+  );
 }

@@ -12,8 +12,11 @@ const kSmb1OnlyReason = 'smb1-only';
 
 /// Where a share lives.
 class SmbTarget {
-  const SmbTarget(
-      {required this.host, required this.port, required this.share});
+  const SmbTarget({
+    required this.host,
+    required this.port,
+    required this.share,
+  });
 
   final String host;
   final int port;
@@ -77,16 +80,16 @@ class FfiSmbNative implements SmbNative {
   }
 
   static BackendFailure _mapError(native.FfiSmbError e) => switch (e.kind) {
-        native.FfiSmbErrorKind.unauthorized => const BackendUnauthorized(),
-        native.FfiSmbErrorKind.accessDenied => BackendPermissionLost(e.message),
-        native.FfiSmbErrorKind.notFound => BackendNotFound(e.message),
-        native.FfiSmbErrorKind.smb1Only =>
-          const BackendUnreachable(kSmb1OnlyReason),
-        native.FfiSmbErrorKind.unreachable ||
-        native.FfiSmbErrorKind.unsupported ||
-        native.FfiSmbErrorKind.other =>
-          BackendUnreachable(e.message),
-      };
+    native.FfiSmbErrorKind.unauthorized => const BackendUnauthorized(),
+    native.FfiSmbErrorKind.accessDenied => BackendPermissionLost(e.message),
+    native.FfiSmbErrorKind.notFound => BackendNotFound(e.message),
+    native.FfiSmbErrorKind.smb1Only => const BackendUnreachable(
+      kSmb1OnlyReason,
+    ),
+    native.FfiSmbErrorKind.unreachable ||
+    native.FfiSmbErrorKind.unsupported ||
+    native.FfiSmbErrorKind.other => BackendUnreachable(e.message),
+  };
 
   static native.FfiSmbTarget _target(SmbTarget t) =>
       native.FfiSmbTarget(host: t.host, port: t.port, share: t.share);
@@ -99,22 +102,25 @@ class FfiSmbNative implements SmbNative {
       );
 
   static FileEntry _entry(native.FfiSmbEntry e) => FileEntry(
-        path: e.path,
-        name: e.name,
-        isDir: e.isDir,
-        size: e.size.toInt(),
-        modified: DateTime.fromMillisecondsSinceEpoch(
-          e.modifiedMs.toInt(),
-          isUtc: true,
-        ),
-        unreadable: e.unreadable,
-      );
+    path: e.path,
+    name: e.name,
+    isDir: e.isDir,
+    size: e.size.toInt(),
+    modified: DateTime.fromMillisecondsSinceEpoch(
+      e.modifiedMs.toInt(),
+      isUtc: true,
+    ),
+    unreadable: e.unreadable,
+  );
 
   @override
   Future<List<FileEntry>> list(SmbTarget t, SmbCredentials c, String dir) =>
       _run(() async {
         final entries = await native.smbList(
-            target: _target(t), creds: _creds(c), dir: dir);
+          target: _target(t),
+          creds: _creds(c),
+          dir: dir,
+        );
         return [for (final e in entries) _entry(e)];
       });
 
@@ -122,19 +128,23 @@ class FfiSmbNative implements SmbNative {
   Future<FileEntry?> stat(SmbTarget t, SmbCredentials c, String path) =>
       _run(() async {
         final e = await native.smbStat(
-            target: _target(t), creds: _creds(c), path: path);
+          target: _target(t),
+          creds: _creds(c),
+          path: path,
+        );
         return e == null ? null : _entry(e);
       });
 
   @override
   Future<void> probe(SmbTarget t, SmbCredentials c, String root) => _run(
-        () => native.smbProbe(target: _target(t), creds: _creds(c), root: root),
-      );
+    () => native.smbProbe(target: _target(t), creds: _creds(c), root: root),
+  );
 
   @override
   Future<List<String>> listShares(String host, int port, SmbCredentials c) =>
       _run(
-          () => native.smbListShares(host: host, port: port, creds: _creds(c)));
+        () => native.smbListShares(host: host, port: port, creds: _creds(c)),
+      );
 
   @override
   Future<String> open(
@@ -142,15 +152,14 @@ class FfiSmbNative implements SmbNative {
     SmbTarget t,
     SmbCredentials c,
     String path,
-  ) =>
-      _run(
-        () => native.smbOpen(
-          accountId: accountId,
-          target: _target(t),
-          creds: _creds(c),
-          path: path,
-        ),
-      );
+  ) => _run(
+    () => native.smbOpen(
+      accountId: accountId,
+      target: _target(t),
+      creds: _creds(c),
+      path: path,
+    ),
+  );
 
   @override
   Future<void> closeAccount(String accountId) =>

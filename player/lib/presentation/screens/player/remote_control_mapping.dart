@@ -43,8 +43,7 @@ T? findTrackById<T>(
   List<T> tracks,
   String id, {
   required String Function(T track) idOf,
-}) =>
-    tracks.where((track) => idOf(track) == id).firstOrNull;
+}) => tracks.where((track) => idOf(track) == id).firstOrNull;
 
 /// Maps `_PlayerScreenState`'s own loading/error flags and the `Player`'s
 /// state onto the wire's [FlutterPlaybackState], for

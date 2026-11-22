@@ -6,8 +6,9 @@ import 'package:player/core/playback/playback_progress_providers.dart';
 
 /// A download manager with no database, for tests that remove accounts. The
 /// real one opens Hive, which a plain unit test has not initialised.
-final Override noDownloadsOverride = downloadManagerProvider
-    .overrideWith((ref) async => createNativeDownloadService());
+final Override noDownloadsOverride = downloadManagerProvider.overrideWith(
+  (ref) async => createNativeDownloadService(),
+);
 
 /// Collection auto-sync with no box, for the same tests. Account removal
 /// clears collection sync best effort, so a test that never initialised Hive
@@ -27,8 +28,8 @@ final Override noCollectionSyncOverride = collectionSyncBoxProvider
 /// table of boxes being opened. Every later `openBox('playback_progress')`
 /// in the bundle then waits on it forever: on 2026-11-20 that hung
 /// `open_files_library_boxes_test.dart` on master.
-final Override noProgressFlushOverride =
-    sourceProgressFlushProvider.overrideWith((ref) {});
+final Override noProgressFlushOverride = sourceProgressFlushProvider
+    .overrideWith((ref) {});
 
 /// Everything Hive-backed a test that removes accounts would otherwise open.
 final List<Override> noHiveOverrides = [

@@ -52,14 +52,18 @@ void main() {
 
     /// Requests [path] under the test target, or exactly as given with
     /// [bare], which the proxy must refuse.
-    Future<HttpResult> makeRequest(String path,
-        {String? rangeHeader, bool bare = false}) async {
+    Future<HttpResult> makeRequest(
+      String path, {
+      String? rangeHeader,
+      bool bare = false,
+    }) async {
       final client = HttpClient();
       final prefix = bare ? '' : '/t/$target';
 
       try {
-        final request = await client
-            .getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$prefix$path'));
+        final request = await client.getUrl(
+          Uri.parse('http://127.0.0.1:${proxy.port}$prefix$path'),
+        );
         if (rangeHeader != null) {
           request.headers.set(HttpHeaders.rangeHeader, rangeHeader);
         }
@@ -97,7 +101,9 @@ void main() {
         final port = proxy.port;
         await proxy.debugDropListener();
         await expectLater(
-            makeRequest('/nope'), throwsA(isA<SocketException>()));
+          makeRequest('/nope'),
+          throwsA(isA<SocketException>()),
+        );
 
         expect(await proxy.healListener(), ProxyHeal.reboundSamePort);
         expect(proxy.port, port);
@@ -107,14 +113,17 @@ void main() {
       test('moves to a new port when the old one is taken', () async {
         await proxy.shutdown();
         var calls = 0;
-        proxy = LocalProxyService(p2p, bind: (address, port) {
-          calls++;
-          // The first bind is start's (port 0); a heal's same-port retry fails.
-          if (calls > 1 && port != 0) {
-            throw const SocketException('Address already in use');
-          }
-          return HttpServer.bind(address, port);
-        });
+        proxy = LocalProxyService(
+          p2p,
+          bind: (address, port) {
+            calls++;
+            // The first bind is start's (port 0); a heal's same-port retry fails.
+            if (calls > 1 && port != 0) {
+              throw const SocketException('Address already in use');
+            }
+            return HttpServer.bind(address, port);
+          },
+        );
         await proxy.start(owner: owner, targetPeer: peer, target: target);
         final events = <ProxyHeal>[];
         final sub = proxy.heals.listen(events.add);
@@ -131,44 +140,53 @@ void main() {
       test('concurrent heals share one rebind', () async {
         await proxy.shutdown();
         var binds = 0;
-        proxy = LocalProxyService(p2p, bind: (address, port) {
-          binds++;
-          return HttpServer.bind(address, port);
-        });
+        proxy = LocalProxyService(
+          p2p,
+          bind: (address, port) {
+            binds++;
+            return HttpServer.bind(address, port);
+          },
+        );
         await proxy.start(owner: owner, targetPeer: peer, target: target);
         await proxy.debugDropListener();
 
-        final results =
-            await Future.wait([proxy.healListener(), proxy.healListener()]);
+        final results = await Future.wait([
+          proxy.healListener(),
+          proxy.healListener(),
+        ]);
         expect(results, everyElement(ProxyHeal.reboundSamePort));
         expect(binds, 2); // start's bind plus exactly one rebind
       });
 
-      test('a listener that closes on its own is rebound without being asked',
-          () async {
-        await proxy.start(owner: owner, targetPeer: peer, target: target);
-        final port = proxy.port;
-        await proxy.debugDropListener(notify: true);
-        await pumpEventQueue(times: 50);
-
-        expect(proxy.port, port);
-        expect((await makeRequest('/nope')).statusCode, 404);
-      });
-
       test(
-          'a listener known closed is not probed, so a foreign process that '
+        'a listener that closes on its own is rebound without being asked',
+        () async {
+          await proxy.start(owner: owner, targetPeer: peer, target: target);
+          final port = proxy.port;
+          await proxy.debugDropListener(notify: true);
+          await pumpEventQueue(times: 50);
+
+          expect(proxy.port, port);
+          expect((await makeRequest('/nope')).statusCode, 404);
+        },
+      );
+
+      test('a listener known closed is not probed, so a foreign process that '
           'took its port is not mistaken for the proxy', () async {
         await proxy.shutdown();
         ServerSocket? foreign;
         addTearDown(() async => foreign?.close());
         final foreignBound = Completer<void>();
         var binds = 0;
-        proxy = LocalProxyService(p2p, bind: (address, port) async {
-          // Holds the heal's same-port retry until the foreign process owns
-          // the port, so the ordering does not depend on timing.
-          if (++binds > 1) await foreignBound.future;
-          return HttpServer.bind(address, port);
-        });
+        proxy = LocalProxyService(
+          p2p,
+          bind: (address, port) async {
+            // Holds the heal's same-port retry until the foreign process owns
+            // the port, so the ordering does not depend on timing.
+            if (++binds > 1) await foreignBound.future;
+            return HttpServer.bind(address, port);
+          },
+        );
         await proxy.start(owner: owner, targetPeer: peer, target: target);
         final port = proxy.port;
         final events = <ProxyHeal>[];
@@ -188,10 +206,13 @@ void main() {
       test('teardown does not trigger a heal', () async {
         await proxy.shutdown();
         var binds = 0;
-        proxy = LocalProxyService(p2p, bind: (address, port) {
-          binds++;
-          return HttpServer.bind(address, port);
-        });
+        proxy = LocalProxyService(
+          p2p,
+          bind: (address, port) {
+            binds++;
+            return HttpServer.bind(address, port);
+          },
+        );
         final events = <ProxyHeal>[];
         final sub = proxy.heals.listen(events.add);
         addTearDown(sub.cancel);
@@ -207,18 +228,23 @@ void main() {
       test('a failed heal throws, and a later start binds afresh', () async {
         await proxy.shutdown();
         var binds = 0;
-        proxy = LocalProxyService(p2p, bind: (address, port) {
-          binds++;
-          if (binds > 1 && binds < 4) {
-            throw const SocketException('Address already in use');
-          }
-          return HttpServer.bind(address, port);
-        });
+        proxy = LocalProxyService(
+          p2p,
+          bind: (address, port) {
+            binds++;
+            if (binds > 1 && binds < 4) {
+              throw const SocketException('Address already in use');
+            }
+            return HttpServer.bind(address, port);
+          },
+        );
         await proxy.start(owner: owner, targetPeer: peer, target: target);
         await proxy.debugDropListener();
 
         await expectLater(
-            proxy.healListener(), throwsA(isA<SocketException>()));
+          proxy.healListener(),
+          throwsA(isA<SocketException>()),
+        );
         expect(proxy.isRunning, isFalse);
 
         await proxy.start(owner: owner, targetPeer: peer, target: target);
@@ -227,29 +253,34 @@ void main() {
       });
 
       test(
-          'a listener that dies and cannot be rebound is not an unhandled error',
-          () async {
-        await proxy.shutdown();
-        var binds = 0;
-        proxy = LocalProxyService(p2p, bind: (address, port) {
-          if (++binds > 1) throw const SocketException('no sockets');
-          return HttpServer.bind(address, port);
-        });
-        await proxy.start(owner: owner, targetPeer: peer, target: target);
-        await proxy.debugDropListener(notify: true);
-        await pumpEventQueue(times: 50);
+        'a listener that dies and cannot be rebound is not an unhandled error',
+        () async {
+          await proxy.shutdown();
+          var binds = 0;
+          proxy = LocalProxyService(
+            p2p,
+            bind: (address, port) {
+              if (++binds > 1) throw const SocketException('no sockets');
+              return HttpServer.bind(address, port);
+            },
+          );
+          await proxy.start(owner: owner, targetPeer: peer, target: target);
+          await proxy.debugDropListener(notify: true);
+          await pumpEventQueue(times: 50);
 
-        expect(proxy.isRunning, isFalse);
-      });
+          expect(proxy.isRunning, isFalse);
+        },
+      );
     });
 
     group('initialization', () {
       test('starts on loopback address', () async {
         await proxy.start(
-            owner: owner,
-            targetPeer: 'test-peer-id',
-            authToken: 'test-token',
-            target: target);
+          owner: owner,
+          targetPeer: 'test-peer-id',
+          authToken: 'test-token',
+          target: target,
+        );
 
         expect(proxy.isRunning, isTrue);
         expect(proxy.port, greaterThan(0));
@@ -257,36 +288,43 @@ void main() {
       });
 
       test('throws when not started and buildHlsUrl called', () {
-        expect(() => proxy.buildHlsUrl('session123', target: target),
-            throwsA(isA<StateError>()));
+        expect(
+          () => proxy.buildHlsUrl('session123', target: target),
+          throwsA(isA<StateError>()),
+        );
       });
 
       test('throws when not started and buildBaseUrl called', () {
-        expect(() => proxy.buildBaseUrl('session123', target: target),
-            throwsA(isA<StateError>()));
+        expect(
+          () => proxy.buildBaseUrl('session123', target: target),
+          throwsA(isA<StateError>()),
+        );
       });
 
       test('can update target peer when already running', () async {
         await proxy.start(
-            owner: owner,
-            targetPeer: 'peer1',
-            authToken: 'token1',
-            target: target);
+          owner: owner,
+          targetPeer: 'peer1',
+          authToken: 'token1',
+          target: target,
+        );
         await proxy.start(
-            owner: owner,
-            targetPeer: 'peer2',
-            authToken: 'token2',
-            target: target);
+          owner: owner,
+          targetPeer: 'peer2',
+          authToken: 'token2',
+          target: target,
+        );
 
         expect(proxy.isRunning, isTrue);
       });
 
       test('stop clears all state', () async {
         await proxy.start(
-            owner: owner,
-            targetPeer: 'test-peer',
-            authToken: 'test-token',
-            target: target);
+          owner: owner,
+          targetPeer: 'test-peer',
+          authToken: 'test-token',
+          target: target,
+        );
 
         expect(proxy.isRunning, isTrue);
 
@@ -300,17 +338,20 @@ void main() {
     group('HTTP behavior', () {
       test('returns 404 for non-HLS paths with CORS', () async {
         await proxy.start(
-            owner: owner,
-            targetPeer: 'test-peer',
-            authToken: 'test-token',
-            target: target);
+          owner: owner,
+          targetPeer: 'test-peer',
+          authToken: 'test-token',
+          target: target,
+        );
 
         final response = await makeRequest('/not-hls/path');
 
         expect(response.statusCode, equals(HttpStatus.notFound));
         expect(response.body, contains('Not Found'));
         expect(
-            response.headers.value('access-control-allow-origin'), equals('*'));
+          response.headers.value('access-control-allow-origin'),
+          equals('*'),
+        );
       });
 
       test('a bare path is not served', () async {
@@ -335,17 +376,20 @@ void main() {
 
       test('returns 400 for invalid HLS path format with CORS', () async {
         await proxy.start(
-            owner: owner,
-            targetPeer: 'test-peer',
-            authToken: 'test-token',
-            target: target);
+          owner: owner,
+          targetPeer: 'test-peer',
+          authToken: 'test-token',
+          target: target,
+        );
 
         final response = await makeRequest('/hls/');
 
         expect(response.statusCode, equals(HttpStatus.badRequest));
         expect(response.body, contains('Invalid HLS path format'));
         expect(
-            response.headers.value('access-control-allow-origin'), equals('*'));
+          response.headers.value('access-control-allow-origin'),
+          equals('*'),
+        );
       });
 
       test('forwards HLS request to P2P and serves payload', () async {
@@ -357,22 +401,28 @@ void main() {
         );
 
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
-              status: HttpStatus.ok,
-              contentType: 'application/vnd.apple.mpegurl',
-              data: utf8.encode('#EXTM3U\n#EXTINF:10,\nsegment_001.ts\n'),
-              cacheControl: 'no-cache',
-            );
+          status: HttpStatus.ok,
+          contentType: 'application/vnd.apple.mpegurl',
+          data: utf8.encode('#EXTM3U\n#EXTINF:10,\nsegment_001.ts\n'),
+          cacheControl: 'no-cache',
+        );
 
         final response = await makeRequest('/hls/session123/index.m3u8');
 
         expect(response.statusCode, equals(HttpStatus.ok));
         expect(response.body, contains('#EXTM3U'));
-        expect(response.headers.contentType?.mimeType,
-            equals('application/vnd.apple.mpegurl'));
-        expect(response.headers.value(HttpHeaders.cacheControlHeader),
-            equals('no-cache'));
         expect(
-            response.headers.value('access-control-allow-origin'), equals('*'));
+          response.headers.contentType?.mimeType,
+          equals('application/vnd.apple.mpegurl'),
+        );
+        expect(
+          response.headers.value(HttpHeaders.cacheControlHeader),
+          equals('no-cache'),
+        );
+        expect(
+          response.headers.value('access-control-allow-origin'),
+          equals('*'),
+        );
 
         expect(p2p.calls, hasLength(1));
         final call = p2p.calls.single;
@@ -393,14 +443,16 @@ void main() {
         );
 
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
-              status: HttpStatus.partialContent,
-              contentType: 'video/mp2t',
-              data: [1, 2, 3, 4],
-              contentRange: 'bytes 0-3/100',
-            );
+          status: HttpStatus.partialContent,
+          contentType: 'video/mp2t',
+          data: [1, 2, 3, 4],
+          contentRange: 'bytes 0-3/100',
+        );
 
-        await makeRequest('/hls/session123/segment_001.ts',
-            rangeHeader: 'bytes=0-1023');
+        await makeRequest(
+          '/hls/session123/segment_001.ts',
+          rangeHeader: 'bytes=0-1023',
+        );
 
         expect(p2p.calls, hasLength(1));
         final call = p2p.calls.single;
@@ -417,13 +469,15 @@ void main() {
         );
 
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
-              status: HttpStatus.partialContent,
-              contentType: 'video/mp2t',
-              data: [1, 2, 3, 4],
-            );
+          status: HttpStatus.partialContent,
+          contentType: 'video/mp2t',
+          data: [1, 2, 3, 4],
+        );
 
-        await makeRequest('/hls/session123/segment_001.ts',
-            rangeHeader: 'bytes=invalid');
+        await makeRequest(
+          '/hls/session123/segment_001.ts',
+          rangeHeader: 'bytes=invalid',
+        );
 
         expect(p2p.calls, hasLength(1));
         final call = p2p.calls.single;
@@ -439,51 +493,57 @@ void main() {
           target: target,
         );
 
-        p2p.onSendHlsRequest =
-            (_) async => throw Exception('p2p transport failure');
+        p2p.onSendHlsRequest = (_) async =>
+            throw Exception('p2p transport failure');
 
         final response = await makeRequest('/hls/session123/index.m3u8');
 
         expect(response.statusCode, equals(HttpStatus.internalServerError));
         expect(response.body, contains('p2p transport failure'));
         expect(
-            response.headers.value('access-control-allow-origin'), equals('*'));
+          response.headers.value('access-control-allow-origin'),
+          equals('*'),
+        );
       });
 
-      test('recovers after write error and serves subsequent requests',
-          () async {
-        await proxy.start(
-          owner: owner,
-          targetPeer: 'target-peer-id',
-          authToken: 'test-auth-token',
-          target: target,
-        );
+      test(
+        'recovers after write error and serves subsequent requests',
+        () async {
+          await proxy.start(
+            owner: owner,
+            targetPeer: 'target-peer-id',
+            authToken: 'test-auth-token',
+            target: target,
+          );
 
-        p2p.onSendHlsRequest = (call) async {
-          if (call.path == 'segment_001.ts') {
+          p2p.onSendHlsRequest = (call) async {
+            if (call.path == 'segment_001.ts') {
+              return testHlsResponse(
+                status: HttpStatus.ok,
+                contentType: 'video/mp2t',
+                data: [1, 2, 3, 4],
+                declaredLength: 1,
+              );
+            }
+
             return testHlsResponse(
               status: HttpStatus.ok,
-              contentType: 'video/mp2t',
-              data: [1, 2, 3, 4],
-              declaredLength: 1,
+              contentType: 'application/vnd.apple.mpegurl',
+              data: utf8.encode('#EXTM3U\n'),
             );
-          }
+          };
 
-          return testHlsResponse(
-            status: HttpStatus.ok,
-            contentType: 'application/vnd.apple.mpegurl',
-            data: utf8.encode('#EXTM3U\n'),
-          );
-        };
+          final first = await makeRequest('/hls/session123/segment_001.ts');
+          expect([
+            HttpStatus.ok,
+            HttpStatus.internalServerError,
+          ], contains(first.statusCode));
 
-        final first = await makeRequest('/hls/session123/segment_001.ts');
-        expect([HttpStatus.ok, HttpStatus.internalServerError],
-            contains(first.statusCode));
-
-        final second = await makeRequest('/hls/session123/index.m3u8');
-        expect(second.statusCode, equals(HttpStatus.ok));
-        expect(second.body, contains('#EXTM3U'));
-      });
+          final second = await makeRequest('/hls/session123/index.m3u8');
+          expect(second.statusCode, equals(HttpStatus.ok));
+          expect(second.body, contains('#EXTM3U'));
+        },
+      );
     });
 
     group('teardown', () {
@@ -493,40 +553,43 @@ void main() {
       // mpv holds one such connection for the whole file, so without the
       // forced close the video pipeline is left waiting on a socket nobody
       // will ever answer, instead of seeing its stream end and reporting it.
-      test('drops the connections it was serving rather than orphaning them',
-          () async {
-        final started = Completer<void>();
+      test(
+        'drops the connections it was serving rather than orphaning them',
+        () async {
+          final started = Completer<void>();
 
-        // A response that never arrives, standing in for a request still
-        // being served when the screen goes away.
-        p2p.onSendHlsRequest = (_) async {
-          started.complete();
-          await Completer<void>().future;
-          return testHlsResponse(
-            status: HttpStatus.ok,
-            contentType: 'video/mp2t',
-            data: const [],
+          // A response that never arrives, standing in for a request still
+          // being served when the screen goes away.
+          p2p.onSendHlsRequest = (_) async {
+            started.complete();
+            await Completer<void>().future;
+            return testHlsResponse(
+              status: HttpStatus.ok,
+              contentType: 'video/mp2t',
+              data: const [],
+            );
+          };
+
+          await proxy.start(owner: owner, targetPeer: 'peer-1', target: target);
+
+          // Deliberately not awaited yet: this request is still open when the
+          // teardown runs, which is the state under test.
+          final inFlight = makeRequest('/hls/session123/segment_001.ts');
+          await started.future;
+
+          await proxy.stop(owner, target: target);
+          expect(proxy.isRunning, isFalse);
+
+          await expectLater(
+            inFlight,
+            throwsA(anything),
+            reason:
+                'the teardown closed the socket, so the client in flight '
+                'finds out; an unforced close would leave it hanging on a '
+                'connection the proxy no longer has the state to answer',
           );
-        };
-
-        await proxy.start(owner: owner, targetPeer: 'peer-1', target: target);
-
-        // Deliberately not awaited yet: this request is still open when the
-        // teardown runs, which is the state under test.
-        final inFlight = makeRequest('/hls/session123/segment_001.ts');
-        await started.future;
-
-        await proxy.stop(owner, target: target);
-        expect(proxy.isRunning, isFalse);
-
-        await expectLater(
-          inFlight,
-          throwsA(anything),
-          reason: 'the teardown closed the socket, so the client in flight '
-              'finds out; an unforced close would leave it hanging on a '
-              'connection the proxy no longer has the state to answer',
-        );
-      });
+        },
+      );
 
       // The up-next handover: the outgoing episode's release starts the
       // teardown, and the incoming episode's start runs while that teardown is
@@ -536,14 +599,17 @@ void main() {
       // target cleared out from under it by the finishing teardown.
       test('a start during a pending teardown gets a live server', () async {
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
-              status: HttpStatus.ok,
-              contentType: 'application/vnd.apple.mpegurl',
-              data: utf8.encode('#EXTM3U\n'),
-            );
+          status: HttpStatus.ok,
+          contentType: 'application/vnd.apple.mpegurl',
+          data: utf8.encode('#EXTM3U\n'),
+        );
 
         final outgoing = Object();
         await proxy.start(
-            owner: outgoing, targetPeer: 'peer-1', target: target);
+          owner: outgoing,
+          targetPeer: 'peer-1',
+          target: target,
+        );
 
         final stopping = proxy.release(outgoing);
         await proxy.start(owner: owner, targetPeer: 'peer-1', target: target);

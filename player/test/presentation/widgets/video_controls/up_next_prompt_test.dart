@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,29 +36,31 @@ Future<void> _pump(
   // The still now goes through ArtworkImage (like every other
   // thumbnail in the app), so a real HTTP fetch attempt would otherwise
   // make `pumpAndSettle` time out in a test environment with no network.
-  await mockNetworkImages(() => tester.pumpWidget(
-        MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: MediaQuery(
-            data: MediaQueryData(size: Size(width, 720)),
-            child: Scaffold(
-              body: Stack(
-                children: [
-                  UpNextPrompt(
-                    target: target,
-                    countdown: countdown,
-                    metrics: PanelMetrics.forWidth(width),
-                    onPlayNow: onPlayNow ?? () {},
-                    onDismiss: onDismiss ?? () {},
-                    onEngagedChanged: onEngagedChanged ?? (_) {},
-                  ),
-                ],
-              ),
+  await mockNetworkImages(
+    () => tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: MediaQuery(
+          data: MediaQueryData(size: Size(width, 720)),
+          child: Scaffold(
+            body: Stack(
+              children: [
+                UpNextPrompt(
+                  target: target,
+                  countdown: countdown,
+                  metrics: PanelMetrics.forWidth(width),
+                  onPlayNow: onPlayNow ?? () {},
+                  onDismiss: onDismiss ?? () {},
+                  onEngagedChanged: onEngagedChanged ?? (_) {},
+                ),
+              ],
             ),
           ),
         ),
-      ));
+      ),
+    ),
+  );
 }
 
 /// Taps the resting pill open. Deliberately not `pumpAndSettle`: on a
@@ -79,11 +81,11 @@ Future<void> _pump(
 /// on the card missed its target with a single big pump, but not across a
 /// few smaller ones.
 Future<void> _expandCard(WidgetTester tester) => mockNetworkImages(() async {
-      await tester.tap(find.byKey(UpNextPrompt.pillKey));
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 100));
-    });
+  await tester.tap(find.byKey(UpNextPrompt.pillKey));
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump(const Duration(milliseconds: 100));
+});
 
 /// Sends a Tab key press and pumps a frame, moving focus one step along the
 /// default reading-order traversal.
@@ -142,8 +144,9 @@ void main() {
       expect(played, 1);
     });
 
-    testWidgets('gives both hit targets at least 44px of width',
-        (tester) async {
+    testWidgets('gives both hit targets at least 44px of width', (
+      tester,
+    ) async {
       await _pump(tester, countdown: countdown, width: 360);
       expect(
         tester.getSize(find.byKey(UpNextPrompt.playKey)).width,
@@ -155,8 +158,9 @@ void main() {
       );
     });
 
-    testWidgets('puts dismiss at the trailing edge, right of Play',
-        (tester) async {
+    testWidgets('puts dismiss at the trailing edge, right of Play', (
+      tester,
+    ) async {
       // So a thumb reaching for the stop cannot catch Play instead.
       await _pump(tester, countdown: countdown);
       expect(
@@ -175,8 +179,9 @@ void main() {
   });
 
   group('expanded card', () {
-    testWidgets('expands on tap and shows the still, code, and title',
-        (tester) async {
+    testWidgets('expands on tap and shows the still, code, and title', (
+      tester,
+    ) async {
       await _pump(tester, countdown: countdown);
       await _expandCard(tester);
       expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
@@ -186,16 +191,20 @@ void main() {
       expect(find.text('Play now'), findsOneWidget);
     });
 
-    testWidgets('omits the still entirely when there is no thumbnail',
-        (tester) async {
-      await _pump(tester,
-          countdown: countdown,
-          target: const UpNextTarget(
-              episodeId: 'ep-8',
-              fileId: 'file-8',
-              seasonNumber: 1,
-              episodeNumber: 8,
-              title: 'Narkina 5'));
+    testWidgets('omits the still entirely when there is no thumbnail', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        countdown: countdown,
+        target: const UpNextTarget(
+          episodeId: 'ep-8',
+          fileId: 'file-8',
+          seasonNumber: 1,
+          episodeNumber: 8,
+          title: 'Narkina 5',
+        ),
+      );
       await tester.tap(find.byKey(UpNextPrompt.pillKey));
       await tester.pumpAndSettle();
       expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
@@ -212,40 +221,49 @@ void main() {
     });
 
     testWidgets(
-        'does not throw when the expanded card is rebuilt below the width '
-        'clamp floor — below 32px, `width - 32` used to go negative and '
-        "trip BoxConstraints' non-negative assert", (tester) async {
-      // Expand at a normal width first: the resting pill sizes to its own
-      // content rather than clamping to the viewport, so tapping it open at
-      // an already-tiny width is a separate, unrelated overflow. Once
-      // expanded, re-pumping at 20px updates (not replaces) the same
-      // element, preserving `_expanded == true` and forcing `_buildCard` to
-      // recompute `cardWidth` against the narrow viewport — exactly the
-      // path this fix clamps.
-      await _pump(tester, countdown: countdown);
-      await _expandCard(tester);
-      expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
+      'does not throw when the expanded card is rebuilt below the width '
+      'clamp floor — below 32px, `width - 32` used to go negative and '
+      "trip BoxConstraints' non-negative assert",
+      (tester) async {
+        // Expand at a normal width first: the resting pill sizes to its own
+        // content rather than clamping to the viewport, so tapping it open at
+        // an already-tiny width is a separate, unrelated overflow. Once
+        // expanded, re-pumping at 20px updates (not replaces) the same
+        // element, preserving `_expanded == true` and forcing `_buildCard` to
+        // recompute `cardWidth` against the narrow viewport — exactly the
+        // path this fix clamps.
+        await _pump(tester, countdown: countdown);
+        await _expandCard(tester);
+        expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
 
-      await _pump(tester, countdown: countdown, width: 20);
-      expect(tester.takeException(), isNull);
-      expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
-    });
+        await _pump(tester, countdown: countdown, width: 20);
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
+      },
+    );
   });
 
   group('engagement', () {
-    testWidgets('reports engaged while expanded and disengaged after collapse',
-        (tester) async {
-      final engaged = <bool>[];
-      await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
-      await _expandCard(tester);
-      expect(engaged.last, isTrue);
-      await tester.tap(find.byKey(UpNextPrompt.cardKey));
-      await tester.pumpAndSettle();
-      expect(engaged.last, isFalse);
-    });
+    testWidgets(
+      'reports engaged while expanded and disengaged after collapse',
+      (tester) async {
+        final engaged = <bool>[];
+        await _pump(
+          tester,
+          countdown: countdown,
+          onEngagedChanged: engaged.add,
+        );
+        await _expandCard(tester);
+        expect(engaged.last, isTrue);
+        await tester.tap(find.byKey(UpNextPrompt.cardKey));
+        await tester.pumpAndSettle();
+        expect(engaged.last, isFalse);
+      },
+    );
 
-    testWidgets('reports engaged on pointer enter and disengaged on exit',
-        (tester) async {
+    testWidgets('reports engaged on pointer enter and disengaged on exit', (
+      tester,
+    ) async {
       final engaged = <bool>[];
       await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -270,34 +288,39 @@ void main() {
   });
 
   group('keyboard accessibility', () {
-    testWidgets('focus traversal reaches Play and Dismiss on the resting pill',
-        (tester) async {
-      await _pump(tester, countdown: countdown);
+    testWidgets(
+      'focus traversal reaches Play and Dismiss on the resting pill',
+      (tester) async {
+        await _pump(tester, countdown: countdown);
 
-      await _tab(tester); // label
-      await _tab(tester); // Play
-      expect(
-        Focus.of(tester.element(find.byIcon(Icons.play_arrow_rounded)))
-            .hasPrimaryFocus,
-        isTrue,
-      );
+        await _tab(tester); // label
+        await _tab(tester); // Play
+        expect(
+          Focus.of(tester.element(find.byIcon(Icons.play_arrow_rounded)))
+              .hasPrimaryFocus,
+          isTrue,
+        );
 
-      await _tab(tester); // Dismiss
-      expect(
-        Focus.of(tester.element(find.byIcon(Icons.close_rounded)))
-            .hasPrimaryFocus,
-        isTrue,
-      );
-    });
+        await _tab(tester); // Dismiss
+        expect(
+          Focus.of(tester.element(find.byIcon(Icons.close_rounded)))
+              .hasPrimaryFocus,
+          isTrue,
+        );
+      },
+    );
 
-    testWidgets('Enter activates Play, Space activates Dismiss',
-        (tester) async {
+    testWidgets('Enter activates Play, Space activates Dismiss', (
+      tester,
+    ) async {
       var played = 0;
       var dismissed = 0;
-      await _pump(tester,
-          countdown: countdown,
-          onPlayNow: () => played++,
-          onDismiss: () => dismissed++);
+      await _pump(
+        tester,
+        countdown: countdown,
+        onPlayNow: () => played++,
+        onDismiss: () => dismissed++,
+      );
 
       await _tab(tester); // label
       await _tab(tester); // Play
@@ -312,35 +335,42 @@ void main() {
     });
 
     testWidgets(
-        'focusing a control reports engaged, so the countdown stops for '
-        'keyboard users too', (tester) async {
-      // The regression this guards: `_setFocused` only fires from
-      // `FocusScope.onFocusChange`, which stays dead unless something inside
-      // can actually take focus. Before making the controls focusable,
-      // nothing in this widget could ever gain focus, so this never fired.
-      //
-      // Asserting `engaged` alone is not enough to catch that: an orphan Tab
-      // press with no focusable descendant still lands on the bare
-      // `FocusScope` itself (a scope node is its own fallback traversal
-      // target), which trivially satisfies `hasFocus` and would report
-      // "engaged" even on the broken widget. Pinning the assertion to the
-      // label's own `Focus` node actually having primary focus is what makes
-      // this fail on the old code and pass on the new.
-      final engaged = <bool>[];
-      await _pump(tester, countdown: countdown, onEngagedChanged: engaged.add);
+      'focusing a control reports engaged, so the countdown stops for '
+      'keyboard users too',
+      (tester) async {
+        // The regression this guards: `_setFocused` only fires from
+        // `FocusScope.onFocusChange`, which stays dead unless something inside
+        // can actually take focus. Before making the controls focusable,
+        // nothing in this widget could ever gain focus, so this never fired.
+        //
+        // Asserting `engaged` alone is not enough to catch that: an orphan Tab
+        // press with no focusable descendant still lands on the bare
+        // `FocusScope` itself (a scope node is its own fallback traversal
+        // target), which trivially satisfies `hasFocus` and would report
+        // "engaged" even on the broken widget. Pinning the assertion to the
+        // label's own `Focus` node actually having primary focus is what makes
+        // this fail on the old code and pass on the new.
+        final engaged = <bool>[];
+        await _pump(
+          tester,
+          countdown: countdown,
+          onEngagedChanged: engaged.add,
+        );
 
-      await _tab(tester); // the pill label is first in tab order
-      expect(
-        Focus.of(tester.element(find.text('Next up · S1E8'))).hasPrimaryFocus,
-        isTrue,
-      );
+        await _tab(tester); // the pill label is first in tab order
+        expect(
+          Focus.of(tester.element(find.text('Next up · S1E8'))).hasPrimaryFocus,
+          isTrue,
+        );
 
-      expect(engaged, isNotEmpty);
-      expect(engaged.last, isTrue);
-    });
+        expect(engaged, isNotEmpty);
+        expect(engaged.last, isTrue);
+      },
+    );
 
-    testWidgets("the expanded card's Play now is keyboard-activatable",
-        (tester) async {
+    testWidgets("the expanded card's Play now is keyboard-activatable", (
+      tester,
+    ) async {
       var played = 0;
       await _pump(tester, countdown: countdown, onPlayNow: () => played++);
       await _expandCard(tester);

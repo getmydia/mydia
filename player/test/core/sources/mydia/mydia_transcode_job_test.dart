@@ -8,21 +8,23 @@ import '../../downloads/download_test_harness.dart';
 
 void main() {
   MydiaTranscodeJob job(FakeDownloadJobService jobs) => MydiaTranscodeJob(
-        jobs: jobs,
-        contentType: 'movie',
-        id: '42',
-        resolution: '720p',
-        fileFor: (jobId) async =>
-            DirectFile(url: 'https://test.invalid/$jobId', extension: 'mp4'),
-      );
+    jobs: jobs,
+    contentType: 'movie',
+    id: '42',
+    resolution: '720p',
+    fileFor: (jobId) async =>
+        DirectFile(url: 'https://test.invalid/$jobId', extension: 'mp4'),
+  );
 
   test('prepare maps the server status', () async {
     final jobs = FakeDownloadJobService(
-        status: const DownloadJobStatus(
-            jobId: 'j9',
-            status: DownloadJobStatusType.transcoding,
-            progress: 0.25,
-            currentFileSize: 5));
+      status: const DownloadJobStatus(
+        jobId: 'j9',
+        status: DownloadJobStatusType.transcoding,
+        progress: 0.25,
+        currentFileSize: 5,
+      ),
+    );
     final snap = await job(jobs).prepare();
     expect(snap.jobId, 'j9');
     expect(snap.ready, isFalse);

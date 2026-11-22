@@ -3,41 +3,40 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/store/source_records.dart';
 
 SourceAccountRecord plexRecord({bool gone = false}) => SourceAccountRecord(
-      account: const ProviderAccount(
-        id: 'acc1',
-        kind: SourceKind.plex,
-        displayName: 'quill',
-        storageNamespace: 'source/acc1',
-        activeProfileId: 'owner',
-      ),
-      profiles: const [
-        SourceProfile(
-            id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
-      ],
-      servers: [
-        SourceServer(
-          id: 'abc123',
-          accountId: 'acc1',
-          profileId: 'owner',
-          name: 'Attic',
-          machineIdentifier: 'abc123',
-          owned: false,
-          gone: gone,
-          httpsRequired: true,
-          connections: [
-            ServerConnection(
-              uri: Uri.parse('https://10-0-0-5.abc123.plex.direct:32400'),
-              local: true,
-            ),
-            ServerConnection(
-              uri: Uri.parse('https://relay.example.test:8443'),
-              relay: true,
-            ),
-          ],
+  account: const ProviderAccount(
+    id: 'acc1',
+    kind: SourceKind.plex,
+    displayName: 'quill',
+    storageNamespace: 'source/acc1',
+    activeProfileId: 'owner',
+  ),
+  profiles: const [
+    SourceProfile(id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+  ],
+  servers: [
+    SourceServer(
+      id: 'abc123',
+      accountId: 'acc1',
+      profileId: 'owner',
+      name: 'Attic',
+      machineIdentifier: 'abc123',
+      owned: false,
+      gone: gone,
+      httpsRequired: true,
+      connections: [
+        ServerConnection(
+          uri: Uri.parse('https://10-0-0-5.abc123.plex.direct:32400'),
+          local: true,
+        ),
+        ServerConnection(
+          uri: Uri.parse('https://relay.example.test:8443'),
+          relay: true,
         ),
       ],
-      addedAtMs: 1700000000000,
-    );
+    ),
+  ],
+  addedAtMs: 1700000000000,
+);
 
 void main() {
   test('round-trips through JSON', () {
@@ -85,44 +84,58 @@ void main() {
     expect(server == server.copyWith(connections: const []), isFalse);
   });
 
-  test('rejects a server or profile whose own account or profile id is unsafe',
-      () {
-    final record = plexRecord();
-    for (final bad in const [
-      SourceServer(
-          id: 'abc123', accountId: 'acc1', profileId: 'a/b', name: 'Attic'),
-      SourceServer(
-          id: 'abc123', accountId: 'a:b', profileId: 'owner', name: 'Attic'),
-    ]) {
+  test(
+    'rejects a server or profile whose own account or profile id is unsafe',
+    () {
+      final record = plexRecord();
+      for (final bad in const [
+        SourceServer(
+          id: 'abc123',
+          accountId: 'acc1',
+          profileId: 'a/b',
+          name: 'Attic',
+        ),
+        SourceServer(
+          id: 'abc123',
+          accountId: 'a:b',
+          profileId: 'owner',
+          name: 'Attic',
+        ),
+      ]) {
+        expect(
+          () => SourceAccountRecord(
+            account: record.account,
+            profiles: record.profiles,
+            servers: [bad],
+            addedAtMs: 0,
+          ),
+          throwsArgumentError,
+        );
+      }
       expect(
         () => SourceAccountRecord(
           account: record.account,
-          profiles: record.profiles,
-          servers: [bad],
+          profiles: const [
+            SourceProfile(
+              id: 'owner',
+              accountId: 'a b',
+              name: 'Q',
+              isOwner: true,
+            ),
+          ],
+          servers: const [],
           addedAtMs: 0,
         ),
         throwsArgumentError,
       );
-    }
-    expect(
-      () => SourceAccountRecord(
-        account: record.account,
-        profiles: const [
-          SourceProfile(id: 'owner', accountId: 'a b', name: 'Q', isOwner: true)
-        ],
-        servers: const [],
-        addedAtMs: 0,
-      ),
-      throwsArgumentError,
-    );
-  });
+    },
+  );
 
   test('an old record reads with no PIN flags and its servers as chosen', () {
     final json = plexRecord().toJson();
-    (json['profiles'] as List)
-        .cast<Map<String, dynamic>>()
-        .single
-        .remove('protected');
+    (json['profiles'] as List).cast<Map<String, dynamic>>().single.remove(
+      'protected',
+    );
     json.remove('chosenServerIds');
     final record = SourceAccountRecord.fromJson(json);
     expect(record.profiles.single.protected, isFalse);
@@ -134,13 +147,18 @@ void main() {
     final record = plexRecord().copyWith(
       profiles: const [
         SourceProfile(
-            id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+          id: 'owner',
+          accountId: 'acc1',
+          name: 'Quill',
+          isOwner: true,
+        ),
         SourceProfile(
-            id: 'kid0001',
-            accountId: 'acc1',
-            name: 'Pip',
-            isOwner: false,
-            protected: true),
+          id: 'kid0001',
+          accountId: 'acc1',
+          name: 'Pip',
+          isOwner: false,
+          protected: true,
+        ),
       ],
       chosenServerIds: ['abc123', 'zz99'],
     );
@@ -157,7 +175,9 @@ void main() {
   });
 
   test('rejects a chosen server id that would break SourceId', () {
-    expect(() => plexRecord().copyWith(chosenServerIds: ['has:colon']),
-        throwsArgumentError);
+    expect(
+      () => plexRecord().copyWith(chosenServerIds: ['has:colon']),
+      throwsArgumentError,
+    );
   });
 }

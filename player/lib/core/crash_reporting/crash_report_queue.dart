@@ -55,13 +55,11 @@ class SendResult {
 /// lost when the app exits.
 class CrashReportQueue {
   CrashReportQueue({
-    required http.Client client,
-    required Uri endpoint,
+    required this._client,
+    required this._endpoint,
     DateTime Function()? now,
     this.maxLength = 20,
-  })  : _client = client,
-        _endpoint = endpoint,
-        _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   static const initialBackoff = Duration(seconds: 60);
   static const maxBackoff = Duration(minutes: 8);
@@ -95,22 +93,24 @@ class CrashReportQueue {
   /// success followed by the queue's retry would store the crash twice.
   Future<SendResult> sendOnce(Map<String, Object?> body) async {
     final abort = Completer<void>();
-    final request = http.AbortableRequest(
-      'POST',
-      _endpoint,
-      abortTrigger: abort.future,
-    )
-      ..headers['content-type'] = 'application/json'
-      ..body = jsonEncode(body);
+    final request =
+        http.AbortableRequest('POST', _endpoint, abortTrigger: abort.future)
+          ..headers['content-type'] = 'application/json'
+          ..body = jsonEncode(body);
     try {
-      final response =
-          await _client.send(request).then(http.Response.fromStream).timeout(
-        requestTimeout,
-        onTimeout: () {
-          abort.complete();
-          throw TimeoutException('crash report send timed out', requestTimeout);
-        },
-      );
+      final response = await _client
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(
+            requestTimeout,
+            onTimeout: () {
+              abort.complete();
+              throw TimeoutException(
+                'crash report send timed out',
+                requestTimeout,
+              );
+            },
+          );
       return SendResult.fromStatus(
         response.statusCode,
         retryAfterHeader: response.headers['retry-after'],
@@ -161,13 +161,15 @@ class CrashReportQueue {
           case SendOutcome.rateLimited:
           case SendOutcome.failed:
             entry.failures++;
-            final expired = entry.failures >= maxAttempts ||
+            final expired =
+                entry.failures >= maxAttempts ||
                 _now().difference(entry.queuedAt) >= maxAge;
             if (expired) {
               _entries.remove(entry);
             } else {
-              entry.nextAttemptAt =
-                  _now().add(result.retryAfter ?? backoffAfter(entry.failures));
+              entry.nextAttemptAt = _now().add(
+                result.retryAfter ?? backoffAfter(entry.failures),
+              );
             }
         }
       }

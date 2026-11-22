@@ -3,7 +3,7 @@
 // them round-trip. Mounted in the real shell regions (`TvShell`), whose
 // traversal policy carries `FocusMemory.requestFocus`.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -28,20 +28,21 @@ void main() {
   /// Asserts focus is on the Play pill itself, not the version picker beside
   /// it.
   void expectOnPlay() => expect(
-        find.descendant(
-          of: find.byElementPredicate(
-              (e) => e == FocusManager.instance.primaryFocus?.context),
-          matching: find.byKey(PrimaryPlayButton.pillKey),
-        ),
-        findsOneWidget,
-        reason: 'focus is on ${describeFocus()}',
-      );
+    find.descendant(
+      of: find.byElementPredicate(
+        (e) => e == FocusManager.instance.primaryFocus?.context,
+      ),
+      matching: find.byKey(PrimaryPlayButton.pillKey),
+    ),
+    findsOneWidget,
+    reason: 'focus is on ${describeFocus()}',
+  );
 
   group('movie detail focus memory (TV)', () {
     Future<void> pumpMovie(
       WidgetTester tester, {
       List<MediaVersion> versions = const [
-        MediaVersion(id: 'v1', height: 1080)
+        MediaVersion(id: 'v1', height: 1080),
       ],
     }) async {
       final movie = fakeMovie(1).ref;
@@ -56,16 +57,19 @@ void main() {
           versions: versions,
         ),
       );
-      await mockNetworkImages(() => TvShell().pump(
-            tester,
-            MovieDetailScreen.target(target: SourceTarget(movie)),
-            overrides: [
-              mediaSourceProvider(source.id).overrideWithValue(source),
-              sourceArtworkProvider.overrideWith((ref, key) async => null),
-              sourceSimilarProvider(movie).overrideWith((_) =>
-                  Stream.value([for (var n = 2; n < 20; n++) fakeMovie(n)])),
-            ],
-          ));
+      await mockNetworkImages(
+        () => TvShell().pump(
+          tester,
+          MovieDetailScreen.target(target: SourceTarget(movie)),
+          overrides: [
+            mediaSourceProvider(source.id).overrideWithValue(source),
+            sourceArtworkProvider.overrideWith((ref, key) async => null),
+            sourceSimilarProvider(movie).overrideWith(
+              (_) => Stream.value([for (var n = 2; n < 20; n++) fakeMovie(n)]),
+            ),
+          ],
+        ),
+      );
       // Watched, Download, Info: the fake source has no favorites and the
       // movie no trailer.
       expect(find.byKey(_action('watched')), findsOneWidget);
@@ -74,30 +78,33 @@ void main() {
     }
 
     testWidgets(
-        'from Play, DOWN steps through the hero bar and the similar rail, '
-        'and UP climbs back to Play', (tester) async {
-      await pumpMovie(tester);
-      await focusIn(tester, HeroPlayControl.sectionKey);
+      'from Play, DOWN steps through the hero bar and the similar rail, '
+      'and UP climbs back to Play',
+      (tester) async {
+        await pumpMovie(tester);
+        await focusIn(tester, HeroPlayControl.sectionKey);
 
-      // Play sits at the hero's right, the button bar under it at the left:
-      // left to the geometric search, DOWN from Play overlaps the similar
-      // rail instead and skips the bar.
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(_action('watched'));
-      // The cast rail between has no focus stops.
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(_similar(2));
+        // Play sits at the hero's right, the button bar under it at the left:
+        // left to the geometric search, DOWN from Play overlaps the similar
+        // rail instead and skips the bar.
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(_action('watched'));
+        // The cast rail between has no focus stops.
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(_similar(2));
 
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expectFocusIn(_action('watched'));
-      // Left to the geometric search, UP from the bar reaches the back
-      // button straight above it.
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expectFocusIn(HeroPlayControl.sectionKey);
-    });
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expectFocusIn(_action('watched'));
+        // Left to the geometric search, UP from the bar reaches the back
+        // button straight above it.
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expectFocusIn(HeroPlayControl.sectionKey);
+      },
+    );
 
-    testWidgets('the hero bar is entered first on its first button',
-        (tester) async {
+    testWidgets('the hero bar is entered first on its first button', (
+      tester,
+    ) async {
       await pumpMovie(tester);
       // m6 sits right of the hero bar, so the nearest button straight up is
       // its last one.
@@ -108,8 +115,9 @@ void main() {
       expectFocusIn(_action('watched'));
     });
 
-    testWidgets('the hero bar is re-entered on the button that left it',
-        (tester) async {
+    testWidgets('the hero bar is re-entered on the button that left it', (
+      tester,
+    ) async {
       await pumpMovie(tester);
       await focusIn(tester, _action('info'));
 
@@ -126,8 +134,9 @@ void main() {
       expectFocusIn(_action('info'));
     });
 
-    testWidgets('the similar rail is re-entered on its card after scrolling',
-        (tester) async {
+    testWidgets('the similar rail is re-entered on its card after scrolling', (
+      tester,
+    ) async {
       await pumpMovie(tester);
       await focusIn(tester, _similar(2));
       for (var i = 0; i < 10; i++) {
@@ -145,8 +154,9 @@ void main() {
       expectFocusIn(_similar(12));
     });
 
-    testWidgets('the Play section is re-entered on the version picker',
-        (tester) async {
+    testWidgets('the Play section is re-entered on the version picker', (
+      tester,
+    ) async {
       // With two versions Play waits on the network probe to pick one, and
       // stays disabled, so not a focus stop, until it answers. An unmocked
       // channel never answers under the test clock.
@@ -155,14 +165,18 @@ void main() {
         (call) async => ['ethernet'],
       );
       addTearDown(
-          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-                const MethodChannel('dev.fluttercommunity.plus/connectivity'),
-                null,
-              ));
-      await pumpMovie(tester, versions: const [
-        MediaVersion(id: 'v1', height: 1080),
-        MediaVersion(id: 'v2', height: 2160),
-      ]);
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+          null,
+        ),
+      );
+      await pumpMovie(
+        tester,
+        versions: const [
+          MediaVersion(id: 'v1', height: 1080),
+          MediaVersion(id: 'v2', height: 2160),
+        ],
+      );
       expect(find.byKey(SmartPlayButton.versionPickerKey), findsOneWidget);
       // The page opens on Play, not on the picker that was focusable first.
       expectOnPlay();

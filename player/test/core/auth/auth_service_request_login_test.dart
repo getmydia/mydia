@@ -14,27 +14,23 @@ class _FakeDeviceInfo extends DeviceInfoService {
   String getPlatform() => 'linux';
 }
 
-Map<String, dynamic> _login({
-  String? token = 'tok',
-  bool totp = false,
-}) =>
-    {
-      '__typename': 'RootMutationType',
-      'login': {
-        '__typename': 'LoginPayload',
-        'token': token,
-        'user': {
-          '__typename': 'User',
-          'id': 'u1',
-          'username': 'maya',
-          'email': null,
-          'displayName': null,
-        },
-        'expiresIn': 100,
-        'totpRequired': totp,
-        'challengeToken': totp ? 'challenge' : null,
-      },
-    };
+Map<String, dynamic> _login({String? token = 'tok', bool totp = false}) => {
+  '__typename': 'RootMutationType',
+  'login': {
+    '__typename': 'LoginPayload',
+    'token': token,
+    'user': {
+      '__typename': 'User',
+      'id': 'u1',
+      'username': 'maya',
+      'email': null,
+      'displayName': null,
+    },
+    'expiresIn': 100,
+    'totpRequired': totp,
+    'challengeToken': totp ? 'challenge' : null,
+  },
+};
 
 void main() {
   late MockAuthStorage storage;
@@ -70,7 +66,10 @@ void main() {
   test('requestLogin returns a TOTP challenge', () async {
     final outcome = await serviceFor(_login(token: null, totp: true))
         .requestLogin(
-            serverUrl: 'https://a.example', username: 'm', password: 'p');
+          serverUrl: 'https://a.example',
+          username: 'm',
+          password: 'p',
+        );
     expect(outcome, isA<TotpChallenge>());
   });
 
@@ -113,9 +112,13 @@ void main() {
     final service = serviceFor(graphqlError('Invalid username or password'));
     await expectLater(
       service.requestLogin(
-          serverUrl: 'http://a.test', username: 'u', password: 'p'),
-      throwsA(predicate(
-          (e) => e.toString().contains('Invalid username or password'))),
+        serverUrl: 'http://a.test',
+        username: 'u',
+        password: 'p',
+      ),
+      throwsA(
+        predicate((e) => e.toString().contains('Invalid username or password')),
+      ),
     );
   });
 }

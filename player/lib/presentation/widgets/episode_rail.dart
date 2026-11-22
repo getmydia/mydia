@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
 import '../../core/layout/breakpoints.dart';
 import '../../domain/detail/detail_views.dart';
 import '../screens/detail/detail_actions.dart';
@@ -19,7 +20,7 @@ class EpisodeRail extends StatelessWidget {
 
   /// Reports a watched-menu choice for one episode. Null hides the menu.
   final Future<void> Function(EpisodeView, EpisodeWatchedAction)?
-      onWatchedAction;
+  onWatchedAction;
 
   const EpisodeRail({
     super.key,

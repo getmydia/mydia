@@ -63,7 +63,9 @@ void main() {
 
     test('floors a rewind at zero', () {
       expect(
-          clampSeekTarget(const Duration(seconds: -5), unknown), Duration.zero);
+        clampSeekTarget(const Duration(seconds: -5), unknown),
+        Duration.zero,
+      );
       expect(
         clampSeekTarget(const Duration(seconds: -5), const Duration(hours: 1)),
         Duration.zero,
@@ -86,7 +88,9 @@ void main() {
     test('reports progress through a known duration', () {
       expect(
         castProgressFraction(
-            const Duration(minutes: 30), const Duration(hours: 1)),
+          const Duration(minutes: 30),
+          const Duration(hours: 1),
+        ),
         0.5,
       );
     });
@@ -94,7 +98,9 @@ void main() {
     test('clamps past-the-end positions', () {
       expect(
         castProgressFraction(
-            const Duration(hours: 2), const Duration(hours: 1)),
+          const Duration(hours: 2),
+          const Duration(hours: 1),
+        ),
         1.0,
       );
     });

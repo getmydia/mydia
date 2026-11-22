@@ -40,15 +40,17 @@ void main() {
     expect(storage.contents, isEmpty);
   });
 
-  test('clearSettings completes when the keychain refuses every delete',
-      () async {
-    // The macOS sign-out bug. SettingsService talked to FlutterSecureStorage
-    // directly, so a refused delete threw and aborted sign-out before it
-    // reached the step that ends the session.
-    final service = SettingsService(
-      storage: NativeAuthStorage(backend: _FailingBackend()),
-    );
+  test(
+    'clearSettings completes when the keychain refuses every delete',
+    () async {
+      // The macOS sign-out bug. SettingsService talked to FlutterSecureStorage
+      // directly, so a refused delete threw and aborted sign-out before it
+      // reached the step that ends the session.
+      final service = SettingsService(
+        storage: NativeAuthStorage(backend: _FailingBackend()),
+      );
 
-    await expectLater(service.clearSettings(), completes);
-  });
+      await expectLater(service.clearSettings(), completes);
+    },
+  );
 }

@@ -37,9 +37,13 @@ void main() {
       final en = await AppLocalizations.delegate.load(const Locale('en'));
       for (final track in UpdateTrack.values) {
         expect(
-            en.updateTrackName(track).toLowerCase(), isNot(contains('master')));
-        expect(en.updateTrackDescription(track).toLowerCase(),
-            isNot(contains('master')));
+          en.updateTrackName(track).toLowerCase(),
+          isNot(contains('master')),
+        );
+        expect(
+          en.updateTrackDescription(track).toLowerCase(),
+          isNot(contains('master')),
+        );
       }
     });
   });
@@ -63,8 +67,9 @@ void main() {
     test('a corrupt stored value falls back to stable', () async {
       final storage = MockAuthStorage();
       await storage.write('update_track', 'banana');
-      final store =
-          UpdateTrackStore(settings: SettingsService(storage: storage));
+      final store = UpdateTrackStore(
+        settings: SettingsService(storage: storage),
+      );
       expect(await store.read(), UpdateTrack.stable);
     });
   });

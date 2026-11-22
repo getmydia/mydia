@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../widgets/detail_hero_app_bar.dart';
@@ -105,7 +106,8 @@ class MovieDetailScreen extends ConsumerWidget {
     required bool compact,
   }) {
     final item = movie.target.ref;
-    final canDownload = isDownloadSupported &&
+    final canDownload =
+        isDownloadSupported &&
         movie.features.contains(DetailFeature.download) &&
         movie.files.isNotEmpty;
     return DetailActionRow(
@@ -118,14 +120,20 @@ class MovieDetailScreen extends ConsumerWidget {
       onToggleFavorite: () =>
           ref.read(movieActionsProvider(target)).toggleFavorite(),
       onDownload: canDownload
-          ? () => startItemDownload(context, ref,
-              item: item, metadata: movieDownloadMetadata(movie))
+          ? () => startItemDownload(
+              context,
+              ref,
+              item: item,
+              metadata: movieDownloadMetadata(movie),
+            )
           : null,
       trailerUrl: movie.trailerUrl,
       showDownload: canDownload,
-      isDownloaded: canDownload &&
+      isDownloaded:
+          canDownload &&
           (ref.watch(isItemDownloadedProvider(item)).value ?? false),
-      onShowMediaInfo: !movie.features.contains(DetailFeature.mediaInfo) ||
+      onShowMediaInfo:
+          !movie.features.contains(DetailFeature.mediaInfo) ||
               movie.files.isEmpty
           ? null
           : () => showMediaInfo(context: context, item: item),
@@ -143,14 +151,13 @@ class MovieDetailScreen extends ConsumerWidget {
               },
             )
           : movie.hasResumableProgress
-              ? _buildProgressBar(context, movie)
-              : null,
+          ? _buildProgressBar(context, movie)
+          : null,
       tags: [
         if (movie.runtimeDuration case final runtime?)
           context.l10n.runtime(runtime),
-        if (movie.files.firstOrNull?.resolution case final resolution?)
-          resolution,
-        if (movie.contentRating case final rating?) rating,
+        ?movie.files.firstOrNull?.resolution,
+        ?movie.contentRating,
         ...movie.genres,
       ],
       rating: movie.ratingDisplay,
@@ -192,9 +199,8 @@ class MovieDetailScreen extends ConsumerWidget {
           const SizedBox(height: 6),
           Text(
             remainingText,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: palette.textSecondary,
-                ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: palette.textSecondary),
           ),
         ],
       ],
@@ -202,7 +208,10 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildHeroSection(
-      BuildContext context, WidgetRef ref, MovieView movie) {
+    BuildContext context,
+    WidgetRef ref,
+    MovieView movie,
+  ) {
     return detailHeroAppBar(
       context: context,
       expandedHeight: 380,
@@ -231,12 +240,8 @@ class MovieDetailScreen extends ConsumerWidget {
     return HeroPlayControl(
       resume: movie.hasResumableProgress,
       files: movie.files,
-      onFileSelected: (file) => pushPlayer(
-        context,
-        ref,
-        target,
-        moviePlayerLocation(movie, file),
-      ),
+      onFileSelected: (file) =>
+          pushPlayer(context, ref, target, moviePlayerLocation(movie, file)),
     );
   }
 }

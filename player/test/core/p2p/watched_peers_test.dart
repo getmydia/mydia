@@ -10,14 +10,13 @@ void main() {
   late bool failDials;
 
   WatchedPeers build() => WatchedPeers(
-        nodeIdFor: (peer) =>
-            RegExp(r'"id":"([^"]+)"').firstMatch(peer)?.group(1),
-        isConnected: connected.contains,
-        dial: (a) async {
-          dialed.add(a);
-          if (failDials) throw Exception('unreachable');
-        },
-      );
+    nodeIdFor: (peer) => RegExp(r'"id":"([^"]+)"').firstMatch(peer)?.group(1),
+    isConnected: connected.contains,
+    dial: (a) async {
+      dialed.add(a);
+      if (failDials) throw Exception('unreachable');
+    },
+  );
 
   setUp(() {
     connected = {};

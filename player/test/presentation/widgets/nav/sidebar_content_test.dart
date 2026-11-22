@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -16,8 +16,10 @@ import '../../screens/sources/fake_media_source.dart';
 
 class _MydiaLike extends FakeCapableSource {
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.continueWatching};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.continueWatching,
+  };
 }
 
 Future<void> _pump(
@@ -40,8 +42,9 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        sidebarLayoutStoreProvider
-            .overrideWithValue(store ?? InMemorySidebarLayoutStore()),
+        sidebarLayoutStoreProvider.overrideWithValue(
+          store ?? InMemorySidebarLayoutStore(),
+        ),
         // A Mydia-like source is the active one, so every location without a
         // source of its own (`/`, `/settings`) resolves against it.
         thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
@@ -75,8 +78,9 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('renders the default destinations flat, with no expander',
-      (tester) async {
+  testWidgets('renders the default destinations flat, with no expander', (
+    tester,
+  ) async {
     await _pump(tester, location: '/');
 
     expect(find.text('Search'), findsOneWidget);
@@ -117,8 +121,9 @@ void main() {
     expect(find.text('Movies'), findsOneWidget);
   });
 
-  testWidgets('the most specific destination wins the selection',
-      (tester) async {
+  testWidgets('the most specific destination wins the selection', (
+    tester,
+  ) async {
     await _pump(tester, location: '/s/${fakeSourceId.value}/favorites');
 
     final favorites = tester.widget<SidebarRow>(
@@ -156,8 +161,9 @@ void main() {
     expect(movies.canCustomise, isTrue);
   });
 
-  testWidgets('offline disables server-backed rows but not Downloads',
-      (tester) async {
+  testWidgets('offline disables server-backed rows but not Downloads', (
+    tester,
+  ) async {
     await _pump(tester, location: '/', isOffline: true);
 
     final movies = tester.widget<SidebarRow>(
@@ -256,36 +262,39 @@ void main() {
   });
 
   testWidgets(
-      'the restore control fills its shared 36px slot, and keeps at least a '
-      '44px tap height', (tester) async {
-    // SidebarRow's trailing slot is a fixed 36px, shared with normal mode's
-    // overflow menu; widening it would shift row layout there too. So the
-    // restore control's live hit target is 36 wide, exactly the slot, not
-    // the 44 its own BoxConstraints requests for height alone — width comes
-    // from Material's own default tap-target padding being clamped down
-    // into the slot, not from this widget's constraints. Height is at least
-    // the requested 44 and, since nothing upstream bounds it, actually lands
-    // at Material's own 48px padded minimum.
-    final store = InMemorySidebarLayoutStore();
-    await store.save(SidebarLayout.defaults.withHidden('collections'));
+    'the restore control fills its shared 36px slot, and keeps at least a '
+    '44px tap height',
+    (tester) async {
+      // SidebarRow's trailing slot is a fixed 36px, shared with normal mode's
+      // overflow menu; widening it would shift row layout there too. So the
+      // restore control's live hit target is 36 wide, exactly the slot, not
+      // the 44 its own BoxConstraints requests for height alone — width comes
+      // from Material's own default tap-target padding being clamped down
+      // into the slot, not from this widget's constraints. Height is at least
+      // the requested 44 and, since nothing upstream bounds it, actually lands
+      // at Material's own 48px padded minimum.
+      final store = InMemorySidebarLayoutStore();
+      await store.save(SidebarLayout.defaults.withHidden('collections'));
 
-    await _pump(tester, location: '/', store: store);
+      await _pump(tester, location: '/', store: store);
 
-    await tester.tap(find.byTooltip('Edit sidebar'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit sidebar'));
+      await tester.pumpAndSettle();
 
-    final button = find.ancestor(
-      of: find.byTooltip('Restore Collections'),
-      matching: find.byType(IconButton),
-    );
-    final size = tester.getSize(button);
+      final button = find.ancestor(
+        of: find.byTooltip('Restore Collections'),
+        matching: find.byType(IconButton),
+      );
+      final size = tester.getSize(button);
 
-    expect(size.width, 36);
-    expect(size.height, greaterThanOrEqualTo(44));
-  });
+      expect(size.width, 36);
+      expect(size.height, greaterThanOrEqualTo(44));
+    },
+  );
 
-  testWidgets('reset asks before it acts, and cancel changes nothing',
-      (tester) async {
+  testWidgets('reset asks before it acts, and cancel changes nothing', (
+    tester,
+  ) async {
     final store = InMemorySidebarLayoutStore();
     await store.save(SidebarLayout.defaults.withHidden('collections'));
 
@@ -340,8 +349,9 @@ void main() {
     expect(node.hasFocus, isTrue);
   });
 
-  testWidgets('the shell node reaches a row when nothing is selected',
-      (tester) async {
+  testWidgets('the shell node reaches a row when nothing is selected', (
+    tester,
+  ) async {
     // A location the sidebar does not list at all — a filter the viewer
     // deleted, or a shared `/filter/<id>` link. No row carries the selection,
     // and without a fallback the node would attach to nothing and the sidebar
@@ -366,13 +376,16 @@ void main() {
         .widget<AnimatedOpacity>(
           find
               .ancestor(
-                  of: find.text(text), matching: find.byType(AnimatedOpacity))
+                of: find.text(text),
+                matching: find.byType(AnimatedOpacity),
+              )
               .first,
         )
         .opacity;
 
-    testWidgets('shows icon boxes with tooltips while labels are hidden',
-        (tester) async {
+    testWidgets('shows icon boxes with tooltips while labels are hidden', (
+      tester,
+    ) async {
       await _pump(tester, location: '/', rail: true);
 
       expect(labelOpacity(tester, 'Search'), 0);
@@ -385,16 +398,18 @@ void main() {
       }
     });
 
-    testWidgets('labels show and the tooltips go once expanded',
-        (tester) async {
+    testWidgets('labels show and the tooltips go once expanded', (
+      tester,
+    ) async {
       await _pump(tester, location: '/', rail: true, railLabelsVisible: true);
 
       expect(labelOpacity(tester, 'Search'), 1);
       expect(find.byTooltip('Search'), findsNothing);
     });
 
-    testWidgets('has no header, and the new-filter row is a normal row',
-        (tester) async {
+    testWidgets('has no header, and the new-filter row is a normal row', (
+      tester,
+    ) async {
       await _pump(tester, location: '/', rail: true);
 
       expect(find.byTooltip('Edit sidebar'), findsNothing);
@@ -411,8 +426,9 @@ void main() {
       );
     });
 
-    testWidgets('the server switcher icon lines up with the rows',
-        (tester) async {
+    testWidgets('the server switcher icon lines up with the rows', (
+      tester,
+    ) async {
       await _pump(tester, location: '/', rail: true, withSwitcher: true);
 
       final switcher = find.byKey(const ValueKey('source-switcher-compact'));
@@ -422,10 +438,7 @@ void main() {
         of: find.byKey(const ValueKey('sidebar-row-search')),
         matching: find.byType(Icon),
       );
-      expect(
-        tester.getCenter(switcher).dx,
-        tester.getCenter(rowIcon.first).dx,
-      );
+      expect(tester.getCenter(switcher).dx, tester.getCenter(rowIcon.first).dx);
     });
 
     testWidgets('the selected row is ringed and filled', (tester) async {

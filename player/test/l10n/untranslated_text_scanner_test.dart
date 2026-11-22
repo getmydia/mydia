@@ -3,21 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'untranslated_text_scanner.dart';
 
 List<String> scan(String body) => findUntranslated(
-      "import 'package:flutter/material.dart';\n$body",
-      path: 'x.dart',
-    ).map((f) => f.text).toList();
+  "import 'package:material_ui/material_ui.dart';\n$body",
+  path: 'x.dart',
+).map((f) => f.text).toList();
 
 void main() {
   test('flags Text with a literal, const or not', () {
-    expect(scan("final a = Text('Sign in'); const b = Text('Cancel');"),
-        ['Sign in', 'Cancel']);
+    expect(scan("final a = Text('Sign in'); const b = Text('Cancel');"), [
+      'Sign in',
+      'Cancel',
+    ]);
   });
 
   test('flags literal UI arguments', () {
     expect(
-      scan("f() => X(title: 'Theme', subtitle: 'On this device', "
-          "tooltip: 'Close', hintText: 'Server URL', label: 'Name', "
-          "message: 'Saved', semanticLabel: 'Back');"),
+      scan(
+        "f() => X(title: 'Theme', subtitle: 'On this device', "
+        "tooltip: 'Close', hintText: 'Server URL', label: 'Name', "
+        "message: 'Saved', semanticLabel: 'Back');",
+      ),
       [
         'Theme',
         'On this device',
@@ -25,7 +29,7 @@ void main() {
         'Server URL',
         'Name',
         'Saved',
-        'Back'
+        'Back',
       ],
     );
   });
@@ -66,14 +70,19 @@ void main() {
   });
 
   test('flags nested conditionals and parentheses', () {
-    expect(
-        scan("f(a, b) => Text(a ? 'A' : (b ? 'B' : 'C'));"), ['A', 'B', 'C']);
+    expect(scan("f(a, b) => Text(a ? 'A' : (b ? 'B' : 'C'));"), [
+      'A',
+      'B',
+      'C',
+    ]);
   });
 
   test('flags the message passed to showToast', () {
     expect(
-      scan(r"f(c, e) { showToast(c, 'Saved'); showToast(c, 'Failed: $e', "
-          r"kind: ToastKind.error); }"),
+      scan(
+        r"f(c, e) { showToast(c, 'Saved'); showToast(c, 'Failed: $e', "
+        r"kind: ToastKind.error); }",
+      ),
       ['Saved', r'Failed: $e'],
     );
   });

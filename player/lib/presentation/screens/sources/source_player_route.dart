@@ -1,6 +1,6 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -90,8 +90,9 @@ class SourcePlayerRoute extends ConsumerStatefulWidget {
 }
 
 class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
-  late final SourcePlayerParams _params =
-      SourcePlayerParams.fromUri(widget.uri);
+  late final SourcePlayerParams _params = SourcePlayerParams.fromUri(
+    widget.uri,
+  );
 
   /// Built once: the player screen reads its session in `initState`.
   late final PlaybackSession? _session = () {

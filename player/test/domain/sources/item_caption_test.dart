@@ -17,15 +17,22 @@ ItemSummary _item(ItemKind kind, {String? subtitle, String? showTitle}) =>
 void main() {
   test('an episode captions with its show and place', () {
     expect(
-      showEpisodeCaption(_item(ItemKind.episode,
-          showTitle: 'Harbor Lights', subtitle: 'S1 · E3')),
+      showEpisodeCaption(
+        _item(
+          ItemKind.episode,
+          showTitle: 'Harbor Lights',
+          subtitle: 'S1 · E3',
+        ),
+      ),
       'Harbor Lights · S1 · E3',
     );
   });
 
   test('an episode with only a subtitle captions with it', () {
-    expect(showEpisodeCaption(_item(ItemKind.episode, subtitle: 'S1 · E3')),
-        'S1 · E3');
+    expect(
+      showEpisodeCaption(_item(ItemKind.episode, subtitle: 'S1 · E3')),
+      'S1 · E3',
+    );
   });
 
   test('an episode with neither part has no caption', () {
@@ -33,7 +40,9 @@ void main() {
   });
 
   test('a movie has no caption even with a subtitle', () {
-    expect(showEpisodeCaption(_item(ItemKind.movie, subtitle: 'new episodes')),
-        isNull);
+    expect(
+      showEpisodeCaption(_item(ItemKind.movie, subtitle: 'new episodes')),
+      isNull,
+    );
   });
 }

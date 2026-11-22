@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' show Locale;
+import 'package:material_ui/material_ui.dart' show Locale;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -25,20 +25,20 @@ const _media = CastMediaInfo(
 );
 
 FlutterPlaybackSnapshot _snapshot(String title) => FlutterPlaybackSnapshot(
-      state: FlutterPlaybackState.playing,
-      title: title,
-      positionMs: BigInt.zero,
-      durationMs: BigInt.from(60000),
-      muted: false,
-      audioTracks: const [],
-      subtitleTracks: const [],
-      capabilities: const FlutterTargetCapabilities(
-        volume: true,
-        trackSelection: true,
-        nextPrevious: false,
-      ),
-      sequence: BigInt.one,
-    );
+  state: FlutterPlaybackState.playing,
+  title: title,
+  positionMs: BigInt.zero,
+  durationMs: BigInt.from(60000),
+  muted: false,
+  audioTracks: const [],
+  subtitleTracks: const [],
+  capabilities: const FlutterTargetCapabilities(
+    volume: true,
+    trackSelection: true,
+    nextPrevious: false,
+  ),
+  sequence: BigInt.one,
+);
 
 /// Records play and pause; anything else it is asked fails the test.
 class _RecordingManager implements CastSessionManager {
@@ -55,11 +55,13 @@ class _RecordingManager implements CastSessionManager {
 }
 
 Future<CastBarState?> _stateFor(CastSession? session) async {
-  final container = ProviderContainer(overrides: [
-    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    hasMydiaProvider.overrideWithValue(true),
-    castSessionProvider.overrideWith((ref) => Stream.value(session)),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      hasMydiaProvider.overrideWithValue(true),
+      castSessionProvider.overrideWith((ref) => Stream.value(session)),
+    ],
+  );
   addTearDown(container.dispose);
   final sub = container.listen(castBarStateProvider, (prev, next) {});
   addTearDown(sub.close);
@@ -69,55 +71,66 @@ Future<CastBarState?> _stateFor(CastSession? session) async {
 
 void main() {
   test('connecting', () async {
-    final state = await _stateFor(const CastSession(
-      device: _device,
-      playbackState: CastPlaybackState.idle,
-      connectionState: CastConnectionState.connecting,
-    ));
+    final state = await _stateFor(
+      const CastSession(
+        device: _device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.connecting,
+      ),
+    );
     expect(state, isA<CastBarConnecting>());
   });
 
   test('a stale session with media is stale', () async {
-    final state = await _stateFor(const CastSession(
-      device: _device,
-      mediaInfo: _media,
-      playbackState: CastPlaybackState.playing,
-      connectionState: CastConnectionState.lost,
-    ));
+    final state = await _stateFor(
+      const CastSession(
+        device: _device,
+        mediaInfo: _media,
+        playbackState: CastPlaybackState.playing,
+        connectionState: CastConnectionState.lost,
+      ),
+    );
     expect(state, isA<CastBarStale>());
   });
 
   test('a stale session without media is offline', () async {
-    final state = await _stateFor(const CastSession(
-      device: _device,
-      playbackState: CastPlaybackState.idle,
-      connectionState: CastConnectionState.lost,
-    ));
+    final state = await _stateFor(
+      const CastSession(
+        device: _device,
+        playbackState: CastPlaybackState.idle,
+        connectionState: CastConnectionState.lost,
+      ),
+    );
     expect((state as CastBarOffline).device, _device);
   });
 
   test('connected, nothing loaded, is idle', () async {
-    final state = await _stateFor(const CastSession(
-      device: _device,
-      playbackState: CastPlaybackState.idle,
-    ));
+    final state = await _stateFor(
+      const CastSession(device: _device, playbackState: CastPlaybackState.idle),
+    );
     expect(state, isA<CastBarIdle>());
   });
 
   test('connected with media is playing', () async {
-    final state = await _stateFor(const CastSession(
-      device: _device,
-      mediaInfo: _media,
-      playbackState: CastPlaybackState.playing,
-    ));
+    final state = await _stateFor(
+      const CastSession(
+        device: _device,
+        mediaInfo: _media,
+        playbackState: CastPlaybackState.playing,
+      ),
+    );
     expect(state, isA<CastBarPlaying>());
   });
 
   test('no Mydia server: nothing', () async {
-    final container = ProviderContainer(overrides: [
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      hasMydiaProvider.overrideWithValue(false),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        hasMydiaProvider.overrideWithValue(false),
+      ],
+    );
     addTearDown(container.dispose);
     expect(container.read(castBarStateProvider), isNull);
   });
@@ -128,16 +141,18 @@ void main() {
       await toggleCastPlayback(
         manager,
         const CastSession(
-            device: _device,
-            mediaInfo: _media,
-            playbackState: CastPlaybackState.playing),
+          device: _device,
+          mediaInfo: _media,
+          playbackState: CastPlaybackState.playing,
+        ),
       );
       await toggleCastPlayback(
         manager,
         const CastSession(
-            device: _device,
-            mediaInfo: _media,
-            playbackState: CastPlaybackState.paused),
+          device: _device,
+          mediaInfo: _media,
+          playbackState: CastPlaybackState.paused,
+        ),
       );
       expect(manager.calls, ['pause', 'play']);
     });
@@ -162,12 +177,15 @@ void main() {
       required CastSession? session,
       required Set<AmbientDismissal> dismissed,
     }) async {
-      final container = ProviderContainer(overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-        hasMydiaProvider.overrideWithValue(true),
-        castSessionProvider.overrideWith((ref) => Stream.value(session)),
-        ambientPlayingProvider.overrideWith((ref) => Stream.value([
+      final container = ProviderContainer(
+        overrides: [
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+          hasMydiaProvider.overrideWithValue(true),
+          castSessionProvider.overrideWith((ref) => Stream.value(session)),
+          ambientPlayingProvider.overrideWith(
+            (ref) => Stream.value([
               AmbientTarget(
                 device: const CastDevice(
                   id: 'node-tv',
@@ -176,18 +194,24 @@ void main() {
                 ),
                 snapshot: _snapshot('The Lantern Keepers'),
               ),
-            ])),
-      ]);
+            ]),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
       final notifier = container.read(ambientDismissalsProvider.notifier);
       dismissed.forEach(notifier.dismissKey);
-      final sub =
-          container.listen(castBarAmbientHiddenProvider, (prev, next) {});
+      final sub = container.listen(
+        castBarAmbientHiddenProvider,
+        (prev, next) {},
+      );
       addTearDown(sub.close);
       // With a session, nothing under test watches the ambient list, so
       // hold it here or awaiting it disposes it mid-load.
-      final ambientSub =
-          container.listen(ambientPlayingProvider, (prev, next) {});
+      final ambientSub = container.listen(
+        ambientPlayingProvider,
+        (prev, next) {},
+      );
       addTearDown(ambientSub.close);
       await container.read(castSessionProvider.future);
       await container.read(ambientPlayingProvider.future);
@@ -197,9 +221,7 @@ void main() {
     test('true while a dismissed player is still playing', () async {
       final container = await containerFor(
         session: null,
-        dismissed: {
-          const AmbientDismissal('node-tv', 'The Lantern Keepers'),
-        },
+        dismissed: {const AmbientDismissal('node-tv', 'The Lantern Keepers')},
       );
       expect(container.read(castBarAmbientHiddenProvider), isTrue);
       expect(container.read(castBarStateProvider), isNull);
@@ -216,13 +238,15 @@ void main() {
           device: _device,
           playbackState: CastPlaybackState.idle,
         ),
-        dismissed: {
-          const AmbientDismissal('node-tv', 'The Lantern Keepers'),
-        },
+        dismissed: {const AmbientDismissal('node-tv', 'The Lantern Keepers')},
       );
-      expect(container.read(castBarAmbientHiddenProvider), isFalse,
-          reason: 'the bar is busy with that session; the banner would not '
-              'show even if restored');
+      expect(
+        container.read(castBarAmbientHiddenProvider),
+        isFalse,
+        reason:
+            'the bar is busy with that session; the banner would not '
+            'show even if restored',
+      );
     });
   });
 
@@ -235,8 +259,12 @@ void main() {
     expect(CastBarText.staleStatus(en, 'Den'), 'Lost connection to Den');
     expect(CastBarText.ambientStatus(en, 'Den'), 'Playing on Den');
     expect(
-        CastBarText.playingStatus(en, 'Den', syncing: false), 'Casting to Den');
-    expect(CastBarText.playingStatus(en, 'Den', syncing: true),
-        'Reconnecting to Den…');
+      CastBarText.playingStatus(en, 'Den', syncing: false),
+      'Casting to Den',
+    );
+    expect(
+      CastBarText.playingStatus(en, 'Den', syncing: true),
+      'Reconnecting to Den…',
+    );
   });
 }

@@ -20,14 +20,16 @@ import '../../presentation/screens/sources/fake_media_source.dart';
 /// publish and answers [result].
 class _RemoteSource extends FakeMediaSource implements RemoteTargets {
   _RemoteSource(SourceId id, this.registered, {this.result = true})
-      : super(id: id);
+    : super(id: id);
 
   final List<String> registered;
   final bool result;
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.remoteTargets};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.remoteTargets,
+  };
 
   @override
   Future<bool> registerNode(String nodeId) async {
@@ -57,11 +59,19 @@ SourceAccountRecord _record(String account, {bool needsReauth = false}) =>
       ),
       profiles: [
         SourceProfile(
-            id: 'owner', accountId: account, name: 'Owner', isOwner: true),
+          id: 'owner',
+          accountId: account,
+          name: 'Owner',
+          isOwner: true,
+        ),
       ],
       servers: [
         SourceServer(
-            id: 'inst', accountId: account, profileId: 'owner', name: account),
+          id: 'inst',
+          accountId: account,
+          profileId: 'owner',
+          name: account,
+        ),
       ],
       addedAtMs: account.codeUnitAt(0),
     );
@@ -102,24 +112,29 @@ void main() {
   }) async {
     p2p = _FakeP2pStatus();
     sent = {
-      for (final a in ['a', 'b']) a: <String>[]
+      for (final a in ['a', 'b']) a: <String>[],
     };
     records = _Records([for (final a in accounts) _record(a)]);
-    container = ProviderContainer(overrides: [
-      p2pStatusNotifierProvider.overrideWith(() => p2p),
-      remoteControlEnabledProvider
-          .overrideWith((ref) => controllable ?? Future.value(true)),
-      sourceRecordsProvider.overrideWith(() => records),
-      mediaSourceProvider.overrideWith((ref, id) {
-        ref.watch(_generation);
-        for (final a in ['a', 'b']) {
-          if (id == idOf(a)) return _RemoteSource(id, sent[a]!, result: result);
-        }
-        return null;
-      }),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        p2pStatusNotifierProvider.overrideWith(() => p2p),
+        remoteControlEnabledProvider.overrideWith(
+          (ref) => controllable ?? Future.value(true),
+        ),
+        sourceRecordsProvider.overrideWith(() => records),
+        mediaSourceProvider.overrideWith((ref, id) {
+          ref.watch(_generation);
+          for (final a in ['a', 'b']) {
+            if (id == idOf(a)) {
+              return _RemoteSource(id, sent[a]!, result: result);
+            }
+          }
+          return null;
+        }),
+      ],
+    );
     addTearDown(container.dispose);
-    container.listen(nodeRegistrationsProvider, (_, __) {});
+    container.listen(nodeRegistrationsProvider, (_, _) {});
     await container.read(sourceRecordsProvider.future);
     await pumpEventQueue();
   }
@@ -171,8 +186,10 @@ void main() {
     records.emit([_record('a', needsReauth: true), _record('b')]);
     await pumpEventQueue();
     expect(sent['a'], hasLength(1), reason: 'not ready while signed out');
-    expect(container.read(nodeRegistrationsProvider)[idOf('a')],
-        isA<RegistrationWaiting>());
+    expect(
+      container.read(nodeRegistrationsProvider)[idOf('a')],
+      isA<RegistrationWaiting>(),
+    );
 
     records.emit([_record('a'), _record('b')]);
     await pumpEventQueue();
@@ -186,8 +203,10 @@ void main() {
     await start();
     p2p.publish('n' * 64);
     await pumpEventQueue();
-    expect(container.read(nodeRegistrationsProvider).values,
-        everyElement(isA<RegistrationFailed>()));
+    expect(
+      container.read(nodeRegistrationsProvider).values,
+      everyElement(isA<RegistrationFailed>()),
+    );
     final before = sent['a']!.length;
 
     container.read(nodeRegistrationsProvider.notifier).retryAll();
@@ -214,8 +233,10 @@ void main() {
 
   test('waits for the node id, then registers', () async {
     await start();
-    expect(container.read(nodeRegistrationsProvider).values,
-        everyElement(isA<RegistrationWaiting>()));
+    expect(
+      container.read(nodeRegistrationsProvider).values,
+      everyElement(isA<RegistrationWaiting>()),
+    );
     expect(sent['a'], isEmpty);
 
     p2p.publish('n' * 64);
@@ -224,43 +245,55 @@ void main() {
     expect(sent['a'], ['n' * 64]);
   });
 
-  test('a setting that has not resolved is waiting, then idle when off',
-      () async {
-    final setting = Completer<bool>();
-    await start(controllable: setting.future);
-    p2p.publish('n' * 64);
-    await pumpEventQueue();
+  test(
+    'a setting that has not resolved is waiting, then idle when off',
+    () async {
+      final setting = Completer<bool>();
+      await start(controllable: setting.future);
+      p2p.publish('n' * 64);
+      await pumpEventQueue();
 
-    expect(sent['a'], isEmpty);
-    expect(container.read(nodeRegistrationsProvider).values,
-        everyElement(isA<RegistrationWaiting>()));
+      expect(sent['a'], isEmpty);
+      expect(
+        container.read(nodeRegistrationsProvider).values,
+        everyElement(isA<RegistrationWaiting>()),
+      );
 
-    setting.complete(false);
-    await pumpEventQueue();
+      setting.complete(false);
+      await pumpEventQueue();
 
-    expect(sent['a'], isEmpty);
-    expect(container.read(nodeRegistrationsProvider).values,
-        everyElement(isA<RegistrationIdle>()));
-  });
+      expect(sent['a'], isEmpty);
+      expect(
+        container.read(nodeRegistrationsProvider).values,
+        everyElement(isA<RegistrationIdle>()),
+      );
+    },
+  );
 
   group('worstRegistrationStatus', () {
     final at = DateTime(2026);
-    test('orders Failed over Waiting over InFlight over Succeeded over Idle',
-        () {
-      const failed = RegistrationFailed('x', 1, null);
-      const waiting = RegistrationWaiting(RegistrationDependency.deviceOnline);
-      const inFlight = RegistrationInFlight('n', 1);
-      final ok = RegistrationSucceeded('n', at);
-      const idle = RegistrationIdle();
+    test(
+      'orders Failed over Waiting over InFlight over Succeeded over Idle',
+      () {
+        const failed = RegistrationFailed('x', 1, null);
+        const waiting = RegistrationWaiting(
+          RegistrationDependency.deviceOnline,
+        );
+        const inFlight = RegistrationInFlight('n', 1);
+        final ok = RegistrationSucceeded('n', at);
+        const idle = RegistrationIdle();
 
-      expect(worstRegistrationStatus([idle, ok, inFlight, waiting, failed]),
-          failed);
-      expect(worstRegistrationStatus([idle, ok, inFlight, waiting]), waiting);
-      expect(worstRegistrationStatus([idle, ok, inFlight]), inFlight);
-      expect(worstRegistrationStatus([idle, ok]), ok);
-      expect(worstRegistrationStatus([idle]), idle);
-      expect(worstRegistrationStatus(const []), isA<RegistrationIdle>());
-    });
+        expect(
+          worstRegistrationStatus([idle, ok, inFlight, waiting, failed]),
+          failed,
+        );
+        expect(worstRegistrationStatus([idle, ok, inFlight, waiting]), waiting);
+        expect(worstRegistrationStatus([idle, ok, inFlight]), inFlight);
+        expect(worstRegistrationStatus([idle, ok]), ok);
+        expect(worstRegistrationStatus([idle]), idle);
+        expect(worstRegistrationStatus(const []), isA<RegistrationIdle>());
+      },
+    );
   });
 }
 

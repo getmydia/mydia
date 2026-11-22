@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
@@ -35,39 +35,41 @@ class GlassIconButton extends StatelessWidget {
         color: color,
       );
     }
-    return LayoutBuilder(builder: (context, constraints) {
-      final size = constraints.hasBoundedHeight
-          ? math.min(
-              DepthTokens.liquidIconButtonSize,
-              constraints.maxHeight - 2 * DepthTokens.liquidIconButtonInset,
-            )
-          : DepthTokens.liquidIconButtonSize;
-      return GlassInteraction(
-        enabled: onPressed != null,
-        child: SizedBox.square(
-          dimension: size,
-          child: GlassSurface.control(
-            borderRadius: BorderRadius.circular(size / 2),
-            child: Material(
-              type: MaterialType.transparency,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: IconButton(
-                icon: icon,
-                onPressed: onPressed,
-                tooltip: tooltip,
-                color: color ?? context.palette.textPrimary,
-                padding: EdgeInsets.zero,
-                style: IconButton.styleFrom(
-                  splashFactory: NoSplash.splashFactory,
-                  minimumSize: Size.square(size),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.hasBoundedHeight
+            ? math.min(
+                DepthTokens.liquidIconButtonSize,
+                constraints.maxHeight - 2 * DepthTokens.liquidIconButtonInset,
+              )
+            : DepthTokens.liquidIconButtonSize;
+        return GlassInteraction(
+          enabled: onPressed != null,
+          child: SizedBox.square(
+            dimension: size,
+            child: GlassSurface.control(
+              borderRadius: BorderRadius.circular(size / 2),
+              child: Material(
+                type: MaterialType.transparency,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: IconButton(
+                  icon: icon,
+                  onPressed: onPressed,
+                  tooltip: tooltip,
+                  color: color ?? context.palette.textPrimary,
+                  padding: EdgeInsets.zero,
+                  style: IconButton.styleFrom(
+                    splashFactory: NoSplash.splashFactory,
+                    minimumSize: Size.square(size),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
@@ -23,28 +23,31 @@ Future<void> _pump(
     features: features,
   );
   await mockNetworkImages(() async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        isItemDownloadedProvider(episode.target.ref)
-            .overrideWith((ref) => false),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: EpisodeRailCard(
-            episode: episode,
-            onWatchedAction: onWatchedAction,
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          isItemDownloadedProvider(episode.target.ref)
+              .overrideWith((ref) => false),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: EpisodeRailCard(
+              episode: episode,
+              onWatchedAction: onWatchedAction,
+            ),
           ),
         ),
       ),
-    ));
+    );
   });
 }
 
 void main() {
-  testWidgets('a source that cannot download gets no download button',
-      (tester) async {
+  testWidgets('a source that cannot download gets no download button', (
+    tester,
+  ) async {
     await _pump(tester);
     expect(find.byType(EpisodeDownloadButton), findsNothing);
   });

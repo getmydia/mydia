@@ -85,8 +85,9 @@ class _FakeFilesTransport implements PeerFilesTransport {
 
   @override
   Future<FlutterPeerFilesResponse> sendPeerFiles(
-          String peer, FlutterPeerFilesRequest request) =>
-      throw UnimplementedError();
+    String peer,
+    FlutterPeerFilesRequest request,
+  ) => throw UnimplementedError();
 
   @override
   Future<P2pRangeStream> openRangeStream({
@@ -96,8 +97,7 @@ class _FakeFilesTransport implements PeerFilesTransport {
     int? rangeStart,
     int? rangeEnd,
     String? authToken,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 }
 
 /// PeerSync transport for a host that never reaches anyone: only the parts
@@ -129,14 +129,18 @@ class _QuietSyncTransport implements PeerSyncTransport {
 
   @override
   Future<FlutterPeerSyncResponse> sendPeerSync(
-      String peer, FlutterPeerSyncRequest req) {
+    String peer,
+    FlutterPeerSyncRequest req,
+  ) {
     onSend?.call(peer);
     return Future.error(Exception('unreachable'));
   }
 
   @override
   Future<void> respondToPeerSync(
-      String requestId, FlutterPeerSyncResponse res) async {}
+    String requestId,
+    FlutterPeerSyncResponse res,
+  ) async {}
   @override
   bool isConnectedToPeer(String peer) => false;
 
@@ -168,8 +172,11 @@ class _RecordingBackend implements FileSystemBackend {
   Future<void> probe() async {}
 }
 
-SourceAccountRecord _filesRecord(String id, String name,
-    {List<ServerConnection> connections = const []}) {
+SourceAccountRecord _filesRecord(
+  String id,
+  String name, {
+  List<ServerConnection> connections = const [],
+}) {
   return SourceAccountRecord(
     account: ProviderAccount(
       id: id,
@@ -180,7 +187,11 @@ SourceAccountRecord _filesRecord(String id, String name,
     ),
     profiles: [
       SourceProfile(
-          id: kOwnerProfileId, accountId: id, name: 'Owner', isOwner: true),
+        id: kOwnerProfileId,
+        accountId: id,
+        name: 'Owner',
+        isOwner: true,
+      ),
     ],
     servers: [
       SourceServer(
@@ -206,12 +217,14 @@ const _rootPaths = {
 /// Three roots and 2,000 invented files, with groups, movies and shows.
 Future<void> _seed(FileLibraryIndex index) async {
   for (final e in _rootPaths.entries) {
-    await index.putRoot(LibraryRoot(
-      id: e.key,
-      path: e.value,
-      kind: FilesLibraryKind.mixed,
-      title: e.key,
-    ));
+    await index.putRoot(
+      LibraryRoot(
+        id: e.key,
+        path: e.value,
+        kind: FilesLibraryKind.mixed,
+        title: e.key,
+      ),
+    );
   }
   final roots = _rootPaths.keys.toList();
   await index.putFiles([
@@ -229,33 +242,37 @@ Future<void> _seed(FileLibraryIndex index) async {
           title: 'The Copper Lantern $i',
           groupKey: 'thecopperlantern$i|',
         ),
-        sidecars: [
-          if (i == 7) 'The Copper Lantern 7/Lantern 7.en.srt',
-        ],
+        sidecars: [if (i == 7) 'The Copper Lantern 7/Lantern 7.en.srt'],
       ),
   ]);
   for (var i = 0; i < 300; i++) {
-    await index.putGroup(GroupMatch(
-      groupKey: 'thecopperlantern$i|',
-      isShow: false,
-      tmdbId: 5000 + i,
-      matchedAt: _t,
-    ));
+    await index.putGroup(
+      GroupMatch(
+        groupKey: 'thecopperlantern$i|',
+        isShow: false,
+        tmdbId: 5000 + i,
+        matchedAt: _t,
+      ),
+    );
   }
   for (var i = 0; i < 50; i++) {
-    await index.putMovie(MatchedMovie(
-      tmdbId: 5000 + i,
-      title: 'The Copper Lantern $i',
-      overview: 'A lamp-lighter keeps harbor town number $i awake.',
-    ));
+    await index.putMovie(
+      MatchedMovie(
+        tmdbId: 5000 + i,
+        title: 'The Copper Lantern $i',
+        overview: 'A lamp-lighter keeps harbor town number $i awake.',
+      ),
+    );
   }
-  await index.putShow(const MatchedShow(
-    tmdbId: 9100,
-    title: 'Saltmarsh Choir',
-    seasons: {
-      1: [MatchedEpisode(season: 1, episode: 1, title: 'Low Tide')],
-    },
-  ));
+  await index.putShow(
+    const MatchedShow(
+      tmdbId: 9100,
+      title: 'Saltmarsh Choir',
+      seasons: {
+        1: [MatchedEpisode(season: 1, episode: 1, title: 'Low Tide')],
+      },
+    ),
+  );
 }
 
 void main() {
@@ -283,12 +300,14 @@ void main() {
     localIndex = FileLibraryIndex(box, accountId: kFilesLocalAccountId);
     smbIndex = FileLibraryIndex(box, accountId: _smbAccount);
     await _seed(localIndex);
-    await smbIndex.putRoot(const LibraryRoot(
-      id: 'rshare',
-      path: '/Media',
-      kind: FilesLibraryKind.movies,
-      title: 'Media',
-    ));
+    await smbIndex.putRoot(
+      const LibraryRoot(
+        id: 'rshare',
+        path: '/Media',
+        kind: FilesLibraryKind.movies,
+        title: 'Media',
+      ),
+    );
     await smbIndex.putFiles([
       IndexedFile(
         key: fileKeyFor('rshare', 'Harbor Kites.mkv'),
@@ -307,12 +326,9 @@ void main() {
     secret = PeerGroupSecret.generate();
     await auth.write(PeerGroupSecret.storageKey, secret.toBase64Url());
     for (final id in [_hostNode, _viewerNode]) {
-      await store.putMember(PeerMember(
-        nodeId: id,
-        deviceName: id,
-        platform: 'linux',
-        updatedAt: 1,
-      ));
+      await store.putMember(
+        PeerMember(nodeId: id, deviceName: id, platform: 'linux', updatedAt: 1),
+      );
     }
     sync = PeerSyncService(
       store: store,
@@ -331,9 +347,13 @@ void main() {
     backendMissing = false;
     accounts = [
       _filesRecord(kFilesLocalAccountId, 'This device'),
-      _filesRecord(_smbAccount, 'NAS', connections: [
-        ServerConnection(uri: Uri.parse('smb://NAS.Local/Media')),
-      ]),
+      _filesRecord(
+        _smbAccount,
+        'NAS',
+        connections: [
+          ServerConnection(uri: Uri.parse('smb://NAS.Local/Media')),
+        ],
+      ),
       // A share another member lends this device: never offered onward.
       _filesRecord('p0123456789ab_flocal', 'Den'),
     ];
@@ -364,8 +384,13 @@ void main() {
     String peer = _viewerNode,
   }) async {
     final id = 'req-${requestCounter++}';
-    transport.requests.add(FlutterInboundPeerFilesRequest(
-        peer: peer, requestId: id, request: request));
+    transport.requests.add(
+      FlutterInboundPeerFilesRequest(
+        peer: peer,
+        requestId: id,
+        request: request,
+      ),
+    );
     await pumpEventQueue();
     return transport.responses[id]!;
   }
@@ -374,10 +399,17 @@ void main() {
   const failed = FlutterPeerFileGrantAnswer.failed();
 
   Future<FlutterPeerFileGrantAnswer> grant(
-      String accountId, String path) async {
+    String accountId,
+    String path,
+  ) async {
     final id = 'grant-${requestCounter++}';
-    transport.grants.add(FlutterPeerFileGrantRequest(
-        requestId: id, accountId: accountId, path: path));
+    transport.grants.add(
+      FlutterPeerFileGrantRequest(
+        requestId: id,
+        accountId: accountId,
+        path: path,
+      ),
+    );
     await pumpEventQueue();
     expect(transport.grantAnswers.containsKey(id), isTrue);
     return transport.grantAnswers[id]!;
@@ -385,25 +417,31 @@ void main() {
 
   String proof([String node = _viewerNode]) => secret.authProof(node);
 
-  FlutterPeerFilesRequest page(String account, int revision,
-          [String? cursor]) =>
-      FlutterPeerFilesRequest.indexPage(
-        authProof: proof(),
-        accountId: account,
-        revision: BigInt.from(revision),
-        cursor: cursor,
-      );
+  FlutterPeerFilesRequest page(
+    String account,
+    int revision, [
+    String? cursor,
+  ]) => FlutterPeerFilesRequest.indexPage(
+    authProof: proof(),
+    accountId: account,
+    revision: BigInt.from(revision),
+    cursor: cursor,
+  );
 
   test('rejects_bad_proof', () async {
     final wrong = PeerGroupSecret.generate().authProof(_viewerNode);
-    expect(await ask(FlutterPeerFilesRequest.manifest(authProof: wrong)),
-        const FlutterPeerFilesResponse.notAuthorized());
     expect(
-      await ask(FlutterPeerFilesRequest.indexPage(
-        authProof: wrong,
-        accountId: kFilesLocalAccountId,
-        revision: BigInt.zero,
-      )),
+      await ask(FlutterPeerFilesRequest.manifest(authProof: wrong)),
+      const FlutterPeerFilesResponse.notAuthorized(),
+    );
+    expect(
+      await ask(
+        FlutterPeerFilesRequest.indexPage(
+          authProof: wrong,
+          accountId: kFilesLocalAccountId,
+          revision: BigInt.zero,
+        ),
+      ),
       const FlutterPeerFilesResponse.notAuthorized(),
     );
     // A proof made for another node does not carry over to this sender.
@@ -416,23 +454,32 @@ void main() {
   test('a revoked member is told it was revoked', () async {
     await sync.revokePeer(_viewerNode);
     const revoked = FlutterPeerFilesResponse.revoked();
-    expect(await ask(FlutterPeerFilesRequest.manifest(authProof: proof())),
-        revoked);
+    expect(
+      await ask(FlutterPeerFilesRequest.manifest(authProof: proof())),
+      revoked,
+    );
     expect(await ask(page(kFilesLocalAccountId, 0)), revoked);
     // Whatever its proof: the roster is the evidence. The node id matches
     // without regard to case, as the roster does everywhere.
     final wrong = PeerGroupSecret.generate().authProof(_viewerNode);
     expect(
-        await ask(FlutterPeerFilesRequest.manifest(authProof: wrong)), revoked);
+      await ask(FlutterPeerFilesRequest.manifest(authProof: wrong)),
+      revoked,
+    );
     expect(
-        await ask(FlutterPeerFilesRequest.manifest(authProof: proof()),
-            peer: _viewerNode.toUpperCase()),
-        revoked);
+      await ask(
+        FlutterPeerFilesRequest.manifest(authProof: proof()),
+        peer: _viewerNode.toUpperCase(),
+      ),
+      revoked,
+    );
 
     // A node the roster has never held is refused, not revoked.
     expect(
-      await ask(FlutterPeerFilesRequest.manifest(authProof: proof('stranger')),
-          peer: 'stranger'),
+      await ask(
+        FlutterPeerFilesRequest.manifest(authProof: proof('stranger')),
+        peer: 'stranger',
+      ),
       const FlutterPeerFilesResponse.notAuthorized(),
     );
   });
@@ -462,8 +509,10 @@ void main() {
 
   test('a hidden files account is never lent, locked or not', () async {
     const path = '/Media/Harbor Kites.mkv';
-    expect(await grant(_smbAccount, path),
-        isA<FlutterPeerFileGrantAnswer_Granted>());
+    expect(
+      await grant(_smbAccount, path),
+      isA<FlutterPeerFileGrantAnswer_Granted>(),
+    );
     accounts = [
       for (final a in accounts)
         if (a.account.id == _smbAccount)
@@ -473,12 +522,15 @@ void main() {
     ];
     final res = await ask(FlutterPeerFilesRequest.manifest(authProof: proof()));
     expect(
-        (res as FlutterPeerFilesResponse_Manifest)
-            .accounts
-            .map((a) => a.accountId),
-        [kFilesLocalAccountId]);
-    expect(await ask(page(_smbAccount, 0)),
-        const FlutterPeerFilesResponse.staleRevision());
+      (res as FlutterPeerFilesResponse_Manifest).accounts.map(
+        (a) => a.accountId,
+      ),
+      [kFilesLocalAccountId],
+    );
+    expect(
+      await ask(page(_smbAccount, 0)),
+      const FlutterPeerFilesResponse.staleRevision(),
+    );
     expect(await grant(_smbAccount, path), notShared);
     // Only hiding withdraws it. A PIN lock gates opening the source here,
     // where it still shows.
@@ -489,25 +541,30 @@ void main() {
         else
           a,
     ];
-    expect(await grant(_smbAccount, path),
-        isA<FlutterPeerFileGrantAnswer_Granted>());
+    expect(
+      await grant(_smbAccount, path),
+      isA<FlutterPeerFileGrantAnswer_Granted>(),
+    );
     // Dedupe still sees it: a hidden share is this device's own.
     expect(
-        sharedFilesAccounts([
-          accounts[1].copyWith(serverLocks: {_smbAccount: SourceLock.hidden}),
-        ]),
-        hasLength(1));
+      sharedFilesAccounts([
+        accounts[1].copyWith(serverLocks: {_smbAccount: SourceLock.hidden}),
+      ]),
+      hasLength(1),
+    );
   });
 
   test('a bump nudges the members with a throttled sync round', () async {
     // The viewer sits out its failure cooldown from the startup sync, which
     // this transport never completes; a member added since has none.
-    await store.putMember(const PeerMember(
-      nodeId: 'third-node',
-      deviceName: 'third',
-      platform: 'linux',
-      updatedAt: 2,
-    ));
+    await store.putMember(
+      const PeerMember(
+        nodeId: 'third-node',
+        deviceName: 'third',
+        platform: 'linux',
+        updatedAt: 2,
+      ),
+    );
     final rounds = <String>[];
     syncTransport.onSend = rounds.add;
     await host.bumpRevision(kFilesLocalAccountId);
@@ -519,31 +576,45 @@ void main() {
   });
 
   test('filesDedupeKey normalizes WebDAV and leaves local folders out', () {
-    final webdav = _filesRecord('w0123456789abcdef', 'Cloud', connections: [
-      ServerConnection(uri: Uri.parse('HTTPS://Dav.Example.org/files/')),
-    ]);
-    expect(filesDedupeKey(webdav),
-        normalizeWebDavUrl(Uri.parse('HTTPS://Dav.Example.org/files/')));
+    final webdav = _filesRecord(
+      'w0123456789abcdef',
+      'Cloud',
+      connections: [
+        ServerConnection(uri: Uri.parse('HTTPS://Dav.Example.org/files/')),
+      ],
+    );
+    expect(
+      filesDedupeKey(webdav),
+      normalizeWebDavUrl(Uri.parse('HTTPS://Dav.Example.org/files/')),
+    );
     expect(filesDedupeKey(_filesRecord(kFilesLocalAccountId, 'Here')), isNull);
   });
 
   test('an S3 account is kind s3, deduped by its normalized connection', () {
     final connection = Uri.parse(
-        's3+https://S3.Example.org:443/bkt//media?style=path&region=r');
+      's3+https://S3.Example.org:443/bkt//media?style=path&region=r',
+    );
     final id = s3AccountId(connection);
     expect(filesAccountKind(id), 's3');
     expect(filesAccountKind(kFilesLocalAccountId), 'local');
     expect(filesAccountKind(_smbAccount), 'smb');
     expect(filesAccountKind('w0123456789abcdef'), 'webdav');
-    final s3 = _filesRecord(id, 'bkt/media',
-        connections: [ServerConnection(uri: connection)]);
+    final s3 = _filesRecord(
+      id,
+      'bkt/media',
+      connections: [ServerConnection(uri: connection)],
+    );
     expect(filesDedupeKey(s3), normalizeS3Url(connection));
   });
 
   test('a damaged S3 record has no dedupe key rather than throwing', () {
-    final damaged = _filesRecord('3' * 17, 'bkt', connections: [
-      ServerConnection(uri: Uri.parse('https://not-an-s3-uri.example/bkt')),
-    ]);
+    final damaged = _filesRecord(
+      '3' * 17,
+      'bkt',
+      connections: [
+        ServerConnection(uri: Uri.parse('https://not-an-s3-uri.example/bkt')),
+      ],
+    );
     expect(filesDedupeKey(damaged), isNull);
   });
 
@@ -566,8 +637,10 @@ void main() {
         ...p.page.movies,
         ...p.page.shows,
       ];
-      expect(blobs.fold<int>(0, (s, b) => s + b.length),
-          lessThanOrEqualTo(64 * 1024));
+      expect(
+        blobs.fold<int>(0, (s, b) => s + b.length),
+        lessThanOrEqualTo(64 * 1024),
+      );
       roots.addAll(decodeJsonRecords(p.page.roots, LibraryRoot.fromMap));
       files.addAll(decodeJsonRecords(p.page.files, IndexedFile.fromMap));
       groups.addAll(decodeJsonRecords(p.page.groups, GroupMatch.fromMap));
@@ -578,14 +651,20 @@ void main() {
     } while (cursor != null);
 
     expect(pages, greaterThan(1));
-    Map<String, Map<String, dynamic>> byKey<T>(Iterable<T> xs,
-            String Function(T) key, Map<String, dynamic> Function(T) toMap) =>
-        {for (final x in xs) key(x): toMap(x).cast<String, dynamic>()};
-    expect(byKey(roots, (r) => r.id, (r) => r.toMap()),
-        byKey(localIndex.roots(), (r) => r.id, (r) => r.toMap()));
+    Map<String, Map<String, dynamic>> byKey<T>(
+      Iterable<T> xs,
+      String Function(T) key,
+      Map<String, dynamic> Function(T) toMap,
+    ) => {for (final x in xs) key(x): toMap(x).cast<String, dynamic>()};
+    expect(
+      byKey(roots, (r) => r.id, (r) => r.toMap()),
+      byKey(localIndex.roots(), (r) => r.id, (r) => r.toMap()),
+    );
     expect(files, hasLength(2000));
-    expect(byKey(files, (f) => f.key, (f) => f.toMap()),
-        byKey(localIndex.files().values, (f) => f.key, (f) => f.toMap()));
+    expect(
+      byKey(files, (f) => f.key, (f) => f.toMap()),
+      byKey(localIndex.files().values, (f) => f.key, (f) => f.toMap()),
+    );
     expect(groups, hasLength(300));
     expect(movies, hasLength(50));
     expect(shows.single.toMap(), localIndex.show(9100)!.toMap());
@@ -596,12 +675,16 @@ void main() {
     expect(files.map((f) => f.key).toSet(), hasLength(files.length));
     expect(groups, hasLength(localIndex.groups().length));
     expect(groups.map((g) => g.groupKey).toSet(), hasLength(groups.length));
-    expect(byKey(groups, (g) => g.groupKey, (g) => g.toMap()),
-        byKey(localIndex.groups(), (g) => g.groupKey, (g) => g.toMap()));
+    expect(
+      byKey(groups, (g) => g.groupKey, (g) => g.toMap()),
+      byKey(localIndex.groups(), (g) => g.groupKey, (g) => g.toMap()),
+    );
     expect(movies, hasLength(localIndex.movies().length));
     expect(movies.map((m) => m.tmdbId).toSet(), hasLength(movies.length));
-    expect(byKey(movies, (m) => '${m.tmdbId}', (m) => m.toMap()),
-        byKey(localIndex.movies(), (m) => '${m.tmdbId}', (m) => m.toMap()));
+    expect(
+      byKey(movies, (m) => '${m.tmdbId}', (m) => m.toMap()),
+      byKey(localIndex.movies(), (m) => '${m.tmdbId}', (m) => m.toMap()),
+    );
     expect(shows, hasLength(localIndex.shows().length));
   });
 
@@ -610,15 +693,21 @@ void main() {
     final next = (first as FlutterPeerFilesResponse_IndexPage).nextCursor;
     expect(next, isNotNull);
     await host.bumpRevision(kFilesLocalAccountId);
-    expect(await ask(page(kFilesLocalAccountId, 0, next)),
-        const FlutterPeerFilesResponse.staleRevision());
-    expect(await ask(page(kFilesLocalAccountId, 1, next)),
-        isA<FlutterPeerFilesResponse_IndexPage>());
+    expect(
+      await ask(page(kFilesLocalAccountId, 0, next)),
+      const FlutterPeerFilesResponse.staleRevision(),
+    );
+    expect(
+      await ask(page(kFilesLocalAccountId, 1, next)),
+      isA<FlutterPeerFilesResponse_IndexPage>(),
+    );
   });
 
   test('an index page of an account that is not shared is stale', () async {
-    expect(await ask(page('p0123456789ab_flocal', 0)),
-        const FlutterPeerFilesResponse.staleRevision());
+    expect(
+      await ask(page('p0123456789ab_flocal', 0)),
+      const FlutterPeerFilesResponse.staleRevision(),
+    );
   });
 
   test('grant_refuses_path_outside_index', () async {
@@ -626,76 +715,98 @@ void main() {
     expect(await grant(kFilesLocalAccountId, '../x'), notShared);
     // The relative path as stored is not the form a read names.
     expect(
-        await grant(kFilesLocalAccountId, 'The Copper Lantern 0/Lantern 0.mkv'),
-        notShared);
+      await grant(kFilesLocalAccountId, 'The Copper Lantern 0/Lantern 0.mkv'),
+      notShared,
+    );
     // Another account's file.
-    expect(await grant(kFilesLocalAccountId, '/Media/Harbor Kites.mkv'),
-        notShared);
     expect(
-        await grant(
-            _smbAccount, '/media/films/The Copper Lantern 0/Lantern 0.mkv'),
-        notShared);
+      await grant(kFilesLocalAccountId, '/Media/Harbor Kites.mkv'),
+      notShared,
+    );
+    expect(
+      await grant(
+        _smbAccount,
+        '/media/films/The Copper Lantern 0/Lantern 0.mkv',
+      ),
+      notShared,
+    );
     expect(backend.played, isEmpty);
   });
 
-  test('grant answers an indexed file with the backend url and headers',
-      () async {
-    const path = '/media/films/The Copper Lantern 0/Lantern 0.mkv';
-    final g = await grant(kFilesLocalAccountId, path);
-    expect(g, isA<FlutterPeerFileGrantAnswer_Granted>());
-    final granted = (g as FlutterPeerFileGrantAnswer_Granted).grant;
-    expect(granted.url, contains(Uri.encodeComponent(path)));
-    expect(granted.headers, [('Authorization', 'Basic abc')]);
-    expect(backend.played, [path]);
-  });
+  test(
+    'grant answers an indexed file with the backend url and headers',
+    () async {
+      const path = '/media/films/The Copper Lantern 0/Lantern 0.mkv';
+      final g = await grant(kFilesLocalAccountId, path);
+      expect(g, isA<FlutterPeerFileGrantAnswer_Granted>());
+      final granted = (g as FlutterPeerFileGrantAnswer_Granted).grant;
+      expect(granted.url, contains(Uri.encodeComponent(path)));
+      expect(granted.headers, [('Authorization', 'Basic abc')]);
+      expect(backend.played, [path]);
+    },
+  );
 
-  test('a backend failure is a failed grant, a gone file is not shared',
-      () async {
-    const path = '/media/films/The Copper Lantern 0/Lantern 0.mkv';
-    // The share is down: the file is there, so the viewer must not be told
-    // it is gone.
-    backend.failure = const BackendUnreachable('down');
-    expect(await grant(kFilesLocalAccountId, path), failed);
-    backend.failure = const BackendUnauthorized('password changed');
-    expect(await grant(kFilesLocalAccountId, path), failed);
-    backend.failure = const BackendNotFound('deleted since the scan');
-    expect(await grant(kFilesLocalAccountId, path), notShared);
-  });
+  test(
+    'a backend failure is a failed grant, a gone file is not shared',
+    () async {
+      const path = '/media/films/The Copper Lantern 0/Lantern 0.mkv';
+      // The share is down: the file is there, so the viewer must not be told
+      // it is gone.
+      backend.failure = const BackendUnreachable('down');
+      expect(await grant(kFilesLocalAccountId, path), failed);
+      backend.failure = const BackendUnauthorized('password changed');
+      expect(await grant(kFilesLocalAccountId, path), failed);
+      backend.failure = const BackendNotFound('deleted since the scan');
+      expect(await grant(kFilesLocalAccountId, path), notShared);
+    },
+  );
 
-  test('a lent account whose backend cannot be built is a failed grant',
-      () async {
-    backendMissing = true;
-    expect(
-        await grant(kFilesLocalAccountId,
-            '/media/films/The Copper Lantern 0/Lantern 0.mkv'),
-        failed);
-  });
+  test(
+    'a lent account whose backend cannot be built is a failed grant',
+    () async {
+      backendMissing = true;
+      expect(
+        await grant(
+          kFilesLocalAccountId,
+          '/media/films/The Copper Lantern 0/Lantern 0.mkv',
+        ),
+        failed,
+      );
+    },
+  );
 
   test('grant_allows_sidecar_of_indexed_file', () async {
     // File 7 sits under the second root, `rshows`. The form authorized is
     // the one the files source hands `playable()` for a subtitle.
     const root = LibraryRoot(
-        id: 'rshows',
-        path: '/media/series',
-        kind: FilesLibraryKind.mixed,
-        title: 'rshows');
-    final path =
-        filesBackendPath(root, 'The Copper Lantern 7/Lantern 7.en.srt');
+      id: 'rshows',
+      path: '/media/series',
+      kind: FilesLibraryKind.mixed,
+      title: 'rshows',
+    );
+    final path = filesBackendPath(
+      root,
+      'The Copper Lantern 7/Lantern 7.en.srt',
+    );
     expect(path, '/media/series/The Copper Lantern 7/Lantern 7.en.srt');
-    expect(await grant(kFilesLocalAccountId, path),
-        isA<FlutterPeerFileGrantAnswer_Granted>());
+    expect(
+      await grant(kFilesLocalAccountId, path),
+      isA<FlutterPeerFileGrantAnswer_Granted>(),
+    );
     expect(backend.played, [path]);
   });
 
   test('members_pushed_on_state_change_and_cleared_on_leave', () async {
     expect(transport.members.last, [_viewerNode]);
 
-    await store.putMember(const PeerMember(
-      nodeId: 'third-node',
-      deviceName: 'third',
-      platform: 'linux',
-      updatedAt: 2,
-    ));
+    await store.putMember(
+      const PeerMember(
+        nodeId: 'third-node',
+        deviceName: 'third',
+        platform: 'linux',
+        updatedAt: 2,
+      ),
+    );
     await sync.revokePeer(_viewerNode);
     await pumpEventQueue();
     expect(transport.members.last, ['third-node']);
@@ -730,12 +841,9 @@ void main() {
   test('a revocation during a push is pushed once that push lands', () async {
     expect(transport.members.last, [_viewerNode]);
     for (final id in ['third-node', 'fourth-node']) {
-      await store.putMember(PeerMember(
-        nodeId: id,
-        deviceName: id,
-        platform: 'linux',
-        updatedAt: 2,
-      ));
+      await store.putMember(
+        PeerMember(nodeId: id, deviceName: id, platform: 'linux', updatedAt: 2),
+      );
     }
     final gate = transport.membersGate = Completer<void>();
     await sync.revokePeer('fourth-node');
@@ -788,6 +896,8 @@ void main() {
     expect(await HivePeerFilesRevisions(box, nowMs: () => now).bump('a'), now);
     // A clock that went backwards still moves the counter forward.
     expect(
-        await HivePeerFilesRevisions(box, nowMs: () => 5).bump('a'), now + 1);
+      await HivePeerFilesRevisions(box, nowMs: () => 5).bump('a'),
+      now + 1,
+    );
   });
 }

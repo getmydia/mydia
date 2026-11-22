@@ -168,10 +168,12 @@ class AmbientTargets {
     // doc), so a sweep already past its first await has to re-check itself
     // rather than assume nothing changed underneath it.
     if (_staleSince(epoch)) return;
-    final probed = await Future.wait(ids.map((id) async {
-      final snapshot = await probe(id);
-      return MapEntry(id, snapshot);
-    }));
+    final probed = await Future.wait(
+      ids.map((id) async {
+        final snapshot = await probe(id);
+        return MapEntry(id, snapshot);
+      }),
+    );
     // Same reasoning, after the second await: a background transition that
     // arrived while the probe fan-out was in flight must win. Publishing
     // here would repopulate `_held` and restart the poll timer behind a
@@ -234,14 +236,16 @@ class AmbientTargets {
       if (held.length >= _maxHeldTargets) break;
       final snapshot = entry.value;
       if (snapshot == null) continue;
-      held.add(AmbientTarget(
-        device: CastDevice(
-          id: entry.key,
-          name: entry.key,
-          protocol: CastProtocolKind.mydia,
+      held.add(
+        AmbientTarget(
+          device: CastDevice(
+            id: entry.key,
+            name: entry.key,
+            protocol: CastProtocolKind.mydia,
+          ),
+          snapshot: snapshot,
         ),
-        snapshot: snapshot,
-      ));
+      );
     }
     return held;
   }
@@ -279,10 +283,12 @@ class AmbientTargets {
   Future<void> _refreshHeld() async {
     if (_held.isEmpty) return;
     final epoch = _epoch;
-    final probed = await Future.wait(_held.map((target) async {
-      final snapshot = await probe(target.device.id);
-      return MapEntry(target, snapshot);
-    }));
+    final probed = await Future.wait(
+      _held.map((target) async {
+        final snapshot = await probe(target.device.id);
+        return MapEntry(target, snapshot);
+      }),
+    );
     if (_staleSince(epoch)) return;
     _reportStopped([
       for (final entry in probed)

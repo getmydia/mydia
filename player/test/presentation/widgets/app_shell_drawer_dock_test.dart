@@ -11,7 +11,7 @@
 // `AppShell.bannerArea` use. A hand-rolled mirror of the shell's shape
 // would stay green if the shell dropped the fade entirely.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 
@@ -24,10 +24,7 @@ const Key _dockKey = Key('dock');
 /// `Bad state: Too many elements`.
 const Key _rootKey = Key('dock-chrome-root');
 
-Future<void> pumpChrome(
-  WidgetTester tester, {
-  required bool drawerOpen,
-}) async {
+Future<void> pumpChrome(WidgetTester tester, {required bool drawerOpen}) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Align(
@@ -46,31 +43,37 @@ Future<void> pumpChrome(
 }
 
 double dockOpacity(WidgetTester tester) => tester
-    .widget<AnimatedOpacity>(find.descendant(
-      of: find.byKey(_rootKey),
-      matching: find.byType(AnimatedOpacity),
-    ))
+    .widget<AnimatedOpacity>(
+      find.descendant(
+        of: find.byKey(_rootKey),
+        matching: find.byType(AnimatedOpacity),
+      ),
+    )
     .opacity;
 
 bool dockIgnoring(WidgetTester tester) => tester
-    .widget<IgnorePointer>(find.descendant(
-      of: find.byKey(_rootKey),
-      matching: find.byType(IgnorePointer),
-    ))
+    .widget<IgnorePointer>(
+      find.descendant(
+        of: find.byKey(_rootKey),
+        matching: find.byType(IgnorePointer),
+      ),
+    )
     .ignoring;
 
 void main() {
   group('AppShell.dockChrome', () {
-    testWidgets('is opaque and interactive with the drawer closed',
-        (tester) async {
+    testWidgets('is opaque and interactive with the drawer closed', (
+      tester,
+    ) async {
       await pumpChrome(tester, drawerOpen: false);
 
       expect(dockOpacity(tester), 1);
       expect(dockIgnoring(tester), isFalse);
     });
 
-    testWidgets('is transparent and inert with the drawer open',
-        (tester) async {
+    testWidgets('is transparent and inert with the drawer open', (
+      tester,
+    ) async {
       await pumpChrome(tester, drawerOpen: true);
 
       expect(dockOpacity(tester), 0);
@@ -78,8 +81,9 @@ void main() {
       expect(dockIgnoring(tester), isTrue);
     });
 
-    testWidgets('keeps the dock mounted at full height while faded',
-        (tester) async {
+    testWidgets('keeps the dock mounted at full height while faded', (
+      tester,
+    ) async {
       await pumpChrome(tester, drawerOpen: false);
       final closedHeight = tester.getSize(find.byKey(_dockKey)).height;
 
@@ -94,8 +98,9 @@ void main() {
   });
 
   group('Scaffold.onDrawerChanged', () {
-    testWidgets('reports open then closed, which is what drives the fade',
-        (tester) async {
+    testWidgets('reports open then closed, which is what drives the fade', (
+      tester,
+    ) async {
       final events = <bool>[];
       final scaffoldKey = GlobalKey<ScaffoldState>();
 

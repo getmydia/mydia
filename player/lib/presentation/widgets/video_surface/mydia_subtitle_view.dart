@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart'
     show SubtitleViewConfiguration;
@@ -102,7 +102,8 @@ class _MydiaSubtitleViewState extends State<MydiaSubtitleView> {
       builder: (context, constraints) {
         final area = constraints.maxWidth * constraints.maxHeight;
         final scale = math.sqrt(
-            (area / (_referenceWidth * _referenceHeight)).clamp(0.0, 1.0));
+          (area / (_referenceWidth * _referenceHeight)).clamp(0.0, 1.0),
+        );
         final textScaler =
             widget.configuration.textScaler ?? TextScaler.linear(scale);
         return Material(

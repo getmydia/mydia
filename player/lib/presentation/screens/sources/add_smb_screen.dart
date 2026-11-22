@@ -6,7 +6,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -151,8 +151,9 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   Future<void> _prefill(String accountId) async {
     try {
       final snapshot = await ref.read(sourceRecordsProvider.future);
-      final record =
-          snapshot.accounts.where((a) => a.account.id == accountId).firstOrNull;
+      final record = snapshot.accounts
+          .where((a) => a.account.id == accountId)
+          .firstOrNull;
       final uri = record?.servers.firstOrNull?.connections.firstOrNull?.uri;
       if (!mounted) return;
       _signInAgain = record?.account.needsReauth ?? true;
@@ -179,9 +180,11 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   void _closeUnsavedBackend() {
     final backend = _backend;
     if (backend == null || _saved) return;
-    unawaited(_native.closeAccount(backend.accountId).catchError((Object e) {
-      debugPrint('[AddSmb] Could not close the account: $e');
-    }));
+    unawaited(
+      _native.closeAccount(backend.accountId).catchError((Object e) {
+        debugPrint('[AddSmb] Could not close the account: $e');
+      }),
+    );
   }
 
   @override
@@ -198,11 +201,11 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
 
   /// `smb://host[:port]/share`, with an IPv6 host bracketed by [Uri].
   static Uri _urlOf(String host, int port, String share) => Uri(
-        scheme: 'smb',
-        host: host,
-        port: port == kSmbDefaultPort ? null : port,
-        path: '/$share',
-      );
+    scheme: 'smb',
+    host: host,
+    port: port == kSmbDefaultPort ? null : port,
+    path: '/$share',
+  );
 
   void _pickServer(DiscoveredSmbServer server) {
     _stopBrowsing();
@@ -227,12 +230,12 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   }
 
   _Problem _problemOf(Object e) => switch (e) {
-        BackendUnauthorized() => _Problem.unauthorized,
-        BackendNotFound() => _Problem.notFound,
-        BackendPermissionLost() => _Problem.accessDenied,
-        BackendUnreachable(message: kSmb1OnlyReason) => _Problem.smb1Only,
-        _ => _Problem.unreachable,
-      };
+    BackendUnauthorized() => _Problem.unauthorized,
+    BackendNotFound() => _Problem.notFound,
+    BackendPermissionLost() => _Problem.accessDenied,
+    BackendUnreachable(message: kSmb1OnlyReason) => _Problem.smb1Only,
+    _ => _Problem.unreachable,
+  };
 
   Future<void> _connect({required bool guest}) async {
     final address = parseSmbAddress(_host.text, _port.text);
@@ -265,7 +268,10 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           return;
         }
         await _native.probe(
-            SmbTarget(host: host, port: port, share: share), credentials, '/');
+          SmbTarget(host: host, port: port, share: share),
+          credentials,
+          '/',
+        );
         if (_signInAgain) {
           await _saveCredentials(accounts, host, port, share, credentials);
           return;
@@ -281,7 +287,11 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
         return;
       }
       final (shares, reached) = await listSharesAtFirstReachable(
-          _native, _candidates(host), port, credentials);
+        _native,
+        _candidates(host),
+        port,
+        credentials,
+      );
       if (!mounted) return;
       if (shares.isEmpty) {
         setState(() => _problem = _Problem.noShares);
@@ -315,25 +325,28 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     final server = _discovered;
     if (server == null) return const [];
     final hostname = server.hostname;
-    return [
-      if (hostname != null) hostname,
-      ...server.addresses.where((a) => a != _hostName),
-    ];
+    return [?hostname, ...server.addresses.where((a) => a != _hostName)];
   }
 
   /// Re-login: the share the screen was opened for keeps its account, so
   /// only the credentials change and `needsReauth` clears. A share removed
   /// while the probe ran stays removed.
-  Future<void> _saveCredentials(FilesAccounts accounts, String host, int port,
-      String share, SmbCredentials credentials) async {
+  Future<void> _saveCredentials(
+    FilesAccounts accounts,
+    String host,
+    int port,
+    String share,
+    SmbCredentials credentials,
+  ) async {
     try {
       await accounts.addSmbAccount(
-          url: _urlOf(host, port, share),
-          credentials: credentials,
-          signInAgain: true,
-          accountId: widget.reauthAccountId,
-          alternatives: _alternatives,
-          serviceName: _discovered?.name);
+        url: _urlOf(host, port, share),
+        credentials: credentials,
+        signInAgain: true,
+        accountId: widget.reauthAccountId,
+        alternatives: _alternatives,
+        serviceName: _discovered?.name,
+      );
     } catch (e) {
       debugPrint('[AddSmb] Save failed: $e');
       if (mounted) setState(() => _problem = _Problem.save);
@@ -416,32 +429,34 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   }
 
   String _problemText(AppLocalizations l10n, _Problem p) => switch (p) {
-        _Problem.address => l10n.filesSmbAddressInvalid,
-        _Problem.unauthorized => l10n.filesSmbUnauthorized,
-        _Problem.notFound => l10n.filesSmbNotFound,
-        _Problem.accessDenied => l10n.filesSmbAccessDenied,
-        _Problem.unreachable => l10n.filesSmbUnreachable,
-        _Problem.smb1Only => l10n.filesSmbSmb1Only,
-        _Problem.noShares => l10n.filesSmbNoShares,
-        _Problem.save => l10n.filesSmbSaveFailed,
-      };
+    _Problem.address => l10n.filesSmbAddressInvalid,
+    _Problem.unauthorized => l10n.filesSmbUnauthorized,
+    _Problem.notFound => l10n.filesSmbNotFound,
+    _Problem.accessDenied => l10n.filesSmbAccessDenied,
+    _Problem.unreachable => l10n.filesSmbUnreachable,
+    _Problem.smb1Only => l10n.filesSmbSmb1Only,
+    _Problem.noShares => l10n.filesSmbNoShares,
+    _Problem.save => l10n.filesSmbSaveFailed,
+  };
 
   void _toggle(String path, bool on) => setState(() {
-        if (on) {
-          _chosen.putIfAbsent(path, () => FilesLibraryKind.mixed);
-        } else {
-          _chosen.remove(path);
-        }
-      });
+    if (on) {
+      _chosen.putIfAbsent(path, () => FilesLibraryKind.mixed);
+    } else {
+      _chosen.remove(path);
+    }
+  });
 
   Widget _error(BuildContext context, AppLocalizations l10n) {
     final p = _problem;
     if (p == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: Text(_problemText(l10n, p),
-          key: const Key('smb-error'),
-          style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      child: Text(
+        _problemText(l10n, p),
+        key: const Key('smb-error'),
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
     );
   }
 
@@ -455,8 +470,10 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
       key: const Key('smb-servers'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(l10n.filesSmbServersHeading,
-            style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          l10n.filesSmbServersHeading,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
         if (_servers.isEmpty && !none)
           Text(l10n.filesSmbSearching, key: const Key('smb-searching')),
@@ -476,8 +493,10 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           if (isIos)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(l10n.filesSmbLocalNetworkDenied,
-                  key: const Key('smb-local-network-denied')),
+              child: Text(
+                l10n.filesSmbLocalNetworkDenied,
+                key: const Key('smb-local-network-denied'),
+              ),
             ),
         ],
         const Divider(),
@@ -513,7 +532,9 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           readOnly: _addressFixed,
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
-              labelText: l10n.filesSmbPortLabel, hintText: '445'),
+            labelText: l10n.filesSmbPortLabel,
+            hintText: '445',
+          ),
         ),
         const SizedBox(height: 16),
         TextField(
@@ -545,7 +566,8 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
           child: _busy
               ? const SizedBox.square(
                   dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Text(l10n.loginConnect),
         ),
         const SizedBox(height: 8),
@@ -577,8 +599,12 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
     );
   }
 
-  Widget _folderRow(String path, String name,
-      {required bool busy, required VoidCallback? onOpen}) {
+  Widget _folderRow(
+    String path,
+    String name, {
+    required bool busy,
+    required VoidCallback? onOpen,
+  }) {
     final key = trimRootPath(path);
     final kind = _chosen[key];
     return ListTile(
@@ -609,7 +635,10 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
   /// subfolder, abandons a slow listing, and holds during a save; at the
   /// share's root it returns to the share list, when there is one.
   Widget _foldersStep(
-      BuildContext context, AppLocalizations l10n, FileSystemBackend backend) {
+    BuildContext context,
+    AppLocalizations l10n,
+    FileSystemBackend backend,
+  ) {
     return RemoteFolderPicker(
       key: const Key('smb-folders'),
       keyPrefix: 'smb',
@@ -632,16 +661,19 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
         onPressed: _busy || (_chosen.isEmpty && !_saved) ? null : _save,
         child: _busy
             ? const SizedBox.square(
-                dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : Text(l10n.commonSave),
       ),
       onPicked: (path) => _toggle(trimRootPath(path), true),
-      rowBuilder: (context,
-              {required path,
-              required title,
-              required busy,
-              required onOpen}) =>
-          _folderRow(path, title, busy: busy, onOpen: onOpen),
+      rowBuilder: (
+        context, {
+        required path,
+        required title,
+        required busy,
+        required onOpen,
+      }) => _folderRow(path, title, busy: busy, onOpen: onOpen),
     );
   }
 
@@ -661,7 +693,8 @@ class _AddSmbScreenState extends ConsumerState<AddSmbScreen> {
                   shrinkWrap: true,
                   children: [
                     const FilesExperimentalNotice(
-                        key: Key('add-smb-experimental')),
+                      key: Key('add-smb-experimental'),
+                    ),
                     const SizedBox(height: 16),
                     switch (_step) {
                       _Step.servers => _serversStep(context, l10n),

@@ -66,22 +66,22 @@ class PersistedCastSession {
     String? selectedSubtitleTrackId,
     String? showId,
   }) : this.forContent(
-          device: device,
-          content: MydiaCastContent(
-            sourceId: sourceId,
-            fileId: fileId,
-            mediaId: mediaId,
-            mediaType: mediaType,
-            showId: showId,
-          ),
-          title: title,
-          position: position,
-          routeKind: routeKind,
-          savedAt: savedAt,
-          mediaUrl: mediaUrl,
-          duration: duration,
-          selectedSubtitleTrackId: selectedSubtitleTrackId,
-        );
+         device: device,
+         content: MydiaCastContent(
+           sourceId: sourceId,
+           fileId: fileId,
+           mediaId: mediaId,
+           mediaType: mediaType,
+           showId: showId,
+         ),
+         title: title,
+         position: position,
+         routeKind: routeKind,
+         savedAt: savedAt,
+         mediaUrl: mediaUrl,
+         duration: duration,
+         selectedSubtitleTrackId: selectedSubtitleTrackId,
+       );
 
   /// Sessions older than this are discarded without a reconnect attempt.
   static const maxAge = Duration(hours: 12);
@@ -89,17 +89,16 @@ class PersistedCastSession {
   bool isExpired(DateTime now) => now.difference(savedAt) > maxAge;
 
   Map<String, dynamic> toMap() => {
-        'device': device.toJson(),
-        ...content.toMap(),
-        'title': title,
-        'positionSeconds': position.inSeconds,
-        'routeKind':
-            routeKind == CastRouteKind.localBridge ? 'bridge' : 'direct',
-        'savedAt': savedAt.toIso8601String(),
-        'mediaUrl': mediaUrl,
-        'durationSeconds': duration.inSeconds,
-        'selectedSubtitleTrackId': selectedSubtitleTrackId,
-      };
+    'device': device.toJson(),
+    ...content.toMap(),
+    'title': title,
+    'positionSeconds': position.inSeconds,
+    'routeKind': routeKind == CastRouteKind.localBridge ? 'bridge' : 'direct',
+    'savedAt': savedAt.toIso8601String(),
+    'mediaUrl': mediaUrl,
+    'durationSeconds': duration.inSeconds,
+    'selectedSubtitleTrackId': selectedSubtitleTrackId,
+  };
 
   /// [legacyMydia] names the instance a Mydia record without a `sourceId`
   /// belongs to; see [CastContent.fromMap].
@@ -180,8 +179,7 @@ class HiveCastSessionStore implements CastSessionStore {
   /// instance's source may not exist yet at construction.
   final SourceId? Function()? _legacyMydia;
 
-  const HiveCastSessionStore(this._box, {SourceId? Function()? legacyMydia})
-      : _legacyMydia = legacyMydia;
+  const HiveCastSessionStore(this._box, {this._legacyMydia});
 
   @override
   Future<void> save(PersistedCastSession session) async {

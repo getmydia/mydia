@@ -52,14 +52,11 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   bool _filling = false;
 
   NativePlayerWindowSizer({
-    required WindowController window,
-    required PlayerWindowSession session,
-    required WorkAreaReader readWorkAreas,
-    void Function()? onDetached,
-  })  : _window = window,
-        _session = session,
-        _readWorkAreas = readWorkAreas,
-        _onDetached = onDetached;
+    required this._window,
+    required this._session,
+    required this._readWorkAreas,
+    this._onDetached,
+  });
 
   @override
   Future<void> attach() async {

@@ -9,11 +9,15 @@ import '../../../../test_utils/scripted_mydia_transport.dart';
 void main() {
   test('Mydia uses the source-scoped player route', () {
     final source = testMydiaSourceOver(
-        ScriptedMydiaTransport.responses([<String, dynamic>{}]));
+      ScriptedMydiaTransport.responses([<String, dynamic>{}]),
+    );
     final session = MydiaPlaybackSession(
       source: source,
       item: ItemRef(
-          sourceId: source.id, kind: ItemKind.episode, externalId: 'e1'),
+        sourceId: source.id,
+        kind: ItemKind.episode,
+        externalId: 'e1',
+      ),
       fileId: 'f1',
       showId: 's1',
       seasonNumber: 1,

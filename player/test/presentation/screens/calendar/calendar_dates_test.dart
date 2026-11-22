@@ -25,7 +25,9 @@ void main() {
   group('truncateToDay', () {
     test('drops the time component', () {
       expect(
-          truncateToDay(DateTime(2026, 8, 27, 14, 30)), DateTime(2026, 8, 27));
+        truncateToDay(DateTime(2026, 8, 27, 14, 30)),
+        DateTime(2026, 8, 27),
+      );
     });
 
     test('is a no-op on a value that already has no time component', () {
@@ -61,8 +63,10 @@ void main() {
 
       expect(grouped.length, 2);
       expect(grouped.first.key, DateTime(2026, 8, 20));
-      expect(grouped.first.value.map((e) => e.ref.externalId).toList(),
-          ['1', '2']);
+      expect(grouped.first.value.map((e) => e.ref.externalId).toList(), [
+        '1',
+        '2',
+      ]);
       expect(grouped.last.key, DateTime(2026, 8, 22));
     });
 

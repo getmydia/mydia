@@ -69,7 +69,10 @@ String normalizeS3Url(Uri connection) {
   final normalized = tryNormalizeS3Url(connection);
   if (normalized == null) {
     throw ArgumentError.value(
-        connection.scheme, 'connection', 'Not an S3 connection URI');
+      connection.scheme,
+      'connection',
+      'Not an S3 connection URI',
+    );
   }
   return normalized;
 }
@@ -89,11 +92,10 @@ bool isS3AccountId(String id) => _s3AccountId.hasMatch(id);
 
 /// Where the share named by [normalized] lives; port 445 when absent.
 SmbTarget smbTargetOf(Uri normalized) => SmbTarget(
-      host: normalized.host,
-      port: normalized.hasPort ? normalized.port : kSmbDefaultPort,
-      share:
-          normalized.pathSegments.where((s) => s.isNotEmpty).firstOrNull ?? '',
-    );
+  host: normalized.host,
+  port: normalized.hasPort ? normalized.port : kSmbDefaultPort,
+  share: normalized.pathSegments.where((s) => s.isNotEmpty).firstOrNull ?? '',
+);
 
 /// What a WebDAV account stores as its account token (`SourceSecrets`).
 class WebDavCredentials {
@@ -130,8 +132,10 @@ class S3Credentials {
   final String accessKeyId;
   final String secretAccessKey;
 
-  String toJson() => jsonEncode(
-      {'accessKeyId': accessKeyId, 'secretAccessKey': secretAccessKey});
+  String toJson() => jsonEncode({
+    'accessKeyId': accessKeyId,
+    'secretAccessKey': secretAccessKey,
+  });
 
   /// Throws [FormatException] when [s] is not a stored credential.
   static S3Credentials fromJson(String s) {
@@ -166,10 +170,10 @@ class SmbCredentials {
   final String? domain;
 
   String toJson() => jsonEncode({
-        'user': user,
-        'password': password,
-        if (domain != null) 'domain': domain,
-      });
+    'user': user,
+    'password': password,
+    if (domain != null) 'domain': domain,
+  });
 
   /// Throws [FormatException] when [s] is not a stored credential.
   static SmbCredentials fromJson(String s) {

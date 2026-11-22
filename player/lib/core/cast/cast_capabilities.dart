@@ -13,19 +13,13 @@ class CastCapabilities {
 
   const CastCapabilities({required this.chromecast, required this.dlna});
 
-  const CastCapabilities.none()
-      : chromecast = false,
-        dlna = false;
+  const CastCapabilities.none() : chromecast = false, dlna = false;
 
   const CastCapabilities.web() : this.none();
 
-  const CastCapabilities.iOS()
-      : chromecast = true,
-        dlna = false;
+  const CastCapabilities.iOS() : chromecast = true, dlna = false;
 
-  const CastCapabilities.full()
-      : chromecast = true,
-        dlna = true;
+  const CastCapabilities.full() : chromecast = true, dlna = true;
 
   /// Whether any casting is possible at all.
   bool get any => chromecast || dlna;
@@ -34,10 +28,10 @@ class CastCapabilities {
   /// `InputCapabilities.initialize()`, which `_startApp` awaits before
   /// `runApp`.
   factory CastCapabilities.forCurrentPlatform() => CastCapabilities.forPlatform(
-        isWeb: PlatformFeatures.isWeb,
-        isIOS: PlatformFeatures.isIOS,
-        isTv: InputCapabilities.directionalPrimary,
-      );
+    isWeb: PlatformFeatures.isWeb,
+    isIOS: PlatformFeatures.isIOS,
+    isTv: InputCapabilities.directionalPrimary,
+  );
 
   /// The capability decision itself, separated from the static platform
   /// lookups so it can be exercised for every platform on one machine. This

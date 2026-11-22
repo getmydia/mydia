@@ -102,10 +102,10 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
     // The tree may be locked (dispose) or mid-rebuild (didUpdateWidget);
     // the frame's end is the first safe moment either way, since `apply`
     // calls `setState` on `SubtitleView`.
-    WidgetsBinding.instance.addPostFrameCallback((_) => lift.apply(
-          kSubtitleRestPadding,
-          duration: DepthTokens.motionMedium,
-        ));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) =>
+          lift.apply(kSubtitleRestPadding, duration: DepthTokens.motionMedium),
+    );
   }
 
   void _handleStatus(AnimationStatus status) => _scheduleSync();
@@ -153,14 +153,14 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
 
   @override
   Widget build(BuildContext context) => _PaintedRectReporter(
-        // Always wrapped, lift or no lift: swapping the element shape when
-        // a lift arrives or leaves would remount `widget.child`'s subtree,
-        // dropping its State. `_handlePainted` is harmless with no lift --
-        // `_scheduleSync` no-ops on a null one.
-        referenceBox: widget.referenceBox,
-        onPainted: _handlePainted,
-        child: widget.child,
-      );
+    // Always wrapped, lift or no lift: swapping the element shape when
+    // a lift arrives or leaves would remount `widget.child`'s subtree,
+    // dropping its State. `_handlePainted` is harmless with no lift --
+    // `_scheduleSync` no-ops on a null one.
+    referenceBox: widget.referenceBox,
+    onPainted: _handlePainted,
+    child: widget.child,
+  );
 }
 
 class _PaintedRectReporter extends SingleChildRenderObjectWidget {
@@ -241,14 +241,16 @@ class VideoStateSubtitleLift implements SubtitleLift {
     final box = state.context.size;
     if (box == null) return;
     final player = state.widget.controller.player;
-    unawaited(applySubtitlePosition(
-      player,
-      subPosForLift(
-        lift: bottom,
-        box: box,
-        videoWidth: player.state.width,
-        videoHeight: player.state.height,
+    unawaited(
+      applySubtitlePosition(
+        player,
+        subPosForLift(
+          lift: bottom,
+          box: box,
+          videoWidth: player.state.width,
+          videoHeight: player.state.height,
+        ),
       ),
-    ));
+    );
   }
 }

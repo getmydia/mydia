@@ -2,7 +2,7 @@
 /// episode with the episode selected in the hero.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
@@ -31,32 +31,33 @@ class SourceShowSelectionRoute extends ConsumerWidget {
     // A detail location gets the full width; the fallback states sit beside
     // the rail rather than under it.
     Widget failed(Object error) => ShellPageInset(
-          child: WindowChromeInsets.removeBand(
-            child: Builder(
-              builder: (context) => Scaffold(
-                appBar: WindowTitleBar.back(context),
-                body: SourceErrorView(
-                  error: error,
-                  account: source?.source.account,
-                  onRetry: () => ref.invalidate(sourceItemProvider(item)),
-                ),
-              ),
+      child: WindowChromeInsets.removeBand(
+        child: Builder(
+          builder: (context) => Scaffold(
+            appBar: WindowTitleBar.back(context),
+            body: SourceErrorView(
+              error: error,
+              account: source?.source.account,
+              onRetry: () => ref.invalidate(sourceItemProvider(item)),
             ),
           ),
-        );
+        ),
+      ),
+    );
     return switch (detail) {
       AsyncData(:final value) when value.show != null =>
         ShowDetailScreen.target(
           target: SourceTarget(value.show!),
-          initialSeason:
-              _isEpisode ? value.summary.parentIndex : value.summary.index,
+          initialSeason: _isEpisode
+              ? value.summary.parentIndex
+              : value.summary.index,
           initialEpisode: _isEpisode ? item.externalId : null,
         ),
       AsyncData() => failed(const SourceException.notFound()),
       AsyncError(:final error) => failed(error),
       _ => const ShellPageInset(
-          child: Scaffold(body: Center(child: CircularProgressIndicator())),
-        ),
+        child: Scaffold(body: Center(child: CircularProgressIndicator())),
+      ),
     };
   }
 }

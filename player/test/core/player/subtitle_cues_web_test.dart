@@ -26,8 +26,8 @@ web.HTMLVideoElement _videoWithTracks(int count) {
 }
 
 List<String> _modes(web.HTMLVideoElement video) => [
-      for (var i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode
-    ];
+  for (var i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode,
+];
 
 void main() {
   test('shows the track that was added last', () {

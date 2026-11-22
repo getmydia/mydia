@@ -4,7 +4,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/build_channel.dart';
@@ -58,7 +58,7 @@ class PlaybackSettingsSection extends ConsumerWidget {
     final quality = current == null
         ? QualityRung.auto
         : QualityRung.fromStorageKey(current.defaultQuality) ??
-            QualityRung.auto;
+              QualityRung.auto;
     final l10n = context.l10n;
 
     return SettingsSection(
@@ -83,8 +83,8 @@ class PlaybackSettingsSection extends ConsumerWidget {
           onChanged: current == null
               ? null
               : (value) => ref
-                  .read(settingsControllerProvider.notifier)
-                  .setAutoSkipSegments(value),
+                    .read(settingsControllerProvider.notifier)
+                    .setAutoSkipSegments(value),
         ),
         SettingsRow.toggle(
           key: const Key('auto-skip-commercials-switch'),
@@ -95,8 +95,8 @@ class PlaybackSettingsSection extends ConsumerWidget {
           onChanged: current == null
               ? null
               : (value) => ref
-                  .read(settingsControllerProvider.notifier)
-                  .setAutoSkipCommercials(value),
+                    .read(settingsControllerProvider.notifier)
+                    .setAutoSkipCommercials(value),
         ),
         const SubtitleSizeSettingsRow(),
         Consumer(
@@ -374,13 +374,13 @@ class AppearanceSettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SettingsSection(
-        label: context.l10n.settingsAppearanceSection,
-        children: [
-          const LanguageSettingsRow(),
-          const ThemePresetSettingsRow(),
-          // Conditional here so a TV does not get a divider above nothing.
-          if (GlassMaterial.liquid.isAvailableOn(defaultTargetPlatform))
-            const GlassMaterialSettingsRow(),
-        ],
-      );
+    label: context.l10n.settingsAppearanceSection,
+    children: [
+      const LanguageSettingsRow(),
+      const ThemePresetSettingsRow(),
+      // Conditional here so a TV does not get a divider above nothing.
+      if (GlassMaterial.liquid.isAvailableOn(defaultTargetPlatform))
+        const GlassMaterialSettingsRow(),
+    ],
+  );
 }

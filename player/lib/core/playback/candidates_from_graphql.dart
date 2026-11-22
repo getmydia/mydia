@@ -6,16 +6,16 @@ import 'playback_plan.dart';
 
 List<CandidateStrategy> candidateStrategiesFrom(
   List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
-) =>
-    [
-      for (final c in candidates ??
+) => [
+  for (final c
+      in candidates ??
           const <Query$StreamingCandidates$streamingCandidates$candidates>[])
-        CandidateStrategy(
-          strategy: c.strategy.toJson(),
-          mime: c.mime,
-          videoCodec: c.videoCodec,
-        ),
-    ];
+    CandidateStrategy(
+      strategy: c.strategy.toJson(),
+      mime: c.mime,
+      videoCodec: c.videoCodec,
+    ),
+];
 
 /// `streamingMetadata.bitrate` is bits per second; the planner and the
 /// rungs speak kbps. Zero or missing is unknown, never "free".

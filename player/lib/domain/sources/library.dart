@@ -16,9 +16,9 @@ class LibraryRef {
   final String id;
 
   factory LibraryRef.fromJson(Map<String, Object?> json) => LibraryRef(
-        sourceId: SourceId(json['sourceId']! as String),
-        id: json['id']! as String,
-      );
+    sourceId: SourceId(json['sourceId']! as String),
+    id: json['id']! as String,
+  );
 
   Map<String, Object?> toJson() => {'sourceId': sourceId.value, 'id': id};
 
@@ -93,18 +93,18 @@ class SortOption {
   }
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'name': name.name,
-        'descendingByDefault': descendingByDefault,
-        'shared': shared?.name,
-      };
+    'id': id,
+    'name': name.name,
+    'descendingByDefault': descendingByDefault,
+    'shared': shared?.name,
+  };
 }
 
 /// A filter chip: either one of [FilterName] or a Mydia [category].
 @immutable
 class FilterOption {
   const FilterOption({required this.id, this.name, this.category})
-      : assert((name == null) != (category == null));
+    : assert((name == null) != (category == null));
 
   final String id;
   final FilterName? name;
@@ -120,8 +120,11 @@ class FilterOption {
     return FilterOption(id: id, name: name, category: category);
   }
 
-  Map<String, Object?> toJson() =>
-      {'id': id, 'name': name?.name, 'category': category?.name};
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name?.name,
+    'category': category?.name,
+  };
 }
 
 /// A library as its source describes it. The sorts and filters are the
@@ -151,31 +154,28 @@ class Library {
   final List<FilterOption> filterOptions;
 
   factory Library.fromJson(Map<String, Object?> json) => Library(
-        ref: LibraryRef.fromJson(json['ref']! as Map<String, Object?>),
-        title: json['title'] as String?,
-        kind: LibraryKind.values.byName(json['kind']! as String),
-        scenes: json['scenes'] as bool? ?? false,
-        sortOptions: [
-          for (final e in (json['sortOptions'] as List?) ?? const [])
-            if (SortOption.tryFromJson(e as Map<String, Object?>) case final o?)
-              o,
-        ],
-        filterOptions: [
-          for (final e in (json['filterOptions'] as List?) ?? const [])
-            if (FilterOption.tryFromJson(e as Map<String, Object?>)
-                case final o?)
-              o,
-        ],
-      );
+    ref: LibraryRef.fromJson(json['ref']! as Map<String, Object?>),
+    title: json['title'] as String?,
+    kind: LibraryKind.values.byName(json['kind']! as String),
+    scenes: json['scenes'] as bool? ?? false,
+    sortOptions: [
+      for (final e in (json['sortOptions'] as List?) ?? const [])
+        ?SortOption.tryFromJson(e as Map<String, Object?>),
+    ],
+    filterOptions: [
+      for (final e in (json['filterOptions'] as List?) ?? const [])
+        ?FilterOption.tryFromJson(e as Map<String, Object?>),
+    ],
+  );
 
   Map<String, Object?> toJson() => {
-        'ref': ref.toJson(),
-        'title': title,
-        'kind': kind.name,
-        'scenes': scenes,
-        'sortOptions': [for (final o in sortOptions) o.toJson()],
-        'filterOptions': [for (final o in filterOptions) o.toJson()],
-      };
+    'ref': ref.toJson(),
+    'title': title,
+    'kind': kind.name,
+    'scenes': scenes,
+    'sortOptions': [for (final o in sortOptions) o.toJson()],
+    'filterOptions': [for (final o in filterOptions) o.toJson()],
+  };
 }
 
 @immutable
@@ -199,13 +199,12 @@ class BrowseQuery {
     String? sortId,
     bool? descending,
     Set<String>? filterIds,
-  }) =>
-      BrowseQuery(
-        sortId: sortId ?? this.sortId,
-        descending: descending ?? this.descending,
-        filterIds: filterIds ?? this.filterIds,
-        pageSize: pageSize,
-      );
+  }) => BrowseQuery(
+    sortId: sortId ?? this.sortId,
+    descending: descending ?? this.descending,
+    filterIds: filterIds ?? this.filterIds,
+    pageSize: pageSize,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -217,11 +216,11 @@ class BrowseQuery {
 
   @override
   int get hashCode => Object.hash(
-        sortId,
-        descending,
-        Object.hashAllUnordered(filterIds),
-        pageSize,
-      );
+    sortId,
+    descending,
+    Object.hashAllUnordered(filterIds),
+    pageSize,
+  );
 }
 
 /// Opaque to callers: an offset for Plex, a page number for Stash.
@@ -245,21 +244,20 @@ class Page<T> {
   static Page<T> fromJson<T>(
     Map<String, Object?> json,
     T Function(Map<String, Object?> item) item,
-  ) =>
-      Page(
-        items: [
-          for (final e in (json['items'] as List?) ?? const [])
-            item(e as Map<String, Object?>),
-        ],
-        nextCursor: json['nextCursor'] == null
-            ? null
-            : Cursor(json['nextCursor']! as String),
-        total: json['total'] as int?,
-      );
+  ) => Page(
+    items: [
+      for (final e in (json['items'] as List?) ?? const [])
+        item(e as Map<String, Object?>),
+    ],
+    nextCursor: json['nextCursor'] == null
+        ? null
+        : Cursor(json['nextCursor']! as String),
+    total: json['total'] as int?,
+  );
 
   Map<String, Object?> toJson(Object? Function(T item) item) => {
-        'items': [for (final i in items) item(i)],
-        'nextCursor': nextCursor?.value,
-        'total': total,
-      };
+    'items': [for (final i in items) item(i)],
+    'nextCursor': nextCursor?.value,
+    'total': total,
+  };
 }

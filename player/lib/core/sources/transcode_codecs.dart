@@ -8,7 +8,8 @@ const _videoKnown = {'h264', 'hevc', 'vp9', 'av1'};
 const _audioKnown = {'aac', 'ac3', 'eac3', 'mp3', 'opus', 'flac'};
 
 ({List<String> video, List<String> audio}) transcodeCodecs(
-    DeviceProfile? profile) {
+  DeviceProfile? profile,
+) {
   final video = (profile?.videoCodecs ?? const ['h264'])
       .where(_videoKnown.contains)
       .toList();

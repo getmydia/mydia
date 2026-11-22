@@ -4,8 +4,7 @@ import 'package:player/core/logging/log_redactor.dart';
 void main() {
   group('removes', () {
     const cases = {
-      'GET https://mydia.example/hls/master.m3u8?token=abc123&quality=hd':
-          'GET https://mydia.example/hls/master.m3u8?token=[REDACTED]&quality=hd',
+      'GET https://mydia.example/hls/master.m3u8?token=abc123&quality=hd': 'GET https://mydia.example/hls/master.m3u8?token=[REDACTED]&quality=hd',
       'refresh with ?access_token=abc&refresh_token=xyz':
           'refresh with ?access_token=[REDACTED]&refresh_token=[REDACTED]',
       'https://x.example/a?Token=ABC': 'https://x.example/a?Token=[REDACTED]',
@@ -27,10 +26,8 @@ void main() {
       'token=abc123 and more text': 'token=[REDACTED] and more text',
       'refresh_token = xyz789': 'refresh_token = [REDACTED]',
       '{"token": abc}': '{"token": [REDACTED]}',
-      'uri=https://b.s3.example/v.mkv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIDEXAMPLE%2F20261114%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=43200&X-Amz-Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7':
-          'uri=https://b.s3.example/v.mkv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=[REDACTED]&X-Amz-Expires=43200&X-Amz-Signature=[REDACTED]',
-      'https://b.s3.example/v.mkv?x-amz-security-token=FwoGZXIvYXdzEJr&x-amz-signature=abc':
-          'https://b.s3.example/v.mkv?x-amz-security-token=[REDACTED]&x-amz-signature=[REDACTED]',
+      'uri=https://b.s3.example/v.mkv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIDEXAMPLE%2F20261114%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Expires=43200&X-Amz-Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7': 'uri=https://b.s3.example/v.mkv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=[REDACTED]&X-Amz-Expires=43200&X-Amz-Signature=[REDACTED]',
+      'https://b.s3.example/v.mkv?x-amz-security-token=FwoGZXIvYXdzEJr&x-amz-signature=abc': 'https://b.s3.example/v.mkv?x-amz-security-token=[REDACTED]&x-amz-signature=[REDACTED]',
     };
 
     for (final MapEntry(key: input, value: expected) in cases.entries) {
@@ -59,8 +56,7 @@ void main() {
   // 'Connecting to https://admin:hunter2@nas.local:8443/api' above; no
   // separate case is added here to avoid duplicating it.
 
-  test(
-      'guards against quadratic scanning: a huge line with a scheme but no '
+  test('guards against quadratic scanning: a huge line with a scheme but no '
       '@ to anchor on redacts quickly', () {
     // 200k+ characters after "https://" with no "@" anywhere: the shape
     // that made the old unbounded _userinfo pattern backtrack over the
@@ -75,7 +71,8 @@ void main() {
     expect(
       stopwatch.elapsed,
       lessThan(const Duration(seconds: 2)),
-      reason: 'redactLogMessage took ${stopwatch.elapsed}, which suggests '
+      reason:
+          'redactLogMessage took ${stopwatch.elapsed}, which suggests '
           'quadratic scanning has regressed',
     );
   });

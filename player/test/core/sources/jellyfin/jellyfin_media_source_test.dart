@@ -26,10 +26,11 @@ final jellyfinRecord = SourceAccountRecord(
   ),
   profiles: const [
     SourceProfile(
-        id: FakeJellyfinServer.userId,
-        accountId: 'jf1',
-        name: FakeJellyfinServer.username,
-        isOwner: true),
+      id: FakeJellyfinServer.userId,
+      accountId: 'jf1',
+      name: FakeJellyfinServer.username,
+      isOwner: true,
+    ),
   ],
   servers: [
     SourceServer(
@@ -43,14 +44,16 @@ final jellyfinRecord = SourceAccountRecord(
   addedAtMs: 0,
 );
 
-const jellyfinSid =
-    SourceId('jf1:${FakeJellyfinServer.userId}:${FakeJellyfinServer.serverId}');
+const jellyfinSid = SourceId(
+  'jf1:${FakeJellyfinServer.userId}:${FakeJellyfinServer.serverId}',
+);
 
 ({
   JellyfinMediaSource source,
   FakeJellyfinServer server,
-  List<int> unauthorized
-}) build() {
+  List<int> unauthorized,
+})
+build() {
   final server = FakeJellyfinServer();
   final unauthorized = <int>[];
   final source = JellyfinMediaSource(
@@ -75,25 +78,37 @@ void main() {
       source: b.source,
       library: const LibraryRef(sourceId: jellyfinSid, id: 'lib-movies'),
       playable: const ItemRef(
-          sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm2'),
+        sourceId: jellyfinSid,
+        kind: ItemKind.movie,
+        externalId: 'm2',
+      ),
       libraryItemCount: 5,
       show: const ItemRef(
-          sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1'),
+        sourceId: jellyfinSid,
+        kind: ItemKind.show,
+        externalId: 'show1',
+      ),
     );
   });
 
   test('resolves the original file with the token in a header', () async {
     final b = build();
     final plan = await b.source.resolve(
-        const ItemRef(
-            sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm2'),
-        'original') as DirectFile;
+      const ItemRef(
+        sourceId: jellyfinSid,
+        kind: ItemKind.movie,
+        externalId: 'm2',
+      ),
+      'original',
+    ) as DirectFile;
     final url = Uri.parse(plan.url);
     expect(url.path, endsWith('/Videos/m2/stream'));
     expect(url.queryParameters['static'], 'true');
     expect(url.queryParameters['mediaSourceId'], isNotEmpty);
-    expect(plan.headers['Authorization'],
-        contains('Token="${FakeJellyfinServer.token}"'));
+    expect(
+      plan.headers['Authorization'],
+      contains('Token="${FakeJellyfinServer.token}"'),
+    );
     expect(plan.url, isNot(contains(FakeJellyfinServer.token)));
   });
 
@@ -110,9 +125,10 @@ void main() {
     await b.source.browse(
       const LibraryRef(sourceId: jellyfinSid, id: 'lib-movies'),
       const BrowseQuery(
-          pageSize: 2,
-          sortId: 'DateCreated',
-          filterIds: {'IsUnplayed', 'bogus'}),
+        pageSize: 2,
+        sortId: 'DateCreated',
+        filterIds: {'IsUnplayed', 'bogus'},
+      ),
       cursor: const Cursor('2'),
     );
     final q = b.server.requests.last.url.queryParameters;
@@ -124,24 +140,35 @@ void main() {
     expect(q['Limit'], '2');
     expect(q['SortBy'], 'DateCreated,SortName');
     expect(q['SortOrder'], 'Descending');
-    expect(q['Filters'], 'IsUnplayed',
-        reason: 'unknown filter ids are dropped');
+    expect(
+      q['Filters'],
+      'IsUnplayed',
+      reason: 'unknown filter ids are dropped',
+    );
   });
 
   test('a show library browses series', () async {
     final b = build();
     final page = await b.source.browse(
-        const LibraryRef(sourceId: jellyfinSid, id: 'lib-shows'),
-        const BrowseQuery(pageSize: 20));
-    expect(b.server.requests.last.url.queryParameters['IncludeItemTypes'],
-        'Series');
+      const LibraryRef(sourceId: jellyfinSid, id: 'lib-shows'),
+      const BrowseQuery(pageSize: 20),
+    );
+    expect(
+      b.server.requests.last.url.queryParameters['IncludeItemTypes'],
+      'Series',
+    );
     expect(page.items.single.ref.kind, ItemKind.show);
   });
 
   test('show to seasons to episodes', () async {
     final b = build();
-    final seasons = await b.source.children(const ItemRef(
-        sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1'));
+    final seasons = await b.source.children(
+      const ItemRef(
+        sourceId: jellyfinSid,
+        kind: ItemKind.show,
+        externalId: 'show1',
+      ),
+    );
     expect(seasons.items.single.ref.externalId, 'season1');
     final episodes = await b.source.children(seasons.items.single.ref);
     expect(episodes.items.map((e) => e.index), [1, 2]);
@@ -153,20 +180,31 @@ void main() {
   test('seasons come in one page; a later cursor adds nothing', () async {
     final b = build();
     const show = ItemRef(
-        sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1');
+      sourceId: jellyfinSid,
+      kind: ItemKind.show,
+      externalId: 'show1',
+    );
     final first = await b.source.children(show);
     expect(first.nextCursor, isNull);
     final requests = b.server.requests.length;
     final later = await b.source.children(show, cursor: const Cursor('200'));
     expect(later.items, isEmpty);
     expect(later.nextCursor, isNull);
-    expect(b.server.requests.length, requests,
-        reason: 'the server would answer the same seasons again');
+    expect(
+      b.server.requests.length,
+      requests,
+      reason: 'the server would answer the same seasons again',
+    );
   });
 
   test('a movie has no children', () async {
-    final page = await build().source.children(const ItemRef(
-        sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm1'));
+    final page = await build().source.children(
+      const ItemRef(
+        sourceId: jellyfinSid,
+        kind: ItemKind.movie,
+        externalId: 'm1',
+      ),
+    );
     expect(page.items, isEmpty);
   });
 
@@ -177,40 +215,50 @@ void main() {
 
   test('watched marks and unmarks with the user id', () async {
     final b = build();
-    const ref =
-        ItemRef(sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm1');
+    const ref = ItemRef(
+      sourceId: jellyfinSid,
+      kind: ItemKind.movie,
+      externalId: 'm1',
+    );
     await b.source.setWatched(ref, true);
     await b.source.setWatched(ref, false);
-    expect(b.server.requests.map((r) => '${r.method} ${r.url.path}'),
-        ['POST /UserPlayedItems/m1', 'DELETE /UserPlayedItems/m1']);
-    expect(b.server.requests.last.url.queryParameters['userId'],
-        FakeJellyfinServer.userId);
+    expect(b.server.requests.map((r) => '${r.method} ${r.url.path}'), [
+      'POST /UserPlayedItems/m1',
+      'DELETE /UserPlayedItems/m1',
+    ]);
+    expect(
+      b.server.requests.last.url.queryParameters['userId'],
+      FakeJellyfinServer.userId,
+    );
   });
 
   test('artwork asks for the width and keys on the tagged path', () async {
     final request = await build().source.artwork(
-        const ArtworkRef('/Items/m2/Images/Primary?tag=p2'),
-        width: 300);
+      const ArtworkRef('/Items/m2/Images/Primary?tag=p2'),
+      width: 300,
+    );
     final url = Uri.parse(request!.url);
     expect(url.path, '/Items/m2/Images/Primary');
     expect(url.queryParameters['tag'], 'p2');
     expect(url.queryParameters['fillWidth'], '300');
     expect(
-        request.cacheKey, '$jellyfinSid|/Items/m2/Images/Primary?tag=p2|300');
+      request.cacheKey,
+      '$jellyfinSid|/Items/m2/Images/Primary?tag=p2|300',
+    );
   });
 
   group('Continue Watching', () {
     const ticks = FakeJellyfinServer.ticks;
     Map<String, dynamic> resumingEpisode(int n) => {
-          ...FakeJellyfinServer.episode(n),
-          'UserData': {'Played': false, 'PlaybackPositionTicks': 600 * ticks},
-        };
+      ...FakeJellyfinServer.episode(n),
+      'UserData': {'Played': false, 'PlaybackPositionTicks': 600 * ticks},
+    };
     Map<String, dynamic> otherSeries(int n) => {
-          ...FakeJellyfinServer.episode(n),
-          'Id': 'o$n',
-          'SeriesId': 'show2',
-          'SeriesName': 'Driftwood',
-        };
+      ...FakeJellyfinServer.episode(n),
+      'Id': 'o$n',
+      'SeriesId': 'show2',
+      'SeriesName': 'Driftwood',
+    };
 
     test('declares the capability', () {
       final source = build().source;
@@ -275,7 +323,9 @@ void main() {
         final b = build();
         b.server.failing.add(path);
         await expectLater(
-            b.source.continueWatching(), throwsA(isA<SourceException>()));
+          b.source.continueWatching(),
+          throwsA(isA<SourceException>()),
+        );
       });
     }
 
@@ -291,8 +341,13 @@ void main() {
 
     test('remove clears the resume point for this user', () async {
       final b = build();
-      await b.source.removeFromContinueWatching(const ItemRef(
-          sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm3'));
+      await b.source.removeFromContinueWatching(
+        const ItemRef(
+          sourceId: jellyfinSid,
+          kind: ItemKind.movie,
+          externalId: 'm3',
+        ),
+      );
       final request = b.server.requests.last;
       expect(request.method, 'POST');
       expect(request.url.path, '/UserItems/m3/UserData');
@@ -306,25 +361,38 @@ void main() {
   test('similar, next up and favorites call the right endpoints', () async {
     final b = build();
     b.server.nextUpItems = [FakeJellyfinServer.episode(2)];
-    const movie =
-        ItemRef(sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm1');
+    const movie = ItemRef(
+      sourceId: jellyfinSid,
+      kind: ItemKind.movie,
+      externalId: 'm1',
+    );
     const show = ItemRef(
-        sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1');
+      sourceId: jellyfinSid,
+      kind: ItemKind.show,
+      externalId: 'show1',
+    );
     expect(
-        b.source.capabilities,
-        containsAll([
-          SourceCapability.similar,
-          SourceCapability.favorites,
-          SourceCapability.nextUp,
-        ]));
+      b.source.capabilities,
+      containsAll([
+        SourceCapability.similar,
+        SourceCapability.favorites,
+        SourceCapability.nextUp,
+      ]),
+    );
     expect(await b.source.as<Similar>()!.similar(movie), hasLength(2));
     final next = await b.source.as<NextUp>()!.nextUp(show);
     expect(next?.ref.kind, ItemKind.episode);
     expect(b.server.requests.last.url.queryParameters['seriesId'], 'show1');
     expect(
-        await b.source.as<NextUp>()!.nextUp(const ItemRef(
-            sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'other')),
-        isNull);
+      await b.source.as<NextUp>()!.nextUp(
+        const ItemRef(
+          sourceId: jellyfinSid,
+          kind: ItemKind.show,
+          externalId: 'other',
+        ),
+      ),
+      isNull,
+    );
     await b.source.as<Favorites>()!.setFavorite(movie, true);
     await b.source.as<Favorites>()!.setFavorite(movie, false);
     expect(b.server.favoriteCalls, [('POST', 'm1'), ('DELETE', 'm1')]);
@@ -332,10 +400,17 @@ void main() {
 
   test('season children ask for overviews', () async {
     final b = build();
-    await b.source.children(const ItemRef(
-        sourceId: jellyfinSid, kind: ItemKind.season, externalId: 'season1'));
-    expect(b.server.requests.last.url.queryParameters['Fields'],
-        'Overview,ProviderIds');
+    await b.source.children(
+      const ItemRef(
+        sourceId: jellyfinSid,
+        kind: ItemKind.season,
+        externalId: 'season1',
+      ),
+    );
+    expect(
+      b.server.requests.last.url.queryParameters['Fields'],
+      'Overview,ProviderIds',
+    );
   });
 
   test('recently added reads the bare array from /Items/Latest', () async {
@@ -355,8 +430,9 @@ void main() {
 
   test('browse asks for the sort fields', () async {
     final b = build();
-    final library = (await b.source.libraries())
-        .firstWhere((l) => l.kind == LibraryKind.movies);
+    final library = (await b.source.libraries()).firstWhere(
+      (l) => l.kind == LibraryKind.movies,
+    );
     await b.source.browse(library.ref, const BrowseQuery());
     final q = b.server.requests
         .lastWhere((r) => r.url.path == '/Items')
@@ -365,8 +441,11 @@ void main() {
     expect(q['Fields'], 'ChildCount,SortName,DateCreated,ProviderIds');
   });
 
-  const jfEpisode =
-      ItemRef(sourceId: jellyfinSid, kind: ItemKind.episode, externalId: 'e1');
+  const jfEpisode = ItemRef(
+    sourceId: jellyfinSid,
+    kind: ItemKind.episode,
+    externalId: 'e1',
+  );
 
   test('skip segments come from /MediaSegments', () async {
     final b = build();

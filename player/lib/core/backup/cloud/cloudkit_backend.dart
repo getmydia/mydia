@@ -22,10 +22,9 @@ class CloudKitBackend implements CloudBackend {
   CloudKitBackend({
     MethodChannel? channel,
     EventChannel? events,
-    required BackupMetaStore meta,
-  })  : _channel = channel ?? const MethodChannel(channelName),
-        _events = events ?? const EventChannel(eventChannelName),
-        _meta = meta;
+    required this._meta,
+  }) : _channel = channel ?? const MethodChannel(channelName),
+       _events = events ?? const EventChannel(eventChannelName);
 
   static const channelName = 'mydia/cloudkit';
   static const eventChannelName = 'mydia/cloudkit/changes';
@@ -38,8 +37,9 @@ class CloudKitBackend implements CloudBackend {
   bool _subscribed = false;
   bool _pendingPush = false;
 
-  late final Stream<void> _changes =
-      _events.receiveBroadcastStream().map((event) {
+  late final Stream<void> _changes = _events.receiveBroadcastStream().map((
+    event,
+  ) {
     if (event == 'push') _pendingPush = true;
   });
 
@@ -125,8 +125,8 @@ class CloudKitBackend implements CloudBackend {
     final records = (result['records'] as List? ?? const [])
         .whereType<Map<Object?, Object?>>()
         .map((m) => m.cast<String, Object?>());
-    final deleted =
-        (result['deleted'] as List? ?? const []).whereType<String>();
+    final deleted = (result['deleted'] as List? ?? const [])
+        .whereType<String>();
     var changed = reset;
     for (final r in records) {
       final info = _slotInfo(r);
@@ -152,8 +152,9 @@ class CloudKitBackend implements CloudBackend {
   Future<List<int>> readBytes(String slotId) async {
     final Object? bytes;
     try {
-      bytes = await _channel
-          .invokeMethod<Object?>('fetchPayload', {'slotId': slotId});
+      bytes = await _channel.invokeMethod<Object?>('fetchPayload', {
+        'slotId': slotId,
+      });
     } on PlatformException catch (e) {
       if (e.code == 'zoneNotFound') {
         throw const BackupRelayException(BackupRelayError.notFound);
@@ -172,14 +173,17 @@ class CloudKitBackend implements CloudBackend {
   }
 
   @override
-  Future<void> writeBytes(String slotId, List<int> bytes,
-          {required String deviceName, required String platform}) =>
-      _invoke('save', {
-        'slotId': slotId,
-        'deviceName': deviceName,
-        'platform': platform,
-        'bytes': bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
-      });
+  Future<void> writeBytes(
+    String slotId,
+    List<int> bytes, {
+    required String deviceName,
+    required String platform,
+  }) => _invoke('save', {
+    'slotId': slotId,
+    'deviceName': deviceName,
+    'platform': platform,
+    'bytes': bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+  });
 
   /// A missing record (or zone) is already deleted: success.
   @override
@@ -217,7 +221,7 @@ class CloudKitBackend implements CloudBackend {
     try {
       status =
           (await _channel.invokeMapMethod<String, Object?>('accountStatus')) ??
-              const {};
+          const {};
     } on PlatformException catch (e) {
       throw _error(e);
     } on MissingPluginException {
@@ -243,8 +247,9 @@ class CloudKitBackend implements CloudBackend {
 
   Future<Map<String, Object?>> _fetchChanges(String? token) async {
     try {
-      return (await _channel.invokeMapMethod<String, Object?>(
-              'fetchChanges', {'token': token})) ??
+      return (await _channel.invokeMapMethod<String, Object?>('fetchChanges', {
+            'token': token,
+          })) ??
           const {};
     } on MissingPluginException {
       throw const BackupRelayException(BackupRelayError.cloudUnavailable);
@@ -292,12 +297,15 @@ class CloudKitBackend implements CloudBackend {
         return const BackupRelayException(BackupRelayError.quotaFull);
       case 'network':
         final details = e.details;
-        final retry =
-            details is Map ? (details['retryAfterMs'] as num?)?.toInt() : null;
+        final retry = details is Map
+            ? (details['retryAfterMs'] as num?)?.toInt()
+            : null;
         return retry == null
             ? const BackupRelayException(BackupRelayError.network)
-            : BackupRelayException(BackupRelayError.rateLimited,
-                retryAfterMs: retry);
+            : BackupRelayException(
+                BackupRelayError.rateLimited,
+                retryAfterMs: retry,
+              );
       default:
         return const BackupRelayException(BackupRelayError.server);
     }
@@ -325,12 +333,10 @@ class CloudKitBackend implements CloudBackend {
       return {
         for (final e in json.entries)
           if (e.value is Map)
-            if (_slotInfo({
+            e.key: ?_slotInfo({
               'slotId': e.key,
               ...(e.value as Map).cast<String, Object?>(),
-            })
-                case final info?)
-              e.key: info,
+            }),
       };
     } catch (e) {
       debugPrint('[Backup] Unreadable CloudKit slot table: ${e.runtimeType}');
@@ -339,12 +345,12 @@ class CloudKitBackend implements CloudBackend {
   }
 
   String _encodeTable(Map<String, SlotInfo> table) => jsonEncode({
-        for (final s in table.values)
-          s.slotId: {
-            'tag': s.version,
-            'deviceName': s.deviceName,
-            'updatedAt': s.updatedAtMs,
-            'size': s.size,
-          },
-      });
+    for (final s in table.values)
+      s.slotId: {
+        'tag': s.version,
+        'deviceName': s.deviceName,
+        'updatedAt': s.updatedAtMs,
+        'size': s.size,
+      },
+  });
 }

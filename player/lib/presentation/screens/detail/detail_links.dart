@@ -23,12 +23,14 @@ enum SourceListing {
 }
 
 /// Every segment goes through [Uri] so ids with `/` or spaces stay one segment.
-String _sourcePath(SourceId id, List<String> rest,
-        {Map<String, String>? query}) =>
-    Uri(
-      pathSegments: ['', 's', id.value, ...rest],
-      queryParameters: query == null || query.isEmpty ? null : query,
-    ).toString();
+String _sourcePath(
+  SourceId id,
+  List<String> rest, {
+  Map<String, String>? query,
+}) => Uri(
+  pathSegments: ['', 's', id.value, ...rest],
+  queryParameters: query == null || query.isEmpty ? null : query,
+).toString();
 
 String sourceHomeLocation(SourceId id) => _sourcePath(id, const []);
 
@@ -36,7 +38,7 @@ String sourceLibraryLocation(LibraryRef library) =>
     _sourcePath(library.sourceId, ['library', library.id]);
 
 String sourceSearchLocation(SourceId id, {String? query}) =>
-    _sourcePath(id, const ['search'], query: {if (query != null) 'q': query});
+    _sourcePath(id, const ['search'], query: {'q': ?query});
 
 String sourceListingLocation(SourceId id, SourceListing listing) =>
     _sourcePath(id, [listing.segment]);
@@ -60,26 +62,23 @@ String sourcePlayerLocation(
   String? fileId,
   String? title,
   Map<String, String> extra = const {},
-}) =>
-    _sourcePath(ref.sourceId, [
-      'player',
-      ref.externalId
-    ], query: {
-      'kind': ref.kind.name,
-      if (fileId != null) 'fileId': fileId,
-      if (title != null) 'title': title,
-      ...extra,
-    });
+}) => _sourcePath(
+  ref.sourceId,
+  ['player', ref.externalId],
+  query: {'kind': ref.kind.name, 'fileId': ?fileId, 'title': ?title, ...extra},
+);
 
-String detailLocation(DetailTarget target) => _sourcePath(target.ref.sourceId,
-    [_detailSegment(target.ref.kind), target.ref.externalId]);
+String detailLocation(DetailTarget target) => _sourcePath(target.ref.sourceId, [
+  _detailSegment(target.ref.kind),
+  target.ref.externalId,
+]);
 
 String _detailSegment(ItemKind kind) => switch (kind) {
-      ItemKind.movie => 'movie',
-      ItemKind.show => 'show',
-      ItemKind.season => 'season',
-      _ => 'episode',
-    };
+  ItemKind.movie => 'movie',
+  ItemKind.show => 'show',
+  ItemKind.season => 'season',
+  _ => 'episode',
+};
 
 String moviePlayerLocation(MovieView movie, MediaFile file) =>
     sourcePlayerLocation(movie.target.ref, fileId: file.id, title: movie.title);

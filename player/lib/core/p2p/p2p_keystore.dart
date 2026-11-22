@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'p2p_keystore_stub.dart'
     if (dart.library.io) 'p2p_keystore_native.dart'
-    if (dart.library.js_interop) 'p2p_keystore_web.dart' as impl;
+    if (dart.library.js_interop) 'p2p_keystore_web.dart'
+    as impl;
 
 /// Persistence for the node's Ed25519 secret key.
 ///

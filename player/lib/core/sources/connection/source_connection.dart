@@ -30,11 +30,7 @@ abstract interface class SourceConnection {
 
 /// A server with exactly one address, such as a Stash URL.
 class SingleConnection implements SourceConnection {
-  SingleConnection({
-    required ServerConnection connection,
-    required Future<bool> Function(Uri base) probe,
-  })  : _connection = connection,
-        _probe = probe;
+  SingleConnection({required this._connection, required this._probe});
 
   final ServerConnection _connection;
   final Future<bool> Function(Uri base) _probe;
@@ -72,22 +68,22 @@ class SingleConnection implements SourceConnection {
   }
 
   Future<bool> _check() => _checking ??= () async {
-        bool up;
-        try {
-          up = await _probe(_connection.uri);
-        } catch (_) {
-          up = false;
-        }
-        _checking = null;
-        if (_disposed) return false;
-        _up = up;
-        _status.value = !up
-            ? SourceConnectionStatus.unreachable
-            : _connection.local
-                ? SourceConnectionStatus.local
-                : SourceConnectionStatus.remote;
-        return up;
-      }();
+    bool up;
+    try {
+      up = await _probe(_connection.uri);
+    } catch (_) {
+      up = false;
+    }
+    _checking = null;
+    if (_disposed) return false;
+    _up = up;
+    _status.value = !up
+        ? SourceConnectionStatus.unreachable
+        : _connection.local
+        ? SourceConnectionStatus.local
+        : SourceConnectionStatus.remote;
+    return up;
+  }();
 
   @override
   void dispose() {

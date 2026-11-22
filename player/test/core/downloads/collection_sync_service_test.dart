@@ -11,21 +11,19 @@ import '../../presentation/screens/sources/fake_capable_source.dart';
 import '../../presentation/screens/sources/fake_media_source.dart';
 
 ItemSummary _season(String id, int n) => ItemSummary(
-      ref: ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.season, externalId: id),
-      title: 'Season $n',
-      index: n,
-    );
+  ref: ItemRef(sourceId: fakeSourceId, kind: ItemKind.season, externalId: id),
+  title: 'Season $n',
+  index: n,
+);
 
 ItemSummary _episode(String id, int season, int n) => ItemSummary(
-      ref: ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.episode, externalId: id),
-      title: 'Invented Episode $n',
-      showTitle: 'Invented Series',
-      parentIndex: season,
-      index: n,
-      defaultVersionId: 'v$id',
-    );
+  ref: ItemRef(sourceId: fakeSourceId, kind: ItemKind.episode, externalId: id),
+  title: 'Invented Episode $n',
+  showTitle: 'Invented Series',
+  parentIndex: season,
+  index: n,
+  defaultVersionId: 'v$id',
+);
 
 /// Like [_SeasonedSource], but the movie `m2` has no file and the episode
 /// `e12` names no version.
@@ -38,12 +36,14 @@ class _FilelessSource extends _SeasonedSource {
   @override
   Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async {
     final page = await super.children(parent, cursor: cursor);
-    return Page(items: [
-      for (final i in page.items)
-        i.ref.externalId == 'e12'
-            ? ItemSummary(ref: i.ref, title: i.title, index: i.index)
-            : i,
-    ]);
+    return Page(
+      items: [
+        for (final i in page.items)
+          i.ref.externalId == 'e12'
+              ? ItemSummary(ref: i.ref, title: i.title, index: i.index)
+              : i,
+      ],
+    );
   }
 }
 
@@ -81,39 +81,47 @@ class _RecordingService extends Fake implements DownloadService {
   Future<DownloadTask> start(DownloadRequest request) async {
     requests.add(request);
     return DownloadTask(
-        id: request.ref.externalId,
-        mediaId: request.ref.externalId,
-        title: request.metadata.title,
-        quality: request.optionId,
-        status: 'queued',
-        createdAt: DateTime(2026));
+      id: request.ref.externalId,
+      mediaId: request.ref.externalId,
+      title: request.metadata.title,
+      quality: request.optionId,
+      status: 'queued',
+      createdAt: DateTime(2026),
+    );
   }
 }
 
 void main() {
-  test('queues movies and every episode of a show at the chosen option',
-      () async {
-    final source = _SeasonedSource();
-    final service = _RecordingService(downloaded: {'m1'});
+  test(
+    'queues movies and every episode of a show at the chosen option',
+    () async {
+      final source = _SeasonedSource();
+      final service = _RecordingService(downloaded: {'m1'});
 
-    final result = await syncCollectionItems(
-      source: source,
-      items: [fakeMovie(1), fakeMovie(2), fakeShow],
-      optionId: '720p',
-      manager: service,
-      queue: const [],
-      metadataFor: summaryDownloadMetadata,
-    );
+      final result = await syncCollectionItems(
+        source: source,
+        items: [fakeMovie(1), fakeMovie(2), fakeShow],
+        optionId: '720p',
+        manager: service,
+        queue: const [],
+        metadataFor: summaryDownloadMetadata,
+      );
 
-    expect(result.moviesQueued, 1);
-    expect(result.episodesQueued, 4);
-    expect(result.skipped, 1);
-    expect(result.failed, 0);
-    expect(service.requests.map((r) => r.ref.externalId),
-        ['m2', 'e11', 'e12', 'e21', 'e22']);
-    expect(service.requests.every((r) => r.optionId == '720p'), isTrue);
-    expect(source.childCalls, ['s1', 'se1', 'se2']);
-  });
+      expect(result.moviesQueued, 1);
+      expect(result.episodesQueued, 4);
+      expect(result.skipped, 1);
+      expect(result.failed, 0);
+      expect(service.requests.map((r) => r.ref.externalId), [
+        'm2',
+        'e11',
+        'e12',
+        'e21',
+        'e22',
+      ]);
+      expect(service.requests.every((r) => r.optionId == '720p'), isTrue);
+      expect(source.childCalls, ['s1', 'se1', 'se2']);
+    },
+  );
 
   test('items with no file to download are skipped, not failed', () async {
     final service = _RecordingService();
@@ -129,8 +137,10 @@ void main() {
 
     expect((result.moviesQueued, result.episodesQueued), (1, 3));
     expect((result.skipped, result.failed), (2, 0));
-    expect(service.requests.map((r) => r.ref.externalId),
-        isNot(containsAll(['m2', 'e12'])));
+    expect(
+      service.requests.map((r) => r.ref.externalId),
+      isNot(containsAll(['m2', 'e12'])),
+    );
   });
 
   test('skips a movie that is already queued', () async {
@@ -189,7 +199,9 @@ void main() {
     );
 
     expect(
-        (result.moviesQueued, result.episodesQueued, result.failed), (1, 0, 1));
+      (result.moviesQueued, result.episodesQueued, result.failed),
+      (1, 0, 1),
+    );
   });
 
   test('allCollectionItems follows pages to the last one', () async {

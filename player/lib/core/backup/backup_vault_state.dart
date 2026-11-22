@@ -16,9 +16,9 @@ class BackupVaultState {
     this.pendingRecoveryKeyText,
     this.recoveryKeyUnacknowledged = false,
   }) : keysByEpoch = Map.unmodifiable({
-          for (final e in keysByEpoch.entries)
-            e.key: Uint8List.fromList(e.value),
-        });
+         for (final e in keysByEpoch.entries)
+           e.key: Uint8List.fromList(e.value),
+       });
 
   final String vaultId;
   final int epoch;
@@ -53,22 +53,20 @@ class BackupVaultState {
     String? Function()? manifestEtag,
     String? Function()? pendingRecoveryKeyText,
     bool? recoveryKeyUnacknowledged,
-  }) =>
-      BackupVaultState(
-        vaultId: vaultId ?? this.vaultId,
-        epoch: epoch ?? this.epoch,
-        keysByEpoch: keysByEpoch ?? this.keysByEpoch,
-        recoveryKeyText: recoveryKeyText ?? this.recoveryKeyText,
-        ownSeq: ownSeq ?? this.ownSeq,
-        lastSuccessMs:
-            lastSuccessMs != null ? lastSuccessMs() : this.lastSuccessMs,
-        manifestEtag: manifestEtag != null ? manifestEtag() : this.manifestEtag,
-        pendingRecoveryKeyText: pendingRecoveryKeyText != null
-            ? pendingRecoveryKeyText()
-            : this.pendingRecoveryKeyText,
-        recoveryKeyUnacknowledged:
-            recoveryKeyUnacknowledged ?? this.recoveryKeyUnacknowledged,
-      );
+  }) => BackupVaultState(
+    vaultId: vaultId ?? this.vaultId,
+    epoch: epoch ?? this.epoch,
+    keysByEpoch: keysByEpoch ?? this.keysByEpoch,
+    recoveryKeyText: recoveryKeyText ?? this.recoveryKeyText,
+    ownSeq: ownSeq ?? this.ownSeq,
+    lastSuccessMs: lastSuccessMs != null ? lastSuccessMs() : this.lastSuccessMs,
+    manifestEtag: manifestEtag != null ? manifestEtag() : this.manifestEtag,
+    pendingRecoveryKeyText: pendingRecoveryKeyText != null
+        ? pendingRecoveryKeyText()
+        : this.pendingRecoveryKeyText,
+    recoveryKeyUnacknowledged:
+        recoveryKeyUnacknowledged ?? this.recoveryKeyUnacknowledged,
+  );
 
   /// Keeps only the two highest epochs of [keysByEpoch].
   Map<int, Uint8List> get _prunedKeys {
@@ -78,21 +76,21 @@ class BackupVaultState {
   }
 
   Map<String, dynamic> toJson() => {
-        'v': 1,
-        'vaultId': vaultId,
-        'epoch': epoch,
-        'keys': {
-          for (final e in _prunedKeys.entries)
-            '${e.key}': base64Url.encode(e.value).replaceAll('=', ''),
-        },
-        'recoveryKey': recoveryKeyText,
-        'ownSeq': ownSeq,
-        'lastSuccessMs': lastSuccessMs,
-        'manifestEtag': manifestEtag,
-        if (pendingRecoveryKeyText != null)
-          'pendingRecoveryKey': pendingRecoveryKeyText,
-        if (recoveryKeyUnacknowledged) 'recoveryKeyUnacknowledged': true,
-      };
+    'v': 1,
+    'vaultId': vaultId,
+    'epoch': epoch,
+    'keys': {
+      for (final e in _prunedKeys.entries)
+        '${e.key}': base64Url.encode(e.value).replaceAll('=', ''),
+    },
+    'recoveryKey': recoveryKeyText,
+    'ownSeq': ownSeq,
+    'lastSuccessMs': lastSuccessMs,
+    'manifestEtag': manifestEtag,
+    if (pendingRecoveryKeyText != null)
+      'pendingRecoveryKey': pendingRecoveryKeyText,
+    if (recoveryKeyUnacknowledged) 'recoveryKeyUnacknowledged': true,
+  };
 
   /// Throws [FormatException] on a wrong version or missing/mistyped fields.
   factory BackupVaultState.fromJson(Map<String, dynamic> json) {

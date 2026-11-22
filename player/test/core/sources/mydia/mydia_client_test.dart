@@ -32,8 +32,13 @@ class _GatedTransport extends FakeMydiaTransport {
       _first = false;
       await gate.future;
     }
-    return super.send(query, variables,
-        token: token, deviceProfile: deviceProfile, timeout: timeout);
+    return super.send(
+      query,
+      variables,
+      token: token,
+      deviceProfile: deviceProfile,
+      timeout: timeout,
+    );
   }
 }
 
@@ -50,32 +55,31 @@ void main() {
     String? mediaToken,
     DateTime? mediaTokenExpiry,
     GetDeviceProfile? getDeviceProfile,
-  }) =>
-      MydiaClient(
-        transport: transport,
-        load: () async {
-          loads++;
-          return MydiaCredentials(
-            instanceId: 'inst-2',
-            accessToken: token,
-            deviceToken: deviceToken,
-            mediaToken: mediaToken,
-            mediaTokenExpiry: mediaTokenExpiry,
-          );
-        },
-        save: (c) async => saved.add(c),
-        onUnauthorized: () => unauthorized++,
-        getDeviceProfile: getDeviceProfile,
+  }) => MydiaClient(
+    transport: transport,
+    load: () async {
+      loads++;
+      return MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: token,
+        deviceToken: deviceToken,
+        mediaToken: mediaToken,
+        mediaTokenExpiry: mediaTokenExpiry,
       );
+    },
+    save: (c) async => saved.add(c),
+    onUnauthorized: () => unauthorized++,
+    getDeviceProfile: getDeviceProfile,
+  );
 
   setUp(() {
     transport = FakeMydiaTransport();
     transport.handlers['MydiaInstanceIdentity'] = (_) => {
-          'serverCompatibility': {'instanceId': 'inst-2'},
-        };
+      'serverCompatibility': {'instanceId': 'inst-2'},
+    };
     transport.handlers['RefreshAccessToken'] = (_) => {
-          'refreshAccessToken': {'token': 'fresh', 'expiresAt': null},
-        };
+      'refreshAccessToken': {'token': 'fresh', 'expiresAt': null},
+    };
     saved = [];
     unauthorized = 0;
     loads = 0;
@@ -89,120 +93,164 @@ void main() {
     expect(loads, 1);
   });
 
-  test('sends the current access token and reports the server reached',
-      () async {
-    final client = build();
-    final data = await client.request(documentNodeQueryMydiaInstanceIdentity);
-    expect((data['serverCompatibility'] as Map)['instanceId'], 'inst-2');
-    expect(transport.calls.single.token, 'access');
-    expect(client.status.value, SourceConnectionStatus.remote);
-  });
+  test(
+    'sends the current access token and reports the server reached',
+    () async {
+      final client = build();
+      final data = await client.request(documentNodeQueryMydiaInstanceIdentity);
+      expect((data['serverCompatibility'] as Map)['instanceId'], 'inst-2');
+      expect(transport.calls.single.token, 'access');
+      expect(client.status.value, SourceConnectionStatus.remote);
+    },
+  );
 
-  test('a rejected token is refreshed with the device token, saved and retried',
-      () async {
-    transport.validTokens = {'fresh'};
-    final client = build();
-    await client.request(documentNodeQueryMydiaInstanceIdentity);
-    expect(transport.calls.map((c) => c.operation), [
-      'MydiaInstanceIdentity',
-      'RefreshAccessToken',
-      'MydiaInstanceIdentity',
-    ]);
-    expect(transport.calls[1].vars, {'deviceToken': 'device'});
-    expect(transport.calls[1].token, isNull);
-    expect(transport.calls.last.token, 'fresh');
-    expect(saved.single.accessToken, 'fresh');
-    expect((await client.credentials()).accessToken, 'fresh');
-    expect(unauthorized, 0);
-  });
+  test(
+    'a rejected token is refreshed with the device token, saved and retried',
+    () async {
+      transport.validTokens = {'fresh'};
+      final client = build();
+      await client.request(documentNodeQueryMydiaInstanceIdentity);
+      expect(transport.calls.map((c) => c.operation), [
+        'MydiaInstanceIdentity',
+        'RefreshAccessToken',
+        'MydiaInstanceIdentity',
+      ]);
+      expect(transport.calls[1].vars, {'deviceToken': 'device'});
+      expect(transport.calls[1].token, isNull);
+      expect(transport.calls.last.token, 'fresh');
+      expect(saved.single.accessToken, 'fresh');
+      expect((await client.credentials()).accessToken, 'fresh');
+      expect(unauthorized, 0);
+    },
+  );
 
-  test('with no device token a rejection flags the account and throws',
-      () async {
-    transport.validTokens = {};
-    final client = build(deviceToken: null);
-    await expectLater(
+  test(
+    'with no device token a rejection flags the account and throws',
+    () async {
+      transport.validTokens = {};
+      final client = build(deviceToken: null);
+      await expectLater(
         client.request(documentNodeQueryMydiaInstanceIdentity),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
-    expect(unauthorized, 1);
-    expect(saved, isEmpty);
-  });
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.unauthorized,
+          ),
+        ),
+      );
+      expect(unauthorized, 1);
+      expect(saved, isEmpty);
+    },
+  );
 
   test('a refresh the server refuses flags the account once', () async {
     transport.validTokens = {};
-    transport.handlers['RefreshAccessToken'] =
-        (_) => throw const SourceException.unauthorized();
+    transport.handlers['RefreshAccessToken'] = (_) =>
+        throw const SourceException.unauthorized();
     final client = build();
     await expectLater(
-        client.request(documentNodeQueryMydiaInstanceIdentity),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
+      client.request(documentNodeQueryMydiaInstanceIdentity),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unauthorized,
+        ),
+      ),
+    );
     expect(unauthorized, 1);
     expect(saved, isEmpty);
   });
 
   test('a refresh that fails transiently does not flag the account', () async {
     transport.validTokens = {};
-    transport.handlers['RefreshAccessToken'] =
-        (_) => throw const SourceException.unreachable();
+    transport.handlers['RefreshAccessToken'] = (_) =>
+        throw const SourceException.unreachable();
     final client = build();
     await expectLater(
-        client.request(documentNodeQueryMydiaInstanceIdentity),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)));
+      client.request(documentNodeQueryMydiaInstanceIdentity),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unreachable,
+        ),
+      ),
+    );
     expect(unauthorized, 0);
     expect(saved, isEmpty);
     expect(client.status.value, SourceConnectionStatus.unreachable);
   });
 
-  test('a refresh the server rejects with an error flags the account',
-      () async {
-    transport.validTokens = {};
-    transport.handlers['RefreshAccessToken'] = (_) =>
-        throw const SourceException.server('Invalid or revoked device token');
-    final client = build();
-    await expectLater(
+  test(
+    'a refresh the server rejects with an error flags the account',
+    () async {
+      transport.validTokens = {};
+      transport.handlers['RefreshAccessToken'] = (_) =>
+          throw const SourceException.server('Invalid or revoked device token');
+      final client = build();
+      await expectLater(
         client.request(documentNodeQueryMydiaInstanceIdentity),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
-    expect(unauthorized, 1);
-    expect(saved, isEmpty);
-  });
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.unauthorized,
+          ),
+        ),
+      );
+      expect(unauthorized, 1);
+      expect(saved, isEmpty);
+    },
+  );
 
   test('a retry rejected again flags the account', () async {
     transport.validTokens = {};
     final client = build();
     await expectLater(
-        client.request(documentNodeQueryMydiaInstanceIdentity),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
+      client.request(documentNodeQueryMydiaInstanceIdentity),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unauthorized,
+        ),
+      ),
+    );
     expect(unauthorized, 1);
   });
 
-  test('a late rejection of the old token retries without a second refresh',
-      () async {
-    transport.validTokens = {'fresh'};
-    final gated = _GatedTransport()
-      ..validTokens = transport.validTokens
-      ..handlers.addAll(transport.handlers);
-    transport = gated;
-    final client = build();
-    final late = client.request(documentNodeQueryMydiaInstanceIdentity);
-    await Future<void>.delayed(Duration.zero);
-    await client.request(documentNodeQueryMydiaInstanceIdentity);
-    gated.gate.complete();
-    await late;
-    expect(transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
-        hasLength(1));
-    expect(transport.calls.last.token, 'fresh');
-    expect(unauthorized, 0);
-  });
+  test(
+    'a late rejection of the old token retries without a second refresh',
+    () async {
+      transport.validTokens = {'fresh'};
+      final gated = _GatedTransport()
+        ..validTokens = transport.validTokens
+        ..handlers.addAll(transport.handlers);
+      transport = gated;
+      final client = build();
+      final late = client.request(documentNodeQueryMydiaInstanceIdentity);
+      await Future<void>.delayed(Duration.zero);
+      await client.request(documentNodeQueryMydiaInstanceIdentity);
+      gated.gate.complete();
+      await late;
+      expect(
+        transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
+        hasLength(1),
+      );
+      expect(transport.calls.last.token, 'fresh');
+      expect(unauthorized, 0);
+    },
+  );
 
   test('an unreachable server sets the status and rethrows', () async {
     transport.unreachable = true;
     final client = build();
-    await expectLater(client.request(documentNodeQueryMydiaInstanceIdentity),
-        throwsA(isA<SourceException>()));
+    await expectLater(
+      client.request(documentNodeQueryMydiaInstanceIdentity),
+      throwsA(isA<SourceException>()),
+    );
     expect(client.status.value, SourceConnectionStatus.unreachable);
   });
 
@@ -213,8 +261,10 @@ void main() {
       client.request(documentNodeQueryMydiaInstanceIdentity),
       client.request(documentNodeQueryMydiaInstanceIdentity),
     ]);
-    expect(transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
-        hasLength(1));
+    expect(
+      transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
+      hasLength(1),
+    );
   });
 
   test('coalesces concurrent 401s into a single refresh request', () async {
@@ -256,14 +306,19 @@ void main() {
 
   test('refused refresh invokes onUnauthorized', () async {
     transport.validTokens = {};
-    transport.handlers['RefreshAccessToken'] =
-        (_) => throw const SourceException.unauthorized();
+    transport.handlers['RefreshAccessToken'] = (_) =>
+        throw const SourceException.unauthorized();
     final client = build();
 
     await expectLater(
       client.request(documentNodeQueryMydiaInstanceIdentity),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unauthorized,
+        ),
+      ),
     );
 
     expect(unauthorized, 1);
@@ -277,22 +332,32 @@ void main() {
         client2.request(documentNodeQueryMydiaInstanceIdentity),
         client2.request(documentNodeQueryMydiaInstanceIdentity),
       ]),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unauthorized,
+        ),
+      ),
     );
     expect(unauthorized, 2);
   });
 
   test('unreachable during refresh does not invoke onUnauthorized', () async {
     transport.validTokens = {};
-    transport.handlers['RefreshAccessToken'] =
-        (_) => throw const SourceException.unreachable();
+    transport.handlers['RefreshAccessToken'] = (_) =>
+        throw const SourceException.unreachable();
     final client = build();
 
     await expectLater(
       client.request(documentNodeQueryMydiaInstanceIdentity),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unreachable,
+        ),
+      ),
     );
 
     expect(unauthorized, 0);
@@ -307,32 +372,35 @@ void main() {
         client2.request(documentNodeQueryMydiaInstanceIdentity),
         client2.request(documentNodeQueryMydiaInstanceIdentity),
       ]),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unreachable,
+        ),
+      ),
     );
     expect(unauthorized, 0);
     expect(client2.status.value, SourceConnectionStatus.unreachable);
     expect((await client2.credentials()).accessToken, 'access');
   });
 
-  test(
-      'retries with fallback on unknown field error and skips straight to fallback on next call',
-      () async {
+  test('retries with fallback on unknown field error and skips straight to fallback on next call', () async {
     final extended = parseString('query GetItem { item { id newField } }');
     final fallback = parseString('query GetItemFallback { item { id } }');
 
     transport.handlers['GetItem'] = (_) => throw const SourceException.server(
-          'Cannot query field "newField" on type "Item"',
-        );
+      'Cannot query field "newField" on type "Item"',
+    );
     transport.handlers['GetItemFallback'] = (_) => {
-          'item': {'id': '1'},
-        };
+      'item': {'id': '1'},
+    };
 
     final client = build();
 
     final firstResult = await client.query(extended, fallback: fallback);
     expect(firstResult, {
-      'item': {'id': '1'}
+      'item': {'id': '1'},
     });
     expect(transport.calls.map((c) => c.operation), [
       'GetItem',
@@ -341,7 +409,7 @@ void main() {
 
     final secondResult = await client.query(extended, fallback: fallback);
     expect(secondResult, {
-      'item': {'id': '1'}
+      'item': {'id': '1'},
     });
     expect(transport.calls.map((c) => c.operation), [
       'GetItem',
@@ -354,9 +422,8 @@ void main() {
     final extended = parseString('query GetItem { item { id newField } }');
     final fallback = parseString('query GetItemFallback { item { id } }');
 
-    transport.handlers['GetItem'] = (_) => throw const SourceException.server(
-          'Internal server error',
-        );
+    transport.handlers['GetItem'] = (_) =>
+        throw const SourceException.server('Internal server error');
 
     final client = build();
 
@@ -371,21 +438,16 @@ void main() {
     final extended = parseString('query GetItem { item { id newField } }');
 
     transport.handlers['GetItem'] = (_) => throw const SourceException.server(
-          'Cannot query field "newField" on type "Item"',
-        );
+      'Cannot query field "newField" on type "Item"',
+    );
 
     final client = build();
 
-    await expectLater(
-      client.query(extended),
-      throwsA(isA<SourceException>()),
-    );
+    await expectLater(client.query(extended), throwsA(isA<SourceException>()));
     expect(transport.calls.map((c) => c.operation), ['GetItem']);
   });
 
-  test(
-      'attaches device profile header once probe resolves, sends without when null',
-      () async {
+  test('attaches device profile header once probe resolves, sends without when null', () async {
     DeviceProfile? currentProfile;
     final client = build(getDeviceProfile: () => currentProfile);
 
@@ -401,44 +463,46 @@ void main() {
   });
 
   group('media token', () {
-    test('refreshes media token proactively when within 1 hour of expiry',
-        () async {
-      final now = DateTime.now();
-      final halfHourFromNow = now.add(const Duration(minutes: 30));
-      final tomorrow = DateTime.parse(
-        now.add(const Duration(hours: 24)).toIso8601String(),
-      );
+    test(
+      'refreshes media token proactively when within 1 hour of expiry',
+      () async {
+        final now = DateTime.now();
+        final halfHourFromNow = now.add(const Duration(minutes: 30));
+        final tomorrow = DateTime.parse(
+          now.add(const Duration(hours: 24)).toIso8601String(),
+        );
 
-      transport.handlers['RefreshMediaToken'] = (vars) => {
-            'refreshMediaToken': {
-              'token': 'fresh-media',
-              'expiresAt': tomorrow.toIso8601String(),
-              'permissions': ['stream'],
-              '__typename': 'MediaToken',
-            },
-          };
+        transport.handlers['RefreshMediaToken'] = (vars) => {
+          'refreshMediaToken': {
+            'token': 'fresh-media',
+            'expiresAt': tomorrow.toIso8601String(),
+            'permissions': ['stream'],
+            '__typename': 'MediaToken',
+          },
+        };
 
-      final client = build(
-        mediaToken: 'old-media',
-        mediaTokenExpiry: halfHourFromNow,
-      );
+        final client = build(
+          mediaToken: 'old-media',
+          mediaTokenExpiry: halfHourFromNow,
+        );
 
-      final token = await client.ensureValidMediaToken();
-      expect(token, 'fresh-media');
-      expect(
-        transport.calls.where((c) => c.operation == 'RefreshMediaToken'),
-        hasLength(1),
-      );
-      expect(
-        transport.calls
-            .firstWhere((c) => c.operation == 'RefreshMediaToken')
-            .vars,
-        {'token': 'old-media'},
-      );
-      expect(saved.single.mediaToken, 'fresh-media');
-      expect(saved.single.mediaTokenExpiry, tomorrow);
-      expect((await client.credentials()).mediaToken, 'fresh-media');
-    });
+        final token = await client.ensureValidMediaToken();
+        expect(token, 'fresh-media');
+        expect(
+          transport.calls.where((c) => c.operation == 'RefreshMediaToken'),
+          hasLength(1),
+        );
+        expect(
+          transport.calls
+              .firstWhere((c) => c.operation == 'RefreshMediaToken')
+              .vars,
+          {'token': 'old-media'},
+        );
+        expect(saved.single.mediaToken, 'fresh-media');
+        expect(saved.single.mediaTokenExpiry, tomorrow);
+        expect((await client.credentials()).mediaToken, 'fresh-media');
+      },
+    );
 
     test('buildMediaUrl appends token parameter', () async {
       final client = build(
@@ -493,18 +557,15 @@ void main() {
         DateTime.now().add(const Duration(hours: 24)).toIso8601String(),
       );
       transport.handlers['RefreshMediaToken'] = (vars) => {
-            'refreshMediaToken': {
-              'token': 'fresh-media',
-              'expiresAt': tomorrow.toIso8601String(),
-              'permissions': ['stream'],
-              '__typename': 'MediaToken',
-            },
-          };
+        'refreshMediaToken': {
+          'token': 'fresh-media',
+          'expiresAt': tomorrow.toIso8601String(),
+          'permissions': ['stream'],
+          '__typename': 'MediaToken',
+        },
+      };
 
-      final client = build(
-        mediaToken: 'old-media',
-        mediaTokenExpiry: null,
-      );
+      final client = build(mediaToken: 'old-media', mediaTokenExpiry: null);
 
       final token = await client.ensureValidMediaToken();
       expect(token, 'fresh-media');
@@ -514,40 +575,43 @@ void main() {
       );
     });
 
-    test('returns existing token if refresh fails but token is not yet expired',
-        () async {
-      final halfHourFromNow = DateTime.now().add(const Duration(minutes: 30));
-      transport.handlers['RefreshMediaToken'] =
-          (_) => throw const SourceException.unreachable();
+    test(
+      'returns existing token if refresh fails but token is not yet expired',
+      () async {
+        final halfHourFromNow = DateTime.now().add(const Duration(minutes: 30));
+        transport.handlers['RefreshMediaToken'] = (_) =>
+            throw const SourceException.unreachable();
 
-      final client = build(
-        mediaToken: 'old-media',
-        mediaTokenExpiry: halfHourFromNow,
-      );
+        final client = build(
+          mediaToken: 'old-media',
+          mediaTokenExpiry: halfHourFromNow,
+        );
 
-      final token = await client.ensureValidMediaToken();
-      expect(token, 'old-media');
-    });
+        final token = await client.ensureValidMediaToken();
+        expect(token, 'old-media');
+      },
+    );
 
     test(
-        'media token returns existing token if refresh fails and expiry is null',
-        () async {
-      transport.handlers['RefreshMediaToken'] =
-          (_) => throw const SourceException.unreachable();
+      'media token returns existing token if refresh fails and expiry is null',
+      () async {
+        transport.handlers['RefreshMediaToken'] = (_) =>
+            throw const SourceException.unreachable();
 
-      final client = build(
-        mediaToken: 'legacy-media',
-        mediaTokenExpiry: null,
-      );
+        final client = build(
+          mediaToken: 'legacy-media',
+          mediaTokenExpiry: null,
+        );
 
-      final token = await client.ensureValidMediaToken();
-      expect(token, 'legacy-media');
-    });
+        final token = await client.ensureValidMediaToken();
+        expect(token, 'legacy-media');
+      },
+    );
 
     test('returns null if refresh fails and token is expired', () async {
       final expired = DateTime.now().subtract(const Duration(minutes: 10));
-      transport.handlers['RefreshMediaToken'] =
-          (_) => throw const SourceException.unreachable();
+      transport.handlers['RefreshMediaToken'] = (_) =>
+          throw const SourceException.unreachable();
 
       final client = build(
         mediaToken: 'expired-media',
@@ -558,29 +622,31 @@ void main() {
       expect(token, isNull);
     });
 
-    test('stores null expiry when refreshed expiresAt is unparseable',
-        () async {
-      final oldExpiry = DateTime.now().add(const Duration(minutes: 10));
-      transport.handlers['RefreshMediaToken'] = (_) => {
-            'refreshMediaToken': {
-              'token': 'fresh-token',
-              'expiresAt': 'not-a-valid-date',
-              'permissions': ['stream'],
-              '__typename': 'MediaToken',
-            },
-          };
+    test(
+      'stores null expiry when refreshed expiresAt is unparseable',
+      () async {
+        final oldExpiry = DateTime.now().add(const Duration(minutes: 10));
+        transport.handlers['RefreshMediaToken'] = (_) => {
+          'refreshMediaToken': {
+            'token': 'fresh-token',
+            'expiresAt': 'not-a-valid-date',
+            'permissions': ['stream'],
+            '__typename': 'MediaToken',
+          },
+        };
 
-      final client = build(
-        mediaToken: 'old-token',
-        mediaTokenExpiry: oldExpiry,
-      );
+        final client = build(
+          mediaToken: 'old-token',
+          mediaTokenExpiry: oldExpiry,
+        );
 
-      final token = await client.ensureValidMediaToken();
-      expect(token, 'fresh-token');
-      expect(saved.last.mediaToken, 'fresh-token');
-      expect(saved.last.mediaTokenExpiry, isNull);
-      expect((await client.credentials()).mediaTokenExpiry, isNull);
-    });
+        final token = await client.ensureValidMediaToken();
+        expect(token, 'fresh-token');
+        expect(saved.last.mediaToken, 'fresh-token');
+        expect(saved.last.mediaTokenExpiry, isNull);
+        expect((await client.credentials()).mediaTokenExpiry, isNull);
+      },
+    );
 
     test('refresh retains mediaToken fields updated concurrently', () async {
       transport.validTokens = {'access', 'fresh-access'};
@@ -594,27 +660,28 @@ void main() {
           throw const SourceException.unauthorized();
         }
         return {
-          'serverCompatibility': {'instanceId': 'inst-2'}
+          'serverCompatibility': {'instanceId': 'inst-2'},
         };
       };
 
       final client = build(mediaToken: 'initial-media');
-      final requestFuture =
-          client.request(documentNodeQueryMydiaInstanceIdentity);
+      final requestFuture = client.request(
+        documentNodeQueryMydiaInstanceIdentity,
+      );
 
       await Future<void>.delayed(Duration.zero);
 
       // Concurrently update media token during the RefreshAccessToken await
       transport.handlers['RefreshMediaToken'] = (_) => {
-            'refreshMediaToken': {
-              'token': 'newer-media',
-              'expiresAt': DateTime.now()
-                  .add(const Duration(hours: 1))
-                  .toIso8601String(),
-              'permissions': ['stream'],
-              '__typename': 'MediaToken',
-            },
-          };
+        'refreshMediaToken': {
+          'token': 'newer-media',
+          'expiresAt': DateTime.now()
+              .add(const Duration(hours: 1))
+              .toIso8601String(),
+          'permissions': ['stream'],
+          '__typename': 'MediaToken',
+        },
+      };
       await client.ensureValidMediaToken();
 
       refreshCompleter.complete({
@@ -640,18 +707,16 @@ void main() {
   });
 
   group('server compatibility', () {
-    test(
-        'fetches server compatibility declaration and handles older servers returning null',
-        () async {
+    test('fetches server compatibility declaration and handles older servers returning null', () async {
       transport.handlers['ServerCompatibility'] = (_) => {
-            'serverCompatibility': {
-              'version': '1.2.3',
-              'minPlayerVersion': '1.0.0',
-              'recommendedPlayerVersion': '1.2.0',
-              '__typename': 'ServerCompatibility',
-            },
-            '__typename': 'RootQueryType',
-          };
+        'serverCompatibility': {
+          'version': '1.2.3',
+          'minPlayerVersion': '1.0.0',
+          'recommendedPlayerVersion': '1.2.0',
+          '__typename': 'ServerCompatibility',
+        },
+        '__typename': 'RootQueryType',
+      };
 
       final client = build();
       final info = await client.fetchCompatibility();
@@ -667,21 +732,21 @@ void main() {
 
       // Gracefully handles responses without explicit __typename
       transport.handlers['ServerCompatibility'] = (_) => {
-            'serverCompatibility': {
-              'version': '2.0.0',
-              'minPlayerVersion': '1.5.0',
-              'recommendedPlayerVersion': '2.0.0',
-            },
-          };
+        'serverCompatibility': {
+          'version': '2.0.0',
+          'minPlayerVersion': '1.5.0',
+          'recommendedPlayerVersion': '2.0.0',
+        },
+      };
       final infoNoTypename = await client.fetchCompatibility();
       expect(infoNoTypename, isNotNull);
       expect(infoNoTypename!.version, '2.0.0');
 
       // Server returns null for compatibility
       transport.handlers['ServerCompatibility'] = (_) => {
-            'serverCompatibility': null,
-            '__typename': 'RootQueryType',
-          };
+        'serverCompatibility': null,
+        '__typename': 'RootQueryType',
+      };
 
       expect(await client.fetchCompatibility(), isNull);
     });
@@ -689,8 +754,8 @@ void main() {
     test('returns null on transport failure', () async {
       final client = build();
 
-      transport.handlers['ServerCompatibility'] =
-          (_) => throw const SourceException.unreachable();
+      transport.handlers['ServerCompatibility'] = (_) =>
+          throw const SourceException.unreachable();
       expect(await client.fetchCompatibility(), isNull);
     });
 
@@ -699,7 +764,8 @@ void main() {
 
       transport.handlers['ServerCompatibility'] = (_) =>
           throw const SourceException.server(
-              'Cannot query field "serverCompatibility"');
+            'Cannot query field "serverCompatibility"',
+          );
       final info = await client.fetchCompatibility();
 
       expect(info, isNotNull);
@@ -708,38 +774,50 @@ void main() {
   });
 
   test('the fallback gets its own variables and is remembered', () async {
-    final current = parseString(r'mutation StartThing($id: ID!, $cap: Int) '
-        r'{ startThing(id: $id, cap: $cap) { id } }');
+    final current = parseString(
+      r'mutation StartThing($id: ID!, $cap: Int) '
+      r'{ startThing(id: $id, cap: $cap) { id } }',
+    );
     final fallback = parseString(
-        r'mutation StartThingFallback($id: ID!) { startThing(id: $id) { id } }');
+      r'mutation StartThingFallback($id: ID!) { startThing(id: $id) { id } }',
+    );
     final server = FakeMydiaTransport()
       ..handlers['StartThing'] = (_) {
         throw const SourceException.server(
-            'Unknown argument "cap" on field "startThing".');
+          'Unknown argument "cap" on field "startThing".',
+        );
       }
       ..handlers['StartThingFallback'] = (vars) => {
-            'startThing': {'id': vars['id']}
-          };
+        'startThing': {'id': vars['id']},
+      };
     final client = fakeMydiaClient(server);
 
-    await client.query(current,
-        fallback: fallback,
-        variables: {'id': 'f', 'cap': 720},
-        fallbackVariables: {'id': 'f'});
+    await client.query(
+      current,
+      fallback: fallback,
+      variables: {'id': 'f', 'cap': 720},
+      fallbackVariables: {'id': 'f'},
+    );
     expect(server.calls.last.vars.containsKey('cap'), isFalse);
 
-    await client.query(current,
-        fallback: fallback,
-        variables: {'id': 'g', 'cap': 720},
-        fallbackVariables: {'id': 'g'});
-    expect(server.calls.map((c) => c.operation),
-        ['StartThing', 'StartThingFallback', 'StartThingFallback']);
+    await client.query(
+      current,
+      fallback: fallback,
+      variables: {'id': 'g', 'cap': 720},
+      fallbackVariables: {'id': 'g'},
+    );
+    expect(server.calls.map((c) => c.operation), [
+      'StartThing',
+      'StartThingFallback',
+      'StartThingFallback',
+    ]);
     expect(server.calls.last.vars, {'id': 'g'});
   });
 
   test('rootQuery lets a generated parser read the bare data', () {
     final parsed = Query$SubtitleTrackSettings.fromJson(
-        rootQuery({'subtitleTrackSettings': <Object>[]}));
+      rootQuery({'subtitleTrackSettings': <Object>[]}),
+    );
     expect(parsed.subtitleTrackSettings, isEmpty);
   });
 }

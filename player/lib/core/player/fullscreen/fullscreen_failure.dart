@@ -62,21 +62,20 @@ class FullscreenFailure {
 
   /// One line, safe to copy out of `DiagnosticsScreen`.
   String get label => switch (cause) {
-        FullscreenFailureCause.documentEnabledProbeFailed =>
-          'document.fullscreenEnabled could not be read',
-        FullscreenFailureCause.videoSupportProbeFailed =>
-          'video element capability probe failed',
-        FullscreenFailureCause.documentRequestRejected =>
-          'requestFullscreen was rejected',
-        FullscreenFailureCause.documentExitRejected =>
-          'exitFullscreen was rejected',
-        FullscreenFailureCause.playerNotWebPlayer =>
-          'player is not the web implementation',
-        FullscreenFailureCause.noVideoElement => 'no media element bound',
-        FullscreenFailureCause.videoEnterFailed =>
-          'webkitEnterFullscreen failed',
-        FullscreenFailureCause.videoExitFailed => 'webkitExitFullscreen failed',
-      };
+    FullscreenFailureCause.documentEnabledProbeFailed =>
+      'document.fullscreenEnabled could not be read',
+    FullscreenFailureCause.videoSupportProbeFailed =>
+      'video element capability probe failed',
+    FullscreenFailureCause.documentRequestRejected =>
+      'requestFullscreen was rejected',
+    FullscreenFailureCause.documentExitRejected =>
+      'exitFullscreen was rejected',
+    FullscreenFailureCause.playerNotWebPlayer =>
+      'player is not the web implementation',
+    FullscreenFailureCause.noVideoElement => 'no media element bound',
+    FullscreenFailureCause.videoEnterFailed => 'webkitEnterFullscreen failed',
+    FullscreenFailureCause.videoExitFailed => 'webkitExitFullscreen failed',
+  };
 
   @override
   String toString() => detail == null ? label : '$label: $detail';

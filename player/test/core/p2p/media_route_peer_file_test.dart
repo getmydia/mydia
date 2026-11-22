@@ -34,10 +34,14 @@ void main() {
   });
 
   test('a peer file route without its token is refused', () {
-    expect(MediaRoutes.resolve('/peerfile/flocal/stream'),
-        isA<MediaRouteFailure>());
-    expect(MediaRoutes.resolve('/peerfile/flocal//stream'),
-        isA<MediaRouteFailure>());
+    expect(
+      MediaRoutes.resolve('/peerfile/flocal/stream'),
+      isA<MediaRouteFailure>(),
+    );
+    expect(
+      MediaRoutes.resolve('/peerfile/flocal//stream'),
+      isA<MediaRouteFailure>(),
+    );
   });
 
   test('direct and download routes keep their fixed remote paths', () {

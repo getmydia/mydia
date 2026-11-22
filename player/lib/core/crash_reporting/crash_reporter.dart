@@ -27,20 +27,18 @@ class CrashReporter {
   CrashReporter({
     required http.Client client,
     required Uri endpoint,
-    required Future<bool> Function() loadConsent,
-    required Future<CrashAppContext> Function() loadAppContext,
+    required this._loadConsent,
+    required this._loadAppContext,
     this.isAvailable = true,
     DateTime Function()? now,
     void Function(FlutterErrorDetails details)? presentFlutterError,
-    Duration consentTimeout = const Duration(seconds: 2),
-  })  : _loadConsent = loadConsent,
-        _loadAppContext = loadAppContext,
-        _now = now ?? DateTime.now,
-        _presentFlutterError = presentFlutterError ??
-            ((details) => FlutterError.presentError(details)),
-        _consentTimeout = consentTimeout,
-        _throttle = _Throttle(now ?? DateTime.now),
-        _queue = CrashReportQueue(client: client, endpoint: endpoint, now: now);
+    this._consentTimeout = const Duration(seconds: 2),
+  }) : _now = now ?? DateTime.now,
+       _presentFlutterError =
+           presentFlutterError ??
+           ((details) => FlutterError.presentError(details)),
+       _throttle = _Throttle(now ?? DateTime.now),
+       _queue = CrashReportQueue(client: client, endpoint: endpoint, now: now);
 
   /// The reporter `main()` installs.
   ///
@@ -64,18 +62,18 @@ class CrashReporter {
   /// code running without `main()`'s override, such as widget tests that
   /// pump the whole app.
   factory CrashReporter.inert() => CrashReporter(
-        client: _NoNetworkClient(),
-        endpoint: Uri(),
-        loadConsent: () async => false,
-        loadAppContext: () async => const CrashAppContext(
-          version: '',
-          buildNumber: '',
-          platform: '',
-          osVersion: '',
-          environment: '',
-        ),
-        isAvailable: false,
-      );
+    client: _NoNetworkClient(),
+    endpoint: Uri(),
+    loadConsent: () async => false,
+    loadAppContext: () async => const CrashAppContext(
+      version: '',
+      buildNumber: '',
+      platform: '',
+      osVersion: '',
+      environment: '',
+    ),
+    isAvailable: false,
+  );
 
   /// False on web and for [CrashReporter.inert]. The handlers still log, but
   /// nothing is sent, [reportStartupFailure] returns null, and the settings

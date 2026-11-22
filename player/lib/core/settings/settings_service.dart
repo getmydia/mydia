@@ -17,7 +17,7 @@ class SettingsService {
   /// [storage] is injectable for tests. Production callers use the default,
   /// which is the platform-appropriate implementation.
   SettingsService({AuthStorage? storage})
-      : _storage = storage ?? getAuthStorage();
+    : _storage = storage ?? getAuthStorage();
 
   final AuthStorage _storage;
 
@@ -171,12 +171,9 @@ class SettingsService {
   /// The storage key of every library sort this device may hold, stored or
   /// cleared. For the cloud backup.
   Future<List<String>> librarySortStorageKeys() async => [
-        for (final k in {
-          ..._legacyLibrarySortKeys,
-          ...await _librarySortIndex()
-        })
-          '$_librarySortKeyPrefix$k',
-      ];
+    for (final k in {..._legacyLibrarySortKeys, ...await _librarySortIndex()})
+      '$_librarySortKeyPrefix$k',
+  ];
 
   Future<List<String>> _librarySortIndex() async {
     final raw = await _storage.read(_librarySortIndexKey);
@@ -206,7 +203,9 @@ class SettingsService {
     if (value == null) return _delete(storageKey);
     if (isLibrarySortKey(storageKey)) {
       return setLibrarySort(
-          storageKey.substring(_librarySortKeyPrefix.length), value);
+        storageKey.substring(_librarySortKeyPrefix.length),
+        value,
+      );
     }
     await _write(storageKey, value);
   }

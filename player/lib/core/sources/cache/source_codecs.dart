@@ -8,29 +8,37 @@ import '../../../domain/sources/ranked_item.dart';
 
 Map<String, Object?> _map(Object? json) => json! as Map<String, Object?>;
 
-Object? encodeSummaries(List<ItemSummary> items) =>
-    [for (final i in items) i.toJson()];
+Object? encodeSummaries(List<ItemSummary> items) => [
+  for (final i in items) i.toJson(),
+];
 
-List<ItemSummary> decodeSummaries(Object? json) =>
-    [for (final e in json! as List) ItemSummary.fromJson(_map(e))];
+List<ItemSummary> decodeSummaries(Object? json) => [
+  for (final e in json! as List) ItemSummary.fromJson(_map(e)),
+];
 
-Object? encodeRanked(List<RankedItem> items) =>
-    [for (final i in items) i.toJson()];
+Object? encodeRanked(List<RankedItem> items) => [
+  for (final i in items) i.toJson(),
+];
 
-List<RankedItem> decodeRanked(Object? json) =>
-    [for (final e in json! as List) RankedItem.fromJson(_map(e))];
+List<RankedItem> decodeRanked(Object? json) => [
+  for (final e in json! as List) RankedItem.fromJson(_map(e)),
+];
 
-Object? encodeLibraries(List<Library> libraries) =>
-    [for (final l in libraries) l.toJson()];
+Object? encodeLibraries(List<Library> libraries) => [
+  for (final l in libraries) l.toJson(),
+];
 
-List<Library> decodeLibraries(Object? json) =>
-    [for (final e in json! as List) Library.fromJson(_map(e))];
+List<Library> decodeLibraries(Object? json) => [
+  for (final e in json! as List) Library.fromJson(_map(e)),
+];
 
-Object? encodeCollections(List<SourceCollection> collections) =>
-    [for (final c in collections) c.toJson()];
+Object? encodeCollections(List<SourceCollection> collections) => [
+  for (final c in collections) c.toJson(),
+];
 
-List<SourceCollection> decodeCollections(Object? json) =>
-    [for (final e in json! as List) SourceCollection.fromJson(_map(e))];
+List<SourceCollection> decodeCollections(Object? json) => [
+  for (final e in json! as List) SourceCollection.fromJson(_map(e)),
+];
 
 Object? encodeSummaryPage(Page<ItemSummary> page) =>
     page.toJson((i) => i.toJson());

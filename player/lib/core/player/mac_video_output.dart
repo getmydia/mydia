@@ -23,7 +23,8 @@ VideoOutputPath chooseVideoOutputPath({
   required String? failedVersion,
   required String appVersion,
 }) {
-  final eligible = platform == TargetPlatform.macOS &&
+  final eligible =
+      platform == TargetPlatform.macOS &&
       !isWeb &&
       !legacyHatch &&
       failedVersion != appVersion;

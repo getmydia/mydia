@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -38,32 +38,39 @@ Future<void> _pump(WidgetTester tester, BackupTestDevice device) async {
   final router = GoRouter(
     initialLocation: restoreBackupLocation,
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const SizedBox(key: Key('home'))),
+      GoRoute(
+        path: '/',
+        builder: (_, _) => const SizedBox(key: Key('home')),
+      ),
       GoRoute(
         path: restoreBackupLocation,
-        builder: (_, __) => const RestoreBackupScreen(),
+        builder: (_, _) => const RestoreBackupScreen(),
       ),
     ],
   );
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      backupSyncServiceProvider.overrideWithValue(device.service),
-      // Only the relay is offered: the screen opens on the key entry.
-      backupControllerProvider
-          .overrideWithValue(FakeBackupController(relay: device.service)),
-    ],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      routerConfig: router,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        backupSyncServiceProvider.overrideWithValue(device.service),
+        // Only the relay is offered: the screen opens on the key entry.
+        backupControllerProvider.overrideWithValue(
+          FakeBackupController(relay: device.service),
+        ),
+      ],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        routerConfig: router,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
 Future<(BackupTestDevice, BackupTestDevice, RecoveryKey)> _setUp(
-    WidgetTester tester) async {
+  WidgetTester tester,
+) async {
   final rig = (await tester.runAsync(_vault))!;
   addTearDown(() {
     rig.$1.dispose();
@@ -73,21 +80,26 @@ Future<(BackupTestDevice, BackupTestDevice, RecoveryKey)> _setUp(
 }
 
 void main() {
-  testWidgets('a malformed key is rejected inline, without the relay',
-      (tester) async {
+  testWidgets('a malformed key is rejected inline, without the relay', (
+    tester,
+  ) async {
     final (tv, fresh, _) = await _setUp(tester);
     await _pump(tester, fresh);
     final before = tv.relay.requests.length;
 
     await tester.enterText(
-        find.byKey(const Key('restore-key-field')), 'not a key');
+      find.byKey(const Key('restore-key-field')),
+      'not a key',
+    );
     await tester.tap(find.byKey(const Key('restore-find-button')));
     await tester.pumpAndSettle();
 
     expect(
-        find.text(
-            "That isn't a recovery key. It has 52 letters and digits in groups of four."),
-        findsOneWidget);
+      find.text(
+        "That isn't a recovery key. It has 52 letters and digits in groups of four.",
+      ),
+      findsOneWidget,
+    );
     expect(tv.relay.requests.length, before);
   });
 
@@ -95,38 +107,50 @@ void main() {
     final (_, fresh, _) = await _setUp(tester);
     await _pump(tester, fresh);
 
-    await tester.enterText(find.byKey(const Key('restore-key-field')),
-        RecoveryKey.generate().display);
+    await tester.enterText(
+      find.byKey(const Key('restore-key-field')),
+      RecoveryKey.generate().display,
+    );
     await tester.tap(find.byKey(const Key('restore-find-button')));
-    await settleEngine(tester,
-        until: () =>
-            find.byKey(const Key('restore-error')).evaluate().isNotEmpty);
+    await settleEngine(
+      tester,
+      until: () => find.byKey(const Key('restore-error')).evaluate().isNotEmpty,
+    );
 
     expect(find.text('No backup matches this key'), findsOneWidget);
   });
 
-  testWidgets('the summary shows before Restore, which then restores',
-      (tester) async {
+  testWidgets('the summary shows before Restore, which then restores', (
+    tester,
+  ) async {
     final (_, fresh, key) = await _setUp(tester);
     await _pump(tester, fresh);
 
     await tester.enterText(
-        find.byKey(const Key('restore-key-field')), key.display.toLowerCase());
+      find.byKey(const Key('restore-key-field')),
+      key.display.toLowerCase(),
+    );
     await tester.tap(find.byKey(const Key('restore-find-button')));
-    await settleEngine(tester,
-        until: () =>
-            find.byKey(const Key('restore-summary')).evaluate().isNotEmpty);
+    await settleEngine(
+      tester,
+      until: () =>
+          find.byKey(const Key('restore-summary')).evaluate().isNotEmpty,
+    );
 
     expect(
-        find.text('1 source, 2 watch records, from 1 device'), findsOneWidget);
+      find.text('1 source, 2 watch records, from 1 device'),
+      findsOneWidget,
+    );
     expect(find.text('Living Room TV'), findsOneWidget);
     // Nothing is applied before Restore is pressed.
     expect(fresh.putAccounts, isEmpty);
     expect(fresh.service.enabled, isFalse);
 
     await tester.tap(find.byKey(const Key('restore-confirm-button')));
-    await settleEngine(tester,
-        until: () => find.byKey(const Key('home')).evaluate().isNotEmpty);
+    await settleEngine(
+      tester,
+      until: () => find.byKey(const Key('home')).evaluate().isNotEmpty,
+    );
 
     expect(fresh.putAccounts, ['p1']);
     expect(fresh.service.enabled, isTrue);
@@ -138,28 +162,37 @@ void main() {
     await tester.pump(const Duration(seconds: 10));
   });
 
-  testWidgets('a device already in a backup cannot restore another',
-      (tester) async {
+  testWidgets('a device already in a backup cannot restore another', (
+    tester,
+  ) async {
     final (tv, _, _) = await _setUp(tester);
     await _pump(tester, tv);
     expect(find.byKey(const Key('restore-already-on')), findsOneWidget);
     expect(
-        find.text('This device is already in a backup. Turn backup off in '
-            'Servers & devices to restore another one.'),
-        findsOneWidget);
+      find.text(
+        'This device is already in a backup. Turn backup off in '
+        'Servers & devices to restore another one.',
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('restore-key-field')), findsNothing);
   });
 
-  testWidgets('backup turning on after the preview says so, not an error',
-      (tester) async {
+  testWidgets('backup turning on after the preview says so, not an error', (
+    tester,
+  ) async {
     final (_, fresh, key) = await _setUp(tester);
     await _pump(tester, fresh);
     await tester.enterText(
-        find.byKey(const Key('restore-key-field')), key.display);
+      find.byKey(const Key('restore-key-field')),
+      key.display,
+    );
     await tester.tap(find.byKey(const Key('restore-find-button')));
-    await settleEngine(tester,
-        until: () =>
-            find.byKey(const Key('restore-summary')).evaluate().isNotEmpty);
+    await settleEngine(
+      tester,
+      until: () =>
+          find.byKey(const Key('restore-summary')).evaluate().isNotEmpty,
+    );
 
     // Pairing, say, turned backup on meanwhile.
     await tester.runAsync(fresh.enable);
@@ -183,8 +216,9 @@ void main() {
       WatchBackupRecord(key: 'watch:tmdb:movie:2', watched: true, updatedAt: 1),
     ];
 
-    testWidgets('restore_screen_shows_three_entries_on_apple_two_elsewhere',
-        (tester) async {
+    testWidgets('restore_screen_shows_three_entries_on_apple_two_elsewhere', (
+      tester,
+    ) async {
       await _pumpCloud(tester, FakeBackupController(offered: all));
       expect(find.byKey(const Key('restore-entry-icloud')), findsOneWidget);
       expect(find.byKey(const Key('restore-entry-gdrive')), findsOneWidget);
@@ -195,9 +229,11 @@ void main() {
       expect(find.byKey(const Key('restore-key-field')), findsNothing);
 
       await _pumpCloud(
-          tester,
-          FakeBackupController(
-              offered: const {BackupStoreKind.relay, BackupStoreKind.gdrive}));
+        tester,
+        FakeBackupController(
+          offered: const {BackupStoreKind.relay, BackupStoreKind.gdrive},
+        ),
+      );
       expect(find.byKey(const Key('restore-entry-icloud')), findsNothing);
       expect(find.byKey(const Key('restore-entry-gdrive')), findsOneWidget);
       expect(find.byKey(const Key('restore-entry-key')), findsOneWidget);
@@ -214,8 +250,10 @@ void main() {
 
       await tester.tap(find.byKey(const Key('restore-entry-icloud')));
       await tester.pumpAndSettle();
-      expect(find.text('0 sources, 2 watch records, from 1 device'),
-          findsOneWidget);
+      expect(
+        find.text('0 sources, 2 watch records, from 1 device'),
+        findsOneWidget,
+      );
       expect(find.text('Living Room TV'), findsOneWidget);
       expect(c.calls, ['previewRestore icloud']);
 
@@ -238,20 +276,27 @@ void main() {
       expect(find.byKey(const Key('restore-summary')), findsOneWidget);
     });
 
-    testWidgets('a store with nothing readable offers no Restore',
-        (tester) async {
+    testWidgets('a store with nothing readable offers no Restore', (
+      tester,
+    ) async {
       final c = FakeBackupController(offered: all);
-      c.clouds[BackupStoreKind.icloud]!.preview =
-          fakeCloudPreview(const [], unreadable: {'tv'});
+      c.clouds[BackupStoreKind.icloud]!.preview = fakeCloudPreview(
+        const [],
+        unreadable: {'tv'},
+      );
       await _pumpCloud(tester, c);
 
       await tester.tap(find.byKey(const Key('restore-entry-icloud')));
       await tester.pumpAndSettle();
 
-      expect(find.text('0 sources, 0 watch records, from 0 devices'),
-          findsOneWidget);
       expect(
-          find.text('Nothing could be read from this backup.'), findsOneWidget);
+        find.text('0 sources, 0 watch records, from 0 devices'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Nothing could be read from this backup.'),
+        findsOneWidget,
+      );
       expect(find.byKey(const Key('restore-confirm-button')), findsNothing);
     });
 
@@ -265,10 +310,13 @@ void main() {
       expect(find.byKey(const Key('restore-error')), findsOneWidget);
     });
 
-    testWidgets('a device backing up to a cloud store cannot restore',
-        (tester) async {
-      await _pumpCloud(tester,
-          FakeBackupController(offered: all, active: BackupStoreKind.gdrive));
+    testWidgets('a device backing up to a cloud store cannot restore', (
+      tester,
+    ) async {
+      await _pumpCloud(
+        tester,
+        FakeBackupController(offered: all, active: BackupStoreKind.gdrive),
+      );
       expect(find.byKey(const Key('restore-already-on')), findsOneWidget);
       expect(find.byKey(const Key('restore-entry-icloud')), findsNothing);
     });
@@ -281,30 +329,33 @@ void main() {
       expect(find.byKey(const Key('restore-summary')), findsOneWidget);
     });
 
-    testWidgets('double tapping Google Drive ignores re-entry while signing in',
-        (tester) async {
-      final waiter = Completer<void>();
-      final c = FakeBackupController(offered: all);
-      c.clouds[BackupStoreKind.gdrive]!.preview = fakeCloudPreview(watched);
-      final google = FakeGoogleSignIn(c.calls)..signInWaiter = waiter;
-      await _pumpCloud(tester, c, google: google);
+    testWidgets(
+      'double tapping Google Drive ignores re-entry while signing in',
+      (tester) async {
+        final waiter = Completer<void>();
+        final c = FakeBackupController(offered: all);
+        c.clouds[BackupStoreKind.gdrive]!.preview = fakeCloudPreview(watched);
+        final google = FakeGoogleSignIn(c.calls)..signInWaiter = waiter;
+        await _pumpCloud(tester, c, google: google);
 
-      await tester.tap(find.byKey(const Key('restore-entry-gdrive')));
-      await tester.pump();
-      expect(c.calls, ['signIn']);
+        await tester.tap(find.byKey(const Key('restore-entry-gdrive')));
+        await tester.pump();
+        expect(c.calls, ['signIn']);
 
-      await tester.tap(find.byKey(const Key('restore-entry-gdrive')));
-      await tester.pump();
-      expect(c.calls, ['signIn']);
+        await tester.tap(find.byKey(const Key('restore-entry-gdrive')));
+        await tester.pump();
+        expect(c.calls, ['signIn']);
 
-      waiter.complete();
-      await tester.pumpAndSettle();
-      expect(c.calls, ['signIn', 'previewRestore gdrive']);
-      expect(find.byKey(const Key('restore-summary')), findsOneWidget);
-    });
+        waiter.complete();
+        await tester.pumpAndSettle();
+        expect(c.calls, ['signIn', 'previewRestore gdrive']);
+        expect(find.byKey(const Key('restore-summary')), findsOneWidget);
+      },
+    );
 
-    testWidgets('key entry offers Back when cloud stores are offered',
-        (tester) async {
+    testWidgets('key entry offers Back when cloud stores are offered', (
+      tester,
+    ) async {
       final c = FakeBackupController(offered: all);
       await _pumpCloud(tester, c);
 
@@ -323,7 +374,8 @@ void main() {
   group('login', () {
     testWidgets('login_offers_icloud_restore_when_slots_exist', (tester) async {
       final c = FakeBackupController(
-          offered: const {BackupStoreKind.relay, BackupStoreKind.icloud});
+        offered: const {BackupStoreKind.relay, BackupStoreKind.icloud},
+      );
       c.clouds[BackupStoreKind.icloud]!.preview = fakeCloudPreview(const [
         WatchBackupRecord(key: 'watch:a', watched: true, updatedAt: 1),
       ]);
@@ -336,7 +388,8 @@ void main() {
 
     testWidgets('no iCloud slots, no button', (tester) async {
       final c = FakeBackupController(
-          offered: const {BackupStoreKind.relay, BackupStoreKind.icloud});
+        offered: const {BackupStoreKind.relay, BackupStoreKind.icloud},
+      );
       await _pumpLoginButton(tester, c, apple: true);
 
       expect(find.byKey(const Key('restore-from-icloud')), findsNothing);
@@ -344,7 +397,8 @@ void main() {
 
     testWidgets('a slow iCloud gives up after 5 s', (tester) async {
       final c = FakeBackupController(
-          offered: const {BackupStoreKind.relay, BackupStoreKind.icloud});
+        offered: const {BackupStoreKind.relay, BackupStoreKind.icloud},
+      );
       c.clouds[BackupStoreKind.icloud]!.preview =
           Completer<CloudRestorePreview>();
       await _pumpLoginButton(tester, c, apple: true, settle: false);
@@ -355,7 +409,8 @@ void main() {
 
     testWidgets('elsewhere the store is never probed', (tester) async {
       final c = FakeBackupController(
-          offered: const {BackupStoreKind.relay, BackupStoreKind.icloud});
+        offered: const {BackupStoreKind.relay, BackupStoreKind.icloud},
+      );
       c.clouds[BackupStoreKind.icloud]!.preview = fakeCloudPreview(const [
         WatchBackupRecord(key: 'watch:a', watched: true, updatedAt: 1),
       ]);
@@ -379,28 +434,33 @@ Future<void> _pumpCloud(
   final router = GoRouter(
     initialLocation: restoreBackupLocation,
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const SizedBox(key: Key('home'))),
+      GoRoute(
+        path: '/',
+        builder: (_, _) => const SizedBox(key: Key('home')),
+      ),
       GoRoute(
         path: restoreBackupLocation,
-        builder: (_, __) => RestoreBackupScreen(initialStore: initialStore),
+        builder: (_, _) => RestoreBackupScreen(initialStore: initialStore),
       ),
     ],
   );
   // A fresh scope each pump, so one test can compare two set-ups.
   await tester.pumpWidget(const SizedBox());
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      backupSyncServiceProvider.overrideWithValue(controller.relay),
-      backupControllerProvider.overrideWithValue(controller),
-      googleSignInMethodProvider.overrideWithValue(google?.method),
-    ],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      routerConfig: router,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        backupSyncServiceProvider.overrideWithValue(controller.relay),
+        backupControllerProvider.overrideWithValue(controller),
+        googleSignInMethodProvider.overrideWithValue(google?.method),
+      ],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        routerConfig: router,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
@@ -410,16 +470,18 @@ Future<void> _pumpLoginButton(
   required bool apple,
   bool settle = true,
 }) async {
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      backupControllerProvider.overrideWithValue(controller),
-      appleBackupPlatformProvider.overrideWithValue(apple),
-    ],
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: Center(child: RestoreFromICloudButton())),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        backupControllerProvider.overrideWithValue(controller),
+        appleBackupPlatformProvider.overrideWithValue(apple),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: Center(child: RestoreFromICloudButton())),
+      ),
     ),
-  ));
+  );
   if (settle) await tester.pumpAndSettle();
 }

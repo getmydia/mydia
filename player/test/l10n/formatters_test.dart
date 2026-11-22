@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:player/core/connection/connection_summary.dart';
@@ -43,11 +43,12 @@ import 'package:player/presentation/screens/player/subtitle_track_builder.dart'
 
 import '../presentation/screens/calendar/calendar_test_items.dart';
 
-Future<AppLocalizations> l10n(String tag) =>
-    AppLocalizations.delegate.load(Locale.fromSubtags(
-      languageCode: tag.split('_').first,
-      countryCode: tag.contains('_') ? tag.split('_').last : null,
-    ));
+Future<AppLocalizations> l10n(String tag) => AppLocalizations.delegate.load(
+  Locale.fromSubtags(
+    languageCode: tag.split('_').first,
+    countryCode: tag.contains('_') ? tag.split('_').last : null,
+  ),
+);
 
 void main() {
   final now = DateTime(2026, 10, 25, 12);
@@ -65,10 +66,14 @@ void main() {
       expect(en.weekdayNarrow(monday), 'M');
       expect(en.monthName(october), 'October');
       expect(en.monthYear(october), 'October 2026');
-      expect(en.monthLabel(DateTime(2026, 11), DateTime(2026, 10, 16)),
-          'November');
-      expect(en.monthLabel(DateTime(2027, 1), DateTime(2026, 10, 16)),
-          'January 2027');
+      expect(
+        en.monthLabel(DateTime(2026, 11), DateTime(2026, 10, 16)),
+        'November',
+      );
+      expect(
+        en.monthLabel(DateTime(2027, 1), DateTime(2026, 10, 16)),
+        'January 2027',
+      );
     });
 
     test('es and pt_BR differ from en', () async {
@@ -82,19 +87,30 @@ void main() {
       }
     });
 
-    test('numbering is the episode code, or the Movie word for a movie',
-        () async {
-      final en = await l10n('en');
-      final episode = calendarEntry('1', DateTime(2026, 10, 16),
-          title: 'The Tide Ledger', season: 2, episode: 5);
-      final movie = calendarEntry('2', DateTime(2026, 10, 16),
-          kind: ItemKind.movie, title: 'Brasswork');
-      expect(en.calendarNumbering(episode), 'S02E05');
-      expect(en.calendarSubtitle(episode), 'S02E05 · The Tide Ledger');
-      expect(en.calendarNumbering(movie), 'Movie');
-      expect(en.calendarSubtitle(movie), 'Movie');
-      expect((await l10n('es')).calendarNumbering(movie), isNot('Movie'));
-    });
+    test(
+      'numbering is the episode code, or the Movie word for a movie',
+      () async {
+        final en = await l10n('en');
+        final episode = calendarEntry(
+          '1',
+          DateTime(2026, 10, 16),
+          title: 'The Tide Ledger',
+          season: 2,
+          episode: 5,
+        );
+        final movie = calendarEntry(
+          '2',
+          DateTime(2026, 10, 16),
+          kind: ItemKind.movie,
+          title: 'Brasswork',
+        );
+        expect(en.calendarNumbering(episode), 'S02E05');
+        expect(en.calendarSubtitle(episode), 'S02E05 · The Tide Ledger');
+        expect(en.calendarNumbering(movie), 'Movie');
+        expect(en.calendarSubtitle(movie), 'Movie');
+        expect((await l10n('es')).calendarNumbering(movie), isNot('Movie'));
+      },
+    );
   });
 
   group('relativeTime', () {
@@ -164,7 +180,9 @@ void main() {
     final en = await l10n('en');
     expect(en.remoteDeviceStatus(RemoteDeviceStatus.revoked), 'Revoked');
     expect(
-        en.remoteDeviceStatus(RemoteDeviceStatus.neverActive), 'Never active');
+      en.remoteDeviceStatus(RemoteDeviceStatus.neverActive),
+      'Never active',
+    );
     expect(en.remoteDeviceStatus(RemoteDeviceStatus.active), 'Active');
     expect(en.remoteDeviceStatus(RemoteDeviceStatus.inactive), 'Inactive');
   });
@@ -177,16 +195,21 @@ void main() {
     expect(en.themePresetName(ThemePreset.macos), 'macOS');
     expect(en.themePresetName(ThemePreset.linux), 'System');
     expect(
-        en.themePresetName(ThemePreset.linux, linuxDesktop: LinuxDesktop.gnome),
-        'System (GNOME)');
+      en.themePresetName(ThemePreset.linux, linuxDesktop: LinuxDesktop.gnome),
+      'System (GNOME)',
+    );
     expect(
-        en.themePresetName(ThemePreset.linux, linuxDesktop: LinuxDesktop.kde),
-        'System (KDE Plasma)');
+      en.themePresetName(ThemePreset.linux, linuxDesktop: LinuxDesktop.kde),
+      'System (KDE Plasma)',
+    );
     final es = await l10n('es');
     expect(
-        es.themePresetName(ThemePreset.linux,
-            linuxDesktop: LinuxDesktop.elementary),
-        'Sistema (elementary OS)');
+      es.themePresetName(
+        ThemePreset.linux,
+        linuxDesktop: LinuxDesktop.elementary,
+      ),
+      'Sistema (elementary OS)',
+    );
     expect(en.glassMaterialName(GlassMaterial.liquid), 'Liquid Glass');
     expect(en.glassMaterialName(GlassMaterial.frosted), 'Frosted');
     expect(en.subtitleSizeName(SubtitleSize.small), 'Small');
@@ -196,44 +219,63 @@ void main() {
     expect(en.updateTrackName(UpdateTrack.stable), 'Stable');
     expect(en.updateTrackName(UpdateTrack.beta), 'Beta');
     expect(en.updateTrackName(UpdateTrack.dev), 'Dev');
-    expect(en.updateTrackDescription(UpdateTrack.stable),
-        'Released builds. The default.');
-    expect(en.updateTrackDescription(UpdateTrack.beta),
-        'Prerelease builds, a few weeks ahead of stable and less tested.');
-    expect(en.updateTrackDescription(UpdateTrack.dev),
-        'Builds straight from development, published when a maintainer asks for one. Expect rough edges.');
+    expect(
+      en.updateTrackDescription(UpdateTrack.stable),
+      'Released builds. The default.',
+    );
+    expect(
+      en.updateTrackDescription(UpdateTrack.beta),
+      'Prerelease builds, a few weeks ahead of stable and less tested.',
+    );
+    expect(
+      en.updateTrackDescription(UpdateTrack.dev),
+      'Builds straight from development, published when a maintainer asks for one. Expect rough edges.',
+    );
     expect(en.qualityName(QualityRung.auto), 'Auto');
     expect(en.qualityName(QualityRung.original), 'Original');
     expect(
-        en.qualityName(const QualityRung(label: '720p', height: 720)), '720p');
+      en.qualityName(const QualityRung(label: '720p', height: 720)),
+      '720p',
+    );
   });
 
   test('fullscreenFailureMessage distinguishes exit from enter', () async {
     final en = await l10n('en');
     for (final cause in FullscreenFailureCause.values) {
-      final exit = cause == FullscreenFailureCause.documentExitRejected ||
+      final exit =
+          cause == FullscreenFailureCause.documentExitRejected ||
           cause == FullscreenFailureCause.videoExitFailed;
-      expect(en.fullscreenFailureMessage(FullscreenFailure(cause)),
-          exit ? 'Could not exit fullscreen' : 'Could not enter fullscreen');
+      expect(
+        en.fullscreenFailureMessage(FullscreenFailure(cause)),
+        exit ? 'Could not exit fullscreen' : 'Could not enter fullscreen',
+      );
     }
   });
 
   test('updateErrorMessage formats a track that is not published', () async {
     final en = await l10n('en');
     expect(
-      en.updateErrorMessage(const UpdateState(
-          trackNotPublished: TrackNotPublished(UpdateTrack.dev))),
+      en.updateErrorMessage(
+        const UpdateState(
+          trackNotPublished: TrackNotPublished(UpdateTrack.dev),
+        ),
+      ),
       'Dev builds are not published for this platform yet.',
     );
     expect(
-      en.updateErrorMessage(const UpdateState(
-          trackNotPublished: TrackNotPublished(UpdateTrack.dev, macos: true))),
+      en.updateErrorMessage(
+        const UpdateState(
+          trackNotPublished: TrackNotPublished(UpdateTrack.dev, macos: true),
+        ),
+      ),
       'Dev builds are not published for macOS yet.',
     );
     expect(
-        en.updateErrorMessage(
-            const UpdateState(error: UpdateProblem.text('boom'))),
-        'boom');
+      en.updateErrorMessage(
+        const UpdateState(error: UpdateProblem.text('boom')),
+      ),
+      'boom',
+    );
     expect(en.updateErrorMessage(const UpdateState()), isNull);
   });
 
@@ -244,40 +286,50 @@ void main() {
       expect(t.subtitleSizeName(SubtitleSize.large), isNot('Large'));
       expect(t.glassMaterialName(GlassMaterial.frosted), isNot('Frosted'));
       expect(
-          t.fullscreenFailureMessage(
-              const FullscreenFailure(FullscreenFailureCause.noVideoElement)),
-          isNot('Could not enter fullscreen'));
+        t.fullscreenFailureMessage(
+          const FullscreenFailure(FullscreenFailureCause.noVideoElement),
+        ),
+        isNot('Could not enter fullscreen'),
+      );
     }
   });
 
   group('quality sentences', () {
     const r720 = QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
-    const r1080 =
-        QualityRung(label: '1080p', height: 1080, maxBitrateKbps: 8000);
+    const r1080 = QualityRung(
+      label: '1080p',
+      height: 1080,
+      maxBitrateKbps: 8000,
+    );
 
     test('autoDeliverySubtitle keeps its English text', () async {
       final en = await l10n('en');
       expect(
         en.autoDeliverySubtitle(
-            const DirectPlayPlan(reason: PlanReason.directPlayAccepted)),
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+        ),
         'Auto · Direct Play',
       );
       expect(
-        en.autoDeliverySubtitle(const HlsPlan(
-          strategy: HlsStrategy.copy,
-          rung: QualityRung.original,
-          adaptive: false,
-          reason: PlanReason.copyAccepted,
-        )),
+        en.autoDeliverySubtitle(
+          const HlsPlan(
+            strategy: HlsStrategy.copy,
+            rung: QualityRung.original,
+            adaptive: false,
+            reason: PlanReason.copyAccepted,
+          ),
+        ),
         'Auto · Original, no re-encoding',
       );
       expect(
-        en.autoDeliverySubtitle(const HlsPlan(
-          strategy: HlsStrategy.transcode,
-          rung: QualityRung.original,
-          adaptive: true,
-          reason: PlanReason.noDirectPlayCandidate,
-        )),
+        en.autoDeliverySubtitle(
+          const HlsPlan(
+            strategy: HlsStrategy.transcode,
+            rung: QualityRung.original,
+            adaptive: true,
+            reason: PlanReason.noDirectPlayCandidate,
+          ),
+        ),
         'Auto · Original, re-encoding required',
       );
       expect(
@@ -296,8 +348,10 @@ void main() {
 
     test('clamp note and preference subtitle', () async {
       final en = await l10n('en');
-      expect(en.qualityClampNote(en.qualityName(r720)),
-          'Limited to 720p by your connection');
+      expect(
+        en.qualityClampNote(en.qualityName(r720)),
+        'Limited to 720p by your connection',
+      );
       expect(en.qualityAutoPreference, 'Adapts to your connection');
       final es = await l10n('es');
       expect(es.qualityClampNote('720p'), isNot(contains('Limited')));
@@ -306,27 +360,35 @@ void main() {
   });
 
   group('loginFailure', () {
-    test('every kind has text in every locale and server text is verbatim',
-        () async {
-      for (final tag in ['en', 'es', 'pt_BR']) {
-        final loc = await l10n(tag);
-        for (final kind in LoginFailureKind.values) {
-          expect(loc.loginFailure(LoginFailureOfKind(kind)), isNotEmpty);
+    test(
+      'every kind has text in every locale and server text is verbatim',
+      () async {
+        for (final tag in ['en', 'es', 'pt_BR']) {
+          final loc = await l10n(tag);
+          for (final kind in LoginFailureKind.values) {
+            expect(loc.loginFailure(LoginFailureOfKind(kind)), isNotEmpty);
+          }
+          expect(
+            loc.loginFailure(const LoginFailureFromServer('Nope, said it')),
+            'Nope, said it',
+          );
         }
-        expect(loc.loginFailure(const LoginFailureFromServer('Nope, said it')),
-            'Nope, said it');
-      }
-      final en = await l10n('en');
-      expect(
+        final en = await l10n('en');
+        expect(
           en.loginFailure(
-              const LoginFailureOfKind(LoginFailureKind.invalidCode)),
-          'Invalid code');
-      final es = await l10n('es');
-      expect(
+            const LoginFailureOfKind(LoginFailureKind.invalidCode),
+          ),
+          'Invalid code',
+        );
+        final es = await l10n('es');
+        expect(
           es.loginFailure(
-              const LoginFailureOfKind(LoginFailureKind.cannotConnect)),
-          isNot(contains('Cannot')));
-    });
+            const LoginFailureOfKind(LoginFailureKind.cannotConnect),
+          ),
+          isNot(contains('Cannot')),
+        );
+      },
+    );
   });
 
   group('navigation and library names', () {
@@ -351,38 +413,49 @@ void main() {
       expect(es.navDestinationLabel(filter), 'Unwatched Anime');
     });
 
-    test('entries: a library keeps its server name, builtins are worded',
-        () async {
-      final es = await l10n('es');
-      const icon = Icons.circle;
-      expect(
-        es.navEntryLabel(const SourceNavEntry(
-            id: 'library-1',
-            label: 'Kids',
-            icon: icon,
-            selectedIcon: icon,
-            route: '/x')),
-        'Kids',
-      );
-      expect(
-        es.navEntryLabel(const SourceNavEntry(
-            id: 'library-2',
-            libraryKind: LibraryKind.videos,
-            icon: icon,
-            selectedIcon: icon,
-            route: '/x')),
-        'Vídeos',
-      );
-      expect(
-        es.navEntryTabLabel(const SourceNavEntry(
-            id: 'shows',
-            shortLabel: true,
-            icon: icon,
-            selectedIcon: icon,
-            route: '/x')),
-        'Series',
-      );
-    });
+    test(
+      'entries: a library keeps its server name, builtins are worded',
+      () async {
+        final es = await l10n('es');
+        const icon = Icons.circle;
+        expect(
+          es.navEntryLabel(
+            const SourceNavEntry(
+              id: 'library-1',
+              label: 'Kids',
+              icon: icon,
+              selectedIcon: icon,
+              route: '/x',
+            ),
+          ),
+          'Kids',
+        );
+        expect(
+          es.navEntryLabel(
+            const SourceNavEntry(
+              id: 'library-2',
+              libraryKind: LibraryKind.videos,
+              icon: icon,
+              selectedIcon: icon,
+              route: '/x',
+            ),
+          ),
+          'Vídeos',
+        );
+        expect(
+          es.navEntryTabLabel(
+            const SourceNavEntry(
+              id: 'shows',
+              shortLabel: true,
+              icon: icon,
+              selectedIcon: icon,
+              route: '/x',
+            ),
+          ),
+          'Series',
+        );
+      },
+    );
 
     test('sort and filter names exist in every language', () async {
       for (final tag in ['en', 'es', 'pt_BR']) {
@@ -394,8 +467,10 @@ void main() {
           expect(loc.sortFieldName(field), isNotEmpty, reason: '$tag $field');
         }
         for (final name in FilterName.values) {
-          expect(loc.filterOptionName(FilterOption(id: 'x', name: name)),
-              isNotEmpty);
+          expect(
+            loc.filterOptionName(FilterOption(id: 'x', name: name)),
+            isNotEmpty,
+          );
         }
         for (final category in MediaCategoryFilter.values) {
           expect(loc.categoryFilterName(category), isNotEmpty);
@@ -408,18 +483,27 @@ void main() {
 
     test('collection and season toasts word their counts', () async {
       final en = await l10n('en');
-      expect(en.collectionSyncQueuedBoth(1, 2, 0),
-          'Queued 1 movie and 2 episodes for download');
-      expect(en.collectionSyncQueuedMovies(3, 2),
-          'Queued 3 movies for download, 2 already downloaded');
+      expect(
+        en.collectionSyncQueuedBoth(1, 2, 0),
+        'Queued 1 movie and 2 episodes for download',
+      );
+      expect(
+        en.collectionSyncQueuedMovies(3, 2),
+        'Queued 3 movies for download, 2 already downloaded',
+      );
       expect(en.showDownloadQueued(1, 0, 0), 'Queued 1 episode');
-      expect(en.showDownloadQueued(4, 2, 1),
-          'Queued 4 episodes, 2 already downloaded or queued, 1 failed');
+      expect(
+        en.showDownloadQueued(4, 2, 1),
+        'Queued 4 episodes, 2 already downloaded or queued, 1 failed',
+      );
       for (final tag in ['es', 'pt_BR']) {
         final loc = await l10n(tag);
         expect(loc.showDownloadQueued(4, 2, 1), contains('4'), reason: tag);
-        expect(loc.collectionSyncQueuedBoth(1, 2, 3), contains('3'),
-            reason: tag);
+        expect(
+          loc.collectionSyncQueuedBoth(1, 2, 3),
+          contains('3'),
+          reason: tag,
+        );
       }
     });
   });
@@ -428,12 +512,17 @@ void main() {
     test('values read the way the panel always drew them in English', () async {
       final en = await l10n('en');
       expect(
-          en.statsValue(const StatsBufferValue(Duration(milliseconds: 18400))),
-          '18.4 s ahead');
-      expect(en.statsValue(const StatsFramesValue(dropped: 3, total: 40)),
-          '3 dropped - 40 total');
-      expect(en.statsValue(const StatsDecoderValue('h264', true)),
-          'h264 hardware');
+        en.statsValue(const StatsBufferValue(Duration(milliseconds: 18400))),
+        '18.4 s ahead',
+      );
+      expect(
+        en.statsValue(const StatsFramesValue(dropped: 3, total: 40)),
+        '3 dropped - 40 total',
+      );
+      expect(
+        en.statsValue(const StatsDecoderValue('h264', true)),
+        'h264 hardware',
+      );
       expect(en.statsValue(const StatsDecoderValue('h264', null)), 'h264');
       expect(en.statsModeName(PlaybackMode.transcode), 'Transcode');
     });
@@ -441,19 +530,24 @@ void main() {
     test('the buffer uses the language decimal separator', () async {
       final es = await l10n('es');
       expect(
-          es.statsValue(const StatsBufferValue(Duration(milliseconds: 18400))),
-          contains('18,4'));
+        es.statsValue(const StatsBufferValue(Duration(milliseconds: 18400))),
+        contains('18,4'),
+      );
     });
 
     test('the HDR output row uses the language decimal separator', () async {
-      const value = StatsHdrValue(StatsHdr(
-        format: 'HDR10',
-        by: HdrTonemapper.edr,
-        transfer: 'PQ',
-        headroom: 13.8,
-      ));
-      expect((await l10n('en')).statsValue(value),
-          'HDR10, HDR output, PQ, headroom 13.8x');
+      const value = StatsHdrValue(
+        StatsHdr(
+          format: 'HDR10',
+          by: HdrTonemapper.edr,
+          transfer: 'PQ',
+          headroom: 13.8,
+        ),
+      );
+      expect(
+        (await l10n('en')).statsValue(value),
+        'HDR10, HDR output, PQ, headroom 13.8x',
+      );
       expect((await l10n('es')).statsValue(value), contains('13,8'));
     });
 
@@ -474,22 +568,30 @@ void main() {
   group('core and domain display text', () {
     test('track names: its own title, else the language', () async {
       final es = await l10n('es');
-      expect(es.audioTrackName(const AudioTrack(id: '1', language: 'spa')),
-          'Español');
       expect(
-          es.audioTrackName(
-              const AudioTrack(id: '1', language: 'eng', title: 'Commentary')),
-          'Commentary');
-      expect(es.subtitleTrackName(const SubtitleTrack(id: '2', language: 'xx')),
-          'XX');
+        es.audioTrackName(const AudioTrack(id: '1', language: 'spa')),
+        'Español',
+      );
+      expect(
+        es.audioTrackName(
+          const AudioTrack(id: '1', language: 'eng', title: 'Commentary'),
+        ),
+        'Commentary',
+      );
+      expect(
+        es.subtitleTrackName(const SubtitleTrack(id: '2', language: 'xx')),
+        'XX',
+      );
     });
 
     test('connection summaries name every kind in every language', () async {
       for (final tag in ['en', 'es', 'pt_BR']) {
         final loc = await l10n(tag);
         for (final kind in ConnectionKind.values) {
-          final summary =
-              ConnectionSummary(kind: kind, tone: ConnectionTone.good);
+          final summary = ConnectionSummary(
+            kind: kind,
+            tone: ConnectionTone.good,
+          );
           expect(loc.connectionLabel(summary), isNotEmpty);
           expect(loc.connectionDetail(summary), isNotEmpty);
         }
@@ -516,127 +618,164 @@ void main() {
       expect(en.downloadNotificationTitle(1), 'Downloading');
       expect(en.downloadNotificationTitle(3), 'Downloading 3 items');
       expect(
-          en.downloadNotificationLine(const NotificationProgress('Quill', 40)),
-          'Quill - 40%');
+        en.downloadNotificationLine(const NotificationProgress('Quill', 40)),
+        'Quill - 40%',
+      );
     });
 
-    test('update notices and log upload failures are worded in every language',
-        () async {
-      for (final tag in ['en', 'es', 'pt_BR']) {
-        final loc = await l10n(tag);
-        for (final notice in UpdateNotice.values) {
-          expect(loc.updateNoticeText(notice), isNotEmpty);
+    test(
+      'update notices and log upload failures are worded in every language',
+      () async {
+        for (final tag in ['en', 'es', 'pt_BR']) {
+          final loc = await l10n(tag);
+          for (final notice in UpdateNotice.values) {
+            expect(loc.updateNoticeText(notice), isNotEmpty);
+          }
+          for (final failure in LogUploadFailure.values) {
+            expect(
+              loc.logUploadFailure(LogUploadException(failure, status: 502)),
+              isNotEmpty,
+            );
+          }
         }
-        for (final failure in LogUploadFailure.values) {
-          expect(loc.logUploadFailure(LogUploadException(failure, status: 502)),
-              isNotEmpty);
-        }
-      }
-      final en = await l10n('en');
-      expect(
-          en.logUploadFailure(const LogUploadException(
-              LogUploadFailure.relayHttp,
-              status: 502)),
-          'The relay answered HTTP 502');
-    });
+        final en = await l10n('en');
+        expect(
+          en.logUploadFailure(
+            const LogUploadException(LogUploadFailure.relayHttp, status: 502),
+          ),
+          'The relay answered HTTP 502',
+        );
+      },
+    );
 
-    test('an unnamed video library is Videos, and Scenes only for Stash',
-        () async {
-      final en = await l10n('en');
-      const ref = LibraryRef(sourceId: SourceId('s'), id: '1');
-      expect(en.libraryTitle(const Library(ref: ref, kind: LibraryKind.videos)),
-          'Videos');
-      expect(
+    test(
+      'an unnamed video library is Videos, and Scenes only for Stash',
+      () async {
+        final en = await l10n('en');
+        const ref = LibraryRef(sourceId: SourceId('s'), id: '1');
+        expect(
+          en.libraryTitle(const Library(ref: ref, kind: LibraryKind.videos)),
+          'Videos',
+        );
+        expect(
           en.libraryTitle(
-              const Library(ref: ref, kind: LibraryKind.videos, scenes: true)),
-          'Scenes');
-    });
+            const Library(ref: ref, kind: LibraryKind.videos, scenes: true),
+          ),
+          'Scenes',
+        );
+      },
+    );
   });
 
   group('player screen text', () {
-    test('every loading step, fallback and why reads in every language',
-        () async {
-      for (final tag in const ['en', 'es', 'pt_BR']) {
-        final loc = await l10n(tag);
-        for (final kind in LoadingStepKind.values) {
-          expect(
-            loc.loadingStepText(
-                LoadingStep(kind, percent: 33, attempt: 2, maxAttempts: 20)),
-            isNotEmpty,
-          );
-        }
-        for (final reason in FailureReason.values) {
-          expect(loc.fallbackMessage(reason), isNotEmpty);
-          expect(loc.statsWhyText(StatsWhyFallback(reason)), isNotEmpty);
-        }
-        for (final kind in StatsWhyKind.values) {
-          expect(loc.statsWhyText(StatsWhyPlain(kind)), isNotEmpty);
-        }
-        for (final notice in SubtitleNotice.values) {
-          expect(loc.subtitleNoticeText(notice), isNotEmpty);
-        }
-        for (final kind in SubtitleDelayNoticeKind.values) {
-          expect(
+    test(
+      'every loading step, fallback and why reads in every language',
+      () async {
+        for (final tag in const ['en', 'es', 'pt_BR']) {
+          final loc = await l10n(tag);
+          for (final kind in LoadingStepKind.values) {
+            expect(
+              loc.loadingStepText(
+                LoadingStep(kind, percent: 33, attempt: 2, maxAttempts: 20),
+              ),
+              isNotEmpty,
+            );
+          }
+          for (final reason in FailureReason.values) {
+            expect(loc.fallbackMessage(reason), isNotEmpty);
+            expect(loc.statsWhyText(StatsWhyFallback(reason)), isNotEmpty);
+          }
+          for (final kind in StatsWhyKind.values) {
+            expect(loc.statsWhyText(StatsWhyPlain(kind)), isNotEmpty);
+          }
+          for (final notice in SubtitleNotice.values) {
+            expect(loc.subtitleNoticeText(notice), isNotEmpty);
+          }
+          for (final kind in SubtitleDelayNoticeKind.values) {
+            expect(
               loc.subtitleDelayNoticeText(
-                  SubtitleDelayNotice(kind, totalMs: 100)),
-              isNotEmpty);
+                SubtitleDelayNotice(kind, totalMs: 100),
+              ),
+              isNotEmpty,
+            );
+          }
+          for (final issue in SubtitleIssue.values) {
+            expect(loc.subtitleIssueText(issue), isNotEmpty);
+          }
+          for (final issue in PlaybackIssue.values) {
+            expect(loc.playbackIssueText(issue), isNotEmpty);
+          }
         }
-        for (final issue in SubtitleIssue.values) {
-          expect(loc.subtitleIssueText(issue), isNotEmpty);
-        }
-        for (final issue in PlaybackIssue.values) {
-          expect(loc.playbackIssueText(issue), isNotEmpty);
-        }
-      }
-    });
+      },
+    );
 
     test('the loading step carries its numbers', () async {
       final en = await l10n('en');
       expect(
-          en.loadingStepText(
-              const LoadingStep(LoadingStepKind.preparingStream, percent: 33)),
-          'Preparing stream... 33%');
+        en.loadingStepText(
+          const LoadingStep(LoadingStepKind.preparingStream, percent: 33),
+        ),
+        'Preparing stream... 33%',
+      );
       expect(
-          en.loadingStepText(const LoadingStep(
-              LoadingStepKind.startingTranscode,
-              attempt: 2,
-              maxAttempts: 20)),
-          'Starting transcoding... (2/20)');
+        en.loadingStepText(
+          const LoadingStep(
+            LoadingStepKind.startingTranscode,
+            attempt: 2,
+            maxAttempts: 20,
+          ),
+        ),
+        'Starting transcoding... (2/20)',
+      );
     });
 
     test('the Why row words each reason', () async {
       final en = await l10n('en');
       const capped = QualityRung(label: '720p', height: 720);
-      expect(en.statsWhyText(const StatsWhyCapped(capped)),
-          'Quality capped to 720p');
-      expect(en.statsWhyText(const StatsWhyCapped(QualityRung.original)),
-          'Quality capped to Original');
-      expect(en.statsWhyText(const StatsWhyRemembered('hevc')),
-          'Remembered decode failure on hevc');
-      expect(en.statsWhyText(const StatsWhyStalled(12)),
-          'Stalled on this connection 12 min ago');
-      expect(en.statsWhyText(const StatsWhyFallback(FailureReason.bandwidth)),
-          'Switched to transcoding for your connection');
       expect(
-          en.fallbackMessage(FailureReason.decodeFailed),
-          "Switched to transcoding: your device can't play this file "
-          'directly');
+        en.statsWhyText(const StatsWhyCapped(capped)),
+        'Quality capped to 720p',
+      );
+      expect(
+        en.statsWhyText(const StatsWhyCapped(QualityRung.original)),
+        'Quality capped to Original',
+      );
+      expect(
+        en.statsWhyText(const StatsWhyRemembered('hevc')),
+        'Remembered decode failure on hevc',
+      );
+      expect(
+        en.statsWhyText(const StatsWhyStalled(12)),
+        'Stalled on this connection 12 min ago',
+      );
+      expect(
+        en.statsWhyText(const StatsWhyFallback(FailureReason.bandwidth)),
+        'Switched to transcoding for your connection',
+      );
+      expect(
+        en.fallbackMessage(FailureReason.decodeFailed),
+        "Switched to transcoding: your device can't play this file "
+        'directly',
+      );
     });
 
     test('the Playing quality names Auto and what it resolved to', () async {
       final en = await l10n('en');
       const r720 = QualityRung(label: '720p', height: 720);
       expect(
-          en.statsQualityText(const StatsQuality(selected: QualityRung.auto)),
-          'Auto');
+        en.statsQualityText(const StatsQuality(selected: QualityRung.auto)),
+        'Auto',
+      );
       expect(
-          en.statsQualityText(
-              const StatsQuality(selected: QualityRung.auto, effective: r720)),
-          'Auto · 720p');
+        en.statsQualityText(
+          const StatsQuality(selected: QualityRung.auto, effective: r720),
+        ),
+        'Auto · 720p',
+      );
       expect(
-          en.statsQualityText(
-              const StatsQuality(selected: QualityRung.original)),
-          'Original');
+        en.statsQualityText(const StatsQuality(selected: QualityRung.original)),
+        'Original',
+      );
     });
 
     test('the link row counts peers with a plural', () async {
@@ -648,47 +787,67 @@ void main() {
     test('subtitle delay toasts show the signed delay', () async {
       final en = await l10n('en');
       expect(
-          en.subtitleDelayNoticeText(const SubtitleDelayNotice(
-              SubtitleDelayNoticeKind.adjusted,
-              totalMs: 100)),
-          'Subtitle delay +100 ms');
+        en.subtitleDelayNoticeText(
+          const SubtitleDelayNotice(
+            SubtitleDelayNoticeKind.adjusted,
+            totalMs: 100,
+          ),
+        ),
+        'Subtitle delay +100 ms',
+      );
       expect(
-          en.subtitleDelayNoticeText(const SubtitleDelayNotice(
-              SubtitleDelayNoticeKind.adjustedAfterSave,
-              totalMs: -200)),
-          'Subtitle delay will be -200 ms after Save');
+        en.subtitleDelayNoticeText(
+          const SubtitleDelayNotice(
+            SubtitleDelayNoticeKind.adjustedAfterSave,
+            totalMs: -200,
+          ),
+        ),
+        'Subtitle delay will be -200 ms after Save',
+      );
     });
 
-    test('a playback problem is the app\'s sentence or the server\'s text',
-        () async {
-      final en = await l10n('en');
-      expect(
+    test(
+      'a playback problem is the app\'s sentence or the server\'s text',
+      () async {
+        final en = await l10n('en');
+        expect(
           en.playbackProblemText(
-              const PlaybackProblem(PlaybackIssue.noPlayableFile)),
-          'This item has no playable file on the server.');
-      expect(en.playbackProblemText(const PlaybackProblem.fromText('Nope')),
-          'Nope');
-    });
+            const PlaybackProblem(PlaybackIssue.noPlayableFile),
+          ),
+          'This item has no playable file on the server.',
+        );
+        expect(
+          en.playbackProblemText(const PlaybackProblem.fromText('Nope')),
+          'Nope',
+        );
+      },
+    );
 
-    test('a playback problem built from a source error is worded by kind',
-        () async {
-      final en = await l10n('en');
-      expect(
+    test(
+      'a playback problem built from a source error is worded by kind',
+      () async {
+        final en = await l10n('en');
+        expect(
           en.playbackProblemText(
-              const PlaybackProblem.fromError(SourceException.notFound())),
-          'This item is no longer on the server.');
-      expect(
+            const PlaybackProblem.fromError(SourceException.notFound()),
+          ),
+          'This item is no longer on the server.',
+        );
+        expect(
           en.playbackFailureText(
-              const PlaybackIssueException(PlaybackIssue.proxyMoved)),
-          'Playback failed: Media proxy moved to a new port');
-    });
+            const PlaybackIssueException(PlaybackIssue.proxyMoved),
+          ),
+          'Playback failed: Media proxy moved to a new port',
+        );
+      },
+    );
   });
 
   group('sourceError', () {
     const kinds = <SourceException, String>{
       SourceException.unreachable():
           'Could not reach this server. Check that it is running and on the '
-              'network.',
+          'network.',
       SourceException.unauthorized():
           'This server no longer accepts the saved sign-in. Sign in again.',
       SourceException.notFound(): 'This item is no longer on the server.',
@@ -719,10 +878,14 @@ void main() {
     test('the server\'s own words are verbatim in every locale', () async {
       for (final tag in ['en', 'es', 'pt_BR']) {
         final loc = await l10n(tag);
-        expect(loc.sourceError(const SourceException.server('Transcoder busy')),
-            'Transcoder busy');
-        expect(loc.sourceError(const SourceException.unsupported('No can do')),
-            'No can do');
+        expect(
+          loc.sourceError(const SourceException.server('Transcoder busy')),
+          'Transcoder busy',
+        );
+        expect(
+          loc.sourceError(const SourceException.unsupported('No can do')),
+          'No can do',
+        );
       }
     });
 
@@ -744,8 +907,11 @@ void main() {
           }
           if (tag != 'en') {
             // Product-name-only sentences could match; none of these do.
-            expect(text, isNot(en.sourceFaultText(fault, '502')),
-                reason: '$fault in $tag');
+            expect(
+              text,
+              isNot(en.sourceFaultText(fault, '502')),
+              reason: '$fault in $tag',
+            );
           }
         }
       }
@@ -754,9 +920,11 @@ void main() {
     test('en fault sentences match the log text they replaced', () async {
       final en = await l10n('en');
       for (final fault in SourceFault.values) {
-        expect(en.sourceFaultText(fault, '502'),
-            fault.logText.replaceAll('{detail}', '502'),
-            reason: '$fault');
+        expect(
+          en.sourceFaultText(fault, '502'),
+          fault.logText.replaceAll('{detail}', '502'),
+          reason: '$fault',
+        );
       }
     });
   });
@@ -764,8 +932,12 @@ void main() {
   group('download failures', () {
     test('encode and decode round-trip every code', () {
       for (final code in DownloadFailureCode.values) {
-        final failure = DownloadFailure(code,
-            count: 3, detail: 'a|b', sourceKind: SourceErrorKind.server);
+        final failure = DownloadFailure(
+          code,
+          count: 3,
+          detail: 'a|b',
+          sourceKind: SourceErrorKind.server,
+        );
         final back = DownloadFailure.decode(failure.encode());
         expect(back.code, code);
         expect(back.count, 3);
@@ -774,67 +946,107 @@ void main() {
       }
     });
 
-    test('a plain sentence from an older build decodes as unknown text',
-        () async {
-      final failure = DownloadFailure.decode('Network error: socket closed');
-      expect(failure.code, DownloadFailureCode.unknown);
-      expect(failure.detail, 'Network error: socket closed');
-      for (final tag in ['en', 'es', 'pt_BR']) {
-        expect((await l10n(tag)).downloadFailureText(failure),
-            'Network error: socket closed');
-      }
-    });
+    test(
+      'a plain sentence from an older build decodes as unknown text',
+      () async {
+        final failure = DownloadFailure.decode('Network error: socket closed');
+        expect(failure.code, DownloadFailureCode.unknown);
+        expect(failure.detail, 'Network error: socket closed');
+        for (final tag in ['en', 'es', 'pt_BR']) {
+          expect(
+            (await l10n(tag)).downloadFailureText(failure),
+            'Network error: socket closed',
+          );
+        }
+      },
+    );
 
     test('a source failure keeps its fault and the server\'s words', () async {
-      final fault = DownloadFailure.decode(DownloadFailure.fromSource(
-              const SourceException.fault(SourceFault.serverHttp,
-                  detail: '502'))
-          .encode());
-      final server = DownloadFailure.decode(DownloadFailure.fromSource(
-              const SourceException.server('Disk on fire'))
-          .encode());
+      final fault = DownloadFailure.decode(
+        DownloadFailure.fromSource(
+          const SourceException.fault(SourceFault.serverHttp, detail: '502'),
+        ).encode(),
+      );
+      final server = DownloadFailure.decode(
+        DownloadFailure.fromSource(const SourceException.server('Disk on fire'))
+            .encode(),
+      );
       final en = await l10n('en');
       expect(en.downloadFailureText(fault), 'The server answered HTTP 502.');
       expect(en.downloadFailureText(server), 'Disk on fire');
-      final gone = DownloadFailure.decode(DownloadFailure.fromSource(
-              const SourceException.unsupportedFault(SourceFault.serverGone))
-          .encode());
+      final gone = DownloadFailure.decode(
+        DownloadFailure.fromSource(
+          const SourceException.unsupportedFault(SourceFault.serverGone),
+        ).encode(),
+      );
       expect(gone.sourceException().kind, SourceErrorKind.unsupported);
     });
 
     test('en matches the sentences the service used to store', () async {
       final en = await l10n('en');
       String text(DownloadFailure f) => en.downloadFailureText(f);
-      expect(text(const DownloadFailure(DownloadFailureCode.cancelled)),
-          'Cancelled by user');
-      expect(text(const DownloadFailure(DownloadFailureCode.stalled, count: 3)),
-          'Download stopped responding after 3 recovery attempts.');
-      expect(text(const DownloadFailure(DownloadFailureCode.startingUp)),
-          'Downloads are still starting.');
       expect(
-          text(const DownloadFailure(DownloadFailureCode.transcodeFailed,
-              detail: 'no space')),
-          'Transcode failed: no space');
+        text(const DownloadFailure(DownloadFailureCode.cancelled)),
+        'Cancelled by user',
+      );
       expect(
-          text(const DownloadFailure(DownloadFailureCode.networkRetries,
-              count: 3, detail: 'reset')),
-          'Network error after 3 attempts: reset');
+        text(const DownloadFailure(DownloadFailureCode.stalled, count: 3)),
+        'Download stopped responding after 3 recovery attempts.',
+      );
       expect(
-          text(const DownloadFailure(DownloadFailureCode.network,
-              detail: 'reset')),
-          'Network error: reset');
+        text(const DownloadFailure(DownloadFailureCode.startingUp)),
+        'Downloads are still starting.',
+      );
       expect(
-          text(const DownloadFailure(DownloadFailureCode.networkKind,
-              detail: 'SocketException')),
-          'Network error (SocketException)');
-      expect(text(const DownloadFailure(DownloadFailureCode.jobGone)),
-          'The server no longer has this download job. Restart to try again.');
-      expect(text(const DownloadFailure(DownloadFailureCode.signInExpired)),
-          'This server no longer accepts the saved sign-in. Sign in again.');
-      expect(text(const DownloadFailure(DownloadFailureCode.itemGone)),
-          'This item is no longer on the server.');
-      expect(text(const DownloadFailure(DownloadFailureCode.unknown)),
-          'Download failed');
+        text(
+          const DownloadFailure(
+            DownloadFailureCode.transcodeFailed,
+            detail: 'no space',
+          ),
+        ),
+        'Transcode failed: no space',
+      );
+      expect(
+        text(
+          const DownloadFailure(
+            DownloadFailureCode.networkRetries,
+            count: 3,
+            detail: 'reset',
+          ),
+        ),
+        'Network error after 3 attempts: reset',
+      );
+      expect(
+        text(
+          const DownloadFailure(DownloadFailureCode.network, detail: 'reset'),
+        ),
+        'Network error: reset',
+      );
+      expect(
+        text(
+          const DownloadFailure(
+            DownloadFailureCode.networkKind,
+            detail: 'SocketException',
+          ),
+        ),
+        'Network error (SocketException)',
+      );
+      expect(
+        text(const DownloadFailure(DownloadFailureCode.jobGone)),
+        'The server no longer has this download job. Restart to try again.',
+      );
+      expect(
+        text(const DownloadFailure(DownloadFailureCode.signInExpired)),
+        'This server no longer accepts the saved sign-in. Sign in again.',
+      );
+      expect(
+        text(const DownloadFailure(DownloadFailureCode.itemGone)),
+        'This item is no longer on the server.',
+      );
+      expect(
+        text(const DownloadFailure(DownloadFailureCode.unknown)),
+        'Download failed',
+      );
     });
 
     test('every code has text in every locale', () async {
@@ -842,36 +1054,53 @@ void main() {
         final loc = await l10n(tag);
         for (final code in DownloadFailureCode.values) {
           expect(
-              loc.downloadFailureText(DownloadFailure(code,
-                  count: 2, detail: 'x', sourceKind: SourceErrorKind.server)),
-              isNotEmpty);
+            loc.downloadFailureText(
+              DownloadFailure(
+                code,
+                count: 2,
+                detail: 'x',
+                sourceKind: SourceErrorKind.server,
+              ),
+            ),
+            isNotEmpty,
+          );
         }
       }
     });
   });
 
   group('update problems', () {
-    test('every issue has text in every locale; platform text is verbatim',
-        () async {
-      for (final tag in ['en', 'es', 'pt_BR']) {
-        final loc = await l10n(tag);
-        for (final issue in UpdateIssue.values) {
-          expect(loc.updateProblemText(UpdateProblem(issue, detail: 'boom')),
-              isNotEmpty);
+    test(
+      'every issue has text in every locale; platform text is verbatim',
+      () async {
+        for (final tag in ['en', 'es', 'pt_BR']) {
+          final loc = await l10n(tag);
+          for (final issue in UpdateIssue.values) {
+            expect(
+              loc.updateProblemText(UpdateProblem(issue, detail: 'boom')),
+              isNotEmpty,
+            );
+          }
+          expect(
+            loc.updateProblemText(const UpdateProblem.text('raw text')),
+            'raw text',
+          );
         }
-        expect(loc.updateProblemText(const UpdateProblem.text('raw text')),
-            'raw text');
-      }
-      final en = await l10n('en');
-      expect(
+        final en = await l10n('en');
+        expect(
           en.updateProblemText(
-              const UpdateProblem(UpdateIssue.checkFailed, detail: 'timeout')),
-          'Failed to check for updates: timeout');
-      expect(
+            const UpdateProblem(UpdateIssue.checkFailed, detail: 'timeout'),
+          ),
+          'Failed to check for updates: timeout',
+        );
+        expect(
           en.updateProblemText(
-              const UpdateProblem(UpdateIssue.needsNewPermissions)),
+            const UpdateProblem(UpdateIssue.needsNewPermissions),
+          ),
           'This update needs new permissions. Install it from your software '
-          'centre.');
-    });
+          'centre.',
+        );
+      },
+    );
   });
 }

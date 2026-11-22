@@ -1,10 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'test_utils/mydia_test_source.dart';
 import 'test_utils/no_downloads.dart';
+
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/app.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -37,38 +39,42 @@ const _session = CastSession(
 /// Pumps the real `MyApp`, so what is under test is where `app.dart` mounts
 /// the layer: above the cast bar, beside a real shell with its sidebar.
 void main() {
-  testWidgets('a toast clears the desktop sidebar and the cast bar',
-      (tester) async {
+  testWidgets('a toast clears the desktop sidebar and the cast bar', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
     final container = ProviderContainer(
-        // The shell's per-source feeds call the real client, which fails (a
-        // 400 under flutter_test's HttpOverrides once the bundle has a
-        // binding) and would schedule Riverpod's retry timers past the test.
-        retry: (_, __) => null,
-        overrides: [
-          noProgressFlushOverride,
-          sidebarLayoutStoreProvider
-              .overrideWithValue(InMemorySidebarLayoutStore()),
-          sourcesLoadingProvider.overrideWithValue(false),
-          hasMydiaProvider.overrideWithValue(true),
-          // The router sends `/` to the active source, and to /sources/add when
-          // there is none, so the shell only mounts with a source stored.
-          thirdPartySourcesProvider.overrideWithValue(const [testMydiaSource]),
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.full()),
-          castSessionProvider.overrideWith((ref) => Stream.value(_session)),
-          castSessionManagerProvider
-              .overrideWith((ref) => Completer<CastSessionManager>().future),
-        ]);
+      // The shell's per-source feeds call the real client, which fails (a
+      // 400 under flutter_test's HttpOverrides once the bundle has a
+      // binding) and would schedule Riverpod's retry timers past the test.
+      retry: (_, _) => null,
+      overrides: [
+        noProgressFlushOverride,
+        sidebarLayoutStoreProvider.overrideWithValue(
+          InMemorySidebarLayoutStore(),
+        ),
+        sourcesLoadingProvider.overrideWithValue(false),
+        hasMydiaProvider.overrideWithValue(true),
+        // The router sends `/` to the active source, and to /sources/add when
+        // there is none, so the shell only mounts with a source stored.
+        thirdPartySourcesProvider.overrideWithValue(const [testMydiaSource]),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        castSessionProvider.overrideWith((ref) => Stream.value(_session)),
+        castSessionManagerProvider.overrideWith(
+          (ref) => Completer<CastSessionManager>().future,
+        ),
+      ],
+    );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MyApp(),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const MyApp()),
+    );
     await tester.pump();
 
     final bar = find.byType(CastMiniController);
@@ -86,7 +92,8 @@ void main() {
     // The SafeArea the obstruction wraps, i.e. the bar's own box.
     final barTop = tester
         .getRect(
-            find.descendant(of: bar, matching: find.byType(SafeArea)).first)
+          find.descendant(of: bar, matching: find.byType(SafeArea)).first,
+        )
         .top;
     // The column the sidebar leaves free, in window coordinates. The sidebar
     // and the layer are both measured, so nothing here is pinned to the
@@ -97,9 +104,13 @@ void main() {
     const gutter = ToastMetrics.gutter;
     final freeLeft = sidebarRect.right + gutter;
     final freeRight = layerRect.right - gutter;
-    expect(pill.center.dx, closeTo((freeLeft + freeRight) / 2, 1.0),
-        reason: 'the pill centres in the column the sidebar leaves free, so '
-            'this fails the moment the sidebar stops claiming its edge');
+    expect(
+      pill.center.dx,
+      closeTo((freeLeft + freeRight) / 2, 1.0),
+      reason:
+          'the pill centres in the column the sidebar leaves free, so '
+          'this fails the moment the sidebar stops claiming its edge',
+    );
     expect(pill.left, greaterThanOrEqualTo(sidebarRect.right));
     expect(pill.bottom, lessThanOrEqualTo(barTop - 16 + 0.5));
   });

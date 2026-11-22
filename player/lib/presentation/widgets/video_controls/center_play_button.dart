@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 
 /// A large centred play/pause button.
@@ -68,10 +68,7 @@ class CenterPlayButton extends StatelessWidget {
                   transitionBuilder: (child, animation) {
                     return ScaleTransition(
                       scale: animation,
-                      child: FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      ),
+                      child: FadeTransition(opacity: animation, child: child),
                     );
                   },
                   child: Icon(

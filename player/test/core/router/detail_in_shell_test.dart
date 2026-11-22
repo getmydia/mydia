@@ -7,7 +7,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart' hide Page;
+import 'package:material_ui/material_ui.dart' hide Page;
 import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -155,20 +155,22 @@ Future<GoRouter> _pumpShellRouter(
   addTearDown(router.dispose);
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      noProgressFlushOverride,
-      mediaSourceProvider(fakeSourceId)
-          .overrideWithValue(source ?? FakeMediaSource()),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: MaterialApp.router(
-      routerConfig: router,
-      builder: toastLayerBuilder,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        noProgressFlushOverride,
+        mediaSourceProvider(fakeSourceId)
+            .overrideWithValue(source ?? FakeMediaSource()),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp.router(
+        routerConfig: router,
+        builder: toastLayerBuilder,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return router;
 }
@@ -177,21 +179,27 @@ Finder _inShell(Finder f) =>
     find.descendant(of: find.byKey(_shellKey), matching: f);
 
 Set<String> _names(List<RouteBase> routes) => {
-      for (final r in routes)
-        if (r is GoRoute && r.name != null) r.name!,
-    };
+  for (final r in routes)
+    if (r is GoRoute && r.name != null) r.name!,
+};
 
 void main() {
   test('the real router registers the detail routes inside its ShellRoute', () {
-    final container = ProviderContainer(overrides: [
-      noProgressFlushOverride,
-      sidebarLayoutStoreProvider
-          .overrideWithValue(InMemorySidebarLayoutStore()),
-      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-      authServiceProvider
-          .overrideWithValue(AuthService(storage: MockAuthStorage())),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        noProgressFlushOverride,
+        sidebarLayoutStoreProvider.overrideWithValue(
+          InMemorySidebarLayoutStore(),
+        ),
+        sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
+        sourceSecretsProvider.overrideWithValue(
+          SourceSecrets(MockAuthStorage()),
+        ),
+        authServiceProvider.overrideWithValue(
+          AuthService(storage: MockAuthStorage()),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     final router = container.read(appRouterProvider);
 
@@ -222,49 +230,54 @@ void main() {
     expect(_shellLocation, '/s/$_id/movie/m1');
   });
 
-  testWidgets('a show detail location renders inside the shell',
-      (tester) async {
+  testWidgets('a show detail location renders inside the shell', (
+    tester,
+  ) async {
     await _pumpShellRouter(tester, initialLocation: '/s/$_id/show/s1');
     expect(_inShell(find.byType(ShowDetailScreen)), findsOneWidget);
   });
 
-  testWidgets('a season detail location renders its show inside the shell',
-      (tester) async {
+  testWidgets('a season detail location renders its show inside the shell', (
+    tester,
+  ) async {
     await _pumpShellRouter(tester, initialLocation: '/s/$_id/season/se1');
     expect(_inShell(find.byType(ShowDetailScreen)), findsOneWidget);
   });
 
-  testWidgets('a detail page pushed from home keeps the shell and Back returns',
-      (tester) async {
-    final router = await _pumpShellRouter(tester);
-    expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
+  testWidgets(
+    'a detail page pushed from home keeps the shell and Back returns',
+    (tester) async {
+      final router = await _pumpShellRouter(tester);
+      expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
 
-    final target = '/s/$_id/movie/m1';
-    unawaited(router.push<void>(target));
-    await tester.pumpAndSettle();
+      final target = '/s/$_id/movie/m1';
+      unawaited(router.push<void>(target));
+      await tester.pumpAndSettle();
 
-    expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
-    expect(router.state.uri.path, target);
-    // A pushed page leaves the shell on the location it was opened from, so
-    // the rail keeps that row selected without any help. (A `go` or a deep
-    // link names the detail location instead; `shellNavLocation` covers it.)
-    expect(_shellLocation, '/');
-    // The shell still learns which page is on top, which is how it lets a
-    // detail page run its art under the rail.
-    expect(isDetailLocation(_topLocation!), isTrue);
+      expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
+      expect(router.state.uri.path, target);
+      // A pushed page leaves the shell on the location it was opened from, so
+      // the rail keeps that row selected without any help. (A `go` or a deep
+      // link names the detail location instead; `shellNavLocation` covers it.)
+      expect(_shellLocation, '/');
+      // The shell still learns which page is on top, which is how it lets a
+      // detail page run its art under the rail.
+      expect(isDetailLocation(_topLocation!), isTrue);
 
-    // The in-page back button pops, it does not go home.
-    await tester.tap(find.byTooltip('Back'));
-    await tester.pumpAndSettle();
-    expect(find.byType(MovieDetailScreen), findsNothing);
-    expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
-    expect(router.state.uri.path, '/');
-    expect(_shellLocation, '/');
-    expect(isDetailLocation(_topLocation!), isFalse);
-  });
+      // The in-page back button pops, it does not go home.
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MovieDetailScreen), findsNothing);
+      expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
+      expect(router.state.uri.path, '/');
+      expect(_shellLocation, '/');
+      expect(isDetailLocation(_topLocation!), isFalse);
+    },
+  );
 
-  testWidgets('Back works through the navigator for browser and Android back',
-      (tester) async {
+  testWidgets('Back works through the navigator for browser and Android back', (
+    tester,
+  ) async {
     final router = await _pumpShellRouter(tester);
     unawaited(router.push<void>('/s/$_id/show/s1'));
     await tester.pumpAndSettle();
@@ -276,8 +289,9 @@ void main() {
     expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
   });
 
-  testWidgets('the player opened from a detail page sits above the shell',
-      (tester) async {
+  testWidgets('the player opened from a detail page sits above the shell', (
+    tester,
+  ) async {
     final router = await _pumpShellRouter(tester);
     unawaited(router.push<void>('/s/$_id/movie/m1'));
     await tester.pumpAndSettle();
@@ -293,12 +307,13 @@ void main() {
     expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
   });
 
-  testWidgets('a collection page opens an item in the shell and Back returns',
-      (tester) async {
+  testWidgets('a collection page opens an item in the shell and Back returns', (
+    tester,
+  ) async {
     // The real collection route and screen: it opens the item with `push`.
     final source = FakeCapableSource()
       ..collectionItemPages = [
-        Page(items: [fakeMovie(1)])
+        Page(items: [fakeMovie(1)]),
       ];
     final router = await _pumpShellRouter(tester, source: source);
     router.go('/s/$_id/collection/c1');
@@ -320,31 +335,36 @@ void main() {
   group('pushRouteSafely with a root page above the shell', () {
     final detail = '/s/$_id/movie/m1';
 
-    testWidgets('closes a plain root page, shows the detail page, Back returns',
-        (tester) async {
-      final router = await _pumpShellRouter(tester);
-      unawaited(router.push<void>('/root-page'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(_rootPageKey), findsOneWidget);
-      expect(rootRouteIsOnTop(), isTrue);
+    testWidgets(
+      'closes a plain root page, shows the detail page, Back returns',
+      (tester) async {
+        final router = await _pumpShellRouter(tester);
+        unawaited(router.push<void>('/root-page'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(_rootPageKey), findsOneWidget);
+        expect(rootRouteIsOnTop(), isTrue);
 
-      expect(
-          pushRouteSafely(router, detail), PushOutcome.pushedAfterClosingPages);
-      await tester.pumpAndSettle();
+        expect(
+          pushRouteSafely(router, detail),
+          PushOutcome.pushedAfterClosingPages,
+        );
+        await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
-      expect(find.byKey(_rootPageKey), findsNothing);
-      expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(_rootPageKey), findsNothing);
+        expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Back'));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(find.byType(MovieDetailScreen), findsNothing);
-      expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
-    });
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.byType(MovieDetailScreen), findsNothing);
+        expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
+      },
+    );
 
-    testWidgets('pushes plainly when nothing is above the shell',
-        (tester) async {
+    testWidgets('pushes plainly when nothing is above the shell', (
+      tester,
+    ) async {
       final router = await _pumpShellRouter(tester);
       expect(rootRouteIsOnTop(), isFalse);
 
@@ -357,14 +377,17 @@ void main() {
       expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
     });
 
-    testWidgets('a dialog is left open: it does not stop the push',
-        (tester) async {
+    testWidgets('a dialog is left open: it does not stop the push', (
+      tester,
+    ) async {
       final router = await _pumpShellRouter(tester);
       final context = rootNavigatorKey.currentContext!;
-      unawaited(showDialog<void>(
-        context: context,
-        builder: (_) => const AlertDialog(key: _dialogKey),
-      ));
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (_) => const AlertDialog(key: _dialogKey),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(rootRouteIsOnTop(), isFalse, reason: 'a dialog is not a page');
 
@@ -375,15 +398,18 @@ void main() {
       expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
     });
 
-    testWidgets('a dialog over a root page: nothing opens, both stay',
-        (tester) async {
+    testWidgets('a dialog over a root page: nothing opens, both stay', (
+      tester,
+    ) async {
       final router = await _pumpShellRouter(tester);
       unawaited(router.push<void>('/root-page'));
       await tester.pumpAndSettle();
-      unawaited(showDialog<void>(
-        context: rootNavigatorKey.currentContext!,
-        builder: (_) => const AlertDialog(key: _dialogKey),
-      ));
+      unawaited(
+        showDialog<void>(
+          context: rootNavigatorKey.currentContext!,
+          builder: (_) => const AlertDialog(key: _dialogKey),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(pushRouteSafely(router, detail), PushOutcome.blockedByForm);
@@ -393,8 +419,9 @@ void main() {
       expect(find.byType(MovieDetailScreen), findsNothing);
     });
 
-    testWidgets('the player is never closed: nothing opens, with a message',
-        (tester) async {
+    testWidgets('the player is never closed: nothing opens, with a message', (
+      tester,
+    ) async {
       final router = await _pumpShellRouter(tester);
       unawaited(router.push<void>(sourcePlayerLocation(fakeMovie(1).ref)));
       await tester.pumpAndSettle();
@@ -409,8 +436,9 @@ void main() {
       expect(find.byType(MovieDetailScreen), findsNothing);
     });
 
-    testWidgets('a form is never closed: nothing opens, with a message',
-        (tester) async {
+    testWidgets('a form is never closed: nothing opens, with a message', (
+      tester,
+    ) async {
       final router = await _pumpShellRouter(tester);
       unawaited(router.push<void>('/sources/add'));
       await tester.pumpAndSettle();
@@ -425,8 +453,9 @@ void main() {
       expect(find.byType(MovieDetailScreen), findsNothing);
     });
 
-    testWidgets('a player path is still pushed over the root page',
-        (tester) async {
+    testWidgets('a player path is still pushed over the root page', (
+      tester,
+    ) async {
       final router = await _pumpShellRouter(tester);
       unawaited(router.push<void>('/root-page'));
       await tester.pumpAndSettle();

@@ -8,8 +8,9 @@ import '../../domain/models/download_request.dart';
 import '../../domain/sources/item.dart';
 
 DownloadMetadata summaryDownloadMetadata(ItemSummary item) {
-  final runtime =
-      item.durationSeconds == null ? null : item.durationSeconds! ~/ 60;
+  final runtime = item.durationSeconds == null
+      ? null
+      : item.durationSeconds! ~/ 60;
   if (item.ref.kind != ItemKind.episode) {
     return DownloadMetadata(
       title: item.title,
@@ -25,8 +26,7 @@ DownloadMetadata summaryDownloadMetadata(ItemSummary item) {
   final episode = (item.index ?? 0).toString().padLeft(2, '0');
   final show = item.showTitle;
   return DownloadMetadata(
-    title:
-        '${show == null ? '' : '$show - '}S${season}E$episode: ${item.title}', // l10n-ignore: stored title, built from data
+    title: '${show == null ? '' : '$show - '}S${season}E$episode: ${item.title}', // l10n-ignore: stored title, built from data
     mediaType: MediaType.episode,
     posterUrl: item.poster?.path,
     thumbnailUrl: item.poster?.path,

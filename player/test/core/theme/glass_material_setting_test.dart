@@ -14,10 +14,13 @@ void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   ProviderContainer containerWith(MockAuthStorage storage) {
-    final c = ProviderContainer(overrides: [
-      coreSettingsServiceProvider
-          .overrideWithValue(SettingsService(storage: storage)),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: storage),
+        ),
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
@@ -63,9 +66,9 @@ void main() {
     await storage.write('glass_material', 'frosted');
     final c = containerWith(storage);
     c.read(glassMaterialSettingProvider);
-    unawaited(c
-        .read(glassMaterialSettingProvider.notifier)
-        .set(GlassMaterial.liquid));
+    unawaited(
+      c.read(glassMaterialSettingProvider.notifier).set(GlassMaterial.liquid),
+    );
     await settle();
     expect(c.read(glassMaterialSettingProvider), GlassMaterial.liquid);
   });

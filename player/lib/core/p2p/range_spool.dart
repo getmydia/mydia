@@ -52,9 +52,9 @@ class RangeSpoolSettings {
 
   /// The app's temp directory, measured through the Rust bridge.
   const RangeSpoolSettings.platform()
-      : rootDirectory = getTemporaryDirectory,
-        diskSpace = nativeDiskSpace,
-        policy = const RangeSpoolPolicy();
+    : rootDirectory = getTemporaryDirectory,
+      diskSpace = nativeDiskSpace,
+      policy = const RangeSpoolPolicy();
 
   /// The directory the spool directory is created in.
   final Future<Directory> Function() rootDirectory;
@@ -269,6 +269,7 @@ class RangeSpool implements RangeSource {
     }
   }
 
-  static String _uniqueName() => '${DateTime.now().microsecondsSinceEpoch}-'
+  static String _uniqueName() =>
+      '${DateTime.now().microsecondsSinceEpoch}-'
       '${_random.nextInt(1 << 32).toRadixString(16)}';
 }

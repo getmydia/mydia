@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/navigation/source_nav.dart';
@@ -36,26 +36,27 @@ NativeSidebar _build({
   String? sourceHeader = 'Attic Server',
   String? settingsBadge,
   bool grouped = false,
-}) =>
-    nativeSidebarFor(
-      l10n: lookupAppLocalizations(const Locale('en')),
-      entries: entries ?? _entries,
-      servers: servers,
-      canFilter: canFilter,
-      isOffline: isOffline,
-      showBackToMydia: showBackToMydia,
-      sourceHeader: sourceHeader,
-      settingsBadge: settingsBadge,
-      grouped: grouped,
-    );
+}) => nativeSidebarFor(
+  l10n: lookupAppLocalizations(const Locale('en')),
+  entries: entries ?? _entries,
+  servers: servers,
+  canFilter: canFilter,
+  isOffline: isOffline,
+  showBackToMydia: showBackToMydia,
+  sourceHeader: sourceHeader,
+  settingsBadge: settingsBadge,
+  grouped: grouped,
+);
 
 List<String> _ids(NativeSidebarSection s) => [for (final i in s.items) i.id];
 
 void main() {
   test('sections follow the Flutter sidebar order', () {
     final sidebar = _build();
-    expect([for (final s in sidebar.sections) s.id],
-        ['leading', 'main', 'trailing']);
+    expect(
+      [for (final s in sidebar.sections) s.id],
+      ['leading', 'main', 'trailing'],
+    );
     expect(_ids(sidebar.sections[0]), [kSourceHeaderId, 'search']);
     expect(_ids(sidebar.sections[1]), [
       'home',
@@ -65,26 +66,43 @@ void main() {
       'f-123',
       kNewFilterId,
     ]);
-    expect(
-        _ids(sidebar.sections[2]), [kEditSidebarId, 'downloads', 'settings']);
+    expect(_ids(sidebar.sections[2]), [
+      kEditSidebarId,
+      'downloads',
+      'settings',
+    ]);
   });
 
-  test('grouped puts builtin pages under Library and the rest under Filters',
-      () {
-    final sidebar = _build(entries: [
-      ..._entries.take(2),
-      _entry('recently_added', '/s/aa/recently-added'),
-      ..._entries.skip(2),
-    ], grouped: true);
-    expect([for (final s in sidebar.sections) s.id],
-        ['leading', 'library', 'filters', 'trailing']);
-    expect(sidebar.sections[1].title, 'Library');
-    expect(
-        _ids(sidebar.sections[1]), ['home', 'movies', 'shows', 'library-lib9']);
-    expect(sidebar.sections[2].title, 'Filters');
-    expect(
-        _ids(sidebar.sections[2]), ['recently_added', 'f-123', kNewFilterId]);
-  });
+  test(
+    'grouped puts builtin pages under Library and the rest under Filters',
+    () {
+      final sidebar = _build(
+        entries: [
+          ..._entries.take(2),
+          _entry('recently_added', '/s/aa/recently-added'),
+          ..._entries.skip(2),
+        ],
+        grouped: true,
+      );
+      expect(
+        [for (final s in sidebar.sections) s.id],
+        ['leading', 'library', 'filters', 'trailing'],
+      );
+      expect(sidebar.sections[1].title, 'Library');
+      expect(_ids(sidebar.sections[1]), [
+        'home',
+        'movies',
+        'shows',
+        'library-lib9',
+      ]);
+      expect(sidebar.sections[2].title, 'Filters');
+      expect(_ids(sidebar.sections[2]), [
+        'recently_added',
+        'f-123',
+        kNewFilterId,
+      ]);
+    },
+  );
 
   test('grouped drops an empty Filters heading', () {
     final sidebar = _build(
@@ -92,8 +110,10 @@ void main() {
       canFilter: false,
       grouped: true,
     );
-    expect([for (final s in sidebar.sections) s.id],
-        ['leading', 'library', 'trailing']);
+    expect(
+      [for (final s in sidebar.sections) s.id],
+      ['leading', 'library', 'trailing'],
+    );
   });
 
   test('the header row names the server and is an action', () {
@@ -136,16 +156,22 @@ void main() {
     expect([for (final s in sidebar.sections) s.id], ['trailing']);
   });
 
-  test('offline disables everything but Downloads, the header, Edit and back',
-      () {
-    final sidebar = _build(isOffline: true, showBackToMydia: true);
-    final enabled = [
-      for (final i in sidebar.items)
-        if (i.enabled) i.id,
-    ];
-    expect(enabled,
-        [kMydiaBackTabId, kSourceHeaderId, kEditSidebarId, 'downloads']);
-  });
+  test(
+    'offline disables everything but Downloads, the header, Edit and back',
+    () {
+      final sidebar = _build(isOffline: true, showBackToMydia: true);
+      final enabled = [
+        for (final i in sidebar.items)
+          if (i.enabled) i.id,
+      ];
+      expect(enabled, [
+        kMydiaBackTabId,
+        kSourceHeaderId,
+        kEditSidebarId,
+        'downloads',
+      ]);
+    },
+  );
 
   test('Settings is last and carries the badge', () {
     final last = _build(settingsBadge: '1').items.last;
@@ -185,7 +211,9 @@ void main() {
   test('selection is the longest matching route', () {
     expect(selectedNativeSidebarId(_entries, '/s/aa'), 'home');
     expect(
-        selectedNativeSidebarId(_entries, '/s/aa/library/movies/x'), 'movies');
+      selectedNativeSidebarId(_entries, '/s/aa/library/movies/x'),
+      'movies',
+    );
     expect(selectedNativeSidebarId(_entries, '/sources/manage'), isNull);
   });
 
@@ -205,14 +233,16 @@ void main() {
     });
   });
 
-  test('the floating tab bar gets Search and the iPhone bar\'s first three',
-      () {
-    final inBar = [
-      for (final item in _build(showBackToMydia: true).items)
-        if (item.inTabBar) item.id,
-    ];
-    expect(inBar, ['search', 'home', 'movies', 'shows']);
-  });
+  test(
+    'the floating tab bar gets Search and the iPhone bar\'s first three',
+    () {
+      final inBar = [
+        for (final item in _build(showBackToMydia: true).items)
+          if (item.inTabBar) item.id,
+      ];
+      expect(inBar, ['search', 'home', 'movies', 'shows']);
+    },
+  );
 
   test('equal inputs give equal sidebars', () {
     expect(_build(), _build());

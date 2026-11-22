@@ -23,9 +23,7 @@ void main() {
     tempDir = await Directory.systemTemp.createTemp('files_cast_bridge_test');
     localVideo = File('${tempDir.path}/copper_valley.mp4');
     await localVideo.writeAsBytes(List<int>.generate(100, (i) => i));
-    bridge = FilesCastBridge(
-      lanAddressResolver: () async => '127.0.0.1',
-    );
+    bridge = FilesCastBridge(lanAddressResolver: () async => '127.0.0.1');
   });
 
   tearDown(() async {
@@ -36,121 +34,129 @@ void main() {
   });
 
   test(
-      'serves local file full GET, HEAD, 206 byte ranges, and 416 out-of-range',
-      () async {
-    final session = await bridge.openSession(
-      media: PlayableFile(url: Uri.file(localVideo.path).toString()),
-      mime: 'video/mp4',
-      subtitles: const {},
-    );
-    expect(bridge.activePort, isNotNull);
-    expect(
-        session.mediaUrl, contains('http://127.0.0.1:${bridge.activePort}/f/'));
+    'serves local file full GET, HEAD, 206 byte ranges, and 416 out-of-range',
+    () async {
+      final session = await bridge.openSession(
+        media: PlayableFile(url: Uri.file(localVideo.path).toString()),
+        mime: 'video/mp4',
+        subtitles: const {},
+      );
+      expect(bridge.activePort, isNotNull);
+      expect(
+        session.mediaUrl,
+        contains('http://127.0.0.1:${bridge.activePort}/f/'),
+      );
 
-    // Full GET
-    final full = await http.get(Uri.parse(session.mediaUrl));
-    expect(full.statusCode, HttpStatus.ok);
-    expect(full.headers['accept-ranges'], 'bytes');
-    expect(full.headers['content-type'], startsWith('video/mp4'));
-    expect(full.headers['access-control-allow-origin'], '*');
-    expect(full.bodyBytes, hasLength(100));
-    expect(full.bodyBytes.first, 0);
-    expect(full.bodyBytes.last, 99);
+      // Full GET
+      final full = await http.get(Uri.parse(session.mediaUrl));
+      expect(full.statusCode, HttpStatus.ok);
+      expect(full.headers['accept-ranges'], 'bytes');
+      expect(full.headers['content-type'], startsWith('video/mp4'));
+      expect(full.headers['access-control-allow-origin'], '*');
+      expect(full.bodyBytes, hasLength(100));
+      expect(full.bodyBytes.first, 0);
+      expect(full.bodyBytes.last, 99);
 
-    // HEAD
-    final head = await http.head(Uri.parse(session.mediaUrl));
-    expect(head.statusCode, HttpStatus.ok);
-    expect(head.headers['content-length'], '100');
-    expect(head.bodyBytes, isEmpty);
+      // HEAD
+      final head = await http.head(Uri.parse(session.mediaUrl));
+      expect(head.statusCode, HttpStatus.ok);
+      expect(head.headers['content-length'], '100');
+      expect(head.bodyBytes, isEmpty);
 
-    // Partial GET (bytes=10-19)
-    final partial = await http.get(
-      Uri.parse(session.mediaUrl),
-      headers: const {'Range': 'bytes=10-19'},
-    );
-    expect(partial.statusCode, HttpStatus.partialContent);
-    expect(partial.headers['content-range'], 'bytes 10-19/100');
-    expect(partial.headers['content-length'], '10');
-    expect(partial.bodyBytes, List<int>.generate(10, (i) => i + 10));
+      // Partial GET (bytes=10-19)
+      final partial = await http.get(
+        Uri.parse(session.mediaUrl),
+        headers: const {'Range': 'bytes=10-19'},
+      );
+      expect(partial.statusCode, HttpStatus.partialContent);
+      expect(partial.headers['content-range'], 'bytes 10-19/100');
+      expect(partial.headers['content-length'], '10');
+      expect(partial.bodyBytes, List<int>.generate(10, (i) => i + 10));
 
-    // Open-ended range (bytes=95-)
-    final tail = await http.get(
-      Uri.parse(session.mediaUrl),
-      headers: const {'Range': 'bytes=95-'},
-    );
-    expect(tail.statusCode, HttpStatus.partialContent);
-    expect(tail.headers['content-range'], 'bytes 95-99/100');
-    expect(tail.bodyBytes, [95, 96, 97, 98, 99]);
+      // Open-ended range (bytes=95-)
+      final tail = await http.get(
+        Uri.parse(session.mediaUrl),
+        headers: const {'Range': 'bytes=95-'},
+      );
+      expect(tail.statusCode, HttpStatus.partialContent);
+      expect(tail.headers['content-range'], 'bytes 95-99/100');
+      expect(tail.bodyBytes, [95, 96, 97, 98, 99]);
 
-    // Suffix range (bytes=-5)
-    final suffix = await http.get(
-      Uri.parse(session.mediaUrl),
-      headers: const {'Range': 'bytes=-5'},
-    );
-    expect(suffix.statusCode, HttpStatus.partialContent);
-    expect(suffix.headers['content-range'], 'bytes 95-99/100');
-    expect(suffix.bodyBytes, [95, 96, 97, 98, 99]);
+      // Suffix range (bytes=-5)
+      final suffix = await http.get(
+        Uri.parse(session.mediaUrl),
+        headers: const {'Range': 'bytes=-5'},
+      );
+      expect(suffix.statusCode, HttpStatus.partialContent);
+      expect(suffix.headers['content-range'], 'bytes 95-99/100');
+      expect(suffix.bodyBytes, [95, 96, 97, 98, 99]);
 
-    // Unsatisfiable range (bytes=200-300)
-    final badRange = await http.get(
-      Uri.parse(session.mediaUrl),
-      headers: const {'Range': 'bytes=200-300'},
-    );
-    expect(badRange.statusCode, HttpStatus.requestedRangeNotSatisfiable);
-    expect(badRange.headers['content-range'], 'bytes */100');
+      // Unsatisfiable range (bytes=200-300)
+      final badRange = await http.get(
+        Uri.parse(session.mediaUrl),
+        headers: const {'Range': 'bytes=200-300'},
+      );
+      expect(badRange.statusCode, HttpStatus.requestedRangeNotSatisfiable);
+      expect(badRange.headers['content-range'], 'bytes */100');
 
-    // Wrong token -> 403
-    final wrongToken = session.mediaUrl.replaceFirst('/f/', '/f/bad');
-    final forbidden = await http.get(Uri.parse(wrongToken));
-    expect(forbidden.statusCode, HttpStatus.forbidden);
+      // Wrong token -> 403
+      final wrongToken = session.mediaUrl.replaceFirst('/f/', '/f/bad');
+      final forbidden = await http.get(Uri.parse(wrongToken));
+      expect(forbidden.statusCode, HttpStatus.forbidden);
 
-    await bridge.closeSession(session.sessionId);
-    expect(bridge.activePort, isNull);
-  });
+      await bridge.closeSession(session.sessionId);
+      expect(bridge.activePort, isNull);
+    },
+  );
 
-  test('proxies upstream HTTP/SMB streams with auth and Range headers',
-      () async {
-    String? seenAuth;
-    String? seenRange;
-    final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => upstream.close(force: true));
-    upstream.listen((req) async {
-      seenAuth = req.headers.value(HttpHeaders.authorizationHeader);
-      seenRange = req.headers.value(HttpHeaders.rangeHeader);
-      req.response.statusCode =
-          seenRange != null ? HttpStatus.partialContent : HttpStatus.ok;
-      req.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
-      if (seenRange != null) {
-        req.response.headers
-            .set(HttpHeaders.contentRangeHeader, 'bytes 5-9/20');
-        req.response.headers.contentLength = 5;
-        req.response.add([5, 6, 7, 8, 9]);
-      } else {
-        req.response.headers.contentLength = 20;
-        req.response.add(List<int>.generate(20, (i) => i));
-      }
-      await req.response.close();
-    });
+  test(
+    'proxies upstream HTTP/SMB streams with auth and Range headers',
+    () async {
+      String? seenAuth;
+      String? seenRange;
+      final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => upstream.close(force: true));
+      upstream.listen((req) async {
+        seenAuth = req.headers.value(HttpHeaders.authorizationHeader);
+        seenRange = req.headers.value(HttpHeaders.rangeHeader);
+        req.response.statusCode = seenRange != null
+            ? HttpStatus.partialContent
+            : HttpStatus.ok;
+        req.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+        if (seenRange != null) {
+          req.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes 5-9/20',
+          );
+          req.response.headers.contentLength = 5;
+          req.response.add([5, 6, 7, 8, 9]);
+        } else {
+          req.response.headers.contentLength = 20;
+          req.response.add(List<int>.generate(20, (i) => i));
+        }
+        await req.response.close();
+      });
 
-    final session = await bridge.openSession(
-      media: PlayableFile(
-        url: 'http://127.0.0.1:${upstream.port}/share/film.mkv',
-        headers: const {'Authorization': 'Basic c2VjcmV0'},
-      ),
-      mime: 'video/x-matroska',
-      subtitles: const {},
-    );
+      final session = await bridge.openSession(
+        media: PlayableFile(
+          url: 'http://127.0.0.1:${upstream.port}/share/film.mkv',
+          headers: const {'Authorization': 'Basic c2VjcmV0'},
+        ),
+        mime: 'video/x-matroska',
+        subtitles: const {},
+      );
 
-    final resp = await http.get(
-      Uri.parse(session.mediaUrl),
-      headers: const {'Range': 'bytes=5-9'},
-    );
-    expect(resp.statusCode, HttpStatus.partialContent);
-    expect(seenAuth, 'Basic c2VjcmV0');
-    expect(seenRange, 'bytes=5-9');
-    expect(resp.headers['content-range'], 'bytes 5-9/20');
-    expect(resp.bodyBytes, [5, 6, 7, 8, 9]);
-  });
+      final resp = await http.get(
+        Uri.parse(session.mediaUrl),
+        headers: const {'Range': 'bytes=5-9'},
+      );
+      expect(resp.statusCode, HttpStatus.partialContent);
+      expect(seenAuth, 'Basic c2VjcmV0');
+      expect(seenRange, 'bytes=5-9');
+      expect(resp.headers['content-range'], 'bytes 5-9/20');
+      expect(resp.bodyBytes, [5, 6, 7, 8, 9]);
+    },
+  );
 
   group('HEAD on a presigned URL', () {
     // S3 signs the method: a URL presigned for GET refuses HEAD. The
@@ -193,8 +199,10 @@ void main() {
         }
         final end = m.group(2)!.isEmpty ? size - 1 : int.parse(m.group(2)!);
         res.statusCode = HttpStatus.partialContent;
-        res.headers
-            .set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$size');
+        res.headers.set(
+          HttpHeaders.contentRangeHeader,
+          'bytes $start-$end/$size',
+        );
         res.headers.contentLength = end - start + 1;
         res.add(List<int>.filled(end - start + 1, 7));
         await res.close();
@@ -206,9 +214,11 @@ void main() {
     Future<FilesCastSession> open(String name, {bool signed = true}) =>
         bridge.openSession(
           media: PlayableFile(
-              url: 'http://127.0.0.1:${upstream.port}/b/$name'
-                  '${signed ? '?X-Amz-Algorithm=AWS4-HMAC-SHA256'
-                      '&X-Amz-Signature=cafe' : ''}'),
+            url:
+                'http://127.0.0.1:${upstream.port}/b/$name'
+                '${signed ? '?X-Amz-Algorithm=AWS4-HMAC-SHA256'
+                          '&X-Amz-Signature=cafe' : ''}',
+          ),
           mime: 'video/x-matroska',
           subtitles: const {},
         );
@@ -226,8 +236,10 @@ void main() {
 
     test('a HEAD with a Range answers that range', () async {
       final session = await open('film.mkv');
-      final resp = await http.head(Uri.parse(session.mediaUrl),
-          headers: const {'Range': 'bytes=100-'});
+      final resp = await http.head(
+        Uri.parse(session.mediaUrl),
+        headers: const {'Range': 'bytes=100-'},
+      );
       expect(resp.statusCode, HttpStatus.partialContent);
       expect(resp.headers['content-range'], 'bytes 100-${total - 1}/$total');
       expect(resp.headers['content-length'], '${total - 100}');
@@ -249,14 +261,16 @@ void main() {
       expect(seen.single.$1, 'GET');
     });
 
-    test('an unsigned URL (WebDAV, a peer) still sends HEAD upstream',
-        () async {
-      final session = await open('film.mkv', signed: false);
-      final resp = await http.head(Uri.parse(session.mediaUrl));
-      // This upstream refuses HEAD, so the HEAD reached it as one.
-      expect(resp.statusCode, HttpStatus.forbidden);
-      expect(seen, [('HEAD', null)]);
-    });
+    test(
+      'an unsigned URL (WebDAV, a peer) still sends HEAD upstream',
+      () async {
+        final session = await open('film.mkv', signed: false);
+        final resp = await http.head(Uri.parse(session.mediaUrl));
+        // This upstream refuses HEAD, so the HEAD reached it as one.
+        expect(resp.statusCode, HttpStatus.forbidden);
+        expect(seen, [('HEAD', null)]);
+      },
+    );
   });
 
   test('serves SRT sidecars converted to WebVTT with CORS headers', () async {
@@ -288,9 +302,7 @@ void main() {
     expect(text, contains('Café by the harbor'));
   });
 
-  test(
-      'opening a second session replaces the first and closing stale id is a no-op',
-      () async {
+  test('opening a second session replaces the first and closing stale id is a no-op', () async {
     final first = await bridge.openSession(
       media: PlayableFile(url: Uri.file(localVideo.path).toString()),
       mime: 'video/mp4',
@@ -314,28 +326,28 @@ void main() {
     expect(newResp.statusCode, HttpStatus.ok);
   });
 
-  test('healListener rebinds on the same port when the socket is dropped',
-      () async {
-    final session = await bridge.openSession(
-      media: PlayableFile(url: Uri.file(localVideo.path).toString()),
-      mime: 'video/mp4',
-      subtitles: const {},
-    );
-    final originalPort = bridge.activePort;
-
-    await bridge.debugDropListener();
-    final heal = await bridge.healListener();
-    expect(heal, anyOf(ProxyHeal.reboundSamePort, ProxyHeal.reboundNewPort));
-    if (heal == ProxyHeal.reboundSamePort) {
-      expect(bridge.activePort, originalPort);
-      final resp = await http.get(Uri.parse(session.mediaUrl));
-      expect(resp.statusCode, HttpStatus.ok);
-    }
-  });
-
   test(
-      'serves local media and sidecars with raw filesystem paths without file:// prefix',
-      () async {
+    'healListener rebinds on the same port when the socket is dropped',
+    () async {
+      final session = await bridge.openSession(
+        media: PlayableFile(url: Uri.file(localVideo.path).toString()),
+        mime: 'video/mp4',
+        subtitles: const {},
+      );
+      final originalPort = bridge.activePort;
+
+      await bridge.debugDropListener();
+      final heal = await bridge.healListener();
+      expect(heal, anyOf(ProxyHeal.reboundSamePort, ProxyHeal.reboundNewPort));
+      if (heal == ProxyHeal.reboundSamePort) {
+        expect(bridge.activePort, originalPort);
+        final resp = await http.get(Uri.parse(session.mediaUrl));
+        expect(resp.statusCode, HttpStatus.ok);
+      }
+    },
+  );
+
+  test('serves local media and sidecars with raw filesystem paths without file:// prefix', () async {
     final srtFile = File('${tempDir.path}/copper_valley_raw.en.srt');
     await srtFile.writeAsString(
       '1\r\n00:00:01,000 --> 00:00:03,000\r\nHarbor dusk\r\n',
@@ -370,7 +382,8 @@ void main() {
   });
 
   test('an upstream failure never logs the presigned URL', () async {
-    const signed = 'https://b.s3.example/films/harbor.mkv'
+    const signed =
+        'https://b.s3.example/films/harbor.mkv'
         '?X-Amz-Credential=AKIDEXAMPLE&X-Amz-Signature=deadbeefcafe';
     final failing = FilesCastBridge(
       lanAddressResolver: () async => '127.0.0.1',
@@ -403,9 +416,7 @@ void main() {
     expect(errors.single, isNot(contains('deadbeefcafe')));
   });
 
-  test(
-      'openSession throws SourceException.unreachable when no LAN IP is available',
-      () async {
+  test('openSession throws SourceException.unreachable when no LAN IP is available', () async {
     final noLanBridge = FilesCastBridge(lanAddressResolver: () async => null);
     addTearDown(noLanBridge.dispose);
     expect(
@@ -414,11 +425,13 @@ void main() {
         mime: 'video/mp4',
         subtitles: const {},
       ),
-      throwsA(isA<SourceException>().having(
-        (e) => e.kind,
-        'kind',
-        SourceErrorKind.unreachable,
-      )),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unreachable,
+        ),
+      ),
     );
   });
 }

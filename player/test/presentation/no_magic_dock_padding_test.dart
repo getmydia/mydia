@@ -42,7 +42,8 @@ void main() {
     expect(
       dir.existsSync(),
       isTrue,
-      reason: 'flutter test runs with the package root as cwd; '
+      reason:
+          'flutter test runs with the package root as cwd; '
           'lib/presentation should resolve. cwd is ${Directory.current.path}',
     );
 
@@ -64,7 +65,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'Use DockInsets.bottomOf(context), or the DockGap / '
+      reason:
+          'Use DockInsets.bottomOf(context), or the DockGap / '
           'SliverDockGap widgets, instead of hardcoding dock clearance. The '
           'dock measures 83 with no system inset and 117 with a 34px home '
           'indicator, so any literal is wrong on some device. '

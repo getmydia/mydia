@@ -18,13 +18,17 @@ void main() {
       expect(theme.colorScheme.onSurface, p.textPrimary);
       expect(theme.appBarTheme.backgroundColor, p.background);
       expect(theme.dialogTheme.backgroundColor, p.surface);
-      expect(theme.elevatedButtonTheme.style?.foregroundColor?.resolve({}),
-          p.background);
+      expect(
+        theme.elevatedButtonTheme.style?.foregroundColor?.resolve({}),
+        p.background,
+      );
     });
   }
 
   test('darkTheme is Projection Booth', () {
     expect(
-        AppTheme.darkTheme.extension<MydiaPalette>(), Palettes.projectionBooth);
+      AppTheme.darkTheme.extension<MydiaPalette>(),
+      Palettes.projectionBooth,
+    );
   });
 }

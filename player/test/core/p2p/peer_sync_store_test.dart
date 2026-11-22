@@ -117,11 +117,7 @@ void main() {
         expect(progressRecord.durationSeconds, 1000);
         expect(progressRecord.updatedAt, 1000);
 
-        final unwatchedRecord = await store.setWatched(
-          key,
-          false,
-          nowMs: 2000,
-        );
+        final unwatchedRecord = await store.setWatched(key, false, nowMs: 2000);
 
         expect(unwatchedRecord.watched, isFalse);
         expect(unwatchedRecord.positionSeconds, isNull);
@@ -228,37 +224,38 @@ void main() {
         expect(store.watchRecord(key)!.watched, isFalse);
       });
 
-      test('landed_at_advances_monotonically_for_old_origin_timestamps',
-          () async {
-        const key = 'tmdb:movie:205';
+      test(
+        'landed_at_advances_monotonically_for_old_origin_timestamps',
+        () async {
+          const key = 'tmdb:movie:205';
 
-        final oldRemote = WireWatchRecord(
-          key: key,
-          watched: true,
-          positionSeconds: null,
-          durationSeconds: null,
-          updatedAtMs: PlatformInt64Util.from(100),
-        );
+          final oldRemote = WireWatchRecord(
+            key: key,
+            watched: true,
+            positionSeconds: null,
+            durationSeconds: null,
+            updatedAtMs: PlatformInt64Util.from(100),
+          );
 
-        await store.mergeRemote(
-          watchRecords: [oldRemote],
-          pinRecords: const [],
-          nowMs: 5000,
-        );
+          await store.mergeRemote(
+            watchRecords: [oldRemote],
+            pinRecords: const [],
+            nowMs: 5000,
+          );
 
-        final record = store.watchRecord(key);
-        expect(record, isNotNull);
-        expect(record!.landedAt, 5000);
+          final record = store.watchRecord(key);
+          expect(record, isNotNull);
+          expect(record!.landedAt, 5000);
 
-        final since4000 = store.watchRecordsSince(4000);
-        expect(since4000.map((r) => r.key), contains(key));
+          final since4000 = store.watchRecordsSince(4000);
+          expect(since4000.map((r) => r.key), contains(key));
 
-        final since5000 = store.watchRecordsSince(5000);
-        expect(since5000.map((r) => r.key), isNot(contains(key)));
-      });
+          final since5000 = store.watchRecordsSince(5000);
+          expect(since5000.map((r) => r.key), isNot(contains(key)));
+        },
+      );
 
-      test('roster_merge_prefers_higher_updated_at_and_revoked_on_tie',
-          () async {
+      test('roster_merge_prefers_higher_updated_at_and_revoked_on_tie', () async {
         const nodeId = 'node-delta-789';
 
         await store.putMember(
@@ -272,35 +269,29 @@ void main() {
         );
 
         // Merging revoked: true with same updatedAt (1000) keeps revoked: true
-        final changed = await store.mergeRoster(
-          [
-            const PeerMember(
-              nodeId: nodeId,
-              deviceName: 'Harbor Deck',
-              platform: 'linux',
-              updatedAt: 1000,
-              revoked: true,
-            ),
-          ],
-          nowMs: 1500,
-        );
+        final changed = await store.mergeRoster([
+          const PeerMember(
+            nodeId: nodeId,
+            deviceName: 'Harbor Deck',
+            platform: 'linux',
+            updatedAt: 1000,
+            revoked: true,
+          ),
+        ], nowMs: 1500);
 
         expect(changed, contains(nodeId));
         expect(store.member(nodeId)!.revoked, isTrue);
 
         // Attempting to un-revoke with same or older updatedAt fails
-        final ignored = await store.mergeRoster(
-          [
-            const PeerMember(
-              nodeId: nodeId,
-              deviceName: 'Harbor Deck',
-              platform: 'linux',
-              updatedAt: 1000,
-              revoked: false,
-            ),
-          ],
-          nowMs: 1600,
-        );
+        final ignored = await store.mergeRoster([
+          const PeerMember(
+            nodeId: nodeId,
+            deviceName: 'Harbor Deck',
+            platform: 'linux',
+            updatedAt: 1000,
+            revoked: false,
+          ),
+        ], nowMs: 1600);
         expect(ignored, isEmpty);
         expect(store.member(nodeId)!.revoked, isTrue);
 
@@ -344,41 +335,43 @@ void main() {
         expect(store.member(nodeId)!.revoked, isTrue);
       });
 
-      test('equal_time_watch_conflicts_settle_the_same_on_both_sides',
-          () async {
-        const key = 'tmdb:movie:99910';
-        // Same position, same millisecond, different durations.
-        await store.recordProgress(
-          key,
-          positionSeconds: 300,
-          durationSeconds: 1000,
-          watchedFraction: 0.95,
-          nowMs: 2000,
-        );
-        FlutterWireWatchRecord wire(int duration) => FlutterWireWatchRecord(
-              key: key,
-              watched: false,
-              positionSeconds: PlatformInt64Util.from(300),
-              durationSeconds: PlatformInt64Util.from(duration),
-              updatedAtMs: PlatformInt64Util.from(2000),
-            );
-        final changed = await store.mergeRemote(
-          watchRecords: [wire(1200)],
-          pinRecords: const [],
-          nowMs: 3000,
-        );
-        expect(changed.changedWatchKeys, {key});
-        expect(store.watchRecord(key)!.durationSeconds, 1200);
+      test(
+        'equal_time_watch_conflicts_settle_the_same_on_both_sides',
+        () async {
+          const key = 'tmdb:movie:99910';
+          // Same position, same millisecond, different durations.
+          await store.recordProgress(
+            key,
+            positionSeconds: 300,
+            durationSeconds: 1000,
+            watchedFraction: 0.95,
+            nowMs: 2000,
+          );
+          FlutterWireWatchRecord wire(int duration) => FlutterWireWatchRecord(
+            key: key,
+            watched: false,
+            positionSeconds: PlatformInt64Util.from(300),
+            durationSeconds: PlatformInt64Util.from(duration),
+            updatedAtMs: PlatformInt64Util.from(2000),
+          );
+          final changed = await store.mergeRemote(
+            watchRecords: [wire(1200)],
+            pinRecords: const [],
+            nowMs: 3000,
+          );
+          expect(changed.changedWatchKeys, {key});
+          expect(store.watchRecord(key)!.durationSeconds, 1200);
 
-        // The shorter duration does not win from the other side.
-        final back = await store.mergeRemote(
-          watchRecords: [wire(1000)],
-          pinRecords: const [],
-          nowMs: 3000,
-        );
-        expect(back.changedWatchKeys, isEmpty);
-        expect(store.watchRecord(key)!.durationSeconds, 1200);
-      });
+          // The shorter duration does not win from the other side.
+          final back = await store.mergeRemote(
+            watchRecords: [wire(1000)],
+            pinRecords: const [],
+            nowMs: 3000,
+          );
+          expect(back.changedWatchKeys, isEmpty);
+          expect(store.watchRecord(key)!.durationSeconds, 1200);
+        },
+      );
 
       test('equal_time_pin_conflicts_settle_the_same_on_both_sides', () async {
         const group = 'harbor-of-echoes-2024';
@@ -390,13 +383,13 @@ void main() {
           nowMs: 2000,
         );
         FlutterWirePinRecord wire(int tmdbId) => FlutterWirePinRecord(
-              key: pinSyncKey(isShow: false, groupKey: group),
-              groupKey: group,
-              isShow: false,
-              tmdbId: PlatformInt64Util.from(tmdbId),
-              pinned: true,
-              updatedAtMs: PlatformInt64Util.from(2000),
-            );
+          key: pinSyncKey(isShow: false, groupKey: group),
+          groupKey: group,
+          isShow: false,
+          tmdbId: PlatformInt64Util.from(tmdbId),
+          pinned: true,
+          updatedAtMs: PlatformInt64Util.from(2000),
+        );
         final changed = await store.mergeRemote(
           watchRecords: const [],
           pinRecords: [wire(200)],
@@ -442,8 +435,9 @@ void main() {
 
   group('HivePeerSyncStore persistence', () {
     test('hive_store_persists_across_reopen', () async {
-      final tempDir =
-          await Directory.systemTemp.createTemp('hive_reopen_test_');
+      final tempDir = await Directory.systemTemp.createTemp(
+        'hive_reopen_test_',
+      );
       Hive.init(tempDir.path);
 
       const boxName = 'peer_sync_reopen_test';
@@ -504,10 +498,7 @@ void main() {
       expect(watch!.positionSeconds, 120);
       expect(watch.updatedAt, 1000);
 
-      final pin = store.pinRecord(
-        isShow: true,
-        groupKey: 'harbor-of-echoes',
-      );
+      final pin = store.pinRecord(isShow: true, groupKey: 'harbor-of-echoes');
       expect(pin, isNotNull);
       expect(pin!.tmdbId, 99950);
       expect(pin.pinned, isTrue);
@@ -540,8 +531,9 @@ void main() {
 
   group('seedPeerSyncStoreIfNeeded', () {
     test('seeds_progress_first_and_watched_second_so_watched_wins', () async {
-      final tempDir =
-          await Directory.systemTemp.createTemp('hive_seed_order_test_');
+      final tempDir = await Directory.systemTemp.createTemp(
+        'hive_seed_order_test_',
+      );
       Hive.init(tempDir.path);
       addTearDown(() async {
         await Hive.close();
@@ -550,21 +542,24 @@ void main() {
         }
       });
 
-      final indexBox =
-          await Hive.openBox<Map<dynamic, dynamic>>('test_index_seed');
+      final indexBox = await Hive.openBox<Map<dynamic, dynamic>>(
+        'test_index_seed',
+      );
       // Item marked watched in indexBox
       await indexBox.put('local_acc/watched/99910', <dynamic, dynamic>{});
 
       // Older progress in progressStore for same item
       final progressStore = InMemoryPlaybackProgressStore();
-      await progressStore.save(LocalPlaybackProgress(
-        sourceId: 'local_acc:owner:srv',
-        mediaId: '99910',
-        mediaType: 'movie',
-        positionSeconds: 100,
-        durationSeconds: 1000,
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(1000),
-      ));
+      await progressStore.save(
+        LocalPlaybackProgress(
+          sourceId: 'local_acc:owner:srv',
+          mediaId: '99910',
+          mediaType: 'movie',
+          positionSeconds: 100,
+          durationSeconds: 1000,
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(1000),
+        ),
+      );
 
       final syncStore = InMemoryPeerSyncStore();
       await seedPeerSyncStoreIfNeeded(

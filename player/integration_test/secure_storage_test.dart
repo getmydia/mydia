@@ -6,6 +6,7 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/storage/secure_storage_options.dart';
+
 import 'helpers/test_bootstrap.dart';
 
 /// Regression tests for the "have to re-pair on every launch" bug.

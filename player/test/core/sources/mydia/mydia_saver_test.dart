@@ -38,13 +38,13 @@ final _refProvider = Provider<Ref>((ref) => ref);
 const _nodeAddr = '{"id":"node-abc","addrs":[]}';
 
 MydiaCredentials _paired({String instanceId = 'inst-2'}) => MydiaCredentials(
-      instanceId: instanceId,
-      accessToken: 'access',
-      mediaToken: 'media',
-      deviceToken: 'device',
-      instanceName: 'Friends',
-      nodeAddr: _nodeAddr,
-    );
+  instanceId: instanceId,
+  accessToken: 'access',
+  mediaToken: 'media',
+  deviceToken: 'device',
+  instanceName: 'Friends',
+  nodeAddr: _nodeAddr,
+);
 
 void main() {
   late MockAuthStorage secretStorage;
@@ -56,22 +56,23 @@ void main() {
     secretStorage = MockAuthStorage();
     store = _OrderingStore(secretStorage);
     transport = FakeMydiaTransport();
-    container = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(secretStorage)),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(secretStorage)),
+      ],
+    );
     addTearDown(container.dispose);
   });
 
   Future<MydiaCredentials> storedCredentials(String accountId) async =>
-      MydiaCredentials.fromJson(jsonDecode(
-              (await secretStorage.read('source/$accountId/account_token'))!)
-          as Map<String, dynamic>);
+      MydiaCredentials.fromJson(
+        jsonDecode(
+          (await secretStorage.read('source/$accountId/account_token'))!,
+        ) as Map<String, dynamic>,
+      );
 
-  Future<SourceId> save(
-    MydiaCredentials c, {
-    String? reauth,
-  }) async {
+  Future<SourceId> save(MydiaCredentials c, {String? reauth}) async {
     await container.read(sourceRecordsProvider.future);
     return saveMydiaServer(
       container.read(_refProvider),
@@ -100,44 +101,54 @@ void main() {
 
   test('a URL login with no id uses the identity the server reports', () async {
     transport.handlers['MydiaInstanceIdentity'] = (_) => {
-          'serverCompatibility': {'instanceId': 'reported-1'},
-        };
+      'serverCompatibility': {'instanceId': 'reported-1'},
+    };
     transport.validTokens = {'tok'};
-    final id = await save(const MydiaCredentials(
-      instanceId: '',
-      accessToken: 'tok',
-      serverUrl: 'https://friend.example',
-      username: 'maya',
-    ));
+    final id = await save(
+      const MydiaCredentials(
+        instanceId: '',
+        accessToken: 'tok',
+        serverUrl: 'https://friend.example',
+        username: 'maya',
+      ),
+    );
 
     expect(id.value, startsWith('mreported-1:'));
     expect(transport.calls.single.token, 'tok');
     final record = (await store.load()).accounts.single;
     expect(record.profiles.single.name, 'maya');
     expect(record.account.displayName, 'friend.example');
-    expect(record.servers.single.connections.single.uri,
-        Uri.parse('https://friend.example'));
+    expect(
+      record.servers.single.connections.single.uri,
+      Uri.parse('https://friend.example'),
+    );
     expect((await storedCredentials('mreported-1')).instanceId, 'reported-1');
   });
 
   test('a URL login with no answer falls back to the URL hash', () async {
     transport.unreachable = true;
-    final id = await save(const MydiaCredentials(
-      instanceId: '',
-      accessToken: 'tok',
-      serverUrl: 'https://friend.example/',
-    ));
+    final id = await save(
+      const MydiaCredentials(
+        instanceId: '',
+        accessToken: 'tok',
+        serverUrl: 'https://friend.example/',
+      ),
+    );
     expect(
-        id.value, startsWith('m${urlInstanceId('https://friend.example')}:'));
+      id.value,
+      startsWith('m${urlInstanceId('https://friend.example')}:'),
+    );
   });
 
   test('a p2p pairing with no id and no answer uses the node id', () async {
     transport.unreachable = true;
-    final id = await save(const MydiaCredentials(
-      instanceId: '',
-      accessToken: 'access',
-      nodeAddr: _nodeAddr,
-    ));
+    final id = await save(
+      const MydiaCredentials(
+        instanceId: '',
+        accessToken: 'access',
+        nodeAddr: _nodeAddr,
+      ),
+    );
     expect(id.value, startsWith('mnnode-abc:'));
   });
 
@@ -149,18 +160,22 @@ void main() {
   });
 
   test('the migrated instance can be re-added', () async {
-    await save(const MydiaCredentials(
-      instanceId: 'inst-9',
-      accessToken: 'old',
-      serverUrl: 'https://home.example',
-    ));
+    await save(
+      const MydiaCredentials(
+        instanceId: 'inst-9',
+        accessToken: 'old',
+        serverUrl: 'https://home.example',
+      ),
+    );
     await store.setLegacyInstanceId('minst-9');
 
-    final id = await save(const MydiaCredentials(
-      instanceId: 'inst-9',
-      accessToken: 'fresh',
-      serverUrl: 'https://Home.example/',
-    ));
+    final id = await save(
+      const MydiaCredentials(
+        instanceId: 'inst-9',
+        accessToken: 'fresh',
+        serverUrl: 'https://Home.example/',
+      ),
+    );
 
     expect(id.value, startsWith('minst-9:'));
     expect((await store.load()).accounts, hasLength(1));
@@ -175,44 +190,51 @@ void main() {
     expect(store.puts, 0);
   });
 
-  test('re-adding an existing guest replaces it and clears needsReauth',
-      () async {
-    final id = await save(_paired());
-    await container.read(sourceRecordsProvider.notifier).markNeedsReauth(
-          'minst-2',
-          true,
-        );
-    expect((await store.load()).accounts.single.account.needsReauth, isTrue);
+  test(
+    're-adding an existing guest replaces it and clears needsReauth',
+    () async {
+      final id = await save(_paired());
+      await container
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth('minst-2', true);
+      expect((await store.load()).accounts.single.account.needsReauth, isTrue);
 
-    await save(const MydiaCredentials(
-      instanceId: 'inst-2',
-      accessToken: 'fresh',
-      instanceName: 'Friends',
-      nodeAddr: _nodeAddr,
-    ));
-    final records = (await store.load()).accounts;
-    expect(records, hasLength(1));
-    expect(records.single.account.needsReauth, isFalse);
-    expect(records.single.sources.single.id, id);
-    expect((await storedCredentials('minst-2')).accessToken, 'fresh');
-  });
+      await save(
+        const MydiaCredentials(
+          instanceId: 'inst-2',
+          accessToken: 'fresh',
+          instanceName: 'Friends',
+          nodeAddr: _nodeAddr,
+        ),
+      );
+      final records = (await store.load()).accounts;
+      expect(records, hasLength(1));
+      expect(records.single.account.needsReauth, isFalse);
+      expect(records.single.sources.single.id, id);
+      expect((await storedCredentials('minst-2')).accessToken, 'fresh');
+    },
+  );
 
   test('a password re-sign-in keeps the device and media tokens', () async {
-    await save(MydiaCredentials(
-      instanceId: 'inst-5',
-      accessToken: 'old',
-      deviceToken: 'device-1',
-      mediaToken: 'media-1',
-      mediaTokenExpiry: DateTime.utc(2030),
-      serverUrl: 'https://home.example',
-      username: 'maya',
-    ));
-    await save(const MydiaCredentials(
-      instanceId: 'inst-5',
-      accessToken: 'fresh',
-      serverUrl: 'https://home.example',
-      username: 'maya',
-    ));
+    await save(
+      MydiaCredentials(
+        instanceId: 'inst-5',
+        accessToken: 'old',
+        deviceToken: 'device-1',
+        mediaToken: 'media-1',
+        mediaTokenExpiry: DateTime.utc(2030),
+        serverUrl: 'https://home.example',
+        username: 'maya',
+      ),
+    );
+    await save(
+      const MydiaCredentials(
+        instanceId: 'inst-5',
+        accessToken: 'fresh',
+        serverUrl: 'https://home.example',
+        username: 'maya',
+      ),
+    );
     final c = await storedCredentials('minst-5');
     expect(c.accessToken, 'fresh');
     expect(c.deviceToken, 'device-1');
@@ -222,12 +244,14 @@ void main() {
 
   test('a re-pair with a new device token replaces it', () async {
     await save(_paired());
-    await save(const MydiaCredentials(
-      instanceId: 'inst-2',
-      accessToken: 'fresh',
-      deviceToken: 'device-2',
-      nodeAddr: _nodeAddr,
-    ));
+    await save(
+      const MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'fresh',
+        deviceToken: 'device-2',
+        nodeAddr: _nodeAddr,
+      ),
+    );
     final c = await storedCredentials('minst-2');
     expect(c.deviceToken, 'device-2');
     expect(c.accessToken, 'fresh');
@@ -238,19 +262,26 @@ void main() {
     await save(_paired());
     final first = (await store.load()).accounts.single.addedAtMs;
     await Future<void>.delayed(const Duration(milliseconds: 5));
-    await save(const MydiaCredentials(
-      instanceId: 'inst-2',
-      accessToken: 'fresh',
-      nodeAddr: _nodeAddr,
-    ));
+    await save(
+      const MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'fresh',
+        nodeAddr: _nodeAddr,
+      ),
+    );
     expect((await store.load()).accounts.single.addedAtMs, first);
   });
 
   test('a re-auth for a different instance is refused', () async {
     await expectLater(
       save(_paired(instanceId: 'inst-3'), reauth: 'minst-2'),
-      throwsA(isA<SourceException>()
-          .having((e) => e.fault, 'fault', SourceFault.mydiaWrongServerCode)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.fault,
+          'fault',
+          SourceFault.mydiaWrongServerCode,
+        ),
+      ),
     );
     expect(store.puts, 0);
   });
@@ -260,11 +291,13 @@ void main() {
     final accountId = 'm$urlId';
 
     Future<void> seedMigrated() async {
-      await save(MydiaCredentials(
-        instanceId: urlId,
-        accessToken: 'old',
-        serverUrl: 'https://home.example',
-      ));
+      await save(
+        MydiaCredentials(
+          instanceId: urlId,
+          accessToken: 'old',
+          serverUrl: 'https://home.example',
+        ),
+      );
       await container
           .read(sourceRecordsProvider.notifier)
           .markNeedsReauth(accountId, true);
@@ -278,8 +311,8 @@ void main() {
 
     setUp(() {
       transport.handlers['MydiaInstanceIdentity'] = (_) => {
-            'serverCompatibility': {'instanceId': 'reported-uuid'},
-          };
+        'serverCompatibility': {'instanceId': 'reported-uuid'},
+      };
       transport.validTokens = {'fresh'};
     });
 
@@ -303,11 +336,13 @@ void main() {
 
     test('does not absorb a genuinely different server', () async {
       await seedMigrated();
-      final id = await save(const MydiaCredentials(
-        instanceId: '',
-        accessToken: 'fresh',
-        serverUrl: 'https://elsewhere.example',
-      ));
+      final id = await save(
+        const MydiaCredentials(
+          instanceId: '',
+          accessToken: 'fresh',
+          serverUrl: 'https://elsewhere.example',
+        ),
+      );
       expect(id.value, startsWith('mreported-uuid:'));
       expect((await store.load()).accounts, hasLength(2));
     });

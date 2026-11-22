@@ -92,8 +92,11 @@ Future<ui.Image> _decode(ImageProvider provider, Duration timeout) {
   stream.addListener(listener);
   // A stalled load must not keep the listener, and so the image stream,
   // alive after the caller has given up on it.
-  return completer.future.timeout(timeout, onTimeout: () {
-    stream.removeListener(listener);
-    throw TimeoutException('artwork decode', timeout);
-  });
+  return completer.future.timeout(
+    timeout,
+    onTimeout: () {
+      stream.removeListener(listener);
+      throw TimeoutException('artwork decode', timeout);
+    },
+  );
 }

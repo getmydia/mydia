@@ -5,7 +5,7 @@
 
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 
@@ -15,8 +15,9 @@ import 'player_screen_test_harness.dart';
 void main() {
   setUp(mockPathProviderDocumentsDirectory);
 
-  testWidgets('offline playback resolves a download and starts',
-      (tester) async {
+  testWidgets('offline playback resolves a download and starts', (
+    tester,
+  ) async {
     // A real file, not a path that merely looks plausible: `downloadedItem`
     // feeds this straight to `_resolveDownloadedFilePath`, whose *first*
     // check is `file_utils.fileExists`. A nonexistent path answers that
@@ -27,8 +28,9 @@ void main() {
     // would make this test pass identically against the deleted
     // `_initializeOfflinePlayback` and against today's routing, proving
     // nothing about which one actually ran.
-    final tempDir =
-        Directory.systemTemp.createTempSync('mydia_offline_resume_test_');
+    final tempDir = Directory.systemTemp.createTempSync(
+      'mydia_offline_resume_test_',
+    );
     addTearDown(() => tempDir.deleteSync(recursive: true));
     final tempFile = File('${tempDir.path}/arrival.mkv')
       ..writeAsBytesSync(const [0]);
@@ -37,8 +39,10 @@ void main() {
       // Offline mode issues no GraphQL at all; the scripted server must never be
       // hit, so unlike most tests in this directory it has no scripted
       // responses to play back and throws if a request ever reaches it.
-      server: ScriptedMydiaTransport((request, callIndex) =>
-          throw StateError('offline mode must not issue GraphQL requests')),
+      server: ScriptedMydiaTransport(
+        (request, callIndex) =>
+            throw StateError('offline mode must not issue GraphQL requests'),
+      ),
       connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -88,10 +92,7 @@ void main() {
       find.textContaining('Failed to play downloaded content'),
       findsNothing,
     );
-    expect(
-      find.textContaining('MediaKit.ensureInitialized'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('MediaKit.ensureInitialized'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -99,8 +100,10 @@ void main() {
 
   testWidgets('offline playback without a download says so', (tester) async {
     final container = buildPlayerScreenContainer(
-      server: ScriptedMydiaTransport((request, callIndex) =>
-          throw StateError('offline mode must not issue GraphQL requests')),
+      server: ScriptedMydiaTransport(
+        (request, callIndex) =>
+            throw StateError('offline mode must not issue GraphQL requests'),
+      ),
       connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -119,14 +122,16 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('offline playback offers to resume from local progress',
-      (tester) async {
+  testWidgets('offline playback offers to resume from local progress', (
+    tester,
+  ) async {
     // A real file for the same reason as the routing test above: a
     // nonexistent path bails out of the offline branch before the resume
     // decision ever runs, at the pre-existing "downloaded file not found"
     // `setState`.
-    final tempDir =
-        Directory.systemTemp.createTempSync('mydia_offline_resume_offer_test_');
+    final tempDir = Directory.systemTemp.createTempSync(
+      'mydia_offline_resume_offer_test_',
+    );
     addTearDown(() => tempDir.deleteSync(recursive: true));
     final tempFile = File('${tempDir.path}/arrival.mkv')
       ..writeAsBytesSync(const [0]);
@@ -134,8 +139,10 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
 
     final container = buildPlayerScreenContainer(
-      server: ScriptedMydiaTransport((request, callIndex) =>
-          throw StateError('offline mode must not issue GraphQL requests')),
+      server: ScriptedMydiaTransport(
+        (request, callIndex) =>
+            throw StateError('offline mode must not issue GraphQL requests'),
+      ),
       connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -165,7 +172,8 @@ void main() {
     expect(
       find.text('Resume'),
       findsOneWidget,
-      reason: 'a downloaded file held entirely on disk resumes with a plain '
+      reason:
+          'a downloaded file held entirely on disk resumes with a plain '
           'seek, but it still has to ask',
     );
 
@@ -173,10 +181,12 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('offline playback does not ask below the resume threshold',
-      (tester) async {
-    final tempDir = Directory.systemTemp
-        .createTempSync('mydia_offline_resume_threshold_test_');
+  testWidgets('offline playback does not ask below the resume threshold', (
+    tester,
+  ) async {
+    final tempDir = Directory.systemTemp.createTempSync(
+      'mydia_offline_resume_threshold_test_',
+    );
     addTearDown(() => tempDir.deleteSync(recursive: true));
     final tempFile = File('${tempDir.path}/arrival.mkv')
       ..writeAsBytesSync(const [0]);
@@ -184,8 +194,10 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
 
     final container = buildPlayerScreenContainer(
-      server: ScriptedMydiaTransport((request, callIndex) =>
-          throw StateError('offline mode must not issue GraphQL requests')),
+      server: ScriptedMydiaTransport(
+        (request, callIndex) =>
+            throw StateError('offline mode must not issue GraphQL requests'),
+      ),
       connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -218,16 +230,16 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets(
-      'downloaded playback while online reconciles local progress the '
+  testWidgets('downloaded playback while online reconciles local progress the '
       'server never heard about', (tester) async {
     // Still downloaded, but back online this time: the "already downloaded"
     // branch, not the offline one. The server has no progress at all for
     // this movie, standing in for a session recorded entirely offline that
     // has not been flushed yet — reconciliation has nothing to prefer over
     // the local record.
-    final tempDir = Directory.systemTemp
-        .createTempSync('mydia_downloaded_online_resume_test_');
+    final tempDir = Directory.systemTemp.createTempSync(
+      'mydia_downloaded_online_resume_test_',
+    );
     addTearDown(() => tempDir.deleteSync(recursive: true));
     final tempFile = File('${tempDir.path}/arrival.mkv')
       ..writeAsBytesSync(const [0]);
@@ -272,7 +284,8 @@ void main() {
     expect(
       find.text('Resume'),
       findsOneWidget,
-      reason: 'the server has no progress for this movie, so the resume '
+      reason:
+          'the server has no progress for this movie, so the resume '
           'prompt can only come from the reconciled local record',
     );
 

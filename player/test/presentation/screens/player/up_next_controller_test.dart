@@ -76,20 +76,22 @@ void main() {
     expect(h.controller.hasNext, isFalse);
   });
 
-  test('at season end, fetches the next season once and offers its premiere',
-      () async {
-    final h = _Harness(nextSeason: [_ep(2, season: 2), _ep(1, season: 2)]);
-    h.controller.setSeason(season, currentEpisodeId: 's1e3');
-    h.controller.onPositionTick();
-    expect(h.controller.showing, isFalse);
-    await Future<void>.delayed(Duration.zero);
-    h.controller.onPositionTick();
-    h.controller.onPositionTick();
-    expect(h.fetchedSeasons, [2]);
-    expect(h.controller.target?.episodeId, 's2e1');
-    expect(h.controller.target?.crossesSeason, isTrue);
-    h.controller.dispose();
-  });
+  test(
+    'at season end, fetches the next season once and offers its premiere',
+    () async {
+      final h = _Harness(nextSeason: [_ep(2, season: 2), _ep(1, season: 2)]);
+      h.controller.setSeason(season, currentEpisodeId: 's1e3');
+      h.controller.onPositionTick();
+      expect(h.controller.showing, isFalse);
+      await Future<void>.delayed(Duration.zero);
+      h.controller.onPositionTick();
+      h.controller.onPositionTick();
+      expect(h.fetchedSeasons, [2]);
+      expect(h.controller.target?.episodeId, 's2e1');
+      expect(h.controller.target?.crossesSeason, isTrue);
+      h.controller.dispose();
+    },
+  );
 
   test('resetNextSeason lets the lookup run again', () async {
     final h = _Harness(nextSeason: const []);

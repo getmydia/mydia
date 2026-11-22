@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -36,31 +36,38 @@ class _NoSearchSource extends FakeMediaSource {
 Future<void> pumpSearch(WidgetTester tester, FakeMediaSource fake) async {
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
-      // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: SourceSearchScreen(sourceId: fakeSourceId),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
+        // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SourceSearchScreen(sourceId: fakeSourceId),
+      ),
     ),
-  ));
+  );
 }
 
 class _MixedSearchSource extends FakeMediaSource {
   @override
-  Future<List<ItemSummary>> search(String query) async =>
-      [fakeMovie(1), fakeShow, fakeEpisode(1)];
+  Future<List<ItemSummary>> search(String query) async => [
+    fakeMovie(1),
+    fakeShow,
+    fakeEpisode(1),
+  ];
 }
 
 void main() {
   testWidgets('kind chips narrow the results client-side', (tester) async {
     await pumpSearch(tester, _MixedSearchSource());
     await tester.enterText(
-        find.byKey(const Key('source-search-field')), 'invented');
+      find.byKey(const Key('source-search-field')),
+      'invented',
+    );
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('source-poster-m1')), findsOneWidget);
@@ -86,31 +93,38 @@ void main() {
   testWidgets('initialQuery fills the box and searches', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home:
-            SourceSearchScreen(sourceId: fakeSourceId, initialQuery: 'film 2'),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourceSearchScreen(
+            sourceId: fakeSourceId,
+            initialQuery: 'film 2',
+          ),
+        ),
       ),
-    ));
+    );
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('source-search-field')))
-            .controller
-            ?.text,
-        'film 2');
+      tester
+          .widget<TextField>(find.byKey(const Key('source-search-field')))
+          .controller
+          ?.text,
+      'film 2',
+    );
     expect(find.text('Invented Film 2'), findsOneWidget);
   });
 
-  testWidgets('clearing the box wins over a search still in flight',
-      (tester) async {
+  testWidgets('clearing the box wins over a search still in flight', (
+    tester,
+  ) async {
     final fake = _ControlledSearchSource();
     await pumpSearch(tester, fake);
     final field = find.byKey(const Key('source-search-field'));
@@ -130,7 +144,9 @@ void main() {
     final fake = _ControlledSearchSource();
     await pumpSearch(tester, fake);
     await tester.enterText(
-        find.byKey(const Key('source-search-field')), 'film');
+      find.byKey(const Key('source-search-field')),
+      'film',
+    );
     await tester.pump(const Duration(milliseconds: 500));
     fake.requests.single.$2.completeError(const SourceException.unreachable());
     await tester.pumpAndSettle();
@@ -154,20 +170,25 @@ void main() {
   testWidgets('searches after typing settles', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-        // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourceSearchScreen(sourceId: fakeSourceId),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+          // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourceSearchScreen(sourceId: fakeSourceId),
+        ),
       ),
-    ));
+    );
     await tester.enterText(
-        find.byKey(const Key('source-search-field')), 'film 2');
+      find.byKey(const Key('source-search-field')),
+      'film 2',
+    );
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Invented Film 2'), findsNothing, reason: 'debounced');
     await tester.pump(const Duration(milliseconds: 400));

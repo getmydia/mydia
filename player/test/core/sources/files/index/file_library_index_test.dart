@@ -55,18 +55,43 @@ void main() {
 
   test('roundtrips_every_record_type', () async {
     final a = FileLibraryIndex(box, accountId: 'a');
-    await a.putRoot(const LibraryRoot(
-        id: 'r1', path: '/m', kind: FilesLibraryKind.mixed, title: 'Media'));
+    await a.putRoot(
+      const LibraryRoot(
+        id: 'r1',
+        path: '/m',
+        kind: FilesLibraryKind.mixed,
+        title: 'Media',
+      ),
+    );
     final f = file('r1', 'x/a.mkv', parsed: true);
     await a.putFiles([f]);
-    await a.putGroup(GroupMatch(
-        groupKey: 'g', isShow: true, tmdbId: 5, pinned: true, matchedAt: t));
-    await a.putMovie(const MatchedMovie(
-        tmdbId: 1, title: 'Tide', year: 1999, runtimeMinutes: 90));
-    await a.putShow(const MatchedShow(tmdbId: 2, title: 'Harbor', seasons: {
-      1: [MatchedEpisode(season: 1, episode: 1, title: 'Pilot')],
-      2: [MatchedEpisode(season: 2, episode: 4, runtimeMinutes: 40)],
-    }));
+    await a.putGroup(
+      GroupMatch(
+        groupKey: 'g',
+        isShow: true,
+        tmdbId: 5,
+        pinned: true,
+        matchedAt: t,
+      ),
+    );
+    await a.putMovie(
+      const MatchedMovie(
+        tmdbId: 1,
+        title: 'Tide',
+        year: 1999,
+        runtimeMinutes: 90,
+      ),
+    );
+    await a.putShow(
+      const MatchedShow(
+        tmdbId: 2,
+        title: 'Harbor',
+        seasons: {
+          1: [MatchedEpisode(season: 1, episode: 1, title: 'Pilot')],
+          2: [MatchedEpisode(season: 2, episode: 4, runtimeMinutes: 40)],
+        },
+      ),
+    );
     await a.setWatched('550', true);
     await a.setWatched('f1', true);
     await a.setWatched('f1', false);
@@ -99,10 +124,22 @@ void main() {
 
   test('remove_root_drops_its_files_only', () async {
     final a = FileLibraryIndex(box, accountId: 'a');
-    await a.putRoot(const LibraryRoot(
-        id: 'r1', path: '/m', kind: FilesLibraryKind.movies, title: 'M'));
-    await a.putRoot(const LibraryRoot(
-        id: 'r2', path: '/s', kind: FilesLibraryKind.series, title: 'S'));
+    await a.putRoot(
+      const LibraryRoot(
+        id: 'r1',
+        path: '/m',
+        kind: FilesLibraryKind.movies,
+        title: 'M',
+      ),
+    );
+    await a.putRoot(
+      const LibraryRoot(
+        id: 'r2',
+        path: '/s',
+        kind: FilesLibraryKind.series,
+        title: 'S',
+      ),
+    );
     final f1 = file('r1', 'a.mkv');
     final f2 = file('r2', 'b.mkv');
     await a.putFiles([f1, f2]);
@@ -143,10 +180,16 @@ void main() {
 
   test('a_season_with_no_episodes_survives_a_reload', () async {
     final a = FileLibraryIndex(box, accountId: 'a');
-    await a.putShow(const MatchedShow(tmdbId: 2, title: 'Harbor', seasons: {
-      0: [],
-      1: [MatchedEpisode(season: 1, episode: 1)],
-    }));
+    await a.putShow(
+      const MatchedShow(
+        tmdbId: 2,
+        title: 'Harbor',
+        seasons: {
+          0: [],
+          1: [MatchedEpisode(season: 1, episode: 1)],
+        },
+      ),
+    );
     final b = FileLibraryIndex(box, accountId: 'a');
     expect(b.show(2)!.seasons.keys, unorderedEquals([0, 1]));
     expect(b.show(2)!.seasons[0], isEmpty);

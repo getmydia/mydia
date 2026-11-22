@@ -24,20 +24,14 @@ typedef ArtworkLoader = Future<String?> Function(String url);
 /// p2p remote control uses.
 class MediaSessionBridge {
   MediaSessionBridge({
-    required RemoteTargetController controller,
-    required Future<SystemMediaSession> Function() createSession,
-    required NowPlayingMetadataResolver resolver,
-    required ArtworkLoader loadArtwork,
-    required Future<void> Function() raiseWindow,
-    required SourceId? Function() playingSource,
-    bool Function() redact = _never,
-  })  : _redact = redact,
-        _playingSource = playingSource,
-        _controller = controller,
-        _createSession = createSession,
-        _resolver = resolver,
-        _loadArtwork = loadArtwork,
-        _raiseWindow = raiseWindow;
+    required this._controller,
+    required this._createSession,
+    required this._resolver,
+    required this._loadArtwork,
+    required this._raiseWindow,
+    required this._playingSource,
+    this._redact = _never,
+  });
 
   final RemoteTargetController _controller;
   final Future<SystemMediaSession> Function() _createSession;
@@ -88,9 +82,10 @@ class MediaSessionBridge {
     if (first != null && !redacted) {
       if (sourceId != null) {
         metadata = await _resolver.resolve(
-            sourceId: sourceId,
-            mediaItemId: first.mediaItemId,
-            episodeId: first.episodeId);
+          sourceId: sourceId,
+          mediaItemId: first.mediaItemId,
+          episodeId: first.episodeId,
+        );
       }
       final url = metadata?.posterUrl;
       if (url != null) {
@@ -110,8 +105,11 @@ class MediaSessionBridge {
 
     // Re-read after the awaits so status and position are current. A player
     // swapped in meanwhile would have bumped the generation above.
-    var state = mediaSessionStateFrom(_controller.snapshot(),
-        metadata: metadata, artworkPath: artworkPath);
+    var state = mediaSessionStateFrom(
+      _controller.snapshot(),
+      metadata: metadata,
+      artworkPath: artworkPath,
+    );
     // A locked or hidden source is playing: the lock screen and MPRIS say
     // only that something is.
     if (redacted && state.status != MediaSessionStatus.stopped) {
@@ -168,7 +166,8 @@ final mediaSessionBridgeProvider = Provider<MediaSessionBridge>((ref) {
     controller: controller,
     createSession: () => createPlatformMediaSession(
       position: () => Duration(
-          milliseconds: controller.snapshot()?.positionMs.toInt() ?? 0),
+        milliseconds: controller.snapshot()?.positionMs.toInt() ?? 0,
+      ),
     ),
     resolver: ref.read(nowPlayingMetadataResolverProvider),
     // The same cache and fetch the poster grid uses, so a poster the user

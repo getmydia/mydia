@@ -39,13 +39,17 @@ void main() {
 
     test('a backend failure throws instead of reading as absent', () async {
       await expectLater(
-          NativeP2pKeystore(backend: _BrokenBackend()).read(), throwsException);
+        NativeP2pKeystore(backend: _BrokenBackend()).read(),
+        throwsException,
+      );
     });
 
     test('a stored value that is not 32 bytes throws', () async {
       final backend = _MapBackend()..values['p2p_node_secret'] = 'AAAA';
       await expectLater(
-          NativeP2pKeystore(backend: backend).read(), throwsA(anything));
+        NativeP2pKeystore(backend: backend).read(),
+        throwsA(anything),
+      );
     });
   });
 }

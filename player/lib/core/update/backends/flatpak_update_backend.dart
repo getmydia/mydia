@@ -15,12 +15,10 @@ import '../update_track.dart';
 /// GitHub release client is never consulted.
 class FlatpakUpdateBackend implements UpdateBackend {
   FlatpakUpdateBackend({
-    required FlatpakPortal portal,
-    required String releaseNotesUrl,
-    String? branch,
-  })  : _portal = portal,
-        _releaseNotesUrl = releaseNotesUrl,
-        _branch = branch;
+    required this._portal,
+    required this._releaseNotesUrl,
+    this._branch,
+  });
 
   final FlatpakPortal _portal;
   final String _releaseNotesUrl;
@@ -63,10 +61,12 @@ class FlatpakUpdateBackend implements UpdateBackend {
       if (commits.updateReady) {
         _publish(FlatpakRemoteUpdate(releaseNotesUrl: _releaseNotesUrl));
       } else if (commits.awaitingRestart) {
-        _publish(FlatpakRemoteUpdate(
-          releaseNotesUrl: _releaseNotesUrl,
-          installedAwaitingRestart: true,
-        ));
+        _publish(
+          FlatpakRemoteUpdate(
+            releaseNotesUrl: _releaseNotesUrl,
+            installedAwaitingRestart: true,
+          ),
+        );
       } else {
         _publish(null);
       }
@@ -92,8 +92,11 @@ class FlatpakUpdateBackend implements UpdateBackend {
   bool get canUpdateInPlace => _monitoring;
 
   @override
-  Set<UpdateTrack> get availableTracks =>
-      const {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev};
+  Set<UpdateTrack> get availableTracks => const {
+    UpdateTrack.stable,
+    UpdateTrack.beta,
+    UpdateTrack.dev,
+  };
 
   @override
   UpdateTrack get currentTrack =>
@@ -144,9 +147,11 @@ class FlatpakUpdateBackend implements UpdateBackend {
         'flatpak uninstall dev.mydia.player//${installed.wireName}',
     ];
     return TrackSwitchDeferred(
-      instructions: 'Flatpak branches are changed outside the app. Run:\n\n'
+      instructions:
+          'Flatpak branches are changed outside the app. Run:\n\n'
           '${commands.join('\n')}',
-      url: 'https://docs.mydia.dev/latest/using/how-to/install-player-linux/'
+      url:
+          'https://docs.mydia.dev/latest/using/how-to/install-player-linux/'
           '${track == UpdateTrack.stable ? '' : '#${track.wireName}'}',
     );
   }
@@ -167,8 +172,8 @@ class FlatpakUpdateBackend implements UpdateBackend {
     // each would see the other's signals. The second caller gets the first
     // call's result. Its onProgress is deliberately dropped: there is one
     // transaction, and it already has a reporter.
-    return _inFlight ??=
-        _runUpdate(onProgress: onProgress).whenComplete(() => _inFlight = null);
+    return _inFlight ??= _runUpdate(onProgress: onProgress)
+        .whenComplete(() => _inFlight = null);
   }
 
   Future<UpdateOutcome> _runUpdate({

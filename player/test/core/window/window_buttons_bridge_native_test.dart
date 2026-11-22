@@ -27,8 +27,7 @@ void main() {
       );
     });
 
-    test(
-        'false hiding on fullscreen macOS — the OS already hides them '
+    test('false hiding on fullscreen macOS — the OS already hides them '
         'there', () {
       expect(
         shouldCallNativeButtonBridge(
@@ -40,8 +39,7 @@ void main() {
       );
     });
 
-    test(
-        'true restoring on fullscreen macOS — a restore is always safe to '
+    test('true restoring on fullscreen macOS — a restore is always safe to '
         'pass through, so the dispose() safety net still reaches native '
         'code even when the player is torn down while still fullscreen', () {
       expect(
@@ -71,8 +69,7 @@ void main() {
         );
       });
 
-      test(
-          'false restoring on ${platform.name} — no traffic lights there '
+      test('false restoring on ${platform.name} — no traffic lights there '
           'either', () {
         expect(
           shouldCallNativeButtonBridge(
@@ -85,8 +82,7 @@ void main() {
       });
     }
 
-    test(
-        'false on Linux, where the buttons are Flutter-drawn and the native '
+    test('false on Linux, where the buttons are Flutter-drawn and the native '
         'bridge has nothing to hide', () {
       expect(
         shouldCallNativeButtonBridge(
@@ -102,29 +98,38 @@ void main() {
   group('publishWindowButtonsHidden', () {
     tearDown(() => windowButtonsHiddenSignal.value = false);
 
-    testWidgets('a restore from dispose lands after the frame, not under it',
-        (tester) async {
+    testWidgets('a restore from dispose lands after the frame, not under it', (
+      tester,
+    ) async {
       windowButtonsHiddenSignal.value = true;
-      await tester.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: Column(children: [
-          ValueListenableBuilder<bool>(
-            valueListenable: windowButtonsHidden,
-            builder: (_, hidden, __) => Text('hidden: $hidden'),
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Column(
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: windowButtonsHidden,
+                builder: (_, hidden, _) => Text('hidden: $hidden'),
+              ),
+              const _RestoresOnDispose(),
+            ],
           ),
-          const _RestoresOnDispose(),
-        ]),
-      ));
+        ),
+      );
 
-      await tester.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: Column(children: [
-          ValueListenableBuilder<bool>(
-            valueListenable: windowButtonsHidden,
-            builder: (_, hidden, __) => Text('hidden: $hidden'),
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Column(
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: windowButtonsHidden,
+                builder: (_, hidden, _) => Text('hidden: $hidden'),
+              ),
+            ],
           ),
-        ]),
-      ));
+        ),
+      );
       expect(tester.takeException(), isNull);
       await tester.pump();
 

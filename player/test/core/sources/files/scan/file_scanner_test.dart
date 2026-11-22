@@ -51,14 +51,13 @@ void main() {
     FakeBackend b, {
     DateTime Function()? now,
     AppForeground? foreground,
-  }) =>
-      FileScanner(
-        backend: b,
-        names: names,
-        index: index,
-        now: now,
-        foreground: foreground,
-      );
+  }) => FileScanner(
+    backend: b,
+    names: names,
+    index: index,
+    now: now,
+    foreground: foreground,
+  );
 
   group('the app leaving the foreground mid-walk', () {
     // iOS freezes a backgrounded app; the request in flight then times out
@@ -66,18 +65,16 @@ void main() {
     test('a_folder_that_failed_while_away_is_read_again_on_return', () async {
       final app = AppForeground();
       final b = _SuspendingBackend(
-          {
-            '/lib/A.mkv': 1,
-            '/lib/sub/B.mkv': 1,
-            '/lib/sub/deeper/C.mkv': 1,
-          },
-          app: app,
-          suspendOn: {'/lib/sub': 1});
+        {'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1, '/lib/sub/deeper/C.mkv': 1},
+        app: app,
+        suspendOn: {'/lib/sub': 1},
+      );
 
       var finished = false;
-      final scan = scanner(b, foreground: app)
-          .scan(root)
-          .whenComplete(() => finished = true);
+      final scan = scanner(
+        b,
+        foreground: app,
+      ).scan(root).whenComplete(() => finished = true);
       await pumpEventQueue();
       expect(finished, isFalse, reason: 'waits for the app to come back');
       expect(index.files(), isEmpty);
@@ -85,42 +82,57 @@ void main() {
       app.onLifecycle(AppLifecycleState.resumed);
       final delta = await scan;
 
-      expect([for (final f in delta.added) f.path],
-          unorderedEquals(['A.mkv', 'sub/B.mkv', 'sub/deeper/C.mkv']));
+      expect([
+        for (final f in delta.added) f.path,
+      ], unorderedEquals(['A.mkv', 'sub/B.mkv', 'sub/deeper/C.mkv']));
       // Picked up at the folder that failed, not walked again from the top.
       expect(b.listed.where((d) => d == '/lib'), hasLength(1));
       expect(b.listed.where((d) => d == '/lib/sub'), hasLength(2));
     });
 
-    test('a_folder_that_fails_in_the_foreground_still_fails_the_scan',
-        () async {
-      final app = AppForeground();
-      final b = FakeBackend({'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1});
-      b.failures['/lib/sub'] = const BackendUnreachable('timed out');
-      await expectLater(scanner(b, foreground: app).scan(root),
-          throwsA(isA<BackendUnreachable>()));
-      expect(b.listed.where((d) => d == '/lib/sub'), hasLength(1));
-      expect(index.files(), isEmpty);
-    });
+    test(
+      'a_folder_that_fails_in_the_foreground_still_fails_the_scan',
+      () async {
+        final app = AppForeground();
+        final b = FakeBackend({'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1});
+        b.failures['/lib/sub'] = const BackendUnreachable('timed out');
+        await expectLater(
+          scanner(b, foreground: app).scan(root),
+          throwsA(isA<BackendUnreachable>()),
+        );
+        expect(b.listed.where((d) => d == '/lib/sub'), hasLength(1));
+        expect(index.files(), isEmpty);
+      },
+    );
 
     test('a_folder_that_fails_after_every_return_ends_the_scan', () async {
       final app = AppForeground();
-      final b = _SuspendingBackend({'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1},
-          app: app, suspendOn: {'/lib/sub': 100}, resumeAfter: true);
-      await expectLater(scanner(b, foreground: app).scan(root),
-          throwsA(isA<BackendUnreachable>()));
-      expect(b.listed.where((d) => d == '/lib/sub'),
-          hasLength(FileScanner.maxReadsAcrossSuspensions));
+      final b = _SuspendingBackend(
+        {'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1},
+        app: app,
+        suspendOn: {'/lib/sub': 100},
+        resumeAfter: true,
+      );
+      await expectLater(
+        scanner(b, foreground: app).scan(root),
+        throwsA(isA<BackendUnreachable>()),
+      );
+      expect(
+        b.listed.where((d) => d == '/lib/sub'),
+        hasLength(FileScanner.maxReadsAcrossSuspensions),
+      );
     });
 
     test('a_refusal_while_away_is_not_retried', () async {
       // The app leaves during the refused listing, and never comes back:
       // the scan still ends, with the folder skipped rather than retried.
       final app = AppForeground();
-      final b = _SuspendingBackend({'/lib/A.mkv': 1, '/lib/locked/B.mkv': 1},
-          app: app,
-          suspendOn: {'/lib/locked': 1},
-          failure: const BackendUnauthorized('HTTP 403'));
+      final b = _SuspendingBackend(
+        {'/lib/A.mkv': 1, '/lib/locked/B.mkv': 1},
+        app: app,
+        suspendOn: {'/lib/locked': 1},
+        failure: const BackendUnauthorized('HTTP 403'),
+      );
       final delta = await scanner(b, foreground: app).scan(root);
       expect([for (final f in delta.added) f.path], ['A.mkv']);
       expect(delta.skippedPaths, ['locked']);
@@ -132,12 +144,16 @@ void main() {
       // iOS grants a few seconds after leaving; a listing started then is
       // frozen with no departure during it, so it must wait instead.
       final app = AppForeground();
-      final b = _LeaveAfterBackend({'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1}, app,
-          after: '/lib');
+      final b = _LeaveAfterBackend(
+        {'/lib/A.mkv': 1, '/lib/sub/B.mkv': 1},
+        app,
+        after: '/lib',
+      );
       var finished = false;
-      final scan = scanner(b, foreground: app)
-          .scan(root)
-          .whenComplete(() => finished = true);
+      final scan = scanner(
+        b,
+        foreground: app,
+      ).scan(root).whenComplete(() => finished = true);
       await pumpEventQueue();
       expect(b.listed, ['/lib']);
       expect(finished, isFalse);
@@ -145,8 +161,9 @@ void main() {
       app.onLifecycle(AppLifecycleState.resumed);
       final delta = await scan;
       expect(b.listed, ['/lib', '/lib/sub']);
-      expect([for (final f in delta.added) f.path],
-          unorderedEquals(['A.mkv', 'sub/B.mkv']));
+      expect([
+        for (final f in delta.added) f.path,
+      ], unorderedEquals(['A.mkv', 'sub/B.mkv']));
     });
   });
 
@@ -211,25 +228,25 @@ void main() {
   test('a_root_whose_kind_changes_is_read_again', () async {
     final b = FakeBackend({'/lib/A.mkv': 1});
     await scanner(b).scan(root);
-    final delta = await scanner(b).scan(const LibraryRoot(
-      id: 'r1',
-      path: '/lib',
-      kind: FilesLibraryKind.series,
-      title: 'Lib',
-    ));
+    final delta = await scanner(b).scan(
+      const LibraryRoot(
+        id: 'r1',
+        path: '/lib',
+        kind: FilesLibraryKind.series,
+        title: 'Lib',
+      ),
+    );
     expect(delta.changed, hasLength(1));
     expect(delta.changed.single.parsedAs, FilesLibraryKind.series);
     expect(names.parsedPaths, hasLength(2));
-    expect(
-      index.files().values.single.parsedAs,
-      FilesLibraryKind.series,
-    );
+    expect(index.files().values.single.parsedAs, FilesLibraryKind.series);
   });
 
   test('a_root_removed_while_it_is_walked_gets_no_files_back', () async {
     await index.putRoot(root);
-    final b =
-        _RemovesRootOnList({'/lib/A.mkv': 1}, () => index.removeRoot(root.id));
+    final b = _RemovesRootOnList({
+      '/lib/A.mkv': 1,
+    }, () => index.removeRoot(root.id));
     final delta = await scanner(b).scan(root);
     expect(delta.isEmpty, isTrue);
     expect(index.files(), isEmpty);
@@ -263,7 +280,9 @@ void main() {
     b.removeFile('/lib/A.mkv');
     b.failures['/lib/sub'] = const BackendUnreachable('down');
     await expectLater(
-        scanner(b).scan(root), throwsA(isA<BackendUnreachable>()));
+      scanner(b).scan(root),
+      throwsA(isA<BackendUnreachable>()),
+    );
     expect(index.files().values.map((f) => f.path).toSet(), {
       'A.mkv',
       'sub/B.mkv',
@@ -305,20 +324,25 @@ void main() {
     // `media/Glass Harbor//` is the folder `/Glass Harbor/`, a child of
     // `/Glass Harbor`: told apart by path alone after one trailing slash is
     // trimmed, it would read as visited and its files never be indexed.
-    String obj(String key) => '<Contents><Key>$key</Key>'
+    String obj(String key) =>
+        '<Contents><Key>$key</Key>'
         '<LastModified>2026-01-02T03:04:05.000Z</LastModified>'
         '<Size>10</Size><StorageClass>STANDARD</StorageClass></Contents>';
-    String pfx(String p) => '<CommonPrefixes><Prefix>$p</Prefix>'
+    String pfx(String p) =>
+        '<CommonPrefixes><Prefix>$p</Prefix>'
         '</CommonPrefixes>';
-    String page(String inner) => '<ListBucketResult>'
+    String page(String inner) =>
+        '<ListBucketResult>'
         '<IsTruncated>false</IsTruncated>$inner</ListBucketResult>';
     final listings = {
       'media/': page(pfx('media/Glass Harbor/')),
       'media/Glass Harbor/': page(
-          obj('media/Glass Harbor/Glass Harbor S01E01.mkv') +
-              pfx('media/Glass Harbor//')),
-      'media/Glass Harbor//':
-          page(obj('media/Glass Harbor//Glass Harbor S01E02.mkv')),
+        obj('media/Glass Harbor/Glass Harbor S01E01.mkv') +
+            pfx('media/Glass Harbor//'),
+      ),
+      'media/Glass Harbor//': page(
+        obj('media/Glass Harbor//Glass Harbor S01E02.mkv'),
+      ),
     };
     final s3 = S3Backend(
       location: S3Location(
@@ -356,12 +380,15 @@ void main() {
     // The bucket under `media/` holds `media/Films/a.mkv` and
     // `media/Films//a.mkv`: the file `/Films/a.mkv`, and `/Films//a.mkv`
     // in the folder `/Films/`.
-    String obj(String key) => '<Contents><Key>$key</Key>'
+    String obj(String key) =>
+        '<Contents><Key>$key</Key>'
         '<LastModified>2026-01-02T03:04:05.000Z</LastModified>'
         '<Size>10</Size><StorageClass>STANDARD</StorageClass></Contents>';
-    String pfx(String p) => '<CommonPrefixes><Prefix>$p</Prefix>'
+    String pfx(String p) =>
+        '<CommonPrefixes><Prefix>$p</Prefix>'
         '</CommonPrefixes>';
-    String page(String inner) => '<ListBucketResult>'
+    String page(String inner) =>
+        '<ListBucketResult>'
         '<IsTruncated>false</IsTruncated>$inner</ListBucketResult>';
     final listings = {
       'media/': page(pfx('media/Films/')),
@@ -376,18 +403,16 @@ void main() {
       style: S3Style.path,
     );
     S3Backend s3() => S3Backend(
-          location: location,
-          accessKeyId: 'AKIDEXAMPLE',
-          secretAccessKey: 'secret',
-          client: MockClient((r) async {
-            final body = r.method == 'GET'
-                ? listings[r.url.queryParameters['prefix']]
-                : null;
-            return body == null
-                ? http.Response('', 404)
-                : http.Response(body, 200);
-          }),
-        );
+      location: location,
+      accessKeyId: 'AKIDEXAMPLE',
+      secretAccessKey: 'secret',
+      client: MockClient((r) async {
+        final body = r.method == 'GET'
+            ? listings[r.url.queryParameters['prefix']]
+            : null;
+        return body == null ? http.Response('', 404) : http.Response(body, 200);
+      }),
+    );
 
     /// The object key the presigned URL for [path] reads.
     Future<String> keyPlayed(String path) async {
@@ -396,11 +421,11 @@ void main() {
     }
 
     LibraryRoot rootAt(String path) => LibraryRoot(
-          id: 'r${path.length}',
-          path: path,
-          kind: FilesLibraryKind.mixed,
-          title: 'Films',
-        );
+      id: 'r${path.length}',
+      path: path,
+      kind: FilesLibraryKind.mixed,
+      title: 'Films',
+    );
 
     for (final (rootPath, keys) in [
       ('/Films/', {'media/Films//a.mkv'}),
@@ -427,22 +452,26 @@ void main() {
       '/lib/sub/deeper/C.mkv': 1,
     });
     await scanner(b).scan(root);
-    expect(index.files().values.map((f) => f.path).toSet(),
-        {'A.mkv', 'sub/B.mkv', 'sub/deeper/C.mkv'});
+    expect(index.files().values.map((f) => f.path).toSet(), {
+      'A.mkv',
+      'sub/B.mkv',
+      'sub/deeper/C.mkv',
+    });
     for (final f in index.files().values) {
       expect(filesBackendPath(root, f.path), '/lib/${f.path}');
     }
 
     const top = LibraryRoot(
-        id: 'rtop', path: '/', kind: FilesLibraryKind.mixed, title: 'Top');
+      id: 'rtop',
+      path: '/',
+      kind: FilesLibraryKind.mixed,
+      title: 'Top',
+    );
     await scanner(FakeBackend({'/A.mkv': 1, '/sub/B.mkv': 1})).scan(top);
     expect(
-        index
-            .files()
-            .values
-            .where((f) => f.rootId == 'rtop')
-            .map((f) => f.path),
-        unorderedEquals(['A.mkv', 'sub/B.mkv']));
+      index.files().values.where((f) => f.rootId == 'rtop').map((f) => f.path),
+      unorderedEquals(['A.mkv', 'sub/B.mkv']),
+    );
   });
 
   group('webdav entries the server refuses', () {
@@ -455,26 +484,29 @@ void main() {
 
     /// Serves `PROPFIND` from [listings], by request path.
     FileScanner davScanner(Map<String, String> listings) => FileScanner(
-          backend: WebDavBackend(
-            base: Uri.parse('https://dav.example.test/media/'),
-            user: 'u',
-            password: 'p',
-            client: MockClient((r) async {
-              final body = listings[r.url.path];
-              return body == null
-                  ? http.Response('', 404)
-                  : http.Response(body, 207);
-            }),
-          ),
-          names: names,
-          index: index,
-        );
+      backend: WebDavBackend(
+        base: Uri.parse('https://dav.example.test/media/'),
+        user: 'u',
+        password: 'p',
+        client: MockClient((r) async {
+          final body = listings[r.url.path];
+          return body == null
+              ? http.Response('', 404)
+              : http.Response(body, 207);
+        }),
+      ),
+      names: names,
+      index: index,
+    );
 
     Set<String> indexed() => index.files().values.map((f) => f.path).toSet();
 
     final readable = {
-      '/media/':
-          _ms([_dir('/media/'), _dir('/media/Show/'), _file('/media/A.mkv')]),
+      '/media/': _ms([
+        _dir('/media/'),
+        _dir('/media/Show/'),
+        _file('/media/A.mkv'),
+      ]),
       '/media/Show/': _ms([
         _dir('/media/Show/'),
         _file('/media/Show/Show S01E01.mkv'),
@@ -529,7 +561,9 @@ void main() {
     b.setFile('/lib/B.mkv', 1);
     b.failures['/lib'] = const BackendPermissionLost('/lib');
     await expectLater(
-        scanner(b).scan(root), throwsA(isA<BackendPermissionLost>()));
+      scanner(b).scan(root),
+      throwsA(isA<BackendPermissionLost>()),
+    );
     expect(index.files().values.map((f) => f.path), ['A.mkv']);
   });
 
@@ -543,8 +577,11 @@ void main() {
       await tmp.delete(recursive: true);
     });
     final chmod = await Process.run('chmod', ['000', locked.path]);
-    expect(chmod.exitCode, 0,
-        reason: 'could not lock the folder: ${chmod.stderr}');
+    expect(
+      chmod.exitCode,
+      0,
+      reason: 'could not lock the folder: ${chmod.stderr}',
+    );
     final local = LibraryRoot(
       id: 'rl',
       path: tmp.path,
@@ -594,25 +631,35 @@ void main() {
 
     test('a_linked_directory_is_walked_and_its_files_found_once', () async {
       final delta = await FileScanner(
-              backend: LocalPathBackend(), names: names, index: index)
-          .scan(local);
+        backend: LocalPathBackend(),
+        names: names,
+        index: index,
+      ).scan(local);
       final paths = [for (final f in delta.added) f.path];
       expect(paths, hasLength(3));
       expect(paths, contains('Glass Orchard S01E01.mkv'));
       expect(paths, contains('elsewhere/Harbor Lights (2020).mkv'));
-      expect(paths.where((p) => p.endsWith('/Copper Valley (2018).mkv')),
-          hasLength(1));
+      expect(
+        paths.where((p) => p.endsWith('/Copper Valley (2018).mkv')),
+        hasLength(1),
+      );
     });
 
     test('a_root_reached_through_a_link_is_walked_once', () async {
       Link('${tmp.path}/via').createSync(local.path);
-      final delta = await FileScanner(
-              backend: LocalPathBackend(), names: names, index: index)
-          .scan(LibraryRoot(
+      final delta =
+          await FileScanner(
+            backend: LocalPathBackend(),
+            names: names,
+            index: index,
+          ).scan(
+            LibraryRoot(
               id: 'r1',
               path: '${tmp.path}/via',
               kind: FilesLibraryKind.mixed,
-              title: 'Lib'));
+              title: 'Lib',
+            ),
+          );
       // Without the root's own identity, `real/up` would walk it again and
       // find the top-level episode a second time.
       final paths = [for (final f in delta.added) f.path];
@@ -716,18 +763,21 @@ String _ms(List<String> responses) =>
     '<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">'
     '${responses.join()}</D:multistatus>';
 
-String _dir(String href) => '<D:response><D:href>$href</D:href>'
+String _dir(String href) =>
+    '<D:response><D:href>$href</D:href>'
     '<D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype>'
     '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>';
 
-String _file(String href) => '<D:response><D:href>$href</D:href>'
+String _file(String href) =>
+    '<D:response><D:href>$href</D:href>'
     '<D:propstat><D:prop><D:resourcetype/>'
     '<D:getcontentlength>10</D:getcontentlength>'
     '<D:getlastmodified>Sun, 01 Nov 2026 12:00:00 GMT</D:getlastmodified>'
     '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>';
 
 /// Refused, with no resourcetype: nothing says whether it is a folder.
-String _denied(String href) => '<D:response><D:href>$href</D:href>'
+String _denied(String href) =>
+    '<D:response><D:href>$href</D:href>'
     '<D:propstat><D:prop/><D:status>HTTP/1.1 403 Forbidden</D:status>'
     '</D:propstat></D:response>';
 

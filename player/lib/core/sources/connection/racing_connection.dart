@@ -27,7 +27,8 @@ typedef CandidateFetch = Future<List<ServerConnection>> Function();
 
 /// [all] filtered to what may be tried and sorted best first.
 typedef ConnectionRanking = List<ServerConnection> Function(
-    List<ServerConnection> all);
+  List<ServerConnection> all,
+);
 
 /// Lower is better: local, then remote, then relay; HTTPS before HTTP.
 int connectionRank(ServerConnection c) =>
@@ -36,15 +37,12 @@ int connectionRank(ServerConnection c) =>
 class RacingConnection implements SourceConnection {
   RacingConnection({
     required this.expectedId,
-    required List<ServerConnection> candidates,
-    required IdentityProbe probe,
-    required ConnectionRanking rank,
-    CandidateFetch? refetch,
+    required this._candidates,
+    required this._probe,
+    required this._rank,
+    this._refetch,
     this.refreshEvery = const Duration(minutes: 15),
-  })  : _candidates = candidates,
-        _probe = probe,
-        _rank = rank,
-        _refetch = refetch;
+  });
 
   /// Started by the first use, not the constructor: the switcher builds a
   /// source just to show its status, and an idle source must not leave a
@@ -181,8 +179,8 @@ class RacingConnection implements SourceConnection {
     _status.value = connection.relay
         ? SourceConnectionStatus.relay
         : connection.local
-            ? SourceConnectionStatus.local
-            : SourceConnectionStatus.remote;
+        ? SourceConnectionStatus.local
+        : SourceConnectionStatus.remote;
     final waiters = List.of(_waiters);
     _waiters.clear();
     for (final w in waiters) {

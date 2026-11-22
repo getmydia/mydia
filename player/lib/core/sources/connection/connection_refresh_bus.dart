@@ -49,7 +49,9 @@ final networkChangeRefreshProvider = Provider<void>((ref) {
       debugPrint('[Sources] Connectivity events unavailable: $e');
   runZonedGuarded(() {
     try {
-      subscription = ref.read(connectivityChangesProvider).listen(
+      subscription = ref
+          .read(connectivityChangesProvider)
+          .listen(
             (_) => bus.ping(ConnectionRefreshReason.network),
             onError: unavailable,
           );

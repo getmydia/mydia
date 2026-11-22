@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -23,20 +23,20 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   @override
   Future<void> requestUpdate({
     void Function(double progress)? onProgress,
-  }) async =>
-      requestCount++;
+  }) async => requestCount++;
 }
 
 AppUpdate _update() => AppUpdate(
-      version: '0.15.0',
-      downloadUrl: 'https://example.invalid/player-linux-v0.15.0.tar.gz',
-      releaseNotesUrl: 'https://example.invalid/releases/0.15.0',
-      releaseTitle: 'Faster library scans',
-      publishedAt: DateTime.utc(2026, 8, 1),
-    );
+  version: '0.15.0',
+  downloadUrl: 'https://example.invalid/player-linux-v0.15.0.tar.gz',
+  releaseNotesUrl: 'https://example.invalid/releases/0.15.0',
+  releaseTitle: 'Faster library scans',
+  publishedAt: DateTime.utc(2026, 8, 1),
+);
 
-const _flatpakUpdate =
-    FlatpakRemoteUpdate(releaseNotesUrl: 'https://example.invalid/releases');
+const _flatpakUpdate = FlatpakRemoteUpdate(
+  releaseNotesUrl: 'https://example.invalid/releases',
+);
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -72,8 +72,9 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('an in-place install asks before closing the app',
-      (tester) async {
+  testWidgets('an in-place install asks before closing the app', (
+    tester,
+  ) async {
     final notifier = _FakeUpdateNotifier(
       UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
     );
@@ -95,50 +96,53 @@ void main() {
   });
 
   testWidgets(
-      'on a directional-primary device an in-place update skips confirm',
-      (tester) async {
-    final notifier = _FakeUpdateNotifier(
-      UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
-    );
+    'on a directional-primary device an in-place update skips confirm',
+    (tester) async {
+      final notifier = _FakeUpdateNotifier(
+        UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+      );
 
-    await _pump(
-      tester,
-      notifier: notifier,
-      environment: InstallEnvironment.inPlace,
-      launched: <Uri>[],
-      directionalPrimary: true,
-    );
-    await tester.tap(find.text('go'));
-    await tester.pumpAndSettle();
+      await _pump(
+        tester,
+        notifier: notifier,
+        environment: InstallEnvironment.inPlace,
+        launched: <Uri>[],
+        directionalPrimary: true,
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(find.textContaining('Mydia will close and update'), findsNothing);
-    expect(notifier.requestCount, 1);
-  });
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining('Mydia will close and update'), findsNothing);
+      expect(notifier.requestCount, 1);
+    },
+  );
 
   testWidgets(
-      'an install-without-asking backend (Android) skips the confirm on a '
-      'touch device too', (tester) async {
-    final notifier = _FakeUpdateNotifier(
-      UpdateState(
-        currentVersion: '0.14.2',
-        availableUpdate: _update(),
-        manualCheck: ManualCheckBehaviour.installsWithoutAsking,
-      ),
-    );
+    'an install-without-asking backend (Android) skips the confirm on a '
+    'touch device too',
+    (tester) async {
+      final notifier = _FakeUpdateNotifier(
+        UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+          manualCheck: ManualCheckBehaviour.installsWithoutAsking,
+        ),
+      );
 
-    await _pump(
-      tester,
-      notifier: notifier,
-      environment: InstallEnvironment.inPlace,
-      launched: <Uri>[],
-    );
-    await tester.tap(find.text('go'));
-    await tester.pumpAndSettle();
+      await _pump(
+        tester,
+        notifier: notifier,
+        environment: InstallEnvironment.inPlace,
+        launched: <Uri>[],
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Mydia will close and update'), findsNothing);
-    expect(notifier.requestCount, 1);
-  });
+      expect(find.textContaining('Mydia will close and update'), findsNothing);
+      expect(notifier.requestCount, 1);
+    },
+  );
 
   testWidgets('confirming an in-place update requests it', (tester) async {
     final notifier = _FakeUpdateNotifier(
@@ -179,54 +183,61 @@ void main() {
   });
 
   testWidgets(
-      'a Flatpak install requests the update through the backend directly, '
-      'with no dialog and no terminal command', (tester) async {
-    final notifier = _FakeUpdateNotifier(
-      const UpdateState(
-          currentVersion: '0.14.2', availableUpdate: _flatpakUpdate),
-    );
-    final launched = <Uri>[];
+    'a Flatpak install requests the update through the backend directly, '
+    'with no dialog and no terminal command',
+    (tester) async {
+      final notifier = _FakeUpdateNotifier(
+        const UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _flatpakUpdate,
+        ),
+      );
+      final launched = <Uri>[];
 
-    await _pump(
-      tester,
-      notifier: notifier,
-      environment: InstallEnvironment.flatpak,
-      launched: launched,
-    );
-    await tester.tap(find.text('go'));
-    await tester.pumpAndSettle();
+      await _pump(
+        tester,
+        notifier: notifier,
+        environment: InstallEnvironment.flatpak,
+        launched: launched,
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
 
-    // The portal already knows how to fetch and apply its own update, so
-    // this used to tell the user to run `flatpak update` themselves; now it
-    // just asks the backend to do it.
-    expect(notifier.requestCount, 1);
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(launched, isEmpty);
-  });
+      // The portal already knows how to fetch and apply its own update, so
+      // this used to tell the user to run `flatpak update` themselves; now it
+      // just asks the backend to do it.
+      expect(notifier.requestCount, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(launched, isEmpty);
+    },
+  );
 
-  testWidgets('a read-only install opens the release page and requests nothing',
-      (tester) async {
-    final notifier = _FakeUpdateNotifier(
-      UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
-    );
-    final launched = <Uri>[];
+  testWidgets(
+    'a read-only install opens the release page and requests nothing',
+    (tester) async {
+      final notifier = _FakeUpdateNotifier(
+        UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+      );
+      final launched = <Uri>[];
 
-    await _pump(
-      tester,
-      notifier: notifier,
-      environment: InstallEnvironment.readOnly,
-      launched: launched,
-    );
-    await tester.tap(find.text('go'));
-    await tester.pumpAndSettle();
+      await _pump(
+        tester,
+        notifier: notifier,
+        environment: InstallEnvironment.readOnly,
+        launched: launched,
+      );
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
 
-    expect(launched, [Uri.parse('https://example.invalid/releases/0.15.0')]);
-    expect(notifier.requestCount, 0);
-    expect(find.byType(AlertDialog), findsNothing);
-  });
+      expect(launched, [Uri.parse('https://example.invalid/releases/0.15.0')]);
+      expect(notifier.requestCount, 0);
+      expect(find.byType(AlertDialog), findsNothing);
+    },
+  );
 
-  testWidgets('with no update available nothing happens at all',
-      (tester) async {
+  testWidgets('with no update available nothing happens at all', (
+    tester,
+  ) async {
     final notifier = _FakeUpdateNotifier(
       const UpdateState(currentVersion: '0.14.2'),
     );

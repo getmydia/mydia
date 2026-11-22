@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -60,34 +60,45 @@ void main() {
       }
       return http.Response('', 404);
     });
-    final container = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),
-      plexIdentityProvider.overrideWith((ref) async => const PlexIdentity(
-          clientIdentifier: 'cid', version: '1', platform: 'Linux')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),
+        plexIdentityProvider.overrideWith(
+          (ref) async => const PlexIdentity(
+            clientIdentifier: 'cid',
+            version: '1',
+            platform: 'Linux',
+          ),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     await container.read(sourceRecordsProvider.future);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showPlexHomeSheet(context,
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showPlexHomeSheet(
+                  context,
                   account: plexRecord().account,
                   serverId: 'abc123',
-                  onSwitched: switched.add),
-              child: const Text('open'),
+                  onSwitched: switched.add,
+                ),
+                child: const Text('open'),
+              ),
             ),
           ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     return container;
@@ -99,16 +110,18 @@ void main() {
     guestGate = null;
   });
 
-  testWidgets('lists the Home users with a lock on protected ones',
-      (tester) async {
+  testWidgets('lists the Home users with a lock on protected ones', (
+    tester,
+  ) async {
     await pump(tester);
     expect(find.byKey(const Key('plex-home-user-owner')), findsOneWidget);
     expect(find.byKey(const Key('plex-home-user-kid0001')), findsOneWidget);
     expect(find.byKey(const Key('plex-home-user-guest02')), findsOneWidget);
     expect(
       find.descendant(
-          of: find.byKey(const Key('plex-home-user-kid0001')),
-          matching: find.byIcon(Icons.lock_rounded)),
+        of: find.byKey(const Key('plex-home-user-kid0001')),
+        matching: find.byIcon(Icons.lock_rounded),
+      ),
       findsOneWidget,
     );
   });
@@ -131,21 +144,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(switched, [const SourceId('acc1:kid0001:abc123')]);
-    expect(container.read(activeSourceIdProvider),
-        const SourceId('acc1:kid0001:abc123'));
-    expect(find.byKey(const Key('plex-home-user-kid0001')), findsNothing,
-        reason: 'the sheet closes after a switch');
+    expect(
+      container.read(activeSourceIdProvider),
+      const SourceId('acc1:kid0001:abc123'),
+    );
+    expect(
+      find.byKey(const Key('plex-home-user-kid0001')),
+      findsNothing,
+      reason: 'the sheet closes after a switch',
+    );
   });
 
-  testWidgets('a switch still completes when the sheet is dismissed mid-way',
-      (tester) async {
+  testWidgets('a switch still completes when the sheet is dismissed mid-way', (
+    tester,
+  ) async {
     guestGate = Completer<void>();
     final container = await pump(tester);
     await tester.tap(find.byKey(const Key('plex-home-user-guest02')));
     await tester.pump();
     Navigator.of(
-            tester.element(find.byKey(const Key('plex-home-user-guest02'))))
-        .pop();
+      tester.element(find.byKey(const Key('plex-home-user-guest02'))),
+    ).pop();
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('plex-home-user-guest02')), findsNothing);
 
@@ -153,8 +172,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(switched, [const SourceId('acc1:guest02:abc123')]);
-    expect(container.read(activeSourceIdProvider),
-        const SourceId('acc1:guest02:abc123'));
+    expect(
+      container.read(activeSourceIdProvider),
+      const SourceId('acc1:guest02:abc123'),
+    );
   });
 
   testWidgets('a failed user list shows an error', (tester) async {

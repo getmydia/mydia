@@ -40,8 +40,8 @@ class AppForeground {
         _back?.complete();
         _back = null;
       case AppLifecycleState.hidden ||
-            AppLifecycleState.paused ||
-            AppLifecycleState.detached:
+          AppLifecycleState.paused ||
+          AppLifecycleState.detached:
         if (_foreground) {
           _foreground = false;
           _departures++;

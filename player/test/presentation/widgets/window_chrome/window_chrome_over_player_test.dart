@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
@@ -64,47 +64,56 @@ Future<void> _pumpPlayingPlayer(
   );
 }
 
-final Finder _closeButton =
-    find.byKey(WindowButtonWidget.keyFor(WindowButton.close));
+final Finder _closeButton = find.byKey(
+  WindowButtonWidget.keyFor(WindowButton.close),
+);
 
 void main() {
   testWidgets(
-      'the window buttons survive a mouse moving onto them mid-playback',
-      (tester) async {
-    await _onLinux(() async {
-      await _pumpPlayingPlayer(tester);
+    'the window buttons survive a mouse moving onto them mid-playback',
+    (tester) async {
+      await _onLinux(() async {
+        await _pumpPlayingPlayer(tester);
 
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: const Offset(400, 300));
-      addTearDown(gesture.removePointer);
-      await tester.pump();
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.addPointer(location: const Offset(400, 300));
+        addTearDown(gesture.removePointer);
+        await tester.pump();
 
-      expect(_closeButton, findsOneWidget,
-          reason: 'precondition: buttons are shown');
+        expect(
+          _closeButton,
+          findsOneWidget,
+          reason: 'precondition: buttons are shown',
+        );
 
-      // Aim at the close button, the way a viewer reaching for it does.
-      await gesture.moveTo(tester.getCenter(_closeButton));
-      await tester.pumpAndSettle();
+        // Aim at the close button, the way a viewer reaching for it does.
+        await gesture.moveTo(tester.getCenter(_closeButton));
+        await tester.pumpAndSettle();
 
-      expect(
-        _closeButton,
-        findsOneWidget,
-        reason: 'the button was deleted out from under the cursor aiming at '
-            'it, so the click lands on nothing',
-      );
+        expect(
+          _closeButton,
+          findsOneWidget,
+          reason:
+              'the button was deleted out from under the cursor aiming at '
+              'it, so the click lands on nothing',
+        );
 
-      // The player is entitled to consider its own chrome hidden here: from
-      // where it sits, under the button, the pointer did leave (the button
-      // is a plain positioned child that absorbs its own hit test, so the
-      // tap and the hover both stop there and never reach the player's own
-      // full-area MouseRegion underneath). What it is not entitled to do is
-      // take the window buttons with it.
-      expect(windowButtonsHidden.value, isTrue);
-    });
-  });
+        // The player is entitled to consider its own chrome hidden here: from
+        // where it sits, under the button, the pointer did leave (the button
+        // is a plain positioned child that absorbs its own hit test, so the
+        // tap and the hover both stop there and never reach the player's own
+        // full-area MouseRegion underneath). What it is not entitled to do is
+        // take the window buttons with it.
+        expect(windowButtonsHidden.value, isTrue);
+      });
+    },
+  );
 
-  testWidgets('hovering anywhere in the end corner keeps the buttons alive',
-      (tester) async {
+  testWidgets('hovering anywhere in the end corner keeps the buttons alive', (
+    tester,
+  ) async {
     await _onLinux(() async {
       await _pumpPlayingPlayer(tester);
 
@@ -117,16 +126,18 @@ void main() {
       // button: a viewer heading for the close button crosses this on the
       // way, and the buttons have to still be there when they arrive. There
       // is no full-width strip to hover any more, only the corner itself.
-      await gesture
-          .moveTo(const Offset(800 - 20, kLinuxWindowChromeHeight / 2));
+      await gesture.moveTo(
+        const Offset(800 - 20, kLinuxWindowChromeHeight / 2),
+      );
       await tester.pumpAndSettle();
 
       expect(_closeButton, findsOneWidget);
     });
   });
 
-  testWidgets('reaching into the end corner restores buttons already hidden',
-      (tester) async {
+  testWidgets('reaching into the end corner restores buttons already hidden', (
+    tester,
+  ) async {
     await _onLinux(() async {
       await _pumpPlayingPlayer(tester);
 
@@ -135,8 +146,11 @@ void main() {
       // here.
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
-      expect(_closeButton, findsNothing,
-          reason: 'precondition: playback hid the buttons');
+      expect(
+        _closeButton,
+        findsNothing,
+        reason: 'precondition: playback hid the buttons',
+      );
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(
@@ -145,10 +159,14 @@ void main() {
       addTearDown(gesture.removePointer);
       await tester.pumpAndSettle();
 
-      expect(_closeButton, findsOneWidget,
-          reason: 'a pointer in the button corner must be able to summon '
-              'the window buttons; nothing underneath can, because the '
-              'corner takes the hover');
+      expect(
+        _closeButton,
+        findsOneWidget,
+        reason:
+            'a pointer in the button corner must be able to summon '
+            'the window buttons; nothing underneath can, because the '
+            'corner takes the hover',
+      );
     });
   });
 
@@ -172,14 +190,19 @@ void main() {
       await gesture.moveTo(const Offset(800 - 20, -50));
       await tester.pumpAndSettle();
 
-      expect(_closeButton, findsNothing,
-          reason: 'the pin is a reprieve while the cursor is there, not a '
-              'permanent override of the hidden state');
+      expect(
+        _closeButton,
+        findsNothing,
+        reason:
+            'the pin is a reprieve while the cursor is there, not a '
+            'permanent override of the hidden state',
+      );
     });
   });
 
-  testWidgets('the click a viewer aims at the close button actually lands',
-      (tester) async {
+  testWidgets('the click a viewer aims at the close button actually lands', (
+    tester,
+  ) async {
     await _onLinux(() async {
       final window = FakeWindowController();
       await _pumpPlayingPlayer(tester, controller: window);

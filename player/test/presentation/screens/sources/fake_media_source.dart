@@ -19,15 +19,26 @@ const fakeSource = Source(
     activeProfileId: 'owner',
   ),
   profile: SourceProfile(
-      id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+    id: 'owner',
+    accountId: 'acc1',
+    name: 'Quill',
+    isOwner: true,
+  ),
   server: SourceServer(
-      id: 'aa11', accountId: 'acc1', profileId: 'owner', name: 'Attic'),
+    id: 'aa11',
+    accountId: 'acc1',
+    profileId: 'owner',
+    name: 'Attic',
+  ),
 );
 
 ItemSummary fakeMovie(int n, {bool watched = false, int? progress}) =>
     ItemSummary(
       ref: ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm$n'),
+        sourceId: fakeSourceId,
+        kind: ItemKind.movie,
+        externalId: 'm$n',
+      ),
       title: 'Invented Film $n',
       year: 2000 + n,
       poster: ArtworkRef('/art/m$n'),
@@ -43,22 +54,28 @@ const fakeShow = ItemSummary(
 );
 
 const fakeSeason = ItemSummary(
-  ref:
-      ItemRef(sourceId: fakeSourceId, kind: ItemKind.season, externalId: 'se1'),
+  ref: ItemRef(
+    sourceId: fakeSourceId,
+    kind: ItemKind.season,
+    externalId: 'se1',
+  ),
   title: 'Season 1',
   index: 1,
 );
 
 ItemSummary fakeEpisode(int n) => ItemSummary(
-      ref: ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e$n'),
-      title: 'Invented Episode $n',
-      subtitle: 'S1 · E$n',
-      index: n,
-      parentIndex: 1,
-      durationSeconds: 1800,
-      defaultVersionId: 'part-$n',
-    );
+  ref: ItemRef(
+    sourceId: fakeSourceId,
+    kind: ItemKind.episode,
+    externalId: 'e$n',
+  ),
+  title: 'Invented Episode $n',
+  subtitle: 'S1 · E$n',
+  index: n,
+  parentIndex: 1,
+  durationSeconds: 1800,
+  defaultVersionId: 'part-$n',
+);
 
 class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
   FakeMediaSource({this.movieCount = 7, this.failWith, this.id = fakeSourceId});
@@ -98,9 +115,9 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
 
   @override
   Set<SourceCapability> get capabilities => const {
-        SourceCapability.watchedState,
-        SourceCapability.searchable,
-      };
+    SourceCapability.watchedState,
+    SourceCapability.searchable,
+  };
 
   @override
   SourceConnectionStatus get connection => _status.value;
@@ -122,25 +139,30 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
         sortOptions: [
           SortOption(id: 'title', name: SortName.title),
           SortOption(
-              id: 'added',
-              name: SortName.recentlyAdded,
-              descendingByDefault: true),
+            id: 'added',
+            name: SortName.recentlyAdded,
+            descendingByDefault: true,
+          ),
         ],
         filterOptions: [
-          FilterOption(id: 'unwatched', name: FilterName.unwatched)
+          FilterOption(id: 'unwatched', name: FilterName.unwatched),
         ],
       ),
       Library(
-          ref: shows,
-          title: 'Series',
-          kind: LibraryKind.shows,
-          sortOptions: [SortOption(id: 'title', name: SortName.title)]),
+        ref: shows,
+        title: 'Series',
+        kind: LibraryKind.shows,
+        sortOptions: [SortOption(id: 'title', name: SortName.title)],
+      ),
     ];
   }
 
   @override
-  Future<Page<ItemSummary>> browse(LibraryRef library, BrowseQuery query,
-      {Cursor? cursor}) async {
+  Future<Page<ItemSummary>> browse(
+    LibraryRef library,
+    BrowseQuery query, {
+    Cursor? cursor,
+  }) async {
     browseCalls.add((query, cursor));
     if (failWith case final e?) throw e;
     if (library == shows) return const Page(items: [fakeShow], total: 1);
@@ -159,13 +181,19 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
   Future<ItemDetail> item(ItemRef ref) async {
     if (ref.kind == ItemKind.show) {
       return const ItemDetail(
-          summary: fakeShow, overview: 'An invented series.');
+        summary: fakeShow,
+        overview: 'An invented series.',
+      );
     }
     if (ref.kind == ItemKind.season) {
       return const ItemDetail(
-          summary: fakeSeason,
-          show: ItemRef(
-              sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's1'));
+        summary: fakeSeason,
+        show: ItemRef(
+          sourceId: fakeSourceId,
+          kind: ItemKind.show,
+          externalId: 's1',
+        ),
+      );
     }
     final summary = ref.kind == ItemKind.episode
         ? fakeEpisode(int.parse(ref.externalId.substring(1)))
@@ -176,7 +204,7 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
       show: ref.kind == ItemKind.episode ? fakeShow.ref : null,
       genres: const ['Drama'],
       versions: const [
-        MediaVersion(id: 'part-1', container: 'mkv', height: 1080)
+        MediaVersion(id: 'part-1', container: 'mkv', height: 1080),
       ],
     );
   }
@@ -203,18 +231,21 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
 
   @override
   Future<List<ItemSummary>> search(String query) async => [
-        for (var n = 1; n <= movieCount; n++)
-          if (fakeMovie(n).title.toLowerCase().contains(query.toLowerCase()))
-            fakeMovie(n),
-      ];
+    for (var n = 1; n <= movieCount; n++)
+      if (fakeMovie(n).title.toLowerCase().contains(query.toLowerCase()))
+        fakeMovie(n),
+  ];
 
   @override
   void dispose() => _status.dispose();
 }
 
 const fakeResumingEpisode = ItemSummary(
-  ref:
-      ItemRef(sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e2'),
+  ref: ItemRef(
+    sourceId: fakeSourceId,
+    kind: ItemKind.episode,
+    externalId: 'e2',
+  ),
   title: 'Invented Episode 2',
   subtitle: 'S1 · E2',
   showTitle: 'Invented Series',
@@ -228,8 +259,8 @@ const fakeResumingEpisode = ItemSummary(
 /// [resuming], as the server would.
 class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
   FakeResumingSource({List<ItemSummary>? resuming})
-      : resuming =
-            resuming ?? [fakeResumingEpisode, fakeMovie(3, progress: 1200)];
+    : resuming =
+          resuming ?? [fakeResumingEpisode, fakeMovie(3, progress: 1200)];
 
   List<ItemSummary> resuming;
   SourceException? continueError;
@@ -251,8 +282,10 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
       !unremovable.contains(item.ref);
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.continueWatching};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.continueWatching,
+  };
 
   @override
   Future<List<ItemSummary>> continueWatching() async {
@@ -311,11 +344,11 @@ class FakeDetailSource extends FakeMediaSource
 
   @override
   Set<SourceCapability> get capabilities => {
-        ...super.capabilities,
-        SourceCapability.similar,
-        SourceCapability.favorites,
-        SourceCapability.nextUp,
-      };
+    ...super.capabilities,
+    SourceCapability.similar,
+    SourceCapability.favorites,
+    SourceCapability.nextUp,
+  };
 
   @override
   Future<List<ItemSummary>> similar(ItemRef ref) async {

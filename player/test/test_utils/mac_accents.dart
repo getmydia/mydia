@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' show Color;
+import 'package:material_ui/material_ui.dart' show Color;
 
 /// The accents System Settings offers, as `controlAccentColor` resolves them
 /// under the dark appearance. "Multicolour" is blue for apps without their

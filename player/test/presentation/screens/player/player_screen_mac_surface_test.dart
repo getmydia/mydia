@@ -8,7 +8,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -161,7 +161,10 @@ class _FakePlayer extends PlatformPlayer {
       tracks: withVideo
           ? probed
           : Tracks(
-              video: const [], audio: probed.audio, subtitle: probed.subtitle),
+              video: const [],
+              audio: probed.audio,
+              subtitle: probed.subtitle,
+            ),
     );
     final value = handleValue;
     if (value != null) _listedTracks.add(value);
@@ -203,7 +206,10 @@ ScriptedMydiaTransport _server() {
     if (request.operation == 'StreamingCandidates') {
       final id = request.variables['id'] as String? ?? 'file-1';
       return streamingCandidatesResponse(
-          directPlay: true, duration: 5400, fileId: id);
+        directPlay: true,
+        duration: 5400,
+        fileId: id,
+      );
     }
     return <String, dynamic>{
       '__typename': 'RootMutationType',
@@ -218,8 +224,12 @@ void _mockPlatformViews(WidgetTester tester) {
     SystemChannels.platform_views,
     (call) async => null,
   );
-  addTearDown(() => tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(SystemChannels.platform_views, null));
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform_views,
+      null,
+    ),
+  );
 }
 
 class _Rig {
@@ -255,34 +265,37 @@ Future<void> _mount(
   String fileId = 'file-1',
 }) async {
   final container = rig.container;
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: PlayerScreen(
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: fileId,
-        title: 'The Long Aurora',
-        session: MydiaPlaybackSession(
-          source: container.read(mediaSourceProvider(testMydiaSourceId))
-              as MydiaSource,
-          item: const ItemRef(
-            sourceId: testMydiaSourceId,
-            kind: ItemKind.movie,
-            externalId: 'movie-1',
-          ),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: PlayerScreen(
+          mediaId: 'movie-1',
+          mediaType: 'movie',
           fileId: fileId,
-          proxy: () => container.read(mediaProxyProvider),
+          title: 'The Long Aurora',
+          session: MydiaPlaybackSession(
+            source: container.read(
+              mediaSourceProvider(testMydiaSourceId),
+            ) as MydiaSource,
+            item: const ItemRef(
+              sourceId: testMydiaSourceId,
+              kind: ItemKind.movie,
+              externalId: 'movie-1',
+            ),
+            fileId: fileId,
+            proxy: () => container.read(mediaProxyProvider),
+          ),
+          createPlayer: createPlayer,
+          surface: surface,
+          outputPath: outputPath ?? () => VideoOutputPath.surface,
         ),
-        createPlayer: createPlayer,
-        surface: surface,
-        outputPath: outputPath ?? () => VideoOutputPath.surface,
       ),
     ),
-  ));
+  );
   await tester.pump();
 }
 
@@ -306,8 +319,12 @@ void main() {
     final fake = _FakePlayer(handleValue: 13);
     final surface = _FakeSurface()..attachGate = Completer<void>();
 
-    await _mount(tester, rig,
-        createPlayer: () => Player(platformPlayer: fake), surface: surface);
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: surface,
+    );
     await pumpUntil(tester, () => _log.contains('attach 13'));
     expect(_log, contains('attach 13'));
     await tester.pump(const Duration(milliseconds: 200));
@@ -320,27 +337,40 @@ void main() {
     await _unmount(tester);
   });
 
-  testWidgets('the start check waits for the track list, not just open',
-      (tester) async {
+  testWidgets('the start check waits for the track list, not just open', (
+    tester,
+  ) async {
     _mockPlatformViews(tester);
     final rig = _rig();
-    final fake =
-        _FakePlayer(handleValue: 14, withVideo: false, tracksOnOpen: false);
+    final fake = _FakePlayer(
+      handleValue: 14,
+      withVideo: false,
+      tracksOnOpen: false,
+    );
 
-    await _mount(tester, rig,
-        createPlayer: () => Player(platformPlayer: fake),
-        surface: _FakeSurface());
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: _FakeSurface(),
+    );
     await pumpUntil(tester, () => fake.opened);
     await tester.pump(const Duration(milliseconds: 500));
-    expect(_log, isNot(contains('awaitVideoOutput 14')),
-        reason: 'mpv has not listed the tracks yet');
+    expect(
+      _log,
+      isNot(contains('awaitVideoOutput 14')),
+      reason: 'mpv has not listed the tracks yet',
+    );
 
     fake.publishTracks();
     await pumpUntil(tester, _playing);
 
     expect(_log, contains('awaitVideoOutput 14'));
-    expect(find.byType(PlayerVideoSurface), findsOneWidget,
-        reason: 'an audio-only source is no surface failure');
+    expect(
+      find.byType(PlayerVideoSurface),
+      findsOneWidget,
+      reason: 'an audio-only source is no surface failure',
+    );
     await tester.runAsync(() async {
       expect(await rig.settings.getMacSurfaceFailedVersion(), isNull);
     });
@@ -348,37 +378,49 @@ void main() {
     await _unmount(tester);
   });
 
-  testWidgets(
-      'the surface path builds no VideoController and attaches '
+  testWidgets('the surface path builds no VideoController and attaches '
       'before open', (tester) async {
     _mockPlatformViews(tester);
     final rig = _rig();
     final fake = _FakePlayer(handleValue: 11);
     final surface = _FakeSurface();
 
-    await _mount(tester, rig,
-        createPlayer: () => Player(platformPlayer: fake), surface: surface);
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: surface,
+    );
     await pumpUntil(tester, _playing);
 
     expect(find.byType(PlayerVideoSurface), findsOneWidget);
     expect(find.byType(Video), findsNothing);
-    expect(fake.isVideoControllerAttached, isFalse,
-        reason: 'constructing a VideoController marks the player attached');
-    expect(_log,
-        containsAllInOrder(['attach 11', 'open 11', 'awaitVideoOutput 11']));
+    expect(
+      fake.isVideoControllerAttached,
+      isFalse,
+      reason: 'constructing a VideoController marks the player attached',
+    );
+    expect(
+      _log,
+      containsAllInOrder(['attach 11', 'open 11', 'awaitVideoOutput 11']),
+    );
 
     await _unmount(tester);
   });
 
-  testWidgets('dispose detaches the surface before disposing the player',
-      (tester) async {
+  testWidgets('dispose detaches the surface before disposing the player', (
+    tester,
+  ) async {
     _mockPlatformViews(tester);
     final rig = _rig();
     final fake = _FakePlayer(handleValue: 12);
 
-    await _mount(tester, rig,
-        createPlayer: () => Player(platformPlayer: fake),
-        surface: _FakeSurface());
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: _FakeSurface(),
+    );
     await pumpUntil(tester, _playing);
     await _unmount(tester);
     await tester.runAsync(() => pumpUntilReal(tester, () => fake.disposed));
@@ -397,13 +439,25 @@ void main() {
     }
 
     final surface = _FakeSurface();
-    await _mount(tester, rig,
-        createPlayer: next, surface: surface, fileId: 'file-a');
+    await _mount(
+      tester,
+      rig,
+      createPlayer: next,
+      surface: surface,
+      fileId: 'file-a',
+    );
     await pumpUntil(tester, _playing);
-    await _mount(tester, rig,
-        createPlayer: next, surface: surface, fileId: 'file-b');
-    await tester.runAsync(() =>
-        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await _mount(
+      tester,
+      rig,
+      createPlayer: next,
+      surface: surface,
+      fileId: 'file-b',
+    );
+    await tester.runAsync(
+      () =>
+          pumpUntilReal(tester, () => players.length == 2 && players[1].opened),
+    );
 
     expect(
       _log,
@@ -413,8 +467,9 @@ void main() {
     await _unmount(tester);
   });
 
-  testWidgets('the stats context carries the surface display headroom',
-      (tester) async {
+  testWidgets('the stats context carries the surface display headroom', (
+    tester,
+  ) async {
     _mockPlatformViews(tester);
     final rig = _rig();
     await rig.container.read(statsOverlayEnabledProvider.future);
@@ -423,8 +478,12 @@ void main() {
     final surface = _FakeSurface();
     addTearDown(surface.displays.close);
 
-    await _mount(tester, rig,
-        createPlayer: () => Player(platformPlayer: fake), surface: surface);
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: surface,
+    );
     await pumpUntil(tester, _playing);
     await tester.pump(const Duration(seconds: 1));
 
@@ -432,14 +491,19 @@ void main() {
     expect(panel, findsOneWidget);
     expect(surface.displays.hasListener, isTrue);
     PlayerStatsPanel widget() => tester.widget<PlayerStatsPanel>(panel);
-    expect(widget().statsContext().outputHeadroom, isNull,
-        reason: 'no display reading yet is not a headroom of 1');
+    expect(
+      widget().statsContext().outputHeadroom,
+      isNull,
+      reason: 'no display reading yet is not a headroom of 1',
+    );
 
-    surface.displays.add(const DisplayInfo(
-      edrHeadroom: 4.0,
-      potentialHeadroom: 8.0,
-      screenName: 'Test',
-    ));
+    surface.displays.add(
+      const DisplayInfo(
+        edrHeadroom: 4.0,
+        potentialHeadroom: 8.0,
+        screenName: 'Test',
+      ),
+    );
     await tester.pump();
     expect(widget().statsContext().outputHeadroom, 4.0);
 
@@ -460,11 +524,16 @@ void main() {
       return Player(platformPlayer: p);
     }
 
-    await _mount(tester, rig,
-        createPlayer: next,
-        surface: _FakeSurface(start: VideoOutputStart.failed));
-    await tester.runAsync(() =>
-        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await _mount(
+      tester,
+      rig,
+      createPlayer: next,
+      surface: _FakeSurface(start: VideoOutputStart.failed),
+    );
+    await tester.runAsync(
+      () =>
+          pumpUntilReal(tester, () => players.length == 2 && players[1].opened),
+    );
     await pumpUntil(tester, _playing);
     await tester.pump(const Duration(seconds: 1));
 
@@ -476,8 +545,10 @@ void main() {
       expect(await rig.settings.getMacSurfaceFailedVersion(), _appVersion);
     });
     expect(
-      find.text('Using the standard video output: the HDR renderer could '
-          'not start on this Mac'),
+      find.text(
+        'Using the standard video output: the HDR renderer could '
+        'not start on this Mac',
+      ),
       findsOneWidget,
     );
 
@@ -485,37 +556,48 @@ void main() {
   });
 
   testWidgets(
-      'a slow start falls back to texture for this playback and records '
-      'nothing', (tester) async {
-    _mockPlatformViews(tester);
-    final rig = _rig();
-    final players = <_FakePlayer>[];
-    Player next() {
-      final p = _FakePlayer(handleValue: players.isEmpty ? 61 : null);
-      players.add(p);
-      return Player(platformPlayer: p);
-    }
+    'a slow start falls back to texture for this playback and records '
+    'nothing',
+    (tester) async {
+      _mockPlatformViews(tester);
+      final rig = _rig();
+      final players = <_FakePlayer>[];
+      Player next() {
+        final p = _FakePlayer(handleValue: players.isEmpty ? 61 : null);
+        players.add(p);
+        return Player(platformPlayer: p);
+      }
 
-    await _mount(tester, rig,
+      await _mount(
+        tester,
+        rig,
         createPlayer: next,
-        surface: _FakeSurface(start: VideoOutputStart.timedOut));
-    await tester.runAsync(() =>
-        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
-    await pumpUntil(tester, _playing);
+        surface: _FakeSurface(start: VideoOutputStart.timedOut),
+      );
+      await tester.runAsync(
+        () => pumpUntilReal(
+          tester,
+          () => players.length == 2 && players[1].opened,
+        ),
+      );
+      await pumpUntil(tester, _playing);
 
-    expect(find.byType(Video), findsOneWidget);
-    expect(find.byType(PlayerVideoSurface), findsNothing);
-    expect(_log, containsAllInOrder(['detach 61', 'dispose 61']));
-    await tester.runAsync(() async {
-      expect(await rig.settings.getMacSurfaceFailedVersion(), isNull,
-          reason: 'an output that is only slow to start is no failure');
-    });
+      expect(find.byType(Video), findsOneWidget);
+      expect(find.byType(PlayerVideoSurface), findsNothing);
+      expect(_log, containsAllInOrder(['detach 61', 'dispose 61']));
+      await tester.runAsync(() async {
+        expect(
+          await rig.settings.getMacSurfaceFailedVersion(),
+          isNull,
+          reason: 'an output that is only slow to start is no failure',
+        );
+      });
 
-    await _unmount(tester);
-  });
+      await _unmount(tester);
+    },
+  );
 
-  testWidgets(
-      'a refused attach falls back to texture for this playback and '
+  testWidgets('a refused attach falls back to texture for this playback and '
       'records nothing', (tester) async {
     _mockPlatformViews(tester);
     final rig = _rig();
@@ -530,30 +612,35 @@ void main() {
       tester,
       rig,
       createPlayer: next,
-      surface: _FakeSurface(
-        attachError: PlatformException(code: 'no-view'),
-      ),
+      surface: _FakeSurface(attachError: PlatformException(code: 'no-view')),
     );
-    await tester.runAsync(() =>
-        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await tester.runAsync(
+      () =>
+          pumpUntilReal(tester, () => players.length == 2 && players[1].opened),
+    );
     await pumpUntil(tester, _playing);
 
     expect(find.byType(Video), findsOneWidget);
     expect(find.byType(PlayerVideoSurface), findsNothing);
-    expect(players[0].opened, isFalse,
-        reason: 'the fallback happens before the surface player opens');
+    expect(
+      players[0].opened,
+      isFalse,
+      reason: 'the fallback happens before the surface player opens',
+    );
     expect(_log, containsAllInOrder(['attach 71', 'detach 71', 'dispose 71']));
     expect(_log, isNot(contains('awaitVideoOutput 71')));
     await tester.runAsync(() async {
-      expect(await rig.settings.getMacSurfaceFailedVersion(), isNull,
-          reason: 'only gpu-next not starting is a version-wide failure');
+      expect(
+        await rig.settings.getMacSurfaceFailedVersion(),
+        isNull,
+        reason: 'only gpu-next not starting is a version-wide failure',
+      );
     });
 
     await _unmount(tester);
   });
 
-  testWidgets(
-      'a slow start superseded during its detach leaves the next file '
+  testWidgets('a slow start superseded during its detach leaves the next file '
       'on the surface', (tester) async {
     _mockPlatformViews(tester);
     final rig = _rig();
@@ -564,32 +651,47 @@ void main() {
       return Player(platformPlayer: p);
     }
 
-    final surface =
-        _FakeSurface(startByHandle: const {81: VideoOutputStart.timedOut})
-          ..detachGate = Completer<void>();
-    await _mount(tester, rig,
-        createPlayer: next, surface: surface, fileId: 'file-a');
+    final surface = _FakeSurface(
+      startByHandle: const {81: VideoOutputStart.timedOut},
+    )..detachGate = Completer<void>();
+    await _mount(
+      tester,
+      rig,
+      createPlayer: next,
+      surface: surface,
+      fileId: 'file-a',
+    );
     await tester.runAsync(
-        () => pumpUntilReal(tester, () => _log.contains('detach 81')));
+      () => pumpUntilReal(tester, () => _log.contains('detach 81')),
+    );
     expect(_log, contains('detach 81'));
 
     // The viewer moves on while the slow playback is still tearing down.
-    await _mount(tester, rig,
-        createPlayer: next, surface: surface, fileId: 'file-b');
+    await _mount(
+      tester,
+      rig,
+      createPlayer: next,
+      surface: surface,
+      fileId: 'file-b',
+    );
     surface.detachGate!.complete();
-    await tester.runAsync(() =>
-        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await tester.runAsync(
+      () =>
+          pumpUntilReal(tester, () => players.length == 2 && players[1].opened),
+    );
     await pumpUntil(tester, _playing);
 
-    expect(_log, containsAllInOrder(['attach 82', 'open 82']),
-        reason: 'the texture retry belonged to the playback that timed out');
+    expect(
+      _log,
+      containsAllInOrder(['attach 82', 'open 82']),
+      reason: 'the texture retry belonged to the playback that timed out',
+    );
     expect(find.byType(PlayerVideoSurface), findsOneWidget);
 
     await _unmount(tester);
   });
 
-  testWidgets(
-      'a fault during the start check does not start a transcode '
+  testWidgets('a fault during the start check does not start a transcode '
       'when the surface falls back', (tester) async {
     _mockPlatformViews(tester);
     final rig = _rig();
@@ -610,8 +712,10 @@ void main() {
     players[0].fail('vo: failed to initialize');
     await tester.pump(const Duration(seconds: 2));
     surface.startGate!.complete();
-    await tester.runAsync(() =>
-        pumpUntilReal(tester, () => players.length == 2 && players[1].opened));
+    await tester.runAsync(
+      () =>
+          pumpUntilReal(tester, () => players.length == 2 && players[1].opened),
+    );
     await pumpUntil(tester, _playing);
 
     expect(find.byType(Video), findsOneWidget);
@@ -629,14 +733,20 @@ void main() {
     final rig = _rig();
     final fake = _FakePlayer(handleValue: 41, withVideo: false);
 
-    await _mount(tester, rig,
-        createPlayer: () => Player(platformPlayer: fake),
-        surface: _FakeSurface());
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: _FakeSurface(),
+    );
     await pumpUntil(tester, _playing);
 
     expect(find.byType(PlayerVideoSurface), findsOneWidget);
-    expect(_log, containsAllInOrder(['open 41', 'awaitVideoOutput 41']),
-        reason: 'the start check runs once mpv has listed the tracks');
+    expect(
+      _log,
+      containsAllInOrder(['open 41', 'awaitVideoOutput 41']),
+      reason: 'the start check runs once mpv has listed the tracks',
+    );
     await tester.runAsync(() async {
       expect(await rig.settings.getMacSurfaceFailedVersion(), isNull);
     });
@@ -674,20 +784,29 @@ void main() {
     _mockPlatformViews(tester);
     // The screen loads the saved scaling and the taps save it: an empty
     // in-memory box keeps both off disk and starts from Fit.
-    final box = (await tester.runAsync(() =>
-        Hive.openBox<String>(VideoScalingPrefs.boxName, bytes: Uint8List(0))))!;
+    final box = (await tester.runAsync(
+      () =>
+          Hive.openBox<String>(VideoScalingPrefs.boxName, bytes: Uint8List(0)),
+    ))!;
     addTearDown(() => tester.runAsync(box.close));
     final rig = _rig();
     final fake = _FakePlayer(handleValue: 61);
     final surface = _FakeSurface();
 
-    await _mount(tester, rig,
-        createPlayer: () => Player(platformPlayer: fake), surface: surface);
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: surface,
+    );
     await pumpUntil(tester, _playing);
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(surface.setOptions, contains((61, 'panscan', '0.0')),
-        reason: 'the initial scaling is sent once attached');
+    expect(
+      surface.setOptions,
+      contains((61, 'panscan', '0.0')),
+      reason: 'the initial scaling is sent once attached',
+    );
 
     final chrome = tester.widget<PlaybackChrome>(find.byType(PlaybackChrome));
     chrome.onScalingTap!();

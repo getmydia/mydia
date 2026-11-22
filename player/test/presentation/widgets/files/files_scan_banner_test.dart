@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/files/files_scan_controller.dart';
@@ -19,23 +19,25 @@ class _FixedScan extends FilesScanController {
 
 void main() {
   testWidgets('banner_follows_the_scan_and_hides_when_it_ends', (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        filesScanProvider(fakeSourceId)
-            .overrideWith(() => _FixedScan(fakeSourceId))
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: FilesScanBanner(sourceId: fakeSourceId)),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          filesScanProvider(fakeSourceId)
+              .overrideWith(() => _FixedScan(fakeSourceId)),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: FilesScanBanner(sourceId: fakeSourceId)),
+        ),
       ),
-    ));
+    );
     expect(find.text('Scanning 312 of 2,040'), findsOneWidget);
 
     // The same banner, still mounted, follows the controller.
-    final scan =
-        ProviderScope.containerOf(tester.element(find.byType(FilesScanBanner)))
-            .read(filesScanProvider(fakeSourceId).notifier) as _FixedScan;
+    final scan = ProviderScope.containerOf(
+      tester.element(find.byType(FilesScanBanner)),
+    ).read(filesScanProvider(fakeSourceId).notifier) as _FixedScan;
     scan.set(const ScanState(running: true, done: 1500, total: 2040));
     await tester.pump();
     expect(find.text('Scanning 1,500 of 2,040'), findsOneWidget);
@@ -54,11 +56,14 @@ void main() {
     scan.set(const ScanState(done: 2040, total: 2040, skippedCount: 3));
     await tester.pump();
     expect(
-        find.text('3 items skipped: they could not be read'), findsOneWidget);
+      find.text('3 items skipped: they could not be read'),
+      findsOneWidget,
+    );
 
     // The next scan's progress replaces it.
     scan.set(
-        const ScanState(running: true, done: 1, total: 2040, skippedCount: 3));
+      const ScanState(running: true, done: 1, total: 2040, skippedCount: 3),
+    );
     await tester.pump();
     expect(find.text('Scanning 1 of 2,040'), findsOneWidget);
     expect(find.byKey(const Key('files-scan-skipped')), findsNothing);
@@ -71,21 +76,24 @@ void main() {
     expect(find.textContaining('of 0'), findsNothing);
   });
 
-  testWidgets('shows Reading file details while probing after a scan',
-      (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        filesScanProvider(fakeSourceId)
-            .overrideWith(() => _IdleScan(fakeSourceId)),
-        filesProbeQueueProvider(fakeSourceId)
-            .overrideWith(() => _FixedProbe(fakeSourceId)),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: FilesScanBanner(sourceId: fakeSourceId)),
+  testWidgets('shows Reading file details while probing after a scan', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          filesScanProvider(fakeSourceId)
+              .overrideWith(() => _IdleScan(fakeSourceId)),
+          filesProbeQueueProvider(fakeSourceId)
+              .overrideWith(() => _FixedProbe(fakeSourceId)),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: FilesScanBanner(sourceId: fakeSourceId)),
+        ),
       ),
-    ));
+    );
     expect(find.byKey(const Key('files-probe-progress')), findsOneWidget);
     expect(find.text('Reading file details 3 of 10'), findsOneWidget);
     expect(find.byKey(const Key('files-scan-banner')), findsNothing);
@@ -95,13 +103,16 @@ void main() {
     const idle = ScanState(done: 10, total: 10);
     expect(filesScanBannerShows(idle), isFalse);
     expect(
-        filesScanBannerShows(idle,
-            probe: const ProbeProgress(running: true, done: 1, total: 2)),
-        isTrue);
+      filesScanBannerShows(
+        idle,
+        probe: const ProbeProgress(running: true, done: 1, total: 2),
+      ),
+      isTrue,
+    );
     expect(
-        filesScanBannerShows(idle,
-            probe: const ProbeProgress(done: 2, total: 2)),
-        isFalse);
+      filesScanBannerShows(idle, probe: const ProbeProgress(done: 2, total: 2)),
+      isFalse,
+    );
   });
 }
 

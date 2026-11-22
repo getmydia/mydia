@@ -13,9 +13,9 @@ enum MediaKind {
   final String wireName;
 
   static MediaKind fromName(String? name) => MediaKind.values.firstWhere(
-        (kind) => kind.name == name,
-        orElse: () => MediaKind.movies,
-      );
+    (kind) => kind.name == name,
+    orElse: () => MediaKind.movies,
+  );
 }
 
 /// Mirrors the server's `MediaCategory` enum.
@@ -52,9 +52,9 @@ enum WatchScope {
   favorites;
 
   static WatchScope fromName(String? name) => WatchScope.values.firstWhere(
-        (scope) => scope.name == name,
-        orElse: () => WatchScope.all,
-      );
+    (scope) => scope.name == name,
+    orElse: () => WatchScope.all,
+  );
 }
 
 /// A saved slice of the library.
@@ -110,11 +110,11 @@ class MediaFilter {
   }
 
   Map<String, dynamic> toJson() => {
-        'kind': kind.name,
-        'category': category?.name,
-        'watch': watch.name,
-        'sort': sort.encode(),
-      };
+    'kind': kind.name,
+    'category': category?.name,
+    'watch': watch.name,
+    'sort': sort.encode(),
+  };
 
   factory MediaFilter.fromJson(Map<String, dynamic> json) {
     final kind = MediaKind.fromName(json['kind'] as String?);

@@ -16,11 +16,11 @@ const _smallPieces = RangeSpoolPolicy(readChunkBytes: 4096);
 /// fails partway through a download.
 class _FailingRangeStream extends FakeRangeStream {
   _FailingRangeStream(int totalBytes, {required this.failAfterBytes})
-      : super(
-          header: fakeRangeHeader(contentLength: totalBytes),
-          totalBytes: totalBytes,
-          chunkBytes: 4096,
-        );
+    : super(
+        header: fakeRangeHeader(contentLength: totalBytes),
+        totalBytes: totalBytes,
+        chunkBytes: 4096,
+      );
 
   final int failAfterBytes;
 
@@ -231,10 +231,10 @@ void main() {
       // used. The reserve is 40 KiB, leaving the spool 60 KiB; checks run
       // every 8 KiB, so it stops at the first check past 60 KiB.
       Future<DiskSpace?> probe(String path) async {
-        final used = dir
-            .listSync()
-            .whereType<File>()
-            .fold<int>(0, (sum, file) => sum + file.lengthSync());
+        final used = dir.listSync().whereType<File>().fold<int>(
+          0,
+          (sum, file) => sum + file.lengthSync(),
+        );
         return DiskSpace(free: volume - used, total: volume);
       }
 

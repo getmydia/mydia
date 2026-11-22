@@ -23,8 +23,7 @@ void main() {
   });
 
   group('next episode after dismissing up-next', () {
-    test(
-        'a cancelled countdown does not navigate; a later manual next still '
+    test('a cancelled countdown does not navigate; a later manual next still '
         'does', () {
       fakeAsync((async) {
         var autoPlayCancelled = false;

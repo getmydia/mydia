@@ -73,19 +73,21 @@ void main() {
     test('web and iOS update elsewhere', () {
       for (final host in [
         const UpdateHost(
-            isWeb: true,
-            isAndroid: false,
-            isIOS: false,
-            isMacOS: false,
-            isWindows: false,
-            isLinux: false),
+          isWeb: true,
+          isAndroid: false,
+          isIOS: false,
+          isMacOS: false,
+          isWindows: false,
+          isLinux: false,
+        ),
         const UpdateHost(
-            isWeb: false,
-            isAndroid: false,
-            isIOS: true,
-            isMacOS: false,
-            isWindows: false,
-            isLinux: false),
+          isWeb: false,
+          isAndroid: false,
+          isIOS: true,
+          isMacOS: false,
+          isWindows: false,
+          isLinux: false,
+        ),
       ]) {
         expect(host.supportsInAppUpdates, isFalse);
       }
@@ -126,12 +128,13 @@ void main() {
     test('web gets no backend at all', () {
       final backend = createUpdateBackend(
         const UpdateHost(
-            isWeb: true,
-            isAndroid: false,
-            isIOS: false,
-            isMacOS: false,
-            isWindows: false,
-            isLinux: false),
+          isWeb: true,
+          isAndroid: false,
+          isIOS: false,
+          isMacOS: false,
+          isWindows: false,
+          isLinux: false,
+        ),
         currentVersion: '0.15.0',
       );
 
@@ -148,8 +151,7 @@ void main() {
       expect(backend, isA<ReleaseUpdateBackend>());
     });
 
-    test(
-        'a Linux tarball install never offers Dev, because none is '
+    test('a Linux tarball install never offers Dev, because none is '
         'published for it', () {
       final backend = createUpdateBackend(
         _linux,
@@ -170,8 +172,7 @@ void main() {
       expect(backend, isA<ReleaseUpdateBackend>());
     });
 
-    test(
-        'a sideloaded Android install offers Dev too, since it is the one '
+    test('a sideloaded Android install offers Dev too, since it is the one '
         'platform that publishes it', () {
       final backend = createUpdateBackend(
         _sideloadedAndroid,
@@ -179,10 +180,11 @@ void main() {
         archiveUpdater: _NoopUpdater.new,
       ) as ReleaseUpdateBackend;
 
-      expect(
-        backend.availableTracks,
-        {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev},
-      );
+      expect(backend.availableTracks, {
+        UpdateTrack.stable,
+        UpdateTrack.beta,
+        UpdateTrack.dev,
+      });
     });
 
     test('a Play install gets no backend at all', () {
@@ -195,8 +197,7 @@ void main() {
       expect(backend, isNull);
     });
 
-    test(
-        'a desktop platform with no concrete updater produces no backend, '
+    test('a desktop platform with no concrete updater produces no backend, '
         'so no dead update row can appear', () {
       final backend = createUpdateBackend(
         _linux,
@@ -210,14 +211,15 @@ void main() {
     test('a Flatpak install gets the portal backend', () {
       final backend = createUpdateBackend(
         const UpdateHost(
-            isWeb: false,
-            isAndroid: false,
-            isIOS: false,
-            isMacOS: false,
-            isWindows: false,
-            isLinux: true,
-            isFlatpak: true,
-            flatpakBranch: 'stable'),
+          isWeb: false,
+          isAndroid: false,
+          isIOS: false,
+          isMacOS: false,
+          isWindows: false,
+          isLinux: true,
+          isFlatpak: true,
+          flatpakBranch: 'stable',
+        ),
         currentVersion: '0.15.0',
         portalFactory: _NoopPortal.new,
       );
@@ -228,12 +230,13 @@ void main() {
     test('macOS gets Sparkle', () {
       final backend = createUpdateBackend(
         const UpdateHost(
-            isWeb: false,
-            isAndroid: false,
-            isIOS: false,
-            isMacOS: true,
-            isWindows: false,
-            isLinux: false),
+          isWeb: false,
+          isAndroid: false,
+          isIOS: false,
+          isMacOS: true,
+          isWindows: false,
+          isLinux: false,
+        ),
         currentVersion: '0.15.0',
       );
 
@@ -262,7 +265,8 @@ void main() {
     late Directory temp;
 
     setUp(
-        () => temp = Directory.systemTemp.createTempSync('mydia-update-host'));
+      () => temp = Directory.systemTemp.createTempSync('mydia-update-host'),
+    );
     tearDown(() => temp.deleteSync(recursive: true));
 
     String writeInfo() {
@@ -271,21 +275,23 @@ void main() {
       return file.path;
     }
 
-    test('Linux plus a Flatpak environment carries isFlatpak and the branch',
-        () {
-      final host = UpdateHost.from(
-        isWeb: false,
-        isAndroid: false,
-        isIOS: false,
-        isMacOS: false,
-        isWindows: false,
-        isLinux: true,
-        flatpak: FlatpakEnvironment(infoPath: writeInfo()),
-      );
+    test(
+      'Linux plus a Flatpak environment carries isFlatpak and the branch',
+      () {
+        final host = UpdateHost.from(
+          isWeb: false,
+          isAndroid: false,
+          isIOS: false,
+          isMacOS: false,
+          isWindows: false,
+          isLinux: true,
+          flatpak: FlatpakEnvironment(infoPath: writeInfo()),
+        );
 
-      expect(host.isFlatpak, isTrue);
-      expect(host.flatpakBranch, 'stable');
-    });
+        expect(host.isFlatpak, isTrue);
+        expect(host.flatpakBranch, 'stable');
+      },
+    );
 
     test('Windows plus the same Flatpak environment reports neither', () {
       final host = UpdateHost.from(
@@ -371,19 +377,21 @@ void main() {
       expect(fromPlay, isTrue);
     });
 
-    test('a non-Android host never calls the lookup and reports not Play',
-        () async {
-      var calls = 0;
-      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
-        isAndroid: false,
-        readInstallerStore: () async {
-          calls++;
-          return 'com.android.vending';
-        },
-      );
+    test(
+      'a non-Android host never calls the lookup and reports not Play',
+      () async {
+        var calls = 0;
+        final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+          isAndroid: false,
+          readInstallerStore: () async {
+            calls++;
+            return 'com.android.vending';
+          },
+        );
 
-      expect(fromPlay, isFalse);
-      expect(calls, 0);
-    });
+        expect(fromPlay, isFalse);
+        expect(calls, 0);
+      },
+    );
   });
 }

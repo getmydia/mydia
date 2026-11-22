@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -35,28 +35,31 @@ void main() {
     List<Override> overrides = const [],
     bool? settingsAvailable,
   }) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        castDiscoveryProvider.overrideWith((ref) => const Stream.empty()),
-        castCapabilitiesProvider.overrideWithValue(capabilities),
-        ...overrides,
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: CastDevicePickerDialog(
-            debugDevicesOverride: devices,
-            debugSettingsAvailableOverride: settingsAvailable,
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          castDiscoveryProvider.overrideWith((ref) => const Stream.empty()),
+          castCapabilitiesProvider.overrideWithValue(capabilities),
+          ...overrides,
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: CastDevicePickerDialog(
+              debugDevicesOverride: devices,
+              debugSettingsAvailableOverride: settingsAvailable,
+            ),
           ),
         ),
       ),
-    ));
+    );
     await tester.pump();
   }
 
-  testWidgets('shows a searching state while the list is empty',
-      (tester) async {
+  testWidgets('shows a searching state while the list is empty', (
+    tester,
+  ) async {
     await pumpPicker(tester, devices: const AsyncValue.data([]));
 
     expect(find.byKey(const Key('cast-picker-searching')), findsOneWidget);
@@ -73,8 +76,9 @@ void main() {
     expect(find.byKey(const Key('cast-picker-searching')), findsNothing);
   });
 
-  testWidgets('a still-loading discovery stream also terminates',
-      (tester) async {
+  testWidgets('a still-loading discovery stream also terminates', (
+    tester,
+  ) async {
     // The discovery stream emits nothing at all until the first device
     // answers, so the loading branch is the one a quiet network actually
     // renders.
@@ -88,15 +92,21 @@ void main() {
   });
 
   testWidgets('groups devices by protocol', (tester) async {
-    await pumpPicker(tester,
-        devices: const AsyncValue.data([
-          CastDevice(
-              id: 'c1',
-              name: 'Living Room',
-              protocol: CastProtocolKind.chromecast),
-          CastDevice(
-              id: 'd1', name: 'Bedroom TV', protocol: CastProtocolKind.dlna),
-        ]));
+    await pumpPicker(
+      tester,
+      devices: const AsyncValue.data([
+        CastDevice(
+          id: 'c1',
+          name: 'Living Room',
+          protocol: CastProtocolKind.chromecast,
+        ),
+        CastDevice(
+          id: 'd1',
+          name: 'Bedroom TV',
+          protocol: CastProtocolKind.dlna,
+        ),
+      ]),
+    );
 
     expect(find.byKey(const Key('cast-group-chromecast')), findsOneWidget);
     expect(find.byKey(const Key('cast-group-dlna')), findsOneWidget);
@@ -124,12 +134,16 @@ void main() {
     );
 
     expect(find.text('Nothing playing'), findsOneWidget);
-    expect(find.text(fakeSource.displayName), findsOneWidget,
-        reason: 'a source that no longer exists is skipped');
+    expect(
+      find.text(fakeSource.displayName),
+      findsOneWidget,
+      reason: 'a source that no longer exists is skipped',
+    );
   });
 
-  testWidgets('says nothing about servers when only one knows the target',
-      (tester) async {
+  testWidgets('says nothing about servers when only one knows the target', (
+    tester,
+  ) async {
     await pumpPicker(
       tester,
       overrides: [
@@ -149,17 +163,20 @@ void main() {
     expect(find.text(fakeSource.displayName), findsNothing);
   });
 
-  testWidgets('shows a Mydia group with what the target is playing',
-      (tester) async {
-    await pumpPicker(tester,
-        devices: const AsyncValue.data([
-          CastDevice(
-            id: 'node-a',
-            name: 'Living Room',
-            protocol: CastProtocolKind.mydia,
-            metadata: {'nodeId': 'node-a', 'nowPlayingTitle': 'Arrival'},
-          ),
-        ]));
+  testWidgets('shows a Mydia group with what the target is playing', (
+    tester,
+  ) async {
+    await pumpPicker(
+      tester,
+      devices: const AsyncValue.data([
+        CastDevice(
+          id: 'node-a',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-a', 'nowPlayingTitle': 'Arrival'},
+        ),
+      ]),
+    );
 
     expect(find.byKey(const Key('cast-group-mydia')), findsOneWidget);
     expect(find.byKey(const Key('cast-device-node-a')), findsOneWidget);
@@ -168,12 +185,13 @@ void main() {
   });
 
   testWidgets(
-      'falls back to a placeholder when a Mydia target reports nothing playing',
-      (tester) async {
-    // Idle, paused, and probe-failed targets all share this: the discovery
-    // probe only populates `nowPlayingTitle` when it catches the target
-    // actively playing something (see `MydiaCastBackend`).
-    await pumpPicker(tester,
+    'falls back to a placeholder when a Mydia target reports nothing playing',
+    (tester) async {
+      // Idle, paused, and probe-failed targets all share this: the discovery
+      // probe only populates `nowPlayingTitle` when it catches the target
+      // actively playing something (see `MydiaCastBackend`).
+      await pumpPicker(
+        tester,
         devices: const AsyncValue.data([
           CastDevice(
             id: 'node-b',
@@ -181,35 +199,39 @@ void main() {
             protocol: CastProtocolKind.mydia,
             metadata: {'nodeId': 'node-b'},
           ),
-        ]));
+        ]),
+      );
 
-    expect(find.byKey(const Key('cast-device-node-b')), findsOneWidget);
-    expect(find.text('Nothing playing'), findsOneWidget);
-  });
+      expect(find.byKey(const Key('cast-device-node-b')), findsOneWidget);
+      expect(find.text('Nothing playing'), findsOneWidget);
+    },
+  );
 
-  testWidgets(
-      'tells a probe-confirmed-idle target apart from one whose status '
+  testWidgets('tells a probe-confirmed-idle target apart from one whose status '
       'could not be fetched', (tester) async {
     // `nowPlayingTitle`'s absence is ambiguous on its own — `MydiaCastBackend`
     // sets `statusUnavailable` when it knows the two apart (Hello succeeded,
     // GetState did not), and the picker owes the viewer the honest copy.
-    await pumpPicker(tester,
-        devices: const AsyncValue.data([
-          CastDevice(
-            id: 'node-c',
-            name: 'Kitchen',
-            protocol: CastProtocolKind.mydia,
-            metadata: {'nodeId': 'node-c', 'statusUnavailable': 'true'},
-          ),
-        ]));
+    await pumpPicker(
+      tester,
+      devices: const AsyncValue.data([
+        CastDevice(
+          id: 'node-c',
+          name: 'Kitchen',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-c', 'statusUnavailable': 'true'},
+        ),
+      ]),
+    );
 
     expect(find.byKey(const Key('cast-device-node-c')), findsOneWidget);
     expect(find.text('Status unavailable'), findsOneWidget);
     expect(find.text('Nothing playing'), findsNothing);
   });
 
-  testWidgets('shows a Mydia group regardless of Chromecast/DLNA capability',
-      (tester) async {
+  testWidgets('shows a Mydia group regardless of Chromecast/DLNA capability', (
+    tester,
+  ) async {
     // Not gated on `capabilities`: a Mydia target is reached over the p2p
     // host, not the platform's local-network entitlement.
     await pumpPicker(
@@ -229,36 +251,42 @@ void main() {
   });
 
   testWidgets(
-      'keeps showing devices past the search timeout when devices arrive early',
-      (tester) async {
-    // Devices are present from the very first frame, so the search-timeout
-    // timer should never have been armed; if it fired anyway and flipped
-    // `_searchExpired`, this would still pass today (that flag is only read
-    // for empty lists), but a stray timer firing after the widget tree
-    // changed shape would surface as an exception here.
-    await pumpPicker(tester,
+    'keeps showing devices past the search timeout when devices arrive early',
+    (tester) async {
+      // Devices are present from the very first frame, so the search-timeout
+      // timer should never have been armed; if it fired anyway and flipped
+      // `_searchExpired`, this would still pass today (that flag is only read
+      // for empty lists), but a stray timer firing after the widget tree
+      // changed shape would surface as an exception here.
+      await pumpPicker(
+        tester,
         devices: const AsyncValue.data([
           CastDevice(
-              id: 'c1',
-              name: 'Living Room',
-              protocol: CastProtocolKind.chromecast),
-        ]));
+            id: 'c1',
+            name: 'Living Room',
+            protocol: CastProtocolKind.chromecast,
+          ),
+        ]),
+      );
 
-    await tester.pump(const Duration(seconds: 11));
+      await tester.pump(const Duration(seconds: 11));
 
-    expect(tester.takeException(), isNull);
-    expect(find.byKey(const Key('cast-group-chromecast')), findsOneWidget);
-  });
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('cast-group-chromecast')), findsOneWidget);
+    },
+  );
 
-  testWidgets('omits the DLNA group when the platform cannot discover it',
-      (tester) async {
+  testWidgets('omits the DLNA group when the platform cannot discover it', (
+    tester,
+  ) async {
     await pumpPicker(
       tester,
       devices: const AsyncValue.data([
         CastDevice(
-            id: 'c1',
-            name: 'Living Room',
-            protocol: CastProtocolKind.chromecast),
+          id: 'c1',
+          name: 'Living Room',
+          protocol: CastProtocolKind.chromecast,
+        ),
       ]),
       capabilities: const CastCapabilities.iOS(),
     );
@@ -267,8 +295,9 @@ void main() {
     expect(find.byKey(const Key('cast-group-dlna')), findsNothing);
   });
 
-  testWidgets('shows an actionable message when discovery is denied',
-      (tester) async {
+  testWidgets('shows an actionable message when discovery is denied', (
+    tester,
+  ) async {
     await pumpPicker(
       tester,
       devices: const AsyncValue.error(
@@ -278,11 +307,14 @@ void main() {
     );
 
     expect(
-        find.byKey(const Key('cast-picker-permission-denied')), findsOneWidget);
+      find.byKey(const Key('cast-picker-permission-denied')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('offers a settings button when discovery is denied on Apple',
-      (tester) async {
+  testWidgets('offers a settings button when discovery is denied on Apple', (
+    tester,
+  ) async {
     await pumpPicker(
       tester,
       devices: const AsyncValue.error(
@@ -293,11 +325,14 @@ void main() {
     );
 
     expect(
-        find.byKey(const Key('local-network-settings-button')), findsOneWidget);
+      find.byKey(const Key('local-network-settings-button')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('withholds the settings button off Apple platforms',
-      (tester) async {
+  testWidgets('withholds the settings button off Apple platforms', (
+    tester,
+  ) async {
     // discoveryDenied also covers Android's multicast lock failing. An
     // Apple-only deep link there fails and then prints macOS instructions,
     // so the panel keeps its explanation and drops the button.
@@ -311,13 +346,18 @@ void main() {
     );
 
     expect(
-        find.byKey(const Key('cast-picker-permission-denied')), findsOneWidget);
+      find.byKey(const Key('cast-picker-permission-denied')),
+      findsOneWidget,
+    );
     expect(
-        find.byKey(const Key('local-network-settings-button')), findsNothing);
+      find.byKey(const Key('local-network-settings-button')),
+      findsNothing,
+    );
   });
 
-  testWidgets('shows a generic error for other discovery failures',
-      (tester) async {
+  testWidgets('shows a generic error for other discovery failures', (
+    tester,
+  ) async {
     await pumpPicker(
       tester,
       devices: AsyncValue.error(Exception('boom'), StackTrace.empty),
@@ -327,8 +367,9 @@ void main() {
   });
 
   group('chosen device marking', () {
-    testWidgets('marks a connected device with the check and connected glyph',
-        (tester) async {
+    testWidgets('marks a connected device with the check and connected glyph', (
+      tester,
+    ) async {
       await pumpPicker(
         tester,
         devices: const AsyncValue.data([_chromecast]),
@@ -348,8 +389,9 @@ void main() {
       expect(tile.trailing, isA<Icon>());
     });
 
-    testWidgets('marks a chosen-but-unconnected device without the check',
-        (tester) async {
+    testWidgets('marks a chosen-but-unconnected device without the check', (
+      tester,
+    ) async {
       await pumpPicker(
         tester,
         devices: const AsyncValue.data([_chromecast]),
@@ -364,12 +406,21 @@ void main() {
       final tile = tester.widget<ListTile>(
         find.byKey(Key('cast-device-${_chromecast.id}')),
       );
-      expect((tile.leading as Icon).icon, Icons.cast,
-          reason: 'the row must not claim a connection the app does not have');
-      expect((tile.leading as Icon).color, Palettes.projectionBooth.primary,
-          reason: 'chosen still gets the accent colour, even unconnected');
-      expect(tile.trailing, isNull,
-          reason: 'the check mark means connected, not merely chosen');
+      expect(
+        (tile.leading as Icon).icon,
+        Icons.cast,
+        reason: 'the row must not claim a connection the app does not have',
+      );
+      expect(
+        (tile.leading as Icon).color,
+        Palettes.projectionBooth.primary,
+        reason: 'chosen still gets the accent colour, even unconnected',
+      );
+      expect(
+        tile.trailing,
+        isNull,
+        reason: 'the check mark means connected, not merely chosen',
+      );
     });
 
     testWidgets('leaves other devices unmarked', (tester) async {
@@ -389,8 +440,10 @@ void main() {
       );
       expect((tile.leading as Icon).icon, Icons.cast);
       expect(
-          (tile.leading as Icon).color, Palettes.projectionBooth.textSecondary,
-          reason: 'only the chosen device gets the accent colour');
+        (tile.leading as Icon).color,
+        Palettes.projectionBooth.textSecondary,
+        reason: 'only the chosen device gets the accent colour',
+      );
       expect(tile.trailing, isNull);
     });
   });
@@ -402,33 +455,40 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
   });
 
-  testWidgets('opening the picker brings back hidden Playing on banners',
-      (tester) async {
-    final container = ProviderContainer(overrides: [
-      castDiscoveryProvider.overrideWith((ref) => const Stream.empty()),
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    ]);
+  testWidgets('opening the picker brings back hidden Playing on banners', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        castDiscoveryProvider.overrideWith((ref) => const Stream.empty()),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     container
         .read(ambientDismissalsProvider.notifier)
         .dismissKey(const AmbientDismissal('node-tv', 'The Lantern Keepers'));
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              key: const Key('open-picker'),
-              onPressed: () => showCastDevicePicker(context),
-              child: const Text('open'),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                key: const Key('open-picker'),
+                onPressed: () => showCastDevicePicker(context),
+                child: const Text('open'),
+              ),
             ),
           ),
         ),
       ),
-    ));
+    );
 
     await tester.tap(find.byKey(const Key('open-picker')));
     await tester.pump();

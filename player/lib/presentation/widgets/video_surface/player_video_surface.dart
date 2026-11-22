@@ -82,8 +82,8 @@ class MpvSurfaceBinding {
     final int viewId;
     final int handle;
     try {
-      final view =
-          await _unlessCancelled(_viewId.future).timeout(_viewCreationTimeout);
+      final view = await _unlessCancelled(_viewId.future)
+          .timeout(_viewCreationTimeout);
       if (view == null) return false;
       viewId = view;
       final resolved = await _unlessCancelled(player.handle);
@@ -104,8 +104,10 @@ class MpvSurfaceBinding {
       return false;
     } on TimeoutException {
       // The caller's teardown detaches whatever the writes got to.
-      debugPrint('[MpvSurface] attach got no reply within '
-          '${_attachReplyTimeout.inSeconds}s');
+      debugPrint(
+        '[MpvSurface] attach got no reply within '
+        '${_attachReplyTimeout.inSeconds}s',
+      );
       return false;
     }
     // A detach sent while the attach was in flight is already queued behind
@@ -187,8 +189,10 @@ class MpvSurfaceBinding {
     try {
       await surface.detach(handle).timeout(_detachReplyTimeout);
     } on TimeoutException {
-      debugPrint('[MpvSurface] detach got no reply within '
-          '${_detachReplyTimeout.inSeconds}s; disposing anyway');
+      debugPrint(
+        '[MpvSurface] detach got no reply within '
+        '${_detachReplyTimeout.inSeconds}s; disposing anyway',
+      );
     } catch (e) {
       debugPrint('[MpvSurface] detach failed: $e');
     }
@@ -239,50 +243,54 @@ class _PlayerVideoSurfaceState extends State<PlayerVideoSurface> {
     final player = binding.player;
     final chrome = widget.chrome;
     final overlay = widget.overlay;
-    return LayoutBuilder(builder: (context, constraints) {
-      _box = constraints.biggest;
-      final subtitles = subtitleViewConfigurationFor(
-          constraints.biggest, widget.subtitleSize);
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          ColoredBox(
-            color: const Color(0xFF000000),
-            child: AppKitView(
-              key: binding.viewKey,
-              viewType: mpvSurfaceViewType,
-              creationParamsCodec: const StandardMessageCodec(),
-              onPlatformViewCreated: binding._onViewCreated,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _box = constraints.biggest;
+        final subtitles = subtitleViewConfigurationFor(
+          constraints.biggest,
+          widget.subtitleSize,
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(
+              color: const Color(0xFF000000),
+              child: AppKitView(
+                key: binding.viewKey,
+                viewType: mpvSurfaceViewType,
+                creationParamsCodec: const StandardMessageCodec(),
+                onPlatformViewCreated: binding._onViewCreated,
+              ),
             ),
-          ),
-          if (chrome != null) ...[
-            // The same condition media_kit's `Video` puts on its
-            // `SubtitleView`: with libass, mpv draws text subtitles itself.
-            if (subtitles.visible &&
-                !(player.platform?.configuration.libass ?? false))
+            if (chrome != null) ...[
+              // The same condition media_kit's `Video` puts on its
+              // `SubtitleView`: with libass, mpv draws text subtitles itself.
+              if (subtitles.visible &&
+                  !(player.platform?.configuration.libass ?? false))
+                Positioned.fill(
+                  child: MydiaSubtitleView(
+                    player: player,
+                    configuration: subtitles,
+                    controller: binding.subtitles,
+                  ),
+                ),
               Positioned.fill(
-                child: MydiaSubtitleView(
-                  player: player,
-                  configuration: subtitles,
-                  controller: binding.subtitles,
+                child: chrome(
+                  player,
+                  SurfaceSubtitleLift(
+                    player: player,
+                    subtitles: binding.subtitles,
+                    box: () => _box,
+                    scaling: widget.scaling,
+                  ),
                 ),
               ),
-            Positioned.fill(
-              child: chrome(
-                player,
-                SurfaceSubtitleLift(
-                  player: player,
-                  subtitles: binding.subtitles,
-                  box: () => _box,
-                  scaling: widget.scaling,
-                ),
-              ),
-            ),
+            ],
+            if (overlay != null) Positioned.fill(child: overlay),
           ],
-          if (overlay != null) Positioned.fill(child: overlay),
-        ],
-      );
-    });
+        );
+      },
+    );
   }
 }
 

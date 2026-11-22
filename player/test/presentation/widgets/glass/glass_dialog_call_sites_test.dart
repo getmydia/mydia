@@ -22,7 +22,10 @@ void main() {
           .join('\n');
       if (RegExp(r'\bAlertDialog\(').hasMatch(code)) offenders.add(path);
     }
-    expect(offenders, isEmpty,
-        reason: 'Use GlassDialog (lib/presentation/widgets/glass/).');
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'Use GlassDialog (lib/presentation/widgets/glass/).',
+    );
   });
 }

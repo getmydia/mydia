@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
 import 'input_capabilities_native.dart'
-    if (dart.library.js_interop) 'input_capabilities_web.dart' as probe;
+    if (dart.library.js_interop) 'input_capabilities_web.dart'
+    as probe;
 import 'platform_features.dart';
-import 'tv_probe_native.dart' if (dart.library.js_interop) 'tv_probe_web.dart'
+import 'tv_probe_native.dart'
+    if (dart.library.js_interop) 'tv_probe_web.dart'
     as tv;
 
 /// What the viewer is pointing with, as opposed to what the build target is.
@@ -51,10 +53,10 @@ class InputCapabilities {
   /// Consumers use this to decide between pointer affordances and focus
   /// affordances, not to decide layout.
   static bool get directionalPrimary => computeDirectionalPrimary(
-        isNativeAndroid: PlatformFeatures.isAndroid,
-        hasLeanback: _hasLeanback,
-        forcedTv: forcedTv,
-      );
+    isNativeAndroid: PlatformFeatures.isAndroid,
+    hasLeanback: _hasLeanback,
+    forcedTv: forcedTv,
+  );
 
   /// Pure predicate behind [directionalPrimary], exposed separately for the
   /// same reason [computeTouchPrimary] is: the platform branches are
@@ -65,16 +67,15 @@ class InputCapabilities {
     required bool isNativeAndroid,
     required bool hasLeanback,
     required bool forcedTv,
-  }) =>
-      forcedTv || (isNativeAndroid && hasLeanback);
+  }) => forcedTv || (isNativeAndroid && hasLeanback);
 
   /// Whether the primary pointer is a finger.
   static bool get touchPrimary => computeTouchPrimary(
-        isNativeMobile: PlatformFeatures.isMobile,
-        isWeb: kIsWeb,
-        coarsePointer: probe.coarsePointer,
-        directionalPrimary: directionalPrimary,
-      );
+    isNativeMobile: PlatformFeatures.isMobile,
+    isWeb: kIsWeb,
+    coarsePointer: probe.coarsePointer,
+    directionalPrimary: directionalPrimary,
+  );
 
   /// Pure predicate behind [touchPrimary], exposed separately so it can be
   /// unit-tested for every platform combination without running on each.
@@ -96,8 +97,7 @@ class InputCapabilities {
     required bool isWeb,
     required bool coarsePointer,
     required bool directionalPrimary,
-  }) =>
-      !directionalPrimary && (isNativeMobile || (isWeb && coarsePointer));
+  }) => !directionalPrimary && (isNativeMobile || (isWeb && coarsePointer));
 
   /// Whether tap and double-tap playback gestures should be wired.
   ///

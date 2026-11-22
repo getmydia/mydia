@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/capabilities.dart';
@@ -20,8 +20,11 @@ import 'package:player/presentation/widgets/primary_play_button.dart';
 import '../detail/detail_harness.dart';
 import '../sources/fake_media_source.dart';
 
-const _show =
-    ItemRef(sourceId: fakeSourceId, kind: ItemKind.show, externalId: 'sh-1');
+const _show = ItemRef(
+  sourceId: fakeSourceId,
+  kind: ItemKind.show,
+  externalId: 'sh-1',
+);
 
 ItemRef _seasonRef(int n) =>
     ItemRef(sourceId: fakeSourceId, kind: ItemKind.season, externalId: 'se-$n');
@@ -31,69 +34,70 @@ ItemSummary _episode(
   int season = 1,
   bool watched = false,
   int? positionSeconds,
-}) =>
-    ItemSummary(
-      ref: ItemRef(
-        sourceId: fakeSourceId,
-        kind: ItemKind.episode,
-        externalId: 'ep-$season-$number',
-      ),
-      title: 'Episode $number',
-      index: number,
-      parentIndex: season,
-      overview: 'Overview for episode $number.',
-      durationSeconds: 2580,
-      defaultVersionId: 'file-$season-$number',
-      userState: UserState(watched: watched, progressSeconds: positionSeconds),
-    );
+}) => ItemSummary(
+  ref: ItemRef(
+    sourceId: fakeSourceId,
+    kind: ItemKind.episode,
+    externalId: 'ep-$season-$number',
+  ),
+  title: 'Episode $number',
+  index: number,
+  parentIndex: season,
+  overview: 'Overview for episode $number.',
+  durationSeconds: 2580,
+  defaultVersionId: 'file-$season-$number',
+  userState: UserState(watched: watched, progressSeconds: positionSeconds),
+);
 
 /// A series whose seasons and episodes the test scripts, with the Next Up
 /// capability a Mydia instance has.
 class _SeriesSource extends ScriptedDetailSource implements NextUp {
   _SeriesSource({required this.episodes, this.nextUpEpisode})
-      : super(
-          detailOf: (ref) => ref.kind == ItemKind.episode
-              ? ItemDetail(
-                  summary: ItemSummary(
-                    ref: ref,
-                    title: 'Episode',
-                    index: 2,
-                    parentIndex: 1,
-                    defaultVersionId: '${ref.externalId}-sd',
-                  ),
-                  versions: [
-                    MediaVersion(id: '${ref.externalId}-sd', height: 480),
-                    MediaVersion(id: '${ref.externalId}-hd', height: 1080),
-                  ],
-                )
-              : ItemDetail(
-                  summary: ItemSummary(
-                    ref: ref,
-                    title: 'Harbor Lights',
-                    year: 2022,
-                  ),
-                  overview: 'A coastal mystery series.',
-                  genres: const ['Mystery', 'Drama'],
-                  contentRating: 'TV-14',
-                  rating: 7.9,
-                  cast: const [Person(name: 'Del Osei', role: 'Det. Osei')],
+    : super(
+        detailOf: (ref) => ref.kind == ItemKind.episode
+            ? ItemDetail(
+                summary: ItemSummary(
+                  ref: ref,
+                  title: 'Episode',
+                  index: 2,
+                  parentIndex: 1,
+                  defaultVersionId: '${ref.externalId}-sd',
                 ),
-        ) {
+                versions: [
+                  MediaVersion(id: '${ref.externalId}-sd', height: 480),
+                  MediaVersion(id: '${ref.externalId}-hd', height: 1080),
+                ],
+              )
+            : ItemDetail(
+                summary: ItemSummary(
+                  ref: ref,
+                  title: 'Harbor Lights',
+                  year: 2022,
+                ),
+                overview: 'A coastal mystery series.',
+                genres: const ['Mystery', 'Drama'],
+                contentRating: 'TV-14',
+                rating: 7.9,
+                cast: const [Person(name: 'Del Osei', role: 'Det. Osei')],
+              ),
+      ) {
     childrenOf = (parent) => switch (parent.kind) {
-          ItemKind.show => [
-              for (final n in episodes.keys)
-                ItemSummary(ref: _seasonRef(n), title: 'Season $n', index: n),
-            ],
-          _ => episodes[int.parse(parent.externalId.substring(3))] ?? const [],
-        };
+      ItemKind.show => [
+        for (final n in episodes.keys)
+          ItemSummary(ref: _seasonRef(n), title: 'Season $n', index: n),
+      ],
+      _ => episodes[int.parse(parent.externalId.substring(3))] ?? const [],
+    };
   }
 
   final Map<int, List<ItemSummary>> episodes;
   final ItemSummary? nextUpEpisode;
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.nextUp};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.nextUp,
+  };
 
   @override
   Future<ItemSummary?> nextUp(ItemRef show) async => nextUpEpisode;
@@ -113,7 +117,8 @@ Future<void> _pumpScreen(
   // Pumps under the Liquid Glass design language when true.
   bool liquid = false,
 }) {
-  final byseason = episodes ??
+  final byseason =
+      episodes ??
       {
         1: [_episode(1, watched: true), _episode(2), _episode(3)],
       };
@@ -122,10 +127,10 @@ Future<void> _pumpScreen(
     nextUpEpisode: nextUp ?? (defaultNextUp ? _episode(2) : null),
   );
   Widget screen(String? episode) => ShowDetailScreen.target(
-        target: const SourceTarget(_show),
-        initialSeason: initialSeason,
-        initialEpisode: episode,
-      );
+    target: const SourceTarget(_show),
+    initialSeason: initialSeason,
+    initialEpisode: episode,
+  );
   return pumpDetailScreen(
     tester,
     initialEpisodes == null
@@ -150,8 +155,9 @@ Future<void> _pumpScreen(
 }
 
 void main() {
-  testWidgets('on Liquid Glass the Next Up pill is a glass badge',
-      (tester) async {
+  testWidgets('on Liquid Glass the Next Up pill is a glass badge', (
+    tester,
+  ) async {
     await _pumpScreen(tester, liquid: true);
     expect(
       find.ancestor(
@@ -162,32 +168,35 @@ void main() {
     );
   });
 
-  testWidgets('on Liquid Glass an unselected season is tappable in its padding',
-      (tester) async {
-    await _pumpScreen(
-      tester,
-      liquid: true,
-      size: const Size(1000, 2200),
-      episodes: {
-        1: [_episode(1, watched: true), _episode(2), _episode(3)],
-        2: [_episode(1, season: 2), _episode(2, season: 2)],
-      },
-    );
-    final text = tester.getRect(find.text('Season 2'));
-    // 8px left of the glyphs: inside the chip's 16px horizontal padding.
-    await tester.tapAt(Offset(text.left - 8, text.center.dy));
-    await tester.pumpAndSettle();
-    expect(
-      find.ancestor(
-        of: find.text('Season 2'),
-        matching: find.byType(GlassSurface),
-      ),
-      findsOneWidget,
-    );
-  });
+  testWidgets(
+    'on Liquid Glass an unselected season is tappable in its padding',
+    (tester) async {
+      await _pumpScreen(
+        tester,
+        liquid: true,
+        size: const Size(1000, 2200),
+        episodes: {
+          1: [_episode(1, watched: true), _episode(2), _episode(3)],
+          2: [_episode(1, season: 2), _episode(2, season: 2)],
+        },
+      );
+      final text = tester.getRect(find.text('Season 2'));
+      // 8px left of the glyphs: inside the chip's 16px horizontal padding.
+      await tester.tapAt(Offset(text.left - 8, text.center.dy));
+      await tester.pumpAndSettle();
+      expect(
+        find.ancestor(
+          of: find.text('Season 2'),
+          matching: find.byType(GlassSurface),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
-  testWidgets('on Liquid Glass only the selected season sits on glass',
-      (tester) async {
+  testWidgets('on Liquid Glass only the selected season sits on glass', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       liquid: true,
@@ -198,9 +207,9 @@ void main() {
       },
     );
     Finder glassAround(String label) => find.ancestor(
-          of: find.text(label),
-          matching: find.byType(GlassSurface),
-        );
+      of: find.text(label),
+      matching: find.byType(GlassSurface),
+    );
     expect(glassAround('Season 1'), findsOneWidget);
     expect(glassAround('Season 2'), findsNothing);
 
@@ -244,8 +253,9 @@ void main() {
     expect(find.byType(CastRail), findsOneWidget);
   });
 
-  testWidgets('tapping a different episode re-targets the hero',
-      (tester) async {
+  testWidgets('tapping a different episode re-targets the hero', (
+    tester,
+  ) async {
     await _pumpScreen(tester);
 
     // The episode rail sits below the redesigned hero/cast/similar sections,
@@ -269,8 +279,9 @@ void main() {
     expect(find.textContaining('E3'), findsWidgets);
   });
 
-  testWidgets('fully-watched show (no next up) still renders the hero',
-      (tester) async {
+  testWidgets('fully-watched show (no next up) still renders the hero', (
+    tester,
+  ) async {
     // With every episode watched there is no next up, so the hero's
     // default-selection seed never fires and the selected episode id stays
     // null. The hero must fall back to the season's first episode rather than
@@ -297,8 +308,9 @@ void main() {
     2: [_episode(1, season: 2), _episode(2, season: 2)],
   };
 
-  testWidgets('switching seasons re-targets the hero at the new season',
-      (tester) async {
+  testWidgets('switching seasons re-targets the hero at the new season', (
+    tester,
+  ) async {
     // The selected episode id still points at a season 1 episode after the
     // switch, so it matches nothing in season 2's list: the hero has to fall
     // back to season 2's first episode instead of spinning forever.
@@ -318,8 +330,9 @@ void main() {
     expect(find.text('S2 · E1'), findsOneWidget);
   });
 
-  testWidgets('initialSeason seeds once and a later season tap sticks',
-      (tester) async {
+  testWidgets('initialSeason seeds once and a later season tap sticks', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       size: const Size(1000, 2200),
@@ -340,8 +353,9 @@ void main() {
     expect(find.text('S2 · E1'), findsNothing);
   });
 
-  testWidgets('initialEpisode selects that episode instead of next up',
-      (tester) async {
+  testWidgets('initialEpisode selects that episode instead of next up', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       size: const Size(1000, 2200),
@@ -355,8 +369,9 @@ void main() {
     expect(find.textContaining('Next Up'), findsNothing);
   });
 
-  testWidgets('initialEpisode in a later season opens on that season',
-      (tester) async {
+  testWidgets('initialEpisode in a later season opens on that season', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       size: const Size(1000, 2200),
@@ -369,8 +384,9 @@ void main() {
     expect(find.text('S2 · E2'), findsOneWidget);
   });
 
-  testWidgets('initialEpisode seeds once and a later episode tap sticks',
-      (tester) async {
+  testWidgets('initialEpisode seeds once and a later episode tap sticks', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       size: const Size(1000, 2200),
@@ -388,8 +404,9 @@ void main() {
     expect(find.text('S1 · E3'), findsNothing);
   });
 
-  testWidgets('a new initialEpisode on the same screen reselects',
-      (tester) async {
+  testWidgets('a new initialEpisode on the same screen reselects', (
+    tester,
+  ) async {
     final requested = ValueNotifier<String?>('ep-1-3');
     addTearDown(requested.dispose);
     await _pumpScreen(
@@ -414,8 +431,9 @@ void main() {
     expect(find.text('2022'), findsOneWidget);
   });
 
-  testWidgets('content rating and genres render once, in the hero tag row',
-      (tester) async {
+  testWidgets('content rating and genres render once, in the hero tag row', (
+    tester,
+  ) async {
     // The tall viewport builds the lower metadata section too, so a
     // reintroduced duplicate down there would be found, not silently
     // scrolled out of the tree.
@@ -426,8 +444,9 @@ void main() {
     expect(find.text('Drama'), findsOneWidget);
   });
 
-  testWidgets('Play passes a resume position for a part-watched episode',
-      (tester) async {
+  testWidgets('Play passes a resume position for a part-watched episode', (
+    tester,
+  ) async {
     final pushed = <String>[];
     final partWatched = _episode(2, positionSeconds: 900);
 
@@ -450,8 +469,9 @@ void main() {
     expect(pushed.single, contains('resume=900'));
   });
 
-  testWidgets('Play omits resume for an already-watched episode',
-      (tester) async {
+  testWidgets('Play omits resume for an already-watched episode', (
+    tester,
+  ) async {
     final pushed = <String>[];
     final watched = _episode(2, watched: true);
 
@@ -473,8 +493,9 @@ void main() {
     expect(pushed.single, isNot(contains('resume=')));
   });
 
-  testWidgets('hero play control sits flush against the overlay right edge',
-      (tester) async {
+  testWidgets('hero play control sits flush against the overlay right edge', (
+    tester,
+  ) async {
     await _pumpScreen(tester, size: const Size(1000, 1200));
     await tester.pumpAndSettle();
 
@@ -487,8 +508,9 @@ void main() {
     );
   });
 
-  testWidgets('hero play control lives in the hero, not the body',
-      (tester) async {
+  testWidgets('hero play control lives in the hero, not the body', (
+    tester,
+  ) async {
     await _pumpScreen(tester, size: const Size(1000, 1200));
     await tester.pumpAndSettle();
 
@@ -525,32 +547,31 @@ void main() {
   });
 
   testWidgets(
-      'tapping a rail card selects the episode without starting playback',
-      (tester) async {
-    final pushed = <String>[];
+    'tapping a rail card selects the episode without starting playback',
+    (tester) async {
+      final pushed = <String>[];
 
-    await _pumpScreen(
-      tester,
-      size: const Size(1000, 2200),
-      pushedRoutes: pushed,
-    );
-    await tester.pumpAndSettle();
+      await _pumpScreen(
+        tester,
+        size: const Size(1000, 2200),
+        pushedRoutes: pushed,
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byType(EpisodeRailCard).last,
-      warnIfMissed: false,
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(find.byType(EpisodeRailCard).last, warnIfMissed: false);
+      await tester.pumpAndSettle();
 
-    expect(pushed, isEmpty);
-    final cards = tester
-        .widgetList<EpisodeRailCard>(find.byType(EpisodeRailCard))
-        .toList();
-    expect(cards.last.selected, isTrue);
-  });
+      expect(pushed, isEmpty);
+      final cards = tester
+          .widgetList<EpisodeRailCard>(find.byType(EpisodeRailCard))
+          .toList();
+      expect(cards.last.selected, isTrue);
+    },
+  );
 
-  testWidgets('tapping a rail card carries the viewport back to the hero',
-      (tester) async {
+  testWidgets('tapping a rail card carries the viewport back to the hero', (
+    tester,
+  ) async {
     await _pumpScreen(
       tester,
       // Phone-shaped, so the rail sits well below the fold and there is real

@@ -9,6 +9,7 @@
 library;
 
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,18 +53,18 @@ class UrlProbeResult {
   });
 
   Map<String, dynamic> toJson() => {
-        'url': url,
-        'success': success,
-        'error': error,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'url': url,
+    'success': success,
+    'error': error,
+    'timestamp': timestamp.toIso8601String(),
+  };
 
   factory UrlProbeResult.fromJson(Map<String, dynamic> json) => UrlProbeResult(
-        url: json['url'] as String,
-        success: json['success'] as bool,
-        error: json['error'] as String?,
-        timestamp: DateTime.parse(json['timestamp'] as String),
-      );
+    url: json['url'] as String,
+    success: json['success'] as bool,
+    error: json['error'] as String?,
+    timestamp: DateTime.parse(json['timestamp'] as String),
+  );
 }
 
 /// Re-export for convenience in UI.
@@ -130,16 +131,14 @@ class ConnectionDiagnosticsNotifier
   ConnectionDiagnosticsState build() {
     // Watch the active source's link for real-time updates
     final activeId = ref.watch(activeSourceIdProvider);
-    final isP2P = activeId != null &&
+    final isP2P =
+        activeId != null &&
         (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
 
     // Schedule async load
     Future.microtask(_loadDiagnostics);
 
-    return ConnectionDiagnosticsState(
-      isP2PMode: isP2P,
-      isLoading: true,
-    );
+    return ConnectionDiagnosticsState(isP2PMode: isP2P, isLoading: true);
   }
 
   AuthStorage get _authStorage => getAuthStorage();
@@ -152,30 +151,37 @@ class ConnectionDiagnosticsNotifier
       final serverUrl = activeId == null
           ? null
           : await ref.read(sourceServerUrlProvider(activeId).future);
-      final directUrls = [if (serverUrl != null) serverUrl];
+      final directUrls = [?serverUrl];
 
       // Load last direct attempt timestamp
       DateTime? lastDirectAttempt;
-      final lastAttemptStr =
-          await _authStorage.read(_DiagnosticsKeys.lastDirectAttempt);
+      final lastAttemptStr = await _authStorage.read(
+        _DiagnosticsKeys.lastDirectAttempt,
+      );
       if (lastAttemptStr != null) {
         try {
           lastDirectAttempt = DateTime.parse(lastAttemptStr);
         } catch (e) {
           debugPrint(
-              '[ConnectionDiagnostics] Failed to parse last attempt: $e');
+            '[ConnectionDiagnostics] Failed to parse last attempt: $e',
+          );
         }
       }
 
       // Load URL attempt errors
       Map<String, DirectUrlAttempt> urlAttempts = {};
-      final errorsJson =
-          await _authStorage.read(_DiagnosticsKeys.directUrlErrors);
+      final errorsJson = await _authStorage.read(
+        _DiagnosticsKeys.directUrlErrors,
+      );
       if (errorsJson != null) {
         try {
           final decoded = jsonDecode(errorsJson) as Map<String, dynamic>;
-          urlAttempts = decoded.map((key, value) => MapEntry(
-              key, DirectUrlAttempt.fromJson(value as Map<String, dynamic>)));
+          urlAttempts = decoded.map(
+            (key, value) => MapEntry(
+              key,
+              DirectUrlAttempt.fromJson(value as Map<String, dynamic>),
+            ),
+          );
         } catch (e) {
           debugPrint('[ConnectionDiagnostics] Failed to parse URL errors: $e');
         }
@@ -187,7 +193,8 @@ class ConnectionDiagnosticsNotifier
       // `compatibility_provider.dart`.
       if (!ref.mounted) return;
 
-      final isP2P = activeId != null &&
+      final isP2P =
+          activeId != null &&
           await ref.read(sourceViaP2pProvider(activeId).future);
       if (!ref.mounted) return;
 
@@ -289,4 +296,5 @@ class ConnectionDiagnosticsNotifier
 /// Provider for connection diagnostics.
 final connectionDiagnosticsProvider =
     NotifierProvider<ConnectionDiagnosticsNotifier, ConnectionDiagnosticsState>(
-        ConnectionDiagnosticsNotifier.new);
+      ConnectionDiagnosticsNotifier.new,
+    );

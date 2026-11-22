@@ -53,12 +53,11 @@ DownloadService createNativeDownloadService({
   HttpClientAdapter? httpAdapter,
   Future<String> Function()? downloadDirectory,
   DateTime Function()? clock,
-}) =>
-    _NativeDownloadService(
-      httpAdapter: httpAdapter,
-      downloadDirectory: downloadDirectory,
-      clock: clock,
-    );
+}) => _NativeDownloadService(
+  httpAdapter: httpAdapter,
+  downloadDirectory: downloadDirectory,
+  clock: clock,
+);
 
 /// Get the native download database implementation.
 DownloadDatabase getDownloadDatabase() => _NativeDownloadDatabase();
@@ -203,10 +202,12 @@ class _NativeDownloadDatabase implements DownloadDatabase {
 
 class _NativeDownloadService implements DownloadService {
   DownloadDatabase? _database;
-  final Dio _dio = Dio(BaseOptions(
-    receiveTimeout: const Duration(minutes: 30),
-    sendTimeout: const Duration(minutes: 30),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      receiveTimeout: const Duration(minutes: 30),
+      sendTimeout: const Duration(minutes: 30),
+    ),
+  );
   final Future<String> Function()? _downloadDirectoryOverride;
   final DateTime Function() _clock;
 
@@ -214,8 +215,8 @@ class _NativeDownloadService implements DownloadService {
     HttpClientAdapter? httpAdapter,
     Future<String> Function()? downloadDirectory,
     DateTime Function()? clock,
-  })  : _downloadDirectoryOverride = downloadDirectory,
-        _clock = clock ?? DateTime.now {
+  }) : _downloadDirectoryOverride = downloadDirectory,
+       _clock = clock ?? DateTime.now {
     if (httpAdapter != null) {
       _dio.httpClientAdapter = httpAdapter;
     }
@@ -319,11 +320,9 @@ class _NativeDownloadService implements DownloadService {
       // Get queued tasks sorted by creation date (FIFO)
       // Only pick up 'queued' tasks - 'transcoding' tasks are already actively
       // managed by _runTask and should not be restarted.
-      final queuedTasks = _database!
-          .getAllTasks()
-          .where((t) => t.status == 'queued')
-          .toList()
-        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final queuedTasks =
+          _database!.getAllTasks().where((t) => t.status == 'queued').toList()
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
       if (queuedTasks.isEmpty) break;
 
@@ -331,8 +330,10 @@ class _NativeDownloadService implements DownloadService {
       final task = queuedTasks.first;
       // Claimed as downloading so the loop holds its slot from the start;
       // otherwise a slow resolve lets this loop launch every queued task.
-      final pendingTask =
-          task.copyWith(status: 'downloading', lastProgressAt: _clock());
+      final pendingTask = task.copyWith(
+        status: 'downloading',
+        lastProgressAt: _clock(),
+      );
       await _database!.saveTask(pendingTask);
 
       _runInBackground(_runTask(pendingTask), 'download ${pendingTask.id}');
@@ -350,10 +351,12 @@ class _NativeDownloadService implements DownloadService {
     // `runZonedGuarded` handler in main.dart, which logs it and files a crash
     // report with the stack trace.
     final zone = Zone.current;
-    unawaited(task.catchError((Object e, StackTrace s) {
-      debugPrint('[DownloadService] $what failed: $e');
-      zone.handleUncaughtError(e, s);
-    }));
+    unawaited(
+      task.catchError((Object e, StackTrace s) {
+        debugPrint('[DownloadService] $what failed: $e');
+        zone.handleUncaughtError(e, s);
+      }),
+    );
   }
 
   @override
@@ -405,8 +408,11 @@ class _NativeDownloadService implements DownloadService {
         final request = await fetch(task, art);
         if (request == null) return null;
         final target = '$path.$suffix.jpg';
-        await _dio.download(request.url, target,
-            options: Options(headers: request.headers));
+        await _dio.download(
+          request.url,
+          target,
+          options: Options(headers: request.headers),
+        );
         return target;
       } catch (e) {
         debugPrint('[Downloads] Artwork skipped: $e');
@@ -417,10 +423,11 @@ class _NativeDownloadService implements DownloadService {
     // An episode's posterUrl is its still, which belongs in the thumbnail;
     // the saved poster is the show's.
     final poster = await one(
-        task.type == MediaType.episode
-            ? (task.showPosterUrl ?? task.posterUrl)
-            : task.posterUrl,
-        'poster');
+      task.type == MediaType.episode
+          ? (task.showPosterUrl ?? task.posterUrl)
+          : task.posterUrl,
+      'poster',
+    );
     final backdrop = await one(task.backdropUrl, 'backdrop');
     final thumbnail = await one(task.thumbnailUrl, 'thumb');
     final saved = [poster, backdrop, thumbnail].whereType<String>().toList();
@@ -444,11 +451,13 @@ class _NativeDownloadService implements DownloadService {
     // taken before the fetches.
     final currentTask = db.getTask(task.id);
     if (currentTask != null) {
-      await db.saveTask(currentTask.copyWith(
-        posterPath: poster,
-        backdropPath: backdrop,
-        thumbnailPath: thumbnail,
-      ));
+      await db.saveTask(
+        currentTask.copyWith(
+          posterPath: poster,
+          backdropPath: backdrop,
+          thumbnailPath: thumbnail,
+        ),
+      );
     }
     // Read after the task write: a delete may have landed during that await.
     final media = db.getMedia(task.id);
@@ -456,11 +465,13 @@ class _NativeDownloadService implements DownloadService {
       await discard();
       return;
     }
-    await db.saveMedia(media.withArtwork(
-      posterPath: poster,
-      backdropPath: backdrop,
-      thumbnailPath: thumbnail,
-    ));
+    await db.saveMedia(
+      media.withArtwork(
+        posterPath: poster,
+        backdropPath: backdrop,
+        thumbnailPath: thumbnail,
+      ),
+    );
   }
 
   /// Deletes a completed download's file and its saved artwork.
@@ -524,9 +535,10 @@ class _NativeDownloadService implements DownloadService {
       case RecoveryAction.fail:
         final failed = task.copyWith(
           status: 'failed',
-          error: const DownloadFailure(DownloadFailureCode.stalled,
-                  count: maxRecoveryAttempts)
-              .encode(),
+          error: const DownloadFailure(
+            DownloadFailureCode.stalled,
+            count: maxRecoveryAttempts,
+          ).encode(),
         );
         await _database!.saveTask(failed);
         _emit(failed);
@@ -559,9 +571,10 @@ class _NativeDownloadService implements DownloadService {
   }
 
   void _ensureStallTimer() {
-    final anyActive = _database
-            ?.getAllTasks()
-            .any((t) => DownloadStatusSets.running.contains(t.status)) ??
+    final anyActive =
+        _database?.getAllTasks().any(
+          (t) => DownloadStatusSets.running.contains(t.status),
+        ) ??
         false;
 
     if (anyActive) {
@@ -673,9 +686,9 @@ class _NativeDownloadService implements DownloadService {
       };
 
       // Get all file paths from active/pending downloads
-      final activeTasks = _database!
-          .getAllTasks()
-          .where((t) => DownloadStatusSets.active.contains(t.status));
+      final activeTasks = _database!.getAllTasks().where(
+        (t) => DownloadStatusSets.active.contains(t.status),
+      );
       final activeTaskPaths = {
         for (final t in activeTasks) ...[
           if (t.filePath != null) t.filePath!,
@@ -747,8 +760,10 @@ class _NativeDownloadService implements DownloadService {
       throw _TaskFailure(DownloadFailure.fromSource(e), permanent: true);
     } on DownloadServiceException catch (e) {
       if (e.statusCode == 404) {
-        throw const _TaskFailure(DownloadFailure(DownloadFailureCode.itemGone),
-            permanent: true);
+        throw const _TaskFailure(
+          DownloadFailure(DownloadFailureCode.itemGone),
+          permanent: true,
+        );
       }
       rethrow;
     }
@@ -763,7 +778,8 @@ class _NativeDownloadService implements DownloadService {
     final shouldQueue = !hasAvailableSlots();
     final now = DateTime.now();
     final task = DownloadTask(
-      id: '${request.ref.sourceId.value}_${request.ref.externalId}_'
+      id:
+          '${request.ref.sourceId.value}_${request.ref.externalId}_'
           '${now.millisecondsSinceEpoch}',
       mediaId: request.ref.externalId,
       sourceId: request.ref.sourceId.value,
@@ -876,19 +892,24 @@ class _NativeDownloadService implements DownloadService {
       Future<void> pollJob(TranscodeJob job, String id) async {
         final snap = await _guardJobCall(() => job.status(id));
         if (snap.error != null) {
-          throw _TaskFailure(DownloadFailure(
+          throw _TaskFailure(
+            DownloadFailure(
               DownloadFailureCode.transcodeFailed,
-              detail: snap.error));
+              detail: snap.error,
+            ),
+          );
         }
         transcodeDone = snap.ready;
         expected = snap.fileSize ?? expected;
-        await save(current.copyWith(
-          transcodeProgress: snap.progress,
-          fileSize: expected,
-          status: snap.ready ? 'downloading' : 'transcoding',
-          lastProgressAt: _clock(),
-          recoveryAttempts: 0,
-        ));
+        await save(
+          current.copyWith(
+            transcodeProgress: snap.progress,
+            fileSize: expected,
+            status: snap.ready ? 'downloading' : 'transcoding',
+            lastProgressAt: _clock(),
+            recoveryAttempts: 0,
+          ),
+        );
       }
 
       if (plan is TranscodeJob) {
@@ -905,14 +926,16 @@ class _NativeDownloadService implements DownloadService {
             return;
           }
           jobId = snap.jobId;
-          await save(current.copyWith(
-            transcodeJobId: snap.jobId,
-            transcodeProgress: snap.progress,
-            fileSize: snap.fileSize,
-            isProgressive: !snap.ready,
-            status: snap.ready ? 'downloading' : 'transcoding',
-            lastProgressAt: _clock(),
-          ));
+          await save(
+            current.copyWith(
+              transcodeJobId: snap.jobId,
+              transcodeProgress: snap.progress,
+              fileSize: snap.fileSize,
+              isProgressive: !snap.ready,
+              status: snap.ready ? 'downloading' : 'transcoding',
+              lastProgressAt: _clock(),
+            ),
+          );
           expected = snap.fileSize;
         }
         transcodeDone = current.transcodeProgress >= 1.0;
@@ -929,15 +952,19 @@ class _NativeDownloadService implements DownloadService {
         expected = file.expectedBytes ?? expected;
       }
 
-      final path = current.filePath ??
+      final path =
+          current.filePath ??
           '${await _getDownloadDirectory()}/'
               '${_generateFileName(current, file.extension)}';
       // A slow resolve or prepare must not eat the stall window.
-      await save(current.copyWith(
+      await save(
+        current.copyWith(
           filePath: path,
           status: 'downloading',
           fileSize: expected,
-          lastProgressAt: _clock()));
+          lastProgressAt: _clock(),
+        ),
+      );
       final disk = File(path);
       diskFile = disk;
 
@@ -963,16 +990,18 @@ class _NativeDownloadService implements DownloadService {
                 : 0.0;
             lastSavedAt = _clock();
             lastSavedBytes = onDisk;
-            await save(current.copyWith(
-              downloadProgress: fraction,
-              progress: current.isProgressive
-                  ? current.transcodeProgress * 0.3 + fraction * 0.7
-                  : fraction,
-              downloadedBytes: onDisk,
-              fileSize: estimate,
-              lastProgressAt: lastSavedAt,
-              recoveryAttempts: 0,
-            ));
+            await save(
+              current.copyWith(
+                downloadProgress: fraction,
+                progress: current.isProgressive
+                    ? current.transcodeProgress * 0.3 + fraction * 0.7
+                    : fraction,
+                downloadedBytes: onDisk,
+                fileSize: estimate,
+                lastProgressAt: lastSavedAt,
+                recoveryAttempts: 0,
+              ),
+            );
           }
 
           final result = await fetchRange(
@@ -1012,9 +1041,11 @@ class _NativeDownloadService implements DownloadService {
           final known = expected;
           final whole = known == null || result.bytesOnDisk >= known;
           if (transcodeDone && (whole || result.statusCode == 200)) break;
-          await Future<void>.delayed(transcodeDone
-              ? const Duration(milliseconds: 500)
-              : const Duration(seconds: 2));
+          await Future<void>.delayed(
+            transcodeDone
+                ? const Duration(milliseconds: 500)
+                : const Duration(seconds: 2),
+          );
         } on DioException catch (e) {
           if (e.type == DioExceptionType.cancel) return;
           final code = e.response?.statusCode;
@@ -1022,8 +1053,9 @@ class _NativeDownloadService implements DownloadService {
           if (code == 401 || code == 403) {
             if (reResolved) {
               throw const _TaskFailure(
-                  DownloadFailure(DownloadFailureCode.signInExpired),
-                  permanent: true);
+                DownloadFailure(DownloadFailureCode.signInExpired),
+                permanent: true,
+              );
             }
             reResolved = true;
             plan = await _resolve(current);
@@ -1035,13 +1067,17 @@ class _NativeDownloadService implements DownloadService {
           if (!transcodeDone) {
             transientRetries++;
             await Future<void>.delayed(
-                Duration(seconds: 1 << transientRetries));
+              Duration(seconds: 1 << transientRetries),
+            );
             if (superseded()) return;
             if (transientRetries >= maxTransientRetries) {
-              throw _ParkTask(DownloadFailure(
+              throw _ParkTask(
+                DownloadFailure(
                   DownloadFailureCode.networkRetries,
                   count: maxTransientRetries,
-                  detail: e.message ?? e.type.name));
+                  detail: e.message ?? e.type.name,
+                ),
+              );
             }
             continue;
           }
@@ -1076,45 +1112,75 @@ class _NativeDownloadService implements DownloadService {
       unawaited(_saveArtwork(done));
     } on _ParkTask catch (e) {
       final before = attemptsBeforeClaim;
-      await save(await withDiskProgress(current.copyWith(
-        status: 'interrupted',
-        error: e.failure.encode(),
-        recoveryAttempts: !e.countsAsAttempt && before != null
-            ? math.min(before, current.recoveryAttempts)
-            : current.recoveryAttempts,
-      )));
+      await save(
+        await withDiskProgress(
+          current.copyWith(
+            status: 'interrupted',
+            error: e.failure.encode(),
+            recoveryAttempts: !e.countsAsAttempt && before != null
+                ? math.min(before, current.recoveryAttempts)
+                : current.recoveryAttempts,
+          ),
+        ),
+      );
     } on _TaskFailure catch (e) {
-      await save(await withDiskProgress(current.copyWith(
-        status: 'failed',
-        error: e.failure.encode(),
-        recoveryAttempts:
-            e.permanent ? maxRecoveryAttempts : current.recoveryAttempts,
-      )));
+      await save(
+        await withDiskProgress(
+          current.copyWith(
+            status: 'failed',
+            error: e.failure.encode(),
+            recoveryAttempts: e.permanent
+                ? maxRecoveryAttempts
+                : current.recoveryAttempts,
+          ),
+        ),
+      );
     } on DeadJobException {
-      await save(current.copyWith(
+      await save(
+        current.copyWith(
           status: 'failed',
           error: const DownloadFailure(DownloadFailureCode.jobGone).encode(),
-          recoveryAttempts: maxRecoveryAttempts));
+          recoveryAttempts: maxRecoveryAttempts,
+        ),
+      );
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) return;
       // The same rule as in the loop, for a failure before the first byte.
       final message = e.message;
-      await save(await withDiskProgress(current.copyWith(
-          status: _isTransportError(e) ? 'interrupted' : 'failed',
-          // No text of its own leaves the generic "download failed".
-          error: (message == null
-                  ? const DownloadFailure(DownloadFailureCode.unknown)
-                  : DownloadFailure.text(message))
-              .encode())));
+      await save(
+        await withDiskProgress(
+          current.copyWith(
+            status: _isTransportError(e) ? 'interrupted' : 'failed',
+            // No text of its own leaves the generic "download failed".
+            error:
+                (message == null
+                        ? const DownloadFailure(DownloadFailureCode.unknown)
+                        : DownloadFailure.text(message))
+                    .encode(),
+          ),
+        ),
+      );
     } on SourceException catch (e) {
       // A source failure that got past the resolve step (a job call failing
       // with an unreadable reply, a refused sign-in): keep it typed so the
       // card words it in the viewer's language.
-      await save(await withDiskProgress(current.copyWith(
-          status: 'failed', error: DownloadFailure.fromSource(e).encode())));
+      await save(
+        await withDiskProgress(
+          current.copyWith(
+            status: 'failed',
+            error: DownloadFailure.fromSource(e).encode(),
+          ),
+        ),
+      );
     } catch (e) {
-      await save(await withDiskProgress(current.copyWith(
-          status: 'failed', error: DownloadFailure.text('$e').encode())));
+      await save(
+        await withDiskProgress(
+          current.copyWith(
+            status: 'failed',
+            error: DownloadFailure.text('$e').encode(),
+          ),
+        ),
+      );
     } finally {
       release();
       _runInBackground(_processQueue(), 'process queue');
@@ -1143,8 +1209,9 @@ class _NativeDownloadService implements DownloadService {
     _speedTracker.clearTask(taskId);
 
     // Re-read: a progress tick may have landed since the read above.
-    final pausedTask =
-        (_database!.getTask(taskId) ?? task).copyWith(status: 'paused');
+    final pausedTask = (_database!.getTask(taskId) ?? task).copyWith(
+      status: 'paused',
+    );
     await _database!.saveTask(pausedTask);
     _emit(pausedTask);
     _runInBackground(_processQueue(), 'process queue');
@@ -1158,8 +1225,10 @@ class _NativeDownloadService implements DownloadService {
     const resumable = {'paused', 'interrupted', 'stalled'};
     if (task == null || !resumable.contains(task.status)) return;
 
-    final resumed =
-        task.copyWith(status: 'downloading', lastProgressAt: _clock());
+    final resumed = task.copyWith(
+      status: 'downloading',
+      lastProgressAt: _clock(),
+    );
     await _database!.saveTask(resumed);
     _emit(resumed);
     _runInBackground(_runTask(resumed), 'resume $taskId');
@@ -1173,8 +1242,11 @@ class _NativeDownloadService implements DownloadService {
   /// - Partial files are deleted
   /// - Database is updated
   /// - Queue is processed
-  Future<void> _cancelAndCleanupTask(String taskId,
-      {bool processQueue = true, bool cancelJob = true}) async {
+  Future<void> _cancelAndCleanupTask(
+    String taskId, {
+    bool processQueue = true,
+    bool cancelJob = true,
+  }) async {
     if (_database == null) return;
 
     final task = _database!.getTask(taskId);
@@ -1340,8 +1412,10 @@ class _NativeDownloadService implements DownloadService {
   Future<int> dismissAllFailed() async {
     if (_database == null) return 0;
 
-    final failedTasks =
-        _database!.getAllTasks().where((t) => t.status == 'failed').toList();
+    final failedTasks = _database!
+        .getAllTasks()
+        .where((t) => t.status == 'failed')
+        .toList();
 
     for (final task in failedTasks) {
       // Delete partial file if exists
@@ -1366,8 +1440,10 @@ class _NativeDownloadService implements DownloadService {
   Future<int> retryAllFailed() async {
     if (_database == null) return 0;
 
-    final failedTasks =
-        _database!.getAllTasks().where((t) => t.status == 'failed').toList();
+    final failedTasks = _database!
+        .getAllTasks()
+        .where((t) => t.status == 'failed')
+        .toList();
 
     for (final task in failedTasks) {
       await retryDownload(task.id);
@@ -1382,8 +1458,9 @@ class _NativeDownloadService implements DownloadService {
 
   @override
   ({int count, int bytes}) accountDownloads(String accountId) {
-    final media = (_database?.getAllMedia() ?? const <DownloadedMedia>[])
-        .where((m) => _ofAccount(m.source, accountId));
+    final media = (_database?.getAllMedia() ?? const <DownloadedMedia>[]).where(
+      (m) => _ofAccount(m.source, accountId),
+    );
     return (
       count: media.length,
       bytes: media.fold(0, (sum, m) => sum + m.fileSize),
@@ -1396,26 +1473,35 @@ class _NativeDownloadService implements DownloadService {
 
   @override
   Future<int> deleteDownloadsOfUnknownAccounts(Set<String> knownAccountIds) =>
-      _deleteDownloadsWhere((source) =>
-          source != preAccountSourceId &&
-          !knownAccountIds.contains(source.value.split(':').first));
+      _deleteDownloadsWhere(
+        (source) =>
+            source != preAccountSourceId &&
+            !knownAccountIds.contains(source.value.split(':').first),
+      );
 
   Future<int> _deleteDownloadsWhere(bool Function(SourceId) matches) async {
     if (_database == null) return 0;
     // Tasks first, so an in-flight download cannot finish and save a media
     // row for the removed account while the files are being deleted.
-    final tasks =
-        _database!.getAllTasks().where((t) => matches(t.source)).toList();
+    final tasks = _database!
+        .getAllTasks()
+        .where((t) => matches(t.source))
+        .toList();
     for (final task in tasks) {
       // The account's credentials are going, so a server-side job cannot be
       // cancelled; skipping it also keeps removal off the network.
-      await _cancelAndCleanupTask(task.id,
-          processQueue: false, cancelJob: false);
+      await _cancelAndCleanupTask(
+        task.id,
+        processQueue: false,
+        cancelJob: false,
+      );
       await _database!.deleteTask(task.id);
     }
     var count = 0;
-    final media =
-        _database!.getAllMedia().where((m) => matches(m.source)).toList();
+    final media = _database!
+        .getAllMedia()
+        .where((m) => matches(m.source))
+        .toList();
     for (final m in media) {
       await _deleteMediaFiles(m);
       await _database!.deleteMedia(m.id);
@@ -1440,8 +1526,9 @@ class _NativeDownloadService implements DownloadService {
       await _deleteMediaFiles(media);
       await _database!.deleteMedia(media.id);
       // Clean up associated tasks
-      final tasks =
-          _database!.getAllTasks().where((t) => t.matches(media.itemRef));
+      final tasks = _database!.getAllTasks().where(
+        (t) => t.matches(media.itemRef),
+      );
       for (final task in tasks) {
         await _database!.deleteTask(task.id);
       }
@@ -1464,7 +1551,10 @@ class _NativeDownloadService implements DownloadService {
 
   @override
   Future<int> deleteSeasonDownloads(
-      SourceId source, String showId, int seasonNumber) async {
+    SourceId source,
+    String showId,
+    int seasonNumber,
+  ) async {
     if (_database == null) return 0;
 
     int count = 0;
@@ -1472,17 +1562,20 @@ class _NativeDownloadService implements DownloadService {
     // Delete completed downloads for this season
     final allMedia = _database!.getAllMedia();
     final seasonMedia = allMedia
-        .where((m) =>
-            m.source == source &&
-            m.showId == showId &&
-            (m.seasonNumber ?? 0) == seasonNumber)
+        .where(
+          (m) =>
+              m.source == source &&
+              m.showId == showId &&
+              (m.seasonNumber ?? 0) == seasonNumber,
+        )
         .toList();
     for (final media in seasonMedia) {
       await _deleteMediaFiles(media);
       await _database!.deleteMedia(media.id);
       // Clean up associated tasks
-      final tasks =
-          _database!.getAllTasks().where((t) => t.matches(media.itemRef));
+      final tasks = _database!.getAllTasks().where(
+        (t) => t.matches(media.itemRef),
+      );
       for (final task in tasks) {
         await _database!.deleteTask(task.id);
       }
@@ -1492,10 +1585,12 @@ class _NativeDownloadService implements DownloadService {
     // Cancel active tasks for this season
     final allTasks = _database!.getAllTasks();
     final seasonTasks = allTasks
-        .where((t) =>
-            t.source == source &&
-            t.showId == showId &&
-            (t.seasonNumber ?? 0) == seasonNumber)
+        .where(
+          (t) =>
+              t.source == source &&
+              t.showId == showId &&
+              (t.seasonNumber ?? 0) == seasonNumber,
+        )
         .toList();
     for (final task in seasonTasks) {
       await _cancelAndCleanupTask(task.id, processQueue: false);
@@ -1551,8 +1646,7 @@ bool _isTransportError(DioException e) =>
       DioExceptionType.connectionTimeout ||
       DioExceptionType.receiveTimeout ||
       DioExceptionType.sendTimeout ||
-      DioExceptionType.unknown =>
-        true,
+      DioExceptionType.unknown => true,
       _ => false,
     };
 
@@ -1604,17 +1698,18 @@ class _TaskFailure implements Exception {
 }
 
 /// What a cancelled task records as its error.
-final String _cancelledByUser =
-    const DownloadFailure(DownloadFailureCode.cancelled).encode();
+final String _cancelledByUser = const DownloadFailure(
+  DownloadFailureCode.cancelled,
+).encode();
 
 /// A dropped connection, as the transport worded it.
 DownloadFailure _networkFailure(DioException e) => DownloadFailure(
-      DownloadFailureCode.network,
-      detail: e.message ?? e.type.name,
-    );
+  DownloadFailureCode.network,
+  detail: e.message ?? e.type.name,
+);
 
 /// A dropped connection that only has a type to show.
 DownloadFailure _networkKind(Object e) => DownloadFailure(
-      DownloadFailureCode.networkKind,
-      detail: '${e.runtimeType}',
-    );
+  DownloadFailureCode.networkKind,
+  detail: '${e.runtimeType}',
+);

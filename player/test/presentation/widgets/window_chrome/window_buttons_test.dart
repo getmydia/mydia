@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/window/decoration_layout.dart';
@@ -36,8 +36,9 @@ Future<void> _pump(
 
 void main() {
   group('WindowButtons', () {
-    testWidgets('renders one button per entry, in the order given',
-        (tester) async {
+    testWidgets('renders one button per entry, in the order given', (
+      tester,
+    ) async {
       await _pump(
         tester,
         buttons: const [
@@ -60,21 +61,25 @@ void main() {
       expect(find.byType(WindowButtonWidget), findsNothing);
     });
 
-    testWidgets('lays buttons out in the order given, left to right under LTR',
-        (tester) async {
-      await _pump(
-        tester,
-        buttons: const [WindowButton.minimize, WindowButton.close],
-        window: FakeWindowController(),
-      );
+    testWidgets(
+      'lays buttons out in the order given, left to right under LTR',
+      (tester) async {
+        await _pump(
+          tester,
+          buttons: const [WindowButton.minimize, WindowButton.close],
+          window: FakeWindowController(),
+        );
 
-      final minimize = tester.getCenter(
-          find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)));
-      final close = tester
-          .getCenter(find.byKey(WindowButtonWidget.keyFor(WindowButton.close)));
+        final minimize = tester.getCenter(
+          find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
+        );
+        final close = tester.getCenter(
+          find.byKey(WindowButtonWidget.keyFor(WindowButton.close)),
+        );
 
-      expect(minimize.dx, lessThan(close.dx));
-    });
+        expect(minimize.dx, lessThan(close.dx));
+      },
+    );
 
     testWidgets('mirrors under RTL, matching what GTK does', (tester) async {
       await _pump(
@@ -85,20 +90,26 @@ void main() {
       );
 
       final minimize = tester.getCenter(
-          find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)));
-      final close = tester
-          .getCenter(find.byKey(WindowButtonWidget.keyFor(WindowButton.close)));
+        find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
+      );
+      final close = tester.getCenter(
+        find.byKey(WindowButtonWidget.keyFor(WindowButton.close)),
+      );
 
       expect(minimize.dx, greaterThan(close.dx));
     });
 
     testWidgets('minimize calls minimize', (tester) async {
       final window = FakeWindowController();
-      await _pump(tester,
-          buttons: const [WindowButton.minimize], window: window);
+      await _pump(
+        tester,
+        buttons: const [WindowButton.minimize],
+        window: window,
+      );
 
-      await tester
-          .tap(find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)));
+      await tester.tap(
+        find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
+      );
       await tester.pump();
 
       expect(window.minimizeCalls, 1);
@@ -108,8 +119,9 @@ void main() {
       final window = FakeWindowController();
       await _pump(tester, buttons: const [WindowButton.close], window: window);
 
-      await tester
-          .tap(find.byKey(WindowButtonWidget.keyFor(WindowButton.close)));
+      await tester.tap(
+        find.byKey(WindowButtonWidget.keyFor(WindowButton.close)),
+      );
       await tester.pump();
 
       expect(window.closeCalls, 1);
@@ -124,8 +136,9 @@ void main() {
         maximized: ValueNotifier(false),
       );
 
-      await tester
-          .tap(find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)));
+      await tester.tap(
+        find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)),
+      );
       await tester.pump();
 
       expect(window.maximizeCalls, 1);
@@ -141,16 +154,18 @@ void main() {
         maximized: ValueNotifier(true),
       );
 
-      await tester
-          .tap(find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)));
+      await tester.tap(
+        find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)),
+      );
       await tester.pump();
 
       expect(window.unmaximizeCalls, 1);
       expect(window.maximizeCalls, 0);
     });
 
-    testWidgets('the maximize glyph swaps when the window maximizes',
-        (tester) async {
+    testWidgets('the maximize glyph swaps when the window maximizes', (
+      tester,
+    ) async {
       final maximized = ValueNotifier(false);
       await _pump(
         tester,
@@ -160,11 +175,11 @@ void main() {
       );
 
       Icon glyph() => tester.widget<Icon>(
-            find.descendant(
-              of: find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)),
-              matching: find.byType(Icon),
-            ),
-          );
+        find.descendant(
+          of: find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)),
+          matching: find.byType(Icon),
+        ),
+      );
 
       final restoredIcon = glyph().icon;
 

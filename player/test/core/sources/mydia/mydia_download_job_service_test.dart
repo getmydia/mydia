@@ -15,13 +15,13 @@ void main() {
               'status': 'ready',
               'progress': 1.0,
               'fileSize': 9,
-            }
+            },
           };
         }
         return {
           'downloadOptions': [
-            {'resolution': 'original', 'label': 'Original', 'estimatedSize': 9}
-          ]
+            {'resolution': 'original', 'label': 'Original', 'estimatedSize': 9},
+          ],
         };
       },
     );
@@ -31,27 +31,39 @@ void main() {
     expect(sent.first, {'contentType': 'movie', 'id': '42'});
 
     final job = await service.prepareDownload(
-        contentType: 'movie', id: '42', resolution: 'original');
+      contentType: 'movie',
+      id: '42',
+      resolution: 'original',
+    );
     expect(job.jobId, 'j1');
     expect(job.currentFileSize, 9);
   });
 
   test('a missing job is a 404', () async {
     final service = MydiaDownloadJobService(
-        request: (_, __) async => {'downloadJobStatus': null});
+      request: (_, _) async => {'downloadJobStatus': null},
+    );
     expect(
       () => service.getJobStatus('gone'),
-      throwsA(isA<DownloadServiceException>()
-          .having((e) => e.statusCode, 'statusCode', 404)),
+      throwsA(
+        isA<DownloadServiceException>().having(
+          (e) => e.statusCode,
+          'statusCode',
+          404,
+        ),
+      ),
     );
   });
 
   test('a cancel the server refuses throws', () async {
     final service = MydiaDownloadJobService(
-        request: (_, __) async => {
-              'cancelDownloadJob': {'success': false}
-            });
-    expect(() => service.cancelJob('j1'),
-        throwsA(isA<DownloadServiceException>()));
+      request: (_, _) async => {
+        'cancelDownloadJob': {'success': false},
+      },
+    );
+    expect(
+      () => service.cancelJob('j1'),
+      throwsA(isA<DownloadServiceException>()),
+    );
   });
 }

@@ -4,9 +4,9 @@ import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/ambient_tint/tint_cache.dart';
 
 AmbientTintColors _c(int v) => AmbientTintColors(
-      ground: Color(0xFF000000 | v),
-      surface: Color(0xFF000000 | v),
-    );
+  ground: Color(0xFF000000 | v),
+  surface: Color(0xFF000000 | v),
+);
 
 void main() {
   test('evicts the least recently used entry', () {

@@ -56,8 +56,7 @@ void main() {
       expect(progress.progress, 42);
     });
 
-    test(
-        'decodes the empty transaction the portal reports when there is '
+    test('decodes the empty transaction the portal reports when there is '
         'nothing to install', () {
       final progress = FlatpakProgress.fromDict({
         'status': const DBusUint32(1),

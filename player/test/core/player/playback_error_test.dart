@@ -18,7 +18,8 @@ void main() {
       expect(
         message,
         contains('replaced'),
-        reason: 'a replaced or deleted file is the common cause, and naming it '
+        reason:
+            'a replaced or deleted file is the common cause, and naming it '
             'is what turns a dead end into something the viewer can act on',
       );
     });
@@ -99,7 +100,8 @@ void main() {
           'Failed to open http://127.0.0.1:12345/direct/file-old/stream.',
         ),
         isFalse,
-        reason: 'a dead source is fatal — offering a play button for it would '
+        reason:
+            'a dead source is fatal — offering a play button for it would '
             'strand the viewer tapping at a stream that will never start',
       );
       expect(autoplayBlocked('Audio device init failed'), isFalse);
@@ -111,14 +113,17 @@ void main() {
     test("matches mpv's no-audio-device message", () {
       expect(
         audioOutputUnavailable(
-            'Could not open/initialize audio device -> no sound.'),
+          'Could not open/initialize audio device -> no sound.',
+        ),
         isTrue,
       );
     });
 
     test('leaves real failures alone', () {
       expect(
-          audioOutputUnavailable('Failed to open http://x/stream.'), isFalse);
+        audioOutputUnavailable('Failed to open http://x/stream.'),
+        isFalse,
+      );
       expect(audioOutputUnavailable('Audio device init failed'), isFalse);
     });
   });
@@ -126,16 +131,21 @@ void main() {
   group('sourceLost', () {
     test('matches mpv giving up on a URL', () {
       expect(
-          sourceLost(
-              'Failed to open http://127.0.0.1:56189/t/a/direct/f/stream.'),
-          isTrue);
+        sourceLost(
+          'Failed to open http://127.0.0.1:56189/t/a/direct/f/stream.',
+        ),
+        isTrue,
+      );
     });
 
     test('ignores the transient connection errors mpv retries itself', () {
       expect(
-          sourceLost('tcp: Connection to tcp://127.0.0.1:56189 failed: '
-              'Connection refused'),
-          isFalse);
+        sourceLost(
+          'tcp: Connection to tcp://127.0.0.1:56189 failed: '
+          'Connection refused',
+        ),
+        isFalse,
+      );
     });
   });
 }

@@ -1,14 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/crash_reporting/startup_report_controller.dart';
 import 'package:player/core/startup/startup_error_app.dart';
 
 void main() {
   group('StartupErrorApp', () {
-    testWidgets('alreadyRunning names the actual problem and the fix',
-        (tester) async {
+    testWidgets('alreadyRunning names the actual problem and the fix', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         StartupErrorApp.alreadyRunning(Exception('lock failed')),
       );
@@ -30,11 +31,10 @@ void main() {
       expect(find.textContaining('disk is on fire'), findsOneWidget);
     });
 
-    testWidgets('always renders a MaterialApp, never a blank screen',
-        (tester) async {
-      await tester.pumpWidget(
-        StartupErrorApp.generic(Exception('boom')),
-      );
+    testWidgets('always renders a MaterialApp, never a blank screen', (
+      tester,
+    ) async {
+      await tester.pumpWidget(StartupErrorApp.generic(Exception('boom')));
 
       expect(find.byType(MaterialApp), findsOneWidget);
       expect(find.byType(Scaffold), findsOneWidget);
@@ -45,8 +45,9 @@ void main() {
     bool buttonEnabled(WidgetTester tester) =>
         tester.widget<ButtonStyleButton>(find.byKey(buttonKey)).enabled;
 
-    testWidgets('generic without a controller shows no report button',
-        (tester) async {
+    testWidgets('generic without a controller shows no report button', (
+      tester,
+    ) async {
       await tester.pumpWidget(StartupErrorApp.generic(Exception('boom')));
 
       expect(find.byKey(buttonKey), findsNothing);
@@ -60,35 +61,37 @@ void main() {
       expect(find.byKey(buttonKey), findsNothing);
     });
 
-    testWidgets('Send report sends as a tap, shows progress, then Report sent',
-        (tester) async {
-      final gate = Completer<bool>();
-      final sends = <bool>[];
-      final controller = StartupReportController(
-        send: ({required bool manual}) {
-          sends.add(manual);
-          return gate.future;
-        },
-      );
+    testWidgets(
+      'Send report sends as a tap, shows progress, then Report sent',
+      (tester) async {
+        final gate = Completer<bool>();
+        final sends = <bool>[];
+        final controller = StartupReportController(
+          send: ({required bool manual}) {
+            sends.add(manual);
+            return gate.future;
+          },
+        );
 
-      await tester.pumpWidget(
-        StartupErrorApp.generic(Exception('boom'), report: controller),
-      );
-      expect(find.text('Send report'), findsOneWidget);
-      expect(buttonEnabled(tester), isTrue);
+        await tester.pumpWidget(
+          StartupErrorApp.generic(Exception('boom'), report: controller),
+        );
+        expect(find.text('Send report'), findsOneWidget);
+        expect(buttonEnabled(tester), isTrue);
 
-      await tester.tap(find.byKey(buttonKey));
-      await tester.pump();
-      expect(find.text('Sending report'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(buttonEnabled(tester), isFalse);
+        await tester.tap(find.byKey(buttonKey));
+        await tester.pump();
+        expect(find.text('Sending report'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(buttonEnabled(tester), isFalse);
 
-      gate.complete(true);
-      await tester.pumpAndSettle();
-      expect(find.text('Report sent'), findsOneWidget);
-      expect(buttonEnabled(tester), isFalse);
-      expect(sends, [true]);
-    });
+        gate.complete(true);
+        await tester.pumpAndSettle();
+        expect(find.text('Report sent'), findsOneWidget);
+        expect(buttonEnabled(tester), isFalse);
+        expect(sends, [true]);
+      },
+    );
 
     testWidgets('a failed send offers a retry', (tester) async {
       final results = [false, true];
@@ -109,8 +112,9 @@ void main() {
       expect(find.text('Report sent'), findsOneWidget);
     });
 
-    testWidgets('opens on Report sent when the report already went out',
-        (tester) async {
+    testWidgets('opens on Report sent when the report already went out', (
+      tester,
+    ) async {
       final controller = StartupReportController(
         send: ({required bool manual}) async => true,
       );

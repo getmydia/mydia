@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/settings_providers.dart';
@@ -14,17 +14,18 @@ import 'package:player/presentation/screens/settings/widgets/glass_material_row.
 import '../../../test_utils/mock_auth_storage.dart';
 
 Widget _host(MockAuthStorage storage, {bool? isTv}) => ProviderScope(
-      overrides: [
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: storage)),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: AppTheme.build(Palettes.projectionBooth, liquid: false),
-        home: Scaffold(body: GlassMaterialSettingsRow(debugIsTv: isTv)),
-      ),
-    );
+  overrides: [
+    coreSettingsServiceProvider.overrideWithValue(
+      SettingsService(storage: storage),
+    ),
+  ],
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: AppTheme.build(Palettes.projectionBooth, liquid: false),
+    home: Scaffold(body: GlassMaterialSettingsRow(debugIsTv: isTv)),
+  ),
+);
 
 void main() {
   testWidgets('toggling switches the material and persists it', (tester) async {
@@ -36,9 +37,12 @@ void main() {
     final container = ProviderScope.containerOf(element);
     expect(container.read(glassMaterialSettingProvider), GlassMaterial.frosted);
 
-    await tester.tap(find.descendant(
+    await tester.tap(
+      find.descendant(
         of: find.byKey(const Key('glass-material-row')),
-        matching: find.byType(Switch)));
+        matching: find.byType(Switch),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(container.read(glassMaterialSettingProvider), GlassMaterial.liquid);
@@ -46,17 +50,21 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('the switch is announced together with its title',
-      (tester) async {
+  testWidgets('the switch is announced together with its title', (
+    tester,
+  ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(_host(MockAuthStorage()));
     await tester.pumpAndSettle();
 
     expect(
-      tester.getSemantics(find.descendant(
+      tester.getSemantics(
+        find.descendant(
           of: find.byKey(const Key('glass-material-row')),
-          matching: find.byType(Switch))),
+          matching: find.byType(Switch),
+        ),
+      ),
       isSemantics(
         label: 'Liquid Glass\nGlass controls and panels',
         hasToggledState: true,

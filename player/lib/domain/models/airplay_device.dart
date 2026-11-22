@@ -4,11 +4,7 @@ class AirPlayDevice {
   final String name;
   final String? model;
 
-  const AirPlayDevice({
-    required this.id,
-    required this.name,
-    this.model,
-  });
+  const AirPlayDevice({required this.id, required this.name, this.model});
 
   @override
   bool operator ==(Object other) {
@@ -24,12 +20,7 @@ class AirPlayDevice {
 }
 
 /// Represents the current state of AirPlay playback.
-enum AirPlayPlaybackState {
-  idle,
-  buffering,
-  playing,
-  paused,
-}
+enum AirPlayPlaybackState { idle, buffering, playing, paused }
 
 /// Information about the media being sent to AirPlay.
 class AirPlayMediaInfo {

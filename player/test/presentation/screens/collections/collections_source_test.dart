@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/collection.dart';
@@ -12,12 +12,12 @@ SourceCollection _collection(
   String id,
   String name, {
   SourceId sourceId = fakeSourceId,
-}) =>
-    SourceCollection(sourceId: sourceId, id: id, name: name, itemCount: 3);
+}) => SourceCollection(sourceId: sourceId, id: id, name: name, itemCount: 3);
 
 void main() {
-  testWidgets('lists the source collections and opens one on that source',
-      (tester) async {
+  testWidgets('lists the source collections and opens one on that source', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..collectionsResult = [_collection('c1', 'Invented Saga')];
     final pushed = await pumpListing(
@@ -35,8 +35,9 @@ void main() {
     expect(pushed.last, '/s/acc1:owner:aa11/collection/c1');
   });
 
-  testWidgets('keeps its own card geometry, not the shared poster grid',
-      (tester) async {
+  testWidgets('keeps its own card geometry, not the shared poster grid', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..collectionsResult = [_collection('c1', 'Invented Saga')];
     await pumpListing(
@@ -51,8 +52,9 @@ void main() {
     expect(delegate.childAspectRatio, 0.85);
   });
 
-  testWidgets('shows the collections of the source it is scoped to',
-      (tester) async {
+  testWidgets('shows the collections of the source it is scoped to', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..collectionsResult = [_collection('c1', 'Invented Saga')];
     final b = FakeCapableSource(id: otherSourceId)

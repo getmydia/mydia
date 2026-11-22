@@ -1,7 +1,8 @@
 import 'package:media_kit/media_kit.dart';
 
 import 'subtitle_delay_stub.dart'
-    if (dart.library.io) 'subtitle_delay_native.dart' as platform;
+    if (dart.library.io) 'subtitle_delay_native.dart'
+    as platform;
 
 /// Sets mpv's `sub-delay` for the currently loaded subtitle track to
 /// [delayMs].

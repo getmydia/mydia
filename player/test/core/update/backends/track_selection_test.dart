@@ -37,8 +37,7 @@ class _OnePressUpdater extends PlatformUpdater {
   Future<void> applyUpdate(
     AppUpdate update, {
     void Function(double progress)? onProgress,
-  }) async =>
-      applied = update;
+  }) async => applied = update;
 }
 
 /// Answers with [update] until [failing] is set, then throws.
@@ -91,7 +90,9 @@ void main() {
 
     expect(backend.currentTrack, UpdateTrack.stable);
     expect(
-        await backend.selectTrack(UpdateTrack.beta), isA<TrackSwitchApplied>());
+      await backend.selectTrack(UpdateTrack.beta),
+      isA<TrackSwitchApplied>(),
+    );
     expect(backend.currentTrack, UpdateTrack.beta);
   });
 
@@ -111,8 +112,7 @@ void main() {
     expect(backend.currentTrack, UpdateTrack.stable);
   });
 
-  test(
-      'a switch whose check fails forgets the old track\'s update, so a '
+  test('a switch whose check fails forgets the old track\'s update, so a '
       'one-press install cannot fall back to it', () async {
     final updater = _OnePressUpdater();
     final service = _FlakyService(
@@ -129,7 +129,8 @@ void main() {
       currentVersion: '0.15.0',
       service: service,
       trackStore: UpdateTrackStore(
-          settings: SettingsService(storage: _FakeAuthStorage())),
+        settings: SettingsService(storage: _FakeAuthStorage()),
+      ),
     );
     addTearDown(backend.dispose);
 
@@ -146,21 +147,24 @@ void main() {
     expect(updater.applied, isNull);
   });
 
-  test('a selected track is actually persisted, not just held in memory',
-      () async {
-    final trackStore = UpdateTrackStore(
-        settings: SettingsService(storage: _FakeAuthStorage()));
-    final backend = ReleaseUpdateBackend(
-      updater: _NoopUpdater(),
-      currentVersion: '0.15.0',
-      trackStore: trackStore,
-    );
-    addTearDown(backend.dispose);
+  test(
+    'a selected track is actually persisted, not just held in memory',
+    () async {
+      final trackStore = UpdateTrackStore(
+        settings: SettingsService(storage: _FakeAuthStorage()),
+      );
+      final backend = ReleaseUpdateBackend(
+        updater: _NoopUpdater(),
+        currentVersion: '0.15.0',
+        trackStore: trackStore,
+      );
+      addTearDown(backend.dispose);
 
-    await backend.selectTrack(UpdateTrack.beta);
+      await backend.selectTrack(UpdateTrack.beta);
 
-    expect(await trackStore.read(), UpdateTrack.beta);
-  });
+      expect(await trackStore.read(), UpdateTrack.beta);
+    },
+  );
 
   test('Flatpak defers to the host, naming the remote', () async {
     final backend = FlatpakUpdateBackend(
@@ -190,8 +194,7 @@ void main() {
     expect(outcome.instructions, contains('//beta'));
   });
 
-  test(
-      'Flatpak selecting beta adds the beta remote first and removes stable '
+  test('Flatpak selecting beta adds the beta remote first and removes stable '
       'after', () async {
     final backend = FlatpakUpdateBackend(
       portal: _NoopPortal(),
@@ -254,10 +257,11 @@ void main() {
     );
     addTearDown(backend.dispose);
 
-    expect(
-      backend.availableTracks,
-      {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev},
-    );
+    expect(backend.availableTracks, {
+      UpdateTrack.stable,
+      UpdateTrack.beta,
+      UpdateTrack.dev,
+    });
   });
 
   test('Flatpak selecting dev names the dev remote and branch', () async {
@@ -323,8 +327,7 @@ void main() {
     // branch that may not exist.
     for (final installed in <String?>['nightly', null]) {
       for (final track in UpdateTrack.values) {
-        test(
-            'branch $installed, choosing ${track.wireName}, installs without '
+        test('branch $installed, choosing ${track.wireName}, installs without '
             'uninstalling', () async {
           final backend = FlatpakUpdateBackend(
             portal: _NoopPortal(),
@@ -390,8 +393,7 @@ void main() {
       expect(backend.currentTrack, UpdateTrack.beta);
     });
 
-    test(
-        'an unrecognized branch reports beta rather than the conservative '
+    test('an unrecognized branch reports beta rather than the conservative '
         'default', () {
       final backend = FlatpakUpdateBackend(
         portal: _NoopPortal(),
@@ -403,8 +405,7 @@ void main() {
       expect(backend.currentTrack, UpdateTrack.beta);
     });
 
-    test(
-        'a null branch reports beta, matching flatpakReleaseNotesUrl\'s own '
+    test('a null branch reports beta, matching flatpakReleaseNotesUrl\'s own '
         'resolution of the same input', () {
       final backend = FlatpakUpdateBackend(
         portal: _NoopPortal(),
@@ -442,7 +443,9 @@ void main() {
 
     expect(backend.availableTracks, {UpdateTrack.stable, UpdateTrack.beta});
     expect(
-        await backend.selectTrack(UpdateTrack.beta), isA<TrackSwitchApplied>());
+      await backend.selectTrack(UpdateTrack.beta),
+      isA<TrackSwitchApplied>(),
+    );
     expect(written, UpdateTrack.beta);
   });
 
@@ -455,8 +458,10 @@ void main() {
     addTearDown(backend.dispose);
     await backend.start();
 
-    expect(await backend.selectTrack(UpdateTrack.beta),
-        isA<TrackSwitchUnsupported>());
+    expect(
+      await backend.selectTrack(UpdateTrack.beta),
+      isA<TrackSwitchUnsupported>(),
+    );
     expect(backend.currentTrack, UpdateTrack.stable);
   });
 }

@@ -59,10 +59,7 @@ void main() {
       // Better to start from the beginning than to show a fabricated
       // percentage computed against a partial playlist length.
       expect(
-        shouldOfferResume(
-          savedPositionSeconds: 2700,
-          realDuration: null,
-        ),
+        shouldOfferResume(savedPositionSeconds: 2700, realDuration: null),
         isFalse,
       );
     });

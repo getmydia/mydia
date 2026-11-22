@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../core/focus/focus_memory.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
@@ -195,8 +196,11 @@ class DetailActionRow extends StatelessWidget {
 
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      showToast(context, context.l10n.detailTrailerOpenFailed,
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.detailTrailerOpenFailed,
+        kind: ToastKind.error,
+      );
     }
   }
 }

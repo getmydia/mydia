@@ -1,6 +1,6 @@
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,8 +25,10 @@ class _PlexSignInScreenState extends ConsumerState<PlexSignInScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        ref.read(plexSignInProvider(widget.reauthAccountId).notifier).start());
+    Future.microtask(
+      () =>
+          ref.read(plexSignInProvider(widget.reauthAccountId).notifier).start(),
+    );
   }
 
   @override
@@ -45,80 +47,93 @@ class _PlexSignInScreenState extends ConsumerState<PlexSignInScreen> {
     final Widget body = switch (state) {
       PlexSignInStarting() ||
       PlexSignInSaving() ||
-      PlexSignInDone() =>
-        const CircularProgressIndicator(),
+      PlexSignInDone() => const CircularProgressIndicator(),
       PlexSignInWaiting(:final code) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(context.l10n.sourcesPlexLinkPrompt,
-                style: theme.textTheme.titleMedium),
-            const SizedBox(height: 16),
-            SelectableText(
-              code,
-              key: const Key('plex-pin-code'),
-              style: theme.textTheme.displayMedium
-                  ?.copyWith(letterSpacing: 8, fontWeight: FontWeight.bold),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            context.l10n.sourcesPlexLinkPrompt,
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 16),
+          SelectableText(
+            code,
+            key: const Key('plex-pin-code'),
+            style: theme.textTheme.displayMedium?.copyWith(
+              letterSpacing: 8,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 16),
-            if (!InputCapabilities.directionalPrimary)
-              FilledButton.icon(
-                key: const Key('plex-open-link'),
-                autofocus: true,
-                onPressed: () => launchUrl(Uri.parse(PlexTvClient.linkUrl),
-                    mode: LaunchMode.externalApplication),
-                icon: const Icon(Icons.open_in_new),
-                label: Text(context.l10n.sourcesPlexOpenLink),
+          ),
+          const SizedBox(height: 16),
+          if (!InputCapabilities.directionalPrimary)
+            FilledButton.icon(
+              key: const Key('plex-open-link'),
+              autofocus: true,
+              onPressed: () => launchUrl(
+                Uri.parse(PlexTvClient.linkUrl),
+                mode: LaunchMode.externalApplication,
               ),
-            const SizedBox(height: 24),
-            const SizedBox(width: 200, child: LinearProgressIndicator()),
-            const SizedBox(height: 8),
-            Text(context.l10n.sourcesPlexWaiting,
-                style: theme.textTheme.bodySmall),
-          ],
-        ),
+              icon: const Icon(Icons.open_in_new),
+              label: Text(context.l10n.sourcesPlexOpenLink),
+            ),
+          const SizedBox(height: 24),
+          const SizedBox(width: 200, child: LinearProgressIndicator()),
+          const SizedBox(height: 8),
+          Text(
+            context.l10n.sourcesPlexWaiting,
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      ),
       PlexSignInChoosing(:final servers, :final chosen) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(context.l10n.sourcesPlexChooseServers,
-                style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            for (final (i, server) in servers.indexed)
-              CheckboxListTile(
-                key: Key('plex-server-${server.clientIdentifier}'),
-                autofocus: i == 0,
-                value: chosen.contains(server.clientIdentifier),
-                onChanged: (_) => controller.toggle(server.clientIdentifier),
-                title: Text(server.name),
-                subtitle: Text([
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            context.l10n.sourcesPlexChooseServers,
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          for (final (i, server) in servers.indexed)
+            CheckboxListTile(
+              key: Key('plex-server-${server.clientIdentifier}'),
+              autofocus: i == 0,
+              value: chosen.contains(server.clientIdentifier),
+              onChanged: (_) => controller.toggle(server.clientIdentifier),
+              title: Text(server.name),
+              subtitle: Text(
+                [
                   server.owned
                       ? context.l10n.sourcesPlexOwned
                       : context.l10n.sourcesPlexShared,
                   if (!server.presence) context.l10n.commonOffline,
-                ].join(' · ')),
+                ].join(' · '),
               ),
-            const SizedBox(height: 16),
-            FilledButton(
-              key: const Key('plex-add-servers'),
-              onPressed: chosen.isEmpty ? null : controller.save,
-              child: Text(context.l10n.sourcesPlexAddServers(chosen.length)),
             ),
-          ],
-        ),
+          const SizedBox(height: 16),
+          FilledButton(
+            key: const Key('plex-add-servers'),
+            onPressed: chosen.isEmpty ? null : controller.save,
+            child: Text(context.l10n.sourcesPlexAddServers(chosen.length)),
+          ),
+        ],
+      ),
       PlexSignInFailed(:final problem) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(context.l10n.signInProblemText(problem),
-                textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(
-              key: const Key('plex-try-again'),
-              autofocus: true,
-              onPressed: controller.start,
-              child: Text(context.l10n.commonTryAgain),
-            ),
-          ],
-        ),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            context.l10n.signInProblemText(problem),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            key: const Key('plex-try-again'),
+            autofocus: true,
+            onPressed: controller.start,
+            child: Text(context.l10n.commonTryAgain),
+          ),
+        ],
+      ),
     };
 
     return Scaffold(

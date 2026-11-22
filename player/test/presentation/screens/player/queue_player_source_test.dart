@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
@@ -24,22 +24,24 @@ import '../../../core/sources/mydia/mydia_source_test.dart' show guest, sid;
 import 'player_screen_test_harness.dart' show FakeSettingsService;
 
 MydiaSource _mydiaSource() => MydiaSource(
-      source: guest,
-      client: MydiaClient(
-        transport: FakeMydiaTransport(),
-        load: () async => const MydiaCredentials(
-          instanceId: 'inst-1',
-          accessToken: 'access',
-          serverUrl: 'https://lake.example',
-        ),
-        save: (_) async {},
-        onUnauthorized: () {},
-      ),
-    );
+  source: guest,
+  client: MydiaClient(
+    transport: FakeMydiaTransport(),
+    load: () async => const MydiaCredentials(
+      instanceId: 'inst-1',
+      accessToken: 'access',
+      serverUrl: 'https://lake.example',
+    ),
+    save: (_) async {},
+    onUnauthorized: () {},
+  ),
+);
 
 /// A two-item queue whose files are `offline`, so mounting the player needs
 /// no server answer to settle.
-String _queueParam() => base64Url.encode(utf8.encode(jsonEncode([
+String _queueParam() => base64Url.encode(
+  utf8.encode(
+    jsonEncode([
       {
         'type': 'movie',
         'id': 'm1',
@@ -52,32 +54,38 @@ String _queueParam() => base64Url.encode(utf8.encode(jsonEncode([
         'file_id': 'offline',
         'title': 'Second Light',
       },
-    ])));
+    ]),
+  ),
+);
 
 Future<void> _pump(WidgetTester tester, {required bool withSource}) async {
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      // The real service reads flutter_secure_storage, whose future never
-      // completes under testWidgets and stays in NativeAuthStorage's static
-      // in-flight map, wedging later files that share the bundle's isolate.
-      settingsServiceProvider.overrideWithValue(FakeSettingsService()),
-      localProxyServiceProvider
-          .overrideWithValue(LocalProxyService.forTesting()),
-      legacyMydiaSourceIdProvider.overrideWithValue(withSource ? sid : null),
-      if (withSource)
-        mediaSourceProvider(sid).overrideWithValue(_mydiaSource()),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: QueuePlayerScreen(itemsParam: _queueParam()),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        // The real service reads flutter_secure_storage, whose future never
+        // completes under testWidgets and stays in NativeAuthStorage's static
+        // in-flight map, wedging later files that share the bundle's isolate.
+        settingsServiceProvider.overrideWithValue(FakeSettingsService()),
+        localProxyServiceProvider.overrideWithValue(
+          LocalProxyService.forTesting(),
+        ),
+        legacyMydiaSourceIdProvider.overrideWithValue(withSource ? sid : null),
+        if (withSource)
+          mediaSourceProvider(sid).overrideWithValue(_mydiaSource()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: QueuePlayerScreen(itemsParam: _queueParam()),
+      ),
     ),
-  ));
+  );
 }
 
 void main() {
-  testWidgets('the queue plays from the Mydia instance, item by item',
-      (tester) async {
+  testWidgets('the queue plays from the Mydia instance, item by item', (
+    tester,
+  ) async {
     await _pump(tester, withSource: true);
 
     final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
@@ -87,8 +95,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets(
-      'with one Mydia instance and no migrated sign-in the queue '
+  testWidgets('with one Mydia instance and no migrated sign-in the queue '
       'plays from it', (tester) async {
     final id = mydiaSourceIdOf(mydiaRecord('inst-1'));
     final h = await mydiaAccountHarness(
@@ -101,10 +108,12 @@ void main() {
       },
       overrides: [
         settingsServiceProvider.overrideWithValue(FakeSettingsService()),
-        localProxyServiceProvider
-            .overrideWithValue(LocalProxyService.forTesting()),
+        localProxyServiceProvider.overrideWithValue(
+          LocalProxyService.forTesting(),
+        ),
         mediaSourceProvider(id).overrideWithValue(
-            MydiaSource(source: guest, client: _mydiaSource().client)),
+          MydiaSource(source: guest, client: _mydiaSource().client),
+        ),
       ],
     );
     addTearDown(h.container.dispose);
@@ -112,14 +121,16 @@ void main() {
     await h.container.read(legacyInstanceIdProvider.future);
     expect(await h.store.legacyInstanceId(), isNull);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: h.container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: QueuePlayerScreen(itemsParam: _queueParam()),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: h.container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: QueuePlayerScreen(itemsParam: _queueParam()),
+        ),
       ),
-    ));
+    );
 
     final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
     expect(screen.session.item.sourceId, id);
@@ -127,8 +138,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('with no Mydia instance the queue says it cannot play',
-      (tester) async {
+  testWidgets('with no Mydia instance the queue says it cannot play', (
+    tester,
+  ) async {
     await _pump(tester, withSource: false);
 
     expect(find.byKey(const Key('queue-player-unavailable')), findsOneWidget);

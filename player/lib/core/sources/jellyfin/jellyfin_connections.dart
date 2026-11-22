@@ -8,7 +8,8 @@ import '../source.dart';
 
 List<ServerConnection> jellyfinConnections(Uri entered, String? localAddress) {
   final local = localAddress == null ? null : Uri.tryParse(localAddress);
-  final useLocal = local != null &&
+  final useLocal =
+      local != null &&
       local.host.isNotEmpty &&
       (local.scheme == 'http' || local.scheme == 'https') &&
       isPrivateHost(local.host) &&

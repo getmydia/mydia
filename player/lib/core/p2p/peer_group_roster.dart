@@ -8,12 +8,10 @@ import 'peer_sync_store.dart';
 /// remote targets in the player device picker.
 class PeerGroupRoster implements DeviceRoster {
   PeerGroupRoster({
-    required PeerSyncStore store,
-    required String? Function() localNodeId,
-    required bool Function(String nodeId) isPeerConnected,
-  })  : _store = store,
-        _localNodeId = localNodeId,
-        _isPeerConnected = isPeerConnected;
+    required this._store,
+    required this._localNodeId,
+    required this._isPeerConnected,
+  });
 
   final PeerSyncStore _store;
   final String? Function() _localNodeId;

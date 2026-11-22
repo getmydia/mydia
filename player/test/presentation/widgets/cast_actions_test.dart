@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
@@ -43,15 +43,18 @@ void main() {
       expect(castErrorMessage(l10n, e), isNotEmpty);
     });
 
-    test(
-        'uses a connection-error message for an unreachable Mydia target '
+    test('uses a connection-error message for an unreachable Mydia target '
         'instead of the Chromecast-centric "your media" phrasing', () {
       const e = CastBackendException('nope', CastFailureKind.unreachable);
       final message = castErrorMessage(l10n, e, isMydiaTarget: true);
 
-      expect(message, isNot(contains('your media')),
-          reason: 'Mydia targets resolve their own content; '
-              '"your media" is Chromecast-only language');
+      expect(
+        message,
+        isNot(contains('your media')),
+        reason:
+            'Mydia targets resolve their own content; '
+            '"your media" is Chromecast-only language',
+      );
       expect(message, contains('online and paired'));
     });
 
@@ -84,12 +87,17 @@ void main() {
     // port number or permission hint that makes the error actionable.
     for (final kind in CastFailureKind.values) {
       test('produces actionable text for $kind', () {
-        final message =
-            castErrorMessage(l10n, CastBackendException('raw', kind));
+        final message = castErrorMessage(
+          l10n,
+          CastBackendException('raw', kind),
+        );
 
         expect(message, isNotEmpty);
-        expect(message, isNot(equals('raw')),
-            reason: 'the raw backend string is not user-facing');
+        expect(
+          message,
+          isNot(equals('raw')),
+          reason: 'the raw backend string is not user-facing',
+        );
       });
     }
   });
@@ -150,8 +158,9 @@ void main() {
       );
     }
 
-    testWidgets('a chosen device with no session connects immediately',
-        (tester) async {
+    testWidgets('a chosen device with no session connects immediately', (
+      tester,
+    ) async {
       // The behaviour this replaces set castTargetProvider and contacted
       // nothing, while the icon claimed the receiver was connected.
       final backend = FakeCastBackend();
@@ -177,48 +186,48 @@ void main() {
     });
 
     testWidgets(
-        'an idle connection to a different device connects to the new one',
-        (tester) async {
-      // An idle connection has no persisted session behind it, so the
-      // live-media re-target path (which reads `persistedSession`) cannot
-      // apply here. Without this branch, picking a new device while idly
-      // connected to another would silently fall through to "set target
-      // only", leaving the old connection live while the UI pointed at the
-      // new device.
-      final backend = FakeCastBackend();
-      final manager = buildManager(backend);
-      addTearDown(manager.dispose);
+      'an idle connection to a different device connects to the new one',
+      (tester) async {
+        // An idle connection has no persisted session behind it, so the
+        // live-media re-target path (which reads `persistedSession`) cannot
+        // apply here. Without this branch, picking a new device while idly
+        // connected to another would silently fall through to "set target
+        // only", leaving the old connection live while the UI pointed at the
+        // new device.
+        final backend = FakeCastBackend();
+        final manager = buildManager(backend);
+        addTearDown(manager.dispose);
 
-      // Establish the idle connection to the first device before the picker
-      // ever renders, matching a user who is already parked on a receiver
-      // with nothing playing.
-      await manager.connectTo(_device);
+        // Establish the idle connection to the first device before the picker
+        // ever renders, matching a user who is already parked on a receiver
+        // with nothing playing.
+        await manager.connectTo(_device);
 
-      await tester.pumpWidget(
-        host(manager: manager, devices: [_otherDevice]),
-      );
-      await tester.pump();
+        await tester.pumpWidget(
+          host(manager: manager, devices: [_otherDevice]),
+        );
+        await tester.pump();
 
-      await tester.tap(find.byKey(const Key('pick-device-button')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('pick-device-button')));
+        await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(Key('cast-device-${_otherDevice.id}')),
-        findsOneWidget,
-      );
-      await tester.tap(find.byKey(Key('cast-device-${_otherDevice.id}')));
-      await tester.pumpAndSettle();
+        expect(
+          find.byKey(Key('cast-device-${_otherDevice.id}')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(Key('cast-device-${_otherDevice.id}')));
+        await tester.pumpAndSettle();
 
-      final container = ProviderScope.containerOf(
-        tester.element(find.byKey(const Key('pick-device-button'))),
-      );
+        final container = ProviderScope.containerOf(
+          tester.element(find.byKey(const Key('pick-device-button'))),
+        );
 
-      expect(backend.connectAttempts.last, _otherDevice);
-      expect(container.read(castTargetProvider), _otherDevice);
-    });
+        expect(backend.connectAttempts.last, _otherDevice);
+        expect(container.read(castTargetProvider), _otherDevice);
+      },
+    );
 
-    testWidgets(
-        'a stale connection to the same device reconnects rather than '
+    testWidgets('a stale connection to the same device reconnects rather than '
         'being swallowed', (tester) async {
       // Before `!session.isStale` was added to the early-return guard,
       // re-picking a device whose connection had dropped matched
@@ -259,14 +268,17 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(backend.connectAttempts.length, attemptsBeforePick + 1,
-          reason: 'picking the same, now-stale device must attempt a fresh '
-              'connect rather than being swallowed by the early return');
+      expect(
+        backend.connectAttempts.length,
+        attemptsBeforePick + 1,
+        reason:
+            'picking the same, now-stale device must attempt a fresh '
+            'connect rather than being swallowed by the early return',
+      );
       expect(backend.connectAttempts.last, _device);
     });
 
-    testWidgets(
-        'a live media session re-targets through retargetTo, carrying '
+    testWidgets('a live media session re-targets through retargetTo, carrying '
         'subtitles the persisted-record rebuild would drop', (tester) async {
       // Before `manager.canRetarget` was checked here, this branch always
       // rebuilt a fresh `CastLaunchRequest` from `PersistedCastSession` —
@@ -310,20 +322,22 @@ void main() {
       await tester.tap(find.byKey(const Key('pick-device-button')));
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(Key('cast-device-${_otherDevice.id}')),
-        findsOneWidget,
-      );
+      expect(find.byKey(Key('cast-device-${_otherDevice.id}')), findsOneWidget);
       await tester.tap(find.byKey(Key('cast-device-${_otherDevice.id}')));
       await tester.pumpAndSettle();
 
-      expect(backend.connectAttempts.last, _otherDevice,
-          reason: 'the tap must actually retarget to the newly chosen '
-              'device');
+      expect(
+        backend.connectAttempts.last,
+        _otherDevice,
+        reason:
+            'the tap must actually retarget to the newly chosen '
+            'device',
+      );
       expect(
         backend.loadedRequests.last.subtitles,
         isNotEmpty,
-        reason: 'a persisted-record rebuild carries no subtitles at all; '
+        reason:
+            'a persisted-record rebuild carries no subtitles at all; '
             'only reusing the live request through retargetTo keeps them',
       );
       expect(backend.loadedRequests.last.subtitles.single.trackId, '3');
@@ -336,38 +350,42 @@ void main() {
       CastFailureKind kind, {
       bool canOpenSettings = true,
     }) async {
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showCastErrorToast(
-                context,
-                CastBackendException('raw', kind),
-                canOpenSettings: canOpenSettings,
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showCastErrorToast(
+                  context,
+                  CastBackendException('raw', kind),
+                  canOpenSettings: canOpenSettings,
+                ),
+                child: const Text('go'),
               ),
-              child: const Text('go'),
             ),
           ),
         ),
-      ));
+      );
 
       await tester.tap(find.text('go'));
       await tester.pump();
     }
 
-    testWidgets('offers a Settings action for a local network denial',
-        (tester) async {
+    testWidgets('offers a Settings action for a local network denial', (
+      tester,
+    ) async {
       await pumpAndShow(tester, CastFailureKind.localNetworkDenied);
 
       expect(find.byKey(const Key('toast-action')), findsOneWidget);
       expect(find.text('Settings'), findsOneWidget);
     });
 
-    testWidgets('offers a Settings action for denied discovery',
-        (tester) async {
+    testWidgets('offers a Settings action for denied discovery', (
+      tester,
+    ) async {
       await pumpAndShow(tester, CastFailureKind.discoveryDenied);
 
       expect(find.byKey(const Key('toast-action')), findsOneWidget);
@@ -380,8 +398,9 @@ void main() {
       expect(find.byKey(const Key('toast-action')), findsNothing);
     });
 
-    testWidgets('offers no action for denied discovery off Apple platforms',
-        (tester) async {
+    testWidgets('offers no action for denied discovery off Apple platforms', (
+      tester,
+    ) async {
       // discoveryDenied also fires when Android cannot take the multicast
       // lock. No Android pane fixes that, so the remedy is gated on the
       // platform rather than on the failure kind alone.
@@ -395,8 +414,9 @@ void main() {
       expect(find.byKey(const Key('toast-action')), findsNothing);
     });
 
-    testWidgets('still explains the failure when no remedy is offered',
-        (tester) async {
+    testWidgets('still explains the failure when no remedy is offered', (
+      tester,
+    ) async {
       // The message must survive the button being withheld, otherwise an
       // Android user gets a bare toast with nothing actionable at all.
       await pumpAndShow(
@@ -408,8 +428,9 @@ void main() {
       expect(find.textContaining('local network'), findsOneWidget);
     });
 
-    testWidgets('a permission failure stays 8s even without a remedy',
-        (tester) async {
+    testWidgets('a permission failure stays 8s even without a remedy', (
+      tester,
+    ) async {
       await pumpAndShow(
         tester,
         CastFailureKind.discoveryDenied,
@@ -422,8 +443,9 @@ void main() {
       expect(find.byKey(const Key('toast-pill')), findsNothing);
     });
 
-    testWidgets('any other cast failure takes the 5s error default',
-        (tester) async {
+    testWidgets('any other cast failure takes the 5s error default', (
+      tester,
+    ) async {
       await pumpAndShow(tester, CastFailureKind.unreachable);
       await tester.pump(const Duration(milliseconds: 4900));
       expect(find.byKey(const Key('toast-pill')), findsOneWidget);

@@ -44,31 +44,33 @@ class LocalPlaybackProgress {
   bool get isSynced => syncedAt != null;
 
   /// The store key. The kind is unused by [progressKey].
-  String get key => progressKey(ItemRef(
-        sourceId: SourceId(sourceId),
-        kind: ItemKind.movie,
-        externalId: mediaId,
-      ));
+  String get key => progressKey(
+    ItemRef(
+      sourceId: SourceId(sourceId),
+      kind: ItemKind.movie,
+      externalId: mediaId,
+    ),
+  );
 
   LocalPlaybackProgress copyWith({DateTime? syncedAt}) => LocalPlaybackProgress(
-        sourceId: sourceId,
-        mediaId: mediaId,
-        mediaType: mediaType,
-        positionSeconds: positionSeconds,
-        durationSeconds: durationSeconds,
-        updatedAt: updatedAt,
-        syncedAt: syncedAt ?? this.syncedAt,
-      );
+    sourceId: sourceId,
+    mediaId: mediaId,
+    mediaType: mediaType,
+    positionSeconds: positionSeconds,
+    durationSeconds: durationSeconds,
+    updatedAt: updatedAt,
+    syncedAt: syncedAt ?? this.syncedAt,
+  );
 
   Map<String, dynamic> toMap() => {
-        'sourceId': sourceId,
-        'mediaId': mediaId,
-        'mediaType': mediaType,
-        'positionSeconds': positionSeconds,
-        'durationSeconds': durationSeconds,
-        'updatedAt': updatedAt.toIso8601String(),
-        'syncedAt': syncedAt?.toIso8601String(),
-      };
+    'sourceId': sourceId,
+    'mediaId': mediaId,
+    'mediaType': mediaType,
+    'positionSeconds': positionSeconds,
+    'durationSeconds': durationSeconds,
+    'updatedAt': updatedAt.toIso8601String(),
+    'syncedAt': syncedAt?.toIso8601String(),
+  };
 
   factory LocalPlaybackProgress.fromMap(Map<dynamic, dynamic> map) {
     final synced = map['syncedAt'] as String?;

@@ -17,29 +17,28 @@ FlutterPlaybackSnapshot buildSnapshot({
   bool muted = false,
   bool nextPrevious = false,
   int sequence = 1,
-}) =>
-    FlutterPlaybackSnapshot(
-      state: state,
-      mediaItemId: mediaItemId,
-      episodeId: episodeId,
-      title: title,
-      subtitle: null,
-      imageUrl: null,
-      positionMs: BigInt.from(position.inMilliseconds),
-      durationMs: BigInt.from(duration.inMilliseconds),
-      volume: volume,
-      muted: muted,
-      audioTracks: const [],
-      subtitleTracks: const [],
-      selectedAudio: null,
-      selectedSubtitle: null,
-      capabilities: FlutterTargetCapabilities(
-        volume: true,
-        trackSelection: true,
-        nextPrevious: nextPrevious,
-      ),
-      sequence: BigInt.from(sequence),
-    );
+}) => FlutterPlaybackSnapshot(
+  state: state,
+  mediaItemId: mediaItemId,
+  episodeId: episodeId,
+  title: title,
+  subtitle: null,
+  imageUrl: null,
+  positionMs: BigInt.from(position.inMilliseconds),
+  durationMs: BigInt.from(duration.inMilliseconds),
+  volume: volume,
+  muted: muted,
+  audioTracks: const [],
+  subtitleTracks: const [],
+  selectedAudio: null,
+  selectedSubtitle: null,
+  capabilities: FlutterTargetCapabilities(
+    volume: true,
+    trackSelection: true,
+    nextPrevious: nextPrevious,
+  ),
+  sequence: BigInt.from(sequence),
+);
 
 /// A binding whose snapshot the test sets directly.
 class FakeBinding implements RemotePlayerBinding {

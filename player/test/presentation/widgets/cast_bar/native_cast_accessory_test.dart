@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,28 +35,35 @@ CastSession _playing({bool syncing = false, bool paused = false}) =>
         position: Duration(seconds: 29),
         imageUrl: 'https://art.test/silo.jpg',
       ),
-      playbackState:
-          paused ? CastPlaybackState.paused : CastPlaybackState.playing,
+      playbackState: paused
+          ? CastPlaybackState.paused
+          : CastPlaybackState.playing,
       isSyncing: syncing,
     );
 
 AmbientTarget _ambient() => AmbientTarget(
-      device: const CastDevice(
-          id: 'node-tv', name: 'node-tv', protocol: CastProtocolKind.mydia),
-      snapshot: FlutterPlaybackSnapshot(
-        state: FlutterPlaybackState.playing,
-        title: 'Night Harbor',
-        imageUrl: 'https://art.test/harbor.jpg',
-        positionMs: BigInt.zero,
-        durationMs: BigInt.from(6000000),
-        muted: false,
-        audioTracks: const [],
-        subtitleTracks: const [],
-        capabilities: const FlutterTargetCapabilities(
-            volume: true, trackSelection: true, nextPrevious: false),
-        sequence: BigInt.one,
-      ),
-    );
+  device: const CastDevice(
+    id: 'node-tv',
+    name: 'node-tv',
+    protocol: CastProtocolKind.mydia,
+  ),
+  snapshot: FlutterPlaybackSnapshot(
+    state: FlutterPlaybackState.playing,
+    title: 'Night Harbor',
+    imageUrl: 'https://art.test/harbor.jpg',
+    positionMs: BigInt.zero,
+    durationMs: BigInt.from(6000000),
+    muted: false,
+    audioTracks: const [],
+    subtitleTracks: const [],
+    capabilities: const FlutterTargetCapabilities(
+      volume: true,
+      trackSelection: true,
+      nextPrevious: false,
+    ),
+    sequence: BigInt.one,
+  ),
+);
 
 class _RecordingManager implements CastSessionManager {
   final calls = <String>[];
@@ -87,7 +94,8 @@ void main() {
     test('ambient', () {
       expect(
         _accessoryFor(
-            CastBarAmbient(target: _ambient(), deviceName: 'Lantern Room')),
+          CastBarAmbient(target: _ambient(), deviceName: 'Lantern Room'),
+        ),
         const NativeAccessory(
           title: 'Night Harbor',
           subtitle: 'Playing on Lantern Room',
@@ -152,8 +160,10 @@ void main() {
           playing: true,
         ),
       );
-      expect(_accessoryFor(CastBarPlaying(_playing(paused: true)))?.playing,
-          isFalse);
+      expect(
+        _accessoryFor(CastBarPlaying(_playing(paused: true)))?.playing,
+        isFalse,
+      );
       final syncing = _accessoryFor(CastBarPlaying(_playing(syncing: true)));
       expect(syncing?.playing, isNull);
       expect(syncing?.subtitle, 'Reconnecting to Cottage Chromecast…');
@@ -169,34 +179,43 @@ void main() {
       CastSessionManager? manager,
     }) async {
       calls = [];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel,
-          (call) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (
+        call,
+      ) async {
         calls.add(call);
         return null;
       });
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(_channel, null));
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          _channel,
+          null,
+        ),
+      );
 
-      final container = ProviderContainer(overrides: [
-        castBarStateProvider.overrideWithValue(state),
-        nativeTabBarChannelProvider.overrideWith((ref) {
-          final channel = NativeTabBarChannel(channel: _channel);
-          ref.onDispose(channel.dispose);
-          return channel;
-        }),
-        if (manager != null)
-          castSessionManagerProvider.overrideWith((ref) async => manager),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          castBarStateProvider.overrideWithValue(state),
+          nativeTabBarChannelProvider.overrideWith((ref) {
+            final channel = NativeTabBarChannel(channel: _channel);
+            ref.onDispose(channel.dispose);
+            return channel;
+          }),
+          if (manager != null)
+            castSessionManagerProvider.overrideWith((ref) async => manager),
+        ],
+      );
       addTearDown(container.dispose);
 
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: NativeCastAccessory()),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: NativeCastAccessory()),
+          ),
         ),
-      ));
+      );
       await tester.pump();
       return container;
     }
@@ -211,8 +230,10 @@ void main() {
     testWidgets('sends the accessory for the state', (tester) async {
       await pump(tester, state: const CastBarIdle(_device));
       expect(calls.single.method, 'setAccessory');
-      expect((calls.single.arguments as Map)['title'],
-          'Ready to play on Cottage Chromecast');
+      expect(
+        (calls.single.arguments as Map)['title'],
+        'Ready to play on Cottage Chromecast',
+      );
     });
 
     testWidgets('unmount removes the accessory', (tester) async {
@@ -220,7 +241,9 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       expect(
-          '${calls.last.method}:${calls.last.arguments}', 'setAccessory:null');
+        '${calls.last.method}:${calls.last.arguments}',
+        'setAccessory:null',
+      );
     });
 
     testWidgets('play/pause pauses a playing session', (tester) async {
@@ -239,8 +262,9 @@ void main() {
       expect(find.text('Ready to play on Cottage Chromecast'), findsOneWidget);
     });
 
-    testWidgets('a tap on the banner takes control as it opens the sheet',
-        (tester) async {
+    testWidgets('a tap on the banner takes control as it opens the sheet', (
+      tester,
+    ) async {
       final manager = _RecordingManager();
       await pump(
         tester,
@@ -250,14 +274,19 @@ void main() {
       await fromNative(tester, 'accessoryTapped');
       await tester.pumpAndSettle();
 
-      expect(manager.calls, ['connectTo:${_ambient().device.id}:Night Harbor'],
-          reason: 'the sheet must open onto the connect, not onto the same '
-              'banner with a View button to tap a second time');
+      expect(
+        manager.calls,
+        ['connectTo:${_ambient().device.id}:Night Harbor'],
+        reason:
+            'the sheet must open onto the connect, not onto the same '
+            'banner with a View button to tap a second time',
+      );
       expect(find.byType(CastControlsSheet), findsOneWidget);
     });
 
-    testWidgets('a tap on any other state only opens the sheet',
-        (tester) async {
+    testWidgets('a tap on any other state only opens the sheet', (
+      tester,
+    ) async {
       final manager = _RecordingManager();
       await pump(tester, state: const CastBarIdle(_device), manager: manager);
       await fromNative(tester, 'accessoryTapped');
@@ -265,26 +294,31 @@ void main() {
       expect(manager.calls, isEmpty);
     });
 
-    testWidgets("the sheet's controller reports no cast bar extent",
-        (tester) async {
+    testWidgets("the sheet's controller reports no cast bar extent", (
+      tester,
+    ) async {
       await pump(tester, state: const CastBarIdle(_device));
       await fromNative(tester, 'accessoryTapped');
       await tester.pumpAndSettle();
-      final sheetBar = tester.widget<CastMiniController>(find.descendant(
-        of: find.byType(CastControlsSheet),
-        matching: find.byType(CastMiniController),
-      ));
+      final sheetBar = tester.widget<CastMiniController>(
+        find.descendant(
+          of: find.byType(CastControlsSheet),
+          matching: find.byType(CastMiniController),
+        ),
+      );
       expect(sheetBar.reportsExtent, isFalse);
       expect(
         find.descendant(
-            of: find.byType(CastControlsSheet),
-            matching: find.byType(ReportedExtent)),
+          of: find.byType(CastControlsSheet),
+          matching: find.byType(ReportedExtent),
+        ),
         findsNothing,
       );
     });
 
-    testWidgets('the sheet closes when there is nothing left to show',
-        (tester) async {
+    testWidgets('the sheet closes when there is nothing left to show', (
+      tester,
+    ) async {
       final container = await pump(tester, state: const CastBarIdle(_device));
       await fromNative(tester, 'accessoryTapped');
       await tester.pumpAndSettle();
@@ -302,34 +336,45 @@ void main() {
       expect(find.byType(CastControlsSheet), findsNothing);
     });
 
-    testWidgets('a sheet that throws on open does not block later taps',
-        (tester) async {
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(_channel, (_) async => null);
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(_channel, null));
-      final container = ProviderContainer(overrides: [
-        castBarStateProvider.overrideWithValue(const CastBarIdle(_device)),
-        nativeTabBarChannelProvider.overrideWith((ref) {
-          final channel = NativeTabBarChannel(channel: _channel);
-          ref.onDispose(channel.dispose);
-          return channel;
-        }),
-      ]);
+    testWidgets('a sheet that throws on open does not block later taps', (
+      tester,
+    ) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        _channel,
+        (_) async => null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          _channel,
+          null,
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          castBarStateProvider.overrideWithValue(const CastBarIdle(_device)),
+          nativeTabBarChannelProvider.overrideWith((ref) {
+            final channel = NativeTabBarChannel(channel: _channel);
+            ref.onDispose(channel.dispose);
+            return channel;
+          }),
+        ],
+      );
       addTearDown(container.dispose);
       // No MaterialApp, so no Navigator: showCastControlsSheet throws
       // synchronously.
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: Localizations(
-          locale: const Locale('en'),
-          delegates: AppLocalizations.localizationsDelegates,
-          child: const Directionality(
-            textDirection: TextDirection.ltr,
-            child: NativeCastAccessory(),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Localizations(
+            locale: const Locale('en'),
+            delegates: AppLocalizations.localizationsDelegates,
+            child: const Directionality(
+              textDirection: TextDirection.ltr,
+              child: NativeCastAccessory(),
+            ),
           ),
         ),
-      ));
+      );
       await tester.pump();
 
       final logged = <String>[];
@@ -343,13 +388,15 @@ void main() {
         debugPrint = original;
       }
 
-      final failures =
-          logged.where((m) => m.contains('cast sheet failed to open'));
+      final failures = logged.where(
+        (m) => m.contains('cast sheet failed to open'),
+      );
       expect(failures, hasLength(2));
     });
 
-    testWidgets('a second tap while the sheet is open opens no second sheet',
-        (tester) async {
+    testWidgets('a second tap while the sheet is open opens no second sheet', (
+      tester,
+    ) async {
       await pump(tester, state: const CastBarIdle(_device));
       await fromNative(tester, 'accessoryTapped');
       await fromNative(tester, 'accessoryTapped');
@@ -357,17 +404,18 @@ void main() {
       expect(find.byType(CastControlsSheet), findsOneWidget);
     });
 
-    testWidgets(
-        'the sheet closes itself, leaving a dialog above it open, when '
+    testWidgets('the sheet closes itself, leaving a dialog above it open, when '
         'there is nothing left to show', (tester) async {
       final container = await pump(tester, state: const CastBarIdle(_device));
       await fromNative(tester, 'accessoryTapped');
       await tester.pumpAndSettle();
-      unawaited(showDialog<void>(
-        context: tester.element(find.byType(CastControlsSheet)),
-        useRootNavigator: true,
-        builder: (_) => const AlertDialog(title: Text('Stop playback?')),
-      ));
+      unawaited(
+        showDialog<void>(
+          context: tester.element(find.byType(CastControlsSheet)),
+          useRootNavigator: true,
+          builder: (_) => const AlertDialog(title: Text('Stop playback?')),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Stop playback?'), findsOneWidget);
 

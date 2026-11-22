@@ -28,7 +28,10 @@ void main() {
 
   test('a URL guest is not p2p', () {
     const direct = MydiaCredentials(
-        instanceId: 'u1', accessToken: 'a', serverUrl: 'https://m.example');
+      instanceId: 'u1',
+      accessToken: 'a',
+      serverUrl: 'https://m.example',
+    );
     expect(direct.isP2p, isFalse);
     expect(direct.nodeId, isNull);
   });
@@ -41,8 +44,10 @@ void main() {
   });
 
   test('normalizeMydiaUrl drops a trailing slash and lowercases the host', () {
-    expect(normalizeMydiaUrl('https://Media.Example:8443/'),
-        'https://media.example:8443');
+    expect(
+      normalizeMydiaUrl('https://Media.Example:8443/'),
+      'https://media.example:8443',
+    );
     expect(normalizeMydiaUrl('http://10.0.0.5:4000'), 'http://10.0.0.5:4000');
   });
 

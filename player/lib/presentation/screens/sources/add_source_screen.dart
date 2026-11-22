@@ -1,7 +1,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,11 +15,12 @@ import '../settings/widgets/settings_section.dart';
 import 'add_folder_screen.dart' show localFoldersSupported;
 
 class AddSourceScreen extends ConsumerWidget {
-  const AddSourceScreen(
-      {super.key,
-      this.isWeb = kIsWeb,
-      this.foldersSupported,
-      this.directionalPrimary});
+  const AddSourceScreen({
+    super.key,
+    this.isWeb = kIsWeb,
+    this.foldersSupported,
+    this.directionalPrimary,
+  });
 
   /// Third-party sources do not exist on web, so a second Mydia added there
   /// would vanish. Overridable for tests.

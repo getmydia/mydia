@@ -21,11 +21,10 @@ import 'playback_stats.dart';
 
 class PlaybackStatsCollector {
   PlaybackStatsCollector({
-    required PlayerSignals signals,
-    required FrameStatsSampler sampler,
+    required this._signals,
+    required this._sampler,
     this.interval = const Duration(seconds: 1),
-  })  : _signals = signals,
-        _sampler = sampler;
+  });
 
   final PlayerSignals _signals;
   final FrameStatsSampler _sampler;

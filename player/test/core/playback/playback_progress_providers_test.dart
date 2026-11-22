@@ -34,35 +34,41 @@ class _MydiaSyncSource extends FakeMediaSource implements ProgressSync {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('a Mydia source coming back into reach gets its offline positions',
-      () async {
-    final store = InMemoryPlaybackProgressStore();
-    await store.save(LocalPlaybackProgress(
-      sourceId: testMydiaSourceId.value,
-      mediaId: '7',
-      mediaType: 'movie',
-      positionSeconds: 30,
-      durationSeconds: 100,
-      updatedAt: DateTime(2026),
-    ));
-    final mydia = _MydiaSyncSource()
-      ..setStatus(SourceConnectionStatus.unreachable);
+  test(
+    'a Mydia source coming back into reach gets its offline positions',
+    () async {
+      final store = InMemoryPlaybackProgressStore();
+      await store.save(
+        LocalPlaybackProgress(
+          sourceId: testMydiaSourceId.value,
+          mediaId: '7',
+          mediaType: 'movie',
+          positionSeconds: 30,
+          durationSeconds: 100,
+          updatedAt: DateTime(2026),
+        ),
+      );
+      final mydia = _MydiaSyncSource()
+        ..setStatus(SourceConnectionStatus.unreachable);
 
-    final container = ProviderContainer(overrides: [
-      playbackProgressStoreProvider.overrideWith((ref) async => store),
-      thirdPartySourcesProvider.overrideWithValue([testMydiaSource]),
-      mediaSourceProvider(testMydiaSourceId).overrideWithValue(mydia),
-    ]);
-    addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          playbackProgressStoreProvider.overrideWith((ref) async => store),
+          thirdPartySourcesProvider.overrideWithValue([testMydiaSource]),
+          mediaSourceProvider(testMydiaSourceId).overrideWithValue(mydia),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    container.read(sourceProgressFlushProvider);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(mydia.pushed, isEmpty, reason: 'unreachable: nothing to push to');
+      container.read(sourceProgressFlushProvider);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(mydia.pushed, isEmpty, reason: 'unreachable: nothing to push to');
 
-    mydia.setStatus(SourceConnectionStatus.remote);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+      mydia.setStatus(SourceConnectionStatus.remote);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    expect(mydia.pushed, ['7']);
-    expect(store.unsynced(), isEmpty);
-  });
+      expect(mydia.pushed, ['7']);
+      expect(store.unsynced(), isEmpty);
+    },
+  );
 }

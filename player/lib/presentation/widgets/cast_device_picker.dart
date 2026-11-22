@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cast/cast_backend.dart';
@@ -25,9 +25,10 @@ import 'osd_dialog.dart';
 /// the picker is where other players are, so it is the place to ask for them
 /// again. `CastButton` draws a dot while one is hidden.
 Future<CastDevice?> showCastDevicePicker(BuildContext context) {
-  ProviderScope.containerOf(context, listen: false)
-      .read(ambientDismissalsProvider.notifier)
-      .clear();
+  ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(ambientDismissalsProvider.notifier).clear();
   return showDialog<CastDevice>(
     context: context,
     builder: (context) => const CastDevicePickerDialog(),
@@ -59,7 +60,8 @@ class CastDevicePickerDialog extends ConsumerWidget {
     // contradicted the toolbar icon.
     final chosenDevice = ref.watch(castDisplayDeviceProvider);
     final connection = ref.watch(castConnectionProvider);
-    final connected = connection == CastConnection.connectedIdle ||
+    final connected =
+        connection == CastConnection.connectedIdle ||
         connection == CastConnection.casting;
 
     return OsdDialog(
@@ -216,10 +218,12 @@ class _DeviceListState extends State<_DeviceList> {
     final chromecast = devices
         .where((d) => d.protocol == CastProtocolKind.chromecast)
         .toList();
-    final dlna =
-        devices.where((d) => d.protocol == CastProtocolKind.dlna).toList();
-    final mydia =
-        devices.where((d) => d.protocol == CastProtocolKind.mydia).toList();
+    final dlna = devices
+        .where((d) => d.protocol == CastProtocolKind.dlna)
+        .toList();
+    final mydia = devices
+        .where((d) => d.protocol == CastProtocolKind.mydia)
+        .toList();
 
     return ListView(
       shrinkWrap: true,
@@ -285,9 +289,8 @@ class _ProtocolGroup extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Text(
             label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: palette.textSecondary,
-                ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: palette.textSecondary),
           ),
         ),
         ...devices.map((device) {
@@ -308,9 +311,9 @@ class _ProtocolGroup extends ConsumerWidget {
           // honest for idle/paused targets whose state we actually know.
           final subtitle = device.protocol == CastProtocolKind.mydia
               ? (device.metadata['nowPlayingTitle'] ??
-                  (device.metadata['statusUnavailable'] == 'true'
-                      ? context.l10n.castPickerStatusUnavailable
-                      : context.l10n.castPickerNothingPlaying))
+                    (device.metadata['statusUnavailable'] == 'true'
+                        ? context.l10n.castPickerStatusUnavailable
+                        : context.l10n.castPickerNothingPlaying))
               : device.model;
           // The Mydia servers that list this device, by their own names.
           // Only worth saying when there is more than one to tell apart.
@@ -337,8 +340,9 @@ class _ProtocolGroup extends ConsumerWidget {
                       Text(servers.join(', ')),
                     ],
                   ),
-            trailing:
-                isConnected ? Icon(Icons.check, color: palette.primary) : null,
+            trailing: isConnected
+                ? Icon(Icons.check, color: palette.primary)
+                : null,
             onTap: () => Navigator.of(context).pop(device),
           );
         }),
@@ -357,7 +361,8 @@ class _DiscoveryError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final denied = error is CastBackendException &&
+    final denied =
+        error is CastBackendException &&
         (error as CastBackendException).kind == CastFailureKind.discoveryDenied;
 
     if (denied) {

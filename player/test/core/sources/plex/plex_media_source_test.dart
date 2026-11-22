@@ -27,7 +27,8 @@ const identity = PlexIdentity(
   FakePlexServer server,
   FixedConnection connection,
   List<int> unauthorized,
-}) build() {
+})
+build() {
   final server = FakePlexServer();
   final connection = FixedConnection(FakePlexServer.base);
   final unauthorized = <int>[];
@@ -63,15 +64,21 @@ void main() {
         externalId: '101',
       ),
       libraryItemCount: FakePlexServer.movies.length,
-      show:
-          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
+      show: const ItemRef(
+        sourceId: sid,
+        kind: ItemKind.show,
+        externalId: '201',
+      ),
     );
   });
 
   const movie = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '101');
 
-  const episode =
-      ItemRef(sourceId: sid, kind: ItemKind.episode, externalId: '401');
+  const episode = ItemRef(
+    sourceId: sid,
+    kind: ItemKind.episode,
+    externalId: '401',
+  );
 
   test('skip segments come from the episode markers', () async {
     final b = build();
@@ -84,8 +91,9 @@ void main() {
   });
 
   test('an item with no markers has no segments', () async {
-    final segments =
-        await build().source.as<SkipSegments>()!.skipSegments(episode);
+    final segments = await build().source.as<SkipSegments>()!.skipSegments(
+      episode,
+    );
     expect(segments, isEmpty);
   });
 
@@ -122,15 +130,16 @@ void main() {
     final b = build();
     final items = await b.source.recentlyAdded();
     expect(items.map((i) => i.ref.externalId), ['104', '102']);
-    final request = b.server.requests
-        .lastWhere((r) => r.url.path == '/library/recentlyAdded');
+    final request = b.server.requests.lastWhere(
+      (r) => r.url.path == '/library/recentlyAdded',
+    );
     expect(request.url.queryParameters['X-Plex-Container-Size'], '20');
   });
 
   test('next up reads the show on deck', () async {
     final next = await build().source.as<NextUp>()!.nextUp(
-          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
-        );
+      const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
+    );
     expect(next?.ref.externalId, '402');
   });
 
@@ -138,15 +147,15 @@ void main() {
     final b = build();
     b.server.nothingOnDeck = true;
     final next = await b.source.as<NextUp>()!.nextUp(
-          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
-        );
+      const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
+    );
     expect(next, isNull);
   });
 
   test('a missing similar endpoint reads as none', () async {
     final similar = await build().source.as<Similar>()!.similar(
-          const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '105'),
-        );
+      const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '105'),
+    );
     expect(similar, isEmpty);
   });
 
@@ -169,8 +178,10 @@ void main() {
 
     // libraries() refreshes what browse reuses.
     await b.source.libraries();
-    expect(b.server.requests.where((r) => r.url.path == '/library/sections'),
-        hasLength(2));
+    expect(
+      b.server.requests.where((r) => r.url.path == '/library/sections'),
+      hasLength(2),
+    );
   });
 
   test('sends sort, filter and paging as Plex expects', () async {
@@ -178,7 +189,10 @@ void main() {
     await b.source.browse(
       const LibraryRef(sourceId: sid, id: '1'),
       const BrowseQuery(
-          sortId: 'addedAt', filterIds: {'unwatched'}, pageSize: 2),
+        sortId: 'addedAt',
+        filterIds: {'unwatched'},
+        pageSize: 2,
+      ),
     );
     final q = b.server.requests.last.url.queryParameters;
     expect(q['sort'], 'addedAt:desc');
@@ -193,8 +207,8 @@ void main() {
 
   test('maps a movie with versions, streams and people', () async {
     final detail = await build().source.item(
-          const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '101'),
-        );
+      const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '101'),
+    );
     expect(detail.summary.title, 'The Lantern Keeper');
     expect(detail.overview, startsWith('A keeper'));
     expect(detail.genres, ['Drama']);
@@ -239,11 +253,7 @@ void main() {
 
   test('marks watched and unwatched', () async {
     final b = build();
-    const ref = ItemRef(
-      sourceId: sid,
-      kind: ItemKind.movie,
-      externalId: '101',
-    );
+    const ref = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '101');
     await b.source.as<WatchedState>()!.setWatched(ref, true);
     expect(b.server.requests.last.url.path, '/:/scrobble');
     expect(b.server.requests.last.url.queryParameters['key'], '101');
@@ -255,9 +265,9 @@ void main() {
     'artwork goes through the photo transcoder with the token in a header',
     () async {
       final request = await build().source.artwork(
-            const ArtworkRef('/library/metadata/101/thumb/1700'),
-            width: 300,
-          );
+        const ArtworkRef('/library/metadata/101/thumb/1700'),
+        width: 300,
+      );
       final url = Uri.parse(request!.url);
       expect(url.path, '/photo/:/transcode');
       expect(url.queryParameters['url'], '/library/metadata/101/thumb/1700');
@@ -317,16 +327,23 @@ void main() {
       expect(q['X-Plex-Container-Size'], '20');
     });
 
-    test('an episode carries its show title, the show poster and its still',
-        () async {
-      final episode = (await build().source.continueWatching()).first;
-      expect(episode.showTitle, 'Harbour Lights');
-      expect(episode.subtitle, 'S1 · E2');
-      expect(episode.userState.progressSeconds, 600);
-      expect(episode.poster, const ArtworkRef('/library/metadata/201/thumb/1'));
-      expect(
-          episode.backdrop, const ArtworkRef('/library/metadata/402/thumb/1'));
-    });
+    test(
+      'an episode carries its show title, the show poster and its still',
+      () async {
+        final episode = (await build().source.continueWatching()).first;
+        expect(episode.showTitle, 'Harbour Lights');
+        expect(episode.subtitle, 'S1 · E2');
+        expect(episode.userState.progressSeconds, 600);
+        expect(
+          episode.poster,
+          const ArtworkRef('/library/metadata/201/thumb/1'),
+        );
+        expect(
+          episode.backdrop,
+          const ArtworkRef('/library/metadata/402/thumb/1'),
+        );
+      },
+    );
 
     test('remove sends a PUT with the rating key', () async {
       final b = build();

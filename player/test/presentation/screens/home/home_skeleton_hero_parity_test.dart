@@ -1,7 +1,7 @@
 // The skeleton hero exists so nothing moves when the real hero replaces it, so
 // its height has to match the loaded hero's in both layouts.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -22,7 +22,8 @@ const _item = ItemSummary(
   ),
   title: 'Night Ferry',
   year: 2011,
-  overview: 'A ferry crosses the saltmarsh after dark, and the passengers '
+  overview:
+      'A ferry crosses the saltmarsh after dark, and the passengers '
       'trade stories until the far shore appears out of the fog, long '
       'after the lanterns have burned low and the tide has turned twice.',
   poster: ArtworkRef('/art/night-ferry'),
@@ -30,34 +31,39 @@ const _item = ItemSummary(
 
 void main() {
   for (final size in const [Size(400, 800), Size(1280, 800)]) {
-    testWidgets('skeleton hero is as tall as the loaded hero at $size',
-        (tester) async {
+    testWidgets('skeleton hero is as tall as the loaded hero at $size', (
+      tester,
+    ) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(const MaterialApp(
-        home: Scaffold(body: SingleChildScrollView(child: _Skeleton())),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: SingleChildScrollView(child: _Skeleton())),
+        ),
+      );
       await tester.pump();
       final skeleton = tester.getSize(find.byKey(HomeLoadingSkeleton.heroKey));
 
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          mediaSourceProvider(fakeSourceId)
-              .overrideWithValue(FakeMediaSource()),
-          sourceArtworkProvider.overrideWith((ref, key) async => null),
-        ],
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: SourceHomeHero(sourceId: fakeSourceId, item: _item),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mediaSourceProvider(fakeSourceId)
+                .overrideWithValue(FakeMediaSource()),
+            sourceArtworkProvider.overrideWith((ref, key) async => null),
+          ],
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: SourceHomeHero(sourceId: fakeSourceId, item: _item),
+              ),
             ),
           ),
         ),
-      ));
+      );
       await tester.pump();
       final loaded = tester.getSize(find.byType(SourceHomeHero));
 
@@ -65,15 +71,18 @@ void main() {
     });
   }
 
-  testWidgets('the stacked poster is capped at 320 below the wide breakpoint',
-      (tester) async {
+  testWidgets('the stacked poster is capped at 320 below the wide breakpoint', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(899, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(body: SingleChildScrollView(child: _Skeleton())),
-    ));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: SingleChildScrollView(child: _Skeleton())),
+      ),
+    );
     await tester.pump();
 
     expect(

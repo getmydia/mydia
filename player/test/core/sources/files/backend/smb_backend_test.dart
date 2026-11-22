@@ -19,7 +19,10 @@ class _GatedNative extends FakeSmbNative {
 
   @override
   Future<List<FileEntry>> list(
-      SmbTarget t, SmbCredentials c, String dir) async {
+    SmbTarget t,
+    SmbCredentials c,
+    String dir,
+  ) async {
     final g = gate;
     gate = null;
     if (g != null) await g.future;
@@ -39,11 +42,11 @@ void main() {
   });
 
   SmbBackend backend() => SmbBackend(
-        native: native,
-        accountId: 'sabc',
-        target: _target,
-        credentials: _creds,
-      );
+    native: native,
+    accountId: 'sabc',
+    target: _target,
+    credentials: _creds,
+  );
 
   test('list_and_stat_pass_native_entries_through', () async {
     final b = backend();
@@ -79,20 +82,22 @@ void main() {
           credentials: credentials,
         );
 
-    test('unreadable credentials are logged without the stored token',
-        () async {
-      final logged = <String>[];
-      final original = debugPrint;
-      debugPrint = (String? message, {int? wrapWidth}) {
-        if (message != null) logged.add(message);
-      };
-      addTearDown(() => debugPrint = original);
+    test(
+      'unreadable credentials are logged without the stored token',
+      () async {
+        final logged = <String>[];
+        final original = debugPrint;
+        debugPrint = (String? message, {int? wrapWidth}) {
+          if (message != null) logged.add(message);
+        };
+        addTearDown(() => debugPrint = original);
 
-      final b = lazy(() async => '{"user":"viewer","password":"hunter-two"');
-      await expectLater(b.probe(), throwsA(isA<BackendUnauthorized>()));
-      expect(logged.join('\n'), contains('Unreadable SMB credentials'));
-      expect(logged.join('\n'), isNot(contains('hunter-two')));
-    });
+        final b = lazy(() async => '{"user":"viewer","password":"hunter-two"');
+        await expectLater(b.probe(), throwsA(isA<BackendUnauthorized>()));
+        expect(logged.join('\n'), contains('Unreadable SMB credentials'));
+        expect(logged.join('\n'), isNot(contains('hunter-two')));
+      },
+    );
 
     test('missing_or_unreadable_credentials_are_refused', () async {
       String? stored;
@@ -166,20 +171,20 @@ void main() {
       List<SmbTarget> targets = const [a, b],
       String? serviceName = 'NAS',
       Duration browseTimeout = const Duration(seconds: 5),
-    }) =>
-        LazySmbBackend(
-          native: native,
-          accountId: 'sabc',
-          targets: targets,
-          credentials: () async => _creds.toJson(),
-          serviceName: serviceName,
-          discovery: discovery,
-          onReachedVia: (t, d) async => reached.add((t, d)),
-          browseTimeout: browseTimeout,
-        );
+    }) => LazySmbBackend(
+      native: native,
+      accountId: 'sabc',
+      targets: targets,
+      credentials: () async => _creds.toJson(),
+      serviceName: serviceName,
+      discovery: discovery,
+      onReachedVia: (t, d) async => reached.add((t, d)),
+      browseTimeout: browseTimeout,
+    );
 
-    List<String> probedHosts() =>
-        [for (final (t, _) in native.probeLogins) t.host];
+    List<String> probedHosts() => [
+      for (final (t, _) in native.probeLogins) t.host,
+    ];
 
     test('first_reachable_target_is_used_and_promoted', () async {
       native.hostFailures['192.168.1.5'] = const BackendUnreachable();
@@ -208,13 +213,18 @@ void main() {
       expect(reached.single.$1.host, 'nas.local');
     });
 
-    test('every_target_refusing_login_rethrows_unauthorized_without_browsing',
-        () async {
-      native.hostFailures['192.168.1.5'] = const BackendUnauthorized();
-      native.hostFailures['nas.local'] = const BackendUnauthorized();
-      await expectLater(lazy().list('/'), throwsA(isA<BackendUnauthorized>()));
-      expect(discovery.listenCount, 0);
-    });
+    test(
+      'every_target_refusing_login_rethrows_unauthorized_without_browsing',
+      () async {
+        native.hostFailures['192.168.1.5'] = const BackendUnauthorized();
+        native.hostFailures['nas.local'] = const BackendUnauthorized();
+        await expectLater(
+          lazy().list('/'),
+          throwsA(isA<BackendUnauthorized>()),
+        );
+        expect(discovery.listenCount, 0);
+      },
+    );
 
     test('a_refused_login_wins_over_an_unreachable_address', () async {
       native.hostFailures['192.168.1.5'] = const BackendUnreachable();
@@ -250,23 +260,26 @@ void main() {
       expect(t.host, '10.0.0.9');
       expect(t.port, 4455);
       // The hostname on port 4455 is a new target: the stored one is on 445.
-      expect([for (final x in d) '${x.host}:${x.port}'],
-          ['10.0.0.9:4455', 'nas.local:4455']);
+      expect(
+        [for (final x in d) '${x.host}:${x.port}'],
+        ['10.0.0.9:4455', 'nas.local:4455'],
+      );
     });
 
     test('browse_ignores_other_names_and_times_out', () async {
       native.hostFailures['192.168.1.5'] = const BackendUnreachable('first');
       native.hostFailures['nas.local'] = const BackendUnreachable('last');
-      final call =
-          lazy(browseTimeout: const Duration(milliseconds: 50)).list('/');
+      final call = lazy(browseTimeout: const Duration(milliseconds: 50))
+          .list('/');
       await pumpEventQueue();
       discovery.emit(const [
         DiscoveredSmbServer(name: 'Other', host: '10.0.0.7', port: 445),
       ]);
       await expectLater(
         call,
-        throwsA(isA<BackendUnreachable>()
-            .having((e) => e.message, 'message', 'last')),
+        throwsA(
+          isA<BackendUnreachable>().having((e) => e.message, 'message', 'last'),
+        ),
       );
       expect(discovery.cancelCount, 1);
       expect(probedHosts(), ['192.168.1.5', 'nas.local']);
@@ -282,13 +295,19 @@ void main() {
     });
 
     test('smb1_only_surfaces_over_a_plain_unreachable', () async {
-      native.hostFailures['192.168.1.5'] =
-          const BackendUnreachable(kSmb1OnlyReason);
+      native.hostFailures['192.168.1.5'] = const BackendUnreachable(
+        kSmb1OnlyReason,
+      );
       native.hostFailures['nas.local'] = const BackendUnreachable();
       await expectLater(
         lazy(serviceName: null).list('/'),
-        throwsA(isA<BackendUnreachable>()
-            .having((e) => e.message, 'message', kSmb1OnlyReason)),
+        throwsA(
+          isA<BackendUnreachable>().having(
+            (e) => e.message,
+            'message',
+            kSmb1OnlyReason,
+          ),
+        ),
       );
       expect(probedHosts(), ['192.168.1.5', 'nas.local']);
     });
@@ -326,56 +345,75 @@ void main() {
       native.hostFailures.remove('10.0.0.9');
       await backend.list('/');
 
-      expect(
-          probedHosts(), ['192.168.1.5', 'nas.local', '10.0.0.9', '10.0.0.9']);
+      expect(probedHosts(), [
+        '192.168.1.5',
+        'nas.local',
+        '10.0.0.9',
+        '10.0.0.9',
+      ]);
       expect(discovery.listenCount, 1);
     });
 
-    test('a_reached_address_over_the_cap_drops_a_hostname_not_itself',
-        () async {
-      final hosts = [for (var i = 1; i <= 6; i++) 'nas$i.local'];
-      for (final h in hosts) {
-        native.hostFailures[h] = const BackendUnreachable();
-      }
-      final backend = lazy(
-        targets: [
-          for (final h in hosts) SmbTarget(host: h, port: 445, share: 'media'),
-        ],
-        browseTimeout: const Duration(milliseconds: 200),
-      );
-      final call = backend.list('/');
-      await pumpEventQueue();
-      discovery.emit(const [
-        DiscoveredSmbServer(name: 'NAS', host: '10.0.0.9', port: 445),
-      ]);
-      await call;
+    test(
+      'a_reached_address_over_the_cap_drops_a_hostname_not_itself',
+      () async {
+        final hosts = [for (var i = 1; i <= 6; i++) 'nas$i.local'];
+        for (final h in hosts) {
+          native.hostFailures[h] = const BackendUnreachable();
+        }
+        final backend = lazy(
+          targets: [
+            for (final h in hosts)
+              SmbTarget(host: h, port: 445, share: 'media'),
+          ],
+          browseTimeout: const Duration(milliseconds: 200),
+        );
+        final call = backend.list('/');
+        await pumpEventQueue();
+        discovery.emit(const [
+          DiscoveredSmbServer(name: 'NAS', host: '10.0.0.9', port: 445),
+        ]);
+        await call;
 
-      native.hostFailures['10.0.0.9'] = const BackendUnreachable();
-      await expectLater(backend.list('/'), throwsA(isA<BackendUnreachable>()));
-      native.probeLogins.clear();
-      await expectLater(backend.list('/'), throwsA(isA<BackendUnreachable>()));
+        native.hostFailures['10.0.0.9'] = const BackendUnreachable();
+        await expectLater(
+          backend.list('/'),
+          throwsA(isA<BackendUnreachable>()),
+        );
+        native.probeLogins.clear();
+        await expectLater(
+          backend.list('/'),
+          throwsA(isA<BackendUnreachable>()),
+        );
 
-      expect(probedHosts(), ['10.0.0.9', ...hosts.take(5)]);
-    });
+        expect(probedHosts(), ['10.0.0.9', ...hosts.take(5)]);
+      },
+    );
 
-    test('stale_ip_refuses_hostname_unreachable_browse_finds_the_nas',
-        () async {
-      native.hostFailures['192.168.1.5'] = const BackendUnauthorized();
-      native.hostFailures['nas.local'] = const BackendUnreachable();
-      final backend = lazy();
-      final call = backend.list('/');
-      await pumpEventQueue();
-      expect(discovery.listenCount, 1);
-      discovery.emit(const [
-        DiscoveredSmbServer(
-            name: 'NAS', host: '10.0.0.9', port: 445, hostname: 'nas.local'),
-      ]);
+    test(
+      'stale_ip_refuses_hostname_unreachable_browse_finds_the_nas',
+      () async {
+        native.hostFailures['192.168.1.5'] = const BackendUnauthorized();
+        native.hostFailures['nas.local'] = const BackendUnreachable();
+        final backend = lazy();
+        final call = backend.list('/');
+        await pumpEventQueue();
+        expect(discovery.listenCount, 1);
+        discovery.emit(const [
+          DiscoveredSmbServer(
+            name: 'NAS',
+            host: '10.0.0.9',
+            port: 445,
+            hostname: 'nas.local',
+          ),
+        ]);
 
-      await call;
-      expect(probedHosts(), ['192.168.1.5', 'nas.local', '10.0.0.9']);
-      await pumpEventQueue();
-      expect(reached.single.$1.host, '10.0.0.9');
-    });
+        await call;
+        expect(probedHosts(), ['192.168.1.5', 'nas.local', '10.0.0.9']);
+        await pumpEventQueue();
+        expect(reached.single.$1.host, '10.0.0.9');
+      },
+    );
 
     test('unreachable_call_drops_the_built_backend', () async {
       final backend = lazy();

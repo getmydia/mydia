@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/window/decoration_layout.dart';
@@ -36,16 +36,12 @@ class DesktopWindowChrome extends StatelessWidget {
   const DesktopWindowChrome({
     super.key,
     required this.child,
-    required ValueListenable<DecorationLayout> layout,
-    required ValueListenable<WindowFrameState> frameState,
-    WindowController? controller,
-    ValueListenable<bool>? fullscreen,
-    ValueListenable<bool>? buttonsHidden,
-  })  : _layout = layout,
-        _frameState = frameState,
-        _controller = controller,
-        _fullscreen = fullscreen,
-        _buttonsHidden = buttonsHidden;
+    required this._layout,
+    required this._frameState,
+    this._controller,
+    this._fullscreen,
+    this._buttonsHidden,
+  });
 
   /// The `ClipRRect` rounding the app to the GTK frame. Exposed for tests.
   static const Key clipKey = ValueKey('desktop-window-chrome-clip');
@@ -156,8 +152,9 @@ class _WindowChromeState extends State<_WindowChrome> {
         final radius = windowCornerRadiusFor(state);
         return ClipRRect(
           key: DesktopWindowChrome.clipKey,
-          borderRadius:
-              radius == 0 ? BorderRadius.zero : BorderRadius.circular(radius),
+          borderRadius: radius == 0
+              ? BorderRadius.zero
+              : BorderRadius.circular(radius),
           clipBehavior: radius == 0 ? Clip.none : Clip.antiAlias,
           child: stack,
         );
@@ -305,8 +302,9 @@ class _WindowChromeState extends State<_WindowChrome> {
             width: isWindows
                 ? kWindowsCaptionButtonsReserve
                 : buttons.length * kLinuxWindowButtonExtent,
-            height:
-                isWindows ? kWindowsTitleBarHeight : kLinuxWindowChromeHeight,
+            height: isWindows
+                ? kWindowsTitleBarHeight
+                : kLinuxWindowChromeHeight,
           );
         }
         return WindowButtons(buttons: buttons, controller: widget.controller);

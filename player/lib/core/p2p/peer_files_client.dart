@@ -83,22 +83,15 @@ typedef _Manifest = ({List<FlutterWireSharedAccount>? accounts, bool revoked});
 /// neither does `NotAuthorized`, so neither deletes anything.
 class PeerFilesClient {
   PeerFilesClient({
-    required PeerFilesTransport transport,
-    required PeerSyncService sync,
-    required PeerFilesStore store,
-    required List<SourceAccountRecord>? Function() localAccounts,
-    Future<void> Function()? localAccountsReady,
-    Stream<void>? localAccountsChanged,
-    Stream<String>? peerConnected,
-    FilesMediaInfoCache? mediaInfoCache,
-  })  : _transport = transport,
-        _sync = sync,
-        _store = store,
-        _mediaInfoCache = mediaInfoCache,
-        _localAccounts = localAccounts,
-        _localAccountsReady = localAccountsReady,
-        _localAccountsChanged = localAccountsChanged,
-        _peerConnected = peerConnected;
+    required this._transport,
+    required this._sync,
+    required this._store,
+    required this._localAccounts,
+    this._localAccountsReady,
+    this._localAccountsChanged,
+    this._peerConnected,
+    this._mediaInfoCache,
+  });
 
   /// How many times one member's fetch goes back to the manifest after a
   /// `StaleRevision`, before keeping the copy it has until the next refresh.
@@ -221,8 +214,8 @@ class PeerFilesClient {
   }
 
   Future<void> _drain() async {
-    while (
-        !_disposed && (_queuedLeave || _queuedAll || _queuedNodes.isNotEmpty)) {
+    while (!_disposed &&
+        (_queuedLeave || _queuedAll || _queuedNodes.isNotEmpty)) {
       try {
         if (_queuedLeave) {
           _queuedLeave = false;
@@ -252,10 +245,7 @@ class PeerFilesClient {
   Set<String>? _localKeys() {
     final local = _localAccounts();
     if (local == null) return null;
-    return {
-      for (final a in sharedFilesAccounts(local))
-        if (filesDedupeKey(a) case final key?) key,
-    };
+    return {for (final a in sharedFilesAccounts(local)) ?filesDedupeKey(a)};
   }
 
   Future<void> _refreshOnce(Set<String>? only) async {
@@ -306,8 +296,10 @@ class PeerFilesClient {
           debugPrint('[PeerFilesClient] $nodeId revoked this device');
           return (accounts: null, revoked: true);
         default:
-          debugPrint('[PeerFilesClient] $nodeId answered a manifest with '
-              '${response.runtimeType}');
+          debugPrint(
+            '[PeerFilesClient] $nodeId answered a manifest with '
+            '${response.runtimeType}',
+          );
       }
     } catch (e) {
       debugPrint('[PeerFilesClient] Manifest from $nodeId failed: $e');
@@ -407,9 +399,9 @@ class PeerFilesClient {
         );
         switch (response) {
           case FlutterPeerFilesResponse_IndexPage(
-              :final page,
-              :final nextCursor
-            ):
+            :final page,
+            :final nextCursor,
+          ):
             pages.add(page);
             cursor = nextCursor;
           case FlutterPeerFilesResponse_StaleRevision():
@@ -417,9 +409,11 @@ class PeerFilesClient {
           case FlutterPeerFilesResponse_Revoked():
             return _Fetch.revoked;
           case FlutterPeerFilesResponse_NotAuthorized() ||
-                FlutterPeerFilesResponse_Manifest():
-            debugPrint('[PeerFilesClient] $nodeId answered a page of '
-                '${wire.accountId} with ${response.runtimeType}');
+              FlutterPeerFilesResponse_Manifest():
+            debugPrint(
+              '[PeerFilesClient] $nodeId answered a page of '
+              '${wire.accountId} with ${response.runtimeType}',
+            );
             return _Fetch.failed;
         }
       } while (cursor != null);
@@ -431,8 +425,10 @@ class PeerFilesClient {
       await _store.replace(localAccountId, wire.revision.toInt(), pages);
       return _Fetch.done;
     } catch (e) {
-      debugPrint('[PeerFilesClient] Fetching ${wire.accountId} from $nodeId '
-          'failed: $e');
+      debugPrint(
+        '[PeerFilesClient] Fetching ${wire.accountId} from $nodeId '
+        'failed: $e',
+      );
       return _Fetch.failed;
     }
   }
@@ -468,11 +464,13 @@ class PeerFilesClient {
           (localKeys == null || localKeys.contains(lent.wire.dedupeKey))) {
         continue;
       }
-      next.add(PeerSharedAccount(
-        nodeId: lent.nodeId,
-        deviceName: member.deviceName,
-        wire: lent.wire,
-      ));
+      next.add(
+        PeerSharedAccount(
+          nodeId: lent.nodeId,
+          deviceName: member.deviceName,
+          wire: lent.wire,
+        ),
+      );
     }
     next.sort((a, b) {
       final byDevice = a.deviceName.compareTo(b.deviceName);
@@ -501,7 +499,7 @@ final peerFilesClientProvider = Provider<PeerFilesClient>((ref) {
   // Every change to the stored sources, filtered down to a change of
   // dedupe keys by the client.
   final localChanges = StreamController<void>.broadcast();
-  ref.listen(sourceRecordsProvider, (_, __) => localChanges.add(null));
+  ref.listen(sourceRecordsProvider, (_, _) => localChanges.add(null));
   final client = PeerFilesClient(
     transport: P2pPeerFilesTransport(p2p),
     sync: ref.watch(peerSyncServiceProvider),

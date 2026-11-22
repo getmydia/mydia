@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
 import 'contrast.dart';
@@ -62,14 +62,14 @@ class MydiaPalette extends ThemeExtension<MydiaPalette> {
 
   /// The surface steps in rising luminance (asserted in palette_test).
   List<Color> get surfaceTones => [
-        background,
-        surfaceDim,
-        surfaceLow,
-        surface,
-        surfaceHigh,
-        surfaceVariant,
-        surfaceBright,
-      ];
+    background,
+    surfaceDim,
+    surfaceLow,
+    surface,
+    surfaceHigh,
+    surfaceVariant,
+    surfaceBright,
+  ];
 
   @override
   MydiaPalette copyWith({
@@ -92,28 +92,27 @@ class MydiaPalette extends ThemeExtension<MydiaPalette> {
     Color? shimmerBase,
     Color? shimmerHighlight,
     bool? ambientTint,
-  }) =>
-      MydiaPalette(
-        background: background ?? this.background,
-        surfaceDim: surfaceDim ?? this.surfaceDim,
-        surfaceLow: surfaceLow ?? this.surfaceLow,
-        surface: surface ?? this.surface,
-        surfaceHigh: surfaceHigh ?? this.surfaceHigh,
-        surfaceVariant: surfaceVariant ?? this.surfaceVariant,
-        surfaceBright: surfaceBright ?? this.surfaceBright,
-        primary: primary ?? this.primary,
-        primaryFocus: primaryFocus ?? this.primaryFocus,
-        onPrimary: onPrimary ?? this.onPrimary,
-        textPrimary: textPrimary ?? this.textPrimary,
-        textSecondary: textSecondary ?? this.textSecondary,
-        textDisabled: textDisabled ?? this.textDisabled,
-        divider: divider ?? this.divider,
-        border: border ?? this.border,
-        cardHover: cardHover ?? this.cardHover,
-        shimmerBase: shimmerBase ?? this.shimmerBase,
-        shimmerHighlight: shimmerHighlight ?? this.shimmerHighlight,
-        ambientTint: ambientTint ?? this.ambientTint,
-      );
+  }) => MydiaPalette(
+    background: background ?? this.background,
+    surfaceDim: surfaceDim ?? this.surfaceDim,
+    surfaceLow: surfaceLow ?? this.surfaceLow,
+    surface: surface ?? this.surface,
+    surfaceHigh: surfaceHigh ?? this.surfaceHigh,
+    surfaceVariant: surfaceVariant ?? this.surfaceVariant,
+    surfaceBright: surfaceBright ?? this.surfaceBright,
+    primary: primary ?? this.primary,
+    primaryFocus: primaryFocus ?? this.primaryFocus,
+    onPrimary: onPrimary ?? this.onPrimary,
+    textPrimary: textPrimary ?? this.textPrimary,
+    textSecondary: textSecondary ?? this.textSecondary,
+    textDisabled: textDisabled ?? this.textDisabled,
+    divider: divider ?? this.divider,
+    border: border ?? this.border,
+    cardHover: cardHover ?? this.cardHover,
+    shimmerBase: shimmerBase ?? this.shimmerBase,
+    shimmerHighlight: shimmerHighlight ?? this.shimmerHighlight,
+    ambientTint: ambientTint ?? this.ambientTint,
+  );
 
   @override
   MydiaPalette lerp(MydiaPalette? other, double t) {
@@ -297,28 +296,27 @@ abstract final class Palettes {
     required int textDisabled,
     required int divider,
     required int border,
-  }) =>
-      MydiaPalette(
-        background: Color(background),
-        surfaceDim: Color(surfaceDim),
-        surfaceLow: Color(surfaceLow),
-        surface: Color(surface),
-        surfaceHigh: Color(surfaceHigh),
-        surfaceVariant: Color(surfaceVariant),
-        surfaceBright: Color(surfaceBright),
-        primary: const Color(0xFF000000),
-        primaryFocus: const Color(0xFF000000),
-        onPrimary: const Color(0xFFFFFFFF),
-        textPrimary: Color(textPrimary),
-        textSecondary: Color(textSecondary),
-        textDisabled: Color(textDisabled),
-        divider: Color(divider),
-        border: Color(border),
-        cardHover: Color(surfaceVariant),
-        shimmerBase: Color(surface),
-        shimmerHighlight: Color(surfaceVariant),
-        ambientTint: false,
-      );
+  }) => MydiaPalette(
+    background: Color(background),
+    surfaceDim: Color(surfaceDim),
+    surfaceLow: Color(surfaceLow),
+    surface: Color(surface),
+    surfaceHigh: Color(surfaceHigh),
+    surfaceVariant: Color(surfaceVariant),
+    surfaceBright: Color(surfaceBright),
+    primary: const Color(0xFF000000),
+    primaryFocus: const Color(0xFF000000),
+    onPrimary: const Color(0xFFFFFFFF),
+    textPrimary: Color(textPrimary),
+    textSecondary: Color(textSecondary),
+    textDisabled: Color(textDisabled),
+    divider: Color(divider),
+    border: Color(border),
+    cardHover: Color(surfaceVariant),
+    shimmerBase: Color(surface),
+    shimmerHighlight: Color(surfaceVariant),
+    ambientTint: false,
+  );
 
   static final MydiaPalette _adwaita = _linuxRamp(
     background: 0xFF1D1D20,
@@ -366,27 +364,26 @@ abstract final class Palettes {
   );
 
   static MydiaPalette _macos(Color accent) => MydiaPalette(
-        background: _macosBackground,
-        surfaceDim: const Color(0xFF212121),
-        surfaceLow: const Color(0xFF242424),
-        surface: const Color(0xFF282828),
-        surfaceHigh: const Color(0xFF2D2D2D),
-        surfaceVariant: const Color(0xFF323232),
-        surfaceBright: const Color(0xFF3A3A3A),
-        primary: accent,
-        primaryFocus:
-            Color.lerp(accent, const Color(0xFF000000), 0.15) ?? accent,
-        onPrimary: onColorFor(accent),
-        textPrimary: const Color(0xFFF2F2F2),
-        textSecondary: const Color(0xFFABABAB),
-        textDisabled: const Color(0xFF8F8F8F),
-        divider: const Color(0xFF2A2A2A),
-        border: const Color(0xFF3D3D3D),
-        cardHover: const Color(0xFF363636),
-        shimmerBase: const Color(0xFF2A2A2A),
-        shimmerHighlight: const Color(0xFF363636),
-        ambientTint: false,
-      );
+    background: _macosBackground,
+    surfaceDim: const Color(0xFF212121),
+    surfaceLow: const Color(0xFF242424),
+    surface: const Color(0xFF282828),
+    surfaceHigh: const Color(0xFF2D2D2D),
+    surfaceVariant: const Color(0xFF323232),
+    surfaceBright: const Color(0xFF3A3A3A),
+    primary: accent,
+    primaryFocus: Color.lerp(accent, const Color(0xFF000000), 0.15) ?? accent,
+    onPrimary: onColorFor(accent),
+    textPrimary: const Color(0xFFF2F2F2),
+    textSecondary: const Color(0xFFABABAB),
+    textDisabled: const Color(0xFF8F8F8F),
+    divider: const Color(0xFF2A2A2A),
+    border: const Color(0xFF3D3D3D),
+    cardHover: const Color(0xFF363636),
+    shimmerBase: const Color(0xFF2A2A2A),
+    shimmerHighlight: const Color(0xFF363636),
+    ambientTint: false,
+  );
 }
 
 extension MydiaPaletteContext on BuildContext {

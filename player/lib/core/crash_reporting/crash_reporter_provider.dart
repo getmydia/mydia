@@ -8,5 +8,6 @@ import 'crash_reporter.dart';
 /// without that override, such as the widget and integration tests that pump
 /// `MyApp` directly, gets an inert reporter that sends nothing, the way
 /// `fetchLogProvider` falls back to an in-memory log.
-final Provider<CrashReporter> crashReporterProvider =
-    Provider<CrashReporter>((ref) => CrashReporter.inert());
+final Provider<CrashReporter> crashReporterProvider = Provider<CrashReporter>(
+  (ref) => CrashReporter.inert(),
+);

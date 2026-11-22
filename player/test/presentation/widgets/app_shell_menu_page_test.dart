@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/nav/menu_page.dart';
@@ -21,9 +21,13 @@ Future<void> _pumpAndOpen(
       ),
     ),
   );
-  await tester.pumpWidget(MaterialApp(
-    home: open == null ? scaffold : ShellMenuScope(open: open, child: scaffold),
-  ));
+  await tester.pumpWidget(
+    MaterialApp(
+      home: open == null
+          ? scaffold
+          : ShellMenuScope(open: open, child: scaffold),
+    ),
+  );
   await tester.tap(find.text('menu'));
   await tester.pumpAndSettle();
 }
@@ -48,14 +52,17 @@ void main() {
       if (platform == TargetPlatform.iOS) continue;
       test('${platform.name} keeps the drawer', () {
         expect(
-            AppShell.usesMenuPage(platform: platform, isWeb: false), isFalse);
+          AppShell.usesMenuPage(platform: platform, isWeb: false),
+          isFalse,
+        );
       });
     }
   });
 
   group('openNavigation', () {
-    testWidgets('opens the menu page where the shell provides one',
-        (tester) async {
+    testWidgets('opens the menu page where the shell provides one', (
+      tester,
+    ) async {
       var opened = 0;
       await _pumpAndOpen(tester, open: () => opened++);
       expect(opened, 1);

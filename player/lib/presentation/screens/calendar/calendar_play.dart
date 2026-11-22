@@ -5,7 +5,7 @@
 // playback goes through the normal resume prompt, exactly like opening the
 // same episode from its own detail screen would.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -36,9 +36,7 @@ Future<void> playCalendarEntry(
     }
   }
   if (!context.mounted) return;
-  await context.push(sourcePlayerLocation(
-    entry.ref,
-    fileId: fileId,
-    title: entry.title,
-  ));
+  await context.push(
+    sourcePlayerLocation(entry.ref, fileId: fileId, title: entry.title),
+  );
 }

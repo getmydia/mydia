@@ -9,12 +9,12 @@ const _probed = Tracks(
   video: [
     VideoTrack('auto', null, null),
     VideoTrack('no', null, null),
-    VideoTrack('1', null, null)
+    VideoTrack('1', null, null),
   ],
   audio: [
     AudioTrack('auto', null, null),
     AudioTrack('no', null, null),
-    AudioTrack('1', null, 'eng')
+    AudioTrack('1', null, 'eng'),
   ],
 );
 
@@ -33,8 +33,10 @@ void main() {
 
   test('returns on the first event with real tracks', () async {
     final updates = StreamController<Tracks>();
-    final result =
-        awaitRealTracks(current: const Tracks(), updates: updates.stream);
+    final result = awaitRealTracks(
+      current: const Tracks(),
+      updates: updates.stream,
+    );
     updates.add(const Tracks());
     updates.add(_probed);
     expect(await result, isTrue);

@@ -11,7 +11,7 @@
 // one, since it needs no --dart-define=MYDIA_FORCE_TV=true to prove
 // anything.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
@@ -38,18 +38,21 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authServiceProvider
-            .overrideWithValue(AuthService(storage: MockAuthStorage())),
-      ],
-      child: const MaterialApp(
-        locale: Locale('es'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: LoginScreen(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authServiceProvider.overrideWithValue(
+            AuthService(storage: MockAuthStorage()),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('es'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: LoginScreen(),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Vinculación rápida'), findsOneWidget);

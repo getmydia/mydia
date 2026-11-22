@@ -62,21 +62,34 @@ Uri webDavBase(Uri url) => Uri.parse(normalizeWebDavUrl(url));
 /// saved, over [client], which the caller owns and closes. Tests override it
 /// with a fake.
 typedef WebDavConnector = FileSystemBackend Function(
-    Uri base, String user, String password, http.Client client);
+  Uri base,
+  String user,
+  String password,
+  http.Client client,
+);
 
 final webDavConnectorProvider = Provider<WebDavConnector>(
-  (_) => (base, user, password, client) =>
-      WebDavBackend(base: base, user: user, password: password, client: client),
+  (_) =>
+      (base, user, password, client) => WebDavBackend(
+        base: base,
+        user: user,
+        password: password,
+        client: client,
+      ),
 );
 
 /// Builds an S3 backend from what the viewer typed, before anything is
 /// saved. A given [http.Client] is the caller's to close; without one the
 /// backend makes its own. Tests override it with a fake.
 typedef S3Connector = FileSystemBackend Function(
-    S3Location location, S3Credentials credentials, http.Client? client);
+  S3Location location,
+  S3Credentials credentials,
+  http.Client? client,
+);
 
 final s3ConnectorProvider = Provider<S3Connector>(
-  (_) => (location, credentials, client) => S3Backend(
+  (_) =>
+      (location, credentials, client) => S3Backend(
         location: location,
         accessKeyId: credentials.accessKeyId,
         secretAccessKey: credentials.secretAccessKey,
@@ -84,8 +97,9 @@ final s3ConnectorProvider = Provider<S3Connector>(
       ),
 );
 
-final filesAccountsProvider =
-    Provider<FilesAccounts>((ref) => FilesAccounts(ref));
+final filesAccountsProvider = Provider<FilesAccounts>(
+  (ref) => FilesAccounts(ref),
+);
 
 class FilesAccounts {
   FilesAccounts(this._ref);
@@ -100,16 +114,18 @@ class FilesAccounts {
   }
 
   SourceProfile _owner(String accountId) => SourceProfile(
-        id: kOwnerProfileId,
-        accountId: accountId,
-        name: 'Owner',
-        isOwner: true,
-      );
+    id: kOwnerProfileId,
+    accountId: accountId,
+    name: 'Owner',
+    isOwner: true,
+  );
 
   /// Writes [record] and rebuilds its sources, so a cleared `needsReauth`
   /// and new credentials are read.
-  Future<SourceId> _save(SourceAccountRecord record,
-      {bool replaceOnly = false}) async {
+  Future<SourceId> _save(
+    SourceAccountRecord record, {
+    bool replaceOnly = false,
+  }) async {
     await _ref
         .read(sourceRecordsProvider.notifier)
         .putAccount(record, replaceOnly: replaceOnly);
@@ -130,27 +146,33 @@ class FilesAccounts {
   /// Adds [path] as a root. With [exact] the path is stored as given (an
   /// empty one is `/`); otherwise trailing separators are dropped, for
   /// backends where `/a/` and `/a` are one folder.
-  Future<void> _addRoot(SourceId id, String accountId,
-      {required String path,
-      required FilesLibraryKind kind,
-      bool exact = false}) async {
+  Future<void> _addRoot(
+    SourceId id,
+    String accountId, {
+    required String path,
+    required FilesLibraryKind kind,
+    bool exact = false,
+  }) async {
     final p = exact ? (path.isEmpty ? '/' : path) : trimRootPath(path);
-    await _ref.read(filesIndexProvider(accountId)).putRoot(LibraryRoot(
-          id: filesRootId(p),
-          path: p,
-          kind: kind,
-          title: filesRootTitle(p),
-        ));
+    await _ref
+        .read(filesIndexProvider(accountId))
+        .putRoot(
+          LibraryRoot(
+            id: filesRootId(p),
+            path: p,
+            kind: kind,
+            title: filesRootTitle(p),
+          ),
+        );
     await _bumpPeerFiles(accountId);
     await _ref
         .read(invalidatorProvider)
         .invalidate(FilesMediaSource.groupLandedTargets(id));
-    unawaited(_ref
-        .read(filesScanProvider(id).notifier)
-        .rescan()
-        .catchError((Object e) {
-      debugPrint('[FilesAccounts] Scan after adding a folder failed: $e');
-    }));
+    unawaited(
+      _ref.read(filesScanProvider(id).notifier).rescan().catchError((Object e) {
+        debugPrint('[FilesAccounts] Scan after adding a folder failed: $e');
+      }),
+    );
   }
 
   /// Adds a folder on this device, creating the [kFilesLocalAccountId]
@@ -165,7 +187,8 @@ class FilesAccounts {
     final SourceAccountRecord record;
     if (existing != null) {
       record = existing.copyWith(
-          account: existing.account.copyWith(needsReauth: false));
+        account: existing.account.copyWith(needsReauth: false),
+      );
     } else {
       const id = kFilesLocalAccountId;
       record = SourceAccountRecord(
@@ -189,8 +212,12 @@ class FilesAccounts {
       );
     }
     final sourceId = await _save(record);
-    await _addRoot(sourceId, kFilesLocalAccountId,
-        path: portableLocalPath(path), kind: kind);
+    await _addRoot(
+      sourceId,
+      kFilesLocalAccountId,
+      path: portableLocalPath(path),
+      kind: kind,
+    );
     return sourceId;
   }
 
@@ -205,7 +232,8 @@ class FilesAccounts {
     final id = webDavAccountId(url);
     final base = webDavBase(url);
     final existing = await _stored(id);
-    final account = existing?.account.copyWith(needsReauth: false) ??
+    final account =
+        existing?.account.copyWith(needsReauth: false) ??
         ProviderAccount(
           id: id,
           kind: SourceKind.files,
@@ -213,9 +241,14 @@ class FilesAccounts {
           storageNamespace: SourceSecrets.newStorageNamespace(id),
           activeProfileId: kOwnerProfileId,
         );
-    await _ref.read(sourceSecretsProvider).writeAccountToken(
-        account, WebDavCredentials(user: user, password: password).toJson());
-    final record = existing?.copyWith(account: account) ??
+    await _ref
+        .read(sourceSecretsProvider)
+        .writeAccountToken(
+          account,
+          WebDavCredentials(user: user, password: password).toJson(),
+        );
+    final record =
+        existing?.copyWith(account: account) ??
         SourceAccountRecord(
           account: account,
           profiles: [_owner(id)],
@@ -264,7 +297,8 @@ class FilesAccounts {
     if (signInAgain && existing == null) {
       throw StateError('S3 account $id was removed');
     }
-    final account = existing?.account.copyWith(needsReauth: false) ??
+    final account =
+        existing?.account.copyWith(needsReauth: false) ??
         ProviderAccount(
           id: id,
           kind: SourceKind.files,
@@ -280,25 +314,25 @@ class FilesAccounts {
     // written), and would win over the current ones.
     final record =
         existing?.copyWith(account: account, serverLocks: const {}) ??
-            SourceAccountRecord(
-              account: account,
-              profiles: [_owner(id)],
-              servers: [
-                SourceServer(
-                  id: id,
-                  accountId: id,
-                  profileId: kOwnerProfileId,
-                  name: name,
-                  connections: [
-                    ServerConnection(
-                      uri: connection,
-                      local: isPrivateHost(loc.endpoint.host),
-                    ),
-                  ],
+        SourceAccountRecord(
+          account: account,
+          profiles: [_owner(id)],
+          servers: [
+            SourceServer(
+              id: id,
+              accountId: id,
+              profileId: kOwnerProfileId,
+              name: name,
+              connections: [
+                ServerConnection(
+                  uri: connection,
+                  local: isPrivateHost(loc.endpoint.host),
                 ),
               ],
-              addedAtMs: DateTime.now().millisecondsSinceEpoch,
-            );
+            ),
+          ],
+          addedAtMs: DateTime.now().millisecondsSinceEpoch,
+        );
     if (!signInAgain) return _save(record);
     try {
       return await _save(record, replaceOnly: true);
@@ -346,7 +380,8 @@ class FilesAccounts {
       port: target.port,
       hosts: [target.host, ...alternatives],
     );
-    final id = accountId ??
+    final id =
+        accountId ??
         await findSmbAccount(
           share: target.share,
           hosts: [target.host, ...alternatives],
@@ -359,7 +394,8 @@ class FilesAccounts {
     if (signInAgain && existing == null) {
       throw StateError('SMB account $id was removed');
     }
-    final account = existing?.account.copyWith(needsReauth: false) ??
+    final account =
+        existing?.account.copyWith(needsReauth: false) ??
         ProviderAccount(
           id: id,
           kind: SourceKind.files,
@@ -415,7 +451,7 @@ class FilesAccounts {
   /// An account keeps the id minted from its first address after it moves,
   /// so a different server answering there later must not take it over.
   Future<String> _unusedSmbAccountId(Uri url) async {
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       final id = smbAccountId(url, attempt);
       if (await _stored(id) == null) return id;
     }
@@ -459,18 +495,23 @@ class FilesAccounts {
 
   /// [hosts]' first, then the hostnames among the rest, normalized.
   static Set<String> _identifyingHosts(List<String> hosts) => {
-        for (final (i, h) in hosts.indexed)
-          if (i == 0 || !isIpLiteral(normalizeSmbHost(h))) normalizeSmbHost(h),
-      }..remove('');
+    for (final (i, h) in hosts.indexed)
+      if (i == 0 || !isIpLiteral(normalizeSmbHost(h))) normalizeSmbHost(h),
+  }..remove('');
 
   /// Moves [reached] to the front of [accountId]'s addresses and adds the
   /// [discovered] ones. Does not rebuild the source: the backend that calls
   /// this is already connected. A no-op when the account is gone.
-  Future<void> promoteSmbAddress(String accountId, SmbTarget reached,
-      {List<SmbTarget> discovered = const []}) {
+  Future<void> promoteSmbAddress(
+    String accountId,
+    SmbTarget reached, {
+    List<SmbTarget> discovered = const [],
+  }) {
     // The read-modify-write runs inside the records queue, so a concurrent
     // `needsReauth` or lock change is never overwritten with stale data.
-    return _ref.read(sourceRecordsProvider.notifier).updateServers(
+    return _ref
+        .read(sourceRecordsProvider.notifier)
+        .updateServers(
           accountId,
           (servers) => [
             for (final server in servers)
@@ -503,54 +544,67 @@ class FilesAccounts {
       throw StateError('SMB account $accountId was removed');
     }
     final record = existing.copyWith(
-        account: existing.account.copyWith(needsReauth: false),
-        servers: [
-          for (final server in existing.servers)
-            server.copyWith(
-              connections: smbConnections(
-                share: smbTargetOf(server.connections.first.uri).share,
-                port: port,
-                hosts: [host, ...alternatives],
-              ),
-              serviceName: serviceName,
-              clearServiceName: serviceName == null,
+      account: existing.account.copyWith(needsReauth: false),
+      servers: [
+        for (final server in existing.servers)
+          server.copyWith(
+            connections: smbConnections(
+              share: smbTargetOf(server.connections.first.uri).share,
+              port: port,
+              hosts: [host, ...alternatives],
             ),
-        ]);
+            serviceName: serviceName,
+            clearServiceName: serviceName == null,
+          ),
+      ],
+    );
     await _save(record, replaceOnly: true);
     await _ref.read(smbNativeProvider).closeAccount(accountId);
   }
 
   /// Adds [path], a path on the share, as a root of [id].
-  Future<void> addSmbRoot(SourceId id,
-          {required String path, required FilesLibraryKind kind}) =>
-      addWebDavRoot(id, path: path, kind: kind);
+  Future<void> addSmbRoot(
+    SourceId id, {
+    required String path,
+    required FilesLibraryKind kind,
+  }) => addWebDavRoot(id, path: path, kind: kind);
 
   /// Adds [path], a path under the bucket's prefix, as a root of [id]. The
   /// path is kept exactly: `/a/` is the folder whose key is `<prefix>a//`,
   /// another folder than `/a` (`<prefix>a/`), so no slash is trimmed.
-  Future<void> addS3Root(SourceId id,
-          {required String path, required FilesLibraryKind kind}) =>
-      _addRemoteRoot(id, path: path, kind: kind, exact: true);
+  Future<void> addS3Root(
+    SourceId id, {
+    required String path,
+    required FilesLibraryKind kind,
+  }) => _addRemoteRoot(id, path: path, kind: kind, exact: true);
 
   /// Adds [path], a server path on the share, as a root of [id].
-  Future<void> addWebDavRoot(SourceId id,
-          {required String path, required FilesLibraryKind kind}) =>
-      _addRemoteRoot(id, path: path, kind: kind);
+  Future<void> addWebDavRoot(
+    SourceId id, {
+    required String path,
+    required FilesLibraryKind kind,
+  }) => _addRemoteRoot(id, path: path, kind: kind);
 
-  Future<void> _addRemoteRoot(SourceId id,
-      {required String path,
-      required FilesLibraryKind kind,
-      bool exact = false}) async {
-    final source =
-        _ref.read(sourcesProvider).where((s) => s.id == id).firstOrNull;
+  Future<void> _addRemoteRoot(
+    SourceId id, {
+    required String path,
+    required FilesLibraryKind kind,
+    bool exact = false,
+  }) async {
+    final source = _ref
+        .read(sourcesProvider)
+        .where((s) => s.id == id)
+        .firstOrNull;
     if (source == null) throw StateError('No files source $id');
     await _addRoot(id, source.account.id, path: path, kind: kind, exact: exact);
   }
 
   /// Drops [rootId] and its files from [id]'s index.
   Future<void> removeRoot(SourceId id, String rootId) async {
-    final source =
-        _ref.read(sourcesProvider).where((s) => s.id == id).firstOrNull;
+    final source = _ref
+        .read(sourcesProvider)
+        .where((s) => s.id == id)
+        .firstOrNull;
     if (source == null) return;
     await _ref.read(filesIndexProvider(source.account.id)).removeRoot(rootId);
     await _bumpPeerFiles(source.account.id);

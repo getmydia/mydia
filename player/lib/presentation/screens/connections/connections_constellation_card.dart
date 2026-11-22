@@ -5,7 +5,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/sources/source.dart';
@@ -59,14 +59,16 @@ class ConnectionsConstellationCard extends ConsumerWidget {
       // The fallback is only a way to the hub, and the hub draws its own
       // sections below.
       if (!interactive) return const SizedBox.shrink();
-      return SettingsCard(children: [
-        SettingsRow.navigation(
-          key: const Key('connections-card-fallback'),
-          icon: Icons.hub_outlined,
-          title: l10n.connectionsTitle,
-          onTap: open,
-        ),
-      ]);
+      return SettingsCard(
+        children: [
+          SettingsRow.navigation(
+            key: const Key('connections-card-fallback'),
+            icon: Icons.hub_outlined,
+            title: l10n.connectionsTitle,
+            onTap: open,
+          ),
+        ],
+      );
     }
 
     // While the saved servers are still being read, an empty list means
@@ -97,10 +99,10 @@ class ConnectionsConstellationCard extends ConsumerWidget {
       ),
     );
     Widget surface(Widget child) => GlassSurface.faux(
-          borderRadius: radius,
-          fillColor: palette.surfaceVariant.withValues(alpha: 0.55),
-          child: child,
-        );
+      borderRadius: radius,
+      fillColor: palette.surfaceVariant.withValues(alpha: 0.55),
+      child: child,
+    );
     final label = l10n.connectionsCardSemantics(footer.summary);
 
     if (!interactive) {
@@ -108,10 +110,9 @@ class ConnectionsConstellationCard extends ConsumerWidget {
         container: true,
         excludeSemantics: true,
         label: label,
-        child: surface(KeyedSubtree(
-          key: const Key('connections-card'),
-          child: content,
-        )),
+        child: surface(
+          KeyedSubtree(key: const Key('connections-card'), child: content),
+        ),
       );
     }
 
@@ -125,16 +126,18 @@ class ConnectionsConstellationCard extends ConsumerWidget {
       child: FocusHighlight(
         onActivate: open,
         borderRadius: radius,
-        child: surface(Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            key: const Key('connections-card'),
-            canRequestFocus: false,
-            borderRadius: radius,
-            onTap: open,
-            child: content,
+        child: surface(
+          Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              key: const Key('connections-card'),
+              canRequestFocus: false,
+              borderRadius: radius,
+              onTap: open,
+              child: content,
+            ),
           ),
-        )),
+        ),
       ),
     );
   }
@@ -203,22 +206,29 @@ class _Diagram extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final available =
-          constraints.maxWidth.isFinite ? constraints.maxWidth : design.width;
-      // Past a third wider than the design the slots drift too far apart to
-      // read as one group, so the box stops growing and centres instead.
-      final width =
-          available.clamp(design.width, design.width * 4 / 3).toDouble();
-      final box = Size(width, design.height);
-      final diagram = SizedBox.fromSize(size: box, child: _stack(context, box));
-      if (available >= design.width) return Center(child: diagram);
-      return SizedBox(
-        width: available,
-        height: design.height * available / design.width,
-        child: FittedBox(child: diagram),
-      );
-    });
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : design.width;
+        // Past a third wider than the design the slots drift too far apart to
+        // read as one group, so the box stops growing and centres instead.
+        final width = available
+            .clamp(design.width, design.width * 4 / 3)
+            .toDouble();
+        final box = Size(width, design.height);
+        final diagram = SizedBox.fromSize(
+          size: box,
+          child: _stack(context, box),
+        );
+        if (available >= design.width) return Center(child: diagram);
+        return SizedBox(
+          width: available,
+          height: design.height * available / design.width,
+          child: FittedBox(child: diagram),
+        );
+      },
+    );
   }
 
   Widget _stack(BuildContext context, Size box) {
@@ -278,17 +288,17 @@ class _Diagram extends StatelessWidget {
   }
 
   static double _sizeOf(ConstellationNode node) => switch (node) {
-        ServerNode() || GhostServerNode() => _serverSize,
-        DeviceNode() || GhostDeviceNode() || MoreNode() => _deviceSize,
-      };
+    ServerNode() || GhostServerNode() => _serverSize,
+    DeviceNode() || GhostDeviceNode() || MoreNode() => _deviceSize,
+  };
 
   static Widget _nodeWidget(ConstellationNode node) => switch (node) {
-        ServerNode(:final server) => _ServerNode(server: server),
-        DeviceNode(:final device) => _DeviceNode(device: device),
-        MoreNode(:final count) => _MoreNode(count: count),
-        GhostServerNode() => const GhostNode(circle: false),
-        GhostDeviceNode() => const GhostNode(circle: true),
-      };
+    ServerNode(:final server) => _ServerNode(server: server),
+    DeviceNode(:final device) => _DeviceNode(device: device),
+    MoreNode(:final count) => _MoreNode(count: count),
+    GhostServerNode() => const GhostNode(circle: false),
+    GhostDeviceNode() => const GhostNode(circle: true),
+  };
 
   static String? _labelOf(ConstellationNode node, AppLocalizations l10n) =>
       switch (node) {
@@ -302,15 +312,28 @@ class _Diagram extends StatelessWidget {
   static _Link _linkOf(PlacedNode p, MydiaPalette palette) {
     final radius = _sizeOf(p.node) / 2;
     return switch (p.node) {
-      ServerNode(:final server) => server.status == ConnectionStatus.online
-          ? _Link(p.center, radius, palette.surfaceBright, _Stroke.solid)
-          : _Link(p.center, radius, palette.surfaceBright, _Stroke.dotted),
-      DeviceNode() => _Link(p.center, radius,
-          palette.primary.withValues(alpha: 0.55), _Stroke.dashed),
-      MoreNode() => _Link(p.center, radius,
-          palette.surfaceBright.withValues(alpha: 0.6), _Stroke.solid),
-      GhostServerNode() || GhostDeviceNode() => _Link(p.center, radius,
-          palette.textDisabled.withValues(alpha: 0.45), _Stroke.dotted),
+      ServerNode(:final server) =>
+        server.status == ConnectionStatus.online
+            ? _Link(p.center, radius, palette.surfaceBright, _Stroke.solid)
+            : _Link(p.center, radius, palette.surfaceBright, _Stroke.dotted),
+      DeviceNode() => _Link(
+        p.center,
+        radius,
+        palette.primary.withValues(alpha: 0.55),
+        _Stroke.dashed,
+      ),
+      MoreNode() => _Link(
+        p.center,
+        radius,
+        palette.surfaceBright.withValues(alpha: 0.6),
+        _Stroke.solid,
+      ),
+      GhostServerNode() || GhostDeviceNode() => _Link(
+        p.center,
+        radius,
+        palette.textDisabled.withValues(alpha: 0.45),
+        _Stroke.dotted,
+      ),
     };
   }
 
@@ -409,8 +432,7 @@ class _Footer extends StatelessWidget {
       servers: servers,
       devices: devices,
       serverDot: servers == null ? null : dot,
-      summary:
-          [if (servers != null) servers, devices].map((s) => '$s.').join(' '),
+      summary: [?servers, devices].map((s) => '$s.').join(' '),
     );
   }
 

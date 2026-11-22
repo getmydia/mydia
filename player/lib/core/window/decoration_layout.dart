@@ -103,8 +103,8 @@ List<WindowButton> _parseSide(String tokens) {
 /// does not draw, and this input is a user-editable settings string. Every
 /// unrecognised token must parse to nothing.
 WindowButton? _buttonFor(String token) => switch (token) {
-      'minimize' => WindowButton.minimize,
-      'maximize' => WindowButton.maximize,
-      'close' => WindowButton.close,
-      _ => null,
-    };
+  'minimize' => WindowButton.minimize,
+  'maximize' => WindowButton.maximize,
+  'close' => WindowButton.close,
+  _ => null,
+};

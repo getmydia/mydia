@@ -61,8 +61,8 @@ Future<void> openBackupMetaBox() async {
 /// ran (tests).
 BackupMetaStorage backupMetaStorageFromHive() =>
     Hive.isBoxOpen(BackupMetaStore.boxName)
-        ? HiveBackupMetaStorage(Hive.box<String>(BackupMetaStore.boxName))
-        : InMemoryBackupMetaStorage();
+    ? HiveBackupMetaStorage(Hive.box<String>(BackupMetaStore.boxName))
+    : InMemoryBackupMetaStorage();
 
 /// An account another device backed up that this one does not have, waiting
 /// for the viewer to add or dismiss it. Holds no credentials: those stay in
@@ -97,12 +97,12 @@ class PendingAccountOffer {
   final int updatedAt;
 
   Map<String, dynamic> toJson() => {
-        'accountId': accountId,
-        'kind': kind,
-        'displayName': displayName,
-        'fromDevice': fromDevice,
-        'updatedAt': updatedAt,
-      };
+    'accountId': accountId,
+    'kind': kind,
+    'displayName': displayName,
+    'fromDevice': fromDevice,
+    'updatedAt': updatedAt,
+  };
 
   @override
   String toString() =>
@@ -146,17 +146,19 @@ class BackupMetaStore {
   /// Records [fingerprint] at [updatedAt] for [key], as after a restore that
   /// wrote another device's value.
   Future<void> setStamp(String key, String fingerprint, int updatedAt) =>
-      _storage.put('$_stampPrefix$key',
-          jsonEncode({'fp': fingerprint, 'at': updatedAt}));
+      _storage.put(
+        '$_stampPrefix$key',
+        jsonEncode({'fp': fingerprint, 'at': updatedAt}),
+      );
 
   bool hasStamp(String key) => _readStamp(key) != null;
 
   /// Record keys with a stamp that start with [prefix].
   List<String> stampedKeys(String prefix) => [
-        for (final k in _storage.keys)
-          if (k.startsWith('$_stampPrefix$prefix'))
-            k.substring(_stampPrefix.length),
-      ];
+    for (final k in _storage.keys)
+      if (k.startsWith('$_stampPrefix$prefix'))
+        k.substring(_stampPrefix.length),
+  ];
 
   ({String fp, int at})? _readStamp(String key) {
     final raw = _storage.get('$_stampPrefix$key');
@@ -175,8 +177,11 @@ class BackupMetaStore {
     for (final k in _storage.keys) {
       if (!k.startsWith(_pendingPrefix)) continue;
       try {
-        offers.add(PendingAccountOffer.fromJson(
-            jsonDecode(_storage.get(k)!) as Map<String, dynamic>));
+        offers.add(
+          PendingAccountOffer.fromJson(
+            jsonDecode(_storage.get(k)!) as Map<String, dynamic>,
+          ),
+        );
       } catch (e) {
         debugPrint('[Backup] Unreadable pending offer $k: ${e.runtimeType}');
       }
@@ -192,7 +197,9 @@ class BackupMetaStore {
   }
 
   Future<void> putPending(PendingAccountOffer offer) => _storage.put(
-      '$_pendingPrefix${offer.accountId}', jsonEncode(offer.toJson()));
+    '$_pendingPrefix${offer.accountId}',
+    jsonEncode(offer.toJson()),
+  );
 
   Future<void> removePending(String accountId) =>
       _storage.delete('$_pendingPrefix$accountId');
@@ -260,16 +267,17 @@ class BackupMetaStore {
   /// slot again. A cloud store is a `CloudStoreKind` name.
   String? mergedVersion(String slotId, {String? store}) => store == null
       ? _storage.get('$_versionPrefix$slotId') ??
-          _storage.get('$_seqPrefix$slotId')
+            _storage.get('$_seqPrefix$slotId')
       : _storage.get('${_mergedPrefix(store)}$slotId');
 
-  Future<void> setMergedVersion(String slotId, String version,
-          {String? store}) =>
-      _storage.put(
-          store == null
-              ? '$_versionPrefix$slotId'
-              : '${_mergedPrefix(store)}$slotId',
-          version);
+  Future<void> setMergedVersion(
+    String slotId,
+    String version, {
+    String? store,
+  }) => _storage.put(
+    store == null ? '$_versionPrefix$slotId' : '${_mergedPrefix(store)}$slotId',
+    version,
+  );
 
   /// Forgets every version merged from [store] (null is the relay), when
   /// this device leaves or joins it: slot ids derive from signers, so a
@@ -289,10 +297,10 @@ class BackupMetaStore {
   /// What this device itself recorded: its own node and the devices it
   /// added to the vault at pairing. Uploaded in its group record.
   Map<String, String> nodeToSlot() => {
-        for (final k in _storage.keys)
-          if (k.startsWith(_nodePrefix))
-            k.substring(_nodePrefix.length): _storage.get(k)!,
-      };
+    for (final k in _storage.keys)
+      if (k.startsWith(_nodePrefix))
+        k.substring(_nodePrefix.length): _storage.get(k)!,
+  };
 
   Future<void> setNodeToSlot(String nodeId, String slotId) =>
       _storage.put('$_nodePrefix$nodeId', slotId);
@@ -304,20 +312,22 @@ class BackupMetaStore {
   /// from that slot's group record and nowhere else, so no member can
   /// claim a node for another member's slot.
   Map<String, Set<String>> slotClaims() => {
-        for (final k in _storage.keys)
-          if (k.startsWith(_claimPrefix))
-            k.substring(_claimPrefix.length): {
-              for (final n in _storage.get(k)!.split(','))
-                if (n.isNotEmpty) n,
-            },
-      };
+    for (final k in _storage.keys)
+      if (k.startsWith(_claimPrefix))
+        k.substring(_claimPrefix.length): {
+          for (final n in _storage.get(k)!.split(','))
+            if (n.isNotEmpty) n,
+        },
+  };
 
   /// Replaces [slotId]'s claim with [nodeIds] (its latest upload wins).
   Future<void> setSlotClaim(String slotId, Set<String> nodeIds) =>
       nodeIds.isEmpty
-          ? _storage.delete('$_claimPrefix$slotId')
-          : _storage.put(
-              '$_claimPrefix$slotId', (nodeIds.toList()..sort()).join(','));
+      ? _storage.delete('$_claimPrefix$slotId')
+      : _storage.put(
+          '$_claimPrefix$slotId',
+          (nodeIds.toList()..sort()).join(','),
+        );
 
   /// Forgets every claim, when this device leaves a vault.
   Future<void> clearSlotClaims() async {
@@ -329,10 +339,10 @@ class BackupMetaStore {
   /// The device name each slot last uploaded under, by slot id, for the
   /// member list: a poll after a restart reads only the slots that changed.
   Map<String, String> slotNames() => {
-        for (final k in _storage.keys)
-          if (k.startsWith(_namePrefix))
-            k.substring(_namePrefix.length): _storage.get(k)!,
-      };
+    for (final k in _storage.keys)
+      if (k.startsWith(_namePrefix))
+        k.substring(_namePrefix.length): _storage.get(k)!,
+  };
 
   Future<void> setSlotName(String slotId, String name) =>
       _storage.put('$_namePrefix$slotId', name);
@@ -365,10 +375,14 @@ class BackupMetaStore {
     return out;
   }
 
-  Future<void> setPendingRemoval(String nodeId,
-          {String? slotId, String? deviceName}) =>
-      _storage.put('$_removalPrefix$nodeId',
-          jsonEncode({'slot': slotId, 'name': deviceName}));
+  Future<void> setPendingRemoval(
+    String nodeId, {
+    String? slotId,
+    String? deviceName,
+  }) => _storage.put(
+    '$_removalPrefix$nodeId',
+    jsonEncode({'slot': slotId, 'name': deviceName}),
+  );
 
   Future<void> removePendingRemoval(String nodeId) =>
       _storage.delete('$_removalPrefix$nodeId');

@@ -9,8 +9,10 @@ void main() {
   test('player_screen.dart references no GraphQL documents', () {
     final source = File('lib/presentation/screens/player/player_screen.dart')
         .readAsStringSync();
-    expect(RegExp(r'documentNode\w+').allMatches(source).map((m) => m[0]),
-        isEmpty);
+    expect(
+      RegExp(r'documentNode\w+').allMatches(source).map((m) => m[0]),
+      isEmpty,
+    );
     expect(source.contains('Query\$'), isFalse);
     expect(source.contains('Mutation\$'), isFalse);
     expect(source.contains('Fragment\$'), isFalse);

@@ -106,27 +106,36 @@ void main() {
 
   test('a change of scaling is a different lift, so sub-pos is resent', () {
     SurfaceSubtitleLift lift(VideoScaling scaling) => SurfaceSubtitleLift(
-        player: player,
-        subtitles: subtitles,
-        box: () => const Size(1, 1),
-        scaling: scaling);
+      player: player,
+      subtitles: subtitles,
+      box: () => const Size(1, 1),
+      scaling: scaling,
+    );
     expect(lift(VideoScaling.fit), lift(VideoScaling.fit));
     expect(lift(VideoScaling.fit), isNot(lift(VideoScaling.fill)));
   });
 
   test('equality follows player and subtitles', () {
     final a = SurfaceSubtitleLift(
-        player: player, subtitles: subtitles, box: () => const Size(1, 1));
+      player: player,
+      subtitles: subtitles,
+      box: () => const Size(1, 1),
+    );
     final b = SurfaceSubtitleLift(
-        player: player, subtitles: subtitles, box: () => const Size(2, 2));
+      player: player,
+      subtitles: subtitles,
+      box: () => const Size(2, 2),
+    );
     final c = SurfaceSubtitleLift(
-        player: player,
-        subtitles: _RecordingController(),
-        box: () => const Size(1, 1));
+      player: player,
+      subtitles: _RecordingController(),
+      box: () => const Size(1, 1),
+    );
     final d = SurfaceSubtitleLift(
-        player: Player(platformPlayer: _FakePlatformPlayer()),
-        subtitles: subtitles,
-        box: () => const Size(1, 1));
+      player: Player(platformPlayer: _FakePlatformPlayer()),
+      subtitles: subtitles,
+      box: () => const Size(1, 1),
+    );
     expect(a, b);
     expect(a.hashCode, b.hashCode);
     expect(a, isNot(c));

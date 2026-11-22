@@ -11,9 +11,9 @@ void main() {
   void mock(Future<Object?> Function(MethodCall call) handler) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(kSparkleChannel, (call) async {
-      calls.add(call);
-      return handler(call);
-    });
+          calls.add(call);
+          return handler(call);
+        });
   }
 
   setUp(() {
@@ -74,14 +74,16 @@ void main() {
     expect(calls.single.arguments, 'dev');
   });
 
-  test('a host that is not there reports failure rather than throwing',
-      () async {
-    // Clearing the handler is what a real macOS build looks like before the
-    // native side registers, and MissingPluginException is not a
-    // PlatformException, so it needs its own catch clause.
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(kSparkleChannel, null);
+  test(
+    'a host that is not there reports failure rather than throwing',
+    () async {
+      // Clearing the handler is what a real macOS build looks like before the
+      // native side registers, and MissingPluginException is not a
+      // PlatformException, so it needs its own catch clause.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(kSparkleChannel, null);
 
-    expect(await MacOSUpdater.setTrack(UpdateTrack.beta), isFalse);
-  });
+      expect(await MacOSUpdater.setTrack(UpdateTrack.beta), isFalse);
+    },
+  );
 }

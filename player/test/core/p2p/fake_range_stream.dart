@@ -57,11 +57,11 @@ class FakeRangeStream implements P2pRangeStream {
 
   /// Serves [data] as one chunk.
   FakeRangeStream.fromBytes(this.header, Uint8List data)
-      : _data = data,
-        totalBytes = data.length,
-        chunkBytes = max(data.length, 1),
-        stallAfterBytes = null,
-        pace = Duration.zero;
+    : _data = data,
+      totalBytes = data.length,
+      chunkBytes = max(data.length, 1),
+      stallAfterBytes = null,
+      pace = Duration.zero;
 
   @override
   final FlutterHlsResponseHeader header;

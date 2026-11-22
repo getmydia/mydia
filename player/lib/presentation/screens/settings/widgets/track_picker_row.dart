@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -96,10 +96,7 @@ class TrackPickerRow extends StatelessWidget {
           ],
           if (instructions != null) ...[
             const SizedBox(height: 12),
-            _DeferredInstructions(
-              instructions: instructions,
-              url: deferredUrl,
-            ),
+            _DeferredInstructions(instructions: instructions, url: deferredUrl),
           ],
         ],
       ),

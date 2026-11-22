@@ -33,7 +33,9 @@ void main() {
   test('a failed create is not remembered', () async {
     final storage = MockAuthStorage()..degradedValue = true;
     await expectLater(
-        BackupIdentity.loadOrCreate(storage), throwsA(isA<StateError>()));
+      BackupIdentity.loadOrCreate(storage),
+      throwsA(isA<StateError>()),
+    );
     storage.degradedValue = false;
     final id = await BackupIdentity.loadOrCreate(storage);
     expect(id.slotId, isNotEmpty);
@@ -71,63 +73,78 @@ void main() {
     expect(storage.contents['backup/identity'], 'not json');
   });
 
-  test('the error for an unreadable identity does not quote the seeds',
-      () async {
-    final storage = MockAuthStorage()
-      ..seedData({
-        'backup/identity': '{"v": 1, "signerSeed": "SECRETSEED", "boxSeed": 3}'
-      });
-    await expectLater(
-      BackupIdentity.loadOrCreate(storage),
-      throwsA(isA<StateError>()
-          .having((e) => e.toString(), 'text', isNot(contains('SECRETSEED')))),
-    );
-  });
+  test(
+    'the error for an unreadable identity does not quote the seeds',
+    () async {
+      final storage = MockAuthStorage()
+        ..seedData({
+          'backup/identity':
+              '{"v": 1, "signerSeed": "SECRETSEED", "boxSeed": 3}',
+        });
+      await expectLater(
+        BackupIdentity.loadOrCreate(storage),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.toString(),
+            'text',
+            isNot(contains('SECRETSEED')),
+          ),
+        ),
+      );
+    },
+  );
 
   group('on the native storage', () {
     setUp(NativeAuthStorage.resetForTest);
     tearDown(NativeAuthStorage.resetForTest);
 
-    test('two_storage_instances_over_one_keychain_create_one_identity',
-        () async {
-      // Production builds a new NativeAuthStorage per getAuthStorage() call,
-      // so the relay service and a cloud service load through different
-      // instances over the same keychain.
-      final backend = _FlakyReadBackend();
-      final results = await Future.wait([
-        BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
-        BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
-      ]);
-      expect(results[1].slotId, results[0].slotId);
-      expect(backend.identityWrites, 1);
-    });
+    test(
+      'two_storage_instances_over_one_keychain_create_one_identity',
+      () async {
+        // Production builds a new NativeAuthStorage per getAuthStorage() call,
+        // so the relay service and a cloud service load through different
+        // instances over the same keychain.
+        final backend = _FlakyReadBackend();
+        final results = await Future.wait([
+          BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
+          BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
+        ]);
+        expect(results[1].slotId, results[0].slotId);
+        expect(backend.identityWrites, 1);
+      },
+    );
 
     test('default native instances share one backing keychain', () {
       expect(
-          identical(NativeAuthStorage().backing, NativeAuthStorage().backing),
-          isTrue);
-    });
-
-    test('a failed read throws and does not replace the stored identity',
-        () async {
-      final backend = _FlakyReadBackend();
-      final existing = await BackupIdentity.loadOrCreate(
-          NativeAuthStorage(backend: backend));
-      final stored = backend.data['backup/identity'];
-      NativeAuthStorage.resetForTest();
-
-      backend.failReads = true;
-      await expectLater(
-        BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
-        throwsA(isA<StateError>()),
+        identical(NativeAuthStorage().backing, NativeAuthStorage().backing),
+        isTrue,
       );
-      expect(backend.data['backup/identity'], stored);
-
-      backend.failReads = false;
-      final again = await BackupIdentity.loadOrCreate(
-          NativeAuthStorage(backend: backend));
-      expect(again.slotId, existing.slotId);
     });
+
+    test(
+      'a failed read throws and does not replace the stored identity',
+      () async {
+        final backend = _FlakyReadBackend();
+        final existing = await BackupIdentity.loadOrCreate(
+          NativeAuthStorage(backend: backend),
+        );
+        final stored = backend.data['backup/identity'];
+        NativeAuthStorage.resetForTest();
+
+        backend.failReads = true;
+        await expectLater(
+          BackupIdentity.loadOrCreate(NativeAuthStorage(backend: backend)),
+          throwsA(isA<StateError>()),
+        );
+        expect(backend.data['backup/identity'], stored);
+
+        backend.failReads = false;
+        final again = await BackupIdentity.loadOrCreate(
+          NativeAuthStorage(backend: backend),
+        );
+        expect(again.slotId, existing.slotId);
+      },
+    );
   });
 }
 

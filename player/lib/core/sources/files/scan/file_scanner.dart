@@ -29,16 +29,12 @@ class ScanDelta {
 /// changed video names, and writes the result to the [FileLibraryIndex].
 class FileScanner {
   FileScanner({
-    required FileSystemBackend backend,
-    required MediaNames names,
-    required FileLibraryIndex index,
+    required this._backend,
+    required this._names,
+    required this._index,
     DateTime Function()? now,
-    AppForeground? foreground,
-  })  : _backend = backend,
-        _names = names,
-        _index = index,
-        _now = now ?? DateTime.now,
-        _foreground = foreground;
+    this._foreground,
+  }) : _now = now ?? DateTime.now;
 
   /// How many times one folder is listed when each failure comes with the
   /// app having left the foreground, before the walk gives up on it.
@@ -74,8 +70,12 @@ class FileScanner {
     final videos = <FileEntry>[];
     final sidecarsByDir = <String, List<FileEntry>>{};
     final skipped = [
-      for (final path
-          in await _walk(root.path, videos, sidecarsByDir, onFolderRead))
+      for (final path in await _walk(
+        root.path,
+        videos,
+        sidecarsByDir,
+        onFolderRead,
+      ))
         _relative(root.path, path),
     ];
     bool wasSkipped(String rel) =>
@@ -107,7 +107,8 @@ class FileScanner {
         pending.add(_Pending(v, rel, key, sidecars, old));
       } else if (!_sameList(old.sidecars, sidecars)) {
         changed.add(
-            _build(root, _Pending(v, rel, key, sidecars, old), old.parsed));
+          _build(root, _Pending(v, rel, key, sidecars, old), old.parsed),
+        );
         done++;
       } else {
         done++;
@@ -120,11 +121,9 @@ class FileScanner {
         i,
         i + _batchSize > pending.length ? pending.length : i + _batchSize,
       );
-      final parsed = _names.parseBatch(
-        root.path,
-        [for (final p in batch) p.entry.path],
-        root.kind,
-      );
+      final parsed = _names.parseBatch(root.path, [
+        for (final p in batch) p.entry.path,
+      ], root.kind);
       final byPath = {for (final p in parsed) p.path: p};
       for (final p in batch) {
         final file = _build(root, p, byPath[p.entry.path]);
@@ -209,12 +208,15 @@ class FileScanner {
         onFolderRead?.call(++foldersRead);
       } on BackendFailure catch (e) {
         final belowRoot = depth > 0;
-        final refusedOrGone = e is BackendPermissionLost ||
+        final refusedOrGone =
+            e is BackendPermissionLost ||
             e is BackendUnauthorized ||
             e is BackendNotFound;
         if (!belowRoot || !refusedOrGone) {
-          debugPrint('[FileScanner] $start walk failed at $dir after '
-              '${clock.elapsed.inSeconds}s, ${stats.summary()}: $e');
+          debugPrint(
+            '[FileScanner] $start walk failed at $dir after '
+            '${clock.elapsed.inSeconds}s, ${stats.summary()}: $e',
+          );
           rethrow;
         }
         debugPrint('[FileScanner] Skipping $dir: $e');
@@ -225,8 +227,10 @@ class FileScanner {
       if (depth == 0) {
         // What the root holds, as the backend handed it over: the first
         // thing to look at when a library comes up empty.
-        debugPrint('[FileScanner] $start lists ${entries.length} entries: '
-            '${describeEntries(entries)}');
+        debugPrint(
+          '[FileScanner] $start lists ${entries.length} entries: '
+          '${describeEntries(entries)}',
+        );
       }
       for (final e in entries) {
         stats.count(e);
@@ -255,8 +259,10 @@ class FileScanner {
       }
     }
     videos.sort((a, b) => a.path.compareTo(b.path));
-    debugPrint('[FileScanner] $start walked in ${clock.elapsed.inSeconds}s: '
-        '${stats.summary()}, ${unreadable.length} skipped as unreadable');
+    debugPrint(
+      '[FileScanner] $start walked in ${clock.elapsed.inSeconds}s: '
+      '${stats.summary()}, ${unreadable.length} skipped as unreadable',
+    );
     return unreadable;
   }
 
@@ -270,7 +276,7 @@ class FileScanner {
   /// leaving would be frozen with no departure during it to tell why.
   Future<List<FileEntry>> _list(String dir) async {
     final foreground = _foreground;
-    for (var reads = 1;; reads++) {
+    for (var reads = 1; ; reads++) {
       if (foreground != null && !foreground.foreground) {
         await foreground.whenForeground();
       }
@@ -283,8 +289,10 @@ class FileScanner {
             reads >= maxReadsAcrossSuspensions) {
           rethrow;
         }
-        debugPrint('[FileScanner] $dir cut off while the app was away '
-            '($e); reading it again on return');
+        debugPrint(
+          '[FileScanner] $dir cut off while the app was away '
+          '($e); reading it again on return',
+        );
       }
     }
   }
@@ -396,11 +404,11 @@ class WalkStats {
   }
 
   String summary() {
-    final top = (other.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)))
-        .take(6)
-        .map((e) => '${e.key} ${e.value}')
-        .join(', ');
+    final top =
+        (other.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+            .take(6)
+            .map((e) => '${e.key} ${e.value}')
+            .join(', ');
     final others = other.values.fold(0, (a, b) => a + b);
     return '$folders folders read, $dirs subfolders, $videos videos, '
         '$subtitles subtitles, $others other files'

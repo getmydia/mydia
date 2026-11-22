@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
@@ -11,18 +11,19 @@ import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
-Widget _host(Widget child,
-        {GlassAccessibility access = GlassAccessibility.none,
-        bool liquid = true}) =>
-    MaterialApp(
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
-      home: GlassAccessibilityScope(
-        value: access,
-        child: Scaffold(
-          body: Center(child: SizedBox(width: 120, height: 48, child: child)),
-        ),
-      ),
-    );
+Widget _host(
+  Widget child, {
+  GlassAccessibility access = GlassAccessibility.none,
+  bool liquid = true,
+}) => MaterialApp(
+  theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+  home: GlassAccessibilityScope(
+    value: access,
+    child: Scaffold(
+      body: Center(child: SizedBox(width: 120, height: 48, child: child)),
+    ),
+  ),
+);
 
 const _box = SizedBox.expand();
 
@@ -36,7 +37,9 @@ void main() {
     'modal': GlassSurface.modal(child: _box),
     'sidebar': const GlassSurface.sidebar(child: _box),
     'control': GlassSurface.control(
-        borderRadius: BorderRadius.circular(24), child: _box),
+      borderRadius: BorderRadius.circular(24),
+      child: _box,
+    ),
   };
 
   final neverLiquid = <String, Widget>{
@@ -59,31 +62,40 @@ void main() {
     testWidgets('appBar takes the scroll edge band', (tester) async {
       await tester.pumpWidget(_host(const GlassSurface.appBar(child: _box)));
       expect(find.byType(LiquidGlassFilter), findsNothing);
-      final backdrop =
-          tester.widget<BackdropFilter>(find.byType(BackdropFilter));
+      final backdrop = tester.widget<BackdropFilter>(
+        find.byType(BackdropFilter),
+      );
       expect(
-          backdrop.filter,
-          ImageFilter.blur(
-            sigmaX: DepthTokens.liquidScrollEdgeBlurSigma,
-            sigmaY: DepthTokens.liquidScrollEdgeBlurSigma,
-          ));
-      final box = tester.widget<DecoratedBox>(find.descendant(
-        of: find.byType(BackdropFilter),
-        matching: find.byType(DecoratedBox),
-      ));
+        backdrop.filter,
+        ImageFilter.blur(
+          sigmaX: DepthTokens.liquidScrollEdgeBlurSigma,
+          sigmaY: DepthTokens.liquidScrollEdgeBlurSigma,
+        ),
+      );
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byType(BackdropFilter),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
       final gradient =
           (box.decoration as BoxDecoration).gradient! as LinearGradient;
-      expect(gradient.colors.first.a,
-          closeTo(DepthTokens.liquidScrollEdgeTopOpacity, 0.002));
-      expect(gradient.colors.last.a,
-          closeTo(DepthTokens.liquidScrollEdgeBottomOpacity, 0.002));
+      expect(
+        gradient.colors.first.a,
+        closeTo(DepthTokens.liquidScrollEdgeTopOpacity, 0.002),
+      );
+      expect(
+        gradient.colors.last.a,
+        closeTo(DepthTokens.liquidScrollEdgeBottomOpacity, 0.002),
+      );
     });
 
     LiquidGlassFilter filterOf(WidgetTester tester) =>
         tester.widget<LiquidGlassFilter>(find.byType(LiquidGlassFilter));
 
-    testWidgets('modal and sidebar are panels; chrome and control are lenses',
-        (tester) async {
+    testWidgets('modal and sidebar are panels; chrome and control are lenses', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(GlassSurface.modal(child: _box)));
       expect(filterOf(tester).profile, same(LiquidGlassProfile.panel));
 
@@ -93,8 +105,14 @@ void main() {
       await tester.pumpWidget(_host(const GlassSurface.chrome(child: _box)));
       expect(filterOf(tester).profile, same(LiquidGlassProfile.lens));
 
-      await tester.pumpWidget(_host(GlassSurface.control(
-          borderRadius: BorderRadius.circular(24), child: _box)));
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.control(
+            borderRadius: BorderRadius.circular(24),
+            child: _box,
+          ),
+        ),
+      );
       expect(filterOf(tester).profile, same(LiquidGlassProfile.lens));
     });
 
@@ -105,8 +123,9 @@ void main() {
       expect(f.adaptiveTintMax, DepthTokens.liquidChromeAdaptiveMax);
     });
 
-    testWidgets('chrome, modal and control use their adaptive roles',
-        (tester) async {
+    testWidgets('chrome, modal and control use their adaptive roles', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const GlassSurface.chrome(child: _box)));
       var f = filterOf(tester);
       expect(f.tint.a, closeTo(DepthTokens.liquidChromeTintOpacity, 0.002));
@@ -117,37 +136,55 @@ void main() {
       expect(f.tint.a, closeTo(DepthTokens.liquidModalTintOpacity, 0.002));
       expect(f.adaptiveTintMax, DepthTokens.liquidModalAdaptiveMax);
 
-      await tester.pumpWidget(_host(GlassSurface.control(
-          borderRadius: BorderRadius.circular(24), child: _box)));
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.control(
+            borderRadius: BorderRadius.circular(24),
+            child: _box,
+          ),
+        ),
+      );
       f = filterOf(tester);
       expect(f.tint.a, closeTo(DepthTokens.liquidControlTintOpacity, 0.002));
       expect(f.adaptiveTintMax, DepthTokens.liquidControlAdaptiveMax);
     });
 
     testWidgets('prominent white control never adapts', (tester) async {
-      await tester.pumpWidget(_host(GlassSurface.control(
-        borderRadius: BorderRadius.circular(24),
-        prominentColor: Colors.white,
-        child: _box,
-      )));
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.control(
+            borderRadius: BorderRadius.circular(24),
+            prominentColor: Colors.white,
+            child: _box,
+          ),
+        ),
+      );
       expect(filterOf(tester).adaptiveTintMax, isNull);
     });
 
     // The outermost DecoratedBox inside the GlassSurface is its shadow
     // wrapper, so a host widget's shadow cannot satisfy the check.
     List<BoxShadow>? outerShadow(WidgetTester tester) {
-      final box = tester.widget<DecoratedBox>(find
-          .descendant(
-            of: find.byType(GlassSurface),
-            matching: find.byType(DecoratedBox),
-          )
-          .first);
+      final box = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.byType(GlassSurface),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
       return (box.decoration as BoxDecoration).boxShadow;
     }
 
     testWidgets('a control casts the lens shadow', (tester) async {
-      await tester.pumpWidget(_host(GlassSurface.control(
-          borderRadius: BorderRadius.circular(24), child: _box)));
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.control(
+            borderRadius: BorderRadius.circular(24),
+            child: _box,
+          ),
+        ),
+      );
       expect(outerShadow(tester), LiquidGlassProfile.lens.shadow);
     });
 
@@ -157,19 +194,26 @@ void main() {
     });
 
     testWidgets('explicit shadows win over the profile shadow', (tester) async {
-      await tester.pumpWidget(_host(const GlassSurface.sidebar(
-        shadows: [BoxShadow(blurRadius: 3)],
-        child: _box,
-      )));
+      await tester.pumpWidget(
+        _host(
+          const GlassSurface.sidebar(
+            shadows: [BoxShadow(blurRadius: 3)],
+            child: _box,
+          ),
+        ),
+      );
       expect(outerShadow(tester), const [BoxShadow(blurRadius: 3)]);
     });
 
-    testWidgets('Increase Contrast boosts the adaptive max too',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        const GlassSurface.chrome(child: _box),
-        access: const GlassAccessibility(increaseContrast: true),
-      ));
+    testWidgets('Increase Contrast boosts the adaptive max too', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const GlassSurface.chrome(child: _box),
+          access: const GlassAccessibility(increaseContrast: true),
+        ),
+      );
       expect(
         filterOf(tester).adaptiveTintMax,
         closeTo(
@@ -182,10 +226,12 @@ void main() {
     });
 
     testWidgets('Reduce Transparency on appBar is solid', (tester) async {
-      await tester.pumpWidget(_host(
-        const GlassSurface.appBar(child: _box),
-        access: const GlassAccessibility(reduceTransparency: true),
-      ));
+      await tester.pumpWidget(
+        _host(
+          const GlassSurface.appBar(child: _box),
+          access: const GlassAccessibility(reduceTransparency: true),
+        ),
+      );
       expect(find.byType(BackdropFilter), findsNothing);
       expect(find.byType(LiquidGlassFilter), findsNothing);
     });
@@ -199,80 +245,107 @@ void main() {
 
     testWidgets('the tint carries the liquid chrome opacity', (tester) async {
       await tester.pumpWidget(
-          _host(const GlassSurface.chrome(opacity: 0.9, child: _box)));
-      final filter =
-          tester.widget<LiquidGlassFilter>(find.byType(LiquidGlassFilter));
+        _host(const GlassSurface.chrome(opacity: 0.9, child: _box)),
+      );
+      final filter = tester.widget<LiquidGlassFilter>(
+        find.byType(LiquidGlassFilter),
+      );
       expect(
-          filter.tint.a, closeTo(DepthTokens.liquidChromeTintOpacity, 0.002));
+        filter.tint.a,
+        closeTo(DepthTokens.liquidChromeTintOpacity, 0.002),
+      );
     });
 
     testWidgets('prominent control is tinted its colour', (tester) async {
-      await tester.pumpWidget(_host(GlassSurface.control(
-        borderRadius: BorderRadius.circular(24),
-        prominentColor: Colors.white,
-        child: _box,
-      )));
-      final filter =
-          tester.widget<LiquidGlassFilter>(find.byType(LiquidGlassFilter));
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.control(
+            borderRadius: BorderRadius.circular(24),
+            prominentColor: Colors.white,
+            child: _box,
+          ),
+        ),
+      );
+      final filter = tester.widget<LiquidGlassFilter>(
+        find.byType(LiquidGlassFilter),
+      );
       expect(
-          filter.tint,
-          Colors.white
-              .withValues(alpha: DepthTokens.liquidProminentTintOpacity));
+        filter.tint,
+        Colors.white.withValues(alpha: DepthTokens.liquidProminentTintOpacity),
+      );
     });
 
     testWidgets('Reduce Transparency keeps the control lift', (tester) async {
-      await tester.pumpWidget(_host(
-        GlassSurface.control(
-            borderRadius: BorderRadius.circular(24), child: _box),
-        access: const GlassAccessibility(reduceTransparency: true),
-      ));
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.control(
+            borderRadius: BorderRadius.circular(24),
+            child: _box,
+          ),
+          access: const GlassAccessibility(reduceTransparency: true),
+        ),
+      );
       expect(find.byType(LiquidGlassFilter), findsNothing);
       expect(outerShadow(tester), LiquidGlassProfile.lens.shadow);
     });
 
-    testWidgets('Reduce Transparency gives a solid fill, no backdrop',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        const GlassSurface.chrome(child: _box),
-        access: const GlassAccessibility(reduceTransparency: true),
-      ));
+    testWidgets('Reduce Transparency gives a solid fill, no backdrop', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const GlassSurface.chrome(child: _box),
+          access: const GlassAccessibility(reduceTransparency: true),
+        ),
+      );
       expect(find.byType(LiquidGlassFilter), findsNothing);
       expect(find.byType(BackdropFilter), findsNothing);
       // The shadow wrapper is outermost; the solid fill is the last box.
-      final box = tester.widget<DecoratedBox>(find
-          .descendant(
-            of: find.byType(GlassSurface),
-            matching: find.byType(DecoratedBox),
-          )
-          .last);
+      final box = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.byType(GlassSurface),
+              matching: find.byType(DecoratedBox),
+            )
+            .last,
+      );
       final color = (box.decoration as BoxDecoration).color;
       expect(color?.a, 1.0);
     });
 
-    testWidgets('Reduce Transparency keeps the modal palette border',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        GlassSurface.modal(child: _box),
-        access: const GlassAccessibility(reduceTransparency: true),
-      ));
+    testWidgets('Reduce Transparency keeps the modal palette border', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.modal(child: _box),
+          access: const GlassAccessibility(reduceTransparency: true),
+        ),
+      );
       // The shadow wrapper is outermost; the solid fill is the last box.
-      final box = tester.widget<DecoratedBox>(find
-          .descendant(
-            of: find.byType(GlassSurface),
-            matching: find.byType(DecoratedBox),
-          )
-          .last);
+      final box = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.byType(GlassSurface),
+              matching: find.byType(DecoratedBox),
+            )
+            .last,
+      );
       expect((box.decoration as BoxDecoration).border, isNotNull);
     });
 
-    testWidgets('Increase Contrast raises the tint and draws a rim',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        const GlassSurface.chrome(child: _box),
-        access: const GlassAccessibility(increaseContrast: true),
-      ));
-      final filter =
-          tester.widget<LiquidGlassFilter>(find.byType(LiquidGlassFilter));
+    testWidgets('Increase Contrast raises the tint and draws a rim', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const GlassSurface.chrome(child: _box),
+          access: const GlassAccessibility(increaseContrast: true),
+        ),
+      );
+      final filter = tester.widget<LiquidGlassFilter>(
+        find.byType(LiquidGlassFilter),
+      );
       expect(
         filter.tint.a,
         closeTo(
@@ -281,10 +354,12 @@ void main() {
           0.002,
         ),
       );
-      final box = tester.widget<DecoratedBox>(find.descendant(
-        of: find.byType(LiquidGlassFilter),
-        matching: find.byType(DecoratedBox),
-      ));
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byType(LiquidGlassFilter),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
       expect((box.decoration as BoxDecoration).border, isNotNull);
     });
   });
@@ -300,46 +375,65 @@ void main() {
       });
     });
 
-    testWidgets('Reduce Transparency on the frosted style casts no shadow',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        GlassSurface.modal(child: _box),
-        access: const GlassAccessibility(reduceTransparency: true),
-        liquid: false,
-      ));
-      final boxes = tester.widgetList<DecoratedBox>(find.descendant(
-        of: find.byType(GlassSurface),
-        matching: find.byType(DecoratedBox),
-      ));
+    testWidgets('Reduce Transparency on the frosted style casts no shadow', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.modal(child: _box),
+          access: const GlassAccessibility(reduceTransparency: true),
+          liquid: false,
+        ),
+      );
+      final boxes = tester.widgetList<DecoratedBox>(
+        find.descendant(
+          of: find.byType(GlassSurface),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
       expect(
-        boxes.where((b) =>
-            ((b.decoration as BoxDecoration).boxShadow ?? const []).isNotEmpty),
+        boxes.where(
+          (b) => ((b.decoration as BoxDecoration).boxShadow ?? const [])
+              .isNotEmpty,
+        ),
         isEmpty,
       );
     });
 
     testWidgets('the Liquid Glass setting takes the shader', (tester) async {
       await tester.pumpWidget(
-          _host(const GlassSurface.chrome(child: _box), liquid: true));
+        _host(const GlassSurface.chrome(child: _box), liquid: true),
+      );
       expect(find.byType(LiquidGlassFilter), findsOneWidget);
     });
   });
 
   group('when Liquid Glass is not available', () {
-    testWidgets('a liquid-styled control still casts the lens shadow',
-        (tester) async {
+    testWidgets('a liquid-styled control still casts the lens shadow', (
+      tester,
+    ) async {
       LiquidGlassSupport.debugOverride = false;
-      await tester.pumpWidget(_host(GlassSurface.control(
-          borderRadius: BorderRadius.circular(24), child: _box)));
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.control(
+            borderRadius: BorderRadius.circular(24),
+            child: _box,
+          ),
+        ),
+      );
       expect(find.byType(LiquidGlassFilter), findsNothing);
-      final box = tester.widget<DecoratedBox>(find
-          .descendant(
-            of: find.byType(GlassSurface),
-            matching: find.byType(DecoratedBox),
-          )
-          .first);
-      expect((box.decoration as BoxDecoration).boxShadow,
-          LiquidGlassProfile.lens.shadow);
+      final box = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.byType(GlassSurface),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      expect(
+        (box.decoration as BoxDecoration).boxShadow,
+        LiquidGlassProfile.lens.shadow,
+      );
     });
 
     testWidgets('appBar keeps its frosted recipe', (tester) async {
@@ -357,10 +451,12 @@ void main() {
     });
 
     testWidgets('Reduce Transparency still applies on Apple', (tester) async {
-      await tester.pumpWidget(_host(
-        const GlassSurface.chrome(child: _box),
-        access: const GlassAccessibility(reduceTransparency: true),
-      ));
+      await tester.pumpWidget(
+        _host(
+          const GlassSurface.chrome(child: _box),
+          access: const GlassAccessibility(reduceTransparency: true),
+        ),
+      );
       expect(find.byType(BackdropFilter), findsNothing);
     });
   });

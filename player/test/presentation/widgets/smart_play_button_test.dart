@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/models/media_file.dart';
@@ -6,11 +6,8 @@ import 'package:player/domain/models/progress.dart';
 import 'package:player/domain/models/show_next_up.dart';
 import 'package:player/presentation/widgets/smart_play_button.dart';
 
-MediaFile _file(String id, String resolution) => MediaFile(
-      id: id,
-      resolution: resolution,
-      directPlaySupported: true,
-    );
+MediaFile _file(String id, String resolution) =>
+    MediaFile(id: id, resolution: resolution, directPlaySupported: true);
 
 /// Half-watched S02E05: 2700 - 600 seconds left, i.e. "35 min left".
 const _partlyWatched = NextUpEpisode(
@@ -28,19 +25,20 @@ const _partlyWatched = NextUpEpisode(
 const _unwatched = NextUpEpisode(id: 'e2', seasonNumber: 1, episodeNumber: 1);
 
 Widget _host(Widget child, double width) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(width: width, child: child),
-        ),
-      ),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: Center(
+      child: SizedBox(width: width, child: child),
+    ),
+  ),
+);
 
 void main() {
   group('SmartPlayButton', () {
-    testWidgets('preserves selected file when files list becomes empty',
-        (tester) async {
+    testWidgets('preserves selected file when files list becomes empty', (
+      tester,
+    ) async {
       final file = _file('a', '480p');
       var files = [file];
 
@@ -49,10 +47,7 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: SmartPlayButton(
-              files: files,
-              onFileSelected: (_) {},
-            ),
+            body: SmartPlayButton(files: files, onFileSelected: (_) {}),
           ),
         ),
       );
@@ -70,10 +65,7 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: SmartPlayButton(
-              files: files,
-              onFileSelected: (_) {},
-            ),
+            body: SmartPlayButton(files: files, onFileSelected: (_) {}),
           ),
         ),
       );
@@ -90,18 +82,19 @@ void main() {
       const MediaFile(id: 'f1', resolution: '1080p', directPlaySupported: true),
     ];
 
-    testWidgets(
-        'wide layout shows the full label and a cue line naming the '
+    testWidgets('wide layout shows the full label and a cue line naming the '
         'resolution of the file it picked', (tester) async {
-      await tester.pumpWidget(_host(
-        SmartPlayButton(
-          files: files,
-          state: NextUpState.continueWatching,
-          episode: _partlyWatched,
-          onFileSelected: (_) {},
+      await tester.pumpWidget(
+        _host(
+          SmartPlayButton(
+            files: files,
+            state: NextUpState.continueWatching,
+            episode: _partlyWatched,
+            onFileSelected: (_) {},
+          ),
+          600,
         ),
-        600,
-      ));
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Continue Watching'), findsOneWidget);
@@ -112,18 +105,19 @@ void main() {
       expect(find.text('S02E05 · 1080p · 35 min left'), findsOneWidget);
     });
 
-    testWidgets(
-        'narrow layout drops the label but keeps the cue, '
+    testWidgets('narrow layout drops the label but keeps the cue, '
         'prefixed with the state word', (tester) async {
-      await tester.pumpWidget(_host(
-        SmartPlayButton(
-          files: files,
-          state: NextUpState.continueWatching,
-          episode: _partlyWatched,
-          onFileSelected: (_) {},
+      await tester.pumpWidget(
+        _host(
+          SmartPlayButton(
+            files: files,
+            state: NextUpState.continueWatching,
+            episode: _partlyWatched,
+            onFileSelected: (_) {},
+          ),
+          200,
         ),
-        200,
-      ));
+      );
       await tester.pumpAndSettle();
 
       // The full pill label is gone. Without the "min left" suffix (which
@@ -134,44 +128,45 @@ void main() {
       // icon form prints it beside the play circle.
       expect(find.text('Continue Watching'), findsNothing);
       expect(find.text('1080p'), findsOneWidget);
-      expect(
-        find.text('Continue · S02E05 · 35 min left'),
-        findsOneWidget,
-      );
+      expect(find.text('Continue · S02E05 · 35 min left'), findsOneWidget);
     });
 
-    testWidgets('without a state it renders the plain icon form',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        SmartPlayButton(files: files, onFileSelected: (_) {}),
-        600,
-      ));
+    testWidgets('without a state it renders the plain icon form', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(SmartPlayButton(files: files, onFileSelected: (_) {}), 600),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Continue Watching'), findsNothing);
       expect(find.text('1080p'), findsOneWidget);
     });
 
-    testWidgets('a state without an episode renders the pill with no cue line',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        SmartPlayButton(
-          files: files,
-          state: NextUpState.start,
-          onFileSelected: (_) {},
-        ),
-        600,
-      ));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Start Watching'), findsOneWidget);
-      expect(find.textContaining('S0'), findsNothing);
-    });
-
     testWidgets(
-        'collapses to the icon form without overflow inside a real Row '
-        'embedding (Expanded metadata sibling + Flexible-wrapped button)',
-        (tester) async {
+      'a state without an episode renders the pill with no cue line',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            SmartPlayButton(
+              files: files,
+              state: NextUpState.start,
+              onFileSelected: (_) {},
+            ),
+            600,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Start Watching'), findsOneWidget);
+        expect(find.textContaining('S0'), findsNothing);
+      },
+    );
+
+    testWidgets('collapses to the icon form without overflow inside a real Row '
+        'embedding (Expanded metadata sibling + Flexible-wrapped button)', (
+      tester,
+    ) async {
       // Verifies the actual invariant under test: a bounded maxWidth is what
       // makes the pill collapse to the icon form. Wrapping SmartPlayButton in
       // Flexible here gives its internal LayoutBuilder a real, finite width
@@ -218,23 +213,22 @@ void main() {
       // The pill collapsed to the icon form: the full label is gone, and the
       // compact cue line (with its state-word prefix) is what remains.
       expect(find.text('Continue Watching'), findsNothing);
-      expect(
-        find.text('Continue · S02E05 · 35 min left'),
-        findsOneWidget,
-      );
+      expect(find.text('Continue · S02E05 · 35 min left'), findsOneWidget);
     });
 
     testWidgets('tapping reports the selected file', (tester) async {
       MediaFile? picked;
-      await tester.pumpWidget(_host(
-        SmartPlayButton(
-          files: files,
-          state: NextUpState.start,
-          episode: _unwatched,
-          onFileSelected: (f) => picked = f,
+      await tester.pumpWidget(
+        _host(
+          SmartPlayButton(
+            files: files,
+            state: NextUpState.start,
+            episode: _unwatched,
+            onFileSelected: (f) => picked = f,
+          ),
+          600,
         ),
-        600,
-      ));
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Start Watching'));

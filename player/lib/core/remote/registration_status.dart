@@ -72,12 +72,12 @@ RegistrationStatus worstRegistrationStatus(
   Iterable<RegistrationStatus> statuses,
 ) {
   int rank(RegistrationStatus s) => switch (s) {
-        RegistrationFailed() => 4,
-        RegistrationWaiting() => 3,
-        RegistrationInFlight() => 2,
-        RegistrationSucceeded() => 1,
-        RegistrationIdle() => 0,
-      };
+    RegistrationFailed() => 4,
+    RegistrationWaiting() => 3,
+    RegistrationInFlight() => 2,
+    RegistrationSucceeded() => 1,
+    RegistrationIdle() => 0,
+  };
   RegistrationStatus worst = const RegistrationIdle();
   var worstRank = -1;
   for (final s in statuses) {

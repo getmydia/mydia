@@ -3,7 +3,7 @@
 // chain: a refresh inside the scheduler flush rebuilt it twice in one frame,
 // and holding it tripped an assertion when the container was disposed.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
@@ -21,55 +21,65 @@ import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/no_downloads.dart';
 
 SourceAccountRecord _record(String id) => SourceAccountRecord(
-      account: ProviderAccount(
-        id: id,
-        kind: SourceKind.plex,
-        displayName: 'Server $id',
-        storageNamespace: 'source/$id',
-        activeProfileId: 'owner',
-      ),
-      profiles: [
-        SourceProfile(id: 'owner', accountId: id, name: 'Owner', isOwner: true),
-      ],
-      servers: [
-        SourceServer(
-            id: 's1',
-            accountId: id,
-            profileId: 'owner',
-            name: 'Server $id',
-            machineIdentifier: 's1'),
-      ],
-      addedAtMs: 1700000000000,
-    );
+  account: ProviderAccount(
+    id: id,
+    kind: SourceKind.plex,
+    displayName: 'Server $id',
+    storageNamespace: 'source/$id',
+    activeProfileId: 'owner',
+  ),
+  profiles: [
+    SourceProfile(id: 'owner', accountId: id, name: 'Owner', isOwner: true),
+  ],
+  servers: [
+    SourceServer(
+      id: 's1',
+      accountId: id,
+      profileId: 'owner',
+      name: 'Server $id',
+      machineIdentifier: 's1',
+    ),
+  ],
+  addedAtMs: 1700000000000,
+);
 
 void main() {
-  testWidgets('adding sources in a burst does not rebuild a provider twice',
-      (tester) async {
+  testWidgets('adding sources in a burst does not rebuild a provider twice', (
+    tester,
+  ) async {
     final store = InMemorySourceStore();
     var mediaBuilt = 0;
-    final container = ProviderContainer(overrides: [
-      noProgressFlushOverride,
-      sidebarLayoutStoreProvider
-          .overrideWithValue(InMemorySidebarLayoutStore()),
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-      authServiceProvider
-          .overrideWithValue(AuthService(storage: MockAuthStorage())),
-      mediaSourceProvider.overrideWith((ref, id) {
-        mediaBuilt++;
-        return null;
-      }),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        noProgressFlushOverride,
+        sidebarLayoutStoreProvider.overrideWithValue(
+          InMemorySidebarLayoutStore(),
+        ),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(
+          SourceSecrets(MockAuthStorage()),
+        ),
+        authServiceProvider.overrideWithValue(
+          AuthService(storage: MockAuthStorage()),
+        ),
+        mediaSourceProvider.overrideWith((ref, id) {
+          mediaBuilt++;
+          return null;
+        }),
+      ],
+    );
     addTearDown(container.dispose);
     final router = container.read(appRouterProvider);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(
-        routerConfig: router,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          routerConfig: router,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+        ),
       ),
-    ));
+    );
     await container.read(sourceRecordsProvider.future);
     await tester.pumpAndSettle();
 

@@ -45,8 +45,8 @@ class LegacyMydiaMigrationDeps {
     required this.store,
     required this.secrets,
     required this.rewrite,
-    DateTime Function()? now,
-  }) : _now = now;
+    this._now,
+  });
 
   final AuthStorage legacy;
   final SourceStore store;
@@ -108,8 +108,11 @@ Future<String?> migrateLegacyMydia(LegacyMydiaMigrationDeps deps) async {
       nodeAddr: creds.nodeAddr,
       username: creds.username,
     );
-    record =
-        buildMydiaAccountRecord(full, instanceId: instanceId, now: deps.now());
+    record = buildMydiaAccountRecord(
+      full,
+      instanceId: instanceId,
+      now: deps.now(),
+    );
     // Credentials first: a stored account without them fails every request.
     await writeMydiaCredentials(deps.secrets, record.account, full);
     await deps.store.putAccount(record);

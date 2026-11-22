@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -45,33 +45,37 @@ Future<ProviderContainer> _pump(
   String? pushed,
 }) async {
   final router = _router = GoRouter(
-      initialLocation: pushed == null ? '/unlock?next=%2Fdone' : '/origin',
-      routes: [
-        GoRoute(path: '/', builder: (_, __) => const Text('home')),
-        GoRoute(path: '/done', builder: (_, __) => const Text('done')),
-        GoRoute(path: '/origin', builder: (_, __) => const Text('origin')),
-        GoRoute(
-            path: '/sources/manage', builder: (_, __) => const Text('manage')),
-        GoRoute(
-          path: '/unlock',
-          builder: (_, s) => UnlockScreen(next: s.uri.queryParameters['next']),
-        ),
-      ]);
-  final container = ProviderContainer(overrides: [
-    deviceAuthProvider.overrideWithValue(auth),
-    pinStoreProvider.overrideWithValue(pins),
-    ...overrides,
-  ]);
+    initialLocation: pushed == null ? '/unlock?next=%2Fdone' : '/origin',
+    routes: [
+      GoRoute(path: '/', builder: (_, _) => const Text('home')),
+      GoRoute(path: '/done', builder: (_, _) => const Text('done')),
+      GoRoute(path: '/origin', builder: (_, _) => const Text('origin')),
+      GoRoute(path: '/sources/manage', builder: (_, _) => const Text('manage')),
+      GoRoute(
+        path: '/unlock',
+        builder: (_, s) => UnlockScreen(next: s.uri.queryParameters['next']),
+      ),
+    ],
+  );
+  final container = ProviderContainer(
+    overrides: [
+      deviceAuthProvider.overrideWithValue(auth),
+      pinStoreProvider.overrideWithValue(pins),
+      ...overrides,
+    ],
+  );
   addTearDown(container.dispose);
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      routerConfig: router,
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        routerConfig: router,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   if (pushed != null) {
     unawaited(router.push(pushed));
@@ -92,7 +96,10 @@ void main() {
   testWidgets('device auth on open, then continues to next', (tester) async {
     final auth = _Auth(DeviceAuthResult.success);
     final c = await _pump(
-        tester, auth, PinStore(MockAuthStorage(), iterations: 1000));
+      tester,
+      auth,
+      PinStore(MockAuthStorage(), iterations: 1000),
+    );
     expect(auth.calls, 1);
     expect(find.text('done'), findsOneWidget);
     expect(c.read(sourceLockProvider), isTrue);
@@ -110,8 +117,11 @@ void main() {
   });
 
   testWidgets('cancelled device auth offers retry and PIN', (tester) async {
-    await _pump(tester, _Auth(DeviceAuthResult.cancelled),
-        PinStore(MockAuthStorage(), iterations: 1000));
+    await _pump(
+      tester,
+      _Auth(DeviceAuthResult.cancelled),
+      PinStore(MockAuthStorage(), iterations: 1000),
+    );
     expect(find.byKey(const Key('unlock-retry-device')), findsOneWidget);
     await tester.tap(find.byKey(const Key('unlock-use-pin')));
     await tester.pumpAndSettle();
@@ -119,8 +129,11 @@ void main() {
   });
 
   testWidgets('cancel goes home', (tester) async {
-    await _pump(tester, _Auth(DeviceAuthResult.cancelled),
-        PinStore(MockAuthStorage(), iterations: 1000));
+    await _pump(
+      tester,
+      _Auth(DeviceAuthResult.cancelled),
+      PinStore(MockAuthStorage(), iterations: 1000),
+    );
     await tester.tap(find.byKey(const Key('unlock-cancel')));
     await tester.pumpAndSettle();
     expect(find.text('home'), findsOneWidget);
@@ -128,19 +141,27 @@ void main() {
 
   // iOS has no system back: a screen reached by `go` from here is a dead end.
   group('opened over another screen', () {
-    testWidgets('without next, unlocking returns to the opener',
-        (tester) async {
-      await _pump(tester, _Auth(DeviceAuthResult.success),
-          PinStore(MockAuthStorage(), iterations: 1000),
-          pushed: unlockLocation());
+    testWidgets('without next, unlocking returns to the opener', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _Auth(DeviceAuthResult.success),
+        PinStore(MockAuthStorage(), iterations: 1000),
+        pushed: unlockLocation(),
+      );
       expect(find.text('origin'), findsOneWidget);
     });
 
-    testWidgets('a root-level next keeps the opener underneath',
-        (tester) async {
-      await _pump(tester, _Auth(DeviceAuthResult.success),
-          PinStore(MockAuthStorage(), iterations: 1000),
-          pushed: unlockLocation('/sources/manage'));
+    testWidgets('a root-level next keeps the opener underneath', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _Auth(DeviceAuthResult.success),
+        PinStore(MockAuthStorage(), iterations: 1000),
+        pushed: unlockLocation('/sources/manage'),
+      );
       expect(find.text('manage'), findsOneWidget);
 
       expect(_router.canPop(), isTrue);
@@ -150,9 +171,12 @@ void main() {
     });
 
     testWidgets('cancel returns to the opener', (tester) async {
-      await _pump(tester, _Auth(DeviceAuthResult.cancelled),
-          PinStore(MockAuthStorage(), iterations: 1000),
-          pushed: unlockLocation());
+      await _pump(
+        tester,
+        _Auth(DeviceAuthResult.cancelled),
+        PinStore(MockAuthStorage(), iterations: 1000),
+        pushed: unlockLocation(),
+      );
       await tester.tap(find.byKey(const Key('unlock-cancel')));
       await tester.pumpAndSettle();
       expect(find.text('origin'), findsOneWidget);
@@ -165,8 +189,11 @@ void main() {
     final pins = PinStore(storage, iterations: 1000);
     await pins.setPin('4821');
     final record = plexRecord();
-    await store.putAccount(record
-        .copyWith(serverLocks: {record.servers.single.id: SourceLock.locked}));
+    await store.putAccount(
+      record.copyWith(
+        serverLocks: {record.servers.single.id: SourceLock.locked},
+      ),
+    );
     final c = await _pump(
       tester,
       _Auth(DeviceAuthResult.unavailable),

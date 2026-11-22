@@ -39,16 +39,17 @@ const _outsideCredits = Duration(minutes: 10);
 /// read is dropped, which `_fetchSegments` treats as "no segments" —
 /// indistinguishable from the bug this file is guarding against.
 Map<String, dynamic> _creditsSegment() => {
-      '__typename': 'MediaSegment',
-      'type': 'CREDITS',
-      'startMs': _creditsStartMs,
-      'endMs': _creditsEndMs,
-    };
+  '__typename': 'MediaSegment',
+  'type': 'CREDITS',
+  'startMs': _creditsStartMs,
+  'endMs': _creditsEndMs,
+};
 
 /// Answers per operation rather than by index, so this script does not break
 /// the moment the screen reorders its startup queries.
-ScriptedMydiaTransport _server(
-    {List<Map<String, dynamic>> segments = const []}) {
+ScriptedMydiaTransport _server({
+  List<Map<String, dynamic>> segments = const [],
+}) {
   return ScriptedMydiaTransport((request, index) {
     if (request.operation == 'MovieSegments') {
       return movieSegmentsResponse(segments: segments);
@@ -67,17 +68,16 @@ ScriptedMydiaTransport _server(
 CastSession _sessionAt(
   Duration position, {
   CastConnectionState connectionState = CastConnectionState.connected,
-}) =>
-    CastSession(
-      device: testDevice,
-      mediaInfo: CastMediaInfo(
-        title: 'Arrival',
-        duration: const Duration(seconds: 5400),
-        position: position,
-      ),
-      playbackState: CastPlaybackState.playing,
-      connectionState: connectionState,
-    );
+}) => CastSession(
+  device: testDevice,
+  mediaInfo: CastMediaInfo(
+    title: 'Arrival',
+    duration: const Duration(seconds: 5400),
+    position: position,
+  ),
+  playbackState: CastPlaybackState.playing,
+  connectionState: connectionState,
+);
 
 /// Pumps while republishing the receiver's position until [condition] holds.
 ///
@@ -108,8 +108,9 @@ void main() {
   setUp(() => session = StreamController<CastSession?>.broadcast());
   tearDown(() => session.close());
 
-  testWidgets('offers a skip on the cast placeholder and seeks the receiver',
-      (tester) async {
+  testWidgets('offers a skip on the cast placeholder and seeks the receiver', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
@@ -132,7 +133,8 @@ void main() {
     expect(
       find.text('Skip Credits'),
       findsOneWidget,
-      reason: 'The receiver is sitting inside a detected credits segment, so '
+      reason:
+          'The receiver is sitting inside a detected credits segment, so '
           'the placeholder has to offer the same affordance local playback '
           'would.',
     );
@@ -143,14 +145,16 @@ void main() {
     expect(
       castManager.seekTargets,
       [const Duration(milliseconds: _creditsEndMs)],
-      reason: 'A skip while casting must move the receiver to the end of the '
+      reason:
+          'A skip while casting must move the receiver to the end of the '
           'segment, in real media coordinates — the space '
           'CastSessionManager.seek is specified in.',
     );
   });
 
-  testWidgets('withdraws the skip once the receiver leaves the segment',
-      (tester) async {
+  testWidgets('withdraws the skip once the receiver leaves the segment', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
@@ -178,8 +182,9 @@ void main() {
     expect(find.byKey(SkipSegmentButton.buttonKey), findsNothing);
   });
 
-  testWidgets('offers no skip over a receiver that has dropped off',
-      (tester) async {
+  testWidgets('offers no skip over a receiver that has dropped off', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
@@ -244,8 +249,9 @@ void main() {
     expect(castManager.seekTargets, hasLength(1));
   });
 
-  testWidgets('auto-skips the receiver exactly once when the setting is on',
-      (tester) async {
+  testWidgets('auto-skips the receiver exactly once when the setting is on', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
@@ -272,7 +278,8 @@ void main() {
     expect(
       castManager.seekTargets,
       [const Duration(milliseconds: _creditsEndMs)],
-      reason: 'Auto-skip has to reach the receiver without the viewer '
+      reason:
+          'Auto-skip has to reach the receiver without the viewer '
           'touching anything.',
     );
 
@@ -287,7 +294,8 @@ void main() {
     expect(
       castManager.seekTargets,
       hasLength(1),
-      reason: 'SegmentSkipTracker spends a segment on first use, so later '
+      reason:
+          'SegmentSkipTracker spends a segment on first use, so later '
           'positions inside it must not re-fire.',
     );
   });

@@ -41,8 +41,7 @@ bool shouldCallNativeButtonBridge({
   required TargetPlatform platform,
   required bool hidden,
   required bool isFullscreen,
-}) =>
-    platform == TargetPlatform.macOS && !(hidden && isFullscreen);
+}) => platform == TargetPlatform.macOS && !(hidden && isFullscreen);
 
 bool? _pendingHidden;
 
@@ -94,12 +93,13 @@ void setWindowButtonsHidden(bool hidden) {
 
   try {
     unawaited(
-      _channel.invokeMethod<void>(
-          'setTrafficLightsHidden', {'hidden': hidden}).catchError(
-        (Object e) => debugPrint(
-          '[WindowButtons] Failed to toggle the native buttons: $e',
-        ),
-      ),
+      _channel
+          .invokeMethod<void>('setTrafficLightsHidden', {'hidden': hidden})
+          .catchError(
+            (Object e) => debugPrint(
+              '[WindowButtons] Failed to toggle the native buttons: $e',
+            ),
+          ),
     );
   } catch (e) {
     debugPrint('[WindowButtons] Failed to toggle the native buttons: $e');

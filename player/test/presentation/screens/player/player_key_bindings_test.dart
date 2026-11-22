@@ -3,10 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/player/player_key_bindings.dart';
 
 KeyDownEvent _down(LogicalKeyboardKey key) => KeyDownEvent(
-      physicalKey: PhysicalKeyboardKey.keyA,
-      logicalKey: key,
-      timeStamp: Duration.zero,
-    );
+  physicalKey: PhysicalKeyboardKey.keyA,
+  logicalKey: key,
+  timeStamp: Duration.zero,
+);
 
 PlayerKeyContext _ctx({
   bool directionalPrimary = false,
@@ -20,20 +20,19 @@ PlayerKeyContext _ctx({
   bool isDesktop = true,
   bool shiftPressed = false,
   double volume = 50,
-}) =>
-    PlayerKeyContext(
-      directionalPrimary: directionalPrimary,
-      chromeVisible: chromeVisible,
-      chromeHasFocus: chromeHasFocus,
-      hasNext: hasNext,
-      hasPrevious: hasPrevious,
-      upNextShowing: upNextShowing,
-      fullscreenAvailable: fullscreenAvailable,
-      isFullscreen: isFullscreen,
-      isDesktop: isDesktop,
-      shiftPressed: shiftPressed,
-      volume: volume,
-    );
+}) => PlayerKeyContext(
+  directionalPrimary: directionalPrimary,
+  chromeVisible: chromeVisible,
+  chromeHasFocus: chromeHasFocus,
+  hasNext: hasNext,
+  hasPrevious: hasPrevious,
+  upNextShowing: upNextShowing,
+  fullscreenAvailable: fullscreenAvailable,
+  isFullscreen: isFullscreen,
+  isDesktop: isDesktop,
+  shiftPressed: shiftPressed,
+  volume: volume,
+);
 
 void main() {
   group('resolvePlayerKey', () {
@@ -49,13 +48,19 @@ void main() {
     test('keyboard arrows seek and change volume', () {
       expect(
         resolvePlayerKey(_down(LogicalKeyboardKey.arrowLeft), _ctx()),
-        isA<KeySeekBy>()
-            .having((c) => c.offset, 'offset', const Duration(seconds: -10)),
+        isA<KeySeekBy>().having(
+          (c) => c.offset,
+          'offset',
+          const Duration(seconds: -10),
+        ),
       );
       expect(
         resolvePlayerKey(_down(LogicalKeyboardKey.arrowRight), _ctx()),
-        isA<KeySeekBy>()
-            .having((c) => c.offset, 'offset', const Duration(seconds: 10)),
+        isA<KeySeekBy>().having(
+          (c) => c.offset,
+          'offset',
+          const Duration(seconds: 10),
+        ),
       );
       expect(
         resolvePlayerKey(_down(LogicalKeyboardKey.arrowUp), _ctx(volume: 95)),
@@ -69,18 +74,26 @@ void main() {
 
     test('remote arrows with OSD hidden scrub or reveal', () {
       final ctx = _ctx(directionalPrimary: true);
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.arrowLeft), ctx),
-          isA<KeyScrub>().having((c) => c.forward, 'forward', false));
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.arrowRight), ctx),
-          isA<KeyScrub>().having((c) => c.forward, 'forward', true));
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.arrowUp), ctx),
-          isA<KeyRevealChrome>());
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.arrowLeft), ctx),
+        isA<KeyScrub>().having((c) => c.forward, 'forward', false),
+      );
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.arrowRight), ctx),
+        isA<KeyScrub>().having((c) => c.forward, 'forward', true),
+      );
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.arrowUp), ctx),
+        isA<KeyRevealChrome>(),
+      );
     });
 
     test('remote arrows with OSD shown fall through to traversal', () {
       final ctx = _ctx(directionalPrimary: true, chromeVisible: true);
       expect(
-          resolvePlayerKey(_down(LogicalKeyboardKey.arrowLeft), ctx), isNull);
+        resolvePlayerKey(_down(LogicalKeyboardKey.arrowLeft), ctx),
+        isNull,
+      );
     });
 
     test('space toggles play without revealing; media play/pause reveals', () {
@@ -92,22 +105,30 @@ void main() {
         resolvePlayerKey(_down(LogicalKeyboardKey.mediaPlayPause), _ctx()),
         isA<KeyTogglePlay>().having((c) => c.revealChrome, 'reveal', true),
       );
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.mediaPlay), _ctx()),
-          isA<KeyPlay>());
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.mediaPause), _ctx()),
-          isA<KeyPause>());
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.mediaPlay), _ctx()),
+        isA<KeyPlay>(),
+      );
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.mediaPause), _ctx()),
+        isA<KeyPause>(),
+      );
     });
 
     test('enter reveals only on the remote tier with focus outside chrome', () {
       expect(resolvePlayerKey(_down(LogicalKeyboardKey.enter), _ctx()), isNull);
       expect(
         resolvePlayerKey(
-            _down(LogicalKeyboardKey.select), _ctx(directionalPrimary: true)),
+          _down(LogicalKeyboardKey.select),
+          _ctx(directionalPrimary: true),
+        ),
         isA<KeyRevealChrome>(),
       );
       expect(
-        resolvePlayerKey(_down(LogicalKeyboardKey.enter),
-            _ctx(directionalPrimary: true, chromeHasFocus: true)),
+        resolvePlayerKey(
+          _down(LogicalKeyboardKey.enter),
+          _ctx(directionalPrimary: true, chromeHasFocus: true),
+        ),
         isNull,
       );
     });
@@ -115,54 +136,78 @@ void main() {
     test('media skip keys carry 30 second offsets', () {
       expect(
         resolvePlayerKey(_down(LogicalKeyboardKey.mediaFastForward), _ctx()),
-        isA<KeyMediaSkip>()
-            .having((c) => c.offset, 'offset', const Duration(seconds: 30)),
+        isA<KeyMediaSkip>().having(
+          (c) => c.offset,
+          'offset',
+          const Duration(seconds: 30),
+        ),
       );
       expect(
         resolvePlayerKey(_down(LogicalKeyboardKey.mediaRewind), _ctx()),
-        isA<KeyMediaSkip>()
-            .having((c) => c.offset, 'offset', const Duration(seconds: -30)),
+        isA<KeyMediaSkip>().having(
+          (c) => c.offset,
+          'offset',
+          const Duration(seconds: -30),
+        ),
       );
     });
 
     test('track keys are ignored without a neighbouring episode', () {
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.mediaTrackNext), _ctx()),
-          isNull);
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.mediaTrackNext), _ctx()),
+        isNull,
+      );
       expect(
         resolvePlayerKey(
-            _down(LogicalKeyboardKey.mediaTrackNext), _ctx(hasNext: true)),
+          _down(LogicalKeyboardKey.mediaTrackNext),
+          _ctx(hasNext: true),
+        ),
         isA<KeyNextEpisode>(),
       );
       expect(
-        resolvePlayerKey(_down(LogicalKeyboardKey.mediaTrackPrevious),
-            _ctx(hasPrevious: true)),
+        resolvePlayerKey(
+          _down(LogicalKeyboardKey.mediaTrackPrevious),
+          _ctx(hasPrevious: true),
+        ),
         isA<KeyPreviousEpisode>(),
       );
     });
 
     test('page keys always go to episode navigation', () {
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.pageUp), _ctx()),
-          isA<KeyEpisodeNav>());
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.pageDown), _ctx()),
-          isA<KeyEpisodeNav>());
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.pageUp), _ctx()),
+        isA<KeyEpisodeNav>(),
+      );
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.pageDown), _ctx()),
+        isA<KeyEpisodeNav>(),
+      );
     });
 
     test('f and f11 need an available fullscreen route', () {
       expect(
         resolvePlayerKey(
-            _down(LogicalKeyboardKey.keyF), _ctx(fullscreenAvailable: false)),
+          _down(LogicalKeyboardKey.keyF),
+          _ctx(fullscreenAvailable: false),
+        ),
         isNull,
       );
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.f11), _ctx()),
-          isA<KeyToggleFullscreen>());
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.f11), _ctx()),
+        isA<KeyToggleFullscreen>(),
+      );
     });
 
     test('t toggles always-on-top on desktop only', () {
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.keyT), _ctx()),
-          isA<KeyToggleAlwaysOnTop>());
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.keyT), _ctx()),
+        isA<KeyToggleAlwaysOnTop>(),
+      );
       expect(
         resolvePlayerKey(
-            _down(LogicalKeyboardKey.keyT), _ctx(isDesktop: false)),
+          _down(LogicalKeyboardKey.keyT),
+          _ctx(isDesktop: false),
+        ),
         isNull,
       );
     });
@@ -185,34 +230,46 @@ void main() {
       );
       expect(
         resolvePlayerKey(
-            _down(LogicalKeyboardKey.keyZ), _ctx(shiftPressed: true)),
+          _down(LogicalKeyboardKey.keyZ),
+          _ctx(shiftPressed: true),
+        ),
         isA<KeyNudgeSubtitle>().having((c) => c.deltaMs, 'delta', 100),
       );
     });
 
     test('a toggles video scaling on every tier', () {
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.keyA), _ctx()),
-          isA<KeyToggleScaling>());
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.keyA), _ctx()),
+        isA<KeyToggleScaling>(),
+      );
       expect(
         resolvePlayerKey(
-            _down(LogicalKeyboardKey.keyA), _ctx(isDesktop: false)),
+          _down(LogicalKeyboardKey.keyA),
+          _ctx(isDesktop: false),
+        ),
         isA<KeyToggleScaling>(),
       );
     });
 
     test('escape cancels up-next first, then leaves fullscreen', () {
       expect(
-        resolvePlayerKey(_down(LogicalKeyboardKey.escape),
-            _ctx(upNextShowing: true, isFullscreen: true)),
+        resolvePlayerKey(
+          _down(LogicalKeyboardKey.escape),
+          _ctx(upNextShowing: true, isFullscreen: true),
+        ),
         isA<KeyCancelUpNext>(),
       );
       expect(
         resolvePlayerKey(
-            _down(LogicalKeyboardKey.escape), _ctx(isFullscreen: true)),
+          _down(LogicalKeyboardKey.escape),
+          _ctx(isFullscreen: true),
+        ),
         isA<KeyExitFullscreen>(),
       );
-      expect(resolvePlayerKey(_down(LogicalKeyboardKey.escape), _ctx()),
-          isA<KeyConsumed>());
+      expect(
+        resolvePlayerKey(_down(LogicalKeyboardKey.escape), _ctx()),
+        isA<KeyConsumed>(),
+      );
     });
 
     test('unbound keys are ignored', () {

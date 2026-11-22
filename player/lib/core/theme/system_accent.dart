@@ -33,9 +33,11 @@ class SystemAccent extends Notifier<Color> {
       if (event is NativeSystemAccentChanged) state = event.color;
     });
     ref.onDispose(sub.cancel);
-    unawaited(channel.querySystemAccent().then((color) {
-      if (color != null && ref.mounted) state = color;
-    }));
+    unawaited(
+      channel.querySystemAccent().then((color) {
+        if (color != null && ref.mounted) state = color;
+      }),
+    );
     return Palettes.macosDefaultAccent;
   }
 }

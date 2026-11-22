@@ -22,8 +22,10 @@ void main() {
         selectedSubtitleTrackId: null,
       );
 
-      final intent =
-          loadContentIntentForPulledSession(pulled, via: const SourceId('b'));
+      final intent = loadContentIntentForPulledSession(
+        pulled,
+        via: const SourceId('b'),
+      );
 
       expect(intent!.via, const SourceId('b'));
       expect(loadContentIntentForPulledSession(pulled)!.via, isNull);
@@ -46,9 +48,13 @@ void main() {
       expect(intent.startAt, const Duration(minutes: 41));
       expect(intent.audioTrack, 'audio-eng');
       expect(intent.subtitleTrack, 'sub-fre');
-      expect(intent.autoplay, isTrue,
-          reason: 'pulling a session back is always meant to resume it, '
-              'never to land on a paused first frame');
+      expect(
+        intent.autoplay,
+        isTrue,
+        reason:
+            'pulling a session back is always meant to resume it, '
+            'never to land on a paused first frame',
+      );
     });
 
     test('carries the episode id across for a show', () {

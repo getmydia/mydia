@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -105,8 +105,7 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   @override
   Future<void> requestUpdate({
     void Function(double progress)? onProgress,
-  }) async =>
-      applyCount++;
+  }) async => applyCount++;
 }
 
 void main() {
@@ -159,8 +158,9 @@ void main() {
     expect(find.byType(Icon), findsNothing);
   });
 
-  testWidgets('a required player mismatch shows a non-dismissible banner',
-      (tester) async {
+  testWidgets('a required player mismatch shows a non-dismissible banner', (
+    tester,
+  ) async {
     await pumpBanner(
       tester,
       const CompatibilityState(
@@ -177,8 +177,9 @@ void main() {
     expect(find.text('Update'), findsOneWidget);
   });
 
-  testWidgets('a required server mismatch offers no update button',
-      (tester) async {
+  testWidgets('a required server mismatch offers no update button', (
+    tester,
+  ) async {
     await pumpBanner(
       tester,
       const CompatibilityState(
@@ -196,27 +197,29 @@ void main() {
   });
 
   testWidgets(
-      'a recommended server mismatch is dismissible and offers no update button',
-      (tester) async {
-    await pumpBanner(
-      tester,
-      const CompatibilityState(
-        verdict: CompatibilityVerdict.serverUpdateRecommended,
-        playerVersion: '0.10.0',
-        serverVersion: '0.9.0',
-        requiredVersion: '0.10.0',
-      ),
-    );
+    'a recommended server mismatch is dismissible and offers no update button',
+    (tester) async {
+      await pumpBanner(
+        tester,
+        const CompatibilityState(
+          verdict: CompatibilityVerdict.serverUpdateRecommended,
+          playerVersion: '0.10.0',
+          serverVersion: '0.9.0',
+          requiredVersion: '0.10.0',
+        ),
+      );
 
-    expect(find.textContaining('A newer Mydia server'), findsOneWidget);
-    // The user cannot update someone else's server, hard or soft mismatch.
-    expect(find.text('Update'), findsNothing);
-    expect(find.text('Details'), findsOneWidget);
-    expect(find.byIcon(Icons.close), findsOneWidget);
-  });
+      expect(find.textContaining('A newer Mydia server'), findsOneWidget);
+      // The user cannot update someone else's server, hard or soft mismatch.
+      expect(find.text('Update'), findsNothing);
+      expect(find.text('Details'), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+    },
+  );
 
-  testWidgets('a recommended mismatch shows a dismiss affordance',
-      (tester) async {
+  testWidgets('a recommended mismatch shows a dismiss affordance', (
+    tester,
+  ) async {
     await pumpBanner(
       tester,
       const CompatibilityState(
@@ -251,8 +254,7 @@ void main() {
     expect(find.text('Version mismatch'), findsOneWidget);
   });
 
-  testWidgets(
-      'with an update in hand, Update starts it rather than '
+  testWidgets('with an update in hand, Update starts it rather than '
       'navigating to Settings', (tester) async {
     await pumpBanner(
       tester,
@@ -283,8 +285,9 @@ void main() {
     expect(find.textContaining('Mydia will close and update'), findsOneWidget);
   });
 
-  testWidgets('with no update in hand, Update still routes to Settings',
-      (tester) async {
+  testWidgets('with no update in hand, Update still routes to Settings', (
+    tester,
+  ) async {
     // Covers macOS, where Sparkle owns checking and availableUpdate stays
     // null, and the window before the first check lands.
     //

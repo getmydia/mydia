@@ -44,26 +44,25 @@ void main() {
       icuArguments('{kind, select, movie{the movie {title}} other{{title}}}'),
       {'kind', 'title'},
     );
-    expect(
-        icuArguments('{count, plural, =0 {none} other {# left}}'), {'count'});
+    expect(icuArguments('{count, plural, =0 {none} other {# left}}'), {
+      'count',
+    });
   });
 
   test('a translation with branch text instead of a number still passes', () {
     expect(
-      missingPlaceholders(
-        {'count'},
-        '{count, plural, one{archivo} other{{count} archivos}}',
-      ),
+      missingPlaceholders({
+        'count',
+      }, '{count, plural, one{archivo} other{{count} archivos}}'),
       isEmpty,
     );
   });
 
   test('a translation missing or renaming a placeholder fails', () {
     expect(
-      missingPlaceholders(
-        {'count'},
-        '{n, plural, one{archivo} other{{n} archivos}}',
-      ),
+      missingPlaceholders({
+        'count',
+      }, '{n, plural, one{archivo} other{{n} archivos}}'),
       {'count'},
     );
     expect(missingPlaceholders({'title'}, 'Agregado'), {'title'});
@@ -85,7 +84,8 @@ void main() {
     expect(
       missing,
       isEmpty,
-      reason: 'gen_l10n fails pub get without the base file. Create each one '
+      reason:
+          'gen_l10n fails pub get without the base file. Create each one '
           'containing {"@@locale": "<lang>"}.',
     );
   });

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/glass_style.dart';
@@ -7,13 +7,17 @@ import 'package:player/core/theme/palette.dart';
 void main() {
   Future<bool> read(WidgetTester tester, ThemeData? theme) async {
     late bool value;
-    await tester.pumpWidget(MaterialApp(
-      theme: theme,
-      home: Builder(builder: (context) {
-        value = GlassStyle.of(context);
-        return const SizedBox();
-      }),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Builder(
+          builder: (context) {
+            value = GlassStyle.of(context);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
     // MaterialApp animates theme changes; let the swap finish.
     await tester.pumpAndSettle();
     return value;
@@ -21,13 +25,19 @@ void main() {
 
   testWidgets('reads the flag from the app theme', (tester) async {
     expect(
-        await read(
-            tester, AppTheme.build(Palettes.projectionBooth, liquid: true)),
-        isTrue);
+      await read(
+        tester,
+        AppTheme.build(Palettes.projectionBooth, liquid: true),
+      ),
+      isTrue,
+    );
     expect(
-        await read(
-            tester, AppTheme.build(Palettes.projectionBooth, liquid: false)),
-        isFalse);
+      await read(
+        tester,
+        AppTheme.build(Palettes.projectionBooth, liquid: false),
+      ),
+      isFalse,
+    );
   });
 
   testWidgets('a theme without the extension reads as Frosted', (tester) async {

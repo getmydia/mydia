@@ -51,19 +51,22 @@ class _RecordingP2p extends P2pService {
 
 final _ping = parseString('query Ping { ok }');
 
-final _sourceProvider =
-    Provider<MydiaSource>((ref) => buildMydiaSource(ref, guest));
+final _sourceProvider = Provider<MydiaSource>(
+  (ref) => buildMydiaSource(ref, guest),
+);
 
 ProviderContainer _container(
   _CountingStorage storage, {
   P2pService? p2p,
   http.Client? client,
 }) {
-  final c = ProviderContainer(overrides: [
-    sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-    if (p2p != null) p2pServiceProvider.overrideWithValue(p2p),
-    sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),
-  ]);
+  final c = ProviderContainer(
+    overrides: [
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      if (p2p != null) p2pServiceProvider.overrideWithValue(p2p),
+      sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),
+    ],
+  );
   addTearDown(c.dispose);
   return c;
 }
@@ -74,10 +77,14 @@ void main() {
     final p2p = _RecordingP2p();
     final secrets = SourceSecrets(storage);
     await writeMydiaCredentials(
-        secrets,
-        guest.account,
-        const MydiaCredentials(
-            instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
+      secrets,
+      guest.account,
+      const MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'at',
+        nodeAddr: '{"id":"n1"}',
+      ),
+    );
     final c = _container(storage, p2p: p2p);
     expect(await c.read(_sourceProvider).client.request(_ping), {'ok': 1});
     expect(p2p.peers, ['{"id":"n1"}']);
@@ -89,23 +96,28 @@ void main() {
     final client = MockClient((r) async {
       seen.add(r);
       return http.Response(
-          jsonEncode({
-            'data': {'ok': 1}
-          }),
-          200,
-          headers: {'content-type': 'application/json'});
+        jsonEncode({
+          'data': {'ok': 1},
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
     });
     await writeMydiaCredentials(
-        SourceSecrets(storage),
-        guest.account,
-        const MydiaCredentials(
-            instanceId: 'inst-2',
-            accessToken: 'at',
-            serverUrl: 'https://lakeside.example.test'));
+      SourceSecrets(storage),
+      guest.account,
+      const MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'at',
+        serverUrl: 'https://lakeside.example.test',
+      ),
+    );
     final c = _container(storage, client: client);
     expect(await c.read(_sourceProvider).client.request(_ping), {'ok': 1});
-    expect(seen.single.url.toString(),
-        'https://lakeside.example.test/api/graphql');
+    expect(
+      seen.single.url.toString(),
+      'https://lakeside.example.test/api/graphql',
+    );
     expect(seen.single.headers['Authorization'], 'Bearer at');
   });
 
@@ -113,10 +125,14 @@ void main() {
     final storage = _CountingStorage();
     final p2p = _RecordingP2p();
     await writeMydiaCredentials(
-        SourceSecrets(storage),
-        guest.account,
-        const MydiaCredentials(
-            instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
+      SourceSecrets(storage),
+      guest.account,
+      const MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'at',
+        nodeAddr: '{"id":"n1"}',
+      ),
+    );
     storage.reads = 0;
     // Read 1 is the client's, read 2 is the transport's.
     storage.failRead = 2;
@@ -130,8 +146,13 @@ void main() {
     final source = _container(_CountingStorage()).read(_sourceProvider);
     await expectLater(
       source.client.request(_ping),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unauthorized,
+        ),
+      ),
     );
   });
 
@@ -139,10 +160,14 @@ void main() {
     final storage = _CountingStorage();
     final p2p = _RecordingP2p();
     await writeMydiaCredentials(
-        SourceSecrets(storage),
-        guest.account,
-        const MydiaCredentials(
-            instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
+      SourceSecrets(storage),
+      guest.account,
+      const MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'at',
+        nodeAddr: '{"id":"n1"}',
+      ),
+    );
     storage.reads = 0;
     final c = _container(storage, p2p: p2p);
     final client = c.read(_sourceProvider).client;

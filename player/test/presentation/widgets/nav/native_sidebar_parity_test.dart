@@ -2,7 +2,7 @@
 // Both read sourceNavEntriesProvider; this pins that nativeSidebarFor keeps
 // SidebarContent's order and drops nothing.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
@@ -23,39 +23,46 @@ void main() {
     '/s/acc1:owner:aa11/library/movies',
     '/settings',
   ]) {
-    testWidgets('native rows match SidebarContent at $location',
-        (tester) async {
+    testWidgets('native rows match SidebarContent at $location', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1200, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final container = ProviderContainer(overrides: [
-        sidebarLayoutStoreProvider
-            .overrideWithValue(InMemorySidebarLayoutStore()),
-        thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
-        hasMydiaProvider.overrideWithValue(true),
-        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          sidebarLayoutStoreProvider.overrideWithValue(
+            InMemorySidebarLayoutStore(),
+          ),
+          thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+          hasMydiaProvider.overrideWithValue(true),
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+        ],
+      );
       addTearDown(container.dispose);
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: SizedBox(
-              width: 260,
-              height: 1400,
-              child: SidebarContent(
-                location: location,
-                onNavigate: (_) {},
-                isOffline: false,
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: SizedBox(
+                width: 260,
+                height: 1400,
+                child: SidebarContent(
+                  location: location,
+                  onNavigate: (_) {},
+                  isOffline: false,
+                ),
               ),
             ),
           ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       // Settings renders as SettingsSidebarRow, so match on the key alone.

@@ -33,41 +33,43 @@ void main() {
       expect(otherSecret.groupId, isNot(equals(secret1.groupId)));
     });
 
-    test('verifies_valid_auth_proof_and_rejects_wrong_node_or_tampered_proof',
-        () {
-      final secret = PeerGroupSecret.generate();
-      const nodeId1 = 'node-echo-123';
-      const nodeId2 = 'node-whisper-456';
+    test(
+      'verifies_valid_auth_proof_and_rejects_wrong_node_or_tampered_proof',
+      () {
+        final secret = PeerGroupSecret.generate();
+        const nodeId1 = 'node-echo-123';
+        const nodeId2 = 'node-whisper-456';
 
-      final proof = secret.authProof(nodeId1);
-      expect(proof.length, 64);
-      expect(RegExp(r'^[0-9a-f]{64}$').hasMatch(proof), isTrue);
+        final proof = secret.authProof(nodeId1);
+        expect(proof.length, 64);
+        expect(RegExp(r'^[0-9a-f]{64}$').hasMatch(proof), isTrue);
 
-      expect(
-        secret.verifyAuthProof(senderNodeId: nodeId1, proof: proof),
-        isTrue,
-      );
+        expect(
+          secret.verifyAuthProof(senderNodeId: nodeId1, proof: proof),
+          isTrue,
+        );
 
-      expect(
-        secret.verifyAuthProof(senderNodeId: nodeId2, proof: proof),
-        isFalse,
-      );
+        expect(
+          secret.verifyAuthProof(senderNodeId: nodeId2, proof: proof),
+          isFalse,
+        );
 
-      final tamperedChar = proof[0] == 'a' ? 'b' : 'a';
-      final tamperedProof = '$tamperedChar${proof.substring(1)}';
-      expect(
-        secret.verifyAuthProof(senderNodeId: nodeId1, proof: tamperedProof),
-        isFalse,
-      );
+        final tamperedChar = proof[0] == 'a' ? 'b' : 'a';
+        final tamperedProof = '$tamperedChar${proof.substring(1)}';
+        expect(
+          secret.verifyAuthProof(senderNodeId: nodeId1, proof: tamperedProof),
+          isFalse,
+        );
 
-      expect(
-        secret.verifyAuthProof(
-          senderNodeId: nodeId1,
-          proof: proof.substring(0, 32),
-        ),
-        isFalse,
-      );
-    });
+        expect(
+          secret.verifyAuthProof(
+            senderNodeId: nodeId1,
+            proof: proof.substring(0, 32),
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('validates 32 byte length', () {
       expect(

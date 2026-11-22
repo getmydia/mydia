@@ -22,7 +22,8 @@ Uri stashUnder(Uri base, String path) {
   final pathWithoutQuery = Uri.parse(path).path;
 
   // If path equals the prefix or starts with '$prefix/', don't prepend
-  final needsPrefix = prefix.isEmpty ||
+  final needsPrefix =
+      prefix.isEmpty ||
       (pathWithoutQuery != prefix && !pathWithoutQuery.startsWith('$prefix/'));
 
   final relative = path.startsWith('/') ? path : '/$path';
@@ -34,12 +35,10 @@ Uri stashUnder(Uri base, String path) {
 class StashClient {
   StashClient({
     required this.connection,
-    required SourceHttp http,
-    required Future<String?> Function() apiKey,
-    void Function()? onUnauthorized,
-  })  : _http = http,
-        _apiKey = apiKey,
-        _onUnauthorized = onUnauthorized;
+    required this._http,
+    required this._apiKey,
+    this._onUnauthorized,
+  });
 
   final SourceConnection connection;
   final SourceHttp _http;
@@ -67,13 +66,15 @@ class StashClient {
   ]) async {
     // gqlgen answers a query that fails validation with 400 or 422 and a
     // JSON `errors` body, so those statuses are decoded, not thrown.
-    final response = await _guard((base) async => _http.send(
-          'POST',
-          stashUnder(base, '/graphql'),
-          headers: {'Accept': 'application/json', ...await headers()},
-          body: {'query': document, 'variables': variables},
-          passThrough: const {400, 422},
-        ));
+    final response = await _guard(
+      (base) async => _http.send(
+        'POST',
+        stashUnder(base, '/graphql'),
+        headers: {'Accept': 'application/json', ...await headers()},
+        body: {'query': document, 'variables': variables},
+        passThrough: const {400, 422},
+      ),
+    );
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     Object? json;
     try {
@@ -81,13 +82,17 @@ class StashClient {
     } on FormatException {
       throw ok
           ? const SourceException.fault(SourceFault.stashUnreadable)
-          : SourceException.fault(SourceFault.stashHttp,
-              detail: '${response.statusCode}');
+          : SourceException.fault(
+              SourceFault.stashHttp,
+              detail: '${response.statusCode}',
+            );
     }
     final errors = json is Map ? json['errors'] : null;
     if (!ok && !(errors is List && errors.isNotEmpty)) {
-      throw SourceException.fault(SourceFault.stashHttp,
-          detail: '${response.statusCode}');
+      throw SourceException.fault(
+        SourceFault.stashHttp,
+        detail: '${response.statusCode}',
+      );
     }
     if (json is! Map) {
       throw const SourceException.fault(SourceFault.stashUnexpectedReply);
@@ -99,7 +104,8 @@ class StashClient {
       if (message == null) {
         throw const SourceException.fault(SourceFault.stashReportedError);
       }
-      final unsupported = message.contains('Cannot query field') ||
+      final unsupported =
+          message.contains('Cannot query field') ||
           message.contains('Unknown argument') ||
           message.contains('Unknown type');
       throw unsupported
@@ -111,10 +117,13 @@ class StashClient {
   }
 
   Future<String> text(String path) => _guard((base) async {
-        final response = await _http.send('GET', stashUnder(base, path),
-            headers: await headers());
-        return utf8.decode(response.bodyBytes);
-      });
+    final response = await _http.send(
+      'GET',
+      stashUnder(base, path),
+      headers: await headers(),
+    );
+    return utf8.decode(response.bodyBytes);
+  });
 
   /// Throws unless Stash reports `OK` (not mid-migration, not unset up).
   Future<void> checkStatus() async {

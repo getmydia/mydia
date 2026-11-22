@@ -17,25 +17,36 @@ void main() {
     // that drops and immediately re-establishes every held connection.
 
     test('paused, detached, and hidden all count as background', () {
-      expect(ambientLifecycleAction(AppLifecycleState.paused),
-          AmbientLifecycleAction.background);
-      expect(ambientLifecycleAction(AppLifecycleState.detached),
-          AmbientLifecycleAction.background);
-      expect(ambientLifecycleAction(AppLifecycleState.hidden),
-          AmbientLifecycleAction.background,
-          reason: '`paused` is mobile-only per its own dartdoc; `hidden` is '
-              'the only backgrounding signal Flutter Web (this app\'s '
-              'primary deployment per player/CLAUDE.md) ever reaches');
+      expect(
+        ambientLifecycleAction(AppLifecycleState.paused),
+        AmbientLifecycleAction.background,
+      );
+      expect(
+        ambientLifecycleAction(AppLifecycleState.detached),
+        AmbientLifecycleAction.background,
+      );
+      expect(
+        ambientLifecycleAction(AppLifecycleState.hidden),
+        AmbientLifecycleAction.background,
+        reason:
+            '`paused` is mobile-only per its own dartdoc; `hidden` is '
+            'the only backgrounding signal Flutter Web (this app\'s '
+            'primary deployment per player/CLAUDE.md) ever reaches',
+      );
     });
 
     test('resumed counts as foreground', () {
-      expect(ambientLifecycleAction(AppLifecycleState.resumed),
-          AmbientLifecycleAction.foreground);
+      expect(
+        ambientLifecycleAction(AppLifecycleState.resumed),
+        AmbientLifecycleAction.foreground,
+      );
     });
 
     test('inactive has no opinion, to avoid churn on transient interrupts', () {
-      expect(ambientLifecycleAction(AppLifecycleState.inactive),
-          AmbientLifecycleAction.none);
+      expect(
+        ambientLifecycleAction(AppLifecycleState.inactive),
+        AmbientLifecycleAction.none,
+      );
     });
   });
 
@@ -59,28 +70,33 @@ void main() {
       expect(await targets.playing.first, isEmpty);
     });
 
-    test('a foreground transition re-sweeps, repopulating held targets',
-        () async {
-      final scripted = ScriptedProbe({
-        'node-tv': playingSnapshot(title: 'Blade Runner'),
-      });
-      final targets = AmbientTargets(
-        rosterSource: rosterOf(['node-tv']),
-        probe: scripted.call,
-      );
-      addTearDown(targets.dispose);
-      final binding = AmbientLifecycleBinding(() => targets);
+    test(
+      'a foreground transition re-sweeps, repopulating held targets',
+      () async {
+        final scripted = ScriptedProbe({
+          'node-tv': playingSnapshot(title: 'Blade Runner'),
+        });
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: scripted.call,
+        );
+        addTearDown(targets.dispose);
+        final binding = AmbientLifecycleBinding(() => targets);
 
-      binding.handle(AppLifecycleState.paused);
-      expect(await targets.playing.first, isEmpty);
+        binding.handle(AppLifecycleState.paused);
+        expect(await targets.playing.first, isEmpty);
 
-      binding.handle(AppLifecycleState.resumed);
-      // sweep() is async; let its microtask chain settle.
-      await Future<void>.delayed(Duration.zero);
+        binding.handle(AppLifecycleState.resumed);
+        // sweep() is async; let its microtask chain settle.
+        await Future<void>.delayed(Duration.zero);
 
-      expect(await targets.playing.first, isNotEmpty,
-          reason: 'recovery is the next foreground sweep');
-    });
+        expect(
+          await targets.playing.first,
+          isNotEmpty,
+          reason: 'recovery is the next foreground sweep',
+        );
+      },
+    );
 
     test('inactive does not drop held targets', () async {
       final scripted = ScriptedProbe({
@@ -98,83 +114,97 @@ void main() {
 
       binding.handle(AppLifecycleState.inactive);
 
-      expect(await targets.playing.first, isNotEmpty,
-          reason: 'a notification shade pull must not tear down a held '
-              'connection');
-    });
-
-    test('a background -> foreground -> background cycle repeats cleanly',
-        () async {
-      final scripted = ScriptedProbe({
-        'node-tv': playingSnapshot(title: 'Blade Runner'),
-      });
-      final targets = AmbientTargets(
-        rosterSource: rosterOf(['node-tv']),
-        probe: scripted.call,
+      expect(
+        await targets.playing.first,
+        isNotEmpty,
+        reason:
+            'a notification shade pull must not tear down a held '
+            'connection',
       );
-      addTearDown(targets.dispose);
-      final binding = AmbientLifecycleBinding(() => targets);
-
-      await targets.sweep();
-      expect(await targets.playing.first, isNotEmpty);
-
-      binding.handle(AppLifecycleState.paused);
-      expect(await targets.playing.first, isEmpty);
-
-      binding.handle(AppLifecycleState.resumed);
-      await Future<void>.delayed(Duration.zero);
-      expect(await targets.playing.first, isNotEmpty);
-
-      binding.handle(AppLifecycleState.detached);
-      expect(await targets.playing.first, isEmpty);
-
-      binding.handle(AppLifecycleState.resumed);
-      await Future<void>.delayed(Duration.zero);
-      expect(await targets.playing.first, isNotEmpty);
     });
 
     test(
-        "an external sweep() (e.g. ambientPlayingProvider's 30-second "
-        'resweep timer) while backgrounded does not undo onBackground()',
-        () async {
-      final scripted = ScriptedProbe({
-        'node-tv': playingSnapshot(title: 'Blade Runner'),
-      });
-      final targets = AmbientTargets(
-        rosterSource: rosterOf(['node-tv']),
-        probe: scripted.call,
-      );
-      addTearDown(targets.dispose);
-      final binding = AmbientLifecycleBinding(() => targets);
+      'a background -> foreground -> background cycle repeats cleanly',
+      () async {
+        final scripted = ScriptedProbe({
+          'node-tv': playingSnapshot(title: 'Blade Runner'),
+        });
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: scripted.call,
+        );
+        addTearDown(targets.dispose);
+        final binding = AmbientLifecycleBinding(() => targets);
 
-      await targets.sweep();
-      expect(await targets.playing.first, isNotEmpty);
+        await targets.sweep();
+        expect(await targets.playing.first, isNotEmpty);
 
-      binding.handle(AppLifecycleState.paused);
-      expect(await targets.playing.first, isEmpty);
+        binding.handle(AppLifecycleState.paused);
+        expect(await targets.playing.first, isEmpty);
 
-      // Something other than the binding — in production,
-      // `ambientPlayingProvider`'s own resweep `Timer.periodic`
-      // (`cast_providers.dart`), which keeps firing for as long as
-      // `CastMiniController` holds a listener, background included — calls
-      // plain `sweep()` directly, bypassing the binding entirely.
-      await targets.sweep();
+        binding.handle(AppLifecycleState.resumed);
+        await Future<void>.delayed(Duration.zero);
+        expect(await targets.playing.first, isNotEmpty);
 
-      expect(await targets.playing.first, isEmpty,
-          reason: 'a stray sweep() from outside the binding must stay '
-              'inert while backgrounded, no matter which timer fired it');
+        binding.handle(AppLifecycleState.detached);
+        expect(await targets.playing.first, isEmpty);
 
-      // The binding itself must still recover normally afterwards.
-      binding.handle(AppLifecycleState.resumed);
-      await Future<void>.delayed(Duration.zero);
-
-      expect(await targets.playing.first, isNotEmpty,
-          reason: 'ambient must still recover on the next genuine '
-              'foreground transition');
-    });
+        binding.handle(AppLifecycleState.resumed);
+        await Future<void>.delayed(Duration.zero);
+        expect(await targets.playing.first, isNotEmpty);
+      },
+    );
 
     test(
-        'a background arriving while a foreground sweep is still in flight '
+      "an external sweep() (e.g. ambientPlayingProvider's 30-second "
+      'resweep timer) while backgrounded does not undo onBackground()',
+      () async {
+        final scripted = ScriptedProbe({
+          'node-tv': playingSnapshot(title: 'Blade Runner'),
+        });
+        final targets = AmbientTargets(
+          rosterSource: rosterOf(['node-tv']),
+          probe: scripted.call,
+        );
+        addTearDown(targets.dispose);
+        final binding = AmbientLifecycleBinding(() => targets);
+
+        await targets.sweep();
+        expect(await targets.playing.first, isNotEmpty);
+
+        binding.handle(AppLifecycleState.paused);
+        expect(await targets.playing.first, isEmpty);
+
+        // Something other than the binding — in production,
+        // `ambientPlayingProvider`'s own resweep `Timer.periodic`
+        // (`cast_providers.dart`), which keeps firing for as long as
+        // `CastMiniController` holds a listener, background included — calls
+        // plain `sweep()` directly, bypassing the binding entirely.
+        await targets.sweep();
+
+        expect(
+          await targets.playing.first,
+          isEmpty,
+          reason:
+              'a stray sweep() from outside the binding must stay '
+              'inert while backgrounded, no matter which timer fired it',
+        );
+
+        // The binding itself must still recover normally afterwards.
+        binding.handle(AppLifecycleState.resumed);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          await targets.playing.first,
+          isNotEmpty,
+          reason:
+              'ambient must still recover on the next genuine '
+              'foreground transition',
+        );
+      },
+    );
+
+    test('a background arriving while a foreground sweep is still in flight '
         'wins: the late sweep does not leave connections open', () async {
       final probeCompleter = Completer<FlutterPlaybackSnapshot?>();
       var probeCalls = 0;
@@ -202,11 +232,15 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
-      expect(await targets.playing.first, isEmpty,
-          reason: "the sweep resolved after the app backgrounded again; "
-              "AmbientTargets itself has no way to cancel it, so the "
-              'binding must notice and re-apply onBackground() rather than '
-              'leave the stale sweep\'s connection open');
+      expect(
+        await targets.playing.first,
+        isEmpty,
+        reason:
+            "the sweep resolved after the app backgrounded again; "
+            "AmbientTargets itself has no way to cancel it, so the "
+            'binding must notice and re-apply onBackground() rather than '
+            'leave the stale sweep\'s connection open',
+      );
     });
 
     test('handle() after dispose() does not throw', () async {
@@ -229,17 +263,21 @@ void main() {
       await Future<void>.delayed(Duration.zero);
     });
 
-    test('targets() resolving to null (p2p not ready yet) is a no-op',
-        () async {
-      final binding = AmbientLifecycleBinding(() => null);
-
-      expect(() => binding.handle(AppLifecycleState.paused), returnsNormally);
-      expect(() => binding.handle(AppLifecycleState.resumed), returnsNormally);
-      await Future<void>.delayed(Duration.zero);
-    });
-
     test(
-        'a roster fetch that throws inside sweep() does not escape as an '
+      'targets() resolving to null (p2p not ready yet) is a no-op',
+      () async {
+        final binding = AmbientLifecycleBinding(() => null);
+
+        expect(() => binding.handle(AppLifecycleState.paused), returnsNormally);
+        expect(
+          () => binding.handle(AppLifecycleState.resumed),
+          returnsNormally,
+        );
+        await Future<void>.delayed(Duration.zero);
+      },
+    );
+
+    test('a roster fetch that throws inside sweep() does not escape as an '
         'unhandled async error', () async {
       // `rosterSource` stands in for the real GraphQL roster fetch
       // (`ambientTargetsProvider` in `core/cast/cast_providers.dart` builds
@@ -262,12 +300,14 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
-      expect(await targets.playing.first, isEmpty,
-          reason: 'a failed sweep leaves nothing held, but must not crash');
+      expect(
+        await targets.playing.first,
+        isEmpty,
+        reason: 'a failed sweep leaves nothing held, but must not crash',
+      );
     });
 
-    test(
-        'a background transition landing while a failing sweep is still in '
+    test('a background transition landing while a failing sweep is still in '
         'flight still calls onBackground()', () async {
       final rosterGate = Completer<List<String>>();
       final targets = AmbientTargets(
@@ -290,10 +330,14 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
-      expect(await targets.playing.first, isEmpty,
-          reason: 'the background transition must still win even though '
-              'the sweep it interrupted went on to fail rather than '
-              'succeed');
+      expect(
+        await targets.playing.first,
+        isEmpty,
+        reason:
+            'the background transition must still win even though '
+            'the sweep it interrupted went on to fail rather than '
+            'succeed',
+      );
     });
   });
 }

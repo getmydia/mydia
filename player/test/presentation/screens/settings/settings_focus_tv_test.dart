@@ -10,7 +10,7 @@
 //
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,27 +42,27 @@ import '../backup/fake_backup_sync_service.dart';
 class _FakeSettingsController extends SettingsController {
   @override
   Future<UserSettings> build() async => const UserSettings(
-        serverUrl: 'mydia.local:4000',
-        username: 'admin',
-        defaultQuality: '1080p',
-      );
+    serverUrl: 'mydia.local:4000',
+    username: 'admin',
+    defaultQuality: '1080p',
+  );
 }
 
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   @override
   P2pStatus build() => const P2pStatus(
-        isInitialized: true,
-        isRelayConnected: false,
-        connectedPeersCount: 0,
-      );
+    isInitialized: true,
+    isRelayConnected: false,
+    connectedPeersCount: 0,
+  );
 }
 
 class _FakeUpdateNotifier extends UpdateNotifier {
   @override
   UpdateState build() => const UpdateState(
-        currentVersion: '0.1.0',
-        manualCheck: ManualCheckBehaviour.checksOnly,
-      );
+    currentVersion: '0.1.0',
+    manualCheck: ManualCheckBehaviour.checksOnly,
+  );
 }
 
 /// An installation that offers a release track picker, as a sideloaded
@@ -70,10 +70,10 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 class _TrackedUpdateNotifier extends UpdateNotifier {
   @override
   UpdateState build() => const UpdateState(
-        currentVersion: '0.1.0',
-        manualCheck: ManualCheckBehaviour.checksOnly,
-        availableTracks: {UpdateTrack.stable, UpdateTrack.beta},
-      );
+    currentVersion: '0.1.0',
+    manualCheck: ManualCheckBehaviour.checksOnly,
+    availableTracks: {UpdateTrack.stable, UpdateTrack.beta},
+  );
 }
 
 class _IdleRegistrations extends NodeRegistrations {
@@ -86,9 +86,8 @@ class _IdleRegistrations extends NodeRegistrations {
   /// A registration failing while Settings is open, which inserts the retry
   /// row under the remote-control switch.
   void fail() => state = {
-        const SourceId('instance'):
-            const RegistrationFailed('offline', 1, null),
-      };
+    const SourceId('instance'): const RegistrationFailed('offline', 1, null),
+  };
 }
 
 var _boxCounter = 0;
@@ -117,15 +116,19 @@ void main() {
           p2pStatusNotifierProvider.overrideWith(_FakeP2pStatusNotifier.new),
           updateProvider.overrideWith(update),
           nodeRegistrationsProvider.overrideWith(_IdleRegistrations.new),
-          remoteControlSettingsProvider
-              .overrideWith((ref) async => RemoteControlSettings(box: box)),
-          sourceStoreProvider
-              .overrideWith((ref) async => InMemorySourceStore()),
-          sourceSecretsProvider
-              .overrideWithValue(SourceSecrets(MockAuthStorage())),
+          remoteControlSettingsProvider.overrideWith(
+            (ref) async => RemoteControlSettings(box: box),
+          ),
+          sourceStoreProvider.overrideWith(
+            (ref) async => InMemorySourceStore(),
+          ),
+          sourceSecretsProvider.overrideWithValue(
+            SourceSecrets(MockAuthStorage()),
+          ),
           // The cast button is the one focus stop outside the list.
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.full()),
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
           ...noHiveOverrides,
           backupSyncServiceProvider.overrideWithValue(FakeBackupSyncService()),
         ],
@@ -134,23 +137,27 @@ void main() {
 
     /// The focus node of every row in the list, top to bottom.
     List<FocusNode> rows(WidgetTester tester) => [
-          for (final ring in find
-              .byKey(FocusHighlight.ringKey, skipOffstage: false)
-              .evaluate())
-            Focus.of(ring),
-        ];
+      for (final ring
+          in find.byKey(FocusHighlight.ringKey, skipOffstage: false).evaluate())
+        Focus.of(ring),
+    ];
 
     void expectOnRow(WidgetTester tester, int index) {
       final row = rows(tester)[index];
-      expect(row.hasPrimaryFocus, isTrue,
-          reason: 'expected row $index, focus is on ${describeFocus()} '
-              '${FocusManager.instance.primaryFocus?.rect}');
+      expect(
+        row.hasPrimaryFocus,
+        isTrue,
+        reason:
+            'expected row $index, focus is on ${describeFocus()} '
+            '${FocusManager.instance.primaryFocus?.rect}',
+      );
     }
 
     const cast = Key('cast-button');
 
-    testWidgets('the list entered for the first time lands on its first row',
-        (tester) async {
+    testWidgets('the list entered for the first time lands on its first row', (
+      tester,
+    ) async {
       await pumpSettings(tester);
       // Settings opens on its first focus stop in reading order, which with
       // a cast button is that button, above the list.
@@ -161,8 +168,9 @@ void main() {
       expectOnRow(tester, 0);
     });
 
-    testWidgets('card is the first focus target after the update card',
-        (tester) async {
+    testWidgets('card is the first focus target after the update card', (
+      tester,
+    ) async {
       await pumpSettings(tester);
       // The update card has nothing focusable unless a release is on offer,
       // so the card is the first stop below the cast button.
@@ -172,7 +180,8 @@ void main() {
       expectOnRow(tester, 0);
       expect(
         rows(tester)[0].rect.contains(
-            tester.getCenter(find.byKey(const Key('connections-card')))),
+          tester.getCenter(find.byKey(const Key('connections-card'))),
+        ),
         isTrue,
       );
 
@@ -187,8 +196,9 @@ void main() {
       expect(find.byKey(const Key('manage-sources-row')), findsNothing);
     });
 
-    testWidgets('the list is re-entered on the row that left it',
-        (tester) async {
+    testWidgets('the list is re-entered on the row that left it', (
+      tester,
+    ) async {
       await pumpSettings(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
       // One more press than rows: the backup switch is not a ringed row.
@@ -205,8 +215,9 @@ void main() {
       expectOnRow(tester, 6);
     });
 
-    testWidgets('LEFT from a row reaches the rail, RIGHT returns',
-        (tester) async {
+    testWidgets('LEFT from a row reaches the rail, RIGHT returns', (
+      tester,
+    ) async {
       await pumpSettings(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
       // One more press than rows: the backup switch is not a ringed row.
@@ -216,31 +227,40 @@ void main() {
       expectOnRow(tester, 4);
 
       await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(shell.sidebarRow.hasPrimaryFocus, isTrue,
-          reason: 'focus is on ${describeFocus()}');
+      expect(
+        shell.sidebarRow.hasPrimaryFocus,
+        isTrue,
+        reason: 'focus is on ${describeFocus()}',
+      );
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expectOnRow(tester, 4);
     });
 
     testWidgets(
-        'a retry row appearing above the track picker does not take its place',
-        (tester) async {
-      await pumpSettings(tester, update: _TrackedUpdateNotifier.new);
-      const stable = Key('update-track-option-stable');
-      await focusIn(tester, stable);
-      await focusIn(tester, cast);
+      'a retry row appearing above the track picker does not take its place',
+      (tester) async {
+        await pumpSettings(tester, update: _TrackedUpdateNotifier.new);
+        const stable = Key('update-track-option-stable');
+        await focusIn(tester, stable);
+        await focusIn(tester, cast);
 
-      final container = ProviderScope.containerOf(
-          tester.element(find.byType(SettingsScreen)));
-      (container.read(nodeRegistrationsProvider.notifier) as _IdleRegistrations)
-          .fail();
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('remote-control-retry-row')), findsOneWidget);
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(SettingsScreen)),
+        );
+        (container.read(
+          nodeRegistrationsProvider.notifier,
+        ) as _IdleRegistrations).fail();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('remote-control-retry-row')),
+          findsOneWidget,
+        );
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
+        await press(tester, LogicalKeyboardKey.arrowDown);
 
-      expectFocusIn(stable);
-    });
+        expectFocusIn(stable);
+      },
+    );
   }, skip: tvSkipReason);
 }

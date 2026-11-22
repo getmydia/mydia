@@ -16,17 +16,17 @@ class WindowGeometry {
   const WindowGeometry({required this.bounds, required this.maximized});
 
   WindowGeometry copyWith({Rect? bounds, bool? maximized}) => WindowGeometry(
-        bounds: bounds ?? this.bounds,
-        maximized: maximized ?? this.maximized,
-      );
+    bounds: bounds ?? this.bounds,
+    maximized: maximized ?? this.maximized,
+  );
 
   Map<String, dynamic> toMap() => {
-        'x': bounds.left,
-        'y': bounds.top,
-        'width': bounds.width,
-        'height': bounds.height,
-        'maximized': maximized,
-      };
+    'x': bounds.left,
+    'y': bounds.top,
+    'width': bounds.width,
+    'height': bounds.height,
+    'maximized': maximized,
+  };
 
   /// Throws [FormatException] on anything unreadable. The store catches and
   /// discards, which is the same split `HivePlaybackProgressStore` uses.

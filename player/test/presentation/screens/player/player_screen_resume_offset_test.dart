@@ -13,7 +13,7 @@
 // production log output, not a reflection hack.
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -44,9 +44,13 @@ void main() {
 
   Future<void> answerResumeDialog(WidgetTester tester) async {
     await pumpUntil(tester, () => find.text('Resume').evaluate().isNotEmpty);
-    expect(find.text('Resume'), findsOneWidget,
-        reason: 'sanity check: the resume dialog must actually appear, or '
-            'the rest of this test exercises the start-over path instead');
+    expect(
+      find.text('Resume'),
+      findsOneWidget,
+      reason:
+          'sanity check: the resume dialog must actually appear, or '
+          'the rest of this test exercises the start-over path instead',
+    );
     await tester.tap(find.text('Resume'));
     await tester.pump();
   }
@@ -70,7 +74,8 @@ void main() {
       }
       if (request.variables.containsKey('strategy')) {
         return startStreamingSessionResponse(
-            startPosition: echoedStartPosition);
+          startPosition: echoedStartPosition,
+        );
       }
       if (request.variables.containsKey('sessionId')) {
         return endStreamingSessionResponse();
@@ -80,91 +85,106 @@ void main() {
   }
 
   testWidgets(
-      'builds the timeline from the echoed startPosition, not the requested '
-      'one', (tester) async {
-    final castManager = CapturingCastSessionManager();
-    final proxyService = TrackingLocalProxyService();
+    'builds the timeline from the echoed startPosition, not the requested '
+    'one',
+    (tester) async {
+      final castManager = CapturingCastSessionManager();
+      final proxyService = TrackingLocalProxyService();
 
-    // Requested: 2700s (the saved position). Echoed: 2695s — deliberately
-    // different, simulating the server clamping to the nearest keyframe.
-    // If a regression fed the *requested* value into the timeline instead,
-    // the assertion below (looking for the 2695 offset) would fail.
-    final server = serverFor(echoedStartPosition: 2695);
+      // Requested: 2700s (the saved position). Echoed: 2695s — deliberately
+      // different, simulating the server clamping to the nearest keyframe.
+      // If a regression fed the *requested* value into the timeline instead,
+      // the assertion below (looking for the 2695 offset) would fail.
+      final server = serverFor(echoedStartPosition: 2695);
 
-    final container = buildPlayerScreenContainer(
-      server: server,
-      connectionState: HarnessLink.direct(),
-      castManager: castManager,
-      proxyService: proxyService,
-    );
-    addTearDown(container.dispose);
+      final container = buildPlayerScreenContainer(
+        server: server,
+        connectionState: HarnessLink.direct(),
+        castManager: castManager,
+        proxyService: proxyService,
+      );
+      addTearDown(container.dispose);
 
-    final loggedLines = <String>[];
-    await mockHttpResponse(
-      () => withCapturedDebugPrint(loggedLines, () async {
-        await pumpPlayerScreen(tester, container);
-        await answerResumeDialog(tester);
+      final loggedLines = <String>[];
+      await mockHttpResponse(
+        () => withCapturedDebugPrint(loggedLines, () async {
+          await pumpPlayerScreen(tester, container);
+          await answerResumeDialog(tester);
 
-        await pumpUntil(
-          tester,
-          () => loggedLines.any((l) => l.contains('Stream timeline:')),
-        );
-      }),
-      responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
-    );
+          await pumpUntil(
+            tester,
+            () => loggedLines.any((l) => l.contains('Stream timeline:')),
+          );
+        }),
+        responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    final timelineLine = loggedLines.firstWhere(
-      (l) => l.contains('Stream timeline:'),
-      orElse: () => '',
-    );
-    expect(timelineLine, contains('startOffset: 0:44:55.000000'),
-        reason: '2695 seconds is 0:44:55 — the echoed offset, not the '
-            'requested 2700s (0:45:00)');
-    expect(timelineLine, isNot(contains('0:45:00.000000')),
-        reason: 'must not carry the requested offset');
-  });
+      final timelineLine = loggedLines.firstWhere(
+        (l) => l.contains('Stream timeline:'),
+        orElse: () => '',
+      );
+      expect(
+        timelineLine,
+        contains('startOffset: 0:44:55.000000'),
+        reason:
+            '2695 seconds is 0:44:55 — the echoed offset, not the '
+            'requested 2700s (0:45:00)',
+      );
+      expect(
+        timelineLine,
+        isNot(contains('0:45:00.000000')),
+        reason: 'must not carry the requested offset',
+      );
+    },
+  );
 
   testWidgets(
-      'falls back to offset zero when an older server omits startPosition '
-      'entirely', (tester) async {
-    final castManager = CapturingCastSessionManager();
-    final proxyService = TrackingLocalProxyService();
+    'falls back to offset zero when an older server omits startPosition '
+    'entirely',
+    (tester) async {
+      final castManager = CapturingCastSessionManager();
+      final proxyService = TrackingLocalProxyService();
 
-    // No `startPosition` key at all — the older-server case.
-    final server = serverFor(echoedStartPosition: null);
+      // No `startPosition` key at all — the older-server case.
+      final server = serverFor(echoedStartPosition: null);
 
-    final container = buildPlayerScreenContainer(
-      server: server,
-      connectionState: HarnessLink.direct(),
-      castManager: castManager,
-      proxyService: proxyService,
-    );
-    addTearDown(container.dispose);
+      final container = buildPlayerScreenContainer(
+        server: server,
+        connectionState: HarnessLink.direct(),
+        castManager: castManager,
+        proxyService: proxyService,
+      );
+      addTearDown(container.dispose);
 
-    final loggedLines = <String>[];
-    await mockHttpResponse(
-      () => withCapturedDebugPrint(loggedLines, () async {
-        await pumpPlayerScreen(tester, container);
-        await answerResumeDialog(tester);
+      final loggedLines = <String>[];
+      await mockHttpResponse(
+        () => withCapturedDebugPrint(loggedLines, () async {
+          await pumpPlayerScreen(tester, container);
+          await answerResumeDialog(tester);
 
-        await pumpUntil(
-          tester,
-          () => loggedLines.any((l) => l.contains('Stream timeline:')),
-        );
-      }),
-      responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
-    );
+          await pumpUntil(
+            tester,
+            () => loggedLines.any((l) => l.contains('Stream timeline:')),
+          );
+        }),
+        responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    final timelineLine = loggedLines.firstWhere(
-      (l) => l.contains('Stream timeline:'),
-      orElse: () => '',
-    );
-    expect(timelineLine, contains('startOffset: 0:00:00.000000'),
-        reason: 'sessionResult.startPosition ?? 0 must yield zero when the '
-            'field is entirely absent, not throw or carry the request');
-  });
+      final timelineLine = loggedLines.firstWhere(
+        (l) => l.contains('Stream timeline:'),
+        orElse: () => '',
+      );
+      expect(
+        timelineLine,
+        contains('startOffset: 0:00:00.000000'),
+        reason:
+            'sessionResult.startPosition ?? 0 must yield zero when the '
+            'field is entirely absent, not throw or carry the request',
+      );
+    },
+  );
 }

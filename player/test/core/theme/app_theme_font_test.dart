@@ -4,7 +4,7 @@
 
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
@@ -15,39 +15,45 @@ void main() {
     expect(AppTheme.darkTheme.textTheme.bodyMedium?.fontFamily, 'Inter');
   });
 
-  test('display, headline and title styles use Outfit; body and label Inter',
-      () {
-    final t = AppTheme.darkTheme.textTheme;
-    for (final s in [
-      t.displayLarge,
-      t.displayMedium,
-      t.displaySmall,
-      t.headlineLarge,
-      t.headlineMedium,
-      t.headlineSmall,
-      t.titleLarge,
-      t.titleMedium,
-      t.titleSmall,
-    ]) {
-      expect(s?.fontFamily, 'Outfit');
-    }
-    for (final s in [
-      t.bodyLarge,
-      t.bodyMedium,
-      t.bodySmall,
-      t.labelLarge,
-      t.labelMedium,
-      t.labelSmall,
-    ]) {
-      expect(s?.fontFamily, 'Inter');
-    }
-  });
+  test(
+    'display, headline and title styles use Outfit; body and label Inter',
+    () {
+      final t = AppTheme.darkTheme.textTheme;
+      for (final s in [
+        t.displayLarge,
+        t.displayMedium,
+        t.displaySmall,
+        t.headlineLarge,
+        t.headlineMedium,
+        t.headlineSmall,
+        t.titleLarge,
+        t.titleMedium,
+        t.titleSmall,
+      ]) {
+        expect(s?.fontFamily, 'Outfit');
+      }
+      for (final s in [
+        t.bodyLarge,
+        t.bodyMedium,
+        t.bodySmall,
+        t.labelLarge,
+        t.labelMedium,
+        t.labelSmall,
+      ]) {
+        expect(s?.fontFamily, 'Inter');
+      }
+    },
+  );
 
   test('pubspec declares Outfit at 500, 600 and 700', () {
-    final fonts = ((loadYaml(File('pubspec.yaml').readAsStringSync())
-        as YamlMap)['flutter'] as YamlMap)['fonts'] as YamlList;
-    final outfit =
-        fonts.cast<YamlMap>().firstWhere((f) => f['family'] == 'Outfit');
+    final fonts =
+        ((loadYaml(File('pubspec.yaml').readAsStringSync())
+                    as YamlMap)['flutter']
+                as YamlMap)['fonts']
+            as YamlList;
+    final outfit = fonts.cast<YamlMap>().firstWhere(
+      (f) => f['family'] == 'Outfit',
+    );
     final weights = [
       for (final f in outfit['fonts'] as YamlList) (f as YamlMap)['weight'],
     ];
@@ -64,8 +70,10 @@ void main() {
       theme.elevatedButtonTheme.style!,
     ]) {
       expect(style.backgroundColor!.resolve({}), const Color(0xFFFFFFFF));
-      expect(style.foregroundColor!.resolve({}),
-          Palettes.projectionBooth.background);
+      expect(
+        style.foregroundColor!.resolve({}),
+        Palettes.projectionBooth.background,
+      );
       expect(style.textStyle!.resolve({})!.fontFamily, 'Outfit');
     }
   });
@@ -77,8 +85,11 @@ void main() {
     expect(pubspec['flutter'], isNotNull, reason: 'flutter section missing');
     final flutter = pubspec['flutter'] as YamlMap;
 
-    expect(flutter['fonts'], isNotNull,
-        reason: 'fonts section missing under flutter');
+    expect(
+      flutter['fonts'],
+      isNotNull,
+      reason: 'fonts section missing under flutter',
+    );
     final fonts = flutter['fonts'] as YamlList;
 
     // Find the Inter family
@@ -90,8 +101,11 @@ void main() {
       }
     }
 
-    expect(interFamily, isNotNull,
-        reason: 'Inter family not found in fonts list');
+    expect(
+      interFamily,
+      isNotNull,
+      reason: 'Inter family not found in fonts list',
+    );
 
     // Verify the weights
     final fontList = interFamily!['fonts'] as YamlList;
@@ -139,8 +153,11 @@ void main() {
     expect(pubspec['flutter'], isNotNull, reason: 'flutter section missing');
     final flutter = pubspec['flutter'] as YamlMap;
 
-    expect(flutter['assets'], isNotNull,
-        reason: 'assets section missing under flutter');
+    expect(
+      flutter['assets'],
+      isNotNull,
+      reason: 'assets section missing under flutter',
+    );
     final assets = flutter['assets'] as YamlList;
 
     final licenseAssets = assets
@@ -148,15 +165,21 @@ void main() {
         .where((asset) => asset.contains('Inter-LICENSE'))
         .toList();
 
-    expect(licenseAssets, isNotEmpty,
-        reason: 'Inter-LICENSE.txt not declared in assets');
+    expect(
+      licenseAssets,
+      isNotEmpty,
+      reason: 'Inter-LICENSE.txt not declared in assets',
+    );
     expect(licenseAssets, contains('assets/fonts/Inter-LICENSE.txt'));
   });
 
   test('Inter license file exists', () {
     const path = 'assets/fonts/Inter-LICENSE.txt';
-    expect(File(path).existsSync(), isTrue,
-        reason: 'missing license file: $path');
+    expect(
+      File(path).existsSync(),
+      isTrue,
+      reason: 'missing license file: $path',
+    );
 
     // Verify it contains SIL license text
     final content = File(path).readAsStringSync();

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:http/http.dart' as http;
 
 /// API client for E2E test setup operations.
@@ -73,7 +74,8 @@ class E2eApiClient {
     if (response.field<Object?>('errors') != null) {
       final errors = response.list('errors');
       throw Exception(
-          'Login failed: ${errors.first.field<Object?>('message')}');
+        'Login failed: ${errors.first.field<Object?>('message')}',
+      );
     }
 
     _authToken = response.object('data').object('login').field<String>('token');
@@ -101,7 +103,8 @@ class E2eApiClient {
     if (response.field<Object?>('errors') != null) {
       final errors = response.list('errors');
       throw Exception(
-          'Failed to generate claim code: ${errors.first.field<Object?>('message')}');
+        'Failed to generate claim code: ${errors.first.field<Object?>('message')}',
+      );
     }
 
     final data = response.object('data').object('generateClaimCode');
@@ -118,18 +121,13 @@ class E2eApiClient {
   ) async {
     final uri = Uri.parse('$mydiaUrl/api/graphql');
 
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-    };
+    final headers = <String, String>{'Content-Type': 'application/json'};
 
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
     }
 
-    final body = jsonEncode({
-      'query': query,
-      'variables': variables,
-    });
+    final body = jsonEncode({'query': query, 'variables': variables});
 
     final response = await http.post(uri, headers: headers, body: body);
 
@@ -168,7 +166,8 @@ class E2eApiClient {
     }
 
     throw TimeoutException(
-        'Mydia server did not become healthy within $timeout');
+      'Mydia server did not become healthy within $timeout',
+    );
   }
 }
 
@@ -178,9 +177,9 @@ extension type const JsonObject(Map<String, Object?> raw) {
   JsonObject object(String key) =>
       JsonObject(raw[key]! as Map<String, Object?>);
   List<JsonObject> list(String key) => [
-        for (final e in raw[key]! as List<Object?>)
-          JsonObject(e! as Map<String, Object?>),
-      ];
+    for (final e in raw[key]! as List<Object?>)
+      JsonObject(e! as Map<String, Object?>),
+  ];
 }
 
 /// Result of generating a claim code.

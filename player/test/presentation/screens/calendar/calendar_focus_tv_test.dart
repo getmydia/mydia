@@ -10,7 +10,7 @@
 //
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -57,14 +57,15 @@ void main() {
     }
 
     ScrollPosition timeline(WidgetTester tester) => tester
-        .state<ScrollableState>(find.descendant(
-          of: find.byKey(const ValueKey('calendar-timeline')),
-          matching: find.byType(Scrollable),
-        ))
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byKey(const ValueKey('calendar-timeline')),
+            matching: find.byType(Scrollable),
+          ),
+        )
         .position;
 
-    testWidgets(
-        'the list entered for the first time lands on the first entry '
+    testWidgets('the list entered for the first time lands on the first entry '
         'on screen', (tester) async {
       await pumpCalendar(tester);
       // Built above the viewport, so a first entry by index would land here.
@@ -76,8 +77,9 @@ void main() {
       expectFocusIn(entry('t0'));
     });
 
-    testWidgets('the list is re-entered on the entry that left it',
-        (tester) async {
+    testWidgets('the list is re-entered on the entry that left it', (
+      tester,
+    ) async {
       await pumpCalendar(tester);
       await focusIn(tester, entry('f4'));
       // However focus reached the bar, coming back down returns to f4 rather
@@ -89,8 +91,9 @@ void main() {
       expectFocusIn(entry('f4'));
     });
 
-    testWidgets('Today starts the list afresh on its first entry',
-        (tester) async {
+    testWidgets('Today starts the list afresh on its first entry', (
+      tester,
+    ) async {
       await pumpCalendar(tester);
       final position = timeline(tester);
       position.jumpTo(position.pixels + 2400);
@@ -99,16 +102,20 @@ void main() {
 
       await focusIn(tester, todayButton);
       await press(tester, LogicalKeyboardKey.enter);
-      expect(find.byKey(entry('f40'), skipOffstage: false), findsNothing,
-          reason: 'the jump back to today unbuilt the remembered entry');
+      expect(
+        find.byKey(entry('f40'), skipOffstage: false),
+        findsNothing,
+        reason: 'the jump back to today unbuilt the remembered entry',
+      );
 
       await press(tester, LogicalKeyboardKey.arrowDown);
 
       expectFocusIn(entry('t0'));
     });
 
-    testWidgets('LEFT from an entry reaches the rail, RIGHT returns',
-        (tester) async {
+    testWidgets('LEFT from an entry reaches the rail, RIGHT returns', (
+      tester,
+    ) async {
       await pumpCalendar(tester);
       await focusIn(tester, monthButton);
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -116,8 +123,11 @@ void main() {
       expectFocusIn(entry('t1'));
 
       await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(shell.sidebarRow.hasPrimaryFocus, isTrue,
-          reason: 'focus is on ${describeFocus()}');
+      expect(
+        shell.sidebarRow.hasPrimaryFocus,
+        isTrue,
+        reason: 'focus is on ${describeFocus()}',
+      );
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expectFocusIn(entry('t1'));

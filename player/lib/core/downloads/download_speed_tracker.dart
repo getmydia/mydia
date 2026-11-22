@@ -32,7 +32,8 @@ class DownloadSpeedTracker {
     list.removeWhere((s) => s.time.isBefore(cutoff));
 
     debugPrint(
-        '[SpeedTracker] recordProgress($taskId): $cumulativeBytes bytes, ${list.length} samples');
+      '[SpeedTracker] recordProgress($taskId): $cumulativeBytes bytes, ${list.length} samples',
+    );
   }
 
   /// Returns bytes per second for [taskId], or 0 if insufficient data.
@@ -40,7 +41,8 @@ class DownloadSpeedTracker {
     final list = _samples[taskId];
     if (list == null || list.length < 2) {
       debugPrint(
-          '[SpeedTracker] getSpeed($taskId): insufficient samples (${list?.length ?? 0})');
+        '[SpeedTracker] getSpeed($taskId): insufficient samples (${list?.length ?? 0})',
+      );
       return 0;
     }
 
@@ -50,20 +52,23 @@ class DownloadSpeedTracker {
 
     if (elapsed < _minSampleInterval.inMilliseconds) {
       debugPrint(
-          '[SpeedTracker] getSpeed($taskId): elapsed too short (${elapsed}ms)');
+        '[SpeedTracker] getSpeed($taskId): elapsed too short (${elapsed}ms)',
+      );
       return 0;
     }
 
     final bytesDelta = newest.bytes - oldest.bytes;
     if (bytesDelta <= 0) {
       debugPrint(
-          '[SpeedTracker] getSpeed($taskId): no byte delta (oldest=${oldest.bytes}, newest=${newest.bytes})');
+        '[SpeedTracker] getSpeed($taskId): no byte delta (oldest=${oldest.bytes}, newest=${newest.bytes})',
+      );
       return 0;
     }
 
     final speed = bytesDelta / (elapsed / 1000.0);
     debugPrint(
-        '[SpeedTracker] getSpeed($taskId): ${(speed / 1024 / 1024).toStringAsFixed(2)} MB/s');
+      '[SpeedTracker] getSpeed($taskId): ${(speed / 1024 / 1024).toStringAsFixed(2)} MB/s',
+    );
     return speed;
   }
 

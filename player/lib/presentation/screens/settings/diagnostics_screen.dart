@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -62,7 +62,8 @@ class DiagnosticsScreen extends StatelessWidget {
             // transparency or blur of its own.
             showCast: false,
             decorate: (row) => ColoredBox(
-              color: Theme.of(context).appBarTheme.backgroundColor ??
+              color:
+                  Theme.of(context).appBarTheme.backgroundColor ??
                   context.palette.background,
               child: row,
             ),
@@ -87,7 +88,8 @@ class DiagnosticsBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeId = ref.watch(activeSourceIdProvider);
-    final isP2P = activeId != null &&
+    final isP2P =
+        activeId != null &&
         (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
     final status = ref.watch(p2pStatusNotifierProvider);
     final version = ref.watch(updateProvider).currentVersion;
@@ -275,7 +277,8 @@ extension on _PlaybackSection {
     // A recorded failure counts only against the running version, which
     // `updateProvider` publishes after its own read: until then the marker
     // cannot be compared, and the line would guess.
-    final bothRead = legacy != null &&
+    final bothRead =
+        legacy != null &&
         failedRead.hasValue &&
         (failedVersion == null || appVersion.isNotEmpty);
     final output = switch (chooseVideoOutputPath(

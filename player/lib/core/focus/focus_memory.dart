@@ -166,11 +166,7 @@ abstract final class FocusMemory {
       if (region._route == route) {
         // Presses up to now, including the one that asked for this, are
         // what led here; only a later one is the viewer changing course.
-        region._claim(
-          fresh: true,
-          reveal: false,
-          baseline: _pressesOn(route),
-        );
+        region._claim(fresh: true, reveal: false, baseline: _pressesOn(route));
       }
     }
   }
@@ -547,7 +543,8 @@ class FocusMemoryRegionState extends State<FocusMemoryRegion> {
     var bounds = view == null
         ? Rect.largest
         : (MediaQuery.maybePaddingOf(context) ?? EdgeInsets.zero).deflateRect(
-            Offset.zero & (view.physicalSize / view.devicePixelRatio));
+            Offset.zero & (view.physicalSize / view.devicePixelRatio),
+          );
     var scrollable = Scrollable.maybeOf(context);
     while (scrollable != null) {
       final box = scrollable.context.findRenderObject();

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
@@ -16,45 +16,48 @@ import '../../../core/sources/mydia/fake_mydia_transport.dart';
 import '../../../core/sources/mydia/mydia_source_test.dart' show guest, sid;
 
 MydiaSource _mydiaSource(LocalProxyService proxy) => MydiaSource(
-      source: guest,
-      client: MydiaClient(
-        transport: FakeMydiaTransport(),
-        load: () async => const MydiaCredentials(
-          instanceId: 'inst-1',
-          accessToken: 'access',
-          serverUrl: 'https://lake.example',
-        ),
-        save: (_) async {},
-        onUnauthorized: () {},
-      ),
-      proxy: () => proxy,
-    );
+  source: guest,
+  client: MydiaClient(
+    transport: FakeMydiaTransport(),
+    load: () async => const MydiaCredentials(
+      instanceId: 'inst-1',
+      accessToken: 'access',
+      serverUrl: 'https://lake.example',
+    ),
+    save: (_) async {},
+    onUnauthorized: () {},
+  ),
+  proxy: () => proxy,
+);
 
 void main() {
   Future<PlayerScreen> pump(WidgetTester tester) async {
     final proxy = LocalProxyService.forTesting();
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        localProxyServiceProvider.overrideWithValue(proxy),
-        mediaSourceProvider(sid).overrideWithValue(_mydiaSource(proxy)),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourcePlayerRoute(
-          sourceId: sid,
-          itemId: 'm1',
-          uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=offline'),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localProxyServiceProvider.overrideWithValue(proxy),
+          mediaSourceProvider(sid).overrideWithValue(_mydiaSource(proxy)),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourcePlayerRoute(
+            sourceId: sid,
+            itemId: 'm1',
+            uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=offline'),
+          ),
         ),
       ),
-    ));
+    );
     final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
     await tester.pumpWidget(const SizedBox());
     return screen;
   }
 
-  testWidgets('a Mydia instance gets a session with every feature',
-      (tester) async {
+  testWidgets('a Mydia instance gets a session with every feature', (
+    tester,
+  ) async {
     final screen = await pump(tester);
     final session = screen.session;
     expect(session, isA<MydiaPlaybackSession>());

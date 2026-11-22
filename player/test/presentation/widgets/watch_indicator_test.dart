@@ -1,21 +1,24 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/watch_status.dart';
 import 'package:player/presentation/widgets/progress_overlay.dart';
 import 'package:player/presentation/widgets/watch_indicator.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(body: Stack(children: [child])),
-    );
+  home: Scaffold(body: Stack(children: [child])),
+);
 
 void main() {
   group('WatchIndicator', () {
-    testWidgets('draws a count for a container with episodes left',
-        (tester) async {
+    testWidgets('draws a count for a container with episodes left', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _host(const WatchIndicator(
-          status: WatchStatus(watched: false, unwatchedEpisodeCount: 12),
-        )),
+        _host(
+          const WatchIndicator(
+            status: WatchStatus(watched: false, unwatchedEpisodeCount: 12),
+          ),
+        ),
       );
 
       expect(find.text('12'), findsOneWidget);
@@ -32,9 +35,11 @@ void main() {
 
     testWidgets('draws nothing at all once watched', (tester) async {
       await tester.pumpWidget(
-        _host(const WatchIndicator(
-          status: WatchStatus(watched: true, percentage: 100),
-        )),
+        _host(
+          const WatchIndicator(
+            status: WatchStatus(watched: true, percentage: 100),
+          ),
+        ),
       );
 
       expect(find.byKey(WatchIndicator.dotKey), findsNothing);
@@ -43,28 +48,34 @@ void main() {
 
     testWidgets('draws no dot while a title is part-played', (tester) async {
       await tester.pumpWidget(
-        _host(const WatchIndicator(
-          status: WatchStatus(watched: false, percentage: 40),
-        )),
+        _host(
+          const WatchIndicator(
+            status: WatchStatus(watched: false, percentage: 40),
+          ),
+        ),
       );
 
       expect(find.byKey(WatchIndicator.dotKey), findsNothing);
     });
 
-    testWidgets('draws nothing for a watched show with a zero count',
-        (tester) async {
+    testWidgets('draws nothing for a watched show with a zero count', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _host(const WatchIndicator(
-          status: WatchStatus(watched: true, unwatchedEpisodeCount: 0),
-        )),
+        _host(
+          const WatchIndicator(
+            status: WatchStatus(watched: true, unwatchedEpisodeCount: 0),
+          ),
+        ),
       );
 
       expect(find.byKey(WatchIndicator.dotKey), findsNothing);
       expect(find.byType(Text), findsNothing);
     });
 
-    testWidgets('draws nothing when the server sent no status at all',
-        (tester) async {
+    testWidgets('draws nothing when the server sent no status at all', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const WatchIndicator(status: null)));
 
       expect(find.byKey(WatchIndicator.dotKey), findsNothing);
@@ -73,9 +84,11 @@ void main() {
 
     testWidgets('renders a large count without truncating it', (tester) async {
       await tester.pumpWidget(
-        _host(const WatchIndicator(
-          status: WatchStatus(watched: false, unwatchedEpisodeCount: 137),
-        )),
+        _host(
+          const WatchIndicator(
+            status: WatchStatus(watched: false, unwatchedEpisodeCount: 137),
+          ),
+        ),
       );
 
       expect(find.text('137'), findsOneWidget);
@@ -85,9 +98,11 @@ void main() {
   group('WatchProgressOverlay', () {
     testWidgets('draws the bar for a part-played title', (tester) async {
       await tester.pumpWidget(
-        _host(const WatchProgressOverlay(
-          status: WatchStatus(watched: false, percentage: 40),
-        )),
+        _host(
+          const WatchProgressOverlay(
+            status: WatchStatus(watched: false, percentage: 40),
+          ),
+        ),
       );
 
       expect(find.byType(ProgressOverlay), findsOneWidget);
@@ -95,9 +110,11 @@ void main() {
 
     testWidgets('draws no bar once watched', (tester) async {
       await tester.pumpWidget(
-        _host(const WatchProgressOverlay(
-          status: WatchStatus(watched: true, percentage: 100),
-        )),
+        _host(
+          const WatchProgressOverlay(
+            status: WatchStatus(watched: true, percentage: 100),
+          ),
+        ),
       );
 
       expect(find.byType(ProgressOverlay), findsNothing);
@@ -122,9 +139,11 @@ void main() {
 
     testWidgets('draws no bar for a show', (tester) async {
       await tester.pumpWidget(
-        _host(const WatchProgressOverlay(
-          status: WatchStatus(watched: false, unwatchedEpisodeCount: 3),
-        )),
+        _host(
+          const WatchProgressOverlay(
+            status: WatchStatus(watched: false, unwatchedEpisodeCount: 3),
+          ),
+        ),
       );
 
       expect(find.byType(ProgressOverlay), findsNothing);

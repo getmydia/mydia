@@ -5,7 +5,7 @@
 //
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/focus/focus_reveal_section.dart';
@@ -15,8 +15,8 @@ void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; CI runs it in the '
-          '"Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; CI runs it in the '
+            '"Run television-tier tests" step.';
 
   group('FocusRevealSection (requires MYDIA_FORCE_TV=true)', () {
     late ScrollController controller;
@@ -106,8 +106,9 @@ void main() {
       );
     }
 
-    testWidgets('UP into the section scrolls its top into view',
-        (tester) async {
+    testWidgets('UP into the section scrolls its top into view', (
+      tester,
+    ) async {
       await pumpPage(tester);
 
       // The card is at the top of the viewport and the hero's buttons are
@@ -125,8 +126,9 @@ void main() {
       expect(controller.offset, 0);
     });
 
-    testWidgets('moving between buttons inside the section does not scroll',
-        (tester) async {
+    testWidgets('moving between buttons inside the section does not scroll', (
+      tester,
+    ) async {
       await pumpPage(tester);
 
       play.requestFocus();
@@ -144,8 +146,7 @@ void main() {
       expect(controller.offset, 100);
     });
 
-    testWidgets(
-        'UP into the section with reduced motion lands at the revealed '
+    testWidgets('UP into the section with reduced motion lands at the revealed '
         'position with no animation to settle', (tester) async {
       await pumpPage(tester, disableAnimations: true);
 

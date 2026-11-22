@@ -41,29 +41,27 @@ class _Binding implements RemotePlayerBinding {
 
   @override
   FlutterPlaybackSnapshot describe(int sequence) => FlutterPlaybackSnapshot(
-        state: playing
-            ? FlutterPlaybackState.playing
-            : FlutterPlaybackState.paused,
-        mediaItemId: 'item-1',
-        episodeId: null,
-        title: 'The Long Aurora',
-        subtitle: null,
-        imageUrl: null,
-        positionMs: BigInt.zero,
-        durationMs: BigInt.from(5400000),
-        volume: 1.0,
-        muted: false,
-        audioTracks: const [],
-        subtitleTracks: const [],
-        selectedAudio: null,
-        selectedSubtitle: null,
-        capabilities: const FlutterTargetCapabilities(
-          volume: true,
-          trackSelection: true,
-          nextPrevious: true,
-        ),
-        sequence: BigInt.from(sequence),
-      );
+    state: playing ? FlutterPlaybackState.playing : FlutterPlaybackState.paused,
+    mediaItemId: 'item-1',
+    episodeId: null,
+    title: 'The Long Aurora',
+    subtitle: null,
+    imageUrl: null,
+    positionMs: BigInt.zero,
+    durationMs: BigInt.from(5400000),
+    volume: 1.0,
+    muted: false,
+    audioTracks: const [],
+    subtitleTracks: const [],
+    selectedAudio: null,
+    selectedSubtitle: null,
+    capabilities: const FlutterTargetCapabilities(
+      volume: true,
+      trackSelection: true,
+      nextPrevious: true,
+    ),
+    sequence: BigInt.from(sequence),
+  );
 }
 
 void main() {
@@ -142,8 +140,7 @@ void main() {
     expect(binding.calls, ['play']);
   });
 
-  test(
-      'togglePlayPause pauses a buffering player when the Dock label still '
+  test('togglePlayPause pauses a buffering player when the Dock label still '
       'shows Pause', () async {
     // The snapshot's playback state is not `playing` here (this is what a
     // buffering player looks like), but the Dock label the host is showing
@@ -199,11 +196,12 @@ void main() {
     // What the host sending `navigate` looks like from Dart's side.
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
-      kAppMenuChannel.name,
-      const StandardMethodCodec()
-          .encodeMethodCall(const MethodCall('navigate', '/search')),
-      (_) {},
-    );
+          kAppMenuChannel.name,
+          const StandardMethodCodec().encodeMethodCall(
+            const MethodCall('navigate', '/search'),
+          ),
+          (_) {},
+        );
 
     expect(routes, ['/search']);
   });

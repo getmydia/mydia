@@ -78,9 +78,9 @@ class _Device {
       settings: SettingsService(storage: auth),
       loadSubtitleLanguages: () async => null,
       saveSubtitleLanguages: (_) async {},
-      onRemoteFilesChanges: (_, __) async {},
+      onRemoteFilesChanges: (_, _) async {},
       rootsFor: (_) async => const [],
-      putRoots: (_, __) async {},
+      putRoots: (_, _) async {},
     );
     restart();
   }
@@ -121,8 +121,11 @@ class _Device {
       authStorage: auth,
       resolveOffered: () async => offered,
       buildCloud: (kind) => buildCloudBackupService(
-        backend: backends[kind] = InMemoryCloudBackend(net.stores[kind]!,
-            kind: kind.cloudKind!, accountLabel: '$name@example.com'),
+        backend: backends[kind] = InMemoryCloudBackend(
+          net.stores[kind]!,
+          kind: kind.cloudKind!,
+          accountLabel: '$name@example.com',
+        ),
         authStorage: auth,
         meta: meta,
         snapshot: snapshot,
@@ -157,8 +160,10 @@ class _Device {
     return _peers = PeerSyncService(
       store: sync,
       authStorage: auth,
-      transport: _transport ??=
-          FakePeerSyncTransport(network: net.network, localNodeId: nodeId),
+      transport: _transport ??= FakePeerSyncTransport(
+        network: net.network,
+        localNodeId: nodeId,
+      ),
       relayClient: net.claimRelay,
       deviceName: name,
       platform: 'linux',
@@ -222,21 +227,24 @@ void main() {
     expect(c.active.value, BackupStoreKind.gdrive);
     expect(await a.auth.read(BackupController.storeKey), 'gdrive');
     expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
-    expect(net.stores[BackupStoreKind.gdrive]!.bytes.keys,
-        contains(await a.slotId()));
+    expect(
+      net.stores[BackupStoreKind.gdrive]!.bytes.keys,
+      contains(await a.slotId()),
+    );
     // The relay vault stays on disk, dormant, and A stays a member so the
     // stub stays readable.
     expect(a.relay.enabled, isFalse);
     expect(a.relay.dormant, isTrue);
     expect((await a.vault())?.vaultId, vaultId);
     expect(
-        net.relay
-            .vault(vaultId)
-            .members
-            .values
-            .map((m) => m.slotId)
-            .contains(await a.slotId()),
-        isTrue);
+      net.relay
+          .vault(vaultId)
+          .members
+          .values
+          .map((m) => m.slotId)
+          .contains(await a.slotId()),
+      isTrue,
+    );
 
     await b.relay.poll();
     expect(b.relay.movedSlots.value, {await a.slotId(): 'gdrive'});
@@ -249,8 +257,11 @@ void main() {
     expect(again.active.value, BackupStoreKind.gdrive);
     expect(a.relay.enabled, isFalse);
     expect(a.relay.status.value, isA<BackupOff>());
-    expect(net.relay.requests.length, before,
-        reason: 'the dormant vault is not synced');
+    expect(
+      net.relay.requests.length,
+      before,
+      reason: 'the dormant vault is not synced',
+    );
     expect(again.cloud(BackupStoreKind.gdrive).enabled, isTrue);
 
     // Nor does starting the relay service itself, as a relay screen might.
@@ -358,23 +369,27 @@ void main() {
   });
 
   test('offered_excludes_icloud_off_apple', () async {
-    Future<Set<BackupStoreKind>> offered(
-            {bool web = false,
-            required bool apple,
-            bool google = true,
-            bool cloudKit = true}) =>
-        resolveOfferedStores(
-          web: web,
-          apple: apple,
-          google: google,
-          cloudKitEnabled: () async => cloudKit,
-        );
+    Future<Set<BackupStoreKind>> offered({
+      bool web = false,
+      required bool apple,
+      bool google = true,
+      bool cloudKit = true,
+    }) => resolveOfferedStores(
+      web: web,
+      apple: apple,
+      google: google,
+      cloudKitEnabled: () async => cloudKit,
+    );
 
-    expect(await offered(apple: false),
-        {BackupStoreKind.relay, BackupStoreKind.gdrive});
+    expect(await offered(apple: false), {
+      BackupStoreKind.relay,
+      BackupStoreKind.gdrive,
+    });
     expect(await offered(apple: true), _allStores);
-    expect(await offered(apple: true, cloudKit: false),
-        {BackupStoreKind.relay, BackupStoreKind.gdrive});
+    expect(await offered(apple: true, cloudKit: false), {
+      BackupStoreKind.relay,
+      BackupStoreKind.gdrive,
+    });
     expect(await offered(apple: false, google: false), {BackupStoreKind.relay});
     expect(await offered(web: true, apple: true), isEmpty);
 
@@ -401,15 +416,20 @@ void main() {
 
     expect(joiner.peers().isPaired, isTrue);
     expect(
-        joiner.controller.storeHint.value,
-        const CloudStoreHint(
-            BackupStoreKind.gdrive, 'Living Room TV@example.com'));
+      joiner.controller.storeHint.value,
+      const CloudStoreHint(
+        BackupStoreKind.gdrive,
+        'Living Room TV@example.com',
+      ),
+    );
     expect(joiner.controller.active.value, isNull);
     expect(joiner.relay.enabled, isFalse);
     expect(joiner.controller.cloud(BackupStoreKind.gdrive).enabled, isFalse);
     expect(net.relay.vaults, isEmpty);
-    expect(net.stores[BackupStoreKind.gdrive]!.bytes.keys,
-        isNot(contains(await joiner.slotId())));
+    expect(
+      net.stores[BackupStoreKind.gdrive]!.bytes.keys,
+      isNot(contains(await joiner.slotId())),
+    );
 
     // Kept across a restart until acknowledged.
     final again = joiner.restart();
@@ -442,33 +462,36 @@ void main() {
     expect(joiner.controller.storeHint.value, isNull);
   });
 
-  test('a joiner on a cloud store is not added to a relay host vault',
-      () async {
-    final host = net.device('Living Room TV', 'node-a');
-    final joiner = net.device('Night Harbor Laptop', 'node-b');
-    await host.enableRelayDirectly();
-    await host.controller.start();
-    await joiner.controller.ready;
-    await joiner.controller.enableCloud(BackupStoreKind.gdrive);
-    await host.peers().start();
-    await joiner.peers().start();
+  test(
+    'a joiner on a cloud store is not added to a relay host vault',
+    () async {
+      final host = net.device('Living Room TV', 'node-a');
+      final joiner = net.device('Night Harbor Laptop', 'node-b');
+      await host.enableRelayDirectly();
+      await host.controller.start();
+      await joiner.controller.ready;
+      await joiner.controller.enableCloud(BackupStoreKind.gdrive);
+      await host.peers().start();
+      await joiner.peers().start();
 
-    final offer = await host.peers().startPairingOffer();
-    await joiner.peers().pairWithCode(offer.code);
-    await joiner.relay.settled();
+      final offer = await host.peers().startPairingOffer();
+      await joiner.peers().pairWithCode(offer.code);
+      await joiner.relay.settled();
 
-    expect(joiner.peers().isPaired, isTrue);
-    expect(joiner.relay.enabled, isFalse);
-    expect(await joiner.vault(), isNull);
-    expect(
+      expect(joiner.peers().isPaired, isTrue);
+      expect(joiner.relay.enabled, isFalse);
+      expect(await joiner.vault(), isNull);
+      expect(
         net.relay
             .vault((await host.vault())!.vaultId)
             .members
             .values
             .map((m) => m.slotId),
-        isNot(contains(await joiner.slotId())));
-    expect(joiner.controller.active.value, BackupStoreKind.gdrive);
-  });
+        isNot(contains(await joiner.slotId())),
+      );
+      expect(joiner.controller.active.value, BackupStoreKind.gdrive);
+    },
+  );
 
   test('switch_to_signed_out_cloud_leaves_relay_untouched', () async {
     final a = net.device('Living Room TV');
@@ -482,14 +505,23 @@ void main() {
     final relayWrites = net.relay.slotWrites[slot];
 
     await expectLater(
-        c.switchTo(BackupStoreKind.gdrive, deleteOld: true),
-        throwsA(isA<BackupRelayException>()
-            .having((e) => e.kind, 'kind', BackupRelayError.signedOut)));
+      c.switchTo(BackupStoreKind.gdrive, deleteOld: true),
+      throwsA(
+        isA<BackupRelayException>().having(
+          (e) => e.kind,
+          'kind',
+          BackupRelayError.signedOut,
+        ),
+      ),
+    );
 
     expect(c.active.value, BackupStoreKind.relay);
     expect(await a.auth.read(BackupController.storeKey), 'relay');
-    expect(net.relay.vaults.keys, contains(vaultId),
-        reason: 'the old backup is not deleted');
+    expect(
+      net.relay.vaults.keys,
+      contains(vaultId),
+      reason: 'the old backup is not deleted',
+    );
     expect(net.relay.slotWrites[slot], relayWrites, reason: 'no stub');
     expect((await a.vault())?.vaultId, vaultId);
     expect(a.relay.enabled, isTrue);
@@ -514,14 +546,18 @@ void main() {
     a.backends[BackupStoreKind.icloud]!.signedIn = false;
 
     await expectLater(
-        a.controller.switchTo(BackupStoreKind.icloud, deleteOld: true),
-        throwsA(isA<BackupRelayException>()));
+      a.controller.switchTo(BackupStoreKind.icloud, deleteOld: true),
+      throwsA(isA<BackupRelayException>()),
+    );
 
     expect(a.controller.active.value, BackupStoreKind.gdrive);
     expect(await a.auth.read(BackupController.storeKey), 'gdrive');
     expect(drive.writes[slot], driveWrites, reason: 'no stub');
-    expect(drive.bytes.keys, containsAll([slot, await b.slotId()]),
-        reason: 'the old backup is not deleted');
+    expect(
+      drive.bytes.keys,
+      containsAll([slot, await b.slotId()]),
+      reason: 'the old backup is not deleted',
+    );
     expect(a.controller.cloud(BackupStoreKind.gdrive).enabled, isTrue);
     expect(net.stores[BackupStoreKind.icloud]!.bytes, isEmpty);
   });
@@ -544,9 +580,11 @@ void main() {
     expect(a.meta.mergedVersion(bSlot, store: 'icloud'), isNotNull);
     await b.controller.poll();
     await _settled(b.controller);
-    expect(net.stores[BackupStoreKind.gdrive]!.bytes.keys,
-        contains(await a.slotId()),
-        reason: 'the moved stub stays in Drive');
+    expect(
+      net.stores[BackupStoreKind.gdrive]!.bytes.keys,
+      contains(await a.slotId()),
+      reason: 'the moved stub stays in Drive',
+    );
   });
 
   test('old_store_failure_after_switch_keeps_new_store_active', () async {
@@ -557,8 +595,10 @@ void main() {
     await _settled(c);
     net.relay.available = false;
 
-    await expectLater(c.switchTo(BackupStoreKind.gdrive, deleteOld: false),
-        throwsA(isA<BackupRelayException>()));
+    await expectLater(
+      c.switchTo(BackupStoreKind.gdrive, deleteOld: false),
+      throwsA(isA<BackupRelayException>()),
+    );
 
     expect(c.active.value, BackupStoreKind.gdrive);
     expect(await a.auth.read(BackupController.storeKey), 'gdrive');
@@ -574,8 +614,10 @@ void main() {
     await _settled(c);
     net.relay.available = false;
 
-    await expectLater(c.switchTo(BackupStoreKind.gdrive, deleteOld: false),
-        throwsA(isA<BackupRelayException>()));
+    await expectLater(
+      c.switchTo(BackupStoreKind.gdrive, deleteOld: false),
+      throwsA(isA<BackupRelayException>()),
+    );
     net.relay.available = true;
 
     expect(c.active.value, BackupStoreKind.gdrive);
@@ -588,9 +630,12 @@ void main() {
     // A host-side pairing no longer adds joiners to it.
     final joiner = await BackupIdentity.loadOrCreate(MockAuthStorage());
     expect(
-        await a.relay.addMemberForPair(
-            await joiner.signerPublicB64(), await joiner.boxPublicB64()),
-        isNull);
+      await a.relay.addMemberForPair(
+        await joiner.signerPublicB64(),
+        await joiner.boxPublicB64(),
+      ),
+      isNull,
+    );
     final before = net.relay.requests.length;
     await a.watch('tmdb:movie:7');
     a.relay.markDirty();
@@ -619,12 +664,14 @@ void main() {
     await a.controller.enableCloud(BackupStoreKind.gdrive);
     await _settled(a.controller);
     final drive = a.controller.cloud(BackupStoreKind.gdrive);
-    a.backends[BackupStoreKind.gdrive]!
-        .failNext(const BackupRelayException(BackupRelayError.server));
+    a.backends[BackupStoreKind.gdrive]!.failNext(
+      const BackupRelayException(BackupRelayError.server),
+    );
 
     await expectLater(
-        a.controller.switchTo(BackupStoreKind.icloud, deleteOld: false),
-        throwsA(isA<BackupRelayException>()));
+      a.controller.switchTo(BackupStoreKind.icloud, deleteOld: false),
+      throwsA(isA<BackupRelayException>()),
+    );
 
     expect(a.controller.active.value, BackupStoreKind.icloud);
     expect(drive.enabled, isFalse);
@@ -634,8 +681,11 @@ void main() {
     await a.watch('tmdb:movie:8');
     drive.markDirty();
     await drive.poll();
-    expect(net.stores[BackupStoreKind.gdrive]!.writes[slot], writes,
-        reason: 'the old store does not sync');
+    expect(
+      net.stores[BackupStoreKind.gdrive]!.writes[slot],
+      writes,
+      reason: 'the old store does not sync',
+    );
 
     await a.controller.switchTo(BackupStoreKind.gdrive, deleteOld: false);
     expect(a.controller.active.value, BackupStoreKind.gdrive);
@@ -686,33 +736,37 @@ void main() {
     expect(net.relay.slotWrites[slot], writes + 1);
   });
 
-  test('a cloud store that cannot be built leaves the others offered',
-      () async {
-    final a = net.device('Living Room TV');
-    a.controller.dispose();
-    final c = a.controller = BackupController(
-      relay: a.relay,
-      authStorage: a.auth,
-      resolveOffered: () async => _allStores,
-      buildCloud: (kind) async {
-        if (kind == BackupStoreKind.icloud) throw StateError('no plugin');
-        return buildCloudBackupService(
-          backend:
-              InMemoryCloudBackend(net.stores[kind]!, kind: kind.cloudKind!),
-          authStorage: a.auth,
-          meta: a.meta,
-          snapshot: a.snapshot,
-          deviceName: () async => a.name,
-          platform: 'linux',
-        );
-      },
-    );
-    addTearDown(c.dispose);
-    await c.ready;
-    expect(c.offered.value, {BackupStoreKind.relay, BackupStoreKind.gdrive});
-    await c.enableCloud(BackupStoreKind.gdrive);
-    expect(c.active.value, BackupStoreKind.gdrive);
-  });
+  test(
+    'a cloud store that cannot be built leaves the others offered',
+    () async {
+      final a = net.device('Living Room TV');
+      a.controller.dispose();
+      final c = a.controller = BackupController(
+        relay: a.relay,
+        authStorage: a.auth,
+        resolveOffered: () async => _allStores,
+        buildCloud: (kind) async {
+          if (kind == BackupStoreKind.icloud) throw StateError('no plugin');
+          return buildCloudBackupService(
+            backend: InMemoryCloudBackend(
+              net.stores[kind]!,
+              kind: kind.cloudKind!,
+            ),
+            authStorage: a.auth,
+            meta: a.meta,
+            snapshot: a.snapshot,
+            deviceName: () async => a.name,
+            platform: 'linux',
+          );
+        },
+      );
+      addTearDown(c.dispose);
+      await c.ready;
+      expect(c.offered.value, {BackupStoreKind.relay, BackupStoreKind.gdrive});
+      await c.enableCloud(BackupStoreKind.gdrive);
+      expect(c.active.value, BackupStoreKind.gdrive);
+    },
+  );
 
   test('stored_cloud_store_that_cannot_be_built_is_off_not_stuck', () async {
     final a = net.device('Living Room TV');
@@ -742,8 +796,10 @@ void main() {
       buildCloud: (kind) async {
         if (kind == BackupStoreKind.gdrive) throw StateError('no backend');
         return buildCloudBackupService(
-          backend:
-              InMemoryCloudBackend(net.stores[kind]!, kind: kind.cloudKind!),
+          backend: InMemoryCloudBackend(
+            net.stores[kind]!,
+            kind: kind.cloudKind!,
+          ),
           authStorage: a.auth,
           meta: a.meta,
           snapshot: a.snapshot,
@@ -770,25 +826,29 @@ void main() {
     expect(await a.auth.read(BackupController.storeKey), 'relay');
   });
 
-  test('a host that leaves its group while naming its store rejects pairing',
-      () async {
-    final host = net.device('Living Room TV', 'node-a');
-    final joiner = net.device('Night Harbor Laptop', 'node-b');
-    host.cloudStoreForPair = () async {
-      await host.peers().leaveGroup();
-      return (store: 'gdrive', account: null);
-    };
-    await host.peers().start();
-    await joiner.peers().start();
+  test(
+    'a host that leaves its group while naming its store rejects pairing',
+    () async {
+      final host = net.device('Living Room TV', 'node-a');
+      final joiner = net.device('Night Harbor Laptop', 'node-b');
+      host.cloudStoreForPair = () async {
+        await host.peers().leaveGroup();
+        return (store: 'gdrive', account: null);
+      };
+      await host.peers().start();
+      await joiner.peers().start();
 
-    final offer = await host.peers().startPairingOffer();
-    await expectLater(
-        joiner.peers().pairWithCode(offer.code), throwsA(anything));
+      final offer = await host.peers().startPairingOffer();
+      await expectLater(
+        joiner.peers().pairWithCode(offer.code),
+        throwsA(anything),
+      );
 
-    expect(joiner.peers().isPaired, isFalse);
-    expect(host.peers().isPaired, isFalse);
-    expect(joiner.controller.storeHint.value, isNull);
-  });
+      expect(joiner.peers().isPaired, isFalse);
+      expect(host.peers().isPaired, isFalse);
+      expect(joiner.controller.storeHint.value, isNull);
+    },
+  );
 
   test('stores_do_not_share_merged_versions', () async {
     final meta = BackupMetaStore(InMemoryBackupMetaStorage());
@@ -829,8 +889,11 @@ void main() {
     await a.controller.enableCloud(BackupStoreKind.gdrive);
 
     final key = await a.relay.prepareEnable();
-    await a.controller
-        .switchTo(BackupStoreKind.relay, deleteOld: false, relayKey: key);
+    await a.controller.switchTo(
+      BackupStoreKind.relay,
+      deleteOld: false,
+      relayKey: key,
+    );
     final vaultId = (await a.vault())!.vaultId;
     // Drive merged B's slot at version "3" (a Drive poll that ran late, or a
     // record kept from it).
@@ -850,8 +913,11 @@ void main() {
 
     await a.controller.poll();
 
-    expect(a.sync.watchRecord('tmdb:movie:101')?.watched, isTrue,
-        reason: 'B slot at seq 3 is merged despite Drive version "3"');
+    expect(
+      a.sync.watchRecord('tmdb:movie:101')?.watched,
+      isTrue,
+      reason: 'B slot at seq 3 is merged despite Drive version "3"',
+    );
     expect(a.meta.mergedVersion(bSlot), '3');
   });
 
@@ -906,25 +972,27 @@ void main() {
     relay.dispose();
   });
 
-  test('switchTo_storeKey_write_failure_rolls_back_target_and_keeps_old',
-      () async {
-    final a = net.device('Living Room TV');
-    final c = a.restart();
-    await c.enableCloud(BackupStoreKind.gdrive);
-    expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+  test(
+    'switchTo_storeKey_write_failure_rolls_back_target_and_keeps_old',
+    () async {
+      final a = net.device('Living Room TV');
+      final c = a.restart();
+      await c.enableCloud(BackupStoreKind.gdrive);
+      expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
 
-    a.auth.failWriteKeys.add(BackupController.storeKey);
-    await expectLater(
-      c.switchTo(BackupStoreKind.icloud, deleteOld: true),
-      throwsA(anything),
-    );
+      a.auth.failWriteKeys.add(BackupController.storeKey);
+      await expectLater(
+        c.switchTo(BackupStoreKind.icloud, deleteOld: true),
+        throwsA(anything),
+      );
 
-    expect(c.active.value, BackupStoreKind.gdrive);
-    expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
-    expect(c.cloud(BackupStoreKind.icloud).enabled, isFalse);
-    expect(net.stores[BackupStoreKind.gdrive]!.deletes, isEmpty);
-    expect(net.stores[BackupStoreKind.gdrive]!.bytes, isNotEmpty);
-  });
+      expect(c.active.value, BackupStoreKind.gdrive);
+      expect(c.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+      expect(c.cloud(BackupStoreKind.icloud).enabled, isFalse);
+      expect(net.stores[BackupStoreKind.gdrive]!.deletes, isEmpty);
+      expect(net.stores[BackupStoreKind.gdrive]!.bytes, isNotEmpty);
+    },
+  );
 
   test('concurrent_enableCloud_or_switchTo_throws_StateError', () async {
     final a = net.device('Living Room TV');
@@ -960,47 +1028,56 @@ void main() {
     await first;
   });
 
-  test('switchTo_target_upload_failure_keeps_old_store_without_moved_stub',
-      () async {
-    final a = net.device('Living Room TV');
-    final b = net.device('Night Harbor Laptop');
-    await a.controller.ready;
-    await a.controller.enableCloud(BackupStoreKind.gdrive);
-    await b.controller.ready;
-    await b.controller.enableCloud(BackupStoreKind.gdrive);
-    await a.controller.poll();
-    await _settled(a.controller);
-    final aSlot = await a.slotId();
-    final bSlot = await b.slotId();
-    final drive = net.stores[BackupStoreKind.gdrive]!;
-    final driveWrites = drive.writes[aSlot];
+  test(
+    'switchTo_target_upload_failure_keeps_old_store_without_moved_stub',
+    () async {
+      final a = net.device('Living Room TV');
+      final b = net.device('Night Harbor Laptop');
+      await a.controller.ready;
+      await a.controller.enableCloud(BackupStoreKind.gdrive);
+      await b.controller.ready;
+      await b.controller.enableCloud(BackupStoreKind.gdrive);
+      await a.controller.poll();
+      await _settled(a.controller);
+      final aSlot = await a.slotId();
+      final bSlot = await b.slotId();
+      final drive = net.stores[BackupStoreKind.gdrive]!;
+      final driveWrites = drive.writes[aSlot];
 
-    a.backends[BackupStoreKind.icloud]!
-        .failNext(const BackupRelayException(BackupRelayError.quotaFull));
+      a.backends[BackupStoreKind.icloud]!.failNext(
+        const BackupRelayException(BackupRelayError.quotaFull),
+      );
 
-    await expectLater(
-      a.controller.switchTo(BackupStoreKind.icloud, deleteOld: true),
-      throwsA(
-        isA<BackupRelayException>()
-            .having((e) => e.kind, 'kind', BackupRelayError.quotaFull),
-      ),
-    );
+      await expectLater(
+        a.controller.switchTo(BackupStoreKind.icloud, deleteOld: true),
+        throwsA(
+          isA<BackupRelayException>().having(
+            (e) => e.kind,
+            'kind',
+            BackupRelayError.quotaFull,
+          ),
+        ),
+      );
 
-    expect(a.controller.active.value, BackupStoreKind.gdrive);
-    expect(await a.auth.read(BackupController.storeKey), 'gdrive');
-    expect(a.controller.cloud(BackupStoreKind.gdrive).enabled, isTrue);
-    expect(a.controller.cloud(BackupStoreKind.icloud).enabled, isFalse);
-    expect(
-      a.controller.cloud(BackupStoreKind.icloud).status.value,
-      isA<BackupOff>(),
-    );
-    expect(drive.writes[aSlot], driveWrites, reason: 'no moved stub written');
-    expect(drive.deletes, isEmpty, reason: 'old slots not deleted');
-    expect(drive.bytes.keys, containsAll([aSlot, bSlot]));
-    expect(net.stores[BackupStoreKind.icloud]!.bytes, isEmpty);
-    expect(a.meta.slotNames()[bSlot], 'Night Harbor Laptop',
-        reason: 'shared store metadata preserved');
-  });
+      expect(a.controller.active.value, BackupStoreKind.gdrive);
+      expect(await a.auth.read(BackupController.storeKey), 'gdrive');
+      expect(a.controller.cloud(BackupStoreKind.gdrive).enabled, isTrue);
+      expect(a.controller.cloud(BackupStoreKind.icloud).enabled, isFalse);
+      expect(
+        a.controller.cloud(BackupStoreKind.icloud).status.value,
+        isA<BackupOff>(),
+      );
+      expect(drive.writes[aSlot], driveWrites, reason: 'no moved stub written');
+      expect(drive.deletes, isEmpty, reason: 'old slots not deleted');
+      expect(drive.bytes.keys, containsAll([aSlot, bSlot]));
+      expect(net.stores[BackupStoreKind.icloud]!.bytes, isEmpty);
+      expect(
+        a.meta.slotNames()[bSlot],
+        'Night Harbor Laptop',
+        reason: 'shared store metadata preserved',
+      );
+    },
+  );
 }
 
 class _StrictStorage extends MockAuthStorage implements StrictAuthRead {

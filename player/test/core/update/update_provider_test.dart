@@ -16,9 +16,9 @@ class _FakeBackend implements UpdateBackend {
   _FakeBackend({
     this.outcome = const AlreadyUpToDate(),
     this.trackSwitchOutcome = const TrackSwitchApplied(),
-    UpdateTrack currentTrack = UpdateTrack.stable,
+    this._currentTrack = UpdateTrack.stable,
     this.manualCheck = ManualCheckBehaviour.checksAndInstalls,
-  }) : _currentTrack = currentTrack;
+  });
 
   @override
   final ManualCheckBehaviour manualCheck;
@@ -46,8 +46,11 @@ class _FakeBackend implements UpdateBackend {
   bool get canUpdateInPlace => true;
 
   @override
-  Set<UpdateTrack> get availableTracks =>
-      const {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev};
+  Set<UpdateTrack> get availableTracks => const {
+    UpdateTrack.stable,
+    UpdateTrack.beta,
+    UpdateTrack.dev,
+  };
 
   @override
   UpdateTrack get currentTrack => _currentTrack;
@@ -156,13 +159,16 @@ void main() {
       container.read(updateProvider);
       await Future<void>.delayed(Duration.zero);
       await container.read(updateProvider.notifier).requestUpdate();
-      expect(container.read(updateProvider).error,
-          const UpdateProblem(UpdateIssue.installPermissionDenied));
+      expect(
+        container.read(updateProvider).error,
+        const UpdateProblem(UpdateIssue.installPermissionDenied),
+      );
       return container;
     }
 
-    testWidgets('resuming with the permission granted re-requests the update',
-        (tester) async {
+    testWidgets('resuming with the permission granted re-requests the update', (
+      tester,
+    ) async {
       final backend = _FakeBackend(outcome: denied);
       var granted = false;
       final container = await tester.runAsync(
@@ -182,37 +188,51 @@ void main() {
     });
 
     testWidgets(
-        'resuming still denied clears the pending install and names the '
-        'permission', (tester) async {
-      final backend = _FakeBackend(outcome: denied);
-      final container = await tester.runAsync(
-        () => deniedContainer(backend, () => false),
-      );
+      'resuming still denied clears the pending install and names the '
+      'permission',
+      (tester) async {
+        final backend = _FakeBackend(outcome: denied);
+        final container = await tester.runAsync(
+          () => deniedContainer(backend, () => false),
+        );
 
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
 
-      expect(backend.requests, 1);
-      expect(container!.read(updateProvider).error,
-          const UpdateProblem(UpdateIssue.installPermissionStillDenied));
+        expect(backend.requests, 1);
+        expect(
+          container!.read(updateProvider).error,
+          const UpdateProblem(UpdateIssue.installPermissionStillDenied),
+        );
 
-      // The flag is cleared: a later resume does nothing more. The listener
-      // ignores a same-state change, so leave the foreground first or this
-      // second resume never fires at all.
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-      expect(backend.requests, 1);
-    });
+        // The flag is cleared: a later resume does nothing more. The listener
+        // ignores a same-state change, so leave the foreground first or this
+        // second resume never fires at all.
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        expect(backend.requests, 1);
+      },
+    );
 
-    testWidgets('a resume with no install pending does nothing',
-        (tester) async {
+    testWidgets('a resume with no install pending does nothing', (
+      tester,
+    ) async {
       final backend = _FakeBackend();
       var asked = false;
-      final container = _container(backend, canInstall: () async {
-        asked = true;
-        return true;
-      });
+      final container = _container(
+        backend,
+        canInstall: () async {
+          asked = true;
+          return true;
+        },
+      );
       container.read(updateProvider);
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -229,13 +249,17 @@ void main() {
     container.read(updateProvider);
     await Future<void>.delayed(Duration.zero);
 
-    backend.controller.add(const FlatpakRemoteUpdate(
-      releaseNotesUrl: 'https://example.invalid/releases',
-    ));
+    backend.controller.add(
+      const FlatpakRemoteUpdate(
+        releaseNotesUrl: 'https://example.invalid/releases',
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
 
-    expect(container.read(updateProvider).availableUpdate,
-        isA<FlatpakRemoteUpdate>());
+    expect(
+      container.read(updateProvider).availableUpdate,
+      isA<FlatpakRemoteUpdate>(),
+    );
   });
 
   test('the manual check behaviour comes from the backend', () async {
@@ -244,8 +268,10 @@ void main() {
     container.read(updateProvider);
     await Future<void>.delayed(Duration.zero);
 
-    expect(container.read(updateProvider).manualCheck,
-        ManualCheckBehaviour.checksAndInstalls);
+    expect(
+      container.read(updateProvider).manualCheck,
+      ManualCheckBehaviour.checksAndInstalls,
+    );
   });
 
   test('an up-to-date result leaves a notice and no update', () async {
@@ -275,8 +301,7 @@ void main() {
     expect(container.read(updateProvider).restartRequired, isTrue);
   });
 
-  test(
-      'a deferred result clears the pending update and says where it went, '
+  test('a deferred result clears the pending update and says where it went, '
       'instead of leaving the same Update Now row', () async {
     final backend = _FakeBackend(outcome: const UpdateDeferred());
     final container = _container(backend);
@@ -285,9 +310,11 @@ void main() {
 
     // Established first, so clearing it below is observable rather than a
     // no-op on a field that was already null.
-    backend.controller.add(const FlatpakRemoteUpdate(
-      releaseNotesUrl: 'https://example.invalid/releases',
-    ));
+    backend.controller.add(
+      const FlatpakRemoteUpdate(
+        releaseNotesUrl: 'https://example.invalid/releases',
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
     expect(container.read(updateProvider).availableUpdate, isNotNull);
 
@@ -307,7 +334,8 @@ void main() {
   test('an unsupported result surfaces its reason as an error', () async {
     final backend = _FakeBackend(
       outcome: const UpdateUnsupported(
-          UpdateProblem(UpdateIssue.needsNewPermissions)),
+        UpdateProblem(UpdateIssue.needsNewPermissions),
+      ),
     );
     final container = _container(backend);
     container.read(updateProvider);
@@ -315,13 +343,16 @@ void main() {
 
     await container.read(updateProvider.notifier).requestUpdate();
 
-    expect(container.read(updateProvider).error,
-        const UpdateProblem(UpdateIssue.needsNewPermissions));
+    expect(
+      container.read(updateProvider).error,
+      const UpdateProblem(UpdateIssue.needsNewPermissions),
+    );
   });
 
   test('a failure surfaces its message', () async {
     final backend = _FakeBackend(
-        outcome: const UpdateFailed(UpdateProblem.text('connection reset')));
+      outcome: const UpdateFailed(UpdateProblem.text('connection reset')),
+    );
     final container = _container(backend);
     container.read(updateProvider);
     await Future<void>.delayed(Duration.zero);
@@ -410,17 +441,19 @@ void main() {
   });
 
   group('an install-without-asking backend (Android)', () {
-    test('checks at startup, so the banner can still offer an update',
-        () async {
-      final backend = _FakeBackend(
-        manualCheck: ManualCheckBehaviour.installsWithoutAsking,
-      );
-      final container = _container(backend);
-      container.read(updateProvider);
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'checks at startup, so the banner can still offer an update',
+      () async {
+        final backend = _FakeBackend(
+          manualCheck: ManualCheckBehaviour.installsWithoutAsking,
+        );
+        final container = _container(backend);
+        container.read(updateProvider);
+        await Future<void>.delayed(Duration.zero);
 
-      expect(backend.refreshes, 1);
-    });
+        expect(backend.refreshes, 1);
+      },
+    );
 
     test('checkForUpdate goes straight to the install', () async {
       final backend = _FakeBackend(
@@ -465,28 +498,32 @@ void main() {
     expect(state.trackNotice, isNull);
   });
 
-  test('a deferred track switch reports its instructions without switching',
-      () async {
-    final backend = _FakeBackend(
-      trackSwitchOutcome: const TrackSwitchDeferred(
-        instructions: 'flatpak install mydia-beta dev.mydia.player//beta',
-        url: 'https://example.invalid/install',
-      ),
-    );
-    final container = _container(backend);
-    container.read(updateProvider);
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'a deferred track switch reports its instructions without switching',
+    () async {
+      final backend = _FakeBackend(
+        trackSwitchOutcome: const TrackSwitchDeferred(
+          instructions: 'flatpak install mydia-beta dev.mydia.player//beta',
+          url: 'https://example.invalid/install',
+        ),
+      );
+      final container = _container(backend);
+      container.read(updateProvider);
+      await Future<void>.delayed(Duration.zero);
 
-    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.beta);
+      await container
+          .read(updateProvider.notifier)
+          .selectTrack(UpdateTrack.beta);
 
-    final state = container.read(updateProvider);
-    expect(state.trackNotice, contains('flatpak install'));
-    expect(state.trackUrl, 'https://example.invalid/install');
-    // The instructions live in trackNotice, not notice: the update card reads
-    // notice, and a deferred track switch has nothing to do with it.
-    expect(state.notice, isNull);
-    expect(state.currentTrack, UpdateTrack.stable);
-  });
+      final state = container.read(updateProvider);
+      expect(state.trackNotice, contains('flatpak install'));
+      expect(state.trackUrl, 'https://example.invalid/install');
+      // The instructions live in trackNotice, not notice: the update card reads
+      // notice, and a deferred track switch has nothing to do with it.
+      expect(state.notice, isNull);
+      expect(state.currentTrack, UpdateTrack.stable);
+    },
+  );
 
   test('a deferred track switch with no url leaves trackUrl null', () async {
     final backend = _FakeBackend(
@@ -571,7 +608,8 @@ void main() {
   test('an unsupported track switch surfaces its reason as an error', () async {
     final backend = _FakeBackend(
       trackSwitchOutcome: const TrackSwitchUnsupported(
-          UpdateProblem(UpdateIssue.saveChoiceFailed, detail: 'disk full')),
+        UpdateProblem(UpdateIssue.saveChoiceFailed, detail: 'disk full'),
+      ),
     );
     final container = _container(backend);
     container.read(updateProvider);
@@ -580,8 +618,10 @@ void main() {
     await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
 
     final state = container.read(updateProvider);
-    expect(state.error,
-        const UpdateProblem(UpdateIssue.saveChoiceFailed, detail: 'disk full'));
+    expect(
+      state.error,
+      const UpdateProblem(UpdateIssue.saveChoiceFailed, detail: 'disk full'),
+    );
     expect(state.trackNotPublished, isNull);
   });
 }

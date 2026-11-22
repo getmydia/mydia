@@ -53,8 +53,8 @@ class HiveDownloadDatabase implements DownloadDatabase {
   @override
   List<DownloadTask> getActiveTasks() => _open
       ? tasksBox.values
-          .where((t) => t.status != 'completed' && t.status != 'cancelled')
-          .toList()
+            .where((t) => t.status != 'completed' && t.status != 'cancelled')
+            .toList()
       : [];
 
   @override
@@ -133,13 +133,14 @@ class FakeDownloadJobService implements DownloadJobService {
   FakeDownloadJobService({
     DownloadJobStatus? status,
     this.downloadUrl = 'https://test.invalid/file.mp4',
-  }) : status = status ??
-            const DownloadJobStatus(
-              jobId: 'job-1',
-              status: DownloadJobStatusType.ready,
-              progress: 1.0,
-              currentFileSize: 10,
-            );
+  }) : status =
+           status ??
+           const DownloadJobStatus(
+             jobId: 'job-1',
+             status: DownloadJobStatusType.ready,
+             progress: 1.0,
+             currentFileSize: 10,
+           );
 
   @override
   Future<DownloadJobStatus> getJobStatus(String jobId) async {
@@ -233,7 +234,10 @@ class RecordingHttpAdapter implements HttpClientAdapter {
     if (error != null && slice.length > bodyErrorAfter) {
       return ResponseBody(
         _dyingBody(
-            Uint8List.sublistView(slice, 0, bodyErrorAfter), error, chunkSize),
+          Uint8List.sublistView(slice, 0, bodyErrorAfter),
+          error,
+          chunkSize,
+        ),
         statusCode,
         headers: {
           Headers.contentLengthHeader: [slice.length.toString()],
@@ -269,7 +273,10 @@ class RecordingHttpAdapter implements HttpClientAdapter {
 }
 
 Stream<Uint8List> _dyingBody(
-    Uint8List first, Exception error, int? chunkSize) async* {
+  Uint8List first,
+  Exception error,
+  int? chunkSize,
+) async* {
   final size = chunkSize ?? math.max(first.length, 1);
   for (var i = 0; i < first.length; i += size) {
     yield Uint8List.sublistView(first, i, math.min(i + size, first.length));
@@ -401,7 +408,8 @@ Future<DownloadHarness> makeHarness({
   service.setDatabase(database);
   final resolver = FakeResolver((task) {
     // Tasks seeded as transcodes keep exercising the job path.
-    final transcode = task.isProgressive ||
+    final transcode =
+        task.isProgressive ||
         task.transcodeJobId != null ||
         task.status == 'transcoding';
     if (!transcode) {
@@ -413,7 +421,9 @@ Future<DownloadHarness> makeHarness({
       id: task.mediaId,
       resolution: task.quality,
       fileFor: (jobId) async => DirectFile(
-          url: await jobService.getDownloadUrl(jobId), extension: 'mp4'),
+        url: await jobService.getDownloadUrl(jobId),
+        extension: 'mp4',
+      ),
     );
   });
   if (attachResolver) service.setPlanResolver(resolver.call);

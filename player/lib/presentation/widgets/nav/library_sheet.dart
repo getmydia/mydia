@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/source_nav.dart';
@@ -23,8 +23,10 @@ Future<void> showLibrarySheet(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-            child: Text(sheetContext.l10n.navLibraries,
-                style: Theme.of(sheetContext).textTheme.headlineSmall),
+            child: Text(
+              sheetContext.l10n.navLibraries,
+              style: Theme.of(sheetContext).textTheme.headlineSmall,
+            ),
           ),
           // The heading stays put; the rows scroll when the source has
           // more than the sheet's height allows (many libraries, or a

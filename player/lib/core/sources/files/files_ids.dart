@@ -50,12 +50,7 @@ String folderId(String rootId, [String dir = '']) =>
 
 /// An id taken apart.
 class FilesId {
-  const FilesId({
-    required this.base,
-    this.season,
-    this.episode,
-    this.fileKey,
-  });
+  const FilesId({required this.base, this.season, this.episode, this.fileKey});
 
   /// TMDB id as text, or a provisional key. Null for an unmatched file.
   final String? base;

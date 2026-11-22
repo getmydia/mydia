@@ -3,7 +3,7 @@
 /// because the merged list itself is never edited.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -46,7 +46,9 @@ class _HomeContinueWatchingRowState
     final rows = widget.rows;
     if (!rows.labelled) return null;
     return allServersServerLabel(
-        rows.names[item.ref.sourceId], rows.extraCopies[item.ref] ?? 0);
+      rows.names[item.ref.sourceId],
+      rows.extraCopies[item.ref] ?? 0,
+    );
   }
 
   @override
@@ -64,14 +66,17 @@ class _HomeContinueWatchingRowState
       itemWidth: ContinueWatchingCard.artSize.width,
       height: ContinueWatchingCard.heightFor(
         context,
-        hasCaption: items.any((i) =>
-            ContinueWatchingCard.hasCaptionFor(i, trailingLabel: _label(i))),
+        hasCaption: items.any(
+          (i) =>
+              ContinueWatchingCard.hasCaptionFor(i, trailingLabel: _label(i)),
+        ),
         hasTimeLeft: items.any(ContinueWatchingCard.hasTimeLeftFor),
       ),
       onTitleTap: widget.onTitleTap,
       posterFor: (context, item) => ContinueWatchingCard(
         key: ValueKey(
-            'home-continue-${item.ref.sourceId.value}-${item.ref.externalId}'),
+          'home-continue-${item.ref.sourceId.value}-${item.ref.externalId}',
+        ),
         item: item,
         trailingLabel: _label(item),
         onTap: () => playItem(context, ref, item.ref),

@@ -7,12 +7,18 @@ library;
 
 final bearerPattern = RegExp(r'Bearer\s+[a-zA-Z0-9_\-.]+');
 final jwtPattern = RegExp(r'eyJ[\w-]+\.[\w-]+\.[\w-]+');
-final passwordPattern =
-    RegExp(r'''password["\s:=]+[^\s"]+''', caseSensitive: false);
-final secretPattern =
-    RegExp(r'''secret["\s:=]+[^\s"]+''', caseSensitive: false);
-final apiKeyPattern =
-    RegExp(r'''api_key["\s:=]+[^\s"]+''', caseSensitive: false);
+final passwordPattern = RegExp(
+  r'''password["\s:=]+[^\s"]+''',
+  caseSensitive: false,
+);
+final secretPattern = RegExp(
+  r'''secret["\s:=]+[^\s"]+''',
+  caseSensitive: false,
+);
+final apiKeyPattern = RegExp(
+  r'''api_key["\s:=]+[^\s"]+''',
+  caseSensitive: false,
+);
 
 /// A Plex token, a Stash API key or a Jellyfin token (the `Token="..."`
 /// field of a `MediaBrowser` authorization header, or `AccessToken` in a

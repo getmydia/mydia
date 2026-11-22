@@ -1,36 +1,29 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 
 /// Badge type for displaying quality information
-enum QualityBadgeType {
-  resolution,
-  hdr,
-  codec,
-}
+enum QualityBadgeType { resolution, hdr, codec }
 
 /// A small, pill-shaped badge displaying quality information
 class QualityBadge extends StatelessWidget {
   final String label;
   final QualityBadgeType type;
 
-  const QualityBadge({
-    super.key,
-    required this.label,
-    required this.type,
-  });
+  const QualityBadge({super.key, required this.label, required this.type});
 
   /// Creates a resolution badge (e.g., "4K", "1080p")
   const QualityBadge.resolution(this.label, {super.key})
-      : type = QualityBadgeType.resolution;
+    : type = QualityBadgeType.resolution;
 
   /// Creates an HDR badge (e.g., "HDR10", "Dolby Vision")
   const QualityBadge.hdr(this.label, {super.key}) : type = QualityBadgeType.hdr;
 
   /// Creates a codec badge (e.g., "HEVC", "H.264")
   const QualityBadge.codec(this.label, {super.key})
-      : type = QualityBadgeType.codec;
+    : type = QualityBadgeType.codec;
 
   // Badge type no longer selects a hue. The palette has a single accent and it
   // is reserved for actions and state (play, active nav, scrubber, focus);
@@ -63,11 +56,7 @@ class QualityBadgeRow extends StatelessWidget {
   final List<QualityBadge> badges;
   final double spacing;
 
-  const QualityBadgeRow({
-    super.key,
-    required this.badges,
-    this.spacing = 6.0,
-  });
+  const QualityBadgeRow({super.key, required this.badges, this.spacing = 6.0});
 
   @override
   Widget build(BuildContext context) {
@@ -75,11 +64,7 @@ class QualityBadgeRow extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Wrap(
-      spacing: spacing,
-      runSpacing: spacing,
-      children: badges,
-    );
+    return Wrap(spacing: spacing, runSpacing: spacing, children: badges);
   }
 }
 
@@ -89,11 +74,7 @@ class MediaQuality {
   final String? hdrFormat;
   final String? codec;
 
-  const MediaQuality({
-    this.resolution,
-    this.hdrFormat,
-    this.codec,
-  });
+  const MediaQuality({this.resolution, this.hdrFormat, this.codec});
 
   /// Returns true if any quality information is present
   bool get hasQuality =>

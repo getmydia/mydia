@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/subtitle_position.dart';
 import 'package:player/core/theme/depth_tokens.dart';
@@ -108,8 +108,9 @@ void main() {
 
   tearDown(() => chrome.dispose());
 
-  testWidgets('lifts clear of the panel while the chrome is shown',
-      (tester) async {
+  testWidgets('lifts clear of the panel while the chrome is shown', (
+    tester,
+  ) async {
     _view(tester);
     final lift = _RecordingLift();
     await tester.pumpWidget(_host(lift: lift, chrome: chrome));
@@ -119,8 +120,9 @@ void main() {
     expect(lift.durations, [DepthTokens.motionFast]);
   });
 
-  testWidgets('drops to rest as a hide starts, and back up on show',
-      (tester) async {
+  testWidgets('drops to rest as a hide starts, and back up on show', (
+    tester,
+  ) async {
     _view(tester);
     final lift = _RecordingLift();
     await tester.pumpWidget(_host(lift: lift, chrome: chrome));
@@ -139,15 +141,17 @@ void main() {
     expect(lift.bottoms, [_shownLift, kSubtitleRestPadding, _shownLift]);
   });
 
-  testWidgets('follows a panel resize without repeating itself',
-      (tester) async {
+  testWidgets('follows a panel resize without repeating itself', (
+    tester,
+  ) async {
     _view(tester);
     final lift = _RecordingLift();
     await tester.pumpWidget(_host(lift: lift, chrome: chrome));
     await tester.pump();
 
-    await tester
-        .pumpWidget(_host(lift: lift, chrome: chrome, panelHeight: 200));
+    await tester.pumpWidget(
+      _host(lift: lift, chrome: chrome, panelHeight: 200),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -167,8 +171,9 @@ void main() {
     expect(lift.bottoms, [_shownLift, kSubtitleRestPadding]);
   });
 
-  testWidgets('counts as shown with no chrome animation above it',
-      (tester) async {
+  testWidgets('counts as shown with no chrome animation above it', (
+    tester,
+  ) async {
     _view(tester);
     final lift = _RecordingLift();
     await tester.pumpWidget(_host(lift: lift));
@@ -186,8 +191,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('swapping lift non-null -> null resets the old lift to rest',
-      (tester) async {
+  testWidgets('swapping lift non-null -> null resets the old lift to rest', (
+    tester,
+  ) async {
     _view(tester);
     final lift = _RecordingLift();
     await tester.pumpWidget(_host(lift: lift, chrome: chrome));
@@ -202,54 +208,63 @@ void main() {
   });
 
   testWidgets(
-      'swapping lift null -> non-null picks up the shown lift, then rest on hide',
-      (tester) async {
-    _view(tester);
-    await tester.pumpWidget(_host(lift: null, chrome: chrome));
-    await tester.pump();
+    'swapping lift null -> non-null picks up the shown lift, then rest on hide',
+    (tester) async {
+      _view(tester);
+      await tester.pumpWidget(_host(lift: null, chrome: chrome));
+      await tester.pump();
 
-    final lift = _RecordingLift();
-    await tester.pumpWidget(_host(lift: lift, chrome: chrome));
-    await tester.pump();
-    expect(lift.bottoms, [_shownLift]);
+      final lift = _RecordingLift();
+      await tester.pumpWidget(_host(lift: lift, chrome: chrome));
+      await tester.pump();
+      expect(lift.bottoms, [_shownLift]);
 
-    chrome.reverse();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 16));
-    expect(chrome.status, AnimationStatus.reverse);
-    expect(lift.bottoms.last, kSubtitleRestPadding);
-    await tester.pumpAndSettle();
-  });
+      chrome.reverse();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(chrome.status, AnimationStatus.reverse);
+      expect(lift.bottoms.last, kSubtitleRestPadding);
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets(
-      'rebuilding with an equal-but-different lift instance does not re-apply',
-      (tester) async {
-    _view(tester);
-    final calls = <double>[];
-    await tester.pumpWidget(_host(lift: _EqualLift(1, calls), chrome: chrome));
-    await tester.pump();
-    expect(calls, [_shownLift]);
+    'rebuilding with an equal-but-different lift instance does not re-apply',
+    (tester) async {
+      _view(tester);
+      final calls = <double>[];
+      await tester.pumpWidget(
+        _host(lift: _EqualLift(1, calls), chrome: chrome),
+      );
+      await tester.pump();
+      expect(calls, [_shownLift]);
 
-    await tester.pumpWidget(_host(lift: _EqualLift(1, calls), chrome: chrome));
-    await tester.pump();
+      await tester.pumpWidget(
+        _host(lift: _EqualLift(1, calls), chrome: chrome),
+      );
+      await tester.pump();
 
-    expect(calls, [_shownLift]);
-  });
+      expect(calls, [_shownLift]);
+    },
+  );
 
-  testWidgets('toggling lift null <-> non-null keeps the child State',
-      (tester) async {
+  testWidgets('toggling lift null <-> non-null keeps the child State', (
+    tester,
+  ) async {
     _view(tester);
     const child = _CountingChild();
     await tester.pumpWidget(_host(lift: null, chrome: chrome, child: child));
     await tester.pump();
-    final before =
-        tester.state<_CountingChildState>(find.byType(_CountingChild));
+    final before = tester.state<_CountingChildState>(
+      find.byType(_CountingChild),
+    );
 
     final lift = _RecordingLift();
     await tester.pumpWidget(_host(lift: lift, chrome: chrome, child: child));
     await tester.pump();
-    final after =
-        tester.state<_CountingChildState>(find.byType(_CountingChild));
+    final after = tester.state<_CountingChildState>(
+      find.byType(_CountingChild),
+    );
 
     expect(identical(before, after), isTrue);
   });

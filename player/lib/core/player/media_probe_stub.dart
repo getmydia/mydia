@@ -12,6 +12,5 @@ class _NoProbe implements MediaProbe {
   Future<ProbeResult?> probe(
     PlayableFile playable, {
     Duration timeout = const Duration(seconds: 15),
-  }) async =>
-      null;
+  }) async => null;
 }

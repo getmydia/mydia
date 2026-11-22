@@ -82,17 +82,20 @@ class _DelayedAuthStorage implements AuthStorage {
 }
 
 class _Harness {
-  _Harness({
-    bool available = true,
-    Duration? slowSave,
-    Duration? slowLoad,
-  }) {
+  _Harness({bool available = true, Duration? slowSave, Duration? slowLoad}) {
     if (slowSave != null) {
-      delayedStorage =
-          _DelayedAuthStorage(storage, slowSave, delayWrites: true);
+      delayedStorage = _DelayedAuthStorage(
+        storage,
+        slowSave,
+        delayWrites: true,
+      );
     } else if (slowLoad != null) {
-      delayedStorage = _DelayedAuthStorage(storage, slowLoad,
-          delayReads: true, delayWrites: false);
+      delayedStorage = _DelayedAuthStorage(
+        storage,
+        slowLoad,
+        delayReads: true,
+        delayWrites: false,
+      );
     }
     settings = DiagnosticsSettings(storage: delayedStorage ?? storage);
     reporter = CrashReporter(
@@ -111,11 +114,13 @@ class _Harness {
       compress: (bytes) => bytes,
       now: now,
     );
-    container = ProviderContainer(overrides: [
-      crashReporterProvider.overrideWithValue(reporter),
-      diagnosticsSettingsProvider.overrideWithValue(settings),
-      logUploaderProvider.overrideWithValue(uploader),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        crashReporterProvider.overrideWithValue(reporter),
+        diagnosticsSettingsProvider.overrideWithValue(settings),
+        logUploaderProvider.overrideWithValue(uploader),
+      ],
+    );
   }
 
   static DateTime now() => DateTime.utc(2026, 9, 22, 12);
@@ -136,13 +141,15 @@ class _Harness {
 
   DiagnosticsState? get current => container.read(diagnosticsProvider).value;
 
-  void writeRecord() => store.add(LogRecord(
-        time: now(),
-        level: LogLevel.info,
-        tag: 'Test',
-        message: 'line',
-        sessionId: 'sess0001',
-      ));
+  void writeRecord() => store.add(
+    LogRecord(
+      time: now(),
+      level: LogLevel.info,
+      tag: 'Test',
+      message: 'line',
+      sessionId: 'sess0001',
+    ),
+  );
 
   Future<void> dispose() async {
     await uploader.deactivate();
@@ -151,15 +158,17 @@ class _Harness {
 }
 
 void main() {
-  test('with the inert reporter, resolves to off without reading storage',
-      () async {
-    final h = _Harness(available: false);
-    addTearDown(h.dispose);
-    await h.settings.save(_both);
+  test(
+    'with the inert reporter, resolves to off without reading storage',
+    () async {
+      final h = _Harness(available: false);
+      addTearDown(h.dispose);
+      await h.settings.save(_both);
 
-    expect(await h.loaded, DiagnosticsState.off);
-    expect(h.uploader.isActive, isFalse);
-  });
+      expect(await h.loaded, DiagnosticsState.off);
+      expect(h.uploader.isActive, isFalse);
+    },
+  );
 
   test('loads the stored switches and applies them', () async {
     final h = _Harness();
@@ -171,42 +180,46 @@ void main() {
     expect(h.uploader.isActive, isTrue);
   });
 
-  test('setCrashes stores it and tells the reporter, leaving logs alone',
-      () async {
-    final h = _Harness();
-    addTearDown(h.dispose);
-    await h.loaded;
+  test(
+    'setCrashes stores it and tells the reporter, leaving logs alone',
+    () async {
+      final h = _Harness();
+      addTearDown(h.dispose);
+      await h.loaded;
 
-    await h.controller.setCrashes(true);
+      await h.controller.setCrashes(true);
 
-    const expected = DiagnosticsState(crashes: true, logs: false);
-    expect(await h.settings.load(), expected);
-    expect(h.current, expected);
-    expect(await h.reporter.isEnabled(), isTrue);
-    expect(h.uploader.isActive, isFalse);
+      const expected = DiagnosticsState(crashes: true, logs: false);
+      expect(await h.settings.load(), expected);
+      expect(h.current, expected);
+      expect(await h.reporter.isEnabled(), isTrue);
+      expect(h.uploader.isActive, isFalse);
 
-    await h.controller.setCrashes(false);
+      await h.controller.setCrashes(false);
 
-    expect(await h.reporter.isEnabled(), isFalse);
-  });
+      expect(await h.reporter.isEnabled(), isFalse);
+    },
+  );
 
-  test('setLogs starts and stops sharing without changing crash consent',
-      () async {
-    final h = _Harness();
-    addTearDown(h.dispose);
-    await h.loaded;
+  test(
+    'setLogs starts and stops sharing without changing crash consent',
+    () async {
+      final h = _Harness();
+      addTearDown(h.dispose);
+      await h.loaded;
 
-    await h.controller.setLogs(true);
+      await h.controller.setLogs(true);
 
-    expect(await h.settings.load(), _logsOnly);
-    expect(h.uploader.isActive, isTrue);
-    expect(await h.reporter.isEnabled(), isFalse);
+      expect(await h.settings.load(), _logsOnly);
+      expect(h.uploader.isActive, isTrue);
+      expect(await h.reporter.isEnabled(), isFalse);
 
-    await h.controller.setLogs(false);
+      await h.controller.setLogs(false);
 
-    expect(h.current, DiagnosticsState.off);
-    expect(h.uploader.isActive, isFalse);
-  });
+      expect(h.current, DiagnosticsState.off);
+      expect(h.uploader.isActive, isFalse);
+    },
+  );
 
   test('turning logs on skips logs already on disk', () async {
     final h = _Harness();
@@ -245,8 +258,7 @@ void main() {
     expect(h.uploader.isActive, isFalse);
   });
 
-  test(
-      'a change made while the provider is still building layers on the '
+  test('a change made while the provider is still building layers on the '
       'value build() was loading', () {
     fakeAsync((async) {
       final h = _Harness(slowLoad: const Duration(seconds: 1));

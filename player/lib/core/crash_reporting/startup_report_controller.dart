@@ -7,10 +7,8 @@ enum StartupReportState { idle, sending, sent, failed }
 /// Each [send] is one POST: no queue, no throttle, no dedup. A tap is the
 /// consent, the way an admin's manual report is on the server.
 class StartupReportController extends ValueNotifier<StartupReportState> {
-  StartupReportController({
-    required Future<bool> Function({required bool manual}) send,
-  })  : _send = send,
-        super(StartupReportState.idle);
+  StartupReportController({required this._send})
+    : super(StartupReportState.idle);
 
   final Future<bool> Function({required bool manual}) _send;
 

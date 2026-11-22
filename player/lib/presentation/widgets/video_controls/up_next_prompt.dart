@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/cache/poster_cache_manager.dart';
@@ -200,47 +200,61 @@ class _UpNextPromptState extends State<UpNextPrompt> {
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(widget.target.eyebrow(context.l10n).toUpperCase(),
-                            style: glassText.copyWith(
-                                fontSize: 9,
-                                letterSpacing: 1.2,
-                                fontWeight: FontWeight.w500)),
-                        _CountdownRing(countdown: widget.countdown),
-                      ]),
-                  const SizedBox(height: 11),
-                  Row(children: [
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      widget.target.eyebrow(context.l10n).toUpperCase(),
+                      style: glassText.copyWith(
+                        fontSize: 9,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    _CountdownRing(countdown: widget.countdown),
+                  ],
+                ),
+                const SizedBox(height: 11),
+                Row(
+                  children: [
                     if (still != null) ...[
                       _CardStill(url: still),
-                      const SizedBox(width: 10)
+                      const SizedBox(width: 10),
                     ],
                     Expanded(
-                        child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          Text(widget.target.episodeCode,
-                              style: glassText.copyWith(fontSize: 9.5)),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.target.episodeCode,
+                            style: glassText.copyWith(fontSize: 9.5),
+                          ),
                           const SizedBox(height: 2),
                           Text(
-                              widget.target.title ??
-                                  context.l10n.upNextEpisodeFallback(
-                                      widget.target.episodeNumber),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white.withValues(alpha: .94))),
-                        ])),
-                  ]),
-                  const SizedBox(height: 11),
-                  Row(children: [
+                            widget.target.title ??
+                                context.l10n.upNextEpisodeFallback(
+                                  widget.target.episodeNumber,
+                                ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withValues(alpha: .94),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 11),
+                Row(
+                  children: [
                     Expanded(
                       child: _FocusableTap(
                         key: UpNextPrompt.playKey,
@@ -265,14 +279,20 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.play_arrow_rounded,
-                                  size: 16, color: Color(0xFF0B0B0C)),
+                              const Icon(
+                                Icons.play_arrow_rounded,
+                                size: 16,
+                                color: Color(0xFF0B0B0C),
+                              ),
                               const SizedBox(width: 4),
-                              Text(context.l10n.videoUpNextPlayNow,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF0B0B0C))),
+                              Text(
+                                context.l10n.videoUpNextPlayNow,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF0B0B0C),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -280,14 +300,17 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                     ),
                     const SizedBox(width: 8),
                     ControlButton(
-                        key: UpNextPrompt.dismissKey,
-                        icon: Icons.close_rounded,
-                        size: 32,
-                        iconSize: 18,
-                        tooltip: context.l10n.commonDismiss,
-                        onTap: widget.onDismiss),
-                  ]),
-                ]),
+                      key: UpNextPrompt.dismissKey,
+                      icon: Icons.close_rounded,
+                      size: 32,
+                      iconSize: 18,
+                      tooltip: context.l10n.commonDismiss,
+                      onTap: widget.onDismiss,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -300,22 +323,24 @@ class _CardStill extends StatelessWidget {
   final String url;
   @override
   Widget build(BuildContext context) => ClipRRect(
-        key: UpNextPrompt.stillKey,
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-            width: 80,
-            height: 45,
-            // `episode_rail_card.dart` already caches this exact episode
-            // still under the same cache manager, so reusing it here is a
-            // cache hit rather than a second download.
-            child: ArtworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                cacheManager: EpisodeThumbnailCacheManager(),
-                placeholder: (_) => const ShimmerCard(width: 80, height: 45),
-                errorWidget: (_) =>
-                    ColoredBox(color: Colors.white.withValues(alpha: .06)))),
-      );
+    key: UpNextPrompt.stillKey,
+    borderRadius: BorderRadius.circular(6),
+    child: SizedBox(
+      width: 80,
+      height: 45,
+      // `episode_rail_card.dart` already caches this exact episode
+      // still under the same cache manager, so reusing it here is a
+      // cache hit rather than a second download.
+      child: ArtworkImage(
+        imageUrl: url,
+        fit: BoxFit.cover,
+        cacheManager: EpisodeThumbnailCacheManager(),
+        placeholder: (_) => const ShimmerCard(width: 80, height: 45),
+        errorWidget: (_) =>
+            ColoredBox(color: Colors.white.withValues(alpha: .06)),
+      ),
+    ),
+  );
 }
 
 /// A 1px hairline between pill segments.
@@ -352,9 +377,7 @@ class _PillSegment extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget region = _FocusableTap(
       onTap: onTap,
-      constraints: const BoxConstraints(
-        minWidth: UpNextPrompt.segmentHitWidth,
-      ),
+      constraints: const BoxConstraints(minWidth: UpNextPrompt.segmentHitWidth),
       child: Center(widthFactor: 1, child: child),
     );
     final message = tooltip;
@@ -432,8 +455,9 @@ class _FocusableTapState extends State<_FocusableTap> {
             borderRadius: widget.borderRadius,
             border: _focused
                 ? Border.all(
-                    color: Colors.white
-                        .withValues(alpha: ControlButton.focusRingOpacity),
+                    color: Colors.white.withValues(
+                      alpha: ControlButton.focusRingOpacity,
+                    ),
                     width: 2,
                   )
                 : null,
@@ -470,7 +494,7 @@ class _CountdownRing extends StatelessWidget {
             tween: Tween<double>(end: countdown.fraction),
             duration: const Duration(milliseconds: 950),
             curve: Curves.linear,
-            builder: (context, value, __) => CircularProgressIndicator(
+            builder: (context, value, _) => CircularProgressIndicator(
               value: value,
               strokeWidth: 2,
               backgroundColor: Colors.white.withValues(alpha: 0.22),

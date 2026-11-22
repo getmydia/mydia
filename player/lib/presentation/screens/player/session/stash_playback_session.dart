@@ -31,8 +31,8 @@ class StashPlaybackSession extends SourcePlaybackSession {
     required StashMediaSource source,
     required super.item,
     required super.fileId,
-  })  : _stash = source,
-        super(source: source);
+  }) : _stash = source,
+       super(source: source);
 
   final StashMediaSource _stash;
 
@@ -43,17 +43,17 @@ class StashPlaybackSession extends SourcePlaybackSession {
 
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) => [
-        CandidateStrategy(
-          strategy: 'DIRECT_PLAY',
-          mime: version.container == 'webm' ? 'video/webm' : 'video/mp4',
-          videoCodec: version.videoCodec,
-        ),
-        const CandidateStrategy(
-          strategy: 'TRANSCODE',
-          mime: 'application/x-mpegURL',
-          videoCodec: 'h264',
-        ),
-      ];
+    CandidateStrategy(
+      strategy: 'DIRECT_PLAY',
+      mime: version.container == 'webm' ? 'video/webm' : 'video/mp4',
+      videoCodec: version.videoCodec,
+    ),
+    const CandidateStrategy(
+      strategy: 'TRANSCODE',
+      mime: 'application/x-mpegURL',
+      videoCodec: 'h264',
+    ),
+  ];
 
   @override
   Future<String> fetchText(String path) => _stash.client.text(path);
@@ -71,26 +71,34 @@ class StashPlaybackSession extends SourcePlaybackSession {
     ItemDetail detail,
     MediaVersion version, {
     String? burnSubtitleStreamId,
-  }) =>
-      StashStreamResolver(
-          client: _stash.client, sceneId: item.externalId, forReceiver: true);
+  }) => StashStreamResolver(
+    client: _stash.client,
+    sceneId: item.externalId,
+    forReceiver: true,
+  );
 
   /// Stash serves every caption as WebVTT from its caption route.
   @override
   Future<List<CastSubtitleTrack>> receiverSubtitles(
-      MediaVersion version) async {
+    MediaVersion version,
+  ) async {
     final credential = await _stash.client.receiverQuery();
     return [
       for (final s in version.streams)
         if (s.kind == MediaStreamKind.subtitle && s.externalPath != null)
           CastSubtitleTrack(
             trackId: s.id,
-            url: await _stash.client.url(s.externalPath!).then((u) => u.replace(
-                    queryParameters: {
-                      ...u.queryParameters,
-                      ...credential
-                    }).toString()),
-            label: s.title ??
+            url: await _stash.client
+                .url(s.externalPath!)
+                .then(
+                  (u) => u
+                      .replace(
+                        queryParameters: {...u.queryParameters, ...credential},
+                      )
+                      .toString(),
+                ),
+            label:
+                s.title ??
                 s.language ??
                 currentAppLocalizations().commonSubtitles,
             language: s.language ?? 'und',
@@ -120,19 +128,26 @@ class StashStreamResolver implements StreamResolver {
   }) async {
     final path = switch (plan) {
       DirectPlayPlan() => '/scene/$sceneId/stream',
-      HlsPlan(:final rung) => '/scene/$sceneId/stream.m3u8'
-          '?resolution=${stashResolutionFor(rung.height)}',
+      HlsPlan(:final rung) =>
+        '/scene/$sceneId/stream.m3u8'
+            '?resolution=${stashResolutionFor(rung.height)}',
     };
     final url = await client.url(path);
     if (!forReceiver) {
       return ResolvedStream(
-          url: url.toString(), headers: await client.headers());
+        url: url.toString(),
+        headers: await client.headers(),
+      );
     }
     return ResolvedStream(
-      url: url.replace(queryParameters: {
-        ...url.queryParameters,
-        ...await client.receiverQuery(),
-      }).toString(),
+      url: url
+          .replace(
+            queryParameters: {
+              ...url.queryParameters,
+              ...await client.receiverQuery(),
+            },
+          )
+          .toString(),
       headers: const {},
     );
   }
@@ -186,10 +201,9 @@ class StashProgressReporter extends PeriodicProgressReporter {
   Future<void> sendStopped({
     required int positionSeconds,
     required int durationSeconds,
-  }) =>
-      client.query(stashSaveActivity, {
-        'id': sceneId,
-        'resume_time': positionSeconds.toDouble(),
-        'playDuration': 0.0,
-      });
+  }) => client.query(stashSaveActivity, {
+    'id': sceneId,
+    'resume_time': positionSeconds.toDouble(),
+    'playDuration': 0.0,
+  });
 }

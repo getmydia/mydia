@@ -31,25 +31,32 @@ void main() {
 
     setUp(() {
       store = InMemorySourceStore();
-      container = ProviderContainer(overrides: [
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
-      ]);
+      container = ProviderContainer(
+        overrides: [
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(
+            SourceSecrets(MockAuthStorage()),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
     });
 
-    test('lists included sources flagged for sign-in, not excluded ones',
-        () async {
-      await store.putAccount(plexRecord());
-      await container.read(sourceRecordsProvider.future);
-      final notifier = container.read(sourceRecordsProvider.notifier);
-      await notifier.markNeedsReauth('acc1', true);
-      expect(container.read(allServersNeedSignInProvider).single.id,
-          plexSource.id);
+    test(
+      'lists included sources flagged for sign-in, not excluded ones',
+      () async {
+        await store.putAccount(plexRecord());
+        await container.read(sourceRecordsProvider.future);
+        final notifier = container.read(sourceRecordsProvider.notifier);
+        await notifier.markNeedsReauth('acc1', true);
+        expect(
+          container.read(allServersNeedSignInProvider).single.id,
+          plexSource.id,
+        );
 
-      await notifier.setIncludedInAllServers(plexSource.id, false);
-      expect(container.read(allServersNeedSignInProvider), isEmpty);
-    });
+        await notifier.setIncludedInAllServers(plexSource.id, false);
+        expect(container.read(allServersNeedSignInProvider), isEmpty);
+      },
+    );
   });
 }

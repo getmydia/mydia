@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/cast/cast_providers.dart';
@@ -33,8 +33,9 @@ class CastChromeIcon extends ConsumerWidget {
     final connection = ref.watch(castConnectionProvider);
     final device = ref.watch(castDisplayDeviceProvider);
     final visuals = castVisualsFor(context.l10n, connection, device?.name);
-    final glyph =
-        visuals.connected ? Icons.cast_connected_rounded : Icons.cast_rounded;
+    final glyph = visuals.connected
+        ? Icons.cast_connected_rounded
+        : Icons.cast_rounded;
 
     // Idle inherits the pill's own IconTheme (white @ 0.80) so the cast glyph
     // matches the back chevron beside it; CastButton's opaque white would

@@ -13,25 +13,23 @@ void main() {
   CastRouteResolver directResolver({
     String? lanBaseUrl = 'http://192.168.1.20:5000/g/abcd',
     String? mediaToken = 'tok123',
-  }) =>
-      CastRouteResolver(
-        isP2pMode: false,
-        serverUrl: 'https://mydia.test',
-        mediaToken: () async => mediaToken,
-        lanBaseUrl: () => lanBaseUrl,
-        streamingSessions: sessions,
-      );
+  }) => CastRouteResolver(
+    isP2pMode: false,
+    serverUrl: 'https://mydia.test',
+    mediaToken: () async => mediaToken,
+    lanBaseUrl: () => lanBaseUrl,
+    streamingSessions: sessions,
+  );
 
   CastRouteResolver p2pResolver({
     String? lanBaseUrl = 'http://192.168.1.20:5000/g/abcd',
-  }) =>
-      CastRouteResolver(
-        isP2pMode: true,
-        serverUrl: null,
-        mediaToken: () async => null,
-        lanBaseUrl: () => lanBaseUrl,
-        streamingSessions: sessions,
-      );
+  }) => CastRouteResolver(
+    isP2pMode: true,
+    serverUrl: null,
+    mediaToken: () async => null,
+    lanBaseUrl: () => lanBaseUrl,
+    streamingSessions: sessions,
+  );
 
   group('route selection', () {
     test('direct connection yields a direct server URL', () async {
@@ -48,7 +46,8 @@ void main() {
       expect(
         route.mediaUrl,
         startsWith(
-            'https://mydia.test/api/v1/hls/${sessions.started.single}/index.m3u8'),
+          'https://mydia.test/api/v1/hls/${sessions.started.single}/index.m3u8',
+        ),
       );
       expect(route.mediaUrl, contains('token=tok123'));
     });
@@ -62,8 +61,10 @@ void main() {
       );
 
       expect(route!.kind, CastRouteKind.directServer);
-      expect(route.mediaUrl,
-          startsWith('https://mydia.test/api/v1/stream/file/file-1'));
+      expect(
+        route.mediaUrl,
+        startsWith('https://mydia.test/api/v1/stream/file/file-1'),
+      );
       expect(sessions.started, isEmpty);
     });
 
@@ -92,7 +93,9 @@ void main() {
 
       expect(
         await resolver.resolve(
-            fileId: 'f', protocol: CastProtocolKind.chromecast),
+          fileId: 'f',
+          protocol: CastProtocolKind.chromecast,
+        ),
         isNull,
       );
     });
@@ -108,37 +111,45 @@ void main() {
 
       expect(
         await resolver.resolve(
-            fileId: 'f', protocol: CastProtocolKind.chromecast),
+          fileId: 'f',
+          protocol: CastProtocolKind.chromecast,
+        ),
         isNull,
       );
     });
 
-    test('reads the LAN base URL at resolve time, not construction time',
-        () async {
-      // The bug this pins: a resolver built while the proxy was still
-      // loopback-only could never produce a bridge route, because it had
-      // captured a null snapshot before LAN access was ever enabled.
-      String? lanBaseUrl;
-      final resolver = CastRouteResolver(
-        isP2pMode: true,
-        serverUrl: null,
-        mediaToken: () async => null,
-        lanBaseUrl: () => lanBaseUrl,
-        streamingSessions: sessions,
-      );
+    test(
+      'reads the LAN base URL at resolve time, not construction time',
+      () async {
+        // The bug this pins: a resolver built while the proxy was still
+        // loopback-only could never produce a bridge route, because it had
+        // captured a null snapshot before LAN access was ever enabled.
+        String? lanBaseUrl;
+        final resolver = CastRouteResolver(
+          isP2pMode: true,
+          serverUrl: null,
+          mediaToken: () async => null,
+          lanBaseUrl: () => lanBaseUrl,
+          streamingSessions: sessions,
+        );
 
-      expect(
-        await resolver.resolve(
-            fileId: 'f', protocol: CastProtocolKind.chromecast),
-        isNull,
-      );
+        expect(
+          await resolver.resolve(
+            fileId: 'f',
+            protocol: CastProtocolKind.chromecast,
+          ),
+          isNull,
+        );
 
-      lanBaseUrl = 'http://192.168.1.20:5000/g/abcd';
+        lanBaseUrl = 'http://192.168.1.20:5000/g/abcd';
 
-      final route = await resolver.resolve(
-          fileId: 'f', protocol: CastProtocolKind.chromecast);
-      expect(route!.kind, CastRouteKind.localBridge);
-    });
+        final route = await resolver.resolve(
+          fileId: 'f',
+          protocol: CastProtocolKind.chromecast,
+        );
+        expect(route!.kind, CastRouteKind.localBridge);
+      },
+    );
 
     test('usesBridge answers before a URL is built', () {
       expect(p2pResolver().usesBridge(), isTrue);
@@ -148,8 +159,7 @@ void main() {
   });
 
   group('bridged Chromecast streaming sessions', () {
-    test('starts a streaming session and addresses the proxy by its id',
-        () async {
+    test('starts a streaming session and addresses the proxy by its id', () async {
       // LocalProxyService forwards /hls/{id}/… with {id} as a *streaming
       // session* id. A file id there resolves to nothing at all.
       final route = await p2pResolver().resolve(
@@ -176,18 +186,22 @@ void main() {
       expect(sessions.started.single, contains('transcode'));
     });
 
-    test('a DLNA bridge route needs no session and keeps the file id',
-        () async {
-      final route = await p2pResolver().resolve(
-        fileId: 'file-1',
-        protocol: CastProtocolKind.dlna,
-      );
+    test(
+      'a DLNA bridge route needs no session and keeps the file id',
+      () async {
+        final route = await p2pResolver().resolve(
+          fileId: 'file-1',
+          protocol: CastProtocolKind.dlna,
+        );
 
-      expect(sessions.started, isEmpty);
-      expect(route!.mediaUrl,
-          'http://192.168.1.20:5000/g/abcd/direct/file-1/stream');
-      expect(route.hlsSessionId, isNull);
-    });
+        expect(sessions.started, isEmpty);
+        expect(
+          route!.mediaUrl,
+          'http://192.168.1.20:5000/g/abcd/direct/file-1/stream',
+        );
+        expect(route.hlsSessionId, isNull);
+      },
+    );
 
     test('a bridge URL carries the instance target the base names', () async {
       final route = await p2pResolver(
@@ -201,8 +215,10 @@ void main() {
       sessions.failure = CastFailureKind.unreachable;
 
       await expectLater(
-        p2pResolver()
-            .resolve(fileId: 'f', protocol: CastProtocolKind.chromecast),
+        p2pResolver().resolve(
+          fileId: 'f',
+          protocol: CastProtocolKind.chromecast,
+        ),
         throwsA(isA<CastBackendException>()),
       );
     });
@@ -210,24 +226,34 @@ void main() {
 
   group('per-protocol media kind', () {
     test('Chromecast gets HLS', () async {
-      final route = await directResolver()
-          .resolve(fileId: 'f', protocol: CastProtocolKind.chromecast);
+      final route = await directResolver().resolve(
+        fileId: 'f',
+        protocol: CastProtocolKind.chromecast,
+      );
 
       expect(route!.mediaKind, CastMediaKind.hls);
       expect(route.mediaUrl, contains('/api/v1/hls/'));
-      expect(sessions.started.single, isNot(contains('transcode')),
-          reason: 'an unforced Chromecast session is an HLS copy, not a '
-              'full transcode');
+      expect(
+        sessions.started.single,
+        isNot(contains('transcode')),
+        reason:
+            'an unforced Chromecast session is an HLS copy, not a '
+            'full transcode',
+      );
     });
 
-    test('DLNA gets progressive, because DLNA renderers cannot play HLS',
-        () async {
-      final route = await directResolver()
-          .resolve(fileId: 'f', protocol: CastProtocolKind.dlna);
+    test(
+      'DLNA gets progressive, because DLNA renderers cannot play HLS',
+      () async {
+        final route = await directResolver().resolve(
+          fileId: 'f',
+          protocol: CastProtocolKind.dlna,
+        );
 
-      expect(route!.mediaKind, CastMediaKind.progressive);
-      expect(route.mediaUrl, contains('strategy=DIRECT_PLAY'));
-    });
+        expect(route!.mediaKind, CastMediaKind.progressive);
+        expect(route.mediaUrl, contains('strategy=DIRECT_PLAY'));
+      },
+    );
 
     test('forceTranscode escalates the strategy for a Chromecast', () async {
       final route = await directResolver().resolve(
@@ -265,15 +291,13 @@ void main() {
       ),
       CastSubtitleTrack(
         trackId: '0f8fad5b-d9cb-469f-a165-70867728950e',
-        url:
-            '/api/player/v1/subtitles/file/file-1/0f8fad5b-d9cb-469f-a165-70867728950e?format=vtt',
+        url: '/api/player/v1/subtitles/file/file-1/0f8fad5b-d9cb-469f-a165-70867728950e?format=vtt',
         label: 'Spanish',
         language: 'spa',
       ),
     ];
 
-    test('a direct Chromecast route rewrites tracks to session paths',
-        () async {
+    test('a direct Chromecast route rewrites tracks to session paths', () async {
       final route = await directResolver().resolve(
         fileId: 'file-1',
         protocol: CastProtocolKind.chromecast,
@@ -289,23 +313,25 @@ void main() {
       expect(route.subtitles.first.trackId, '3');
     });
 
-    test('a bridged Chromecast route serves subtitles from the LAN proxy',
-        () async {
-      final route = await p2pResolver().resolve(
-        fileId: 'file-1',
-        protocol: CastProtocolKind.chromecast,
-        subtitles: tracks,
-      );
+    test(
+      'a bridged Chromecast route serves subtitles from the LAN proxy',
+      () async {
+        final route = await p2pResolver().resolve(
+          fileId: 'file-1',
+          protocol: CastProtocolKind.chromecast,
+          subtitles: tracks,
+        );
 
-      expect(route!.kind, CastRouteKind.localBridge);
-      // The whole point: the bridge could not serve subtitles at all before.
-      expect(route.subtitles, hasLength(2));
-      expect(
-        route.subtitles.last.url,
-        'http://192.168.1.20:5000/g/abcd/hls/${route.hlsSessionId}'
-        '/subs_0f8fad5b-d9cb-469f-a165-70867728950e.vtt',
-      );
-    });
+        expect(route!.kind, CastRouteKind.localBridge);
+        // The whole point: the bridge could not serve subtitles at all before.
+        expect(route.subtitles, hasLength(2));
+        expect(
+          route.subtitles.last.url,
+          'http://192.168.1.20:5000/g/abcd/hls/${route.hlsSessionId}'
+          '/subs_0f8fad5b-d9cb-469f-a165-70867728950e.vtt',
+        );
+      },
+    );
 
     test('a bridged DLNA route has no session, so no subtitles', () async {
       final route = await p2pResolver().resolve(

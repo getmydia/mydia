@@ -22,8 +22,8 @@ class ScriptedMydiaTransport implements MydiaGqlTransport {
 
   /// Answers in order, repeating the last answer once the list runs out.
   ScriptedMydiaTransport.responses(List<Object> responses)
-      : handler = ((_, i) =>
-            responses[i < responses.length ? i : responses.length - 1]);
+    : handler = ((_, i) =>
+          responses[i < responses.length ? i : responses.length - 1]);
 
   final ScriptHandler handler;
   final List<ScriptedRequest> requests = [];
@@ -36,9 +36,9 @@ class ScriptedMydiaTransport implements MydiaGqlTransport {
 
   /// The requests for [operation], in order.
   List<ScriptedRequest> of(String operation) => [
-        for (final r in requests)
-          if (r.operation == operation) r
-      ];
+    for (final r in requests)
+      if (r.operation == operation) r,
+  ];
 
   @override
   Future<Map<String, dynamic>> send(

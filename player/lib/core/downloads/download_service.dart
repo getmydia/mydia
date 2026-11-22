@@ -14,7 +14,8 @@ import '../../domain/sources/item.dart';
 import '../sources/source.dart';
 import 'download_service_stub.dart'
     if (dart.library.html) 'download_service_web.dart'
-    if (dart.library.io) 'download_service_native.dart' as impl;
+    if (dart.library.io) 'download_service_native.dart'
+    as impl;
 
 /// Get the platform-appropriate download service implementation.
 DownloadService getDownloadService() => impl.getDownloadService();
@@ -54,8 +55,11 @@ typedef DownloadPlanResolver = Future<DownloadPlan> Function(DownloadTask task);
 
 /// Where one piece of a task's artwork is. [art] is a URL for art that is one
 /// (`UrlArt`) and an `ArtworkRef.path` otherwise. Null when there is none.
-typedef ArtworkFetcher = Future<({String url, Map<String, String> headers})?>
-    Function(DownloadTask task, String art);
+typedef ArtworkFetcher =
+    Future<({String url, Map<String, String> headers})?> Function(
+      DownloadTask task,
+      String art,
+    );
 
 /// Abstract interface for the download service/manager.
 abstract class DownloadService {
@@ -124,7 +128,10 @@ abstract class DownloadService {
 
   /// Delete all downloads for a specific season of a series. Returns count deleted.
   Future<int> deleteSeasonDownloads(
-      SourceId source, String showId, int seasonNumber);
+    SourceId source,
+    String showId,
+    int seasonNumber,
+  );
 
   /// What removing [accountId] would delete: every download from any of its
   /// profiles and servers.

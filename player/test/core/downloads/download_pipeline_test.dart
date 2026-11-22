@@ -18,45 +18,52 @@ import 'download_test_harness.dart';
 import '../../test_utils/mydia_test_source.dart';
 
 const _plex = ItemRef(
-    sourceId: SourceId('acc1:owner:aa11'),
-    kind: ItemKind.movie,
-    externalId: '42');
+  sourceId: SourceId('acc1:owner:aa11'),
+  kind: ItemKind.movie,
+  externalId: '42',
+);
 
 DownloadRequest _request([ItemRef ref = _plex]) => DownloadRequest(
-      ref: ref,
-      optionId: 'original',
-      metadata: const DownloadMetadata(
-          title: 'Quill Harbor', mediaType: MediaType.movie),
-    );
+  ref: ref,
+  optionId: 'original',
+  metadata: const DownloadMetadata(
+    title: 'Quill Harbor',
+    mediaType: MediaType.movie,
+  ),
+);
 
 void main() {
   final body = Uint8List.fromList(List.generate(64, (i) => i));
 
-  test('a direct plan downloads with its headers and the source on the record',
-      () async {
-    final h = await makeHarness(body: body);
-    addTearDown(h.dispose);
-    h.resolver.plan = (_) => const DirectFile(
+  test(
+    'a direct plan downloads with its headers and the source on the record',
+    () async {
+      final h = await makeHarness(body: body);
+      addTearDown(h.dispose);
+      h.resolver.plan = (_) => const DirectFile(
         url: testFileUrl,
         headers: {'X-Plex-Token': 'secret'},
-        extension: 'mkv');
+        extension: 'mkv',
+      );
 
-    final task = await h.service.start(_request());
-    await h.waitForStatus(task.id, 'completed');
+      final task = await h.service.start(_request());
+      await h.waitForStatus(task.id, 'completed');
 
-    final media = h.service.getDownloaded(_plex)!;
-    expect(media.filePath, endsWith('.mkv'));
-    expect(media.source, _plex.sourceId);
-    expect(h.adapter.requests.last.headers['X-Plex-Token'], 'secret');
-    expect(h.adapter.requests.last.uri.toString(), isNot(contains('secret')));
-  });
+      final media = h.service.getDownloaded(_plex)!;
+      expect(media.filePath, endsWith('.mkv'));
+      expect(media.source, _plex.sourceId);
+      expect(h.adapter.requests.last.headers['X-Plex-Token'], 'secret');
+      expect(h.adapter.requests.last.uri.toString(), isNot(contains('secret')));
+    },
+  );
 
   test('a restart resolves the plan again', () async {
     final h = await makeHarness(body: body);
     addTearDown(h.dispose);
     h.adapter.failWith = DioException(
-        requestOptions: RequestOptions(),
-        type: DioExceptionType.connectionError);
+      requestOptions: RequestOptions(),
+      type: DioExceptionType.connectionError,
+    );
     final task = await h.service.start(_request());
     await h.waitForStatus(task.id, 'interrupted');
     expect(h.resolver.calls, 1);
@@ -98,21 +105,25 @@ void main() {
     final task = await h.service.start(_request());
     await h.waitForStatus(task.id, 'failed');
     expect(h.resolver.calls, 2);
-    expect(h.database.getTask(task.id)!.failure?.code,
-        DownloadFailureCode.signInExpired);
+    expect(
+      h.database.getTask(task.id)!.failure?.code,
+      DownloadFailureCode.signInExpired,
+    );
   });
 
   test('nothing recovers until a resolver is installed', () async {
     final h = await makeHarness(body: body, attachResolver: false);
     addTearDown(h.dispose);
-    await h.database.saveTask(DownloadTask(
-      id: 'orphan',
-      mediaId: 'm1',
-      title: 'Orphan',
-      quality: '1080p',
-      status: 'downloading',
-      createdAt: DateTime(2026, 1, 1),
-    ));
+    await h.database.saveTask(
+      DownloadTask(
+        id: 'orphan',
+        mediaId: 'm1',
+        title: 'Orphan',
+        quality: '1080p',
+        status: 'downloading',
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    );
 
     await h.service.recoverStuckDownloads();
     expect(h.database.getTask('orphan')!.status, 'downloading');
@@ -169,12 +180,14 @@ void main() {
       );
       addTearDown(h.dispose);
       h.adapter.failWith = DioException(
-          requestOptions: RequestOptions(),
-          type: DioExceptionType.connectionError);
+        requestOptions: RequestOptions(),
+        type: DioExceptionType.connectionError,
+      );
       final jobPlan = h.resolver.plan;
       h.resolver.plan = (task) => jobPlan(task.copyWith(isProgressive: true));
-      final task =
-          await h.service.start(_request(testMydiaRef(ItemKind.movie, '7')));
+      final task = await h.service.start(
+        _request(testMydiaRef(ItemKind.movie, '7')),
+      );
       while (h.adapter.requests.isEmpty) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
@@ -187,50 +200,59 @@ void main() {
     });
   });
 
-  test('a gated resolver holds a limit of one to one running download',
-      () async {
-    final h = await makeHarness(body: body);
-    addTearDown(h.dispose);
-    h.service.applySettings(maxConcurrentDownloads: 1, autoStartQueued: false);
-    for (var i = 0; i < 3; i++) {
-      await h.database.saveTask(DownloadTask(
-        id: 'q$i',
-        mediaId: 'm$i',
-        title: 'Queued $i',
-        quality: '1080p',
-        status: 'queued',
-        createdAt: DateTime(2026, 1, 1).add(Duration(minutes: i)),
-      ));
-    }
-    final gate = h.resolver.gate = Completer<void>();
-    h.service.applySettings(maxConcurrentDownloads: 1, autoStartQueued: true);
-    await settle();
+  test(
+    'a gated resolver holds a limit of one to one running download',
+    () async {
+      final h = await makeHarness(body: body);
+      addTearDown(h.dispose);
+      h.service.applySettings(
+        maxConcurrentDownloads: 1,
+        autoStartQueued: false,
+      );
+      for (var i = 0; i < 3; i++) {
+        await h.database.saveTask(
+          DownloadTask(
+            id: 'q$i',
+            mediaId: 'm$i',
+            title: 'Queued $i',
+            quality: '1080p',
+            status: 'queued',
+            createdAt: DateTime(2026, 1, 1).add(Duration(minutes: i)),
+          ),
+        );
+      }
+      final gate = h.resolver.gate = Completer<void>();
+      h.service.applySettings(maxConcurrentDownloads: 1, autoStartQueued: true);
+      await settle();
 
-    final running = h.database
-        .getAllTasks()
-        .where((t) => t.status == 'downloading' || t.status == 'transcoding');
-    expect(running.length, 1);
-    expect(h.resolver.calls, 1);
+      final running = h.database.getAllTasks().where(
+        (t) => t.status == 'downloading' || t.status == 'transcoding',
+      );
+      expect(running.length, 1);
+      expect(h.resolver.calls, 1);
 
-    gate.complete();
-    for (var i = 0; i < 3; i++) {
-      await h.waitForStatus('q$i', 'completed');
-    }
-  });
+      gate.complete();
+      for (var i = 0; i < 3; i++) {
+        await h.waitForStatus('q$i', 'completed');
+      }
+    },
+  );
 
   test('a queue-claimed task is not stalled while it resolves', () async {
     final h = await makeHarness(body: body);
     addTearDown(h.dispose);
     h.service.applySettings(maxConcurrentDownloads: 1, autoStartQueued: false);
-    await h.database.saveTask(DownloadTask(
-      id: 'old',
-      mediaId: 'm1',
-      title: 'Old',
-      quality: '1080p',
-      status: 'queued',
-      lastProgressAt: h.clock.now.subtract(const Duration(minutes: 10)),
-      createdAt: DateTime(2026, 1, 1),
-    ));
+    await h.database.saveTask(
+      DownloadTask(
+        id: 'old',
+        mediaId: 'm1',
+        title: 'Old',
+        quality: '1080p',
+        status: 'queued',
+        lastProgressAt: h.clock.now.subtract(const Duration(minutes: 10)),
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    );
     final gate = h.resolver.gate = Completer<void>();
     h.service.applySettings(maxConcurrentDownloads: 1, autoStartQueued: true);
     await settle();
@@ -255,30 +277,35 @@ void main() {
     expect(h.database.getTask(task.id)!.status, 'completed');
   });
 
-  test('a connection dropped with bytes on disk is parked for a ranged resume',
-      () async {
-    final h = await makeHarness(body: body);
-    addTearDown(h.dispose);
-    final partial = '${h.downloadDir.path}/partial.mp4';
-    await File(partial).writeAsBytes(Uint8List.fromList([0, 1, 2, 3]));
-    await h.database.saveTask(DownloadTask(
-      id: 'drop',
-      mediaId: 'm1',
-      title: 'Drop',
-      quality: '1080p',
-      status: 'paused',
-      filePath: partial,
-      createdAt: DateTime(2026, 1, 1),
-    ));
-    h.adapter.failWith = DioException(
+  test(
+    'a connection dropped with bytes on disk is parked for a ranged resume',
+    () async {
+      final h = await makeHarness(body: body);
+      addTearDown(h.dispose);
+      final partial = '${h.downloadDir.path}/partial.mp4';
+      await File(partial).writeAsBytes(Uint8List.fromList([0, 1, 2, 3]));
+      await h.database.saveTask(
+        DownloadTask(
+          id: 'drop',
+          mediaId: 'm1',
+          title: 'Drop',
+          quality: '1080p',
+          status: 'paused',
+          filePath: partial,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
+      h.adapter.failWith = DioException(
         requestOptions: RequestOptions(),
-        type: DioExceptionType.connectionError);
+        type: DioExceptionType.connectionError,
+      );
 
-    await h.service.resumeDownload('drop');
-    await h.waitForStatus('drop', 'interrupted');
+      await h.service.resumeDownload('drop');
+      await h.waitForStatus('drop', 'interrupted');
 
-    expect(await File(partial).length(), 4);
-  });
+      expect(await File(partial).length(), 4);
+    },
+  );
 
   test('a job plan prepares, polls and fetches the job file', () async {
     final h = await makeHarness(body: body);
@@ -286,8 +313,9 @@ void main() {
     // The default plan only takes the job path for tasks marked as transcodes.
     final jobPlan = h.resolver.plan;
     h.resolver.plan = (task) => jobPlan(task.copyWith(isProgressive: true));
-    final task =
-        await h.service.start(_request(testMydiaRef(ItemKind.movie, '7')));
+    final task = await h.service.start(
+      _request(testMydiaRef(ItemKind.movie, '7')),
+    );
     await h.waitForStatus(task.id, 'completed');
     expect(h.jobService.prepareCount, 1);
   });
@@ -303,16 +331,18 @@ void main() {
     Future<DownloadHarness> seeded(Exception error) async {
       final h = await makeHarness(body: body, jobStatus: transcoding);
       h.jobService.statusError = error;
-      await h.database.saveTask(DownloadTask(
-        id: 'job',
-        mediaId: 'm1',
-        title: 'Quill Harbor',
-        quality: '1080p',
-        status: 'interrupted',
-        isProgressive: true,
-        transcodeJobId: 'job-1',
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await h.database.saveTask(
+        DownloadTask(
+          id: 'job',
+          mediaId: 'm1',
+          title: 'Quill Harbor',
+          quality: '1080p',
+          status: 'interrupted',
+          isProgressive: true,
+          transcodeJobId: 'job-1',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
       return h;
     }
 
@@ -334,22 +364,25 @@ void main() {
       });
     }
 
-    test('a refused sign-in while polling fails typed, not as English text',
-        () async {
-      final h = await seeded(const SourceException.unauthorized());
-      addTearDown(h.dispose);
+    test(
+      'a refused sign-in while polling fails typed, not as English text',
+      () async {
+        final h = await seeded(const SourceException.unauthorized());
+        addTearDown(h.dispose);
 
-      await h.service.resumeDownload('job');
-      await h.waitForStatus('job', 'failed');
+        await h.service.resumeDownload('job');
+        await h.waitForStatus('job', 'failed');
 
-      final failure = h.database.getTask('job')!.failure!;
-      expect(failure.code, DownloadFailureCode.source);
-      expect(failure.sourceKind, SourceErrorKind.unauthorized);
-    });
+        final failure = h.database.getTask('job')!.failure!;
+        expect(failure.code, DownloadFailureCode.source);
+        expect(failure.sourceKind, SourceErrorKind.unauthorized);
+      },
+    );
 
     test('an unreadable reply while polling keeps its fault', () async {
       final h = await seeded(
-          const SourceException.fault(SourceFault.serverUnreadable));
+        const SourceException.fault(SourceFault.serverUnreadable),
+      );
       addTearDown(h.dispose);
 
       await h.service.resumeDownload('job');
@@ -375,31 +408,34 @@ void main() {
       final jobPlan = h.resolver.plan;
       h.resolver.plan = (task) => jobPlan(task.copyWith(isProgressive: true));
 
-      final task =
-          await h.service.start(_request(testMydiaRef(ItemKind.movie, '7')));
+      final task = await h.service.start(
+        _request(testMydiaRef(ItemKind.movie, '7')),
+      );
       await h.waitForStatus(task.id, 'interrupted');
     });
   });
 
-  test('a multi-chunk download saves far fewer times than it has chunks',
-      () async {
-    final big = Uint8List(2048);
-    final h = await makeHarness(body: big);
-    addTearDown(h.dispose);
-    h.adapter.chunkSize = 16;
-    final seen = <DownloadTask>[];
-    final sub = h.service.progressStream.listen(seen.add);
-    addTearDown(sub.cancel);
+  test(
+    'a multi-chunk download saves far fewer times than it has chunks',
+    () async {
+      final big = Uint8List(2048);
+      final h = await makeHarness(body: big);
+      addTearDown(h.dispose);
+      h.adapter.chunkSize = 16;
+      final seen = <DownloadTask>[];
+      final sub = h.service.progressStream.listen(seen.add);
+      addTearDown(sub.cancel);
 
-    final task = await h.service.start(_request());
-    await h.waitForStatus(task.id, 'completed');
+      final task = await h.service.start(_request());
+      await h.waitForStatus(task.id, 'completed');
 
-    // 128 chunks arrive with the clock standing still: the first save, the
-    // final state and the completion are all that is written.
-    expect(seen.length, lessThan(10));
-    final stored = h.database.getTask(task.id)!;
-    expect(stored.downloadProgress, 1.0);
-    expect(stored.downloadedBytes, 2048);
-    expect(await File(stored.filePath!).length(), 2048);
-  });
+      // 128 chunks arrive with the clock standing still: the first save, the
+      // final state and the completion are all that is written.
+      expect(seen.length, lessThan(10));
+      final stored = h.database.getTask(task.id)!;
+      expect(stored.downloadProgress, 1.0);
+      expect(stored.downloadedBytes, 2048);
+      expect(await File(stored.filePath!).length(), 2048);
+    },
+  );
 }

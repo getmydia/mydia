@@ -93,17 +93,17 @@ class CreateVaultRequest {
   final String lookupHash;
 
   Map<String, dynamic> toJson() => {
-        'vault_id': vaultId,
-        'signer': backupB64(signer),
-        'slot_id': slotId,
-        'envelope': backupB64(envelope),
-        'box_pub': backupB64(boxPub),
-        'recovery_signer': backupB64(recoverySigner),
-        'recovery_slot_id': recoverySlotId,
-        'recovery_envelope': backupB64(recoveryEnvelope),
-        'recovery_box_pub': backupB64(recoveryBoxPub),
-        'lookup_hash': lookupHash,
-      };
+    'vault_id': vaultId,
+    'signer': backupB64(signer),
+    'slot_id': slotId,
+    'envelope': backupB64(envelope),
+    'box_pub': backupB64(boxPub),
+    'recovery_signer': backupB64(recoverySigner),
+    'recovery_slot_id': recoverySlotId,
+    'recovery_envelope': backupB64(recoveryEnvelope),
+    'recovery_box_pub': backupB64(recoveryBoxPub),
+    'lookup_hash': lookupHash,
+  };
 }
 
 class ManifestMember {
@@ -115,11 +115,11 @@ class ManifestMember {
   });
 
   factory ManifestMember.fromJson(Map<String, dynamic> j) => ManifestMember(
-        signer: backupUnb64(j['signer'] as String),
-        boxPub: backupUnb64(j['box_pub'] as String),
-        slotId: j['slot_id'] as String,
-        recovery: j['recovery'] == true,
-      );
+    signer: backupUnb64(j['signer'] as String),
+    boxPub: backupUnb64(j['box_pub'] as String),
+    slotId: j['slot_id'] as String,
+    recovery: j['recovery'] == true,
+  );
 
   final Uint8List signer;
   final Uint8List boxPub;
@@ -137,12 +137,12 @@ class ManifestSlot {
   });
 
   factory ManifestSlot.fromJson(Map<String, dynamic> j) => ManifestSlot(
-        slotId: j['slot_id'] as String,
-        seq: j['seq'] as int,
-        epoch: j['epoch'] as int,
-        size: j['size'] as int,
-        updatedAt: j['updated_at'] as int,
-      );
+    slotId: j['slot_id'] as String,
+    seq: j['seq'] as int,
+    epoch: j['epoch'] as int,
+    size: j['size'] as int,
+    updatedAt: j['updated_at'] as int,
+  );
 
   final String slotId;
   final int seq;
@@ -203,10 +203,10 @@ class MemberAdd {
   final String slotId;
 
   Map<String, dynamic> toJson() => {
-        'signer': backupB64(signer),
-        'slot_id': slotId,
-        'box_pub': backupB64(boxPub),
-      };
+    'signer': backupB64(signer),
+    'slot_id': slotId,
+    'box_pub': backupB64(boxPub),
+  };
 }
 
 class RecoveryReplacement {
@@ -225,12 +225,12 @@ class RecoveryReplacement {
   final String lookupHash;
 
   Map<String, dynamic> toJson() => {
-        'signer': backupB64(signer),
-        'slot_id': slotId,
-        'envelope': backupB64(envelope),
-        'box_pub': backupB64(boxPub),
-        'lookup_hash': lookupHash,
-      };
+    'signer': backupB64(signer),
+    'slot_id': slotId,
+    'envelope': backupB64(envelope),
+    'box_pub': backupB64(boxPub),
+    'lookup_hash': lookupHash,
+  };
 }
 
 class MemberUpdate {
@@ -255,15 +255,13 @@ class MemberUpdate {
   final RecoveryReplacement? recovery;
 
   Map<String, dynamic> toJson() => {
-        'expected_epoch': expectedEpoch,
-        'new_epoch': newEpoch,
-        'add': [for (final a in add) a.toJson()],
-        'remove': [for (final r in remove) backupB64(r)],
-        'envelopes': {
-          for (final e in envelopes.entries) e.key: backupB64(e.value),
-        },
-        'recovery': recovery?.toJson(),
-      };
+    'expected_epoch': expectedEpoch,
+    'new_epoch': newEpoch,
+    'add': [for (final a in add) a.toJson()],
+    'remove': [for (final r in remove) backupB64(r)],
+    'envelopes': {for (final e in envelopes.entries) e.key: backupB64(e.value)},
+    'recovery': recovery?.toJson(),
+  };
 }
 
 /// Signed client for metadata-relay's `/backup/v1` API. Wire format:
@@ -275,11 +273,11 @@ class BackupRelayClient {
     DateTime Function()? clock,
     this.requestTimeout = const Duration(seconds: 30),
     this.slotTimeout = const Duration(seconds: 120),
-  })  : _client = client ?? http.Client(),
-        _baseUrl = baseUrl.endsWith('/')
-            ? baseUrl.substring(0, baseUrl.length - 1)
-            : baseUrl,
-        _clock = clock ?? DateTime.now;
+  }) : _client = client ?? http.Client(),
+       _baseUrl = baseUrl.endsWith('/')
+           ? baseUrl.substring(0, baseUrl.length - 1)
+           : baseUrl,
+       _clock = clock ?? DateTime.now;
 
   static const _api = '/backup/v1';
 
@@ -332,7 +330,7 @@ class BackupRelayClient {
       'GET',
       '$_api/vaults/$vaultId',
       signer: signer,
-      headers: {if (etag != null) 'if-none-match': etag},
+      headers: {'if-none-match': ?etag},
       accept304: true,
     );
     if (r.statusCode == 304) return null;
@@ -435,14 +433,18 @@ class BackupRelayClient {
     bool accept304 = false,
     bool slot = false,
   }) async {
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       final request = http.Request(method, Uri.parse('$_baseUrl$path'));
       request.headers.addAll(headers);
       if (contentType != null) request.headers['content-type'] = contentType;
       if (body.isNotEmpty) request.bodyBytes = Uint8List.fromList(body);
       if (signer != null) {
-        request.headers['authorization'] =
-            await _authorization(signer, method, request.url.path, body);
+        request.headers['authorization'] = await _authorization(
+          signer,
+          method,
+          request.url.path,
+          body,
+        );
       }
 
       final http.Response response;

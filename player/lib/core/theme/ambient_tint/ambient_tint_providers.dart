@@ -18,18 +18,18 @@ typedef TintExtractor = Future<Color?> Function(BackdropSource source);
 /// How a source's artwork becomes a seed colour. Overridden in tests.
 @Riverpod(keepAlive: true)
 TintExtractor tintExtractor(Ref ref) => (source) {
-      final url = source.imageUrl;
-      if (url == null || url.isEmpty) return Future.value();
-      return extractTint(
-        artworkImageProvider(
-          url,
-          cacheManager: BackdropCacheManager(),
-          decodeWidth: tintDecodeWidth,
-          headers: source.headers.isEmpty ? null : source.headers,
-          cacheKey: source.cacheKey,
-        ),
-      );
-    };
+  final url = source.imageUrl;
+  if (url == null || url.isEmpty) return Future.value();
+  return extractTint(
+    artworkImageProvider(
+      url,
+      cacheManager: BackdropCacheManager(),
+      decodeWidth: tintDecodeWidth,
+      headers: source.headers.isEmpty ? null : source.headers,
+      cacheKey: source.cacheKey,
+    ),
+  );
+};
 
 @Riverpod(keepAlive: true)
 TintCache tintCache(Ref ref) => TintCache();
@@ -105,7 +105,7 @@ class AmbientTintController extends _$AmbientTintController {
   Future<void> _resolve(BackdropSource source, int generation) async {
     // A subscription, not ref.read: the family is autoDispose and a bare read
     // can dispose it before the future completes (player/docs/riverpod.md).
-    final sub = ref.listen(tintForSourceProvider(source).future, (_, __) {});
+    final sub = ref.listen(tintForSourceProvider(source).future, (_, _) {});
     try {
       final colors = await sub.read();
       if (!ref.mounted || generation != _generation) return;

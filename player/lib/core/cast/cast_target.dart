@@ -23,5 +23,6 @@ class CastTargetNotifier extends Notifier<CastDevice?> {
   void clear() => state = null;
 }
 
-final castTargetProvider =
-    NotifierProvider<CastTargetNotifier, CastDevice?>(CastTargetNotifier.new);
+final castTargetProvider = NotifierProvider<CastTargetNotifier, CastDevice?>(
+  CastTargetNotifier.new,
+);

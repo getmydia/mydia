@@ -14,14 +14,11 @@ import 'plex_identity.dart';
 class PlexServerClient {
   PlexServerClient({
     required this.connection,
-    required SourceHttp http,
-    required Future<PlexIdentity> Function() identity,
-    required Future<String?> Function() token,
-    void Function()? onUnauthorized,
-  })  : _http = http,
-        _identity = identity,
-        _token = token,
-        _onUnauthorized = onUnauthorized;
+    required this._http,
+    required this._identity,
+    required this._token,
+    this._onUnauthorized,
+  });
 
   final SourceConnection connection;
   final SourceHttp _http;
@@ -49,10 +46,9 @@ class PlexServerClient {
   static Uri _resolve(Uri base, String path, Map<String, String>? query) {
     final relative = Uri.parse(path);
     final merged = {...relative.queryParameters, ...?query};
-    return base.resolveUri(Uri(
-      path: relative.path,
-      queryParameters: merged.isEmpty ? null : merged,
-    ));
+    return base.resolveUri(
+      Uri(path: relative.path, queryParameters: merged.isEmpty ? null : merged),
+    );
   }
 
   /// The `MediaContainer` object of a JSON response.
@@ -91,8 +87,11 @@ class PlexServerClient {
   ) async {
     final base = await connection.base();
     try {
-      return await _http.send(method, _resolve(base, path, query),
-          headers: await headers());
+      return await _http.send(
+        method,
+        _resolve(base, path, query),
+        headers: await headers(),
+      );
     } on SourceException catch (e) {
       if (e.kind == SourceErrorKind.unreachable) connection.reportFailure(base);
       if (e.kind == SourceErrorKind.unauthorized) _onUnauthorized?.call();
@@ -109,8 +108,11 @@ Future<String?> plexIdentityProbe(
   Uri base,
   Duration timeout,
 ) async {
-  final json =
-      await http.json('GET', base.resolve('/identity'), timeout: timeout);
+  final json = await http.json(
+    'GET',
+    base.resolve('/identity'),
+    timeout: timeout,
+  );
   final body = json is Map ? json['MediaContainer'] : null;
   return body is Map ? body['machineIdentifier'] as String? : null;
 }

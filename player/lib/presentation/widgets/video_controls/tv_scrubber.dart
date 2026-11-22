@@ -71,8 +71,8 @@ class _TvScrubberState extends State<TvScrubber> {
 
   KeyEventResult _step(ScrubDirection direction, bool isRepeat) =>
       widget.scrub.step(direction, isRepeat: isRepeat)
-          ? KeyEventResult.handled
-          : KeyEventResult.ignored;
+      ? KeyEventResult.handled
+      : KeyEventResult.ignored;
 
   void _commit() {
     if (widget.scrub.active) unawaited(widget.scrub.commit());

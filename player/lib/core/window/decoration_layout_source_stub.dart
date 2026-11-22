@@ -11,8 +11,8 @@ class DecorationLayoutSource {
 
   final ValueNotifier<DecorationLayout> _layout =
       ValueNotifier<DecorationLayout>(
-    parseDecorationLayout(kFallbackDecorationLayout),
-  );
+        parseDecorationLayout(kFallbackDecorationLayout),
+      );
 
   ValueListenable<DecorationLayout> get layout => _layout;
 

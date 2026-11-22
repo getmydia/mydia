@@ -6,7 +6,7 @@
 //
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
@@ -18,19 +18,27 @@ import 'package:player/presentation/widgets/primary_play_button.dart';
 import '../../test_utils/tv_shell_harness.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      theme: AppTheme.darkTheme,
-      home: Scaffold(body: Center(child: child)),
-    );
+  theme: AppTheme.darkTheme,
+  home: Scaffold(body: Center(child: child)),
+);
 
 /// The emphasis around whatever holds focus now.
 ({double scale, bool ring}) _emphasis(WidgetTester tester, Finder of) {
   final finder = find.ancestor(of: of, matching: find.byType(FocusEmphasis));
   final scale = tester
-      .widget<AnimatedScale>(find.descendant(
-          of: finder.first, matching: find.byKey(FocusEmphasis.scaleKey)))
+      .widget<AnimatedScale>(
+        find.descendant(
+          of: finder.first,
+          matching: find.byKey(FocusEmphasis.scaleKey),
+        ),
+      )
       .scale;
-  final paint = tester.widget<CustomPaint>(find.descendant(
-      of: finder.first, matching: find.byKey(FocusEmphasis.ringKey)));
+  final paint = tester.widget<CustomPaint>(
+    find.descendant(
+      of: finder.first,
+      matching: find.byKey(FocusEmphasis.ringKey),
+    ),
+  );
   return (
     scale: scale,
     ring: (paint.foregroundPainter! as FocusEmphasisPainter).visible,
@@ -39,17 +47,22 @@ Widget _host(Widget child) => MaterialApp(
 
 void main() {
   group('focused buttons on the television tier', () {
-    testWidgets('an emphasized FocusHighlight grows and rings when focused',
-        (tester) async {
+    testWidgets('an emphasized FocusHighlight grows and rings when focused', (
+      tester,
+    ) async {
       final node = FocusNode();
       addTearDown(node.dispose);
       const box = Key('box');
-      await tester.pumpWidget(_host(FocusHighlight(
-        emphasis: true,
-        focusNode: node,
-        onActivate: () {},
-        child: const SizedBox(key: box, width: 80, height: 40),
-      )));
+      await tester.pumpWidget(
+        _host(
+          FocusHighlight(
+            emphasis: true,
+            focusNode: node,
+            onActivate: () {},
+            child: const SizedBox(key: box, width: 80, height: 40),
+          ),
+        ),
+      );
 
       expect(_emphasis(tester, find.byKey(box)), (scale: 1.0, ring: false));
 
@@ -60,40 +73,53 @@ void main() {
       expect(focused.ring, isTrue);
 
       // Its own thin ring would sit inside the new one: it is not drawn.
-      final own =
-          tester.widget<DecoratedBox>(find.byKey(FocusHighlight.ringKey));
+      final own = tester.widget<DecoratedBox>(
+        find.byKey(FocusHighlight.ringKey),
+      );
       expect((own.decoration as BoxDecoration).border, isNull);
     });
 
     testWidgets('the ring is the palette accent', (tester) async {
       final node = FocusNode();
       addTearDown(node.dispose);
-      await tester.pumpWidget(_host(FocusHighlight(
-        emphasis: true,
-        focusNode: node,
-        onActivate: () {},
-        child: const SizedBox(width: 80, height: 40),
-      )));
+      await tester.pumpWidget(
+        _host(
+          FocusHighlight(
+            emphasis: true,
+            focusNode: node,
+            onActivate: () {},
+            child: const SizedBox(width: 80, height: 40),
+          ),
+        ),
+      );
       node.requestFocus();
       await tester.pumpAndSettle();
 
-      final paint =
-          tester.widget<CustomPaint>(find.byKey(FocusEmphasis.ringKey));
+      final paint = tester.widget<CustomPaint>(
+        find.byKey(FocusEmphasis.ringKey),
+      );
       final context = tester.element(find.byKey(FocusEmphasis.ringKey));
-      expect((paint.foregroundPainter! as FocusEmphasisPainter).color,
-          context.palette.primary);
+      expect(
+        (paint.foregroundPainter! as FocusEmphasisPainter).color,
+        context.palette.primary,
+      );
     });
 
-    testWidgets('focused, it paints a glow and then the accent ring',
-        (tester) async {
+    testWidgets('focused, it paints a glow and then the accent ring', (
+      tester,
+    ) async {
       final node = FocusNode();
       addTearDown(node.dispose);
-      await tester.pumpWidget(_host(FocusHighlight(
-        emphasis: true,
-        focusNode: node,
-        onActivate: () {},
-        child: const SizedBox(width: 80, height: 40),
-      )));
+      await tester.pumpWidget(
+        _host(
+          FocusHighlight(
+            emphasis: true,
+            focusNode: node,
+            onActivate: () {},
+            child: const SizedBox(width: 80, height: 40),
+          ),
+        ),
+      );
       final ring = find.byKey(FocusEmphasis.ringKey);
       final accent = tester.element(ring).palette.primary;
       expect(tester.renderObject(ring), isNot(paints..rrect()));
@@ -118,7 +144,8 @@ void main() {
 
     testWidgets('a focused Play is emphasized', (tester) async {
       await tester.pumpWidget(
-          _host(PrimaryPlayButton(onPressed: () {}, label: 'Play')));
+        _host(PrimaryPlayButton(onPressed: () {}, label: 'Play')),
+      );
       FocusManager.instance.rootScope.traversalDescendants.first.requestFocus();
       await tester.pumpAndSettle();
 
@@ -129,11 +156,9 @@ void main() {
 
     testWidgets('a focused GlassButton is emphasized', (tester) async {
       const key = Key('more');
-      await tester.pumpWidget(_host(GlassButton(
-        buttonKey: key,
-        label: 'More',
-        onPressed: () {},
-      )));
+      await tester.pumpWidget(
+        _host(GlassButton(buttonKey: key, label: 'More', onPressed: () {})),
+      );
       FocusManager.instance.rootScope.traversalDescendants.first.requestFocus();
       await tester.pumpAndSettle();
 
@@ -142,17 +167,24 @@ void main() {
       expect(more.ring, isTrue);
     });
 
-    testWidgets('a focused GlassButton on Liquid Glass is emphasized',
-        (tester) async {
+    testWidgets('a focused GlassButton on Liquid Glass is emphasized', (
+      tester,
+    ) async {
       const key = Key('more');
-      await tester.pumpWidget(MaterialApp(
-        theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
-        home: Scaffold(
-          body: Center(
-            child: GlassButton(buttonKey: key, label: 'More', onPressed: () {}),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+          home: Scaffold(
+            body: Center(
+              child: GlassButton(
+                buttonKey: key,
+                label: 'More',
+                onPressed: () {},
+              ),
+            ),
           ),
         ),
-      ));
+      );
       FocusManager.instance.rootScope.traversalDescendants.first.requestFocus();
       await tester.pumpAndSettle();
 
@@ -161,8 +193,9 @@ void main() {
       expect(more.ring, isTrue);
     });
 
-    testWidgets('every Material button gets an accent border when focused',
-        (tester) async {
+    testWidgets('every Material button gets an accent border when focused', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const SizedBox()));
       final context = tester.element(find.byType(SizedBox));
       final theme = Theme.of(context);
@@ -178,7 +211,9 @@ void main() {
         expect(side!.width, greaterThanOrEqualTo(3));
         final rest = style.side!.resolve({});
         expect(
-            rest == null || rest.width == 0 || rest == BorderSide.none, isTrue);
+          rest == null || rest.width == 0 || rest == BorderSide.none,
+          isTrue,
+        );
       }
     });
   }, skip: tvSkipReason);

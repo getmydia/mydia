@@ -15,26 +15,28 @@ class _NoopLift implements SubtitleLift {
 }
 
 void main() {
-  test('playbackChromeBuilder builds a PlaybackChrome from player and lift',
-      () {
-    final player = Player(platformPlayer: _FakePlatformPlayer());
-    final lift = _NoopLift();
-    final build = playbackChromeBuilder(
-      timeline: StreamTimeline.zero,
-      onSeekToReal: (_) async {},
-      castAction: null,
-      onCastTap: null,
-      title: 'Sample',
-      audioTrackCount: 2,
-    );
+  test(
+    'playbackChromeBuilder builds a PlaybackChrome from player and lift',
+    () {
+      final player = Player(platformPlayer: _FakePlatformPlayer());
+      final lift = _NoopLift();
+      final build = playbackChromeBuilder(
+        timeline: StreamTimeline.zero,
+        onSeekToReal: (_) async {},
+        castAction: null,
+        onCastTap: null,
+        title: 'Sample',
+        audioTrackCount: 2,
+      );
 
-    final widget = build(player, lift);
+      final widget = build(player, lift);
 
-    expect(widget, isA<PlaybackChrome>());
-    final chrome = widget as PlaybackChrome;
-    expect(chrome.player, same(player));
-    expect(chrome.subtitleLift, same(lift));
-    expect(chrome.title, 'Sample');
-    expect(chrome.audioTrackCount, 2);
-  });
+      expect(widget, isA<PlaybackChrome>());
+      final chrome = widget as PlaybackChrome;
+      expect(chrome.player, same(player));
+      expect(chrome.subtitleLift, same(lift));
+      expect(chrome.title, 'Sample');
+      expect(chrome.audioTrackCount, 2);
+    },
+  );
 }

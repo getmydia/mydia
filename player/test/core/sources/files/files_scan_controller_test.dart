@@ -57,20 +57,24 @@ void main() {
   }) async {
     final store = InMemorySourceStore();
     await store.putAccount(filesLocalRecord);
-    final c = ProviderContainer(overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      filesIndexBoxProvider.overrideWithValue(f.box),
-      filesProgressStoreProvider.overrideWithValue(f.progress),
-      mediaNamesProvider.overrideWithValue(names ?? FakeMediaNames()),
-      relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-      if (!realBackend)
-        filesBackendBuilderProvider.overrideWithValue((ref, source) => backend),
-      filesClockProvider.overrideWithValue(() => clock),
-      if (foreground != null)
-        appForegroundProvider.overrideWithValue(foreground),
-      ...extra,
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        filesIndexBoxProvider.overrideWithValue(f.box),
+        filesProgressStoreProvider.overrideWithValue(f.progress),
+        mediaNamesProvider.overrideWithValue(names ?? FakeMediaNames()),
+        relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
+        if (!realBackend)
+          filesBackendBuilderProvider.overrideWithValue(
+            (ref, source) => backend,
+          ),
+        filesClockProvider.overrideWithValue(() => clock),
+        if (foreground != null)
+          appForegroundProvider.overrideWithValue(foreground),
+        ...extra,
+      ],
+    );
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
     return c;
@@ -79,12 +83,14 @@ void main() {
   setUp(() async {
     clock = now;
     f = await FilesFixture.create(seed: false);
-    await f.index.putRoot(const LibraryRoot(
-      id: 'rm',
-      path: '/media/films',
-      kind: FilesLibraryKind.movies,
-      title: 'Films',
-    ));
+    await f.index.putRoot(
+      const LibraryRoot(
+        id: 'rm',
+        path: '/media/films',
+        kind: FilesLibraryKind.movies,
+        title: 'Films',
+      ),
+    );
     backend = FakeBackend({
       '/media/films/Amber Tide (2019).mkv': 10,
       '/media/films/Low Orbit (2022).mkv': 20,
@@ -98,8 +104,10 @@ void main() {
       final c = await container();
       final index = c.read(filesIndexProvider(filesLocalSource.account.id));
       if (lastScan != null) await index.setLastScanAt(lastScan);
-      expect(c.read(mediaSourceProvider(filesLocalSource.id)),
-          isA<FilesMediaSource>());
+      expect(
+        c.read(mediaSourceProvider(filesLocalSource.id)),
+        isA<FilesMediaSource>(),
+      );
       await _settle();
       return index;
     }
@@ -113,25 +121,26 @@ void main() {
     expect(index.files(), hasLength(2));
   });
 
-  test('a finished scan bumps the peer files revision; a failed one does not',
-      () async {
-    await f.index.setLastScanAt(now);
-    final c = await container();
-    final revisions = c.read(peerFilesRevisionsProvider);
-    final scan = c.read(filesScanProvider(filesLocalSource.id).notifier);
-    const account = kFilesLocalAccountId;
-
-    await scan.rescan();
-    final bumped = revisions.revision(account);
-    expect(bumped, greaterThan(0));
-
-    backend.failures['/media/films'] = const BackendUnreachable('unplugged');
-    await scan.rescan();
-    expect(revisions.revision(account), bumped);
-  });
-
   test(
-      'a finished scan drops details of removed files and reads the rest '
+    'a finished scan bumps the peer files revision; a failed one does not',
+    () async {
+      await f.index.setLastScanAt(now);
+      final c = await container();
+      final revisions = c.read(peerFilesRevisionsProvider);
+      final scan = c.read(filesScanProvider(filesLocalSource.id).notifier);
+      const account = kFilesLocalAccountId;
+
+      await scan.rescan();
+      final bumped = revisions.revision(account);
+      expect(bumped, greaterThan(0));
+
+      backend.failures['/media/films'] = const BackendUnreachable('unplugged');
+      await scan.rescan();
+      expect(revisions.revision(account), bumped);
+    },
+  );
+
+  test('a finished scan drops details of removed files and reads the rest '
       'in the background on desktop', () async {
     await f.index.setLastScanAt(now);
     final cache = await f.mediaInfoCache();
@@ -147,12 +156,14 @@ void main() {
     );
     await cache.put(account, gone, _probed);
     final probe = FakeMediaProbe(_probed)..gate = Completer<void>();
-    final c = await container(extra: [
-      mediaProbeProvider.overrideWithValue(probe),
-      filesMediaInfoCacheProvider.overrideWithValue(cache),
-      filesProbeDesktopProvider.overrideWithValue(true),
-      filesProbeIdlePollProvider.overrideWithValue(Duration.zero),
-    ]);
+    final c = await container(
+      extra: [
+        mediaProbeProvider.overrideWithValue(probe),
+        filesMediaInfoCacheProvider.overrideWithValue(cache),
+        filesProbeDesktopProvider.overrideWithValue(true),
+        filesProbeIdlePollProvider.overrideWithValue(Duration.zero),
+      ],
+    );
     final id = filesLocalSource.id;
     c.read(mediaSourceProvider(id));
 
@@ -169,8 +180,9 @@ void main() {
     final index = c.read(filesIndexProvider(account));
     expect(probe.probed, hasLength(2));
     expect(
-        index.files().values.every((file) => cache.get(account, file) != null),
-        isTrue);
+      index.files().values.every((file) => cache.get(account, file) != null),
+      isTrue,
+    );
     expect(c.read(filesProbeQueueProvider(id)).running, isFalse);
   });
 
@@ -187,8 +199,11 @@ void main() {
     final id = filesLocalSource.id;
     c.read(mediaSourceProvider(id));
     final states = <ScanState>[];
-    c.listen(filesScanProvider(id), (_, s) => states.add(s),
-        fireImmediately: true);
+    c.listen(
+      filesScanProvider(id),
+      (_, s) => states.add(s),
+      fireImmediately: true,
+    );
     await c.read(filesScanProvider(id).notifier).rescan();
     expect(states.first.running, isFalse);
     expect(states.any((s) => s.running && s.total == 2 && s.done == 2), isTrue);
@@ -197,27 +212,31 @@ void main() {
     expect(states.last.error, isNull);
   });
 
-  test('a_root_that_cannot_be_read_is_reported_and_others_still_scan',
-      () async {
-    await f.index.putRoot(const LibraryRoot(
-      id: 'rgone',
-      path: '/media/gone',
-      kind: FilesLibraryKind.movies,
-      title: 'Gone',
-    ));
-    await f.index.setLastScanAt(now);
-    final c = await container();
-    final id = filesLocalSource.id;
-    c.read(mediaSourceProvider(id));
-    final media = c.read(mediaSourceProvider(id))!;
-    await _settle();
-    expect(media.connection, SourceConnectionStatus.local);
-    await c.read(filesScanProvider(id).notifier).rescan();
-    final state = c.read(filesScanProvider(id));
-    expect(state.error, isA<BackendNotFound>());
-    expect(state.total, 2);
-    expect(media.connection, SourceConnectionStatus.unreachable);
-  });
+  test(
+    'a_root_that_cannot_be_read_is_reported_and_others_still_scan',
+    () async {
+      await f.index.putRoot(
+        const LibraryRoot(
+          id: 'rgone',
+          path: '/media/gone',
+          kind: FilesLibraryKind.movies,
+          title: 'Gone',
+        ),
+      );
+      await f.index.setLastScanAt(now);
+      final c = await container();
+      final id = filesLocalSource.id;
+      c.read(mediaSourceProvider(id));
+      final media = c.read(mediaSourceProvider(id))!;
+      await _settle();
+      expect(media.connection, SourceConnectionStatus.local);
+      await c.read(filesScanProvider(id).notifier).rescan();
+      final state = c.read(filesScanProvider(id));
+      expect(state.error, isA<BackendNotFound>());
+      expect(state.total, 2);
+      expect(media.connection, SourceConnectionStatus.unreachable);
+    },
+  );
 
   test('a_run_where_every_root_fails_keeps_the_last_scan_time', () async {
     final earlier = now.subtract(const Duration(hours: 1));
@@ -240,13 +259,16 @@ void main() {
   test('storage_that_failed_to_open_leaves_files_sources_out', () async {
     final store = InMemorySourceStore();
     await store.putAccount(filesLocalRecord);
-    final c = ProviderContainer(overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      filesIndexBoxProvider
-          .overrideWith((ref) => throw StateError('box not open')),
-      filesProgressStoreProvider.overrideWithValue(f.progress),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        filesIndexBoxProvider.overrideWith(
+          (ref) => throw StateError('box not open'),
+        ),
+        filesProgressStoreProvider.overrideWithValue(f.progress),
+      ],
+    );
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
     expect(c.read(sourcesProvider).map((s) => s.id), [filesLocalSource.id]);
@@ -256,14 +278,19 @@ void main() {
 
   test('forgot_pin_removes_a_locked_files_account_with_its_index', () async {
     final store = InMemorySourceStore();
-    await store.putAccount(filesLocalRecord.copyWith(
-        serverLocks: {filesLocalSource.server.id: SourceLock.hidden}));
-    final c = ProviderContainer(overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      filesIndexBoxProvider.overrideWithValue(f.box),
-      filesProgressStoreProvider.overrideWithValue(f.progress),
-    ]);
+    await store.putAccount(
+      filesLocalRecord.copyWith(
+        serverLocks: {filesLocalSource.server.id: SourceLock.hidden},
+      ),
+    );
+    final c = ProviderContainer(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        filesIndexBoxProvider.overrideWithValue(f.box),
+        filesProgressStoreProvider.overrideWithValue(f.progress),
+      ],
+    );
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
     await f.addFiles(['Amber Tide (2019).mkv'], rootId: 'rm');
@@ -271,8 +298,10 @@ void main() {
     await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
 
     expect((await store.load()).accounts, isEmpty);
-    final reopened =
-        FileLibraryIndex(f.box, accountId: filesLocalSource.account.id);
+    final reopened = FileLibraryIndex(
+      f.box,
+      accountId: filesLocalSource.account.id,
+    );
     expect(reopened.roots(), isEmpty);
     expect(reopened.files(), isEmpty);
   });
@@ -293,8 +322,10 @@ void main() {
     expect(state.error, isNull);
     expect(state.skippedCount, 1);
     expect(media.connection, SourceConnectionStatus.local);
-    expect(index.files().values.map((f) => f.path),
-        containsAll(['Amber Tide (2019).mkv', 'Low Orbit (2022).mkv']));
+    expect(
+      index.files().values.map((f) => f.path),
+      containsAll(['Amber Tide (2019).mkv', 'Low Orbit (2022).mkv']),
+    );
   });
 
   test('a_resume_past_the_interval_scans', () async {
@@ -330,12 +361,14 @@ void main() {
     final index = c.read(filesIndexProvider(filesLocalSource.account.id));
     final first = scans.rescan();
     await _settle();
-    await index.putRoot(const LibraryRoot(
-      id: 'rn',
-      path: '/media/new',
-      kind: FilesLibraryKind.movies,
-      title: 'New',
-    ));
+    await index.putRoot(
+      const LibraryRoot(
+        id: 'rn',
+        path: '/media/new',
+        kind: FilesLibraryKind.movies,
+        title: 'New',
+      ),
+    );
     final second = scans.rescan();
     final third = scans.rescan();
     gated.gate.complete();
@@ -354,8 +387,10 @@ void main() {
     final states = <ScanState>[];
     c.listen(filesScanProvider(id), (_, s) => states.add(s));
     await c.read(filesScanProvider(id).notifier).rescan();
-    expect(states.any((s) => s.running && s.walking && s.foldersRead == 1),
-        isTrue);
+    expect(
+      states.any((s) => s.running && s.walking && s.foldersRead == 1),
+      isTrue,
+    );
     expect(states.last.walking, isFalse);
   });
 
@@ -377,8 +412,10 @@ void main() {
     await scan;
     final state = c.read(filesScanProvider(id));
     expect(state.error, isNull);
-    expect(c.read(filesIndexProvider(filesLocalSource.account.id)).files(),
-        hasLength(2));
+    expect(
+      c.read(filesIndexProvider(filesLocalSource.account.id)).files(),
+      hasLength(2),
+    );
   });
 
   test('a_scan_that_throws_still_finishes', () async {
@@ -431,81 +468,100 @@ void main() {
 
     test('a_missing_root_is_unreachable_and_still_browses', () async {
       final gone = '${tmp.path}/unplugged';
-      await f.index.putRoot(LibraryRoot(
-        id: 'rgone',
-        path: gone,
-        kind: FilesLibraryKind.movies,
-        title: 'Gone',
-      ));
+      await f.index.putRoot(
+        LibraryRoot(
+          id: 'rgone',
+          path: gone,
+          kind: FilesLibraryKind.movies,
+          title: 'Gone',
+        ),
+      );
       await f.addFiles(['Amber Tide (2019).mkv'], rootId: 'rgone');
       await f.index.setLastScanAt(now);
       final c = await container(realBackend: true);
       final media = await open(c);
       expect(media.backend, isA<LocalFoldersBackend>());
       expect(media.connection, SourceConnectionStatus.unreachable);
-      expect(c.read(thirdPartySourcesProvider).single.account.needsReauth,
-          isFalse);
+      expect(
+        c.read(thirdPartySourcesProvider).single.account.needsReauth,
+        isFalse,
+      );
       final page = await media.browse(
-          LibraryRef(sourceId: filesLocalSource.id, id: 'rgone'),
-          const BrowseQuery());
+        LibraryRef(sourceId: filesLocalSource.id, id: 'rgone'),
+        const BrowseQuery(),
+      );
       expect(page.items.single.title, 'Amber Tide');
     });
 
     test('a_root_that_refuses_access_flags_sign_in', () async {
       final locked = Directory('${tmp.path}/locked')..createSync();
       await Process.run('chmod', ['000', locked.path]);
-      await f.index.putRoot(LibraryRoot(
-        id: 'rlocked',
-        path: locked.path,
-        kind: FilesLibraryKind.movies,
-        title: 'Locked',
-      ));
+      await f.index.putRoot(
+        LibraryRoot(
+          id: 'rlocked',
+          path: locked.path,
+          kind: FilesLibraryKind.movies,
+          title: 'Locked',
+        ),
+      );
       await f.index.setLastScanAt(now);
       final c = await container(realBackend: true);
       final media = await open(c);
       expect(media.connection, SourceConnectionStatus.unreachable);
       expect(
-          c.read(thirdPartySourcesProvider).single.account.needsReauth, isTrue);
+        c.read(thirdPartySourcesProvider).single.account.needsReauth,
+        isTrue,
+      );
     }, skip: Platform.isWindows);
 
-    test('a_subfolder_that_refuses_access_neither_fails_nor_flags_sign_in',
-        () async {
-      // Like lost+found at the top of an ext4 drive.
-      final locked = Directory('${tmp.path}/lost+found')..createSync();
-      File('${tmp.path}/Amber Tide (2019).mkv').writeAsBytesSync([1]);
-      await Process.run('chmod', ['000', locked.path]);
-      await f.index.putRoot(LibraryRoot(
-        id: 'rdrive',
-        path: tmp.path,
-        kind: FilesLibraryKind.movies,
-        title: 'Drive',
-      ));
-      await f.index.setLastScanAt(now);
-      final c = await container(realBackend: true);
-      final media = await open(c);
-      await c.read(filesScanProvider(filesLocalSource.id).notifier).rescan();
+    test(
+      'a_subfolder_that_refuses_access_neither_fails_nor_flags_sign_in',
+      () async {
+        // Like lost+found at the top of an ext4 drive.
+        final locked = Directory('${tmp.path}/lost+found')..createSync();
+        File('${tmp.path}/Amber Tide (2019).mkv').writeAsBytesSync([1]);
+        await Process.run('chmod', ['000', locked.path]);
+        await f.index.putRoot(
+          LibraryRoot(
+            id: 'rdrive',
+            path: tmp.path,
+            kind: FilesLibraryKind.movies,
+            title: 'Drive',
+          ),
+        );
+        await f.index.setLastScanAt(now);
+        final c = await container(realBackend: true);
+        final media = await open(c);
+        await c.read(filesScanProvider(filesLocalSource.id).notifier).rescan();
 
-      expect(c.read(filesScanProvider(filesLocalSource.id)).error, isNull);
-      expect(c.read(filesScanProvider(filesLocalSource.id)).skippedCount, 1);
-      expect(media.connection, SourceConnectionStatus.local);
-      expect(c.read(thirdPartySourcesProvider).single.account.needsReauth,
-          isFalse);
-      expect(
+        expect(c.read(filesScanProvider(filesLocalSource.id)).error, isNull);
+        expect(c.read(filesScanProvider(filesLocalSource.id)).skippedCount, 1);
+        expect(media.connection, SourceConnectionStatus.local);
+        expect(
+          c.read(thirdPartySourcesProvider).single.account.needsReauth,
+          isFalse,
+        );
+        expect(
           c
               .read(filesIndexProvider(filesLocalSource.account.id))
               .files()
               .values
               .map((f) => f.path),
-          ['Amber Tide (2019).mkv']);
-    }, skip: Platform.isWindows || _runningAsRoot());
+          ['Amber Tide (2019).mkv'],
+        );
+      },
+      skip: Platform.isWindows || _runningAsRoot(),
+    );
 
     test('present_roots_are_local', () async {
-      await f.index.putRoot(LibraryRoot(
-        id: 'rhere',
-        path: tmp.path,
-        kind: FilesLibraryKind.movies,
-        title: 'Here',
-      ));
+      await f.index.putRoot(
+        LibraryRoot(
+          id: 'rhere',
+          path: tmp.path,
+          kind: FilesLibraryKind.movies,
+          title: 'Here',
+        ),
+      );
       await f.index.setLastScanAt(now);
       final c = await container(realBackend: true);
       final media = await open(c);
@@ -558,6 +614,5 @@ class _ThrowingNames extends FakeMediaNames {
     String root,
     List<String> paths,
     FilesLibraryKind kind,
-  ) =>
-      throw Exception('parser crashed');
+  ) => throw Exception('parser crashed');
 }

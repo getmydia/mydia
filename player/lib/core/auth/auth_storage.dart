@@ -5,7 +5,8 @@ library;
 
 import 'auth_storage_stub.dart'
     if (dart.library.html) 'auth_storage_web.dart'
-    if (dart.library.io) 'auth_storage_native.dart' as impl;
+    if (dart.library.io) 'auth_storage_native.dart'
+    as impl;
 
 /// Get the platform-appropriate auth storage implementation.
 AuthStorage getAuthStorage() => impl.getAuthStorage();

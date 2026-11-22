@@ -2,7 +2,7 @@
 /// approve elsewhere or a username and password.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -71,8 +71,8 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
             children: switch (state) {
               JellyfinEnterAddress(:final error) => _address(error),
               JellyfinChecking() || JellyfinSignedIn() => const [
-                  Center(child: CircularProgressIndicator()),
-                ],
+                Center(child: CircularProgressIndicator()),
+              ],
               JellyfinQuickConnect(:final code, :final expired) =>
                 _quickConnect(context, code, expired),
               JellyfinPassword(:final error, :final quickConnectAvailable) =>
@@ -88,31 +88,33 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
       ? const SizedBox.shrink()
       : Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: Text(context.l10n.signInProblemText(error),
-              key: const Key('jellyfin-error'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          child: Text(
+            context.l10n.signInProblemText(error),
+            key: const Key('jellyfin-error'),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
         );
 
   List<Widget> _address(SignInProblem? error) => [
-        TextField(
-          key: const Key('jellyfin-url-field'),
-          controller: _url,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          decoration: InputDecoration(
-            labelText: context.l10n.sourcesServerAddressLabel,
-            hintText: 'http://192.168.1.30:8096', // l10n-ignore: example URL
-          ),
-          onSubmitted: (_) => _ctl.submitAddress(_url.text),
-        ),
-        _error(error),
-        const SizedBox(height: 24),
-        FilledButton(
-          key: const Key('jellyfin-continue-button'),
-          onPressed: () => _ctl.submitAddress(_url.text),
-          child: Text(context.l10n.commonContinue),
-        ),
-      ];
+    TextField(
+      key: const Key('jellyfin-url-field'),
+      controller: _url,
+      autofocus: true,
+      keyboardType: TextInputType.url,
+      decoration: InputDecoration(
+        labelText: context.l10n.sourcesServerAddressLabel,
+        hintText: 'http://192.168.1.30:8096', // l10n-ignore: example URL
+      ),
+      onSubmitted: (_) => _ctl.submitAddress(_url.text),
+    ),
+    _error(error),
+    const SizedBox(height: 24),
+    FilledButton(
+      key: const Key('jellyfin-continue-button'),
+      onPressed: () => _ctl.submitAddress(_url.text),
+      child: Text(context.l10n.commonContinue),
+    ),
+  ];
 
   List<Widget> _quickConnect(BuildContext context, String code, bool expired) {
     final theme = Theme.of(context);
@@ -130,8 +132,10 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
           code,
           key: const Key('jellyfin-quick-connect-code'),
           textAlign: TextAlign.center,
-          style: theme.textTheme.displayMedium
-              ?.copyWith(letterSpacing: 8, fontWeight: FontWeight.w600),
+          style: theme.textTheme.displayMedium?.copyWith(
+            letterSpacing: 8,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       if (expired)
         FilledButton(
@@ -151,38 +155,37 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
   }
 
   List<Widget> _passwordForm(
-          SignInProblem? error, bool quickConnectAvailable) =>
-      [
-        TextField(
-          key: const Key('jellyfin-username-field'),
-          controller: _user,
-          autofocus: true,
-          decoration:
-              InputDecoration(labelText: context.l10n.loginUsernameLabel),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          key: const Key('jellyfin-password-field'),
-          controller: _password,
-          obscureText: true,
-          decoration:
-              InputDecoration(labelText: context.l10n.loginPasswordLabel),
-          onSubmitted: (_) => _ctl.submitPassword(_user.text, _password.text),
-        ),
-        _error(error),
-        const SizedBox(height: 24),
-        FilledButton(
-          key: const Key('jellyfin-sign-in-button'),
-          onPressed: () => _ctl.submitPassword(_user.text, _password.text),
-          child: Text(context.l10n.loginSignIn),
-        ),
-        if (quickConnectAvailable) ...[
-          const SizedBox(height: 8),
-          TextButton(
-            key: const Key('jellyfin-use-quick-connect-button'),
-            onPressed: _ctl.startQuickConnect,
-            child: Text(context.l10n.sourcesJellyfinUseQuickConnect),
-          ),
-        ],
-      ];
+    SignInProblem? error,
+    bool quickConnectAvailable,
+  ) => [
+    TextField(
+      key: const Key('jellyfin-username-field'),
+      controller: _user,
+      autofocus: true,
+      decoration: InputDecoration(labelText: context.l10n.loginUsernameLabel),
+    ),
+    const SizedBox(height: 16),
+    TextField(
+      key: const Key('jellyfin-password-field'),
+      controller: _password,
+      obscureText: true,
+      decoration: InputDecoration(labelText: context.l10n.loginPasswordLabel),
+      onSubmitted: (_) => _ctl.submitPassword(_user.text, _password.text),
+    ),
+    _error(error),
+    const SizedBox(height: 24),
+    FilledButton(
+      key: const Key('jellyfin-sign-in-button'),
+      onPressed: () => _ctl.submitPassword(_user.text, _password.text),
+      child: Text(context.l10n.loginSignIn),
+    ),
+    if (quickConnectAvailable) ...[
+      const SizedBox(height: 8),
+      TextButton(
+        key: const Key('jellyfin-use-quick-connect-button'),
+        onPressed: _ctl.startQuickConnect,
+        child: Text(context.l10n.sourcesJellyfinUseQuickConnect),
+      ),
+    ],
+  ];
 }

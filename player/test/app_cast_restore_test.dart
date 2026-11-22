@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/app.dart';
@@ -25,20 +25,19 @@ void main() {
     buildOverrides({
       required bool bound,
       Future<String?> Function()? legacyId,
-    }) =>
-        [
-          noProgressFlushOverride,
-          sourcesLoadingProvider.overrideWithValue(false),
-          hasMydiaProvider.overrideWithValue(bound),
-          legacyInstanceIdProvider
-              .overrideWith((ref) => (legacyId ?? () async => null)()),
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.full()),
-          castSessionManagerProvider.overrideWith((ref) async {
-            managerBuilt = true;
-            throw StateError('unreachable in these tests');
-          }),
-        ];
+    }) => [
+      noProgressFlushOverride,
+      sourcesLoadingProvider.overrideWithValue(false),
+      hasMydiaProvider.overrideWithValue(bound),
+      legacyInstanceIdProvider.overrideWith(
+        (ref) => (legacyId ?? () async => null)(),
+      ),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      castSessionManagerProvider.overrideWith((ref) async {
+        managerBuilt = true;
+        throw StateError('unreachable in these tests');
+      }),
+    ];
 
     setUp(() => managerBuilt = false);
 
@@ -47,26 +46,34 @@ void main() {
       required bool bound,
       Future<String?> Function()? legacyId,
     }) async {
-      await tester.pumpWidget(ProviderScope(
-        overrides: buildOverrides(bound: bound, legacyId: legacyId),
-        child: const MyApp(),
-      ));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: buildOverrides(bound: bound, legacyId: legacyId),
+          child: const MyApp(),
+        ),
+      );
       await tester.pump();
     }
 
-    testWidgets('does not touch the cast stack while no Mydia account exists',
-        (tester) async {
+    testWidgets('does not touch the cast stack while no Mydia account exists', (
+      tester,
+    ) async {
       await pumpApp(tester, bound: false);
 
-      expect(managerBuilt, isFalse,
-          reason: 'the cast stack must not be built before a Mydia account '
-              'exists');
+      expect(
+        managerBuilt,
+        isFalse,
+        reason:
+            'the cast stack must not be built before a Mydia account '
+            'exists',
+      );
     });
 
     // The manager is also built by the mini controller, so what pins the
     // restore's wait is that it asks for the id, not when the manager builds.
-    testWidgets('reads the legacy instance id before restoring',
-        (tester) async {
+    testWidgets('reads the legacy instance id before restoring', (
+      tester,
+    ) async {
       var legacyRead = false;
       await pumpApp(
         tester,
@@ -77,13 +84,17 @@ void main() {
         },
       );
 
-      expect(legacyRead, isTrue,
-          reason: 'a pre-upgrade record needs the legacy id to decode');
+      expect(
+        legacyRead,
+        isTrue,
+        reason: 'a pre-upgrade record needs the legacy id to decode',
+      );
       expect(managerBuilt, isTrue);
     });
 
-    testWidgets('still restores when the legacy instance id cannot be read',
-        (tester) async {
+    testWidgets('still restores when the legacy instance id cannot be read', (
+      tester,
+    ) async {
       await pumpApp(
         tester,
         bound: true,
@@ -96,9 +107,13 @@ void main() {
     testWidgets('restores once a Mydia account exists', (tester) async {
       await pumpApp(tester, bound: true);
 
-      expect(managerBuilt, isTrue,
-          reason: 'gating on a Mydia account must not disable restore '
-              'outright');
+      expect(
+        managerBuilt,
+        isTrue,
+        reason:
+            'gating on a Mydia account must not disable restore '
+            'outright',
+      );
     });
   });
 
@@ -108,30 +123,36 @@ void main() {
   /// initialising the chain pre-auth, which is what actually tripped the E2E
   /// pairing test.
   group('CastMiniController', () {
-    testWidgets('does not build the cast stack without a Mydia account',
-        (tester) async {
+    testWidgets('does not build the cast stack without a Mydia account', (
+      tester,
+    ) async {
       var managerBuilt = false;
 
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          noProgressFlushOverride,
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.full()),
-          hasMydiaProvider.overrideWithValue(false),
-          castSessionManagerProvider.overrideWith((ref) async {
-            managerBuilt = true;
-            throw StateError('unreachable in this test');
-          }),
-        ],
-        child: const MaterialApp(
-          home: Scaffold(body: CastMiniController()),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            noProgressFlushOverride,
+            castCapabilitiesProvider.overrideWithValue(
+              const CastCapabilities.full(),
+            ),
+            hasMydiaProvider.overrideWithValue(false),
+            castSessionManagerProvider.overrideWith((ref) async {
+              managerBuilt = true;
+              throw StateError('unreachable in this test');
+            }),
+          ],
+          child: const MaterialApp(home: Scaffold(body: CastMiniController())),
         ),
-      ));
+      );
       await tester.pump();
 
-      expect(managerBuilt, isFalse,
-          reason: 'the mini controller must not reach the cast stack with '
-              'no Mydia account');
+      expect(
+        managerBuilt,
+        isFalse,
+        reason:
+            'the mini controller must not reach the cast stack with '
+            'no Mydia account',
+      );
     });
   });
 
@@ -154,33 +175,35 @@ void main() {
   /// dispose, so the rejection lands on an already-torn-down subscription,
   /// the same way the real one does.
   group('castSessionProvider disposal', () {
-    testWidgets('does not leak an unhandled error when disposed mid-loading',
-        (tester) async {
+    testWidgets('does not leak an unhandled error when disposed mid-loading', (
+      tester,
+    ) async {
       final flutterErrors = <FlutterErrorDetails>[];
       final previousOnError = FlutterError.onError;
       FlutterError.onError = flutterErrors.add;
       addTearDown(() => FlutterError.onError = previousOnError);
 
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          noProgressFlushOverride,
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.full()),
-          hasMydiaProvider.overrideWithValue(true),
-          // Rejects on a real delay chosen to land after this test disposes
-          // the tree below — the "late arrival" that has nowhere to go once
-          // `castSessionProvider`'s own subscription is already torn down.
-          castSessionManagerProvider.overrideWith((ref) {
-            return Future<CastSessionManager>.delayed(
-              const Duration(milliseconds: 60),
-              () => throw StateError('unreachable in this test'),
-            );
-          }),
-        ],
-        child: const MaterialApp(
-          home: Scaffold(body: CastMiniController()),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            noProgressFlushOverride,
+            castCapabilitiesProvider.overrideWithValue(
+              const CastCapabilities.full(),
+            ),
+            hasMydiaProvider.overrideWithValue(true),
+            // Rejects on a real delay chosen to land after this test disposes
+            // the tree below — the "late arrival" that has nowhere to go once
+            // `castSessionProvider`'s own subscription is already torn down.
+            castSessionManagerProvider.overrideWith((ref) {
+              return Future<CastSessionManager>.delayed(
+                const Duration(milliseconds: 60),
+                () => throw StateError('unreachable in this test'),
+              );
+            }),
+          ],
+          child: const MaterialApp(home: Scaffold(body: CastMiniController())),
         ),
-      ));
+      );
       await tester.pump();
 
       // Dispose well before the 60ms rejection above fires.
@@ -194,11 +217,15 @@ void main() {
       // subscription) is already torn down.
       await tester.pump(const Duration(milliseconds: 150));
 
-      expect(flutterErrors, isEmpty,
-          reason: 'castSessionProvider must catch its own read of '
-              'castSessionManagerProvider.future instead of letting a '
-              'disposal-time rejection escape as an unhandled async error: '
-              '${flutterErrors.map((d) => d.exceptionAsString()).toList()}');
+      expect(
+        flutterErrors,
+        isEmpty,
+        reason:
+            'castSessionProvider must catch its own read of '
+            'castSessionManagerProvider.future instead of letting a '
+            'disposal-time rejection escape as an unhandled async error: '
+            '${flutterErrors.map((d) => d.exceptionAsString()).toList()}',
+      );
     });
   });
 }

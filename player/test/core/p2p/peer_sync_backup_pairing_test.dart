@@ -21,8 +21,10 @@ import 'peer_sync_service_test.dart'
 /// the way `backupPairingHooksProvider` wires them.
 class _Node {
   _Node(this.name, this.nodeId, this.net) {
-    transport =
-        FakePeerSyncTransport(network: net.network, localNodeId: nodeId);
+    transport = FakePeerSyncTransport(
+      network: net.network,
+      localNodeId: nodeId,
+    );
     snapshot = BackupSnapshot(
       peerSync: store,
       authStorage: auth,
@@ -32,9 +34,9 @@ class _Node {
       settings: SettingsService(storage: auth),
       loadSubtitleLanguages: () async => null,
       saveSubtitleLanguages: (_) async {},
-      onRemoteFilesChanges: (_, __) async {},
+      onRemoteFilesChanges: (_, _) async {},
       rootsFor: (_) async => const [],
-      putRoots: (_, __) async {},
+      putRoots: (_, _) async {},
     );
     backup = BackupSyncService(
       relay: net.backupRelay.relayClient(),
@@ -167,8 +169,11 @@ void main() {
     expect((await joiner.state())!.vaultId, vaultId);
     expect(joiner.backup.status.value, isA<BackupIdle>());
     expect(joiner.backup.showJoinedNotice, isTrue);
-    expect(joiner.backup.recoveryKeyText, isNull,
-        reason: 'the recovery key never travels over pairing');
+    expect(
+      joiner.backup.recoveryKeyText,
+      isNull,
+      reason: 'the recovery key never travels over pairing',
+    );
     final vault = net.backupRelay.vault(vaultId);
     final joinerSlot = await joiner.slotId();
     expect(vault.members.values.map((m) => m.slotId), contains(joinerSlot));
@@ -187,19 +192,21 @@ void main() {
     expect(joiner.backup.showJoinedNotice, isFalse);
   });
 
-  test('a host without backup sends no vault and the joiner stays off',
-      () async {
-    final host = await net.node('Living Room TV', 'node-a');
-    final joiner = await net.node('Night Harbor Laptop', 'node-b');
+  test(
+    'a host without backup sends no vault and the joiner stays off',
+    () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
 
-    await net.pair(host, joiner);
+      await net.pair(host, joiner);
 
-    expect(joiner.peers.isPaired, isTrue);
-    expect(joiner.backup.enabled, isFalse);
-    expect(joiner.backup.status.value, isA<BackupOff>());
-    expect(joiner.backup.showJoinedNotice, isFalse);
-    expect(net.backupRelay.vaults, isEmpty);
-  });
+      expect(joiner.peers.isPaired, isTrue);
+      expect(joiner.backup.enabled, isFalse);
+      expect(joiner.backup.status.value, isA<BackupOff>());
+      expect(joiner.backup.showJoinedNotice, isFalse);
+      expect(net.backupRelay.vaults, isEmpty);
+    },
+  );
 
   test('a relay failure on the host still pairs, without backup', () async {
     final host = await net.node('Living Room TV', 'node-a');
@@ -229,60 +236,64 @@ void main() {
     expect(net.backupRelay.onlyVault.members, hasLength(2));
   });
 
-  test('revoking the joiner records a pending removal and writes nothing',
-      () async {
-    final host = await net.node('Living Room TV', 'node-a');
-    final joiner = await net.node('Night Harbor Laptop', 'node-b');
-    await host.enableBackup();
-    await net.pair(host, joiner);
-    await host.backup.poll();
-    final joinerSlot = await joiner.slotId();
-    final vault = net.backupRelay.onlyVault;
-    final before = net.backupRelay.requests.length;
+  test(
+    'revoking the joiner records a pending removal and writes nothing',
+    () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      await net.pair(host, joiner);
+      await host.backup.poll();
+      final joinerSlot = await joiner.slotId();
+      final vault = net.backupRelay.onlyVault;
+      final before = net.backupRelay.requests.length;
 
-    net.clock.setMs(5000);
-    await host.peers.revokePeer('node-b');
+      net.clock.setMs(5000);
+      await host.peers.revokePeer('node-b');
 
-    expect(host.store.member('node-b')!.revoked, isTrue);
-    expect(net.backupRelay.requests.skip(before), isEmpty);
-    expect(vault.epoch, 1);
-    expect(host.meta.pendingRemovals()['node-b']?.slotId, joinerSlot);
-    final pending = host.backup.pendingRemovals.value.single;
-    expect(pending.slotId, joinerSlot);
-    expect(pending.deviceName, 'Night Harbor Laptop');
+      expect(host.store.member('node-b')!.revoked, isTrue);
+      expect(net.backupRelay.requests.skip(before), isEmpty);
+      expect(vault.epoch, 1);
+      expect(host.meta.pendingRemovals()['node-b']?.slotId, joinerSlot);
+      final pending = host.backup.pendingRemovals.value.single;
+      expect(pending.slotId, joinerSlot);
+      expect(pending.deviceName, 'Night Harbor Laptop');
 
-    // The viewer removes it: a rotation that also replaces the recovery
-    // key, and the entry clears.
-    final key = await host.backup.removeMember(pending.slotId);
-    expect(vault.epoch, 2);
-    expect(vault.slots.containsKey(joinerSlot), isFalse);
-    expect((await host.state())!.recoveryKeyText, key.display);
-    expect(host.backup.pendingRemovals.value, isEmpty);
-    expect(host.meta.pendingRemovals(), isEmpty);
+      // The viewer removes it: a rotation that also replaces the recovery
+      // key, and the entry clears.
+      final key = await host.backup.removeMember(pending.slotId);
+      expect(vault.epoch, 2);
+      expect(vault.slots.containsKey(joinerSlot), isFalse);
+      expect((await host.state())!.recoveryKeyText, key.display);
+      expect(host.backup.pendingRemovals.value, isEmpty);
+      expect(host.meta.pendingRemovals(), isEmpty);
 
-    await joiner.backup.poll();
-    expect(joiner.backup.status.value, isA<BackupRemoved>());
-  });
+      await joiner.backup.poll();
+      expect(joiner.backup.status.value, isA<BackupRemoved>());
+    },
+  );
 
-  test('a pending removal clears once another device removed the slot',
-      () async {
-    final host = await net.node('Living Room TV', 'node-a');
-    final laptop = await net.node('Night Harbor Laptop', 'node-b');
-    final phone = await net.node('Pocket Phone', 'node-c');
-    await host.enableBackup();
-    await net.pair(host, laptop);
-    await net.pair(host, phone);
-    await host.backup.poll();
-    await host.peers.revokePeer('node-b');
-    expect(host.backup.pendingRemovals.value, hasLength(1));
+  test(
+    'a pending removal clears once another device removed the slot',
+    () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final laptop = await net.node('Night Harbor Laptop', 'node-b');
+      final phone = await net.node('Pocket Phone', 'node-c');
+      await host.enableBackup();
+      await net.pair(host, laptop);
+      await net.pair(host, phone);
+      await host.backup.poll();
+      await host.peers.revokePeer('node-b');
+      expect(host.backup.pendingRemovals.value, hasLength(1));
 
-    await phone.backup.poll();
-    await phone.backup.removeMember(await laptop.slotId());
-    await host.backup.poll();
+      await phone.backup.poll();
+      await phone.backup.removeMember(await laptop.slotId());
+      await host.backup.poll();
 
-    expect(host.backup.pendingRemovals.value, isEmpty);
-    expect(host.meta.pendingRemovals(), isEmpty);
-  });
+      expect(host.backup.pendingRemovals.value, isEmpty);
+      expect(host.meta.pendingRemovals(), isEmpty);
+    },
+  );
 
   test('pending removals are forgotten when backup is turned off', () async {
     final host = await net.node('Living Room TV', 'node-a');
@@ -348,13 +359,18 @@ void main() {
     await laptop.meta.setNodeToSlot('node-b', hostSlot);
     await net.upload(laptop);
     await phone.backup.poll();
-    expect(phone.meta.slotClaims()[laptopSlot] ?? const <String>{},
-        isNot(contains('node-b')));
+    expect(
+      phone.meta.slotClaims()[laptopSlot] ?? const <String>{},
+      isNot(contains('node-b')),
+    );
 
     await phone.peers.revokePeer('node-b');
 
-    expect(phone.backup.pendingRemovals.value, isEmpty,
-        reason: 'no claim the phone believes names it');
+    expect(
+      phone.backup.pendingRemovals.value,
+      isEmpty,
+      reason: 'no claim the phone believes names it',
+    );
     expect(net.backupRelay.onlyVault.epoch, 1);
   });
 
@@ -377,21 +393,27 @@ void main() {
     expect(host.backup.pendingRemovals.value, isEmpty);
     expect(net.backupRelay.onlyVault.epoch, 1);
   });
-  test('a signer already in the vault is not recorded against the node',
-      () async {
-    final host = await net.node('Living Room TV', 'node-a');
-    final laptop = await net.node('Night Harbor Laptop', 'node-b');
-    await host.enableBackup();
-    await net.pair(host, laptop);
-    final hostKeys = (await host.backup.pairKeys())!;
+  test(
+    'a signer already in the vault is not recorded against the node',
+    () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final laptop = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      await net.pair(host, laptop);
+      final hostKeys = (await host.backup.pairKeys())!;
 
-    // node-x presents the host's own public keys.
-    expect(
-        await host.backup
-            .addMemberForPair(hostKeys.signer, hostKeys.box, nodeId: 'node-x'),
-        isNotNull);
-    expect(host.meta.nodeToSlot().containsKey('node-x'), isFalse);
-  });
+      // node-x presents the host's own public keys.
+      expect(
+        await host.backup.addMemberForPair(
+          hostKeys.signer,
+          hostKeys.box,
+          nodeId: 'node-x',
+        ),
+        isNotNull,
+      );
+      expect(host.meta.nodeToSlot().containsKey('node-x'), isFalse);
+    },
+  );
 
   test('a host add past its deadline writes nothing', () async {
     final host = await net.node('Living Room TV', 'node-a');
@@ -400,9 +422,12 @@ void main() {
     final keys = (await joiner.backup.pairKeys())!;
     final before = net.backupRelay.requests.length;
 
-    final vaultId = await host.backup.addMemberForPair(keys.signer, keys.box,
-        nodeId: 'node-b',
-        deadline: DateTime.now().subtract(const Duration(seconds: 1)));
+    final vaultId = await host.backup.addMemberForPair(
+      keys.signer,
+      keys.box,
+      nodeId: 'node-b',
+      deadline: DateTime.now().subtract(const Duration(seconds: 1)),
+    );
 
     expect(vaultId, isNull);
     expect(net.backupRelay.requests.skip(before), isEmpty);
@@ -432,8 +457,8 @@ void main() {
       final joiner = await net.node('Night Harbor Laptop', 'node-b');
       await host.enableBackup();
       final signer = (await joiner.backup.pairKeys())!.signer;
-      net.backupRelay.hangWhen =
-          (r) => (r.headers['authorization'] ?? '').contains('signer=$signer');
+      net.backupRelay.hangWhen = (r) =>
+          (r.headers['authorization'] ?? '').contains('signer=$signer');
 
       final clock = Stopwatch()..start();
       final offer = await host.peers.startPairingOffer();
@@ -444,40 +469,49 @@ void main() {
       expect(host.store.member('node-b')!.revoked, isFalse);
     });
 
-    test('an add that lands after the host\'s deadline is taken out again',
-        () async {
-      final host = await net.node('Living Room TV', 'node-a');
-      final joiner = await net.node('Night Harbor Laptop', 'node-b');
-      await host.enableBackup();
-      final keys = (await joiner.backup.pairKeys())!;
-      final posted = Completer<void>();
-      net.backupRelay.hangWhen = (r) {
-        final add = r.method == 'POST' && r.url.path.endsWith('/members');
-        if (add && !posted.isCompleted) posted.complete();
-        return add;
-      };
+    test(
+      'an add that lands after the host\'s deadline is taken out again',
+      () async {
+        final host = await net.node('Living Room TV', 'node-a');
+        final joiner = await net.node('Night Harbor Laptop', 'node-b');
+        await host.enableBackup();
+        final keys = (await joiner.backup.pairKeys())!;
+        final posted = Completer<void>();
+        net.backupRelay.hangWhen = (r) {
+          final add = r.method == 'POST' && r.url.path.endsWith('/members');
+          if (add && !posted.isCompleted) posted.complete();
+          return add;
+        };
 
-      final deadline = DateTime.now().add(const Duration(hours: 1));
-      final result = host.backup.addMemberForPair(keys.signer, keys.box,
-          nodeId: 'node-b', deadline: deadline);
-      // The POST is in flight, so the deadline check before it has passed.
-      await posted.future;
-      // The host gives up while the relay still holds the write, which it
-      // then applies.
-      host.clockOverride = deadline.add(const Duration(seconds: 1));
-      net.backupRelay.hangWhen = null;
-      net.backupRelay.releaseHung();
+        final deadline = DateTime.now().add(const Duration(hours: 1));
+        final result = host.backup.addMemberForPair(
+          keys.signer,
+          keys.box,
+          nodeId: 'node-b',
+          deadline: deadline,
+        );
+        // The POST is in flight, so the deadline check before it has passed.
+        await posted.future;
+        // The host gives up while the relay still holds the write, which it
+        // then applies.
+        host.clockOverride = deadline.add(const Duration(seconds: 1));
+        net.backupRelay.hangWhen = null;
+        net.backupRelay.releaseHung();
 
-      expect(await result, isNull);
-      expect(joiner.backup.enabled, isFalse);
+        expect(await result, isNull);
+        expect(joiner.backup.enabled, isFalse);
 
-      final vault = net.backupRelay.onlyVault;
-      expect(vault.members, hasLength(2),
-          reason: 'no member the joiner does not know it is');
-      expect(vault.epoch, 2);
-      expect(host.meta.nodeToSlot().containsKey('node-b'), isFalse);
-      expect((await host.state())!.keysByEpoch.keys, contains(2));
-    });
+        final vault = net.backupRelay.onlyVault;
+        expect(
+          vault.members,
+          hasLength(2),
+          reason: 'no member the joiner does not know it is',
+        );
+        expect(vault.epoch, 2);
+        expect(host.meta.nodeToSlot().containsKey('node-b'), isFalse);
+        expect((await host.state())!.keysByEpoch.keys, contains(2));
+      },
+    );
 
     test('does not hold up a revocation', () async {
       final host = await net.node('Living Room TV', 'node-a');
@@ -521,48 +555,55 @@ void main() {
 
     expect(joiner.peers.isPaired, isTrue);
     expect((await joiner.state())!.vaultId, ownVault);
-    expect(joiner.backup.pendingVaultChoice.value,
-        (current: ownVault, offered: hostVault));
+    expect(joiner.backup.pendingVaultChoice.value, (
+      current: ownVault,
+      offered: hostVault,
+    ));
     expect(joiner.backup.showJoinedNotice, isFalse);
   });
 
-  test('keeping the offered vault switches and deletes a sole-member vault',
-      () async {
-    final host = await net.node('Living Room TV', 'node-a');
-    final joiner = await net.node('Night Harbor Laptop', 'node-b');
-    await host.enableBackup();
-    await joiner.enableBackup();
-    final hostVault = (await host.state())!.vaultId;
-    final ownVault = (await joiner.state())!.vaultId;
-    await net.pair(host, joiner);
+  test(
+    'keeping the offered vault switches and deletes a sole-member vault',
+    () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      await joiner.enableBackup();
+      final hostVault = (await host.state())!.vaultId;
+      final ownVault = (await joiner.state())!.vaultId;
+      await net.pair(host, joiner);
 
-    // An offer from the old vault's members means nothing in the new one.
-    await joiner.meta.putPending(const PendingAccountOffer(
-      accountId: 'p1',
-      kind: 'plex',
-      displayName: 'Night Harbor Plex',
-      fromDevice: 'Old Laptop',
-      updatedAt: 1,
-    ));
-    await joiner.meta.dismiss('p2', 1);
+      // An offer from the old vault's members means nothing in the new one.
+      await joiner.meta.putPending(
+        const PendingAccountOffer(
+          accountId: 'p1',
+          kind: 'plex',
+          displayName: 'Night Harbor Plex',
+          fromDevice: 'Old Laptop',
+          updatedAt: 1,
+        ),
+      );
+      await joiner.meta.dismiss('p2', 1);
 
-    await joiner.backup.resolveVaultChoice(keepOffered: true);
+      await joiner.backup.resolveVaultChoice(keepOffered: true);
 
-    expect(joiner.meta.pendingAccounts(), isEmpty);
-    expect(joiner.meta.isDismissed('p2', 1), isFalse);
-    expect(joiner.backup.pendingVaultChoice.value, isNull);
-    final state = (await joiner.state())!;
-    expect(state.vaultId, hostVault);
-    expect(state.recoveryKeyText, isNull);
-    expect(net.backupRelay.vaults.containsKey(ownVault), isFalse);
-    expect(
+      expect(joiner.meta.pendingAccounts(), isEmpty);
+      expect(joiner.meta.isDismissed('p2', 1), isFalse);
+      expect(joiner.backup.pendingVaultChoice.value, isNull);
+      final state = (await joiner.state())!;
+      expect(state.vaultId, hostVault);
+      expect(state.recoveryKeyText, isNull);
+      expect(net.backupRelay.vaults.containsKey(ownVault), isFalse);
+      expect(
         net.backupRelay
             .vault(hostVault)
             .slots
             .containsKey(await joiner.slotId()),
-        isTrue);
-    expect(joiner.backup.status.value, isA<BackupIdle>());
-  });
+        isTrue,
+      );
+      expect(joiner.backup.status.value, isA<BackupIdle>());
+    },
+  );
 
   test('keeping the current vault leaves the offered one', () async {
     final host = await net.node('Living Room TV', 'node-a');
@@ -573,8 +614,10 @@ void main() {
     final ownVault = (await joiner.state())!.vaultId;
     await net.pair(host, joiner);
     final joinerSlot = await joiner.slotId();
-    expect(net.backupRelay.vault(hostVault).members.values.map((m) => m.slotId),
-        contains(joinerSlot));
+    expect(
+      net.backupRelay.vault(hostVault).members.values.map((m) => m.slotId),
+      contains(joinerSlot),
+    );
 
     await joiner.backup.resolveVaultChoice(keepOffered: false);
 
@@ -582,8 +625,10 @@ void main() {
     expect((await joiner.state())!.vaultId, ownVault);
     expect(net.backupRelay.vaults, hasLength(2));
     final offered = net.backupRelay.vault(hostVault);
-    expect(offered.members.values.map((m) => m.slotId),
-        isNot(contains(joinerSlot)));
+    expect(
+      offered.members.values.map((m) => m.slotId),
+      isNot(contains(joinerSlot)),
+    );
     expect(offered.epoch, 2, reason: 'leaving rotates the vault key');
   });
 
@@ -607,37 +652,41 @@ void main() {
     await fresh.adoptVault(hostVault);
 
     expect((await joiner.state())!.vaultId, ownVault);
-    expect(fresh.pendingVaultChoice.value,
-        (current: ownVault, offered: hostVault));
+    expect(fresh.pendingVaultChoice.value, (
+      current: ownVault,
+      offered: hostVault,
+    ));
   });
 
-  test('declining the offered vault clears the choice even without identity',
-      () async {
-    final host = await net.node('Living Room TV', 'node-a');
-    final joiner = await net.node('Night Harbor Laptop', 'node-b');
-    await host.enableBackup();
-    await joiner.enableBackup();
-    final hostVault = (await host.state())!.vaultId;
+  test(
+    'declining the offered vault clears the choice even without identity',
+    () async {
+      final host = await net.node('Living Room TV', 'node-a');
+      final joiner = await net.node('Night Harbor Laptop', 'node-b');
+      await host.enableBackup();
+      await joiner.enableBackup();
+      final hostVault = (await host.state())!.vaultId;
 
-    // A service that has not started holds no identity, and this one
-    // cannot load it.
-    final fresh = BackupSyncService(
-      relay: net.backupRelay.relayClient(),
-      authStorage: joiner.auth,
-      meta: joiner.meta,
-      snapshot: joiner.snapshot,
-      deviceName: () async => joiner.name,
-      platform: 'linux',
-    );
-    addTearDown(fresh.dispose);
-    await fresh.adoptVault(hostVault);
-    expect(fresh.pendingVaultChoice.value, isNotNull);
-    await joiner.auth.write(BackupIdentity.storageKey, 'not json');
+      // A service that has not started holds no identity, and this one
+      // cannot load it.
+      final fresh = BackupSyncService(
+        relay: net.backupRelay.relayClient(),
+        authStorage: joiner.auth,
+        meta: joiner.meta,
+        snapshot: joiner.snapshot,
+        deviceName: () async => joiner.name,
+        platform: 'linux',
+      );
+      addTearDown(fresh.dispose);
+      await fresh.adoptVault(hostVault);
+      expect(fresh.pendingVaultChoice.value, isNotNull);
+      await joiner.auth.write(BackupIdentity.storageKey, 'not json');
 
-    await fresh.resolveVaultChoice(keepOffered: false);
+      await fresh.resolveVaultChoice(keepOffered: false);
 
-    expect(fresh.pendingVaultChoice.value, isNull);
-  });
+      expect(fresh.pendingVaultChoice.value, isNull);
+    },
+  );
 
   test('adoptVault aborts when the stored state cannot be read', () async {
     final host = await net.node('Living Room TV', 'node-a');
@@ -650,7 +699,9 @@ void main() {
     await expectLater(joiner.backup.adoptVault(hostVault), throwsA(anything));
 
     expect(
-        await joiner.auth.read(BackupVaultStateStore.storageKey), '{"v": 9}');
+      await joiner.auth.read(BackupVaultStateStore.storageKey),
+      '{"v": 9}',
+    );
     expect(joiner.backup.showJoinedNotice, isFalse);
   });
 

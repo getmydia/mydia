@@ -8,36 +8,44 @@ import 'package:player/presentation/screens/connections/constellation_layout.dar
 const _box = Size(320, 250);
 
 ConnectionServer _server(String id) => ConnectionServer(
-      record: SourceAccountRecord(
-        account: ProviderAccount(
-          id: id,
-          kind: SourceKind.mydia,
-          displayName: 'Home Mydia',
-          storageNamespace: 'source/$id',
-          activeProfileId: 'owner',
-        ),
-        profiles: const [],
-        servers: const [],
-        addedAtMs: 0,
-      ),
+  record: SourceAccountRecord(
+    account: ProviderAccount(
+      id: id,
       kind: SourceKind.mydia,
-      name: 'Home Mydia $id',
-      host: null,
-      serverCount: 1,
-      status: ConnectionStatus.online,
-      locked: false,
-      inAllServers: true,
-    );
+      displayName: 'Home Mydia',
+      storageNamespace: 'source/$id',
+      activeProfileId: 'owner',
+    ),
+    profiles: const [],
+    servers: const [],
+    addedAtMs: 0,
+  ),
+  kind: SourceKind.mydia,
+  name: 'Home Mydia $id',
+  host: null,
+  serverCount: 1,
+  status: ConnectionStatus.online,
+  locked: false,
+  inAllServers: true,
+);
 
 ConnectionDevice _device(String id) => ConnectionDevice(
-    nodeId: id, name: 'Pixel phone', platform: 'android', lastSyncedAt: null);
+  nodeId: id,
+  name: 'Pixel phone',
+  platform: 'android',
+  lastSyncedAt: null,
+);
 
 Offset _at(double x, double y) => Offset(x * _box.width, y * _box.height);
 
 void main() {
   test('empty shows both ghosts', () {
     final placed = layoutConstellation(
-        servers: const [], devices: const [], showServers: true, box: _box);
+      servers: const [],
+      devices: const [],
+      showServers: true,
+      box: _box,
+    );
     expect(placed, hasLength(2));
     expect(placed[0].node, isA<GhostServerNode>());
     expect(placed[0].center, _at(0.16, 0.21));
@@ -50,7 +58,11 @@ void main() {
     final b = _server('b');
     final d = _device('d');
     final placed = layoutConstellation(
-        servers: [a, b], devices: [d], showServers: true, box: _box);
+      servers: [a, b],
+      devices: [d],
+      showServers: true,
+      box: _box,
+    );
     expect(placed.map((p) => p.node), [
       ServerNode(a),
       ServerNode(b),
@@ -67,7 +79,11 @@ void main() {
     final servers = [for (var i = 0; i < 5; i++) _server('s$i')];
     final devices = [for (var i = 0; i < 3; i++) _device('d$i')];
     final placed = layoutConstellation(
-        servers: servers, devices: devices, showServers: true, box: _box);
+      servers: servers,
+      devices: devices,
+      showServers: true,
+      box: _box,
+    );
     expect(placed, hasLength(5));
     expect(placed.where((p) => p.node is ServerNode), hasLength(3));
     expect(placed.where((p) => p.node is DeviceNode), hasLength(1));
@@ -87,10 +103,16 @@ void main() {
             box: _box,
           );
           final centres = placed.map((p) => p.center).toList();
-          expect(centres.toSet(), hasLength(centres.length),
-              reason: '$s servers, $d devices, showServers $show');
-          expect(centres, isNot(contains(_at(0.5, 0.46))), // the centre node
-              reason: '$s servers, $d devices, showServers $show');
+          expect(
+            centres.toSet(),
+            hasLength(centres.length),
+            reason: '$s servers, $d devices, showServers $show',
+          );
+          expect(
+            centres,
+            isNot(contains(_at(0.5, 0.46))), // the centre node
+            reason: '$s servers, $d devices, showServers $show',
+          );
         }
       }
     }
@@ -98,15 +120,20 @@ void main() {
 
   test('showServers false places devices only and no server ghost', () {
     final placed = layoutConstellation(
-        servers: [_server('a'), _server('b')],
-        devices: [_device('d')],
-        showServers: false,
-        box: _box);
+      servers: [_server('a'), _server('b')],
+      devices: [_device('d')],
+      showServers: false,
+      box: _box,
+    );
     expect(placed.map((p) => p.node), [DeviceNode(_device('d'))]);
     expect(placed.single.center, _at(0.89, 0.68));
 
     final empty = layoutConstellation(
-        servers: const [], devices: const [], showServers: false, box: _box);
+      servers: const [],
+      devices: const [],
+      showServers: false,
+      box: _box,
+    );
     expect(empty.map((p) => p.node), [const GhostDeviceNode()]);
   });
 }

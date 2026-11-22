@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/diagnostics/diagnostics_provider.dart';
@@ -36,8 +36,10 @@ class DiagnosticsSharingSection extends ConsumerWidget {
           value: state?.crashes ?? false,
           onChanged: state == null
               ? null
-              : (on) => _save(context,
-                  () => ref.read(diagnosticsProvider.notifier).setCrashes(on)),
+              : (on) => _save(
+                  context,
+                  () => ref.read(diagnosticsProvider.notifier).setCrashes(on),
+                ),
         ),
         if (canShareLogs)
           SettingsRow.toggle(
@@ -47,8 +49,10 @@ class DiagnosticsSharingSection extends ConsumerWidget {
             value: state?.logs ?? false,
             onChanged: state == null
                 ? null
-                : (on) => _save(context,
-                    () => ref.read(diagnosticsProvider.notifier).setLogs(on)),
+                : (on) => _save(
+                    context,
+                    () => ref.read(diagnosticsProvider.notifier).setLogs(on),
+                  ),
           ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -78,7 +82,9 @@ class DiagnosticsSharingSection extends ConsumerWidget {
   }
 
   Future<void> _save(
-      BuildContext context, Future<void> Function() write) async {
+    BuildContext context,
+    Future<void> Function() write,
+  ) async {
     try {
       await write();
     } catch (e) {

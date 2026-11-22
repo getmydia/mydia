@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/sidebar_layout_providers.dart';
@@ -139,11 +139,7 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
         widget.editing?.id ?? 'f_${DateTime.now().microsecondsSinceEpoch}';
 
     await widget.onSave(
-      FilterDestination(
-        id: id,
-        label: name,
-        filter: _filter,
-      ),
+      FilterDestination(id: id, label: name, filter: _filter),
     );
   }
 
@@ -188,9 +184,8 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                     widget.editing == null
                         ? context.l10n.navNewFilter
                         : context.l10n.filterEditorEditTitle,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
                 Padding(
@@ -240,7 +235,8 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                       key: const Key('filter-editor-category'),
                       initialValue: _filter.category,
                       decoration: InputDecoration(
-                          labelText: context.l10n.filterEditorCategory),
+                        labelText: context.l10n.filterEditorCategory,
+                      ),
                       items: [
                         DropdownMenuItem(
                           value: null,
@@ -249,8 +245,9 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                         for (final category in categories)
                           DropdownMenuItem(
                             value: category,
-                            child:
-                                Text(context.l10n.categoryFilterName(category)),
+                            child: Text(
+                              context.l10n.categoryFilterName(category),
+                            ),
                           ),
                       ],
                       onChanged: _setCategory,
@@ -284,8 +281,9 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                 ListTile(
                   leading: const Icon(Icons.sort_rounded),
                   title: Text(context.l10n.filterEditorSort),
-                  subtitle:
-                      Text(context.l10n.sortFieldName(_filter.sort.field)),
+                  subtitle: Text(
+                    context.l10n.sortFieldName(_filter.sort.field),
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _showSortPicker,
                 ),

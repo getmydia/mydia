@@ -40,7 +40,7 @@ final stashRecord = SourceAccountRecord(
 );
 
 ({StashMediaSource source, FakeStashServer server, List<int> unauthorized})
-    build() {
+build() {
   final server = FakeStashServer();
   final unauthorized = <int>[];
   final source = StashMediaSource(
@@ -59,19 +59,24 @@ void main() {
   const sid = SourceId('st1:owner:main');
 
   runMediaSourceContract(
-      'Stash',
-      () async => ContractFixture(
-            source: build().source,
-            library: const LibraryRef(sourceId: sid, id: stashScenesLibraryId),
-            playable: const ItemRef(
-                sourceId: sid, kind: ItemKind.video, externalId: '2'),
-            libraryItemCount: 5,
-          ));
+    'Stash',
+    () async => ContractFixture(
+      source: build().source,
+      library: const LibraryRef(sourceId: sid, id: stashScenesLibraryId),
+      playable: const ItemRef(
+        sourceId: sid,
+        kind: ItemKind.video,
+        externalId: '2',
+      ),
+      libraryItemCount: 5,
+    ),
+  );
 
   test('strips the API key from server-made URLs', () {
     expect(
       stashRelativePath(
-          'http://192.168.1.20:9999/scene/4/screenshot?t=1700&apikey=k'),
+        'http://192.168.1.20:9999/scene/4/screenshot?t=1700&apikey=k',
+      ),
       '/scene/4/screenshot?t=1700',
     );
     expect(stashRelativePath(null), isNull);
@@ -99,14 +104,16 @@ void main() {
 
   test('falls back to the file name for an untitled scene', () async {
     final page = await build().source.browse(
-        const LibraryRef(sourceId: sid, id: stashScenesLibraryId),
-        const BrowseQuery());
+      const LibraryRef(sourceId: sid, id: stashScenesLibraryId),
+      const BrowseQuery(),
+    );
     expect(page.items[2].title, 'tidepool_3.mp4');
   });
 
   test('maps a scene with its file, captions and people', () async {
     final detail = await build().source.item(
-        const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'));
+      const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
+    );
     expect(detail.summary.userState.watched, isTrue);
     expect(detail.summary.userState.progressSeconds, 300);
     expect(detail.studio, 'Kelpline');
@@ -117,14 +124,17 @@ void main() {
     expect(version.height, 1080);
     expect(version.bitrateKbps, 6000);
     expect(version.streamPath, '/scene/2/stream');
-    expect(version.streams.single.externalPath,
-        '/scene/2/caption?lang=en&type=srt');
+    expect(
+      version.streams.single.externalPath,
+      '/scene/2/caption?lang=en&type=srt',
+    );
   });
 
   test('resolves the original file with the API key in a header', () async {
     final plan = await build().source.resolve(
-        const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
-        'original') as DirectFile;
+      const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
+      'original',
+    ) as DirectFile;
     expect(Uri.parse(plan.url).path, '/scene/2/stream');
     expect(plan.headers['ApiKey'], FakeStashServer.apiKey);
     expect(plan.url, isNot(contains(FakeStashServer.apiKey)));
@@ -133,32 +143,39 @@ void main() {
   test('a scene carries added and last played, no sort title', () async {
     final b = build();
     final detail = await b.source.item(
-        ItemRef(sourceId: b.source.id, kind: ItemKind.video, externalId: '2'));
+      ItemRef(sourceId: b.source.id, kind: ItemKind.video, externalId: '2'),
+    );
     expect(detail.summary.addedAt, DateTime.utc(2024, 2, 2, 10));
     expect(detail.summary.lastPlayedAt, DateTime.utc(2024, 6, 2, 20));
     expect(detail.summary.sortTitle, isNull);
   });
 
-  test('recently added sorts by created_at, newest first, 20 at most',
-      () async {
-    final b = build();
-    final items = await b.source.recentlyAdded();
-    expect(items.first.ref.externalId, '5');
-    final filter = b.server.operations
-        .lastWhere((o) => o.$1 == 'FindScenes')
-        .$2['filter'] as Map;
-    expect(filter['sort'], 'created_at');
-    expect(filter['direction'], 'DESC');
-    expect(filter['per_page'], 20);
-  });
+  test(
+    'recently added sorts by created_at, newest first, 20 at most',
+    () async {
+      final b = build();
+      final items = await b.source.recentlyAdded();
+      expect(items.first.ref.externalId, '5');
+      final filter =
+          b.server.operations
+                  .lastWhere((o) => o.$1 == 'FindScenes')
+                  .$2['filter']
+              as Map;
+      expect(filter['sort'], 'created_at');
+      expect(filter['direction'], 'DESC');
+      expect(filter['per_page'], 20);
+    },
+  );
 
   test('sort options tag title, added and released', () {
     final shared = {for (final o in stashSortOptions) o.id: o.shared};
     expect(shared['title'], SharedSort.title);
     expect(shared['created_at'], SharedSort.added);
     expect(shared['date'], SharedSort.released);
-    expect(shared.entries.where((e) => e.value != null).map((e) => e.key),
-        unorderedEquals(['title', 'created_at', 'date']));
+    expect(
+      shared.entries.where((e) => e.value != null).map((e) => e.key),
+      unorderedEquals(['title', 'created_at', 'date']),
+    );
   });
 
   test('watched writes add a play or reset the count', () async {
@@ -170,21 +187,31 @@ void main() {
     expect(b.server.operations.last.$1, 'ResetPlayCount');
   });
 
-  test('pushProgress throws when the answer carries no mutation result',
-      () async {
-    final b = build();
-    const ref = ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2');
-    final sync = b.source.as<ProgressSync>()!;
-    await sync.pushProgress(ref,
-        positionSeconds: 30, durationSeconds: 100, watched: true);
+  test(
+    'pushProgress throws when the answer carries no mutation result',
+    () async {
+      final b = build();
+      const ref = ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2');
+      final sync = b.source.as<ProgressSync>()!;
+      await sync.pushProgress(
+        ref,
+        positionSeconds: 30,
+        durationSeconds: 100,
+        watched: true,
+      );
 
-    b.server.emptyMutationAnswers = true;
-    await expectLater(
-      sync.pushProgress(ref,
-          positionSeconds: 30, durationSeconds: 100, watched: false),
-      throwsA(isA<SourceException>()),
-    );
-  });
+      b.server.emptyMutationAnswers = true;
+      await expectLater(
+        sync.pushProgress(
+          ref,
+          positionSeconds: 30,
+          durationSeconds: 100,
+          watched: false,
+        ),
+        throwsA(isA<SourceException>()),
+      );
+    },
+  );
 
   test('a false sceneSaveActivity is not a confirmed save', () async {
     final b = build();
@@ -192,8 +219,12 @@ void main() {
     final sync = b.source.as<ProgressSync>()!;
     b.server.saveActivityAnswer = false;
     await expectLater(
-      sync.pushProgress(ref,
-          positionSeconds: 30, durationSeconds: 100, watched: false),
+      sync.pushProgress(
+        ref,
+        positionSeconds: 30,
+        durationSeconds: 100,
+        watched: false,
+      ),
       throwsA(isA<SourceException>()),
     );
   });
@@ -204,30 +235,42 @@ void main() {
         'Cannot query field "sceneAddPlay" on type "Mutation".';
     await expectLater(
       b.source.as<WatchedState>()!.setWatched(
-          const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
-          true),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unsupported)),
+        const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
+        true,
+      ),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unsupported,
+        ),
+      ),
     );
   });
 
   test('a rejected key reports unauthorized', () async {
     final b = build();
     b.server.status = 401;
-    await expectLater(b.source.libraries(), completes,
-        reason: 'the synthetic library needs no request');
     await expectLater(
-      b.source.browse(const LibraryRef(sourceId: sid, id: stashScenesLibraryId),
-          const BrowseQuery()),
+      b.source.libraries(),
+      completes,
+      reason: 'the synthetic library needs no request',
+    );
+    await expectLater(
+      b.source.browse(
+        const LibraryRef(sourceId: sid, id: stashScenesLibraryId),
+        const BrowseQuery(),
+      ),
       throwsA(isA<SourceException>()),
     );
     expect(b.unauthorized, [1]);
   });
 
   test('artwork resolves against the base with the key in a header', () async {
-    final request = await build()
-        .source
-        .artwork(const ArtworkRef('/scene/4/screenshot?t=1700'), width: 300);
+    final request = await build().source.artwork(
+      const ArtworkRef('/scene/4/screenshot?t=1700'),
+      width: 300,
+    );
     expect(request!.url, 'http://192.168.1.20:9999/scene/4/screenshot?t=1700');
     expect(request.headers['ApiKey'], FakeStashServer.apiKey);
   });
@@ -242,29 +285,32 @@ void main() {
     expect(source.capabilities, isNot(contains(SourceCapability.trending)));
   });
 
-  test('Continue Watching asks for resumable scenes, last played first',
-      () async {
-    final b = build();
-    final items = await b.source.continueWatching();
-    final (name, vars) = b.server.operations.last;
-    expect(name, 'FindScenes');
-    expect(vars['filter'], {
-      'page': 1,
-      'per_page': 20,
-      'sort': 'last_played_at',
-      'direction': 'DESC',
-    });
-    expect(vars['scene_filter'], {
-      'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
-    });
-    expect(items.map((i) => i.ref.externalId), ['4', '2']);
-    expect(items.first.userState.progressSeconds, 120);
-  });
+  test(
+    'Continue Watching asks for resumable scenes, last played first',
+    () async {
+      final b = build();
+      final items = await b.source.continueWatching();
+      final (name, vars) = b.server.operations.last;
+      expect(name, 'FindScenes');
+      expect(vars['filter'], {
+        'page': 1,
+        'per_page': 20,
+        'sort': 'last_played_at',
+        'direction': 'DESC',
+      });
+      expect(vars['scene_filter'], {
+        'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
+      });
+      expect(items.map((i) => i.ref.externalId), ['4', '2']);
+      expect(items.first.userState.progressSeconds, 120);
+    },
+  );
 
   test('remove clears the resume point', () async {
     final b = build();
     await b.source.removeFromContinueWatching(
-        const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'));
+      const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
+    );
     final (name, vars) = b.server.operations.last;
     expect(name, 'SaveActivity');
     expect(vars, {'id': '2', 'resume_time': 0});

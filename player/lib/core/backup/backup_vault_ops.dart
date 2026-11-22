@@ -28,8 +28,14 @@ String _hex(List<int> bytes) =>
 
 /// What a recovery key stands for on the relay.
 class RecoveryMember {
-  RecoveryMember._(this.key, this.signer, this.box, this.signerPub, this.boxPub,
-      this.lookupHandle);
+  RecoveryMember._(
+    this.key,
+    this.signer,
+    this.box,
+    this.signerPub,
+    this.boxPub,
+    this.lookupHandle,
+  );
 
   static Future<RecoveryMember> of(RecoveryKey key) async {
     final signer = await key.signer();
@@ -74,13 +80,12 @@ class BackupVaultOps {
     List<int> boxPub,
     String vaultId,
     int epoch,
-  ) =>
-      VaultCrypto.sealEnvelope(
-        vaultKey: vaultKey,
-        recipientBox: SimplePublicKey(boxPub, type: KeyPairType.x25519),
-        vaultId: vaultId,
-        epoch: epoch,
-      );
+  ) => VaultCrypto.sealEnvelope(
+    vaultKey: vaultKey,
+    recipientBox: SimplePublicKey(boxPub, type: KeyPairType.x25519),
+    vaultId: vaultId,
+    epoch: epoch,
+  );
 
   /// Creates a vault at epoch 1 holding [identity] and [recovery], under a
   /// vault id chosen here so both envelopes bind it. A taken id (a
@@ -92,21 +97,23 @@ class BackupVaultOps {
   ) async {
     final signerPub = (await identity.signer.extractPublicKey()).bytes;
     final boxPub = (await identity.box.extractPublicKey()).bytes;
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       final vaultId = randomVaultId();
       try {
-        final created = await _relay.createVault(CreateVaultRequest(
-          vaultId: vaultId,
-          signer: signerPub,
-          boxPub: boxPub,
-          slotId: identity.slotId,
-          envelope: await seal(vaultKey, boxPub, vaultId, 1),
-          recoverySigner: recovery.signerPub,
-          recoveryBoxPub: recovery.boxPub,
-          recoverySlotId: recovery.slotId,
-          recoveryEnvelope: await seal(vaultKey, recovery.boxPub, vaultId, 1),
-          lookupHash: await recovery.lookupHash(),
-        ));
+        final created = await _relay.createVault(
+          CreateVaultRequest(
+            vaultId: vaultId,
+            signer: signerPub,
+            boxPub: boxPub,
+            slotId: identity.slotId,
+            envelope: await seal(vaultKey, boxPub, vaultId, 1),
+            recoverySigner: recovery.signerPub,
+            recoveryBoxPub: recovery.boxPub,
+            recoverySlotId: recovery.slotId,
+            recoveryEnvelope: await seal(vaultKey, recovery.boxPub, vaultId, 1),
+            lookupHash: await recovery.lookupHash(),
+          ),
+        );
         // The envelopes bind the id sent; any other would not open.
         if (created != vaultId) {
           throw const BackupRelayException(BackupRelayError.invalid);
@@ -121,7 +128,7 @@ class BackupVaultOps {
   /// Finds the vault [recovery] opens and reads its manifest as the
   /// recovery member. Returns the vault key of the manifest's epoch.
   Future<({String vaultId, BackupManifest manifest, Uint8List vaultKey})>
-      openWithRecovery(RecoveryMember recovery) async {
+  openWithRecovery(RecoveryMember recovery) async {
     final vaultId = await _relay.lookup(recovery.lookupHandle);
     final manifest = (await _relay.manifest(vaultId, recovery.signer))!;
     final vaultKey = await VaultCrypto.openEnvelope(
@@ -144,8 +151,9 @@ class BackupVaultOps {
     for (final s in opened.manifest.slots) {
       final BackupPayload? p;
       try {
-        p = await readSlot(opened.vaultId, recovery.signer, s,
-            {opened.manifest.epoch: opened.vaultKey});
+        p = await readSlot(opened.vaultId, recovery.signer, s, {
+          opened.manifest.epoch: opened.vaultKey,
+        });
       } on NewerBackupVersionException {
         unreadable.add(s.slotId);
         continue;
@@ -193,8 +201,12 @@ class BackupVaultOps {
           ),
         ],
         envelopes: {
-          backupB64(memberSigner):
-              await seal(vaultKey, memberBox, vaultId, epoch),
+          backupB64(memberSigner): await seal(
+            vaultKey,
+            memberBox,
+            vaultId,
+            epoch,
+          ),
         },
       ),
     );
@@ -214,7 +226,7 @@ class BackupVaultOps {
     final signerPub = (await identity.signer.extractPublicKey()).bytes;
     final boxPub = (await identity.box.extractPublicKey()).bytes;
     var current = (epoch: epoch, vaultKey: vaultKey);
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       try {
         await addMember(
           vaultId: vaultId,
@@ -259,14 +271,14 @@ class BackupVaultOps {
     RecoveryMember? newRecovery,
     Future<void> Function(BackupManifest manifest)? onManifest,
   }) async {
-    for (var attempt = 0;; attempt++) {
+    for (var attempt = 0; ; attempt++) {
       final manifest = (await _relay.manifest(vaultId, signer))!;
       await onManifest?.call(manifest);
       final removed = removeSlotId == null
           ? null
           : manifest.members
-              .where((m) => !m.recovery && m.slotId == removeSlotId)
-              .firstOrNull;
+                .where((m) => !m.recovery && m.slotId == removeSlotId)
+                .firstOrNull;
       if (removed == null && newRecovery == null) return null;
 
       final epoch = manifest.epoch + 1;
@@ -275,8 +287,12 @@ class BackupVaultOps {
       for (final m in manifest.members) {
         if (identical(m, removed)) continue;
         if (m.recovery && newRecovery != null) continue;
-        envelopes[backupB64(m.signer)] =
-            await seal(vaultKey, m.boxPub, vaultId, epoch);
+        envelopes[backupB64(m.signer)] = await seal(
+          vaultKey,
+          m.boxPub,
+          vaultId,
+          epoch,
+        );
       }
       final recovery = newRecovery == null
           ? null
@@ -284,8 +300,12 @@ class BackupVaultOps {
               signer: newRecovery.signerPub,
               boxPub: newRecovery.boxPub,
               slotId: newRecovery.slotId,
-              envelope:
-                  await seal(vaultKey, newRecovery.boxPub, vaultId, epoch),
+              envelope: await seal(
+                vaultKey,
+                newRecovery.boxPub,
+                vaultId,
+                epoch,
+              ),
               lookupHash: await newRecovery.lookupHash(),
             );
       try {
@@ -328,14 +348,16 @@ class BackupVaultOps {
       rethrow;
     }
     try {
-      return BackupPayload.decode(await VaultCrypto.openSlot(
-        vaultKey: key,
-        vaultId: vaultId,
-        epoch: slot.epoch,
-        slotId: slot.slotId,
-        seq: slot.seq,
-        sealed: sealed,
-      ));
+      return BackupPayload.decode(
+        await VaultCrypto.openSlot(
+          vaultKey: key,
+          vaultId: vaultId,
+          epoch: slot.epoch,
+          slotId: slot.slotId,
+          seq: slot.seq,
+          sealed: sealed,
+        ),
+      );
     } on NewerBackupVersionException {
       rethrow;
     } on Object catch (e) {

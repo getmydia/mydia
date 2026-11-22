@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../l10n/l10n.dart';
@@ -8,11 +9,7 @@ class DownloadDialog extends StatefulWidget {
   final List<MediaFile> files;
   final String title;
 
-  const DownloadDialog({
-    super.key,
-    required this.files,
-    required this.title,
-  });
+  const DownloadDialog({super.key, required this.files, required this.title});
 
   @override
   State<DownloadDialog> createState() => _DownloadDialogState();
@@ -50,16 +47,14 @@ class _DownloadDialogState extends State<DownloadDialog> {
         children: [
           Text(
             context.l10n.commonDownload,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
             widget.title,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: palette.textSecondary,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: palette.textSecondary),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -73,9 +68,8 @@ class _DownloadDialogState extends State<DownloadDialog> {
           children: [
             Text(
               context.l10n.downloadSelectQuality,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             RadioGroup<MediaFile>(
@@ -142,10 +136,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
         ),
         child: Row(
           children: [
-            Radio<MediaFile>(
-              value: file,
-              activeColor: palette.primary,
-            ),
+            Radio<MediaFile>(value: file, activeColor: palette.primary),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -153,25 +144,19 @@ class _DownloadDialogState extends State<DownloadDialog> {
                 children: [
                   Text(
                     file.displayQuality ?? context.l10n.commonUnknown,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _formatFileSize(file.size),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: palette.textSecondary,
-                        ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.textSecondary),
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              Icon(
-                Icons.check_circle,
-                color: palette.primary,
-              ),
+            if (isSelected) Icon(Icons.check_circle, color: palette.primary),
           ],
         ),
       ),
@@ -186,9 +171,6 @@ Future<MediaFile?> showDownloadDialog(
 }) async {
   return showDialog<MediaFile>(
     context: context,
-    builder: (context) => DownloadDialog(
-      files: files,
-      title: title,
-    ),
+    builder: (context) => DownloadDialog(files: files, title: title),
   );
 }

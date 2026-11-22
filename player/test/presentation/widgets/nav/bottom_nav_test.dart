@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
@@ -35,21 +35,23 @@ Future<List<String>> _pump(
     downloadSupported: downloadSupported,
   );
   final navigations = <String>[];
-  await tester.pumpWidget(ProviderScope(
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        bottomNavigationBar: BottomNav(
-          location: '/s/${fakeSourceId.value}',
-          onNavigate: navigations.add,
-          entries: entries,
-          isOffline: isOffline,
-          showBackToMydia: showBackToMydia,
+  await tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          bottomNavigationBar: BottomNav(
+            location: '/s/${fakeSourceId.value}',
+            onNavigate: navigations.add,
+            entries: entries,
+            isOffline: isOffline,
+            showBackToMydia: showBackToMydia,
+          ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return navigations;
 }
@@ -100,31 +102,34 @@ Future<List<String>> _pumpBar(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final navigations = <String>[];
-  await tester.pumpWidget(ProviderScope(
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(padding: padding),
-        child: child!,
-      ),
-      home: Scaffold(
-        bottomNavigationBar: BottomNav(
-          location: '/s/x',
-          onNavigate: navigations.add,
-          entries: const [_home, _movies],
-          libraryEntries: libraryEntries,
+  await tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(padding: padding),
+          child: child!,
+        ),
+        home: Scaffold(
+          bottomNavigationBar: BottomNav(
+            location: '/s/x',
+            onNavigate: navigations.add,
+            entries: const [_home, _movies],
+            libraryEntries: libraryEntries,
+          ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return navigations;
 }
 
 void main() {
-  testWidgets('the bar is a 24 px glass pill floating 12 px off the edges',
-      (tester) async {
+  testWidgets('the bar is a 24 px glass pill floating 12 px off the edges', (
+    tester,
+  ) async {
     await _pumpBar(tester, padding: const EdgeInsets.only(bottom: 34));
     final glass = tester.widget<GlassSurface>(find.byType(GlassSurface));
     expect(glass.borderRadius, BorderRadius.circular(AppTheme.radiusBottomBar));
@@ -134,10 +139,13 @@ void main() {
     expect(rect.right, 400 - 12);
   });
 
-  testWidgets('long-press on Home lists the libraries; tapping one navigates',
-      (tester) async {
-    final navigations =
-        await _pumpBar(tester, libraryEntries: const [_lib4k, _kids, _docs]);
+  testWidgets('long-press on Home lists the libraries; tapping one navigates', (
+    tester,
+  ) async {
+    final navigations = await _pumpBar(
+      tester,
+      libraryEntries: const [_lib4k, _kids, _docs],
+    );
     await tester.longPress(find.text('Home'));
     await tester.pumpAndSettle();
     for (final label in ['Movies 4K', 'Kids', 'Documentaries']) {
@@ -149,16 +157,18 @@ void main() {
     expect(find.text('Documentaries'), findsNothing);
   });
 
-  testWidgets('long-press on Home does nothing without library entries',
-      (tester) async {
+  testWidgets('long-press on Home does nothing without library entries', (
+    tester,
+  ) async {
     await _pumpBar(tester);
     await tester.longPress(find.text('Home'));
     await tester.pumpAndSettle();
     expect(find.text('Libraries'), findsNothing);
   });
 
-  testWidgets('a long library list scrolls inside a short landscape sheet',
-      (tester) async {
+  testWidgets('a long library list scrolls inside a short landscape sheet', (
+    tester,
+  ) async {
     final many = [
       for (var i = 0; i < 15; i++)
         SourceNavEntry(
@@ -179,11 +189,14 @@ void main() {
     expect(tester.takeException(), isNull);
 
     final last = find.byKey(const ValueKey('library-sheet-lib-14'));
-    await tester.scrollUntilVisible(last, 100,
-        scrollable: find.descendant(
-          of: find.byType(BottomSheet),
-          matching: find.byType(Scrollable),
-        ));
+    await tester.scrollUntilVisible(
+      last,
+      100,
+      scrollable: find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(Scrollable),
+      ),
+    );
     // scrollUntilVisible stops once the row's edge shows; bring all of it in.
     await tester.ensureVisible(last);
     await tester.pumpAndSettle();
@@ -202,14 +215,15 @@ void main() {
       route: '/s/x/search',
       anchored: true,
     );
-    expect(
-      libraryNavEntries([_home, _movies, anchored, _lib4k, _kids]),
-      [_lib4k, _kids],
-    );
+    expect(libraryNavEntries([_home, _movies, anchored, _lib4k, _kids]), [
+      _lib4k,
+      _kids,
+    ]);
   });
 
-  testWidgets('shows Home, Movies, Shows, Downloads and Settings',
-      (tester) async {
+  testWidgets('shows Home, Movies, Shows, Downloads and Settings', (
+    tester,
+  ) async {
     final navigations = await _pump(tester);
     for (final label in ['Home', 'Movies', 'Shows', 'Downloads', 'Settings']) {
       expect(find.text(label), findsOneWidget, reason: label);
@@ -218,15 +232,15 @@ void main() {
     expect(navigations, ['/s/${fakeSourceId.value}/library/movies']);
   });
 
-  testWidgets('a source without a movies library has no Movies item',
-      (tester) async {
+  testWidgets('a source without a movies library has no Movies item', (
+    tester,
+  ) async {
     await _pump(tester, withMovies: false);
     expect(find.text('Movies'), findsNothing);
     expect(find.text('Shows'), findsOneWidget);
   });
 
-  testWidgets(
-      'Favorites takes the Downloads slot where downloads are '
+  testWidgets('Favorites takes the Downloads slot where downloads are '
       'unsupported', (tester) async {
     await _pump(tester, downloadSupported: false);
     expect(find.text('Downloads'), findsNothing);
@@ -236,8 +250,9 @@ void main() {
   group('narrow phones', () {
     for (final width in [320.0, 360.0, 400.0, 599.0]) {
       for (final back in [true, false]) {
-        testWidgets('fits every item at $width px, back to Mydia $back',
-            (tester) async {
+        testWidgets('fits every item at $width px, back to Mydia $back', (
+          tester,
+        ) async {
           tester.view.physicalSize = Size(width, 800);
           tester.view.devicePixelRatio = 1.0;
           addTearDown(tester.view.reset);

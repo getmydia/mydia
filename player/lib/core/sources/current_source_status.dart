@@ -10,16 +10,16 @@ import 'sources_providers.dart';
 
 /// The connection status of source [id], kept current. Null when the source
 /// does not exist.
-final sourceStatusProvider =
-    Provider.autoDispose.family<SourceConnectionStatus?, SourceId>((ref, id) {
-  final source = ref.watch(mediaSourceProvider(id));
-  if (source == null) return null;
-  final status = source.statusListenable;
-  void changed() => ref.invalidateSelf();
-  status.addListener(changed);
-  ref.onDispose(() => status.removeListener(changed));
-  return status.value;
-});
+final sourceStatusProvider = Provider.autoDispose
+    .family<SourceConnectionStatus?, SourceId>((ref, id) {
+      final source = ref.watch(mediaSourceProvider(id));
+      if (source == null) return null;
+      final status = source.statusListenable;
+      void changed() => ref.invalidateSelf();
+      status.addListener(changed);
+      ref.onDispose(() => status.removeListener(changed));
+      return status.value;
+    });
 
 /// The active source's connection status. Null when there is no source.
 final currentSourceStatusProvider = Provider<SourceConnectionStatus?>((ref) {
@@ -48,12 +48,12 @@ SourceId? statusSourceIdFor(String location, {SourceId? active}) {
 /// The connection status of the source the screen at a location belongs to.
 final routeSourceStatusProvider = Provider.autoDispose
     .family<SourceConnectionStatus?, String>((ref, location) {
-  final id = statusSourceIdFor(
-    location,
-    active: ref.watch(activeSourceIdProvider),
-  );
-  return id == null ? null : ref.watch(sourceStatusProvider(id));
-});
+      final id = statusSourceIdFor(
+        location,
+        active: ref.watch(activeSourceIdProvider),
+      );
+      return id == null ? null : ref.watch(sourceStatusProvider(id));
+    });
 
 /// Whether [status] means the source cannot be reached right now.
 bool isOffline(SourceConnectionStatus? status) =>
@@ -63,14 +63,14 @@ bool isOffline(SourceConnectionStatus? status) =>
 /// offline viewer may open. A files source browses its local index whatever
 /// its status, so an unreachable one (a folder unplugged, a share down)
 /// still shows as offline but never holds navigation back.
-final routeNavigationOfflineProvider =
-    Provider.autoDispose.family<bool, String>((ref, location) {
-  final id = statusSourceIdFor(
-    location,
-    active: ref.watch(activeSourceIdProvider),
-  );
-  if (id == null || !isOffline(ref.watch(sourceStatusProvider(id)))) {
-    return false;
-  }
-  return ref.watch(mediaSourceProvider(id))?.kind != SourceKind.files;
-});
+final routeNavigationOfflineProvider = Provider.autoDispose
+    .family<bool, String>((ref, location) {
+      final id = statusSourceIdFor(
+        location,
+        active: ref.watch(activeSourceIdProvider),
+      );
+      if (id == null || !isOffline(ref.watch(sourceStatusProvider(id)))) {
+        return false;
+      }
+      return ref.watch(mediaSourceProvider(id))?.kind != SourceKind.files;
+    });

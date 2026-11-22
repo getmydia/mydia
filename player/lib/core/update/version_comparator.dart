@@ -147,8 +147,9 @@ class VersionComparator {
       return bandA.compareTo(bandB);
     }
 
-    final shorter =
-        identifiersA.length < identifiersB.length ? identifiersA : identifiersB;
+    final shorter = identifiersA.length < identifiersB.length
+        ? identifiersA
+        : identifiersB;
     for (var i = 0; i < shorter.length; i++) {
       final cmp = _compareIdentifier(identifiersA[i], identifiersB[i]);
       if (cmp != 0) return cmp;

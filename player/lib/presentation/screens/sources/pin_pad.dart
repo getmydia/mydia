@@ -1,7 +1,7 @@
 /// Digit entry that works with touch, a mouse and a TV remote's D-pad.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/sources/lock/pin_store.dart';
 import '../../../l10n/l10n.dart';
@@ -52,28 +52,34 @@ class _PinPadState extends State<PinPad> {
     });
   }
 
-  Widget _key(String id, Widget child, VoidCallback onPressed,
-          {bool autofocus = false}) =>
-      Padding(
-        padding: const EdgeInsets.all(6),
-        child: SizedBox(
-          width: 72,
-          height: 56,
-          child: FilledButton.tonal(
-            key: Key('pin-pad-$id'),
-            autofocus: autofocus,
-            onPressed: onPressed,
-            child: child,
-          ),
-        ),
-      );
+  Widget _key(
+    String id,
+    Widget child,
+    VoidCallback onPressed, {
+    bool autofocus = false,
+  }) => Padding(
+    padding: const EdgeInsets.all(6),
+    child: SizedBox(
+      width: 72,
+      height: 56,
+      child: FilledButton.tonal(
+        key: Key('pin-pad-$id'),
+        autofocus: autofocus,
+        onPressed: onPressed,
+        child: child,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    Widget digit(String d, {bool autofocus = false}) =>
-        _key(d, Text(d, style: theme.textTheme.titleLarge), () => _digit(d),
-            autofocus: autofocus);
+    Widget digit(String d, {bool autofocus = false}) => _key(
+      d,
+      Text(d, style: theme.textTheme.titleLarge),
+      () => _digit(d),
+      autofocus: autofocus,
+    );
     return Column(
       key: const Key('pin-pad'),
       mainAxisSize: MainAxisSize.min,
@@ -87,9 +93,11 @@ class _PinPadState extends State<PinPad> {
           height: 24,
           child: _error == null
               ? null
-              : Text(_error!,
+              : Text(
+                  _error!,
                   key: const Key('pin-pad-error'),
-                  style: TextStyle(color: theme.colorScheme.error)),
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
         ),
         for (final row in const [
           ['1', '2', '3'],
@@ -118,9 +126,9 @@ class _PinPadState extends State<PinPad> {
 
 /// Asks for a new PIN twice. Null when cancelled.
 Future<String?> showPinSetupDialog(BuildContext context) => showDialog<String>(
-      context: context,
-      builder: (context) => const _PinSetupDialog(),
-    );
+  context: context,
+  builder: (context) => const _PinSetupDialog(),
+);
 
 class _PinSetupDialog extends StatefulWidget {
   const _PinSetupDialog();
@@ -143,29 +151,30 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
       ),
       // Scrolls: the pad plus this text is taller than a landscape phone.
       content: SingleChildScrollView(
-          child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(context.l10n.sourcesPinSetupBody),
-          const SizedBox(height: 16),
-          // The pad clears itself after each submit; a stable key keeps the
-          // mismatch message visible.
-          PinPad(
-            onSubmit: (pin) async {
-              if (_first == null) {
-                setState(() => _first = pin);
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(context.l10n.sourcesPinSetupBody),
+            const SizedBox(height: 16),
+            // The pad clears itself after each submit; a stable key keeps the
+            // mismatch message visible.
+            PinPad(
+              onSubmit: (pin) async {
+                if (_first == null) {
+                  setState(() => _first = pin);
+                  return null;
+                }
+                if (pin != _first) {
+                  setState(() => _first = null);
+                  return context.l10n.sourcesPinMismatch;
+                }
+                Navigator.of(context).pop(pin);
                 return null;
-              }
-              if (pin != _first) {
-                setState(() => _first = null);
-                return context.l10n.sourcesPinMismatch;
-              }
-              Navigator.of(context).pop(pin);
-              return null;
-            },
-          ),
-        ],
-      )),
+              },
+            ),
+          ],
+        ),
+      ),
       actions: [
         TextButton(
           key: const Key('pin-setup-cancel'),

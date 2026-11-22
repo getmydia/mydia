@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../../core/layout/breakpoints.dart';
@@ -18,8 +18,11 @@ import '../sources/source_poster_row.dart';
 /// this geometry meant holding a code-generated Riverpod `StreamNotifier` in
 /// `AsyncLoading`, which is a lot of scaffolding to assert a padding value.
 class HomeLoadingSkeleton extends StatelessWidget {
-  const HomeLoadingSkeleton(
-      {super.key, this.showHero = true, this.topInset = 0});
+  const HomeLoadingSkeleton({
+    super.key,
+    this.showHero = true,
+    this.topInset = 0,
+  });
 
   /// False for a home with no hero (All servers), whose loaded list opens
   /// with a rail.
@@ -60,8 +63,10 @@ class HomeLoadingSkeleton extends StatelessWidget {
         // duplicates break the list's child bookkeeping on a rebuild.
         const KeyedSubtree(
           key: ValueKey('home-skeleton-slot-0'),
-          child:
-              _ShimmerRail(key: HomeLoadingSkeleton.railKey, landscape: true),
+          child: _ShimmerRail(
+            key: HomeLoadingSkeleton.railKey,
+            landscape: true,
+          ),
         ),
         const KeyedSubtree(
           key: ValueKey('home-skeleton-slot-1'),
@@ -93,16 +98,21 @@ class _ShimmerHero extends StatelessWidget {
     );
 
     Widget bar(double width, double height, double radius) => _ShimmerRail._bar(
-          color: palette.shimmerBase,
-          width: width,
-          height: height,
-          radius: radius,
-        );
+      color: palette.shimmerBase,
+      width: width,
+      height: height,
+      radius: radius,
+    );
 
     // A bar as tall as [lines] lines of [style], so the placeholder follows
     // the loaded text's metrics: invisible text inside a filled box.
-    Widget textBar(double? width, TextStyle? style, int lines, double radius,
-        {double vertical = 0}) {
+    Widget textBar(
+      double? width,
+      TextStyle? style,
+      int lines,
+      double radius, {
+      double vertical = 0,
+    }) {
       final text = List.filled(lines, 'M').join('\n');
       return SizedBox(
         width: width,
@@ -194,7 +204,8 @@ class _ShimmerHero extends StatelessWidget {
                     width: SourceHomeHero.narrowPosterWidth(context),
                     child: AspectRatio(
                       key: HomeLoadingSkeleton.heroPosterKey,
-                      aspectRatio: SourceHomeHero.posterSize.width /
+                      aspectRatio:
+                          SourceHomeHero.posterSize.width /
                           SourceHomeHero.posterSize.height,
                       child: bar(
                         double.infinity,
@@ -243,7 +254,7 @@ class _ShimmerRail extends StatelessWidget {
     // Overflow the viewport so the rail has no empty tail that fills in later.
     final count =
         (MediaQuery.sizeOf(context).width / (itemWidth + cardSpacing)).ceil() +
-            1;
+        1;
 
     return Shimmer.fromColors(
       baseColor: palette.shimmerBase,

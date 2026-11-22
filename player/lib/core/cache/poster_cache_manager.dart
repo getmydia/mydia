@@ -20,17 +20,17 @@ class PosterCacheManager extends CacheManager with ImageCacheManager {
   }
 
   PosterCacheManager._()
-      : super(
-          Config(
-            key,
-            // Cache up to 500 poster images (should handle most libraries)
-            maxNrOfCacheObjects: 500,
-            // Keep posters cached for 90 days since they rarely change
-            stalePeriod: const Duration(days: 90),
-            // Store in dedicated posterCache directory
-            fileService: HttpFileService(),
-          ),
-        );
+    : super(
+        Config(
+          key,
+          // Cache up to 500 poster images (should handle most libraries)
+          maxNrOfCacheObjects: 500,
+          // Keep posters cached for 90 days since they rarely change
+          stalePeriod: const Duration(days: 90),
+          // Store in dedicated posterCache directory
+          fileService: HttpFileService(),
+        ),
+      );
 }
 
 /// Custom cache manager for backdrop images (wide landscape artwork).
@@ -51,16 +51,16 @@ class BackdropCacheManager extends CacheManager with ImageCacheManager {
   }
 
   BackdropCacheManager._()
-      : super(
-          Config(
-            key,
-            // Cache up to 200 backdrop images
-            maxNrOfCacheObjects: 200,
-            // Keep backdrops cached for 90 days
-            stalePeriod: const Duration(days: 90),
-            fileService: HttpFileService(),
-          ),
-        );
+    : super(
+        Config(
+          key,
+          // Cache up to 200 backdrop images
+          maxNrOfCacheObjects: 200,
+          // Keep backdrops cached for 90 days
+          stalePeriod: const Duration(days: 90),
+          fileService: HttpFileService(),
+        ),
+      );
 }
 
 /// Custom cache manager for episode thumbnails.
@@ -81,16 +81,16 @@ class EpisodeThumbnailCacheManager extends CacheManager with ImageCacheManager {
   }
 
   EpisodeThumbnailCacheManager._()
-      : super(
-          Config(
-            key,
-            // Cache up to 1000 episode thumbnails (TV shows have many episodes)
-            maxNrOfCacheObjects: 1000,
-            // Keep thumbnails cached for 90 days
-            stalePeriod: const Duration(days: 90),
-            fileService: HttpFileService(),
-          ),
-        );
+    : super(
+        Config(
+          key,
+          // Cache up to 1000 episode thumbnails (TV shows have many episodes)
+          maxNrOfCacheObjects: 1000,
+          // Keep thumbnails cached for 90 days
+          stalePeriod: const Duration(days: 90),
+          fileService: HttpFileService(),
+        ),
+      );
 }
 
 /// Custom cache manager for video seek preview sprite sheets.
@@ -112,16 +112,16 @@ class SeekSpriteCacheManager extends CacheManager with ImageCacheManager {
   }
 
   SeekSpriteCacheManager._()
-      : super(
-          Config(
-            key,
-            // Cache up to 50 sprite sheets (only for recently played)
-            maxNrOfCacheObjects: 50,
-            // Keep sprites cached for 7 days (shorter since they're large)
-            stalePeriod: const Duration(days: 7),
-            fileService: HttpFileService(),
-          ),
-        );
+    : super(
+        Config(
+          key,
+          // Cache up to 50 sprite sheets (only for recently played)
+          maxNrOfCacheObjects: 50,
+          // Keep sprites cached for 7 days (shorter since they're large)
+          stalePeriod: const Duration(days: 7),
+          fileService: HttpFileService(),
+        ),
+      );
 }
 
 /// Drops every cache manager singleton so the next use builds a fresh one.

@@ -16,9 +16,11 @@ void main() {
     });
 
     test('maps play without a position', () {
-      final play = RemoteControlIntent.fromRequest(
-        const FlutterRemoteControlRequest_Play(),
-      )! as TransportIntent;
+      final play =
+          RemoteControlIntent.fromRequest(
+                const FlutterRemoteControlRequest_Play(),
+              )!
+              as TransportIntent;
 
       expect(play.action, TransportAction.play);
       expect(play.position, isNull);
@@ -49,30 +51,35 @@ void main() {
     });
 
     test('maps a null track id to clearing the track', () {
-      final intent = RemoteControlIntent.fromRequest(
-        const FlutterRemoteControlRequest_SelectSubtitleTrack(id: null),
-      )! as TrackSelectionIntent;
+      final intent =
+          RemoteControlIntent.fromRequest(
+                const FlutterRemoteControlRequest_SelectSubtitleTrack(id: null),
+              )!
+              as TrackSelectionIntent;
 
       expect(intent.kind, TrackKind.subtitle);
       expect(intent.trackId, isNull);
     });
 
-    test('returns null for Hello and GetState, which are not playback actions',
-        () {
-      expect(
-        RemoteControlIntent.fromRequest(
-            const FlutterRemoteControlRequest_GetState()),
-        isNull,
-      );
-      expect(
-        RemoteControlIntent.fromRequest(
-          const FlutterRemoteControlRequest_Hello(
-            controllerName: 'iPhone',
-            protocolVersion: 1,
+    test(
+      'returns null for Hello and GetState, which are not playback actions',
+      () {
+        expect(
+          RemoteControlIntent.fromRequest(
+            const FlutterRemoteControlRequest_GetState(),
           ),
-        ),
-        isNull,
-      );
-    });
+          isNull,
+        );
+        expect(
+          RemoteControlIntent.fromRequest(
+            const FlutterRemoteControlRequest_Hello(
+              controllerName: 'iPhone',
+              protocolVersion: 1,
+            ),
+          ),
+          isNull,
+        );
+      },
+    );
   });
 }

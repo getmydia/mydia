@@ -19,8 +19,10 @@ MediaFileInfo mediaFileInfoFromJson(Map<String, dynamic> json) {
     bitrate: json['bitrate'] as int?,
     resolution: json['resolution'] as String?,
     codec: json['codec'] as String?,
-    streams:
-        streams?.cast<Map<String, dynamic>>().map(_streamFromJson).toList(),
+    streams: streams
+        ?.cast<Map<String, dynamic>>()
+        .map(_streamFromJson)
+        .toList(),
     externalSubtitles: (external ?? const [])
         .cast<Map<String, dynamic>>()
         .map(_externalSubtitleFromJson)

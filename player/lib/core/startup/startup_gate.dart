@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/l10n.dart';
 import '../theme/app_theme.dart';
@@ -52,10 +52,10 @@ class _StartupGateState extends State<StartupGate> {
 
   @override
   Widget build(BuildContext context) => switch (_outcome) {
-        null => const StartupSplash(),
-        final StartupReady ready => widget.buildApp(ready),
-        final other => widget.buildFailure(other),
-      };
+    null => const StartupSplash(),
+    final StartupReady ready => widget.buildApp(ready),
+    final other => widget.buildFailure(other),
+  };
 }
 
 /// The `Scaffold` painting the theme's background is what ends the black

@@ -34,8 +34,10 @@ void main() {
     });
 
     test('Unauthorized', () async {
-      expect(await _failWith(native.FfiSmbErrorKind.unauthorized),
-          isA<BackendUnauthorized>());
+      expect(
+        await _failWith(native.FfiSmbErrorKind.unauthorized),
+        isA<BackendUnauthorized>(),
+      );
     });
 
     test('AccessDenied', () async {
@@ -121,34 +123,42 @@ void main() {
 
     test('fromJson rejects what is not credentials', () {
       expect(
-          () => SmbCredentials.fromJson('{}'), throwsA(isA<FormatException>()));
+        () => SmbCredentials.fromJson('{}'),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
   group('FakeSmbNative', () {
-    test('lists, stats, records opens and closes, throws its failure',
-        () async {
-      final fake = FakeSmbNative()
-        ..addFile('media', '/Films/a.mkv', size: 5)
-        ..addDir('media', '/Empty');
-      final root = await fake.list(_target, _creds, '/');
-      expect(root.map((e) => e.name), unorderedEquals(['Films', 'Empty']));
-      expect((await fake.stat(_target, _creds, '/Films/a.mkv'))?.size, 5);
-      expect(await fake.stat(_target, _creds, '/nope'), isNull);
-      expect(await fake.open('acc', _target, _creds, '/Films/a.mkv'),
-          'http://127.0.0.1:1/smb/0');
-      expect(fake.opens, [('acc', '/Films/a.mkv')]);
-      await fake.closeAccount('acc');
-      expect(fake.closedAccounts, ['acc']);
-      fake.failure = const BackendUnauthorized();
-      await expectLater(fake.probe(_target, _creds, '/'),
-          throwsA(isA<BackendUnauthorized>()));
-      fake.failure = null;
-      final heals = <ProxyHeal>[];
-      fake.heals.listen(heals.add);
-      fake.emitHeal(ProxyHeal.reboundNewPort);
-      await Future<void>.delayed(Duration.zero);
-      expect(heals, [ProxyHeal.reboundNewPort]);
-    });
+    test(
+      'lists, stats, records opens and closes, throws its failure',
+      () async {
+        final fake = FakeSmbNative()
+          ..addFile('media', '/Films/a.mkv', size: 5)
+          ..addDir('media', '/Empty');
+        final root = await fake.list(_target, _creds, '/');
+        expect(root.map((e) => e.name), unorderedEquals(['Films', 'Empty']));
+        expect((await fake.stat(_target, _creds, '/Films/a.mkv'))?.size, 5);
+        expect(await fake.stat(_target, _creds, '/nope'), isNull);
+        expect(
+          await fake.open('acc', _target, _creds, '/Films/a.mkv'),
+          'http://127.0.0.1:1/smb/0',
+        );
+        expect(fake.opens, [('acc', '/Films/a.mkv')]);
+        await fake.closeAccount('acc');
+        expect(fake.closedAccounts, ['acc']);
+        fake.failure = const BackendUnauthorized();
+        await expectLater(
+          fake.probe(_target, _creds, '/'),
+          throwsA(isA<BackendUnauthorized>()),
+        );
+        fake.failure = null;
+        final heals = <ProxyHeal>[];
+        fake.heals.listen(heals.add);
+        fake.emitHeal(ProxyHeal.reboundNewPort);
+        await Future<void>.delayed(Duration.zero);
+        expect(heals, [ProxyHeal.reboundNewPort]);
+      },
+    );
   });
 }

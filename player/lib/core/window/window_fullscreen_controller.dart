@@ -16,10 +16,9 @@ import 'window_fullscreen.dart';
 /// window, and that field never learns about any of them.
 class WindowFullscreenController with WindowListener {
   WindowFullscreenController({
-    required WindowController window,
+    required this._window,
     ValueNotifier<bool>? signal,
-  })  : _window = window,
-        _signal = signal ?? windowFullscreenSignal;
+  }) : _signal = signal ?? windowFullscreenSignal;
 
   final WindowController _window;
   final ValueNotifier<bool> _signal;

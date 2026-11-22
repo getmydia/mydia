@@ -20,8 +20,11 @@ import 'shared_sort_keys.dart';
 abstract interface class MergedLibraryReader {
   Future<MergedResult<List<ItemSummary>>> continueWatching();
   Future<MergedResult<List<ItemSummary>>> recentlyAdded();
-  Future<MergedGrid> grid(LibraryKind kind, SharedSort sort,
-      {bool? descending});
+  Future<MergedGrid> grid(
+    LibraryKind kind,
+    SharedSort sort, {
+    bool? descending,
+  });
   Future<MergedResult<MergedSearch>> search(String query);
 
   /// Every server's favourites, one card per title, sorted by title.
@@ -53,7 +56,9 @@ class LiveMergedReader implements MergedLibraryReader {
   }
 
   Future<MergedResult<List<T>>> _each<C extends Object, T>(
-      Future<T> Function(C capability) call, T empty) async {
+    Future<T> Function(C capability) call,
+    T empty,
+  ) async {
     final caps = [for (final s in sources) s.as<C>()];
     final answers = await Future.wait([
       for (var i = 0; i < sources.length; i++)
@@ -66,7 +71,7 @@ class LiveMergedReader implements MergedLibraryReader {
       [for (final a in answers) a ?? empty],
       skipped: [
         for (var i = 0; i < sources.length; i++)
-          if (caps[i] == null) sources[i].id
+          if (caps[i] == null) sources[i].id,
       ],
       unavailable: [
         for (var i = 0; i < sources.length; i++)
@@ -79,36 +84,50 @@ class LiveMergedReader implements MergedLibraryReader {
 
   /// Every server's row, newest first, one card per title, at most [limit].
   /// Duplicates collapse before the cap so they do not use up places.
-  MergedResult<List<ItemSummary>> _row(MergedResult<List<List<ItemSummary>>> r,
-      DateTime? Function(ItemSummary) at,
-      {int limit = 20}) {
+  MergedResult<List<ItemSummary>> _row(
+    MergedResult<List<List<ItemSummary>>> r,
+    DateTime? Function(ItemSummary) at, {
+    int limit = 20,
+  }) {
     final d = mergeNewest(r.value, _order, at, limit: limit);
-    return MergedResult(d.items,
-        unavailable: r.unavailable,
-        skipped: r.skipped,
-        extraCopies: d.extraCopies);
+    return MergedResult(
+      d.items,
+      unavailable: r.unavailable,
+      skipped: r.skipped,
+      extraCopies: d.extraCopies,
+    );
   }
 
   @override
   Future<MergedResult<List<ItemSummary>>> continueWatching() async => _row(
-      await _each<ContinueWatching, List<ItemSummary>>(
-          (c) => c.continueWatching(), const <ItemSummary>[]),
-      (i) => i.lastPlayedAt);
+    await _each<ContinueWatching, List<ItemSummary>>(
+      (c) => c.continueWatching(),
+      const <ItemSummary>[],
+    ),
+    (i) => i.lastPlayedAt,
+  );
 
   @override
   Future<MergedResult<List<ItemSummary>>> recentlyAdded() async => _row(
-      await _each<RecentlyAdded, List<ItemSummary>>(
-          (c) => c.recentlyAdded(), const <ItemSummary>[]),
-      (i) => i.addedAt,
-      // The home splits this into movies and TV, so each half needs room.
-      limit: 40);
+    await _each<RecentlyAdded, List<ItemSummary>>(
+      (c) => c.recentlyAdded(),
+      const <ItemSummary>[],
+    ),
+    (i) => i.addedAt,
+    // The home splits this into movies and TV, so each half needs room.
+    limit: 40,
+  );
 
   @override
-  Future<MergedGrid> grid(LibraryKind kind, SharedSort sort,
-      {bool? descending}) async {
+  Future<MergedGrid> grid(
+    LibraryKind kind,
+    SharedSort sort, {
+    bool? descending,
+  }) async {
     final desc = descending ?? defaultDescending(sort);
-    final listed =
-        await Future.wait([for (final s in sources) _guard(s, s.libraries)]);
+    final listed = await Future.wait([
+      for (final s in sources) _guard(s, s.libraries),
+    ]);
     final streams = <GridStream>[];
     final unavailable = <SourceId>[];
     final skipped = <SourceId>[];
@@ -126,50 +145,65 @@ class LiveMergedReader implements MergedLibraryReader {
         final option = l.sortOptions.where((o) => o.shared == sort).firstOrNull;
         if (option == null) continue;
         joined = true;
-        streams.add(GridStream(
-          source: s,
-          library: l.ref,
-          query: BrowseQuery(
-              sortId: option.id, descending: desc, pageSize: pageSize),
-        ));
+        streams.add(
+          GridStream(
+            source: s,
+            library: l.ref,
+            query: BrowseQuery(
+              sortId: option.id,
+              descending: desc,
+              pageSize: pageSize,
+            ),
+          ),
+        );
       }
       if (!joined) skipped.add(s.id);
     }
-    return MergedGrid(streams,
-        sort: sort,
-        descending: desc,
-        timeout: timeout,
-        unavailable: unavailable,
-        skipped: skipped);
+    return MergedGrid(
+      streams,
+      sort: sort,
+      descending: desc,
+      timeout: timeout,
+      unavailable: unavailable,
+      skipped: skipped,
+    );
   }
 
   @override
   Future<MergedResult<MergedSearch>> search(String query) async {
     final r = await _each<Searchable, List<ItemSummary>>(
-        (c) => c.search(query), const <ItemSummary>[]);
+      (c) => c.search(query),
+      const <ItemSummary>[],
+    );
     final sections = <MergedSection, List<ItemSummary>>{};
     final extra = <ItemRef, int>{};
     for (final section in MergedSection.values) {
       final d = dedupe(
-          roundRobin([
-            for (final list in r.value)
-              [
-                for (final i in list)
-                  if (sectionOf(i.ref.kind) == section) i
-              ],
-          ]),
-          _order);
+        roundRobin([
+          for (final list in r.value)
+            [
+              for (final i in list)
+                if (sectionOf(i.ref.kind) == section) i,
+            ],
+        ]),
+        _order,
+      );
       if (d.items.isEmpty) continue;
       sections[section] = d.items;
       extra.addAll(d.extraCopies);
     }
-    return MergedResult(MergedSearch(sections),
-        unavailable: r.unavailable, skipped: r.skipped, extraCopies: extra);
+    return MergedResult(
+      MergedSearch(sections),
+      unavailable: r.unavailable,
+      skipped: r.skipped,
+      extraCopies: extra,
+    );
   }
 
   @override
-  Future<MergedResult<List<ItemSummary>>> favorites(
-      {int perSourceCap = 500}) async {
+  Future<MergedResult<List<ItemSummary>>> favorites({
+    int perSourceCap = 500,
+  }) async {
     final r = await _each<FavoritesListing, List<ItemSummary>>((c) async {
       final all = <ItemSummary>[];
       Cursor? cursor;
@@ -181,17 +215,24 @@ class LiveMergedReader implements MergedLibraryReader {
       return all.take(perSourceCap).toList();
     }, const <ItemSummary>[]);
     final d = mergeAlphabetical(r.value, _order);
-    return MergedResult(d.items,
-        unavailable: r.unavailable,
-        skipped: r.skipped,
-        extraCopies: d.extraCopies);
+    return MergedResult(
+      d.items,
+      unavailable: r.unavailable,
+      skipped: r.skipped,
+      extraCopies: d.extraCopies,
+    );
   }
 
   @override
   Future<MergedResult<List<SourceCollection>>> collections() async {
     final r = await _each<Collections, List<SourceCollection>>(
-        (c) => c.collections(), const <SourceCollection>[]);
-    return MergedResult([for (final l in r.value) ...l],
-        unavailable: r.unavailable, skipped: r.skipped);
+      (c) => c.collections(),
+      const <SourceCollection>[],
+    );
+    return MergedResult(
+      [for (final l in r.value) ...l],
+      unavailable: r.unavailable,
+      skipped: r.skipped,
+    );
   }
 }

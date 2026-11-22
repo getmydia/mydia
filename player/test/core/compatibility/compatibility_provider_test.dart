@@ -29,16 +29,15 @@ Map<String, dynamic> okResponse({
   String version = Compatibility.recommendedServerVersion,
   String min = Compatibility.recommendedServerVersion,
   String recommended = Compatibility.recommendedServerVersion,
-}) =>
-    {
-      '__typename': 'RootQueryType',
-      'serverCompatibility': {
-        '__typename': 'ServerCompatibility',
-        'version': version,
-        'minPlayerVersion': min,
-        'recommendedPlayerVersion': recommended,
-      },
-    };
+}) => {
+  '__typename': 'RootQueryType',
+  'serverCompatibility': {
+    '__typename': 'ServerCompatibility',
+    'version': version,
+    'minPlayerVersion': min,
+    'recommendedPlayerVersion': recommended,
+  },
+};
 
 var _boxCounter = 0;
 
@@ -56,25 +55,28 @@ const _activeId = SourceId('mydia-active');
 
 /// The overrides that make a server answering [client] the active source.
 List<Override> activeServer(MydiaClient client) => [
-      activeSourceIdProvider.overrideWithValue(_activeId),
-      mediaSourceProvider(_activeId)
-          .overrideWithValue(MydiaSource(source: guest, client: client)),
-    ];
+  activeSourceIdProvider.overrideWithValue(_activeId),
+  mediaSourceProvider(_activeId)
+      .overrideWithValue(MydiaSource(source: guest, client: client)),
+];
 
 /// A server answering [response], or refusing the query as a server
 /// predating the feature does when [response] is null.
 ///
 /// With [unreachable], a null [response] is a dead connection instead, which
 /// says nothing about the server's age.
-MydiaClient serverAnswering(Map<String, dynamic>? response,
-    {bool unreachable = false}) {
+MydiaClient serverAnswering(
+  Map<String, dynamic>? response, {
+  bool unreachable = false,
+}) {
   final transport = FakeMydiaTransport();
   transport.handlers['ServerCompatibility'] = (_) =>
       response ??
       (unreachable
           ? throw const SourceException.unreachable()
           : throw const SourceException.server(
-              'Cannot query field "serverCompatibility"'));
+              'Cannot query field "serverCompatibility"',
+            ));
   return fakeMydiaClient(transport);
 }
 
@@ -129,22 +131,24 @@ void main() {
     expect(state.requiredVersion, '0.9.0');
   });
 
-  test('a server that predates the compatibility query requires an update',
-      () async {
-    final box = await memoryBox();
-    final container = harness(
-      playerVersion: '0.9.0',
-      response: null,
-      box: box,
-    );
+  test(
+    'a server that predates the compatibility query requires an update',
+    () async {
+      final box = await memoryBox();
+      final container = harness(
+        playerVersion: '0.9.0',
+        response: null,
+        box: box,
+      );
 
-    final state = await container.read(compatibilityProvider.future);
+      final state = await container.read(compatibilityProvider.future);
 
-    expect(state.verdict, CompatibilityVerdict.serverUpdateRequired);
-    expect(state.showBanner, isTrue);
-    expect(state.requiredVersion, Compatibility.minServerVersion);
-    expect(state.serverVersion, isNull);
-  });
+      expect(state.verdict, CompatibilityVerdict.serverUpdateRequired);
+      expect(state.showBanner, isTrue);
+      expect(state.requiredVersion, Compatibility.minServerVersion);
+      expect(state.serverVersion, isNull);
+    },
+  );
 
   test('an unreachable server yields unknown and no banner', () async {
     final box = await memoryBox();
@@ -196,8 +200,9 @@ void main() {
     // Not awaited: dismiss() runs synchronously up to its first await, then
     // suspends and hands control back here, before the Hive write and the
     // eventual state write happen.
-    final dismissFuture =
-        container.read(compatibilityProvider.notifier).dismiss();
+    final dismissFuture = container
+        .read(compatibilityProvider.notifier)
+        .dismiss();
 
     // Disposes while dismiss() is still suspended, so its state write races
     // a torn down provider. Without the ref.mounted guard, resuming below
@@ -222,8 +227,11 @@ void main() {
     // live again.
     final second = harness(
       playerVersion: '0.8.0',
-      response:
-          okResponse(version: '99.0.0', min: '0.7.0', recommended: '99.0.0'),
+      response: okResponse(
+        version: '99.0.0',
+        min: '0.7.0',
+        recommended: '99.0.0',
+      ),
       box: box,
     );
     final state = await second.read(compatibilityProvider.future);
@@ -248,113 +256,128 @@ void main() {
     expect(box.isEmpty, isTrue);
   });
 
-  test('a pre-existing dismissal key does not suppress a required verdict',
-      () async {
-    final box = await memoryBox();
-    const playerVersion = '0.8.0';
-    const serverVersion = '0.9.0';
+  test(
+    'a pre-existing dismissal key does not suppress a required verdict',
+    () async {
+      final box = await memoryBox();
+      const playerVersion = '0.8.0';
+      const serverVersion = '0.9.0';
 
-    // Seeded under the exact key build() would look up for this state, so
-    // the test proves the required verdict is honored rather than proving an
-    // unrelated key simply failed to match.
-    const seeded = CompatibilityState(
-      verdict: CompatibilityVerdict.playerUpdateRequired,
-      playerVersion: playerVersion,
-      serverVersion: serverVersion,
-    );
-    await box.put(seeded.dismissalKey, true);
+      // Seeded under the exact key build() would look up for this state, so
+      // the test proves the required verdict is honored rather than proving an
+      // unrelated key simply failed to match.
+      const seeded = CompatibilityState(
+        verdict: CompatibilityVerdict.playerUpdateRequired,
+        playerVersion: playerVersion,
+        serverVersion: serverVersion,
+      );
+      await box.put(seeded.dismissalKey, true);
 
-    final container = harness(
-      playerVersion: playerVersion,
-      response: okResponse(version: serverVersion, min: serverVersion),
-      box: box,
-    );
+      final container = harness(
+        playerVersion: playerVersion,
+        response: okResponse(version: serverVersion, min: serverVersion),
+        box: box,
+      );
 
-    final state = await container.read(compatibilityProvider.future);
+      final state = await container.read(compatibilityProvider.future);
 
-    expect(state.verdict, CompatibilityVerdict.playerUpdateRequired);
-    expect(state.showBanner, isTrue);
-  });
+      expect(state.verdict, CompatibilityVerdict.playerUpdateRequired);
+      expect(state.showBanner, isTrue);
+    },
+  );
 
-  test('a failing dismissal box does not suppress a recommended banner',
-      () async {
-    final container = ProviderContainer(
-      // Riverpod retries a provider that throws with exponential backoff by
-      // default. Disabled here so the override's throw surfaces immediately
-      // instead of retrying for a real Exception until the test times out.
-      retry: (retryCount, error) => null,
-      overrides: [
-        ...activeServer(serverAnswering(
-          okResponse(min: '0.7.0'),
-        )),
-        playerVersionProvider.overrideWith((ref) async => '0.8.0'),
-        compatibilityDismissalBoxProvider
-            .overrideWith((ref) async => throw Exception('box open failed')),
-      ],
-    );
-    addTearDown(container.dispose);
+  test(
+    'a failing dismissal box does not suppress a recommended banner',
+    () async {
+      final container = ProviderContainer(
+        // Riverpod retries a provider that throws with exponential backoff by
+        // default. Disabled here so the override's throw surfaces immediately
+        // instead of retrying for a real Exception until the test times out.
+        retry: (retryCount, error) => null,
+        overrides: [
+          ...activeServer(serverAnswering(okResponse(min: '0.7.0'))),
+          playerVersionProvider.overrideWith((ref) async => '0.8.0'),
+          compatibilityDismissalBoxProvider.overrideWith(
+            (ref) async => throw Exception('box open failed'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    final state = await container.read(compatibilityProvider.future);
+      final state = await container.read(compatibilityProvider.future);
 
-    expect(state.verdict, CompatibilityVerdict.playerUpdateRecommended);
-    expect(state.showBanner, isTrue);
-  });
+      expect(state.verdict, CompatibilityVerdict.playerUpdateRecommended);
+      expect(state.showBanner, isTrue);
+    },
+  );
 
-  test('a pre-existing dismissal key suppresses a matching recommended verdict',
-      () async {
-    final box = await memoryBox();
-    const playerVersion = '0.8.0';
-    const serverVersion = Compatibility.recommendedServerVersion;
+  test(
+    'a pre-existing dismissal key suppresses a matching recommended verdict',
+    () async {
+      final box = await memoryBox();
+      const playerVersion = '0.8.0';
+      const serverVersion = Compatibility.recommendedServerVersion;
 
-    // Same pre-seeding mechanism as the required-verdict test above, but here
-    // the verdict is dismissible, so the seeded key should take effect. This
-    // is what gives the required-verdict test its teeth: it proves a seeded
-    // key can suppress a banner at all, so the required-verdict test not
-    // suppressing one is meaningful rather than a key that never matched
-    // anything.
-    const seeded = CompatibilityState(
-      verdict: CompatibilityVerdict.playerUpdateRecommended,
-      playerVersion: playerVersion,
-      serverVersion: serverVersion,
-    );
-    await box.put(seeded.dismissalKey, true);
+      // Same pre-seeding mechanism as the required-verdict test above, but here
+      // the verdict is dismissible, so the seeded key should take effect. This
+      // is what gives the required-verdict test its teeth: it proves a seeded
+      // key can suppress a banner at all, so the required-verdict test not
+      // suppressing one is meaningful rather than a key that never matched
+      // anything.
+      const seeded = CompatibilityState(
+        verdict: CompatibilityVerdict.playerUpdateRecommended,
+        playerVersion: playerVersion,
+        serverVersion: serverVersion,
+      );
+      await box.put(seeded.dismissalKey, true);
 
-    final container = harness(
-      playerVersion: playerVersion,
-      response: okResponse(
-        version: serverVersion,
-        min: '0.7.0',
-        recommended: serverVersion,
-      ),
-      box: box,
-    );
+      final container = harness(
+        playerVersion: playerVersion,
+        response: okResponse(
+          version: serverVersion,
+          min: '0.7.0',
+          recommended: serverVersion,
+        ),
+        box: box,
+      );
 
-    final state = await container.read(compatibilityProvider.future);
+      final state = await container.read(compatibilityProvider.future);
 
-    expect(state.verdict, CompatibilityVerdict.playerUpdateRecommended);
-    expect(state.dismissed, isTrue);
-    expect(state.showBanner, isFalse);
-  });
+      expect(state.verdict, CompatibilityVerdict.playerUpdateRecommended);
+      expect(state.dismissed, isTrue);
+      expect(state.showBanner, isFalse);
+    },
+  );
 
   group('follows the active source', () {
     const a = SourceId('mydia-a');
     const b = SourceId('mydia-b');
 
     // A is at parity; B is a server whose own floor the player is below.
-    Future<CompatibilityState> stateFor(SourceId? active,
-        {MediaSource? other}) async {
+    Future<CompatibilityState> stateFor(
+      SourceId? active, {
+      MediaSource? other,
+    }) async {
       final box = await memoryBox();
-      final container = ProviderContainer(overrides: [
-        activeSourceIdProvider.overrideWithValue(active),
-        mediaSourceProvider(a).overrideWithValue(
-            MydiaSource(source: guest, client: serverAnswering(okResponse()))),
-        mediaSourceProvider(b).overrideWithValue(MydiaSource(
-            source: guest, client: serverAnswering(okResponse(min: '99.0.0')))),
-        mediaSourceProvider(const SourceId('plex')).overrideWithValue(other),
-        playerVersionProvider.overrideWith(
-            (ref) async => Compatibility.recommendedServerVersion),
-        compatibilityDismissalBoxProvider.overrideWith((ref) async => box),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          activeSourceIdProvider.overrideWithValue(active),
+          mediaSourceProvider(a).overrideWithValue(
+            MydiaSource(source: guest, client: serverAnswering(okResponse())),
+          ),
+          mediaSourceProvider(b).overrideWithValue(
+            MydiaSource(
+              source: guest,
+              client: serverAnswering(okResponse(min: '99.0.0')),
+            ),
+          ),
+          mediaSourceProvider(const SourceId('plex')).overrideWithValue(other),
+          playerVersionProvider.overrideWith(
+            (ref) async => Compatibility.recommendedServerVersion,
+          ),
+          compatibilityDismissalBoxProvider.overrideWith((ref) async => box),
+        ],
+      );
       addTearDown(container.dispose);
       return container.read(compatibilityProvider.future);
     }
@@ -368,8 +391,10 @@ void main() {
     });
 
     test('a non-Mydia active source shows no Mydia warning', () async {
-      final state =
-          await stateFor(const SourceId('plex'), other: FakeMediaSource());
+      final state = await stateFor(
+        const SourceId('plex'),
+        other: FakeMediaSource(),
+      );
       expect(state.verdict, CompatibilityVerdict.unknown);
       expect(state.showBanner, isFalse);
     });

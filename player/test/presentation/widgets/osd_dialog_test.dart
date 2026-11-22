@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/depth_tokens.dart';
@@ -11,10 +11,8 @@ Future<void> _open(WidgetTester tester, Widget dialog) async {
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => dialog,
-            ),
+            onPressed: () =>
+                showDialog<void>(context: context, builder: (_) => dialog),
             child: const Text('open'),
           ),
         ),
@@ -26,8 +24,9 @@ Future<void> _open(WidgetTester tester, Widget dialog) async {
 }
 
 void main() {
-  testWidgets('lays out title, content and actions on the OSD material',
-      (tester) async {
+  testWidgets('lays out title, content and actions on the OSD material', (
+    tester,
+  ) async {
     await _open(
       tester,
       OsdDialog(
@@ -80,8 +79,9 @@ void main() {
     );
   });
 
-  testWidgets('a maxFinite-width list sizes as it did under AlertDialog',
-      (tester) async {
+  testWidgets('a maxFinite-width list sizes as it did under AlertDialog', (
+    tester,
+  ) async {
     await _open(
       tester,
       OsdDialog(

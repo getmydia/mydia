@@ -9,13 +9,15 @@ Future<void> runIsolated(
   Map<String, Future<void> Function()> tasks, {
   void Function(String line) log = _debugPrint,
 }) async {
-  await Future.wait(tasks.entries.map((task) async {
-    try {
-      await task.value();
-    } catch (e) {
-      log('[runIsolated] ${task.key} failed: $e');
-    }
-  }));
+  await Future.wait(
+    tasks.entries.map((task) async {
+      try {
+        await task.value();
+      } catch (e) {
+        log('[runIsolated] ${task.key} failed: $e');
+      }
+    }),
+  );
 }
 
 void _debugPrint(String line) => debugPrint(line);

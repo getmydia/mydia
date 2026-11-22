@@ -8,8 +8,7 @@ import 'thumbnail_service.dart';
 /// scrub, and the VTT request is wasted on them. Notifies once, when cues
 /// arrive, so a bubble already on screen can add its frame.
 class ScrubThumbnails extends ChangeNotifier {
-  ScrubThumbnails({required ThumbnailService service, required this.fileId})
-      : _service = service;
+  ScrubThumbnails({required this._service, required this.fileId});
 
   final ThumbnailService _service;
   final String fileId;

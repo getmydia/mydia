@@ -39,8 +39,7 @@ class _FakeWatcher implements CacheWatcher {
 /// else to [_inner]. Pins the ordering contract of `invalidateAll`: the log
 /// is cleared before any live watcher is refetched.
 class _CallOrderFetchLog implements FetchLog {
-  _CallOrderFetchLog(this._inner, {required void Function() onClearAll})
-      : _onClearAll = onClearAll;
+  _CallOrderFetchLog(this._inner, {required this._onClearAll});
 
   final FetchLog _inner;
   final void Function() _onClearAll;
@@ -69,9 +68,7 @@ class _CallOrderFetchLog implements FetchLog {
 /// else to [_inner]. Same technique as [_CallOrderFetchLog], for a family
 /// target.
 class _FamilyClearOrderFetchLog implements FetchLog {
-  _FamilyClearOrderFetchLog(this._inner,
-      {required void Function() onClearFamily})
-      : _onClearFamily = onClearFamily;
+  _FamilyClearOrderFetchLog(this._inner, {required this._onClearFamily});
 
   final FetchLog _inner;
   final void Function() _onClearFamily;
@@ -192,8 +189,7 @@ void main() {
       expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
     });
 
-    test(
-        'a live watcher that allows automatic refetch (canRefetch true or '
+    test('a live watcher that allows automatic refetch (canRefetch true or '
         'unset) still refetches', () async {
       final log = InMemoryFetchLog();
       final watcher = _FakeWatcher(QueryKeys.home, log, canRefetch: () => true);
@@ -207,8 +203,7 @@ void main() {
       expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
     });
 
-    test(
-        'a live watcher that declines automatic refetch (e.g. a paginated '
+    test('a live watcher that declines automatic refetch (e.g. a paginated '
         'library) has its fetch-log entry cleared instead of being '
         'refetched', () async {
       // Simulates a library scrolled past page 1 catching an automatic
@@ -219,8 +214,11 @@ void main() {
       // screen is treated as cold on its next fresh mount rather than
       // staying silently stale forever.
       final log = InMemoryFetchLog({QueryKeys.home: DateTime(2026, 7, 28)});
-      final watcher =
-          _FakeWatcher(QueryKeys.home, log, canRefetch: () => false);
+      final watcher = _FakeWatcher(
+        QueryKeys.home,
+        log,
+        canRefetch: () => false,
+      );
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
@@ -239,35 +237,38 @@ void main() {
       final log = InMemoryFetchLog({
         QueryKeys.unwatched: DateTime(2026, 7, 28),
       });
-      final invalidator =
-          Invalidator(registry: WatcherRegistry(), fetchLog: log);
+      final invalidator = Invalidator(
+        registry: WatcherRegistry(),
+        fetchLog: log,
+      );
 
       await invalidator.invalidate([QueryKeys.unwatched.target]);
 
       expect(log.lastFetchedAt(QueryKeys.unwatched), isNull);
     });
 
-    test('invalidateAll clears the log and refetches every live watcher',
-        () async {
-      final log = InMemoryFetchLog({
-        QueryKeys.unwatched: DateTime(2026, 7, 28),
-      });
-      final watcher = _FakeWatcher(QueryKeys.home, log);
-
-      final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
-      final invalidator = Invalidator(registry: registry, fetchLog: log);
-
-      await invalidator.invalidateAll();
-
-      expect(log.lastFetchedAt(QueryKeys.unwatched), isNull);
-      expect(watcher.refetches, 1);
-      // The live watcher's refetch restamps its own entry after clearAll()
-      // wipes it, so it survives to the end of the call.
-      expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
-    });
-
     test(
-        'invalidateAll clears the log before refetching any live watcher '
+      'invalidateAll clears the log and refetches every live watcher',
+      () async {
+        final log = InMemoryFetchLog({
+          QueryKeys.unwatched: DateTime(2026, 7, 28),
+        });
+        final watcher = _FakeWatcher(QueryKeys.home, log);
+
+        final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
+        final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+        await invalidator.invalidateAll();
+
+        expect(log.lastFetchedAt(QueryKeys.unwatched), isNull);
+        expect(watcher.refetches, 1);
+        // The live watcher's refetch restamps its own entry after clearAll()
+        // wipes it, so it survives to the end of the call.
+        expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
+      },
+    );
+
+    test('invalidateAll clears the log before refetching any live watcher '
         '(ordering)', () async {
       // The restamp assertion above does not pin the clear-then-refetch
       // order on its own, so snapshot the refetch count at the moment
@@ -284,23 +285,30 @@ void main() {
       watcher = _FakeWatcher(QueryKeys.home, orderTrackingLog);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
-      final invalidator =
-          Invalidator(registry: registry, fetchLog: orderTrackingLog);
+      final invalidator = Invalidator(
+        registry: registry,
+        fetchLog: orderTrackingLog,
+      );
 
       await invalidator.invalidateAll();
 
-      expect(refetchesAtClear, 0,
-          reason: 'clearAll() must run before any live watcher is '
-              'refetched, not after');
+      expect(
+        refetchesAtClear,
+        0,
+        reason:
+            'clearAll() must run before any live watcher is '
+            'refetched, not after',
+      );
       expect(watcher.refetches, 1);
     });
 
-    test(
-        'a key whose fetch-log clear throws does not block the rest of the '
+    test('a key whose fetch-log clear throws does not block the rest of the '
         'batch', () async {
       final log = _PartiallyFailingFetchLog(QueryKeys.favorites);
-      final invalidator =
-          Invalidator(registry: WatcherRegistry(), fetchLog: log);
+      final invalidator = Invalidator(
+        registry: WatcherRegistry(),
+        fetchLog: log,
+      );
 
       await invalidator.invalidate([
         QueryKeys.favorites.target,
@@ -311,8 +319,7 @@ void main() {
       expect(log.clearedKeys, [QueryKeys.home, QueryKeys.tvShowsList]);
     });
 
-    test(
-        'invalidateAll still refetches live watchers when clearing the '
+    test('invalidateAll still refetches live watchers when clearing the '
         'fetch log throws', () async {
       final log = _ClearAllFailingFetchLog();
       final watcher = _FakeWatcher(QueryKeys.home, log);
@@ -327,30 +334,34 @@ void main() {
       expect(watcher.refetches, 1);
     });
 
-    test('a family target refetches every live watcher of that operation',
-        () async {
-      final log = InMemoryFetchLog();
-      final one = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
-      final two = _FakeWatcher(QueryKeys.collectionItems('c2'), log);
+    test(
+      'a family target refetches every live watcher of that operation',
+      () async {
+        final log = InMemoryFetchLog();
+        final one = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
+        final two = _FakeWatcher(QueryKeys.collectionItems('c2'), log);
 
-      final registry = WatcherRegistry()
-        ..register(QueryKeys.collectionItems('c1'), one)
-        ..register(QueryKeys.collectionItems('c2'), two);
-      final invalidator = Invalidator(registry: registry, fetchLog: log);
+        final registry = WatcherRegistry()
+          ..register(QueryKeys.collectionItems('c1'), one)
+          ..register(QueryKeys.collectionItems('c2'), two);
+        final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await invalidator.invalidate([Families.collectionItems]);
+        await invalidator.invalidate([Families.collectionItems]);
 
-      expect(one.refetches, 1);
-      expect(two.refetches, 1);
-    });
+        expect(one.refetches, 1);
+        expect(two.refetches, 1);
+      },
+    );
 
     test('a dormant family member has its fetch-log entry cleared', () async {
       final log = InMemoryFetchLog({
         QueryKeys.collectionItems('c1'): DateTime(2026, 7, 28),
         QueryKeys.home: DateTime(2026, 7, 28),
       });
-      final invalidator =
-          Invalidator(registry: WatcherRegistry(), fetchLog: log);
+      final invalidator = Invalidator(
+        registry: WatcherRegistry(),
+        fetchLog: log,
+      );
 
       await invalidator.invalidate([Families.collectionItems]);
 
@@ -358,70 +369,85 @@ void main() {
       expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
     });
 
-    test('a live family member keeps the record its refetch just wrote',
-        () async {
-      // Snapshot the refetch count at the moment `clearFamily()` runs, so
-      // the clear-before-refetch order is pinned, then check the refetch
-      // restamped the record: clearing first must not leave a screen that
-      // refreshed a moment ago cold on its next mount.
-      final innerLog = InMemoryFetchLog();
-      late final _FakeWatcher watcher;
-      int? refetchesAtClear;
-      final orderTrackingLog = _FamilyClearOrderFetchLog(
-        innerLog,
-        onClearFamily: () => refetchesAtClear = watcher.refetches,
-      );
-      watcher = _FakeWatcher(QueryKeys.collectionItems('c1'), orderTrackingLog);
+    test(
+      'a live family member keeps the record its refetch just wrote',
+      () async {
+        // Snapshot the refetch count at the moment `clearFamily()` runs, so
+        // the clear-before-refetch order is pinned, then check the refetch
+        // restamped the record: clearing first must not leave a screen that
+        // refreshed a moment ago cold on its next mount.
+        final innerLog = InMemoryFetchLog();
+        late final _FakeWatcher watcher;
+        int? refetchesAtClear;
+        final orderTrackingLog = _FamilyClearOrderFetchLog(
+          innerLog,
+          onClearFamily: () => refetchesAtClear = watcher.refetches,
+        );
+        watcher = _FakeWatcher(
+          QueryKeys.collectionItems('c1'),
+          orderTrackingLog,
+        );
 
-      final registry = WatcherRegistry()
-        ..register(QueryKeys.collectionItems('c1'), watcher);
-      final invalidator =
-          Invalidator(registry: registry, fetchLog: orderTrackingLog);
+        final registry = WatcherRegistry()
+          ..register(QueryKeys.collectionItems('c1'), watcher);
+        final invalidator = Invalidator(
+          registry: registry,
+          fetchLog: orderTrackingLog,
+        );
 
-      await invalidator.invalidate([Families.collectionItems]);
+        await invalidator.invalidate([Families.collectionItems]);
 
-      expect(refetchesAtClear, 0,
-          reason: 'clearFamily() must run before any live family member is '
-              'refetched, not after');
-      expect(watcher.refetches, 1);
-      expect(
-        orderTrackingLog.lastFetchedAt(QueryKeys.collectionItems('c1')),
-        isNotNull,
-      );
-    });
+        expect(
+          refetchesAtClear,
+          0,
+          reason:
+              'clearFamily() must run before any live family member is '
+              'refetched, not after',
+        );
+        expect(watcher.refetches, 1);
+        expect(
+          orderTrackingLog.lastFetchedAt(QueryKeys.collectionItems('c1')),
+          isNotNull,
+        );
+      },
+    );
 
     test(
-        'a family target does not touch another operation with the same prefix',
-        () async {
-      final log = InMemoryFetchLog({
-        QueryKeys.collectionItems('c1'): DateTime(2026, 7, 28),
-        QueryKeys.collections: DateTime(2026, 7, 28),
-      });
-      final invalidator =
-          Invalidator(registry: WatcherRegistry(), fetchLog: log);
+      'a family target does not touch another operation with the same prefix',
+      () async {
+        final log = InMemoryFetchLog({
+          QueryKeys.collectionItems('c1'): DateTime(2026, 7, 28),
+          QueryKeys.collections: DateTime(2026, 7, 28),
+        });
+        final invalidator = Invalidator(
+          registry: WatcherRegistry(),
+          fetchLog: log,
+        );
 
-      await invalidator.invalidate([const FamilyTarget('Collection')]);
+        await invalidator.invalidate([const FamilyTarget('Collection')]);
 
-      expect(log.lastFetchedAt(QueryKeys.collectionItems('c1')), isNotNull);
-      expect(log.lastFetchedAt(QueryKeys.collections), isNotNull);
-    });
-
-    test('a family clear that throws still refetches the live watchers',
-        () async {
-      final log = _FamilyClearFailingFetchLog();
-      final watcher = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
-
-      final registry = WatcherRegistry()
-        ..register(QueryKeys.collectionItems('c1'), watcher);
-      final invalidator = Invalidator(registry: registry, fetchLog: log);
-
-      await invalidator.invalidate([Families.collectionItems]);
-
-      expect(watcher.refetches, 1);
-    });
+        expect(log.lastFetchedAt(QueryKeys.collectionItems('c1')), isNotNull);
+        expect(log.lastFetchedAt(QueryKeys.collections), isNotNull);
+      },
+    );
 
     test(
-        'a watcher whose refetch throws does not block the rest of the '
+      'a family clear that throws still refetches the live watchers',
+      () async {
+        final log = _FamilyClearFailingFetchLog();
+        final watcher = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
+
+        final registry = WatcherRegistry()
+          ..register(QueryKeys.collectionItems('c1'), watcher);
+        final invalidator = Invalidator(registry: registry, fetchLog: log);
+
+        await invalidator.invalidate([Families.collectionItems]);
+
+        expect(watcher.refetches, 1);
+      },
+    );
+
+    test('a watcher whose refetch throws does not block the rest of the '
         'family', () async {
       // Registration order controls iteration order here: `WatcherRegistry`
       // stores watchers in a plain `Map` (a `LinkedHashMap`, which iterates

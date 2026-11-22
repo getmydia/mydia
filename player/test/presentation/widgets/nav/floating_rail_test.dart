@@ -1,5 +1,5 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,8 +21,10 @@ import '../../screens/sources/fake_media_source.dart';
 
 class _MydiaLike extends FakeCapableSource {
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.continueWatching};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.continueWatching,
+  };
 }
 
 const _railKey = Key('floating-rail');
@@ -114,10 +116,9 @@ double _fadeValue(WidgetTester tester, Finder fade) => tester
     .value;
 
 double _labelOpacity(WidgetTester tester, String text) => _fadeValue(
-      tester,
-      find.ancestor(
-          of: find.text(text), matching: find.byType(AnimatedOpacity)),
-    );
+  tester,
+  find.ancestor(of: find.text(text), matching: find.byType(AnimatedOpacity)),
+);
 
 double _scrimOpacity(WidgetTester tester) =>
     _fadeValue(tester, find.byKey(const Key('rail-scrim-fade')));
@@ -147,8 +148,9 @@ Map<String, Finder> _railIcons() {
   };
 }
 
-Map<String, Rect> _rects(WidgetTester tester, Map<String, Finder> icons) =>
-    {for (final e in icons.entries) e.key: tester.getRect(e.value)};
+Map<String, Rect> _rects(WidgetTester tester, Map<String, Finder> icons) => {
+  for (final e in icons.entries) e.key: tester.getRect(e.value),
+};
 
 void _expectSameRects(
   Map<String, Rect> expected,
@@ -200,8 +202,9 @@ void main() {
     expect(find.byKey(_scrimKey), findsNothing);
   });
 
-  testWidgets('hover held 200ms expands over content with a scrim',
-      (tester) async {
+  testWidgets('hover held 200ms expands over content with a scrim', (
+    tester,
+  ) async {
     await _pumpRail(tester);
     final contentBefore = tester.getRect(find.byKey(const Key('content')));
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -218,8 +221,9 @@ void main() {
     expect(_railWidth(tester), 72);
   });
 
-  testWidgets('focus entering the rail expands it; leaving collapses',
-      (tester) async {
+  testWidgets('focus entering the rail expands it; leaving collapses', (
+    tester,
+  ) async {
     final row = FocusNode(debugLabel: 'row');
     final content = FocusNode(debugLabel: 'content');
     addTearDown(row.dispose);
@@ -235,8 +239,9 @@ void main() {
     expect(_railWidth(tester), 72);
   });
 
-  testWidgets('Escape collapses and asks the shell for content focus',
-      (tester) async {
+  testWidgets('Escape collapses and asks the shell for content focus', (
+    tester,
+  ) async {
     final row = FocusNode(debugLabel: 'row');
     addTearDown(row.dispose);
     var exits = 0;
@@ -253,8 +258,9 @@ void main() {
     expect(find.byKey(_scrimKey), findsNothing);
   });
 
-  testWidgets('pin keeps it expanded without a scrim and persists',
-      (tester) async {
+  testWidgets('pin keeps it expanded without a scrim and persists', (
+    tester,
+  ) async {
     final store = await _pumpRail(tester);
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: const Offset(40, 300));
@@ -320,8 +326,9 @@ void main() {
     expect(scrim.color.a, closeTo(0.55, 0.01));
   });
 
-  testWidgets('moving out before 200ms cancels the hover expansion',
-      (tester) async {
+  testWidgets('moving out before 200ms cancels the hover expansion', (
+    tester,
+  ) async {
     await _pumpRail(tester);
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: const Offset(40, 300));
@@ -333,8 +340,9 @@ void main() {
     expect(find.byKey(_scrimKey), findsNothing);
   });
 
-  testWidgets('pinned, hovered, then unpinned keeps expanded with labels',
-      (tester) async {
+  testWidgets('pinned, hovered, then unpinned keeps expanded with labels', (
+    tester,
+  ) async {
     await _pumpRail(tester, pinned: true);
     expect(_railWidth(tester), 272);
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -356,12 +364,12 @@ void main() {
     expect(find.byKey(_scrimKey), findsOneWidget);
   });
 
-  testWidgets(
-      'pinned then unpinned with pointer away collapses and exits '
+  testWidgets('pinned then unpinned with pointer away collapses and exits '
       'edit mode', (tester) async {
     await _pumpRail(tester, pinned: true);
-    final container =
-        ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(FloatingRail)),
+    );
     container.read(sidebarEditModeProvider.notifier).toggle();
     expect(container.read(sidebarEditModeProvider), isTrue);
 
@@ -399,22 +407,30 @@ void main() {
   });
 
   group('one geometry, only width and label opacity animate', () {
-    testWidgets('the collapsed toggle sits in the rows\' icon column',
-        (tester) async {
+    testWidgets('the collapsed toggle sits in the rows\' icon column', (
+      tester,
+    ) async {
       await _pumpRail(tester);
-      final row = tester.getCenter(find
-          .descendant(
+      final row = tester.getCenter(
+        find
+            .descendant(
               of: find.byKey(const ValueKey('source-nav-settings')),
-              matching: find.byType(Icon))
-          .first);
-      final toggle = tester.getCenter(find.descendant(
+              matching: find.byType(Icon),
+            )
+            .first,
+      );
+      final toggle = tester.getCenter(
+        find.descendant(
           of: find.byKey(const Key('rail-toggle')),
-          matching: find.byType(Icon)));
+          matching: find.byType(Icon),
+        ),
+      );
       expect(toggle.dx, closeTo(row.dx, 0.5));
     }, variant: TargetPlatformVariant.desktop());
 
-    testWidgets('icons never move while the rail expands and collapses',
-        (tester) async {
+    testWidgets('icons never move while the rail expands and collapses', (
+      tester,
+    ) async {
       await _pumpRail(tester, showBackToMydia: true);
       final icons = _railIcons();
       final collapsed = _rects(tester, icons);
@@ -449,8 +465,9 @@ void main() {
       _expectSameRects(collapsed, _rects(tester, icons), 'once collapsed');
     });
 
-    testWidgets('no overflow at 72px or mid-animation, Back to Mydia shown',
-        (tester) async {
+    testWidgets('no overflow at 72px or mid-animation, Back to Mydia shown', (
+      tester,
+    ) async {
       await _pumpRail(tester, showBackToMydia: true);
       expect(tester.takeException(), isNull);
       expect(find.text('Back to Mydia'), findsOneWidget);
@@ -465,8 +482,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('labels are invisible collapsed and opaque expanded',
-        (tester) async {
+    testWidgets('labels are invisible collapsed and opaque expanded', (
+      tester,
+    ) async {
       final row = FocusNode(debugLabel: 'row');
       addTearDown(row.dispose);
       await _pumpRail(tester, rowNode: row);
@@ -479,8 +497,9 @@ void main() {
       expect(_labelOpacity(tester, 'Settings'), 1);
     });
 
-    testWidgets('labels fade in late and out fast, not all at once',
-        (tester) async {
+    testWidgets('labels fade in late and out fast, not all at once', (
+      tester,
+    ) async {
       final row = FocusNode(debugLabel: 'row');
       addTearDown(row.dispose);
       await _pumpRail(tester, rowNode: row);
@@ -507,8 +526,9 @@ void main() {
       expect(_railWidth(tester), greaterThan(72));
     });
 
-    testWidgets('the scrim fades rather than jumping, inert while hidden',
-        (tester) async {
+    testWidgets('the scrim fades rather than jumping, inert while hidden', (
+      tester,
+    ) async {
       final row = FocusNode(debugLabel: 'row');
       addTearDown(row.dispose);
       await _pumpRail(tester, rowNode: row);
@@ -524,9 +544,13 @@ void main() {
       await tester.idle();
       await tester.pump();
       final seen = <double>[];
-      await _pumpFrames(tester, 6, onFrame: (_) {
-        seen.add(_scrimOpacity(tester));
-      });
+      await _pumpFrames(
+        tester,
+        6,
+        onFrame: (_) {
+          seen.add(_scrimOpacity(tester));
+        },
+      );
       expect(seen.first, greaterThan(0));
       expect(seen.first, lessThan(1));
       for (var i = 1; i < seen.length; i++) {
@@ -551,8 +575,9 @@ void main() {
       expect(_scrimOpacity(tester), 0);
     });
 
-    testWidgets('the footer buttons are inert and unfocusable collapsed',
-        (tester) async {
+    testWidgets('the footer buttons are inert and unfocusable collapsed', (
+      tester,
+    ) async {
       final store = await _pumpRail(tester);
       const pin = Key('rail-pin');
       const edit = Key('rail-edit');
@@ -565,8 +590,9 @@ void main() {
       await tester.tap(find.byKey(edit), warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(store.railPinned, isFalse);
-      final container =
-          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(FloatingRail)),
+      );
       expect(container.read(sidebarEditModeProvider), isFalse);
       // Still reserving room, so nothing above moves.
       expect(tester.getSize(find.byKey(pin)).height, greaterThan(0));
@@ -578,8 +604,9 @@ void main() {
       await gesture.addPointer(location: const Offset(40, 300));
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pumpAndSettle();
-      final container =
-          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(FloatingRail)),
+      );
 
       await tester.tap(find.byKey(const Key('rail-edit')));
       await tester.pumpAndSettle();
@@ -591,8 +618,9 @@ void main() {
       expect(store.railPinned, isTrue);
     });
 
-    testWidgets('a touch on the expand button opens the rail until dismissed',
-        (tester) async {
+    testWidgets('a touch on the expand button opens the rail until dismissed', (
+      tester,
+    ) async {
       await _pumpRail(tester);
       const toggle = Key('rail-toggle');
 
@@ -613,8 +641,9 @@ void main() {
       expect(_railWidth(tester), 72, reason: 'the button collapses it too');
     });
 
-    testWidgets('collapsing a pinned rail from the button unpins it',
-        (tester) async {
+    testWidgets('collapsing a pinned rail from the button unpins it', (
+      tester,
+    ) async {
       final store = await _pumpRail(tester, pinned: true);
       expect(_railWidth(tester), 272);
 
@@ -624,21 +653,26 @@ void main() {
       expect(store.railPinned, isFalse);
     });
 
-    testWidgets('Settings is the last entry, below the rail controls',
-        (tester) async {
+    testWidgets('Settings is the last entry, below the rail controls', (
+      tester,
+    ) async {
       await _pumpRail(tester);
-      final settings =
-          tester.getRect(find.byKey(const ValueKey('source-nav-settings')));
+      final settings = tester.getRect(
+        find.byKey(const ValueKey('source-nav-settings')),
+      );
       final toggle = tester.getRect(find.byKey(const Key('rail-toggle')));
       expect(toggle.top, lessThan(settings.top));
-      expect(tester.getRect(find.byKey(const Key('rail-pin'))).top,
-          lessThan(settings.top));
+      expect(
+        tester.getRect(find.byKey(const Key('rail-pin'))).top,
+        lessThan(settings.top),
+      );
       // Same icon column as the rows.
       expect(toggle.center.dx, closeTo(settings.left + 24, 1));
     });
 
-    testWidgets('finishing an edit from the keyboard keeps focus in the rail',
-        (tester) async {
+    testWidgets('finishing an edit from the keyboard keeps focus in the rail', (
+      tester,
+    ) async {
       final row = FocusNode(debugLabel: 'row');
       addTearDown(row.dispose);
       await _pumpRail(tester, rowNode: row);
@@ -650,12 +684,16 @@ void main() {
           FocusManager.instance.primaryFocus?.context
               ?.findAncestorWidgetOfExactType<FloatingRail>() !=
           null;
-      final container =
-          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(FloatingRail)),
+      );
 
       // Focus alone (no hover) reaches the footer's edit button and presses it.
-      _buttonNode(tester, find.byKey(const Key('rail-edit')), find.byType(Icon))
-          .requestFocus();
+      _buttonNode(
+        tester,
+        find.byKey(const Key('rail-edit')),
+        find.byType(Icon),
+      ).requestFocus();
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
@@ -678,8 +716,9 @@ void main() {
       expect(_railWidth(tester), 272);
     });
 
-    testWidgets('Done with no earlier focus in the rail does not collapse it',
-        (tester) async {
+    testWidgets('Done with no earlier focus in the rail does not collapse it', (
+      tester,
+    ) async {
       // Focus history would let Flutter fall back to an earlier node, hiding
       // the defect. Here Done is the only thing ever focused in the rail.
       await _pumpRail(tester);
@@ -687,8 +726,9 @@ void main() {
       await gesture.addPointer(location: const Offset(40, 300));
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pumpAndSettle();
-      final container =
-          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(FloatingRail)),
+      );
       container.read(sidebarEditModeProvider.notifier).toggle();
       await tester.pumpAndSettle();
 
@@ -713,8 +753,9 @@ void main() {
       );
     });
 
-    testWidgets('reduced motion reaches the final state in one pump',
-        (tester) async {
+    testWidgets('reduced motion reaches the final state in one pump', (
+      tester,
+    ) async {
       final row = FocusNode(debugLabel: 'row');
       addTearDown(row.dispose);
       await _pumpRail(tester, rowNode: row, disableAnimations: true);
@@ -735,14 +776,17 @@ void main() {
     });
   });
 
-  testWidgets('the rail surface takes the panel Liquid Glass profile',
-      (tester) async {
+  testWidgets('the rail surface takes the panel Liquid Glass profile', (
+    tester,
+  ) async {
     await _pumpRail(tester);
     expect(
       find.descendant(
         of: find.byKey(_railKey),
-        matching: find.byWidgetPredicate((w) =>
-            w is GlassSurface && w.liquidProfile == LiquidGlassProfile.panel),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is GlassSurface && w.liquidProfile == LiquidGlassProfile.panel,
+        ),
       ),
       findsOneWidget,
     );
@@ -750,12 +794,13 @@ void main() {
 
   test('expanded fill keeps textSecondary at 4.5:1 over a white backdrop', () {
     final fill = Color.alphaBlend(
-      AmbientTintColors.neutralFor(Palettes.projectionBooth)
-          .surface
+      AmbientTintColors.neutralFor(Palettes.projectionBooth).surface
           .withValues(alpha: 0.92),
       Colors.white,
     );
-    expect(_contrast(Palettes.projectionBooth.textSecondary, fill),
-        greaterThanOrEqualTo(4.5));
+    expect(
+      _contrast(Palettes.projectionBooth.textSecondary, fill),
+      greaterThanOrEqualTo(4.5),
+    );
   });
 }

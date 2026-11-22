@@ -24,13 +24,16 @@ void main() {
         stopLocal: () async => order.add('stopLocal'),
       );
 
-      expect(order, ['startCast', 'stopLocal'],
-          reason: 'the receiver has to confirm the load before local '
-              'playback is allowed to stop');
+      expect(
+        order,
+        ['startCast', 'stopLocal'],
+        reason:
+            'the receiver has to confirm the load before local '
+            'playback is allowed to stop',
+      );
     });
 
-    test(
-        'a failed cast leaves local playback running: stopLocal is never '
+    test('a failed cast leaves local playback running: stopLocal is never '
         'called and the failure propagates', () async {
       var stopLocalCalled = false;
       final failure = Exception('unreachable receiver');
@@ -41,17 +44,21 @@ void main() {
           stopLocal: () async => stopLocalCalled = true,
         ),
         throwsA(same(failure)),
-        reason: 'the caller (_showCastDevicePicker) has to see this to show '
+        reason:
+            'the caller (_showCastDevicePicker) has to see this to show '
             'its own error toast instead of silently swallowing it',
       );
 
-      expect(stopLocalCalled, isFalse,
-          reason: 'this is the whole point: a failed LoadContent must not '
-              'stop whatever the viewer was already watching locally');
+      expect(
+        stopLocalCalled,
+        isFalse,
+        reason:
+            'this is the whole point: a failed LoadContent must not '
+            'stop whatever the viewer was already watching locally',
+      );
     });
 
-    test(
-        'a cast that throws asynchronously, mid-negotiation, still leaves '
+    test('a cast that throws asynchronously, mid-negotiation, still leaves '
         'local playback alone', () async {
       // `startCast` awaits a real network round trip (connect, resolve
       // route, LOAD) before it can fail — this proves the guarantee holds

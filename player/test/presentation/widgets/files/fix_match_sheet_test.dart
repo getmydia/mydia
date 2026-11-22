@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/capabilities.dart';
@@ -39,35 +39,43 @@ class _Editing implements MatchEditing {
       sets.add(choice);
 }
 
-const _ref =
-    ItemRef(sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'tmdb-1');
+const _ref = ItemRef(
+  sourceId: fakeSourceId,
+  kind: ItemKind.movie,
+  externalId: 'tmdb-1',
+);
 
 /// [settle] false leaves a search in flight: its progress bar never settles.
-Future<void> _pump(WidgetTester tester, _Editing editing,
-    {bool settle = true}) async {
-  await tester.pumpWidget(ProviderScope(
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => TextButton(
-            key: const Key('open'),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              builder: (_) => FixMatchSheet(
-                editing: editing,
-                item: _ref,
-                initialTitle: 'Invented Film',
+Future<void> _pump(
+  WidgetTester tester,
+  _Editing editing, {
+  bool settle = true,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              key: const Key('open'),
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => FixMatchSheet(
+                  editing: editing,
+                  item: _ref,
+                  initialTitle: 'Invented Film',
+                ),
               ),
+              child: const Text('open'),
             ),
-            child: const Text('open'),
           ),
         ),
       ),
     ),
-  ));
+  );
   await tester.tap(find.byKey(const Key('open')));
   if (settle) {
     await tester.pumpAndSettle();
@@ -123,12 +131,14 @@ void main() {
     await tester.pump();
     expect(editing.pending, hasLength(2));
 
-    editing.pending[1]
-        .complete(const [TmdbCandidate(id: 22, title: 'Newer Film')]);
+    editing.pending[1].complete(const [
+      TmdbCandidate(id: 22, title: 'Newer Film'),
+    ]);
     await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsNothing);
-    editing.pending[0]
-        .complete(const [TmdbCandidate(id: 21, title: 'Older Film')]);
+    editing.pending[0].complete(const [
+      TmdbCandidate(id: 21, title: 'Older Film'),
+    ]);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('fix-match-result-22')), findsOneWidget);
@@ -150,33 +160,40 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
-  testWidgets('a match that moves the item closes its detail page',
-      (tester) async {
+  testWidgets('a match that moves the item closes its detail page', (
+    tester,
+  ) async {
     final source = _EditingSource();
-    await tester.pumpWidget(ProviderScope(
-      overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(source)],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => TextButton(
-            key: const Key('open-detail'),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => Scaffold(
-                body: Consumer(
-                  builder: (context, ref, _) => TextButton(
-                    key: const Key('fix'),
-                    onPressed: fixMatchAction(context, ref, _ref, 'Old'),
-                    child: const Text('detail page'),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              key: const Key('open-detail'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => Scaffold(
+                    body: Consumer(
+                      builder: (context, ref, _) => TextButton(
+                        key: const Key('fix'),
+                        onPressed: fixMatchAction(context, ref, _ref, 'Old'),
+                        child: const Text('detail page'),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            )),
-            child: const Text('home'),
+              child: const Text('home'),
+            ),
           ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.byKey(const Key('open-detail')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('fix')));
@@ -189,25 +206,30 @@ void main() {
     expect(find.text('home'), findsOneWidget);
   });
 
-  testWidgets('a match that keeps the item leaves its detail page open',
-      (tester) async {
+  testWidgets('a match that keeps the item leaves its detail page open', (
+    tester,
+  ) async {
     final source = _EditingSource(itemSurvives: true);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(source)],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: Consumer(
-            builder: (context, ref, _) => TextButton(
-              key: const Key('fix'),
-              onPressed: fixMatchAction(context, ref, _ref, 'Old'),
-              child: const Text('detail page'),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) => TextButton(
+                key: const Key('fix'),
+                onPressed: fixMatchAction(context, ref, _ref, 'Old'),
+                child: const Text('detail page'),
+              ),
             ),
           ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.byKey(const Key('fix')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('fix-match-result-11')));
@@ -242,8 +264,10 @@ class _EditingSource extends FakeMediaSource implements MatchEditing {
   final sets = <TmdbCandidate?>[];
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.matchEditing};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.matchEditing,
+  };
 
   @override
   bool canEditMatch(ItemRef ref) => editable;
@@ -253,8 +277,7 @@ class _EditingSource extends FakeMediaSource implements MatchEditing {
     ItemRef ref,
     String query, {
     int? year,
-  }) async =>
-      const [TmdbCandidate(id: 11, title: 'Invented Film', year: 1999)];
+  }) async => const [TmdbCandidate(id: 11, title: 'Invented Film', year: 1999)];
 
   @override
   Future<void> setMatch(ItemRef ref, TmdbCandidate? choice) async =>
@@ -265,7 +288,12 @@ class _EditingSource extends FakeMediaSource implements MatchEditing {
     if (sets.isNotEmpty && !itemSurvives) {
       throw const SourceException.notFound();
     }
-    return super.item(const ItemRef(
-        sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm1'));
+    return super.item(
+      const ItemRef(
+        sourceId: fakeSourceId,
+        kind: ItemKind.movie,
+        externalId: 'm1',
+      ),
+    );
   }
 }

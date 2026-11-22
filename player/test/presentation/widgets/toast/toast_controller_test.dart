@@ -1,5 +1,5 @@
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/toast/toast_controller.dart';
 import 'package:player/presentation/widgets/toast/toast_models.dart';
@@ -7,29 +7,43 @@ import 'package:player/presentation/widgets/toast/toast_models.dart';
 void main() {
   group('default durations', () {
     test('info and success stay 3s', () {
-      expect(ToastMetrics.defaultDuration(ToastKind.info, hasAction: false),
-          const Duration(seconds: 3));
-      expect(ToastMetrics.defaultDuration(ToastKind.success, hasAction: false),
-          const Duration(seconds: 3));
+      expect(
+        ToastMetrics.defaultDuration(ToastKind.info, hasAction: false),
+        const Duration(seconds: 3),
+      );
+      expect(
+        ToastMetrics.defaultDuration(ToastKind.success, hasAction: false),
+        const Duration(seconds: 3),
+      );
     });
 
     test('errors stay 5s', () {
-      expect(ToastMetrics.defaultDuration(ToastKind.error, hasAction: false),
-          const Duration(seconds: 5));
+      expect(
+        ToastMetrics.defaultDuration(ToastKind.error, hasAction: false),
+        const Duration(seconds: 5),
+      );
     });
 
     test('an action extends any non-progress kind to 8s', () {
-      expect(ToastMetrics.defaultDuration(ToastKind.info, hasAction: true),
-          const Duration(seconds: 8));
-      expect(ToastMetrics.defaultDuration(ToastKind.error, hasAction: true),
-          const Duration(seconds: 8));
+      expect(
+        ToastMetrics.defaultDuration(ToastKind.info, hasAction: true),
+        const Duration(seconds: 8),
+      );
+      expect(
+        ToastMetrics.defaultDuration(ToastKind.error, hasAction: true),
+        const Duration(seconds: 8),
+      );
     });
 
     test('progress waits for its caller, up to 30s', () {
-      expect(ToastMetrics.defaultDuration(ToastKind.progress, hasAction: false),
-          const Duration(seconds: 30));
-      expect(ToastMetrics.defaultDuration(ToastKind.progress, hasAction: true),
-          const Duration(seconds: 30));
+      expect(
+        ToastMetrics.defaultDuration(ToastKind.progress, hasAction: false),
+        const Duration(seconds: 30),
+      );
+      expect(
+        ToastMetrics.defaultDuration(ToastKind.progress, hasAction: true),
+        const Duration(seconds: 30),
+      );
     });
   });
 
@@ -49,8 +63,11 @@ void main() {
     test('an explicit duration wins over the default', () {
       fakeAsync((async) {
         final controller = ToastController();
-        controller.show('Denied',
-            kind: ToastKind.error, duration: const Duration(seconds: 8));
+        controller.show(
+          'Denied',
+          kind: ToastKind.error,
+          duration: const Duration(seconds: 8),
+        );
         async.elapse(const Duration(seconds: 7));
         expect(controller.current, isNotNull);
         async.elapse(const Duration(seconds: 1));
@@ -83,8 +100,11 @@ void main() {
         async.elapse(const Duration(seconds: 2));
         controller.show('B');
         async.elapse(const Duration(seconds: 2));
-        expect(controller.current?.message, 'B',
-            reason: "A's timer must not close B");
+        expect(
+          controller.current?.message,
+          'B',
+          reason: "A's timer must not close B",
+        );
         async.elapse(const Duration(seconds: 1));
         expect(controller.current, isNull);
         controller.dispose();
@@ -93,13 +113,16 @@ void main() {
 
     test('an icon is kept for info only', () {
       final controller = ToastController();
-      expect(controller.show('a', icon: Icons.sync_rounded).icon,
-          Icons.sync_rounded);
       expect(
-          controller
-              .show('b', kind: ToastKind.error, icon: Icons.sync_rounded)
-              .icon,
-          isNull);
+        controller.show('a', icon: Icons.sync_rounded).icon,
+        Icons.sync_rounded,
+      );
+      expect(
+        controller
+            .show('b', kind: ToastKind.error, icon: Icons.sync_rounded)
+            .icon,
+        isNull,
+      );
       controller.dispose();
     });
 
@@ -120,38 +143,53 @@ void main() {
       });
     });
 
-    test('with accessible navigation an action toast waits to be dismissed',
-        () {
-      fakeAsync((async) {
-        final controller = ToastController()..accessibleNavigation = true;
-        controller.show('Denied',
-            action: ToastAction(label: 'Settings', onPressed: () {}));
-        async.elapse(const Duration(minutes: 1));
-        expect(controller.current?.message, 'Denied');
+    test(
+      'with accessible navigation an action toast waits to be dismissed',
+      () {
+        fakeAsync((async) {
+          final controller = ToastController()..accessibleNavigation = true;
+          controller.show(
+            'Denied',
+            action: ToastAction(label: 'Settings', onPressed: () {}),
+          );
+          async.elapse(const Duration(minutes: 1));
+          expect(controller.current?.message, 'Denied');
 
-        controller.show('Plain');
-        async.elapse(const Duration(seconds: 3));
-        expect(controller.current, isNull,
-            reason: 'only toasts with an action wait');
-        controller.dispose();
-      });
-    });
+          controller.show('Plain');
+          async.elapse(const Duration(seconds: 3));
+          expect(
+            controller.current,
+            isNull,
+            reason: 'only toasts with an action wait',
+          );
+          controller.dispose();
+        });
+      },
+    );
 
     test('turning accessibility on stops a live action countdown for good', () {
       fakeAsync((async) {
         final controller = ToastController();
         // Error with an action: 8s.
-        final entry = controller.show('Denied',
-            kind: ToastKind.error,
-            action: ToastAction(label: 'Settings', onPressed: () {}));
+        final entry = controller.show(
+          'Denied',
+          kind: ToastKind.error,
+          action: ToastAction(label: 'Settings', onPressed: () {}),
+        );
         async.elapse(const Duration(seconds: 2));
         controller.accessibleNavigation = true;
         async.elapse(const Duration(seconds: 7));
-        expect(controller.current?.id, entry.id,
-            reason: 'past the 8s it was shown with');
+        expect(
+          controller.current?.id,
+          entry.id,
+          reason: 'past the 8s it was shown with',
+        );
         async.elapse(const Duration(minutes: 5));
-        expect(controller.current?.id, entry.id,
-            reason: 'nothing closes it on its own any more');
+        expect(
+          controller.current?.id,
+          entry.id,
+          reason: 'nothing closes it on its own any more',
+        );
         controller.dispose();
       });
     });
@@ -165,8 +203,11 @@ void main() {
         async.elapse(const Duration(milliseconds: 999));
         expect(controller.current?.message, 'Saved');
         async.elapse(const Duration(milliseconds: 1));
-        expect(controller.current, isNull,
-            reason: 'only toasts with an action wait to be dismissed');
+        expect(
+          controller.current,
+          isNull,
+          reason: 'only toasts with an action wait to be dismissed',
+        );
         controller.dispose();
       });
     });
@@ -174,15 +215,20 @@ void main() {
     test('turning accessibility off restarts a waiting action countdown', () {
       fakeAsync((async) {
         final controller = ToastController()..accessibleNavigation = true;
-        final entry = controller.show('Denied',
-            action: ToastAction(label: 'Settings', onPressed: () {}));
+        final entry = controller.show(
+          'Denied',
+          action: ToastAction(label: 'Settings', onPressed: () {}),
+        );
         async.elapse(const Duration(minutes: 1));
         expect(controller.current?.id, entry.id);
 
         controller.accessibleNavigation = false;
         async.elapse(const Duration(seconds: 7, milliseconds: 999));
-        expect(controller.current?.id, entry.id,
-            reason: 'a full 8s, counted from the mode change');
+        expect(
+          controller.current?.id,
+          entry.id,
+          reason: 'a full 8s, counted from the mode change',
+        );
         async.elapse(const Duration(milliseconds: 1));
         expect(controller.current, isNull);
         controller.dispose();
@@ -192,16 +238,21 @@ void main() {
     test('turning accessibility off leaves a hover-paused toast paused', () {
       fakeAsync((async) {
         final controller = ToastController()..accessibleNavigation = true;
-        final entry = controller.show('Denied',
-            action: ToastAction(label: 'Settings', onPressed: () {}));
+        final entry = controller.show(
+          'Denied',
+          action: ToastAction(label: 'Settings', onPressed: () {}),
+        );
         controller.pause(entry.id);
         async.elapse(const Duration(seconds: 30));
         expect(controller.current?.id, entry.id);
 
         controller.accessibleNavigation = false;
         async.elapse(const Duration(seconds: 30));
-        expect(controller.current?.id, entry.id,
-            reason: 'the pointer is still resting on the pill');
+        expect(
+          controller.current?.id,
+          entry.id,
+          reason: 'the pointer is still resting on the pill',
+        );
 
         controller.resume(entry.id);
         async.elapse(const Duration(seconds: 7, milliseconds: 999));
@@ -225,8 +276,11 @@ void main() {
         controller.accessibleNavigation = false;
         expect(notified, 1, reason: 'a no-op assignment does not notify');
         async.elapse(const Duration(milliseconds: 999));
-        expect(controller.current?.message, 'Saved',
-            reason: 'a repeated assignment must not restart the countdown');
+        expect(
+          controller.current?.message,
+          'Saved',
+          reason: 'a repeated assignment must not restart the countdown',
+        );
         async.elapse(const Duration(milliseconds: 1));
         expect(controller.current, isNull);
         expect(notified, 2);
@@ -234,8 +288,11 @@ void main() {
         controller.accessibleNavigation = true;
         expect(notified, 3, reason: 'a real change notifies');
         controller.accessibleNavigation = true;
-        expect(notified, 3,
-            reason: 'inert even with nothing on screen to re-decide');
+        expect(
+          notified,
+          3,
+          reason: 'inert even with nothing on screen to re-decide',
+        );
         controller.dispose();
       });
     });
@@ -271,16 +328,20 @@ void main() {
 
     test('a left claim insets by its right edge', () {
       final controller = ToastController();
-      controller.setClaim(#sidebar,
-          const ToastClaim(ToastEdge.left, Rect.fromLTWH(0, 0, 260, 900)));
+      controller.setClaim(
+        #sidebar,
+        const ToastClaim(ToastEdge.left, Rect.fromLTWH(0, 0, 260, 900)),
+      );
       expect(controller.insetsFor(layer).left, 260);
       controller.dispose();
     });
 
     test('a bottom claim insets by its distance from the bottom', () {
       final controller = ToastController();
-      controller.setClaim(#dock,
-          const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83)));
+      controller.setClaim(
+        #dock,
+        const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83)),
+      );
       expect(controller.insetsFor(layer).bottom, 95);
       controller.dispose();
     });
@@ -288,23 +349,35 @@ void main() {
     test('each edge takes its largest claim', () {
       final controller = ToastController();
       controller
-        ..setClaim(#dock,
-            const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83)))
-        ..setClaim(#castBar,
-            const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(0, 830, 1400, 70)))
-        ..setClaim(#narrow,
-            const ToastClaim(ToastEdge.left, Rect.fromLTWH(0, 0, 260, 900)))
-        ..setClaim(#wide,
-            const ToastClaim(ToastEdge.left, Rect.fromLTWH(0, 0, 300, 900)));
-      expect(controller.insetsFor(layer),
-          const EdgeInsets.only(left: 300, bottom: 95));
+        ..setClaim(
+          #dock,
+          const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83)),
+        )
+        ..setClaim(
+          #castBar,
+          const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(0, 830, 1400, 70)),
+        )
+        ..setClaim(
+          #narrow,
+          const ToastClaim(ToastEdge.left, Rect.fromLTWH(0, 0, 260, 900)),
+        )
+        ..setClaim(
+          #wide,
+          const ToastClaim(ToastEdge.left, Rect.fromLTWH(0, 0, 300, 900)),
+        );
+      expect(
+        controller.insetsFor(layer),
+        const EdgeInsets.only(left: 300, bottom: 95),
+      );
       controller.dispose();
     });
 
     test('removing a claim drops its inset', () {
       final controller = ToastController();
-      controller.setClaim(#dock,
-          const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83)));
+      controller.setClaim(
+        #dock,
+        const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83)),
+      );
       controller.removeClaim(#dock);
       expect(controller.insetsFor(layer), EdgeInsets.zero);
       controller.dispose();
@@ -314,8 +387,10 @@ void main() {
       final controller = ToastController();
       var notified = 0;
       controller.addListener(() => notified++);
-      const claim =
-          ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83));
+      const claim = ToastClaim(
+        ToastEdge.bottom,
+        Rect.fromLTWH(12, 805, 776, 83),
+      );
       // A second instance carrying equal values, not the same object: two
       // identical `const` literals canonicalise to one, which would let this
       // pass on identity alone even if `ToastClaim` had no `==`.
@@ -333,24 +408,36 @@ void main() {
       fakeAsync((async) {
         final controller = ToastController();
         final entry = controller.show('Saved');
-        expect(async.pendingTimers, hasLength(1),
-            reason: 'a live countdown, so the check below can fail');
+        expect(
+          async.pendingTimers,
+          hasLength(1),
+          reason: 'a live countdown, so the check below can fail',
+        );
         controller.dispose();
         expect(async.pendingTimers, isEmpty);
         expect(
-            () => controller.setClaim(#dock,
-                const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(0, 0, 1, 1))),
-            returnsNormally);
+          () => controller.setClaim(
+            #dock,
+            const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(0, 0, 1, 1)),
+          ),
+          returnsNormally,
+        );
         expect(() => controller.removeClaim(#dock), returnsNormally);
         expect(() => controller.close(entry.id), returnsNormally);
         expect(() => controller.pause(entry.id), returnsNormally);
         expect(() => controller.resume(entry.id), returnsNormally);
         expect(() => controller.show('late'), returnsNormally);
         expect(() => controller.accessibleNavigation = true, returnsNormally);
-        expect(async.pendingTimers, isEmpty,
-            reason: 'a disposed controller reschedules no countdown');
-        expect(controller.accessibleNavigation, isFalse,
-            reason: 'and records no mode change either');
+        expect(
+          async.pendingTimers,
+          isEmpty,
+          reason: 'a disposed controller reschedules no countdown',
+        );
+        expect(
+          controller.accessibleNavigation,
+          isFalse,
+          reason: 'and records no mode change either',
+        );
       });
     });
   });

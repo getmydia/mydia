@@ -26,22 +26,24 @@ void main() {
   }
 
   test('excludes local node id and revoked members from entries', () async {
-    await store.putMember(member(
-      nodeId: 'local-node',
-      name: 'Local Tablet',
-      platform: 'android',
-    ));
-    await store.putMember(member(
-      nodeId: 'peer-active-1',
-      name: 'Living Room TV',
-      platform: 'android_tv',
-    ));
-    await store.putMember(member(
-      nodeId: 'peer-revoked-2',
-      name: 'Old TV Stick',
-      platform: 'fire_tv',
-      revoked: true,
-    ));
+    await store.putMember(
+      member(nodeId: 'local-node', name: 'Local Tablet', platform: 'android'),
+    );
+    await store.putMember(
+      member(
+        nodeId: 'peer-active-1',
+        name: 'Living Room TV',
+        platform: 'android_tv',
+      ),
+    );
+    await store.putMember(
+      member(
+        nodeId: 'peer-revoked-2',
+        name: 'Old TV Stick',
+        platform: 'fire_tv',
+        revoked: true,
+      ),
+    );
 
     final roster = PeerGroupRoster(
       store: store,
@@ -62,22 +64,24 @@ void main() {
   });
 
   test('allows active member and refuses revoked or unknown node', () async {
-    await store.putMember(member(
-      nodeId: 'local-node',
-      name: 'Local Tablet',
-      platform: 'android',
-    ));
-    await store.putMember(member(
-      nodeId: 'peer-active-1',
-      name: 'Living Room TV',
-      platform: 'android_tv',
-    ));
-    await store.putMember(member(
-      nodeId: 'peer-revoked-2',
-      name: 'Old TV Stick',
-      platform: 'fire_tv',
-      revoked: true,
-    ));
+    await store.putMember(
+      member(nodeId: 'local-node', name: 'Local Tablet', platform: 'android'),
+    );
+    await store.putMember(
+      member(
+        nodeId: 'peer-active-1',
+        name: 'Living Room TV',
+        platform: 'android_tv',
+      ),
+    );
+    await store.putMember(
+      member(
+        nodeId: 'peer-revoked-2',
+        name: 'Old TV Stick',
+        platform: 'fire_tv',
+        revoked: true,
+      ),
+    );
 
     final roster = PeerGroupRoster(
       store: store,
@@ -86,32 +90,31 @@ void main() {
     );
 
     expect(await roster.allows('peer-active-1'), isTrue);
-    expect(await roster.allows('PEER-ACTIVE-1'), isTrue,
-        reason: 'node id lookup should be case-insensitive');
+    expect(
+      await roster.allows('PEER-ACTIVE-1'),
+      isTrue,
+      reason: 'node id lookup should be case-insensitive',
+    );
     expect(await roster.allows('peer-revoked-2'), isFalse);
     expect(await roster.allows('local-node'), isFalse);
     expect(await roster.allows('unknown-node'), isFalse);
   });
 
-  test(
-      'online entries returns connected active members or all active when none connected',
-      () async {
-    await store.putMember(member(
-      nodeId: 'peer-1',
-      name: 'Screen One',
-      platform: 'linux',
-    ));
-    await store.putMember(member(
-      nodeId: 'peer-2',
-      name: 'Screen Two',
-      platform: 'macos',
-    ));
-    await store.putMember(member(
-      nodeId: 'peer-revoked',
-      name: 'Screen Revoked',
-      platform: 'windows',
-      revoked: true,
-    ));
+  test('online entries returns connected active members or all active when none connected', () async {
+    await store.putMember(
+      member(nodeId: 'peer-1', name: 'Screen One', platform: 'linux'),
+    );
+    await store.putMember(
+      member(nodeId: 'peer-2', name: 'Screen Two', platform: 'macos'),
+    );
+    await store.putMember(
+      member(
+        nodeId: 'peer-revoked',
+        name: 'Screen Revoked',
+        platform: 'windows',
+        revoked: true,
+      ),
+    );
 
     final connectedNodes = <String>{};
     final roster = PeerGroupRoster(

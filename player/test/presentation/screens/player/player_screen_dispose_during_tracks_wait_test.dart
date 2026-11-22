@@ -23,7 +23,7 @@ import 'player_screen_test_harness.dart';
 /// `_FakePlatformPlayer`, minus the track emission in `open`.
 class _NeverProbesPlatformPlayer extends PlatformPlayer {
   _NeverProbesPlatformPlayer()
-      : super(configuration: const PlayerConfiguration());
+    : super(configuration: const PlayerConfiguration());
 
   // `VideoController` waits for a native output this test does not render.
   final _handle = Completer<int>();
@@ -103,61 +103,68 @@ void main() {
   }
 
   testWidgets(
-      'disposing the screen while _openPlayerAndStart awaits real tracks '
-      'does not throw', (tester) async {
-    final fake = _NeverProbesPlatformPlayer();
-    final container = buildPlayerScreenContainer(
-      server: _server(),
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-    );
-    addTearDown(container.dispose);
-
-    final logged = <String>[];
-    await withCapturedDebugPrint(logged, () async {
-      await pumpPlayerScreen(
-        tester,
-        container,
-        createPlayer: () => Player(platformPlayer: fake),
+    'disposing the screen while _openPlayerAndStart awaits real tracks '
+    'does not throw',
+    (tester) async {
+      final fake = _NeverProbesPlatformPlayer();
+      final container = buildPlayerScreenContainer(
+        server: _server(),
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
       );
+      addTearDown(container.dispose);
 
-      await pumpUntil(tester, () => fake.openCalled);
-      // `pumpUntil` gives up silently after its try budget instead of
-      // failing, so without this the test could unmount below having never
-      // actually reached `open()` -- and pass vacuously, having proven
-      // nothing about disposing mid-`awaitRealTracks`.
-      expect(fake.openCalled, isTrue,
-          reason: 'sanity check: open() must have run before this test '
+      final logged = <String>[];
+      await withCapturedDebugPrint(logged, () async {
+        await pumpPlayerScreen(
+          tester,
+          container,
+          createPlayer: () => Player(platformPlayer: fake),
+        );
+
+        await pumpUntil(tester, () => fake.openCalled);
+        // `pumpUntil` gives up silently after its try budget instead of
+        // failing, so without this the test could unmount below having never
+        // actually reached `open()` -- and pass vacuously, having proven
+        // nothing about disposing mid-`awaitRealTracks`.
+        expect(
+          fake.openCalled,
+          isTrue,
+          reason:
+              'sanity check: open() must have run before this test '
               'disposes the screen, or the rest of this test proves nothing '
-              'about the tracks-wait race');
-      // A couple more pumps for the microtasks between `open()` returning
-      // and `awaitRealTracks` subscribing to `player.stream.tracks` to
-      // settle, without letting the (3s native) timeout resolve the wait
-      // first.
-      await tester.pump();
-      await tester.pump();
+              'about the tracks-wait race',
+        );
+        // A couple more pumps for the microtasks between `open()` returning
+        // and `awaitRealTracks` subscribing to `player.stream.tracks` to
+        // settle, without letting the (3s native) timeout resolve the wait
+        // first.
+        await tester.pump();
+        await tester.pump();
 
-      // Unmount while `_openPlayerAndStart` is still suspended on
-      // `awaitRealTracks`. This nulls `_player` and disposes `fake`
-      // (closing its stream controllers), which makes `awaitRealTracks`'s
-      // subscription see `onDone` and resolve the wait shortly after.
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump();
-      await tester.pump();
-    });
+        // Unmount while `_openPlayerAndStart` is still suspended on
+        // `awaitRealTracks`. This nulls `_player` and disposes `fake`
+        // (closing its stream controllers), which makes `awaitRealTracks`'s
+        // subscription see `onDone` and resolve the wait shortly after.
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+        await tester.pump();
+      });
 
-    // No exception should escape to the framework's error zone...
-    expect(tester.takeException(), isNull);
-    // ...and `_initializePlayer`'s own try/catch, which would otherwise
-    // swallow the exact crash this guards against (`player.play()` against
-    // a disposed player's already-closed stream controller), must not have
-    // caught one either.
-    expect(
-      logged.where((l) => l.contains('Error initializing player')),
-      isEmpty,
-      reason: 'continuing to use the player/progress service past dispose() '
-          'must not throw once `_openPlayerAndStart` bails out early',
-    );
-  });
+      // No exception should escape to the framework's error zone...
+      expect(tester.takeException(), isNull);
+      // ...and `_initializePlayer`'s own try/catch, which would otherwise
+      // swallow the exact crash this guards against (`player.play()` against
+      // a disposed player's already-closed stream controller), must not have
+      // caught one either.
+      expect(
+        logged.where((l) => l.contains('Error initializing player')),
+        isEmpty,
+        reason:
+            'continuing to use the player/progress service past dispose() '
+            'must not throw once `_openPlayerAndStart` bails out early',
+      );
+    },
+  );
 }

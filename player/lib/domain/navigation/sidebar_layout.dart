@@ -18,10 +18,11 @@ class SidebarLayout {
   /// The arrangement a user sees before they touch anything, and the one a
   /// user with unreadable stored state falls back to.
   static final SidebarLayout defaults = SidebarLayout(
-    order: (List.of(builtinDestinations)
-          ..sort((a, b) => a.defaultIndex.compareTo(b.defaultIndex)))
-        .map((d) => d.id)
-        .toList(),
+    order:
+        (List.of(builtinDestinations)
+              ..sort((a, b) => a.defaultIndex.compareTo(b.defaultIndex)))
+            .map((d) => d.id)
+            .toList(),
     hidden: const {},
     filters: const {},
   );
@@ -55,14 +56,12 @@ class SidebarLayout {
     // still get Downloads above Settings, or the edges render arbitrarily.
     int anchorRank(NavDestination d) => _builtinsById[d.id]?.defaultIndex ?? 0;
 
-    final leading = resolved
-        .where((d) => d.isAnchored && _anchorsToTop(d))
-        .toList()
-      ..sort((a, b) => anchorRank(a).compareTo(anchorRank(b)));
-    final trailing = resolved
-        .where((d) => d.isAnchored && !_anchorsToTop(d))
-        .toList()
-      ..sort((a, b) => anchorRank(a).compareTo(anchorRank(b)));
+    final leading =
+        resolved.where((d) => d.isAnchored && _anchorsToTop(d)).toList()
+          ..sort((a, b) => anchorRank(a).compareTo(anchorRank(b)));
+    final trailing =
+        resolved.where((d) => d.isAnchored && !_anchorsToTop(d)).toList()
+          ..sort((a, b) => anchorRank(a).compareTo(anchorRank(b)));
     // Saved filters are ordinary unanchored rows and belong in `middle`,
     // above the bottom anchors. Never special-case FilterDestination into a
     // group after `trailing`: that renders custom filters below Settings,
@@ -89,18 +88,20 @@ class SidebarLayout {
 
     // Rule 1: drop ids matching neither a builtin nor a stored filter.
     final kept = order
-        .where((id) =>
-            availableBuiltins.containsKey(id) || filters.containsKey(id))
+        .where(
+          (id) => availableBuiltins.containsKey(id) || filters.containsKey(id),
+        )
         .toList();
 
     // Rule 2: insert absent builtins at their defaultIndex rather than
     // appending, so a destination added in a later release lands where it was
     // designed to rather than below the user's saved filters.
     final present = kept.toSet();
-    final missing = availableBuiltins.values
-        .where((destination) => !present.contains(destination.id))
-        .toList()
-      ..sort((a, b) => a.defaultIndex.compareTo(b.defaultIndex));
+    final missing =
+        availableBuiltins.values
+            .where((destination) => !present.contains(destination.id))
+            .toList()
+          ..sort((a, b) => a.defaultIndex.compareTo(b.defaultIndex));
 
     for (final destination in missing) {
       final insertAt = _insertionPoint(kept, destination, availableBuiltins);
@@ -231,8 +232,9 @@ class SidebarLayout {
 
   SidebarLayout withFilter(FilterDestination destination) {
     return copyWith(
-      order:
-          order.contains(destination.id) ? order : [...order, destination.id],
+      order: order.contains(destination.id)
+          ? order
+          : [...order, destination.id],
       filters: {...filters, destination.id: destination},
     );
   }
@@ -246,12 +248,12 @@ class SidebarLayout {
   }
 
   Map<String, dynamic> toJson() => {
-        'order': order,
-        'hidden': hidden.toList(),
-        'filters': {
-          for (final entry in filters.entries) entry.key: entry.value.toJson(),
-        },
-      };
+    'order': order,
+    'hidden': hidden.toList(),
+    'filters': {
+      for (final entry in filters.entries) entry.key: entry.value.toJson(),
+    },
+  };
 
   /// Rule 5: anything unreadable yields [defaults] rather than throwing.
   factory SidebarLayout.fromJson(Map<String, dynamic> json) {
@@ -291,10 +293,10 @@ class SidebarLayout {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(order),
-        Object.hashAllUnordered(hidden),
-        Object.hashAllUnordered(filters.keys),
-      );
+    Object.hashAll(order),
+    Object.hashAllUnordered(hidden),
+    Object.hashAllUnordered(filters.keys),
+  );
 
   @override
   String toString() =>

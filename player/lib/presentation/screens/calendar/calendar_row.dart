@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/palette.dart';
@@ -69,7 +69,8 @@ class CalendarRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 SizedBox(
-                  height: TimelineLayout.subtitleLine *
+                  height:
+                      TimelineLayout.subtitleLine *
                       MediaQuery.textScalerOf(context).scale(1),
                   child: Row(
                     children: [
@@ -88,9 +89,11 @@ class CalendarRow extends StatelessWidget {
                       if (!entry.isPlayable) ...[
                         const SizedBox(width: 6),
                         _StatusChip(
-                          key: ValueKey(_isFuture
-                              ? 'calendar-upcoming-$id'
-                              : 'calendar-absent-$id'),
+                          key: ValueKey(
+                            _isFuture
+                                ? 'calendar-upcoming-$id'
+                                : 'calendar-absent-$id',
+                          ),
                           label: _isFuture
                               ? context.l10n.calendarStatusUpcoming
                               : context.l10n.calendarStatusNotInLibrary,

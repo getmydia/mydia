@@ -152,5 +152,6 @@ class FakeBackupSyncService implements BackupSyncService {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
-      'FakeBackupSyncService: ${invocation.memberName}');
+    'FakeBackupSyncService: ${invocation.memberName}',
+  );
 }

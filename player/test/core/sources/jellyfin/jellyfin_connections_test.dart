@@ -20,14 +20,16 @@ void main() {
       '::not a uri',
       wan.toString(),
     ]) {
-      expect(jellyfinConnections(wan, local), [ServerConnection(uri: wan)],
-          reason: '$local');
+      expect(jellyfinConnections(wan, local), [
+        ServerConnection(uri: wan),
+      ], reason: '$local');
     }
   });
 
   test('an entered private URL is itself local', () {
-    expect(jellyfinConnections(lan, lan.toString()),
-        [ServerConnection(uri: lan, local: true)]);
+    expect(jellyfinConnections(lan, lan.toString()), [
+      ServerConnection(uri: lan, local: true),
+    ]);
   });
 
   test('ranks the LAN first and drops plain HTTP to a public host', () {

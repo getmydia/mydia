@@ -62,9 +62,7 @@ class UpdateProblem {
   const UpdateProblem(this.issue, {this.detail}) : text = null;
 
   /// Text from the platform, shown verbatim.
-  const UpdateProblem.text(String this.text)
-      : issue = null,
-        detail = null;
+  const UpdateProblem.text(String this.text) : issue = null, detail = null;
 
   final UpdateIssue? issue;
 

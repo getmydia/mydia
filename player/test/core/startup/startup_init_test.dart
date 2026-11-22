@@ -16,10 +16,10 @@ import 'package:player/core/startup/startup_timeline.dart';
 /// instance failure.
 class _LockError extends FileSystemException {
   _LockError()
-      : super(
-          'lock failed: Resource temporarily unavailable, errno = 11',
-          '/tmp/mydia-test/download_tasks.lock',
-        );
+    : super(
+        'lock failed: Resource temporarily unavailable, errno = 11',
+        '/tmp/mydia-test/download_tasks.lock',
+      );
 }
 
 StartupSteps _steps({
@@ -126,32 +126,34 @@ void main() {
     expect((outcome as StartupReady).sourceCache, isA<InMemorySourceCache>());
   });
 
-  test('the legacy migration runs after the cache and downloads open',
-      () async {
-    final order = <String>[];
-    final cache = InMemorySourceCache();
-    SourceCache? given;
-    final timeline = StartupTimeline('t');
-    final outcome = await runStartup(
-      _steps(
-        sourceCache: () async {
-          order.add('cache');
-          return cache;
-        },
-        downloadDb: () async => order.add('downloads'),
-        legacyMigration: (c) async {
-          given = c;
-          order.add('migration');
-        },
-      ),
-      timeline: timeline,
-    );
-    expect(outcome, isA<StartupReady>());
-    expect(given, same(cache));
-    expect(order.last, 'migration');
-    expect(order, containsAll(['cache', 'downloads']));
-    expect(timeline.marks.keys, contains('legacy_migration'));
-  });
+  test(
+    'the legacy migration runs after the cache and downloads open',
+    () async {
+      final order = <String>[];
+      final cache = InMemorySourceCache();
+      SourceCache? given;
+      final timeline = StartupTimeline('t');
+      final outcome = await runStartup(
+        _steps(
+          sourceCache: () async {
+            order.add('cache');
+            return cache;
+          },
+          downloadDb: () async => order.add('downloads'),
+          legacyMigration: (c) async {
+            given = c;
+            order.add('migration');
+          },
+        ),
+        timeline: timeline,
+      );
+      expect(outcome, isA<StartupReady>());
+      expect(given, same(cache));
+      expect(order.last, 'migration');
+      expect(order, containsAll(['cache', 'downloads']));
+      expect(timeline.marks.keys, contains('legacy_migration'));
+    },
+  );
 
   test('a throwing legacy migration does not stop startup', () async {
     final timeline = StartupTimeline('t');
@@ -174,7 +176,7 @@ void main() {
         'hive',
         'download_db',
         'sidebar',
-        'init_done'
+        'init_done',
       ]),
     );
   });

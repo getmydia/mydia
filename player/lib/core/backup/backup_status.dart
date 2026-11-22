@@ -124,8 +124,9 @@ class RestorePreview {
 
   int get epoch => manifest.epoch;
 
-  List<String> get deviceNames =>
-      [for (final p in payloads.values) p.deviceName];
+  List<String> get deviceNames => [
+    for (final p in payloads.values) p.deviceName,
+  ];
 
   int get sources =>
       records.whereType<AccountBackupRecord>().where((r) => !r.deleted).length;
@@ -157,8 +158,12 @@ Future<ApplyResult> applyByOrigin(
       }
     }
     if (mine.isEmpty) continue;
-    final result = await snapshot.apply(mine,
-        mode: mode, fromDevice: p.deviceName, nowMs: nowMs);
+    final result = await snapshot.apply(
+      mine,
+      mode: mode,
+      fromDevice: p.deviceName,
+      nowMs: nowMs,
+    );
     watch += result.watchChanged;
     pins += result.pinsChanged;
     accounts += result.accountsAdded;

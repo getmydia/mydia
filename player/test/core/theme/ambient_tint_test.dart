@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,8 +45,9 @@ void main() {
     expect(seen.last, AmbientTintColors.neutralFor(Palettes.projectionBooth));
   });
 
-  testWidgets('ShellAmbientTint ignores the tint when the preset has none',
-      (tester) async {
+  testWidgets('ShellAmbientTint ignores the tint when the preset has none', (
+    tester,
+  ) async {
     final seen = <AmbientTintColors>[];
     await tester.pumpWidget(
       ProviderScope(
@@ -73,12 +74,15 @@ void main() {
     final seen = <AmbientTintColors>[];
     final probe = _Probe(seen);
     await tester.pumpWidget(
-        _app(AmbientTintColors.neutralFor(Palettes.projectionBooth), probe));
+      _app(AmbientTintColors.neutralFor(Palettes.projectionBooth), probe),
+    );
     await tester.pumpWidget(_app(_warm, probe));
     await tester.pump(const Duration(milliseconds: 300));
     expect(seen.last, isNot(_warm));
-    expect(seen.last,
-        isNot(AmbientTintColors.neutralFor(Palettes.projectionBooth)));
+    expect(
+      seen.last,
+      isNot(AmbientTintColors.neutralFor(Palettes.projectionBooth)),
+    );
     await tester.pump(const Duration(milliseconds: 400));
     expect(seen.last, _warm);
   });
@@ -87,8 +91,11 @@ void main() {
     final seen = <AmbientTintColors>[];
     final probe = _Probe(seen);
     await tester.pumpWidget(
-      _app(AmbientTintColors.neutralFor(Palettes.projectionBooth), probe,
-          reduce: true),
+      _app(
+        AmbientTintColors.neutralFor(Palettes.projectionBooth),
+        probe,
+        reduce: true,
+      ),
     );
     await tester.pumpWidget(_app(_warm, probe, reduce: true));
     await tester.pump();
@@ -101,7 +108,8 @@ void main() {
     final builds = <int>[];
     final counter = _Counter(builds);
     await tester.pumpWidget(
-        _app(AmbientTintColors.neutralFor(Palettes.projectionBooth), counter));
+      _app(AmbientTintColors.neutralFor(Palettes.projectionBooth), counter),
+    );
     await tester.pumpWidget(_app(_warm, counter));
     await tester.pumpAndSettle();
     expect(builds, hasLength(1));

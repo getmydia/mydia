@@ -2,7 +2,7 @@
 /// `ArtworkRef` into a URL, headers and a cache key.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cache/poster_cache_manager.dart';
@@ -16,12 +16,14 @@ import 'focus_highlight.dart';
 import 'media_poster.dart';
 
 final sourceArtworkProvider = FutureProvider.autoDispose
-    .family<ArtworkRequest?, ({SourceId sourceId, ArtworkRef art, int width})>(
-        (ref, key) async {
-  final source = ref.watch(mediaSourceProvider(key.sourceId));
-  if (source == null) return null;
-  return source.artwork(key.art, width: key.width);
-});
+    .family<ArtworkRequest?, ({SourceId sourceId, ArtworkRef art, int width})>((
+      ref,
+      key,
+    ) async {
+      final source = ref.watch(mediaSourceProvider(key.sourceId));
+      if (source == null) return null;
+      return source.artwork(key.art, width: key.width);
+    });
 
 /// Null when there is nothing to show: unwatched with no progress.
 WatchStatus? watchStatusFor(UserState state, int? durationSeconds) {
@@ -48,7 +50,8 @@ ArtworkRequest? _resolved(
 ) {
   if (art == null) return null;
   return switch (ref.watch(
-      sourceArtworkProvider((sourceId: sourceId, art: art, width: width)))) {
+    sourceArtworkProvider((sourceId: sourceId, art: art, width: width)),
+  )) {
     AsyncData(:final value) => value,
     _ => null,
   };
@@ -83,8 +86,12 @@ class SourcePoster extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final request =
-        _resolved(ref, item.ref.sourceId, item.poster, artworkWidth);
+    final request = _resolved(
+      ref,
+      item.ref.sourceId,
+      item.poster,
+      artworkWidth,
+    );
     // MediaPoster is a GestureDetector, which a D-pad cannot reach.
     // FocusHighlight makes each poster a focus stop with the app's ring,
     // and OK on a remote activates it like a tap.

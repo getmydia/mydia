@@ -22,9 +22,9 @@ class DiagnosticsState {
   final bool logs;
 
   DiagnosticsState copyWith({bool? crashes, bool? logs}) => DiagnosticsState(
-        crashes: crashes ?? this.crashes,
-        logs: logs ?? this.logs,
-      );
+    crashes: crashes ?? this.crashes,
+    logs: logs ?? this.logs,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -41,7 +41,7 @@ class DiagnosticsState {
 
 class DiagnosticsSettings {
   DiagnosticsSettings({AuthStorage? storage})
-      : _storage = storage ?? getAuthStorage();
+    : _storage = storage ?? getAuthStorage();
 
   static const crashesKey = 'diagnostics.crashes';
   static const logsKey = 'diagnostics.logs';
@@ -113,11 +113,10 @@ class DiagnosticsSettings {
   /// A timed log window becomes logs off: the user agreed to a bounded
   /// window, and an open-ended upload would share more than they chose.
   static DiagnosticsState _fromLegacyChoice(String choice) => switch (choice) {
-        'crashes' ||
-        'logs_24h' ||
-        'logs_7d' =>
-          const DiagnosticsState(crashes: true, logs: false),
-        'logs_forever' => const DiagnosticsState(crashes: true, logs: true),
-        _ => DiagnosticsState.off,
-      };
+    'crashes' ||
+    'logs_24h' ||
+    'logs_7d' => const DiagnosticsState(crashes: true, logs: false),
+    'logs_forever' => const DiagnosticsState(crashes: true, logs: true),
+    _ => DiagnosticsState.off,
+  };
 }

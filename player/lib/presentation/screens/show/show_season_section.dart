@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/focus/focus_memory.dart';
 import '../../../core/player/input_capabilities.dart';
@@ -93,9 +94,8 @@ class ShowSeasonSection extends ConsumerWidget {
           const SizedBox(width: 10),
           Text(
             context.l10n.sourcesSearchKindEpisodes,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const Spacer(),
           if (isDownloadSupported &&
@@ -201,9 +201,10 @@ class ShowEpisodeList extends ConsumerWidget {
     final selectedSeason = ref.watch(selectedSeasonProvider(key));
 
     final episodesAsync = ref.watch(
-      seasonEpisodesViewProvider(
-        (show: show.target, seasonNumber: selectedSeason),
-      ),
+      seasonEpisodesViewProvider((
+        show: show.target,
+        seasonNumber: selectedSeason,
+      )),
     );
 
     return episodesAsync.when(
@@ -230,16 +231,14 @@ class ShowEpisodeList extends ConsumerWidget {
                     const SizedBox(height: 16),
                     Text(
                       context.l10n.downloadsEpisodesNotFound,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       context.l10n.showSeasonEmptyBody,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: palette.textSecondary,
-                          ),
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: palette.textSecondary),
                     ),
                   ],
                 ),
@@ -292,15 +291,13 @@ class ShowEpisodeList extends ConsumerWidget {
                 },
                 onWatchedAction: show.features.contains(DetailFeature.watched)
                     ? (episode, action) => ref
-                        .read(
-                          seasonActionsProvider(
-                            (
+                          .read(
+                            seasonActionsProvider((
                               show: show.target,
                               seasonNumber: episode.seasonNumber,
-                            ),
-                          ),
-                        )
-                        .episode(episode, action)
+                            )),
+                          )
+                          .episode(episode, action)
                     : null,
               ),
             ),
@@ -334,16 +331,14 @@ class ShowEpisodeList extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Text(
                   context.l10n.showEpisodesLoadFailed,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   error.toString(),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: palette.textSecondary,
-                      ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: palette.textSecondary),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -380,9 +375,7 @@ class SeasonActionsButton extends ConsumerWidget {
         visualDensity: VisualDensity.compact,
       ),
       color: palette.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (value) => _handleSeasonAction(context, ref, value),
       itemBuilder: (context) => [
         PopupMenuItem(
@@ -465,9 +458,10 @@ class _SeasonChipState extends State<_SeasonChip>
       duration: const Duration(milliseconds: 100),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -490,8 +484,8 @@ class _SeasonChipState extends State<_SeasonChip>
             fontWeight: FontWeight.w600,
             color: glass
                 ? (widget.isSelected
-                    ? palette.textPrimary
-                    : palette.textSecondary)
+                      ? palette.textPrimary
+                      : palette.textSecondary)
                 : (widget.isSelected ? Colors.white : palette.textPrimary),
           ),
         ),
@@ -534,10 +528,7 @@ class _SeasonChipState extends State<_SeasonChip>
         widget.onTap();
       },
       onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: chip,
-      ),
+      child: ScaleTransition(scale: _scaleAnimation, child: chip),
     );
     // A GestureDetector takes no focus, which left a remote with no way to
     // change season. On the television tier the chip is a focus stop that

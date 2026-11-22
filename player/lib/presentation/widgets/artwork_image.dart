@@ -74,7 +74,7 @@ class ArtworkImage extends StatelessWidget {
       ),
       // OctoImage does not fade without a placeholder, so there is always one.
       placeholderBuilder: placeholder ?? (_) => Container(),
-      errorBuilder: error == null ? null : (context, _, __) => error(context),
+      errorBuilder: error == null ? null : (context, _, _) => error(context),
       fadeInDuration: fadeInDuration,
       fadeOutDuration: fadeOutDuration,
       width: width,

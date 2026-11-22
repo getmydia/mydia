@@ -14,13 +14,11 @@ class _UnreadableBox extends Fake implements Box<Map<dynamic, dynamic>> {
   Map<dynamic, dynamic>? get(
     dynamic key, {
     Map<dynamic, dynamic>? defaultValue,
-  }) =>
-      throw StateError('corrupt record');
+  }) => throw StateError('corrupt record');
 
   @override
-  Future<void> delete(dynamic key) => Future<void>.error(
-        StateError('could not delete corrupt record'),
-      );
+  Future<void> delete(dynamic key) =>
+      Future<void>.error(StateError('could not delete corrupt record'));
 }
 
 void main() {
@@ -54,11 +52,11 @@ void main() {
     (
       'HivePlaybackMemory',
       () async => HivePlaybackMemory(
-            await Hive.openBox<Map<dynamic, dynamic>>(
-              'playback_memory_test_${boxes++}',
-              bytes: Uint8List(0),
-            ),
-          ),
+        await Hive.openBox<Map<dynamic, dynamic>>(
+          'playback_memory_test_${boxes++}',
+          bytes: Uint8List(0),
+        ),
+      ),
     ),
   ]) {
     group(label, () {
@@ -67,22 +65,34 @@ void main() {
       setUp(() async => memory = await open());
 
       test('a recorded failure is remembered for this server only', () async {
-        await memory.recordFailure(server, key, FailureReason.decodeTooSlow,
-            now: now);
+        await memory.recordFailure(
+          server,
+          key,
+          FailureReason.decodeTooSlow,
+          now: now,
+        );
         expect(memory.failuresFor(server, now: now), {key});
         expect(memory.failuresFor('https://other.example', now: now), isEmpty);
       });
 
       test('a failure expires after 14 days', () async {
-        await memory.recordFailure(server, key, FailureReason.decodeFailed,
-            now: now);
-        final later =
-            now.add(kFailureMemoryTtl).add(const Duration(seconds: 1));
+        await memory.recordFailure(
+          server,
+          key,
+          FailureReason.decodeFailed,
+          now: now,
+        );
+        final later = now
+            .add(kFailureMemoryTtl)
+            .add(const Duration(seconds: 1));
         expect(memory.failuresFor(server, now: later), isEmpty);
-        expect(memory.failuresFor(server, now: now.add(kFailureMemoryTtl)),
-            isEmpty);
-        final justBefore =
-            now.add(kFailureMemoryTtl).subtract(const Duration(seconds: 1));
+        expect(
+          memory.failuresFor(server, now: now.add(kFailureMemoryTtl)),
+          isEmpty,
+        );
+        final justBefore = now
+            .add(kFailureMemoryTtl)
+            .subtract(const Duration(seconds: 1));
         expect(memory.failuresFor(server, now: justBefore), {key});
       });
 
@@ -100,15 +110,19 @@ void main() {
 
       test('a stall lapses after an hour', () async {
         await memory.recordStall(server, LinkPath.http, 6000, now: now);
-        final justBefore =
-            now.add(kStallMemoryTtl).subtract(const Duration(seconds: 1));
+        final justBefore = now
+            .add(kStallMemoryTtl)
+            .subtract(const Duration(seconds: 1));
         expect(
           memory.recentStall(server, LinkPath.http, now: justBefore),
           isNotNull,
         );
         expect(
-          memory.recentStall(server, LinkPath.http,
-              now: now.add(kStallMemoryTtl)),
+          memory.recentStall(
+            server,
+            LinkPath.http,
+            now: now.add(kStallMemoryTtl),
+          ),
           isNull,
         );
       });
@@ -124,8 +138,12 @@ void main() {
       });
 
       test('recording a stall keeps the failures already remembered', () async {
-        await memory.recordFailure(server, key, FailureReason.decodeFailed,
-            now: now);
+        await memory.recordFailure(
+          server,
+          key,
+          FailureReason.decodeFailed,
+          now: now,
+        );
         await memory.recordStall(server, LinkPath.http, 6000, now: now);
         expect(memory.failuresFor(server, now: now), {key});
       });
@@ -133,8 +151,10 @@ void main() {
   }
 
   test('HivePlaybackMemory survives a malformed record', () async {
-    final box = await Hive.openBox<Map<dynamic, dynamic>>('playback_memory_bad',
-        bytes: Uint8List(0));
+    final box = await Hive.openBox<Map<dynamic, dynamic>>(
+      'playback_memory_bad',
+      bytes: Uint8List(0),
+    );
     await box.put(server, {'failures': 'not a map', 'stalls': 'nope'});
     final memory = HivePlaybackMemory(box);
     expect(memory.failuresFor(server, now: now), isEmpty);
@@ -163,149 +183,161 @@ void main() {
     );
   });
 
-  test('HivePlaybackMemory drops a legacy throughput estimate on write',
-      () async {
-    final box = await Hive.openBox<Map<dynamic, dynamic>>(
-      'playback_memory_legacy_throughput',
-      bytes: Uint8List(0),
-    );
-    await box.put(server, {
-      'failures': <String, dynamic>{},
-      'throughputKbps': 8000,
-    });
-    final memory = HivePlaybackMemory(box);
-    expect(memory.recentStall(server, LinkPath.http, now: now), isNull);
-
-    await memory.recordStall(server, LinkPath.http, 6000, now: now);
-
-    expect(box.get(server)!.containsKey('throughputKbps'), isFalse);
-    expect(
-      memory.recentStall(server, LinkPath.http, now: now)?.ceilingKbps,
-      6000,
-    );
-  });
-
-  test('HivePlaybackMemory survives errors reading and deleting a record',
-      () async {
-    final memory = HivePlaybackMemory(_UnreadableBox());
-
-    expect(memory.failuresFor(server, now: now), isEmpty);
-    expect(memory.recentStall(server, LinkPath.http, now: now), isNull);
-    await pumpEventQueue();
-  });
-
-  test('playback memory provider falls back when its box will not open',
-      () async {
-    final container = ProviderContainer(overrides: [
-      playbackMemoryBoxProvider.overrideWith(
-        (ref) async => throw StateError('box unavailable'),
-      ),
-    ]);
-    addTearDown(container.dispose);
-
-    final memory = await container.read(playbackMemoryProvider.future);
-
-    expect(memory, isA<InMemoryPlaybackMemory>());
-  });
-
-  group('openPlaybackMemoryBox corruption recovery', () {
-    test('recovers from a corrupt box file by deleting and recreating it',
-        () async {
-      final tempDir =
-          await Directory.systemTemp.createTemp('hive_corrupt_test_');
-      addTearDown(() async {
-        try {
-          tempDir.deleteSync(recursive: true);
-        } catch (_) {}
-      });
-
-      const boxName = 'corrupt_test_box';
-      final boxFile = File('${tempDir.path}/$boxName.hive');
-      await boxFile.writeAsBytes([1, 2, 3, 4, 58, 99, 100, 255]);
-
-      final box = await openPlaybackMemoryBox(
-        boxName: boxName,
-        path: tempDir.path,
+  test(
+    'HivePlaybackMemory drops a legacy throughput estimate on write',
+    () async {
+      final box = await Hive.openBox<Map<dynamic, dynamic>>(
+        'playback_memory_legacy_throughput',
+        bytes: Uint8List(0),
       );
-      addTearDown(box.close);
-
-      expect(box.isOpen, isTrue);
-      expect(box.isEmpty, isTrue);
-
-      await box.put('server_1', {'key': 'val'});
-      expect(box.get('server_1'), {'key': 'val'});
-    });
-
-    test(
-        'playback memory provider resolves to HivePlaybackMemory after recovery',
-        () async {
-      final tempDir =
-          await Directory.systemTemp.createTemp('hive_provider_test_');
-      addTearDown(() async {
-        try {
-          tempDir.deleteSync(recursive: true);
-        } catch (_) {}
+      await box.put(server, {
+        'failures': <String, dynamic>{},
+        'throughputKbps': 8000,
       });
-      // The provider recovers into a box that stays open. Closed here, before
-      // the directory goes, so it cannot break the next Hive.close() in the
-      // same isolate (another file's, in CI's bundled run).
-      addTearDown(Hive.close);
+      final memory = HivePlaybackMemory(box);
+      expect(memory.recentStall(server, LinkPath.http, now: now), isNull);
 
-      const boxName = 'corrupt_provider_box';
-      final boxFile = File('${tempDir.path}/$boxName.hive');
-      await boxFile.writeAsBytes([1, 2, 3, 4, 58, 99, 100, 255]);
+      await memory.recordStall(server, LinkPath.http, 6000, now: now);
 
-      final container = ProviderContainer(overrides: [
-        playbackMemoryBoxProvider.overrideWith(
-          (ref) => openPlaybackMemoryBox(boxName: boxName, path: tempDir.path),
-        ),
-      ]);
+      expect(box.get(server)!.containsKey('throughputKbps'), isFalse);
+      expect(
+        memory.recentStall(server, LinkPath.http, now: now)?.ceilingKbps,
+        6000,
+      );
+    },
+  );
+
+  test(
+    'HivePlaybackMemory survives errors reading and deleting a record',
+    () async {
+      final memory = HivePlaybackMemory(_UnreadableBox());
+
+      expect(memory.failuresFor(server, now: now), isEmpty);
+      expect(memory.recentStall(server, LinkPath.http, now: now), isNull);
+      await pumpEventQueue();
+    },
+  );
+
+  test(
+    'playback memory provider falls back when its box will not open',
+    () async {
+      final container = ProviderContainer(
+        overrides: [
+          playbackMemoryBoxProvider.overrideWith(
+            (ref) async => throw StateError('box unavailable'),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
 
       final memory = await container.read(playbackMemoryProvider.future);
-      expect(memory, isA<HivePlaybackMemory>());
-    });
 
-    test('isBoxCorruptionError identifies corruption vs non-corruption errors',
-        () {
-      expect(
-        isBoxCorruptionError(const FileSystemException('Permission denied')),
-        isFalse,
-      );
-      expect(
-        isBoxCorruptionError(HiveError('The box "foo" is already open')),
-        isFalse,
-      );
-      expect(
-        isBoxCorruptionError(HiveError('Hive not initialized')),
-        isFalse,
-      );
-      expect(
-        isBoxCorruptionError(HiveError('unknown typeId: 58')),
-        isTrue,
-      );
-      expect(
-        isBoxCorruptionError(HiveError('Wrong checksum in file')),
-        isTrue,
-      );
-      expect(
-        isBoxCorruptionError(HiveError('Box file is corrupted')),
-        isTrue,
-      );
-      expect(
-        isBoxCorruptionError(const FormatException('Bad frame format')),
-        isTrue,
-      );
-      expect(
-        isBoxCorruptionError(RangeError('Index out of range')),
-        isTrue,
-      );
-    });
+      expect(memory, isA<InMemoryPlaybackMemory>());
+    },
+  );
 
-    test('rethrows non-corruption open failure without deleting box file',
-        () async {
-      final tempDir =
-          await Directory.systemTemp.createTemp('hive_non_corrupt_test_');
+  group('openPlaybackMemoryBox corruption recovery', () {
+    test(
+      'recovers from a corrupt box file by deleting and recreating it',
+      () async {
+        final tempDir = await Directory.systemTemp.createTemp(
+          'hive_corrupt_test_',
+        );
+        addTearDown(() async {
+          try {
+            tempDir.deleteSync(recursive: true);
+          } catch (_) {}
+        });
+
+        const boxName = 'corrupt_test_box';
+        final boxFile = File('${tempDir.path}/$boxName.hive');
+        await boxFile.writeAsBytes([1, 2, 3, 4, 58, 99, 100, 255]);
+
+        final box = await openPlaybackMemoryBox(
+          boxName: boxName,
+          path: tempDir.path,
+        );
+        addTearDown(box.close);
+
+        expect(box.isOpen, isTrue);
+        expect(box.isEmpty, isTrue);
+
+        await box.put('server_1', {'key': 'val'});
+        expect(box.get('server_1'), {'key': 'val'});
+      },
+    );
+
+    test(
+      'playback memory provider resolves to HivePlaybackMemory after recovery',
+      () async {
+        final tempDir = await Directory.systemTemp.createTemp(
+          'hive_provider_test_',
+        );
+        addTearDown(() async {
+          try {
+            tempDir.deleteSync(recursive: true);
+          } catch (_) {}
+        });
+        // The provider recovers into a box that stays open. Closed here, before
+        // the directory goes, so it cannot break the next Hive.close() in the
+        // same isolate (another file's, in CI's bundled run).
+        addTearDown(Hive.close);
+
+        const boxName = 'corrupt_provider_box';
+        final boxFile = File('${tempDir.path}/$boxName.hive');
+        await boxFile.writeAsBytes([1, 2, 3, 4, 58, 99, 100, 255]);
+
+        final container = ProviderContainer(
+          overrides: [
+            playbackMemoryBoxProvider.overrideWith(
+              (ref) =>
+                  openPlaybackMemoryBox(boxName: boxName, path: tempDir.path),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final memory = await container.read(playbackMemoryProvider.future);
+        expect(memory, isA<HivePlaybackMemory>());
+      },
+    );
+
+    test(
+      'isBoxCorruptionError identifies corruption vs non-corruption errors',
+      () {
+        expect(
+          isBoxCorruptionError(const FileSystemException('Permission denied')),
+          isFalse,
+        );
+        expect(
+          isBoxCorruptionError(HiveError('The box "foo" is already open')),
+          isFalse,
+        );
+        expect(
+          isBoxCorruptionError(HiveError('Hive not initialized')),
+          isFalse,
+        );
+        expect(isBoxCorruptionError(HiveError('unknown typeId: 58')), isTrue);
+        expect(
+          isBoxCorruptionError(HiveError('Wrong checksum in file')),
+          isTrue,
+        );
+        expect(
+          isBoxCorruptionError(HiveError('Box file is corrupted')),
+          isTrue,
+        );
+        expect(
+          isBoxCorruptionError(const FormatException('Bad frame format')),
+          isTrue,
+        );
+        expect(isBoxCorruptionError(RangeError('Index out of range')), isTrue);
+      },
+    );
+
+    test('rethrows non-corruption open failure without deleting box file', () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'hive_non_corrupt_test_',
+      );
       addTearDown(() async {
         try {
           tempDir.deleteSync(recursive: true);

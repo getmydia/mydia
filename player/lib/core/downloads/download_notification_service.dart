@@ -198,7 +198,8 @@ class DownloadNotificationService {
     } catch (e) {
       // Fall back to flutter_foreground_task's default update
       debugPrint(
-          '[DownloadNotification] Native update failed, using fallback: $e');
+        '[DownloadNotification] Native update failed, using fallback: $e',
+      );
       await FlutterForegroundTask.updateService(
         notificationTitle: title,
         notificationText: text,

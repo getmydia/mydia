@@ -7,7 +7,7 @@ import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -43,10 +43,14 @@ Future<T?> _showAdaptive<T>(BuildContext context, Widget child) {
 /// creates the vault with the key (the backup controller's switch to the
 /// relay); without it, [service] does.
 Future<bool> showEnableBackupSheet(
-    BuildContext context, BackupSyncService service,
-    {Future<void> Function(RecoveryKey key)? confirm}) async {
+  BuildContext context,
+  BackupSyncService service, {
+  Future<void> Function(RecoveryKey key)? confirm,
+}) async {
   final enabled = await _showAdaptive<bool>(
-      context, RecoveryKeySheet.enable(service: service, confirm: confirm));
+    context,
+    RecoveryKeySheet.enable(service: service, confirm: confirm),
+  );
   return enabled ?? false;
 }
 
@@ -58,34 +62,44 @@ Future<void> showRecoveryKeySheet(BuildContext context, String keyText) =>
 /// stays up until the viewer presses Done: a tap outside or Back does not
 /// close it, since the old key no longer works. [onDone] runs when Done is
 /// pressed, and only then.
-Future<void> showReplacedRecoveryKeySheet(BuildContext context, String keyText,
-        {required VoidCallback onDone}) =>
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => PopScope(
-        canPop: false,
-        child: GlassDialog(
-          content: SizedBox(
-            width: 460,
-            child: RecoveryKeySheet.show(
-                keyText: keyText, replaced: true, onDone: onDone),
-          ),
+Future<void> showReplacedRecoveryKeySheet(
+  BuildContext context,
+  String keyText, {
+  required VoidCallback onDone,
+}) => showDialog<void>(
+  context: context,
+  barrierDismissible: false,
+  builder: (_) => PopScope(
+    canPop: false,
+    child: GlassDialog(
+      content: SizedBox(
+        width: 460,
+        child: RecoveryKeySheet.show(
+          keyText: keyText,
+          replaced: true,
+          onDone: onDone,
         ),
       ),
-    );
+    ),
+  ),
+);
 
 class RecoveryKeySheet extends StatefulWidget {
-  const RecoveryKeySheet.enable(
-      {super.key, required this.service, this.confirm})
-      : keyText = null,
-        replaced = false,
-        onDone = null;
+  const RecoveryKeySheet.enable({
+    super.key,
+    required this.service,
+    this.confirm,
+  }) : keyText = null,
+       replaced = false,
+       onDone = null;
 
-  const RecoveryKeySheet.show(
-      {super.key, required this.keyText, this.replaced = false, this.onDone})
-      : service = null,
-        confirm = null;
+  const RecoveryKeySheet.show({
+    super.key,
+    required this.keyText,
+    this.replaced = false,
+    this.onDone,
+  }) : service = null,
+       confirm = null;
 
   /// Creates the vault with the key the viewer saved; [service]'s
   /// `confirmEnable` when null.
@@ -177,8 +191,11 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
       debugPrint('[Backup] Turning on failed: ${e.runtimeType}');
       if (!mounted) return;
       if (widget.service!.status.value is BackupUnavailable) {
-        showToast(context, context.l10n.backupUnavailable,
-            kind: ToastKind.error);
+        showToast(
+          context,
+          context.l10n.backupUnavailable,
+          kind: ToastKind.error,
+        );
         Navigator.of(context).pop(false);
         return;
       }
@@ -231,24 +248,33 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
     return SafeArea(
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-            20, 20, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+          20,
+          20,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l10n.backupKeySheetTitle,
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              l10n.backupKeySheetTitle,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
-            Text(l10n.backupKeySheetBody,
-                style: TextStyle(color: palette.textSecondary)),
+            Text(
+              l10n.backupKeySheetBody,
+              style: TextStyle(color: palette.textSecondary),
+            ),
             if (widget.replaced) ...[
               const SizedBox(height: 12),
               Text(
                 l10n.backupKeyReplacedNotice,
                 key: const Key('recovery-key-replaced'),
                 style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.error),
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.error,
+                ),
               ),
             ],
             if (_retrying) ...[
@@ -313,8 +339,9 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
                 value: _saved,
-                onChanged:
-                    _busy ? null : (v) => setState(() => _saved = v ?? false),
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _saved = v ?? false),
                 title: Text(l10n.backupKeySavedCheckbox),
               ),
               const SizedBox(height: 8),
@@ -322,8 +349,9 @@ class _RecoveryKeySheetState extends State<RecoveryKeySheet> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed:
-                        _busy ? null : () => Navigator.of(context).pop(false),
+                    onPressed: _busy
+                        ? null
+                        : () => Navigator.of(context).pop(false),
                     child: Text(l10n.commonCancel),
                   ),
                   const SizedBox(width: 8),

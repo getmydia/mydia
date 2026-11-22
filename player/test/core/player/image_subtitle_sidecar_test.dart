@@ -74,13 +74,10 @@ void main() {
 
     test('a newer pick cancels the poll without saving', () async {
       var checks = 0;
-      final result = await run(
-        [
-          const SidecarResponse(status: 503),
-          const SidecarResponse(status: 200, body: [1]),
-        ],
-        cancelled: () => checks++ >= 2,
-      );
+      final result = await run([
+        const SidecarResponse(status: 503),
+        const SidecarResponse(status: 200, body: [1]),
+      ], cancelled: () => checks++ >= 2);
       expect(result, isA<SidecarCancelled>());
     });
 
@@ -88,7 +85,7 @@ void main() {
       final result = await pollImageSidecar(
         url: url,
         headers: headers,
-        get: (_, __) async => throw StateError('connection reset'),
+        get: (_, _) async => throw StateError('connection reset'),
         save: (_) async => fail('nothing to save'),
         cancelled: () => false,
       );

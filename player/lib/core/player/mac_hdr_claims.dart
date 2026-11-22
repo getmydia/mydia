@@ -35,9 +35,9 @@ List<String> macHdrFormats(
   return switch (path) {
     VideoOutputPath.texture => nativeHdrFormats,
     VideoOutputPath.surface => [
-        if (dolbyVisionVerified) 'dolby_vision',
-        ...nativeHdrFormats,
-      ],
+      if (dolbyVisionVerified) 'dolby_vision',
+      ...nativeHdrFormats,
+    ],
   };
 }
 

@@ -28,14 +28,14 @@ enum BuildChannel {
   }
 
   String get appName => switch (this) {
-        stable => 'Mydia Player',
-        beta => 'Mydia Player Beta',
-        dev => 'Mydia Player Dev',
-      };
+    stable => 'Mydia Player',
+    beta => 'Mydia Player Beta',
+    dev => 'Mydia Player Dev',
+  };
 
   String? get badgeLabel => switch (this) {
-        stable => null,
-        beta => 'BETA',
-        dev => 'DEV',
-      };
+    stable => null,
+    beta => 'BETA',
+    dev => 'DEV',
+  };
 }

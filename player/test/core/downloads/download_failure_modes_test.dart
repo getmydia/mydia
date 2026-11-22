@@ -21,23 +21,27 @@ import '../../test_utils/mydia_test_source.dart';
 const _tokenUrl = 'https://host.invalid/f.mp4?token=secret';
 
 DownloadRequest _request([String id = 'm1']) => DownloadRequest(
-      ref: testMydiaRef(ItemKind.movie, id),
-      optionId: '1080p',
-      metadata: const DownloadMetadata(
-          title: 'Quill Harbor', mediaType: MediaType.movie),
-    );
+  ref: testMydiaRef(ItemKind.movie, id),
+  optionId: '1080p',
+  metadata: const DownloadMetadata(
+    title: 'Quill Harbor',
+    mediaType: MediaType.movie,
+  ),
+);
 
-DownloadTask _task(String id,
-        {String? sourceId, String status = 'downloading'}) =>
-    DownloadTask(
-      id: id,
-      mediaId: id,
-      title: 'The Lantern Accord',
-      quality: 'original',
-      status: status,
-      sourceId: sourceId,
-      createdAt: DateTime(2026, 1, 1),
-    );
+DownloadTask _task(
+  String id, {
+  String? sourceId,
+  String status = 'downloading',
+}) => DownloadTask(
+  id: id,
+  mediaId: id,
+  title: 'The Lantern Accord',
+  quality: 'original',
+  status: status,
+  sourceId: sourceId,
+  createdAt: DateTime(2026, 1, 1),
+);
 
 final _en = AppLocalizationsEn();
 
@@ -60,17 +64,21 @@ void main() {
       final file = File('${dir.path}/f.bin');
 
       await expectLater(
-        fetchRange(dio,
-            url: _tokenUrl,
-            headers: const {},
-            file: file,
-            from: 0,
-            cancelToken: CancelToken(),
-            onProgress: (_, __) async {}),
-        throwsA(isA<DioException>()
-            .having((e) => e.type, 'type', DioExceptionType.connectionError)
-            .having((e) => e.message, 'message', isNot(contains('secret')))
-            .having((e) => e.message, 'message', contains('HttpException'))),
+        fetchRange(
+          dio,
+          url: _tokenUrl,
+          headers: const {},
+          file: file,
+          from: 0,
+          cancelToken: CancelToken(),
+          onProgress: (_, _) async {},
+        ),
+        throwsA(
+          isA<DioException>()
+              .having((e) => e.type, 'type', DioExceptionType.connectionError)
+              .having((e) => e.message, 'message', isNot(contains('secret')))
+              .having((e) => e.message, 'message', contains('HttpException')),
+        ),
       );
       expect(await file.length(), 4);
     });
@@ -91,23 +99,25 @@ void main() {
       expect(stored.error, isNot(contains('secret')));
     });
 
-    test('a drop after throttled chunks saves the real bytes on disk',
-        () async {
-      final h = await makeHarness(body: body);
-      addTearDown(h.dispose);
-      h.adapter
-        ..chunkSize = 1
-        ..bodyError = const HttpException('Connection closed')
-        ..bodyErrorAfter = 6;
+    test(
+      'a drop after throttled chunks saves the real bytes on disk',
+      () async {
+        final h = await makeHarness(body: body);
+        addTearDown(h.dispose);
+        h.adapter
+          ..chunkSize = 1
+          ..bodyError = const HttpException('Connection closed')
+          ..bodyErrorAfter = 6;
 
-      final task = await h.service.start(_request());
-      await h.waitForStatus(task.id, 'interrupted');
+        final task = await h.service.start(_request());
+        await h.waitForStatus(task.id, 'interrupted');
 
-      final stored = h.database.getTask(task.id)!;
-      expect(await File(stored.filePath!).length(), 6);
-      expect(stored.downloadedBytes, 6);
-      expect(stored.downloadProgress, greaterThan(0));
-    });
+        final stored = h.database.getTask(task.id)!;
+        expect(await File(stored.filePath!).length(), 6);
+        expect(stored.downloadedBytes, 6);
+        expect(stored.downloadProgress, greaterThan(0));
+      },
+    );
 
     test('a connection error before the first byte parks too', () async {
       final h = await makeHarness(body: body);
@@ -190,7 +200,10 @@ void main() {
       final h = await makeHarness(body: body);
       addTearDown(h.dispose);
       h.resolver.plan = (_) => const DirectFile(
-          url: testFileUrl, extension: 'mp4', expectedBytes: 1000);
+        url: testFileUrl,
+        extension: 'mp4',
+        expectedBytes: 1000,
+      );
       final seen = <DownloadTask>[];
       final sub = h.service.progressStream.listen(seen.add);
       addTearDown(sub.cancel);
@@ -199,7 +212,8 @@ void main() {
       await h.waitForStatus(task.id, 'completed');
 
       final withBytes = seen.where(
-          (t) => (t.downloadedBytes ?? 0) > 0 && t.status == 'downloading');
+        (t) => (t.downloadedBytes ?? 0) > 0 && t.status == 'downloading',
+      );
       expect(withBytes, isNotEmpty);
       for (final t in withBytes) {
         expect(t.fileSize, 10);
@@ -207,31 +221,42 @@ void main() {
       }
     });
 
-    test('a resumed download finishes at the real size, not the estimate',
-        () async {
-      final h = await makeHarness(body: body);
-      addTearDown(h.dispose);
-      final path = '${h.downloadDir.path}/partial.mp4';
-      await File(path).writeAsBytes(body.sublist(0, 4));
-      h.resolver.plan = (_) => const DirectFile(
-          url: testFileUrl, extension: 'mp4', expectedBytes: 1000);
-      await h.database
-          .saveTask(_task('p1', status: 'paused').copyWith(filePath: path));
+    test(
+      'a resumed download finishes at the real size, not the estimate',
+      () async {
+        final h = await makeHarness(body: body);
+        addTearDown(h.dispose);
+        final path = '${h.downloadDir.path}/partial.mp4';
+        await File(path).writeAsBytes(body.sublist(0, 4));
+        h.resolver.plan = (_) => const DirectFile(
+          url: testFileUrl,
+          extension: 'mp4',
+          expectedBytes: 1000,
+        );
+        await h.database.saveTask(
+          _task('p1', status: 'paused').copyWith(filePath: path),
+        );
 
-      await h.service.resumeDownload('p1');
-      await h.waitForStatus('p1', 'completed');
-      expect(await File(path).readAsBytes(), body);
-      expect(h.database.getTask('p1')!.fileSize, 10);
-    });
+        await h.service.resumeDownload('p1');
+        await h.waitForStatus('p1', 'completed');
+        expect(await File(path).readAsBytes(), body);
+        expect(h.database.getTask('p1')!.fileSize, 10);
+      },
+    );
   });
 
   test('cancel does not wait for an unreachable server', () async {
     final partial = Directory.systemTemp.createTempSync('cancel_').path;
     final file = File('$partial/p.mp4')..writeAsBytesSync([1, 2, 3]);
-    final h = await makeHarness(body: body, seedTasks: [
-      _task('c1', status: 'paused')
-          .copyWith(transcodeJobId: 'job-1', filePath: file.path),
-    ]);
+    final h = await makeHarness(
+      body: body,
+      seedTasks: [
+        _task(
+          'c1',
+          status: 'paused',
+        ).copyWith(transcodeJobId: 'job-1', filePath: file.path),
+      ],
+    );
     addTearDown(h.dispose);
     addTearDown(() => Directory(partial).delete(recursive: true));
     h.resolver.gate = Completer<void>();
@@ -246,21 +271,27 @@ void main() {
     const hidden = SourceId('acc1:owner:aa11');
     bool discreet(SourceId s) => s == hidden;
 
-    DownloadTask running(String title,
-            {SourceId? source, double progress = 0.5}) =>
-        _task('x-$title', sourceId: (source ?? testMydiaSourceId).value)
-            .copyWith(title: title, progress: progress);
+    DownloadTask running(
+      String title, {
+      SourceId? source,
+      double progress = 0.5,
+    }) => _task(
+      'x-$title',
+      sourceId: (source ?? testMydiaSourceId).value,
+    ).copyWith(title: title, progress: progress);
 
     test('a discreet single task never names its title', () {
-      final text = buildDownloadNotificationText(
-          [running('Secret Title', source: hidden)], discreet);
+      final text = buildDownloadNotificationText([
+        running('Secret Title', source: hidden),
+      ], discreet);
       expect(_words(text), isNot(contains('Secret Title')));
       expect(text.progress, 50);
     });
 
     test('a visible single task still does', () {
-      final text =
-          buildDownloadNotificationText([running('Quill Harbor')], discreet);
+      final text = buildDownloadNotificationText([
+        running('Quill Harbor'),
+      ], discreet);
       expect(_en.downloadNotificationLine(text.line), contains('Quill Harbor'));
     });
 

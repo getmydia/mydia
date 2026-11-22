@@ -12,9 +12,9 @@ void main() {
     calls = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(NativeTabBarSupport.channel, (call) {
-      calls.add(call);
-      return reply();
-    });
+          calls.add(call);
+          return reply();
+        });
   }
 
   tearDown(() {
@@ -44,8 +44,9 @@ void main() {
     TargetPlatform.windows,
     TargetPlatform.android,
   ]) {
-    testWidgets('$platform: unsupported without touching the channel',
-        (tester) async {
+    testWidgets('$platform: unsupported without touching the channel', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = platform;
       answer(() async => 'sidebar');
       await NativeTabBarSupport.initialize();
@@ -91,8 +92,9 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('iOS never answering: unsupported after the timeout',
-      (tester) async {
+  testWidgets('iOS never answering: unsupported after the timeout', (
+    tester,
+  ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     answer(() => Completer<Object?>().future);
     var done = false;

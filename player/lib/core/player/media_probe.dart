@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../sources/files/backend/file_system_backend.dart';
-import 'media_probe_stub.dart' if (dart.library.io) 'media_probe_native.dart'
+import 'media_probe_stub.dart'
+    if (dart.library.io) 'media_probe_native.dart'
     as platform;
 import 'mpv_probe_mapping.dart';
 
@@ -31,10 +32,7 @@ bool hasRealTracks(Object? decodedTrackList) {
 
 /// Runs probes one at a time, process wide, and turns every failure into null.
 class SerializedMediaProbe implements MediaProbe {
-  SerializedMediaProbe(
-    this._inner, {
-    this.grace = const Duration(seconds: 5),
-  });
+  SerializedMediaProbe(this._inner, {this.grace = const Duration(seconds: 5)});
 
   final MediaProbe _inner;
 

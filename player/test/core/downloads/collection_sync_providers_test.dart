@@ -23,8 +23,9 @@ void main() {
     // finishes), so `openBox` of the production name waits on it for good.
     // The box is handed in through the provider override, so its name is free.
     box = await Hive.openBox<Map<dynamic, dynamic>>(
-        'collection_sync_test_${dir.uri.pathSegments.where((s) => s.isNotEmpty).last}'
-            .toLowerCase());
+      'collection_sync_test_${dir.uri.pathSegments.where((s) => s.isNotEmpty).last}'
+          .toLowerCase(),
+    );
   });
 
   tearDown(() async {
@@ -33,10 +34,12 @@ void main() {
   });
 
   ProviderContainer containerBoundTo(SourceId? bound) {
-    final container = ProviderContainer(overrides: [
-      collectionSyncBoxProvider.overrideWith((ref) async => box),
-      legacyMydiaSourceIdProvider.overrideWithValue(bound),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        collectionSyncBoxProvider.overrideWith((ref) async => box),
+        legacyMydiaSourceIdProvider.overrideWithValue(bound),
+      ],
+    );
     addTearDown(container.dispose);
     return container;
   }
@@ -51,9 +54,13 @@ void main() {
     );
 
     expect(
-        await c.read(isCollectionSyncedProvider(_a.value, '1').future), isTrue);
-    expect(await c.read(isCollectionSyncedProvider(_b.value, '1').future),
-        isFalse);
+      await c.read(isCollectionSyncedProvider(_a.value, '1').future),
+      isTrue,
+    );
+    expect(
+      await c.read(isCollectionSyncedProvider(_b.value, '1').future),
+      isFalse,
+    );
 
     await c.read(saveCollectionSyncProvider)(
       sourceId: _b.value,
@@ -61,19 +68,26 @@ void main() {
       name: 'Other Saga',
       resolution: 'original',
     );
-    final configB =
-        await c.read(collectionSyncConfigProvider(_b.value, '1').future);
+    final configB = await c.read(
+      collectionSyncConfigProvider(_b.value, '1').future,
+    );
     expect(configB!['resolution'], 'original');
     expect(
-        (await c.read(
-            collectionSyncConfigProvider(_a.value, '1').future))!['resolution'],
-        '720p');
+      (await c.read(
+        collectionSyncConfigProvider(_a.value, '1').future,
+      ))!['resolution'],
+      '720p',
+    );
 
     await c.read(removeCollectionSyncProvider)(_a.value, '1');
-    expect(await c.read(isCollectionSyncedProvider(_a.value, '1').future),
-        isFalse);
     expect(
-        await c.read(isCollectionSyncedProvider(_b.value, '1').future), isTrue);
+      await c.read(isCollectionSyncedProvider(_a.value, '1').future),
+      isFalse,
+    );
+    expect(
+      await c.read(isCollectionSyncedProvider(_b.value, '1').future),
+      isTrue,
+    );
   });
 
   test('a collection-id-only entry belongs to the legacy instance', () async {
@@ -81,9 +95,13 @@ void main() {
     final c = containerBoundTo(_a);
 
     expect(
-        await c.read(isCollectionSyncedProvider(_a.value, '1').future), isTrue);
-    expect(await c.read(isCollectionSyncedProvider(_b.value, '1').future),
-        isFalse);
+      await c.read(isCollectionSyncedProvider(_a.value, '1').future),
+      isTrue,
+    );
+    expect(
+      await c.read(isCollectionSyncedProvider(_b.value, '1').future),
+      isFalse,
+    );
 
     final all = await c.read(allSyncedCollectionsProvider.future);
     expect(all['1'], {
@@ -107,23 +125,31 @@ void main() {
 
     expect(box.keys, ['${_a.value}:1']);
     expect(
-        (await c.read(
-            collectionSyncConfigProvider(_a.value, '1').future))!['resolution'],
-        '1080p');
+      (await c.read(
+        collectionSyncConfigProvider(_a.value, '1').future,
+      ))!['resolution'],
+      '1080p',
+    );
   });
 
-  test('a legacy entry that recorded its source stays with that source',
-      () async {
-    await box.put('1', {
-      'name': 'Saga',
-      'resolution': '720p',
-      'sourceId': _b.value,
-    });
-    final c = containerBoundTo(_a);
+  test(
+    'a legacy entry that recorded its source stays with that source',
+    () async {
+      await box.put('1', {
+        'name': 'Saga',
+        'resolution': '720p',
+        'sourceId': _b.value,
+      });
+      final c = containerBoundTo(_a);
 
-    expect(await c.read(isCollectionSyncedProvider(_a.value, '1').future),
-        isFalse);
-    expect(
-        await c.read(isCollectionSyncedProvider(_b.value, '1').future), isTrue);
-  });
+      expect(
+        await c.read(isCollectionSyncedProvider(_a.value, '1').future),
+        isFalse,
+      );
+      expect(
+        await c.read(isCollectionSyncedProvider(_b.value, '1').future),
+        isTrue,
+      );
+    },
+  );
 }

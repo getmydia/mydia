@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/scrub_controller.dart';
@@ -31,32 +31,34 @@ void main() {
       onCommit: (target) async => commits.add(target),
       elapsed: () => clock,
     );
-    await tester.pumpWidget(MaterialApp(
-      home: Focus(
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent) reachedParent.add(event.logicalKey);
-          return KeyEventResult.ignored;
-        },
-        child: Column(
-          children: [
-            TvScrubber(
-              scrub: scrub,
-              focusNode: barFocus,
-              onPlayPause: () => playPauses++,
-              builder: (context, focused) => SizedBox(
-                key: ValueKey('bar-focused-$focused'),
-                width: 400,
-                height: 32,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent) reachedParent.add(event.logicalKey);
+            return KeyEventResult.ignored;
+          },
+          child: Column(
+            children: [
+              TvScrubber(
+                scrub: scrub,
+                focusNode: barFocus,
+                onPlayPause: () => playPauses++,
+                builder: (context, focused) => SizedBox(
+                  key: ValueKey('bar-focused-$focused'),
+                  width: 400,
+                  height: 32,
+                ),
               ),
-            ),
-            Focus(
-              focusNode: otherFocus,
-              child: const SizedBox(width: 400, height: 32),
-            ),
-          ],
+              Focus(
+                focusNode: otherFocus,
+                child: const SizedBox(width: 400, height: 32),
+              ),
+            ],
+          ),
         ),
       ),
-    ));
+    );
     barFocus.requestFocus();
     // One pump applies the focus change, the next rebuilds the bar with it.
     await tester.pump();

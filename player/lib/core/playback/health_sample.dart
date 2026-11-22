@@ -38,7 +38,8 @@ class HealthSample {
   final bool interrupted;
 
   @override
-  String toString() => 'HealthSample(at: ${at.inSeconds}s, '
+  String toString() =>
+      'HealthSample(at: ${at.inSeconds}s, '
       'pos: ${position.inSeconds}s, ahead: ${bufferedAhead.inSeconds}s, '
       'buffering: $buffering, playing: $playing, dropped: $droppedFrames, '
       'kbps: $throughputKbps, fault: $fault, interrupted: $interrupted)';

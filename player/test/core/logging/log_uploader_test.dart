@@ -22,7 +22,7 @@ const _meta = LogUploadMeta(
 
 typedef _Request = ({
   Map<String, Object?> meta,
-  List<Map<String, Object?>> lines
+  List<Map<String, Object?>> lines,
 });
 
 class _Harness {
@@ -82,26 +82,29 @@ class _Harness {
 
   void write(int count, {DateTime? at, String message = 'line'}) {
     for (var i = 0; i < count; i++) {
-      store.add(LogRecord(
-        time: at ?? start.add(async.elapsed),
-        level: LogLevel.info,
-        tag: 'Test',
-        message: '$message ${store.records.length}',
-        sessionId: 'sess0001',
-      ));
+      store.add(
+        LogRecord(
+          time: at ?? start.add(async.elapsed),
+          level: LogLevel.info,
+          tag: 'Test',
+          message: '$message ${store.records.length}',
+          sessionId: 'sess0001',
+        ),
+      );
     }
   }
 
-  List<Object?> messages(int request) =>
-      [for (final line in requests[request].lines) line['msg']];
+  List<Object?> messages(int request) => [
+    for (final line in requests[request].lines) line['msg'],
+  ];
 
   /// Every message from a request the relay actually accepted (2xx), in
   /// the order the requests were sent. Used to check nothing the relay
   /// stored was ever sent again in a later request.
   List<Object?> deliveredMessages() => [
-        for (var i = 0; i < requests.length; i++)
-          if (statusesSent[i] >= 200 && statusesSent[i] < 300) ...messages(i),
-      ];
+    for (var i = 0; i < requests.length; i++)
+      if (statusesSent[i] >= 200 && statusesSent[i] < 300) ...messages(i),
+  ];
 }
 
 void main() {
@@ -166,8 +169,7 @@ void main() {
       });
     });
 
-    test(
-        'deactivate() mid-drain stops further requests '
+    test('deactivate() mid-drain stops further requests '
         'and never sends a record written after it', () {
       fakeAsync((async) {
         late final _Harness h;
@@ -197,8 +199,11 @@ void main() {
         async.elapse(const Duration(minutes: 10));
 
         expect(h.uploader.isActive, isFalse);
-        expect(h.requests.length, requestsAtDeactivate,
-            reason: 'deactivate() mid-drain must stop further requests');
+        expect(
+          h.requests.length,
+          requestsAtDeactivate,
+          reason: 'deactivate() mid-drain must stop further requests',
+        );
         final sent = [
           for (var i = 0; i < h.requests.length; i++) ...h.messages(i),
         ];
@@ -210,8 +215,7 @@ void main() {
       });
     });
 
-    test(
-        'reactivating with a reset cursor after a mid-drain deactivate is '
+    test('reactivating with a reset cursor after a mid-drain deactivate is '
         'not overwritten by the stale drain, and skips what was written '
         'while sharing was off', () {
       fakeAsync((async) {
@@ -246,8 +250,11 @@ void main() {
           for (var i = 0; i < h.requests.length; i++) ...h.messages(i),
         ];
         for (final message in sent) {
-          expect(message.toString(), isNot(startsWith('while-off')),
-              reason: 'nothing written while sharing was off may be sent');
+          expect(
+            message.toString(),
+            isNot(startsWith('while-off')),
+            reason: 'nothing written while sharing was off may be sent',
+          );
         }
         expect(sent, contains('after-reactivate 8'));
       });
@@ -287,8 +294,11 @@ void main() {
 
     test('429 waits for Retry-After', () {
       fakeAsync((async) {
-        final h = _Harness(async,
-            statuses: [429, 204], headers: {'retry-after': '300'});
+        final h = _Harness(
+          async,
+          statuses: [429, 204],
+          headers: {'retry-after': '300'},
+        );
         h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(1);
@@ -306,11 +316,7 @@ void main() {
       fakeAsync((async) {
         // Big enough that all 4 lines fit in one read (triggering the
         // 413), and small enough that half that budget only fits 2.
-        final h = _Harness(
-          async,
-          statuses: [413, 204],
-          maxBatchBytes: 200340,
-        );
+        final h = _Harness(async, statuses: [413, 204], maxBatchBytes: 200340);
         h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(4, message: 'x' * 50000);
@@ -339,11 +345,7 @@ void main() {
         // total well under even the shrink floor, so every read at every
         // budget level returns all of them: the batch never becomes a
         // single line on its own, only the floor check can stop the loop.
-        final h = _Harness(
-          async,
-          statuses: [413],
-          maxBatchBytes: 1024 * 1024,
-        );
+        final h = _Harness(async, statuses: [413], maxBatchBytes: 1024 * 1024);
         h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(20);
@@ -362,8 +364,7 @@ void main() {
       });
     });
 
-    test(
-        'a partial acceptance followed by a failure never resends what '
+    test('a partial acceptance followed by a failure never resends what '
         'already landed', () {
       fakeAsync((async) {
         // 6 lines, each just over 20 KB. All 6 add up to well under
@@ -386,14 +387,25 @@ void main() {
         final written = [for (var i = 0; i < 6; i++) '${'x' * 20000} $i'];
 
         async.elapse(const Duration(seconds: 61));
-        expect(h.requests, hasLength(3),
-            reason: '413 shrinks, the shrunk batch is accepted, '
-                'the remainder gets a 429');
-        expect(h.messages(1), written.sublist(0, 3),
-            reason: 'the shrunk batch the relay actually accepted');
-        expect(h.store.savedCursor, const LogCursor('mem', 3),
-            reason: 'the accepted half must be durable even though the '
-                'request as a whole is still in progress');
+        expect(
+          h.requests,
+          hasLength(3),
+          reason:
+              '413 shrinks, the shrunk batch is accepted, '
+              'the remainder gets a 429',
+        );
+        expect(
+          h.messages(1),
+          written.sublist(0, 3),
+          reason: 'the shrunk batch the relay actually accepted',
+        );
+        expect(
+          h.store.savedCursor,
+          const LogCursor('mem', 3),
+          reason:
+              'the accepted half must be durable even though the '
+              'request as a whole is still in progress',
+        );
 
         async.elapse(const Duration(seconds: 60));
         expect(h.requests, hasLength(4));
@@ -409,8 +421,7 @@ void main() {
       });
     });
 
-    test(
-        'a failed retry after a 413 shrink never duplicates a line once a '
+    test('a failed retry after a 413 shrink never duplicates a line once a '
         'later attempt succeeds', () {
       fakeAsync((async) {
         final h = _Harness(
@@ -425,8 +436,11 @@ void main() {
 
         async.elapse(const Duration(seconds: 61));
         expect(h.requests, hasLength(2), reason: '413 then the 503 throws');
-        expect(h.store.savedCursor, const LogCursor('mem', 0),
-            reason: 'nothing was ever accepted, so the cursor must not move');
+        expect(
+          h.store.savedCursor,
+          const LogCursor('mem', 0),
+          reason: 'nothing was ever accepted, so the cursor must not move',
+        );
 
         async.elapse(const Duration(seconds: 60));
         expect(h.requests, hasLength(3));

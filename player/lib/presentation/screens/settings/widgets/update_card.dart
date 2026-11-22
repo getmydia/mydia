@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -41,7 +41,8 @@ class UpdateCard extends ConsumerWidget {
     final state = ref.watch(updateProvider);
     final update = state.availableUpdate;
 
-    final awaitingRestart = state.restartRequired ||
+    final awaitingRestart =
+        state.restartRequired ||
         (update is FlatpakRemoteUpdate && update.installedAwaitingRestart);
 
     if (update == null && !awaitingRestart) {
@@ -209,13 +210,11 @@ class _Progress extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           progress > 0
-              ? context.l10n
-                  .settingsUpdateDownloadingPercent((progress * 100).toInt())
+              ? context.l10n.settingsUpdateDownloadingPercent(
+                  (progress * 100).toInt(),
+                )
               : context.l10n.settingsUpdateDownloading,
-          style: TextStyle(
-            fontSize: 12,
-            color: context.palette.textSecondary,
-          ),
+          style: TextStyle(fontSize: 12, color: context.palette.textSecondary),
         ),
       ],
     );

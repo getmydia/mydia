@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -16,16 +16,19 @@ ItemSummary _entry({
   required DateTime airDate,
   bool playable = false,
   ItemKind kind = ItemKind.episode,
-}) =>
-    calendarEntry(id, airDate,
-        playable: playable, kind: kind, season: 3, episode: 4);
+}) => calendarEntry(
+  id,
+  airDate,
+  playable: playable,
+  kind: kind,
+  season: 3,
+  episode: 4,
+);
 
 Future<void> _pump(WidgetTester tester, ItemSummary entry) {
   return tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
+      overrides: [sourceArtworkProvider.overrideWith((ref, key) async => null)],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -34,7 +37,10 @@ Future<void> _pump(WidgetTester tester, ItemSummary entry) {
             width: 300,
             height: 210,
             child: CalendarCard(
-                entry: entry, today: DateTime(2026, 8, 27), imageHeight: 150),
+              entry: entry,
+              today: DateTime(2026, 8, 27),
+              imageHeight: 150,
+            ),
           ),
         ),
       ),
@@ -54,7 +60,10 @@ Future<List<String>> _tapPlay(
     tester,
     Scaffold(
       body: CalendarCard(
-          entry: entry, today: DateTime(2026, 8, 27), imageHeight: 150),
+        entry: entry,
+        today: DateTime(2026, 8, 27),
+        imageHeight: 150,
+      ),
     ),
     [source],
     size: const Size(1600, 900),
@@ -68,8 +77,9 @@ Future<List<String>> _tapPlay(
       ),
     ],
   );
-  await tester
-      .tap(find.byKey(ValueKey('calendar-play-${entry.ref.externalId}')));
+  await tester.tap(
+    find.byKey(ValueKey('calendar-play-${entry.ref.externalId}')),
+  );
   // The best version is picked after real device detection: poll in real time.
   for (var i = 0; i < 250 && pushed.isEmpty; i++) {
     await tester.runAsync(
@@ -81,10 +91,14 @@ Future<List<String>> _tapPlay(
 }
 
 void main() {
-  testWidgets('play pushes the best version of the fetched item',
-      (tester) async {
-    final entry =
-        _entry(id: '7', airDate: DateTime(2026, 8, 20), playable: true);
+  testWidgets('play pushes the best version of the fetched item', (
+    tester,
+  ) async {
+    final entry = _entry(
+      id: '7',
+      airDate: DateTime(2026, 8, 20),
+      playable: true,
+    );
     final source = ScriptedDetailSource(
       detailOf: (ref) => ItemDetail(
         summary: entry,
@@ -101,10 +115,14 @@ void main() {
     expect(Uri.parse(pushed.single).queryParameters['fileId'], 'hd');
   });
 
-  testWidgets('play falls back to the listed version when the fetch fails',
-      (tester) async {
-    final entry =
-        _entry(id: '8', airDate: DateTime(2026, 8, 20), playable: true);
+  testWidgets('play falls back to the listed version when the fetch fails', (
+    tester,
+  ) async {
+    final entry = _entry(
+      id: '8',
+      airDate: DateTime(2026, 8, 20),
+      playable: true,
+    );
     final source = ScriptedDetailSource(
       detailOf: (ref) => throw StateError('server unreachable'),
     );
@@ -115,10 +133,13 @@ void main() {
     expect(Uri.parse(pushed.single).queryParameters['fileId'], 'file-8');
   });
 
-  testWidgets('a card shows title, numbering and a play control',
-      (tester) async {
-    await _pump(tester,
-        _entry(id: '1', airDate: DateTime(2026, 8, 20), playable: true));
+  testWidgets('a card shows title, numbering and a play control', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _entry(id: '1', airDate: DateTime(2026, 8, 20), playable: true),
+    );
 
     expect(find.text('A Show'), findsOneWidget);
     expect(find.textContaining('S03E04'), findsOneWidget);
@@ -127,15 +148,19 @@ void main() {
   });
 
   testWidgets("today's card is marked new", (tester) async {
-    await _pump(tester,
-        _entry(id: '2', airDate: DateTime(2026, 8, 27), playable: true));
+    await _pump(
+      tester,
+      _entry(id: '2', airDate: DateTime(2026, 8, 27), playable: true),
+    );
     expect(find.byKey(const ValueKey('calendar-new-2')), findsOneWidget);
     expect(find.text('New today'), findsOneWidget);
   });
 
   testWidgets('a card with no artwork still lays out', (tester) async {
-    await _pump(tester,
-        _entry(id: '3', airDate: DateTime(2026, 8, 20), playable: true));
+    await _pump(
+      tester,
+      _entry(id: '3', airDate: DateTime(2026, 8, 20), playable: true),
+    );
     expect(tester.takeException(), isNull);
     expect(find.byType(CalendarArtwork), findsOneWidget);
   });
@@ -152,7 +177,10 @@ void main() {
       tester,
       Scaffold(
         body: CalendarCard(
-            entry: entry, today: DateTime(2026, 8, 27), imageHeight: 150),
+          entry: entry,
+          today: DateTime(2026, 8, 27),
+          imageHeight: 150,
+        ),
       ),
       [ScriptedDetailSource(detailOf: (ref) => throw StateError('offline'))],
       size: const Size(1600, 900),
@@ -181,8 +209,11 @@ void main() {
   }
 
   testWidgets('tapping the body opens detail, not the player', (tester) async {
-    final entry =
-        _entry(id: '9', airDate: DateTime(2026, 8, 20), playable: true);
+    final entry = _entry(
+      id: '9',
+      airDate: DateTime(2026, 8, 20),
+      playable: true,
+    );
 
     final pushed = await tapAndCollect(tester, entry, 'calendar-card-9');
 
@@ -192,8 +223,11 @@ void main() {
   });
 
   testWidgets('tapping play opens the player, not detail', (tester) async {
-    final entry =
-        _entry(id: '10', airDate: DateTime(2026, 8, 20), playable: true);
+    final entry = _entry(
+      id: '10',
+      airDate: DateTime(2026, 8, 20),
+      playable: true,
+    );
 
     final pushed = await tapAndCollect(tester, entry, 'calendar-play-10');
 

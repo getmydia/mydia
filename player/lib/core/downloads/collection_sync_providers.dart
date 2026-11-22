@@ -145,7 +145,8 @@ Future<void> Function({
   required String collectionId,
   required String name,
   required String resolution,
-}) saveCollectionSync(Ref ref) {
+})
+saveCollectionSync(Ref ref) {
   return ({
     required String sourceId,
     required String collectionId,
@@ -174,7 +175,7 @@ Future<void> Function({
 /// `keepAlive` for the same reason as [saveCollectionSync].
 @Riverpod(keepAlive: true)
 Future<void> Function(String sourceId, String collectionId)
-    removeCollectionSync(Ref ref) {
+removeCollectionSync(Ref ref) {
   return (String sourceId, String collectionId) async {
     final box = await ref.read(collectionSyncBoxProvider.future);
     final legacy = ref.read(legacyMydiaSourceIdProvider)?.value;

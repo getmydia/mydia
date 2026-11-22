@@ -23,14 +23,16 @@ void main() {
   test('a watched write refetches the live item and colds the rest', () async {
     final log = InMemoryFetchLog();
     final source = _CountingSource();
-    final c = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-      fetchLogProvider.overrideWithValue(log),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        fetchLogProvider.overrideWithValue(log),
+      ],
+    );
     addTearDown(c.dispose);
 
     final live = fakeMovie(1).ref;
-    c.listen(sourceItemProvider(live), (_, __) {});
+    c.listen(sourceItemProvider(live), (_, _) {});
     await c.read(sourceItemProvider(live).future);
     await pumpEventQueue();
 
@@ -42,16 +44,21 @@ void main() {
     await pumpEventQueue();
 
     expect(source.itemCalls, before + 1, reason: 'the live item refetched');
-    expect(log.lastFetchedAt(dormant), isNull,
-        reason: 'the dormant item mounts cold next time');
+    expect(
+      log.lastFetchedAt(dormant),
+      isNull,
+      reason: 'the dormant item mounts cold next time',
+    );
   });
 
   test('a detail write goes through the same rule', () async {
     final log = InMemoryFetchLog();
-    final c = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(_CountingSource()),
-      fetchLogProvider.overrideWithValue(log),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(_CountingSource()),
+        fetchLogProvider.overrideWithValue(log),
+      ],
+    );
     addTearDown(c.dispose);
     final key = SourceKeys.continueWatching(fakeSourceId);
     await log.record(key, DateTime.now());

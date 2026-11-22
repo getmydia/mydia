@@ -53,22 +53,19 @@ class P2pPeerFilesTransport implements PeerFilesTransport {
   Future<FlutterPeerFilesResponse> sendPeerFiles(
     String peer,
     FlutterPeerFilesRequest request,
-  ) =>
-      _p2pService.sendPeerFiles(peer, request);
+  ) => _p2pService.sendPeerFiles(peer, request);
 
   @override
   Future<void> respondToPeerFiles(
     String requestId,
     FlutterPeerFilesResponse response,
-  ) =>
-      _p2pService.respondToPeerFiles(requestId, response);
+  ) => _p2pService.respondToPeerFiles(requestId, response);
 
   @override
   Future<void> respondPeerFileGrant(
     String requestId,
     FlutterPeerFileGrantAnswer answer,
-  ) =>
-      _p2pService.respondPeerFileGrant(requestId, answer);
+  ) => _p2pService.respondPeerFileGrant(requestId, answer);
 
   @override
   Future<void> setPeerFilesMembers(List<String> nodeIds) =>
@@ -90,13 +87,12 @@ class P2pPeerFilesTransport implements PeerFilesTransport {
     int? rangeStart,
     int? rangeEnd,
     String? authToken,
-  }) =>
-      _p2pService.openRangeStream(
-        peer: peer,
-        sessionId: sessionId,
-        path: path,
-        rangeStart: rangeStart,
-        rangeEnd: rangeEnd,
-        authToken: authToken,
-      );
+  }) => _p2pService.openRangeStream(
+    peer: peer,
+    sessionId: sessionId,
+    path: path,
+    rangeStart: rangeStart,
+    rangeEnd: rangeEnd,
+    authToken: authToken,
+  );
 }

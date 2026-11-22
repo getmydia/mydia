@@ -6,10 +6,7 @@ import 'package:player/core/auth/auth_storage_native.dart';
 /// A backend whose operations fail on demand, standing in for a keyring that
 /// is absent, locked, or unreachable across D-Bus.
 class _FailingBackend implements SecretBackend {
-  _FailingBackend({
-    this.failWrite = false,
-    this.failDelete = false,
-  });
+  _FailingBackend({this.failWrite = false, this.failDelete = false});
 
   final bool failWrite;
   final bool failDelete;
@@ -76,7 +73,7 @@ class _CountingBackend implements SecretBackend {
 /// backend read happened and what it would have found.
 class _BlockingBackend implements SecretBackend {
   _BlockingBackend(this.pending, Map<String, String> initial)
-      : _data = {...initial};
+    : _data = {...initial};
   final Completer<String?> pending;
   final Map<String, String> _data;
   int readCount = 0;
@@ -113,8 +110,9 @@ void main() {
     });
 
     test('reports degraded when a write fails', () async {
-      final storage =
-          NativeAuthStorage(backend: _FailingBackend(failWrite: true));
+      final storage = NativeAuthStorage(
+        backend: _FailingBackend(failWrite: true),
+      );
 
       await storage.write('token', 'abc');
 
@@ -122,8 +120,9 @@ void main() {
     });
 
     test('keeps the value readable in-session after a failed write', () async {
-      final storage =
-          NativeAuthStorage(backend: _FailingBackend(failWrite: true));
+      final storage = NativeAuthStorage(
+        backend: _FailingBackend(failWrite: true),
+      );
 
       await storage.write('token', 'abc');
 
@@ -155,8 +154,9 @@ void main() {
     });
 
     test('a delete clears the in-memory overlay', () async {
-      final storage =
-          NativeAuthStorage(backend: _FailingBackend(failWrite: true));
+      final storage = NativeAuthStorage(
+        backend: _FailingBackend(failWrite: true),
+      );
 
       await storage.write('token', 'abc');
       await storage.delete('token');
@@ -167,8 +167,9 @@ void main() {
     });
 
     test('a failed delete does not report degraded', () async {
-      final storage =
-          NativeAuthStorage(backend: _FailingBackend(failDelete: true));
+      final storage = NativeAuthStorage(
+        backend: _FailingBackend(failDelete: true),
+      );
 
       await storage.delete('missing-key');
 
@@ -201,8 +202,10 @@ void main() {
       final backend = _CountingBackend({'auth_token': 't1'});
       final storage = NativeAuthStorage(backend: backend);
 
-      final results = await Future.wait(
-          [storage.read('auth_token'), storage.read('auth_token')]);
+      final results = await Future.wait([
+        storage.read('auth_token'),
+        storage.read('auth_token'),
+      ]);
       await storage.read('auth_token');
 
       expect(results, ['t1', 't1']);
@@ -231,7 +234,9 @@ void main() {
       await NativeAuthStorage(backend: backend).read('auth_token');
       await NativeAuthStorage(backend: backend).write('auth_token', 'new');
       expect(
-          await NativeAuthStorage(backend: backend).read('auth_token'), 'new');
+        await NativeAuthStorage(backend: backend).read('auth_token'),
+        'new',
+      );
     });
 
     test('deleteAll drops the cache', () async {
@@ -250,8 +255,7 @@ void main() {
       expect(await storage.read('auth_token'), 't1');
     });
 
-    test(
-        'a delete that lands while a read is in flight is not overwritten '
+    test('a delete that lands while a read is in flight is not overwritten '
         'by that read', () async {
       final pending = Completer<String?>();
       final backend = _BlockingBackend(pending, {'auth_token': 't1'});
@@ -274,8 +278,7 @@ void main() {
       expect(backend.readCount, 1);
     });
 
-    test(
-        'a deleteAll that lands while a read is in flight is not '
+    test('a deleteAll that lands while a read is in flight is not '
         'overwritten by that read', () async {
       final pending = Completer<String?>();
       final backend = _BlockingBackend(pending, {'auth_token': 't1'});
@@ -301,8 +304,7 @@ void main() {
       expect(backend.readCount, 2);
     });
 
-    test(
-        'a read started after deleteAll, while the pre-deletion backend read '
+    test('a read started after deleteAll, while the pre-deletion backend read '
         'is still pending, does not join that stale future', () async {
       final pending = Completer<String?>();
       final backend = _BlockingBackend(pending, {'auth_token': 't1'});
@@ -323,14 +325,17 @@ void main() {
       pending.complete('t1');
 
       expect(await firstRead, 't1');
-      expect(await secondRead, isNull,
-          reason: 'the backend was cleared by deleteAll; a read started '
-              'after it must not surface the pre-deletion value');
+      expect(
+        await secondRead,
+        isNull,
+        reason:
+            'the backend was cleared by deleteAll; a read started '
+            'after it must not surface the pre-deletion value',
+      );
       expect(backend.readCount, 2);
     });
 
-    test(
-        'a read started after delete, while the pre-deletion backend read '
+    test('a read started after delete, while the pre-deletion backend read '
         'is still pending, does not join that stale future', () async {
       final pending = Completer<String?>();
       final backend = _BlockingBackend(pending, {'auth_token': 't1'});
@@ -345,9 +350,13 @@ void main() {
       pending.complete('t1');
 
       expect(await firstRead, 't1');
-      expect(await secondRead, isNull,
-          reason: 'the key was deleted; a read started afterward must not '
-              'surface the pre-deletion value');
+      expect(
+        await secondRead,
+        isNull,
+        reason:
+            'the key was deleted; a read started afterward must not '
+            'surface the pre-deletion value',
+      );
       // The tombstoned read cache already answers the second read without a
       // second backend hit; this pins that down so a future change to the
       // cache-check ordering can't quietly start relying on `_inflight`

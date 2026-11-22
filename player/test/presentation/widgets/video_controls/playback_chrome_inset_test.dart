@@ -24,7 +24,7 @@
 // consuming left/right/bottom, an easy thing to miss since only one edge is
 // wrong.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:media_kit/media_kit.dart';
@@ -76,42 +76,35 @@ Widget _host(
   Widget topBarSlot, {
   required WindowChromeInsets insets,
   required double paddingTop,
-}) =>
-    MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Builder(
-        builder: (context) => MediaQuery(
-          // `MediaQuery.of(context).copyWith`, not a bare `MediaQueryData(...)`:
-          // the latter defaults every other field, including `size`, to its
-          // class default (`Size.zero`), which would keep the macOS group's
-          // resized `tester.view.physicalSize` from ever reaching
-          // `Breakpoints.isDesktop` -- see `chromeHost` below, which has the
-          // same fix for the same reason.
-          data: MediaQuery.of(context)
-              .copyWith(padding: EdgeInsets.only(top: paddingTop)),
-          child: WindowChromeInsets.scope(
-            insets: insets,
-            child: Scaffold(
-              body: Stack(
-                children: [
-                  const Positioned.fill(
-                    child: ColoredBox(
-                      key: _videoSurfaceKey,
-                      color: Colors.black,
-                    ),
-                  ),
-                  SafeArea(
-                    top: false,
-                    child: Stack(children: [topBarSlot]),
-                  ),
-                ],
+}) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Builder(
+    builder: (context) => MediaQuery(
+      // `MediaQuery.of(context).copyWith`, not a bare `MediaQueryData(...)`:
+      // the latter defaults every other field, including `size`, to its
+      // class default (`Size.zero`), which would keep the macOS group's
+      // resized `tester.view.physicalSize` from ever reaching
+      // `Breakpoints.isDesktop` -- see `chromeHost` below, which has the
+      // same fix for the same reason.
+      data: MediaQuery.of(context)
+          .copyWith(padding: EdgeInsets.only(top: paddingTop)),
+      child: WindowChromeInsets.scope(
+        insets: insets,
+        child: Scaffold(
+          body: Stack(
+            children: [
+              const Positioned.fill(
+                child: ColoredBox(key: _videoSurfaceKey, color: Colors.black),
               ),
-            ),
+              SafeArea(top: false, child: Stack(children: [topBarSlot])),
+            ],
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
   group('PlayerTopBarSlot inside the macOS title bar band', () {
@@ -122,8 +115,7 @@ void main() {
     const width = 1280.0;
     const height = 800.0;
 
-    testWidgets(
-        'the back pill clears the traffic lights and sits level '
+    testWidgets('the back pill clears the traffic lights and sits level '
         'with them', (tester) async {
       tester.view.physicalSize = const Size(width, height);
       tester.view.devicePixelRatio = 1.0;
@@ -137,8 +129,9 @@ void main() {
         ),
       );
 
-      final gutter =
-          WindowTitleRow.endGutter(tester.element(find.byType(ChromeTopBar)));
+      final gutter = WindowTitleRow.endGutter(
+        tester.element(find.byType(ChromeTopBar)),
+      );
       final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
 
       expect(back.left, greaterThanOrEqualTo(kMacTrafficLightsWidth + gutter));
@@ -147,8 +140,9 @@ void main() {
       expect((back.top + back.bottom) / 2, closeTo(20, 1));
     });
 
-    testWidgets('the cast pill sits endGutter from the trailing edge',
-        (tester) async {
+    testWidgets('the cast pill sits endGutter from the trailing edge', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(width, height);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -166,8 +160,9 @@ void main() {
         ),
       );
 
-      final gutter =
-          WindowTitleRow.endGutter(tester.element(find.byType(ChromeTopBar)));
+      final gutter = WindowTitleRow.endGutter(
+        tester.element(find.byType(ChromeTopBar)),
+      );
       final cast = tester.getRect(find.byKey(ChromeTopBar.castKey));
 
       expect(cast.right, closeTo(width - gutter, 0.5));
@@ -176,37 +171,40 @@ void main() {
 
   group('PlayerTopBarSlot with no window chrome to clear', () {
     testWidgets(
-        "today's mobile position is unchanged: padding.top + 16, unaffected "
-        'by the chrome no longer consuming padding.top itself', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          PlayerTopBarSlot(child: ChromeTopBar(onBack: () {})),
-          insets: WindowChromeInsets.zero,
-          paddingTop: 24,
-        ),
-      );
+      "today's mobile position is unchanged: padding.top + 16, unaffected "
+      'by the chrome no longer consuming padding.top itself',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            PlayerTopBarSlot(child: ChromeTopBar(onBack: () {})),
+            insets: WindowChromeInsets.zero,
+            paddingTop: 24,
+          ),
+        );
 
-      final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
-      expect(back.top, 24 + 16);
-    });
+        final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
+        expect(back.top, 24 + 16);
+      },
+    );
 
     testWidgets(
-        'CONTROL: the stand-in surface stays full-bleed within this shape, '
-        'because it sits outside the SafeArea', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          PlayerTopBarSlot(child: ChromeTopBar(onBack: () {})),
-          insets: WindowChromeInsets.zero,
-          paddingTop: 24,
-        ),
-      );
+      'CONTROL: the stand-in surface stays full-bleed within this shape, '
+      'because it sits outside the SafeArea',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            PlayerTopBarSlot(child: ChromeTopBar(onBack: () {})),
+            insets: WindowChromeInsets.zero,
+            paddingTop: 24,
+          ),
+        );
 
-      expect(tester.getRect(find.byKey(_videoSurfaceKey)).top, 0);
-    });
+        expect(tester.getRect(find.byKey(_videoSurfaceKey)).top, 0);
+      },
+    );
   });
 
-  group(
-      'PlayerTopBarSlot keeps the loading/error cast pill on the playing '
+  group('PlayerTopBarSlot keeps the loading/error cast pill on the playing '
       "state's spot", () {
     Future<Rect> castRectFor(
       WidgetTester tester, {
@@ -286,92 +284,105 @@ void main() {
     });
   });
 
-  group('PlaybackChrome: the rest of the chrome keeps its old SafeArea insets',
-      () {
-    late Player player;
+  group(
+    'PlaybackChrome: the rest of the chrome keeps its old SafeArea insets',
+    () {
+      late Player player;
 
-    setUp(() {
-      player = Player(platformPlayer: _FakePlatformPlayer());
-    });
+      setUp(() {
+        player = Player(platformPlayer: _FakePlatformPlayer());
+      });
 
-    tearDown(() => player.dispose());
+      tearDown(() => player.dispose());
 
-    // A nonzero bottom is load-bearing: the content and panel assertions
-    // below check `rect.bottom` against `height - padding.bottom`, which a
-    // zero bottom cannot tell apart from a `PlaybackChrome` that dropped the
-    // bottom `SafeArea` inset entirely -- both give the same rect.
-    const padding = EdgeInsets.fromLTRB(44, 24, 44, 20);
-    const width = 1200.0;
-    const height = 700.0;
+      // A nonzero bottom is load-bearing: the content and panel assertions
+      // below check `rect.bottom` against `height - padding.bottom`, which a
+      // zero bottom cannot tell apart from a `PlaybackChrome` that dropped the
+      // bottom `SafeArea` inset entirely -- both give the same rect.
+      const padding = EdgeInsets.fromLTRB(44, 24, 44, 20);
+      const width = 1200.0;
+      const height = 700.0;
 
-    // `MediaQuery.of(context).copyWith(padding: padding)`, not a bare
-    // `MediaQueryData(padding: padding)`: the latter defaults every other
-    // field, including `size`, to its class default (`Size.zero`), which
-    // would make `PanelMetrics.resolve`'s width-driven `bottomOffset` branch
-    // in `PlaybackChrome.build` resolve against 0 instead of the resized
-    // view. `copyWith` keeps the real, resized `size` and overrides only
-    // `padding`.
-    Widget chromeHost() => MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Builder(
-            builder: (context) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(padding: padding),
-              child: Scaffold(
-                body: PlaybackChrome(
-                  player: player,
-                  timeline: StreamTimeline.zero,
-                  onSeekToReal: (_) async {},
-                ),
+      // `MediaQuery.of(context).copyWith(padding: padding)`, not a bare
+      // `MediaQueryData(padding: padding)`: the latter defaults every other
+      // field, including `size`, to its class default (`Size.zero`), which
+      // would make `PanelMetrics.resolve`'s width-driven `bottomOffset` branch
+      // in `PlaybackChrome.build` resolve against 0 instead of the resized
+      // view. `copyWith` keeps the real, resized `size` and overrides only
+      // `padding`.
+      Widget chromeHost() => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(padding: padding),
+            child: Scaffold(
+              body: PlaybackChrome(
+                player: player,
+                timeline: StreamTimeline.zero,
+                onSeekToReal: (_) async {},
               ),
             ),
           ),
-        );
+        ),
+      );
 
-    Future<void> pump(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(width, height);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(chromeHost());
-      await tester.pumpAndSettle();
-    }
+      Future<void> pump(WidgetTester tester) async {
+        tester.view.physicalSize = const Size(width, height);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(chromeHost());
+        await tester.pumpAndSettle();
+      }
 
-    testWidgets(
+      testWidgets(
         'the safe-area content layer keeps the box a single all-sides '
         'SafeArea always gave it, consumed on every side and not just '
-        'left/right/bottom', (tester) async {
-      await pump(tester);
+        'left/right/bottom',
+        (tester) async {
+          await pump(tester);
 
-      final content = tester.getRect(find.byKey(PlaybackChrome.safeContentKey));
-      expect(content.left, padding.left);
-      expect(content.top, padding.top);
-      expect(content.right, width - padding.right);
-      expect(content.bottom, height - padding.bottom);
-    });
+          final content = tester.getRect(
+            find.byKey(PlaybackChrome.safeContentKey),
+          );
+          expect(content.left, padding.left);
+          expect(content.top, padding.top);
+          expect(content.right, width - padding.right);
+          expect(content.bottom, height - padding.bottom);
+        },
+      );
 
-    testWidgets(
+      testWidgets(
         'the bottom transport panel keeps its old rect, unaffected by the '
-        'top bar now sitting outside the SafeArea', (tester) async {
-      await pump(tester);
+        'top bar now sitting outside the SafeArea',
+        (tester) async {
+          await pump(tester);
 
-      final panel = tester.getRect(find.byType(ChromeSubtitleLift));
-      // Desktop-tier width (>= 900), matching the resized view above, so
-      // `bottomOffset` is 48 -- see `PanelMetrics.resolve`.
-      final metrics = PanelMetrics.resolve(width: width, touchPrimary: false);
+          final panel = tester.getRect(find.byType(ChromeSubtitleLift));
+          // Desktop-tier width (>= 900), matching the resized view above, so
+          // `bottomOffset` is 48 -- see `PanelMetrics.resolve`.
+          final metrics = PanelMetrics.resolve(
+            width: width,
+            touchPrimary: false,
+          );
 
-      expect(panel.left, padding.left);
-      expect(panel.right, width - padding.right);
-      expect(panel.bottom, height - padding.bottom - metrics.bottomOffset);
-    });
+          expect(panel.left, padding.left);
+          expect(panel.right, width - padding.right);
+          expect(panel.bottom, height - padding.bottom - metrics.bottomOffset);
+        },
+      );
 
-    testWidgets(
+      testWidgets(
         'the top bar still clears the same left inset the old SafeArea gave '
         "it, proving PlayerTopBarSlot's own left/right padding compensation "
-        'end to end against the real widget', (tester) async {
-      await pump(tester);
+        'end to end against the real widget',
+        (tester) async {
+          await pump(tester);
 
-      final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
-      expect(back.left, padding.left + 16);
-    });
-  });
+          final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
+          expect(back.left, padding.left + 16);
+        },
+      );
+    },
+  );
 }

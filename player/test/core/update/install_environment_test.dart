@@ -151,10 +151,7 @@ void main() {
       // Guards the wiring between the lookups and the decision. Only the
       // running platform's answer is observable, which is why the decision
       // itself is tested purely above.
-      expect(
-        InstallEnvironment.detect(),
-        isIn(InstallEnvironment.values),
-      );
+      expect(InstallEnvironment.detect(), isIn(InstallEnvironment.values));
     });
   });
 }

@@ -1,6 +1,6 @@
 import 'dart:ui' show lerpDouble;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/depth_tokens.dart';
 import '../focus_highlight.dart';
@@ -169,12 +169,12 @@ class _ControlButtonState extends State<ControlButton> {
                           switchOutCurve: Curves.linear,
                           transitionBuilder: (child, animation) =>
                               ScaleTransition(
-                            scale: animation,
-                            child: FadeTransition(
-                              opacity: animation,
-                              child: child,
-                            ),
-                          ),
+                                scale: animation,
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              ),
                           // Keyed on the glyph, so a change of icon — and only
                           // a change of icon — triggers the cross-fade.
                           child: KeyedSubtree(
@@ -192,15 +192,17 @@ class _ControlButtonState extends State<ControlButton> {
     );
 
     final Widget button = MouseRegion(
-      cursor:
-          _interactive ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: _interactive
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: _interactive ? (_) => setState(() => _pressed = true) : null,
-        onTapCancel:
-            _interactive ? () => setState(() => _pressed = false) : null,
+        onTapCancel: _interactive
+            ? () => setState(() => _pressed = false)
+            : null,
         onTap: _interactive
             ? () {
                 setState(() => _pressed = false);

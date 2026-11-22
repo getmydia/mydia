@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cache/query_key.dart';
@@ -104,7 +104,8 @@ class BrowseScaffold extends ConsumerWidget {
     return WindowChromeInsets.removeBand(
       child: Builder(
         builder: (context) {
-          final barHeight = WindowTitleRow.heightOf(context) +
+          final barHeight =
+              WindowTitleRow.heightOf(context) +
               (secondRow == null ? 0.0 : secondRowHeight);
           final chromeTop = freshnessTopInset(context, appBarHeight: barHeight);
           final scrollTopPadding = chromeTop + 8;
@@ -143,10 +144,7 @@ class BrowseScaffold extends ConsumerWidget {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(
-    BuildContext context,
-    double barHeight,
-  ) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, double barHeight) {
     final palette = context.palette;
     // The hamburger opens the phone drawer, which only exists below the
     // rail breakpoint.
@@ -181,12 +179,12 @@ class BrowseScaffold extends ConsumerWidget {
                       tooltip: context.l10n.commonBack,
                     )
                   : (isDesktop
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.menu_rounded),
-                          onPressed: () => AppShell.openNavigation(context),
-                          tooltip: context.l10n.commonMenu,
-                        )),
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.menu_rounded),
+                            onPressed: () => AppShell.openNavigation(context),
+                            tooltip: context.l10n.commonMenu,
+                          )),
               // The label ellipsises: this bar uses `headlineSmall` to match
               // LibraryScreen, which is larger than the `titleLarge` the old
               // mobile bars used. "Continue Watching" at that size overflows
@@ -204,11 +202,11 @@ class BrowseScaffold extends ConsumerWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.3,
-                                ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.3,
+                            ),
                       ),
                     ),
                   ],
