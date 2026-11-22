@@ -57,6 +57,8 @@ defmodule Mydia.Metadata.ImageUrl do
   def image_url(nil, _size), do: nil
   def image_url("", _size), do: nil
   def image_url("http" <> _ = url, _size), do: url
+  # Hosted posters are served by this app as-is; they have no TMDB sizes.
+  def image_url("/generated/" <> _ = path, _size), do: path
 
   def image_url(path, size) do
     # Ensure leading slash for TMDB relative paths

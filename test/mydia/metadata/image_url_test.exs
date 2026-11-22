@@ -3,6 +3,14 @@ defmodule Mydia.Metadata.ImageUrlTest do
 
   alias Mydia.Metadata.ImageUrl
 
+  test "a hosted poster path passes through untouched" do
+    assert ImageUrl.poster_url("/generated/posters/abc-0123abcd.jpg") ==
+             "/generated/posters/abc-0123abcd.jpg"
+
+    assert ImageUrl.poster_url("/generated/posters/abc-0123abcd.jpg", "w342") ==
+             "/generated/posters/abc-0123abcd.jpg"
+  end
+
   describe "backdrop_url/1" do
     # original is commonly 3840x2160, about 33 MB decoded. Every consumer
     # shows it blurred, dimmed or at most full-width, so w1280 is enough and

@@ -32,6 +32,7 @@ defmodule Mydia.Media.MediaItem do
           category_override: boolean(),
           download_audio_language: String.t() | nil,
           seasons_refreshed_at: DateTime.t() | nil,
+          poster_override: String.t() | nil,
           last_upgrade_check_at: DateTime.t() | nil,
           last_language_check_at: DateTime.t() | nil,
           quality_profile: Mydia.Settings.QualityProfile.t() | Ecto.Association.NotLoaded.t(),
@@ -94,6 +95,10 @@ defmodule Mydia.Media.MediaItem do
     # should_skip_season_refresh?/1, which returns false on a nil timestamp,
     # unable to throttle anything.
     field :seasons_refreshed_at, :utc_datetime
+    # User-chosen poster path (hosted `/generated/posters/...` or a provider
+    # path). Written only through poster_override_changeset/2, never cast by
+    # changeset/2, so a metadata refresh can never clear it.
+    field :poster_override, :string
     # Set programmatically by the upgrade sweep; never cast from user input.
     field :last_upgrade_check_at, :utc_datetime
     # Set programmatically by the audio-language scan in Mydia.Upgrades; never
@@ -214,6 +219,14 @@ defmodule Mydia.Media.MediaItem do
         [download_audio_language: "is not a known language code"]
       end
     end)
+  end
+
+  @doc """
+  Changeset that sets or clears the user-chosen poster. Casts only
+  `:poster_override`.
+  """
+  def poster_override_changeset(media_item, attrs) do
+    cast(media_item, attrs, [:poster_override])
   end
 
   @doc """
