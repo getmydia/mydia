@@ -47,7 +47,7 @@
 - [ ] **Step 2:** In `./dev player android shell`, run `cd player && flutter pub get && flutter build apk --debug`. Expected: FAIL. Record the exact Gradle error and the store path it names in the commit message.
 - [ ] **Step 3:** Fix it in the shell hook. Preferred order, stop at the first that works: (a) a Gradle/Flutter setting that relocates the included build's project cache (`--project-cache-dir` via `GRADLE_OPTS`/`gradle.properties` if Gradle 9 honours it for included builds); (b) the shell hook copies `$FLUTTER_ROOT/packages/flutter_tools/gradle` into a writable cache dir keyed on the Flutter store path and points `flutter.sdk`/the plugin loader at it; (c) a writable full SDK copy (reflink/`cp -r` once per store path into `$XDG_CACHE_HOME/mydia/flutter-<hash>`) exported as `FLUTTER_ROOT` and first on `PATH`. Comment the hook with the Gradle error it prevents. If none works, stop and report to the user (spec: PR 1 does not ship a broken Android build).
 - [ ] **Step 4:** Re-run step 2's command. Expected: `Built build/app/outputs/flutter-apk/app-debug.apk`.
-- [ ] **Step 5:** Run `GRADLE_USER_HOME=$(mktemp -d) ./dev player android build`. Expected: release APK at `player/build/app/outputs/flutter-apk/app-release.apk`, and `./scripts/check-apk-abis.sh player` passes.
+- [ ] **Step 5:** Run `GRADLE_USER_HOME=$(mktemp -d) ./dev player android build`. Expected: release APK at `player/build/app/outputs/flutter-apk/app-release.apk`, and `./scripts/check-apk-abis.sh player/build/app/outputs/flutter-apk/app-release.apk` passes.
 - [ ] **Step 6:** Commit `build(player): Flutter 3.50.1 on Gradle 9 from the Nix-store SDK`.
 
 ### Task 2: Android toolchain syntax for AGP 9
