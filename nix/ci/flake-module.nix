@@ -7,6 +7,8 @@
 #                                        builds, NIFs, plugin wasm), built
 #                                        with `nix build .#ciInternal.<name>`
 #   legacyPackages.<system>.ciRustAttrs  list of Rust check attribute names
+#   legacyPackages.<system>.ciAndroid    Build / Android's dev shell and
+#                                        stamp (nix/ci/android.nix)
 #
 # The per-check files set the perSystem options `ciChecks`, `ciInternal` and
 # `ciRustAttrs`, which merge across modules (legacyPackages itself does not).
@@ -19,7 +21,7 @@
 { inputs, lib, flake-parts-lib, ... }:
 
 {
-  imports = [ ./rust.nix ./mix-deps.nix ./elixir.nix ./tests.nix ./relay.nix ./guards.nix ./player.nix ];
+  imports = [ ./rust.nix ./mix-deps.nix ./elixir.nix ./tests.nix ./relay.nix ./guards.nix ./player.nix ./android.nix ];
 
   options.perSystem = flake-parts-lib.mkPerSystemOption {
     options = {
@@ -32,6 +34,11 @@
         type = lib.types.lazyAttrsOf lib.types.package;
         default = { };
         description = "Internal CI derivations, exposed as legacyPackages.ciInternal.";
+      };
+      ciAndroid = lib.mkOption {
+        type = lib.types.lazyAttrsOf lib.types.package;
+        default = { };
+        description = "Build / Android's dev shell and stamp (nix/ci/android.nix), exposed as legacyPackages.ciAndroid.";
       };
       ciRustAttrs = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -73,7 +80,7 @@
       checks = lib.mkIf pkgs.stdenv.hostPlatform.isLinux config.ciChecks;
 
       legacyPackages = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
-        inherit (config) ciInternal ciRustAttrs;
+        inherit (config) ciInternal ciRustAttrs ciAndroid;
       };
 
       # The shell of the CI jobs that stay outside the sandbox: `Lint /

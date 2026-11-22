@@ -9,14 +9,21 @@
 # Output (stdout, one compact line):
 #
 #   {"inputs":[{"name","attr","group"}...],"checks":[{"name","attr","group"}...],
-#    "nixos":[{"name","attr","group"}...],"all":[{"name","out"}...]}
+#    "nixos":[{"name","attr","group"}...],"android":true|false,
+#    "all":[{"name","out"}...]}
 #
 # `attr` is what the workflow passes to `nix build .#<attr>`.
 #
 # all: every check and every ciInternal attribute (aliases included), cached
-#   or not, with its output path ("out", or the first output), for the
-#   master-only pins job, which refreshes the `master-<name>` pins without
-#   evaluating again.
+#   or not, with its output path ("out", or the first output), plus
+#   ciAndroid.stamp as `android-stamp`, for the master-only pins job, which
+#   refreshes the `master-<name>` pins without evaluating again.
+#   ciAndroid.shell is left out on purpose: its closure holds the unfree
+#   Android SDK, which must never be pushed (nix/ci/android.nix).
+#
+# android: true when the cache lacks `legacyPackages.<system>.ciAndroid.stamp`,
+#   the marker Build / Android pushes once the APK built from exactly these
+#   inputs (nix/ci/android.nix). False skips the job.
 #
 # checks: every `checks.<system>.*` attribute whose cacheStatus, from
 #   `nix-eval-jobs --check-cache-status`, is not "cached". nix-eval-jobs
@@ -85,10 +92,12 @@ run_eval_jobs() {
 
 run_eval_jobs "$tmp/checks.jsonl" "checks.$system" --check-cache-status
 run_eval_jobs "$tmp/internal.jsonl" "legacyPackages.$system.ciInternal"
+run_eval_jobs "$tmp/android.jsonl" "legacyPackages.$system.ciAndroid" --check-cache-status
 
 jq -c -n --arg system "$system" \
   --slurpfile checks "$tmp/checks.jsonl" \
-  --slurpfile internal "$tmp/internal.jsonl" '
+  --slurpfile internal "$tmp/internal.jsonl" \
+  --slurpfile android "$tmp/android.jsonl" '
   def group:
     if test("^test-sqlite-") then "sqlite"
     elif test("^test-postgres-") then "postgres"
@@ -101,7 +110,9 @@ jq -c -n --arg system "$system" \
 
   def out_path: .outputs.out // ((.outputs // {}) | to_entries | first | .value?);
 
-  ($checks | map(select(.cacheStatus != "cached"))) as $uncached
+  ($android | map(select(.attr == "stamp")) | first) as $stamp
+  | if $stamp == null then error("legacyPackages.\($system).ciAndroid has no stamp") else . end
+  | ($checks | map(select(.cacheStatus != "cached"))) as $uncached
   | ($internal
       | map(select(.drvPath))
       | group_by(.drvPath)
@@ -120,7 +131,8 @@ jq -c -n --arg system "$system" \
       inputs: ($inputs | map({name: ., attr: "ciInternal.\(.)", group: group})),
       checks: ($built | map(select(.group != "nixos"))),
       nixos: ($built | map(select(.group == "nixos"))),
-      all: ($checks + $internal
+      android: ($stamp.cacheStatus != "cached"),
+      all: ($checks + $internal + [$stamp | .attr = "android-stamp"]
               | map({name: .attr, out: out_path} | select(.out))
               | sort_by(.name))
     }'

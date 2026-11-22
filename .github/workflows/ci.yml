@@ -11,6 +11,8 @@ name: CI
 #                 master pushes, workflow_dispatch and Dependabot PRs only
 #   Nix / Checks  the aggregator of plan, inputs and checks
 #   pins          master only: refresh the master-<name> pin of every output
+#   Build / Android  outside the sandbox; runs when the plan finds no
+#                 ciAndroid.stamp for this run's Android inputs
 #
 # A run where nothing changed what the checks read plans two empty matrices,
 # skips both build jobs and finishes in the time it takes to evaluate. There
@@ -18,7 +20,8 @@ name: CI
 #
 # Four jobs stay outside the sandbox: Guards (yq over this file), Lint /
 # Ratchet (reads git history), Rust / SMB integration (needs a root smbd)
-# and Build / Android (Gradle has no lockfile Nix could fetch from). The
+# and Build / Android (Gradle has no lockfile Nix could fetch from; the plan
+# still decides whether it runs, through nix/ci/android.nix's stamp). The
 # required checks Test, Test / PostgreSQL, Test / E2E Browser, Test / Player,
 # Test / Player E2E, Build / Web, Build / Linux and Check / Web icons sit on
 # aggregators at the end; the player ones gate on the player-* checks
@@ -73,7 +76,7 @@ jobs:
       # The required contexts in the Master ruleset must never conclude
       # `skipped` (.github/ci-flakes.md, "Why the list was short"). Each lives on
       # an aggregator whose only job-level condition is always(). Build /
-      # Android is a plain job with no `needs`, so nothing can skip it.
+      # Android is not required: the plan skips it when its stamp is cached.
       - name: Guard the required-check aggregators
         run: |
           set -euo pipefail
@@ -97,6 +100,7 @@ jobs:
       inputs: ${{ steps.plan.outputs.inputs }}
       checks: ${{ steps.plan.outputs.checks }}
       nixos: ${{ steps.plan.outputs.nixos }}
+      android: ${{ steps.plan.outputs.android }}
       all: ${{ steps.plan.outputs.all }}
     steps:
       - name: Checkout
@@ -129,6 +133,7 @@ jobs:
             echo "inputs=$(jq -c .inputs "$plan")"
             echo "checks=$(jq -c .checks "$plan")"
             echo "nixos=$(jq -c .nixos "$plan")"
+            echo "android=$(jq -c .android "$plan")"
             echo "all=$(jq -c .all "$plan")"
           } >> "$GITHUB_OUTPUT"
 
@@ -140,6 +145,11 @@ jobs:
               nixos_note="uncached, not built on non-Dependabot pull requests"
             fi
             echo "$(jq '.inputs | length' "$plan") inputs and $(jq '.checks | length' "$plan") checks to build, $(jq '.nixos | length' "$plan") NixOS VM tests (non-blocking) $nixos_note; everything else is cached."
+            if [ "$(jq .android "$plan")" = true ]; then
+              echo "Build / Android runs: no APK has built from these Android inputs yet."
+            else
+              echo "Build / Android is skipped: an APK already built from these Android inputs."
+            fi
             echo
             jq -r --arg note "$nixos_note" '
               (.inputs | map("- input `\(.name)`")),
@@ -436,14 +446,22 @@ jobs:
           test -n "${MYDIA_SMB_TEST_HOST:-}"
           nix develop .#ci -c cargo test --features test-introspection --manifest-path player/rust/mydia_smb/Cargo.toml
 
-  # The release APK, on every run. It cannot be a derivation: Gradle has no
-  # dependency lockfile for nixpkgs' mitmCache to fetch from, and Flutter's
-  # Android engine artifacts in the sandbox are unproven (design/specs/
-  # 2026-11-21-nix-ci-phase-2-design.md, "Android"). The toolchain is the
-  # .#android dev shell `./dev player android build` uses (Flutter from
-  # player/.fvmrc, the Android SDK and NDK, JDK 17, Rust with the Android
-  # targets), substituted from the caches. No pub or Gradle cache: both fetch
-  # on each run. It needs no niks3 push: a dev shell is not a check output.
+  # The release APK, whenever the plan finds no ciAndroid.stamp in the cache
+  # for this run's Android inputs: the player app, player/android, the p2p
+  # crate and its path deps, the GraphQL schema, the ABI check script, this
+  # workflow, and the .#android shell's derivation, so a flake.lock or
+  # toolchain change reruns it too (nix/ci/android.nix). The job pushes the
+  # stamp only after the APK built and passed its ABI check. It cannot be a
+  # derivation: Gradle has no dependency lockfile for nixpkgs' mitmCache to
+  # fetch from, and Flutter's Android engine artifacts in the sandbox are
+  # unproven (design/specs/2026-11-21-nix-ci-phase-2-design.md, "Android").
+  #
+  # The toolchain is the .#android dev shell `./dev player android build`
+  # uses (Flutter from player/.fvmrc, the Android SDK and NDK, JDK 17, Rust
+  # with the Android targets). The job pushes every input of that shell
+  # except the Android SDK composition, which is unfree and stays out of the
+  # public cache (scripts/ci-android-shell-push.sh), so the SDK and NDK are
+  # still unpacked on each run. No pub or Gradle cache: both fetch each run.
   #
   # The Build APK step drives cargokit, which cross-compiles
   # player/rust/mydia_player_p2p (and native/mydia_p2p_core under it) against
@@ -452,19 +470,28 @@ jobs:
   # re-checks the resolution without Flutter's SDK and fails.
   build-android:
     name: Build / Android
+    needs: plan
+    if: needs.plan.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Keeps free-disk: the Android SDK and NDK closure is several GB.
+      # Keeps free-disk: the Android SDK and NDK closure is about 8 GB.
       - name: Set up Nix
         uses: ./.github/actions/nix-ci
-        with:
-          push: 'false'
+
+      # Before the APK build, so a failing build still seeds the toolchain.
+      - name: Push the dev shell's free inputs
+        run: |
+          shell="$(nix build --no-link --print-out-paths .#ciAndroid.shell)"
+          scripts/ci-android-shell-push.sh "$shell"
 
       # --enforce-lockfile fails the job when pubspec.lock does not resolve on
       # the .fvmrc SDK, instead of quietly testing a re-resolved tree.
@@ -491,6 +518,11 @@ jobs:
           name: mydia-player-android-apk
           path: player/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
+
+      - name: Record the passing inputs
+        run: |
+          stamp="$(nix build --no-link --print-out-paths .#ciAndroid.stamp)"
+          "$NIX_CI_PUSH" "$stamp"
 
   # Required contexts live on these aggregators: each always runs and
   # concludes success or failure, never `skipped` (whether the ruleset counts

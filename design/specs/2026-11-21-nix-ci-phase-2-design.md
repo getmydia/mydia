@@ -158,7 +158,10 @@ tag, and whatever under `scripts/e2e/` the NixOS test no longer reads.
 Android engine artifacts in the sandbox are unproven. It stays an ordinary job
 and moves into `ci.yml`:
 
-- It runs on every PR. No path filter, no stamp gate.
+- It runs on every PR. No path filter, no stamp gate. (Since changed: a
+  reference-free stamp derivation over its inputs now lets the plan skip it,
+  and the free part of its dev shell is pushed; `.github/ci.md`, "Build /
+  Android runs when its inputs change".)
 - Its toolchain comes from `nix develop .#android` (Flutter, Android SDK, NDK,
   Rust with Android targets), substituted from niks3 and cache.nixos.org. This
   removes `subosito/flutter-action`, `actions/setup-java` and the runner's
