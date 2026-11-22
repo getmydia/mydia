@@ -13,9 +13,7 @@ const _scope = 'https://www.googleapis.com/auth/drive.appdata';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty || args.first.trim().isEmpty) {
-    stderr.writeln(
-      'usage: dart run tool/gdrive_device_probe.dart <client_id>',
-    );
+    stderr.writeln('usage: dart run tool/gdrive_device_probe.dart <client_id>');
     exit(64);
   }
 
@@ -28,9 +26,8 @@ Future<void> main(List<String> args) async {
       charset: 'utf-8',
     );
     request.write(
-      Uri(
-        queryParameters: {'client_id': args.first.trim(), 'scope': _scope},
-      ).query,
+      Uri(queryParameters: {'client_id': args.first.trim(), 'scope': _scope})
+          .query,
     );
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();

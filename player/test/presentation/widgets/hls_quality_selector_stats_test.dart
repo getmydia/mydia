@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/domain/models/quality_delivery_subtitle.dart';

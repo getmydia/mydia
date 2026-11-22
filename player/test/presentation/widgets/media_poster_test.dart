@@ -2,7 +2,7 @@
 // The contract itself lives in test_utils/poster_contract.dart so every poster
 // surface asserts the same thing.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/watch_status.dart';
 import 'package:player/presentation/widgets/media_poster.dart';

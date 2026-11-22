@@ -5,7 +5,7 @@
 // Requires --dart-define=MYDIA_FORCE_TV=true; see login_tv_test.dart for why
 // this file skips itself rather than failing without it.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/tv_canvas.dart';
 import 'package:player/core/player/input_capabilities.dart';

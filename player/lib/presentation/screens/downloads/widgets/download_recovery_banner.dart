@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../../core/downloads/download_recovery.dart';
 import '../../../../core/theme/palette.dart';

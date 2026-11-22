@@ -12,7 +12,7 @@
 // Everything here is computed from the tokens rather than hardcoded, so the
 // floors keep holding as the palette moves.
 
-import 'package:flutter/material.dart' show Color;
+import 'package:material_ui/material_ui.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';

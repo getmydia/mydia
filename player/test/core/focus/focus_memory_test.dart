@@ -2,7 +2,7 @@
 // widgets, so phones, tablets, desktop and the web keep today's traversal,
 // Tab order included. The TV behaviour is pinned in focus_memory_tv_test.dart.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/focus/focus_memory.dart';
 import 'package:player/core/player/input_capabilities.dart';

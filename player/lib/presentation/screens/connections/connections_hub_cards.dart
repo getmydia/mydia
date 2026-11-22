@@ -2,7 +2,7 @@
 /// device, the add-a-server ghost and the pair call to action.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/sources/source.dart';
 import '../../../core/theme/app_theme.dart';

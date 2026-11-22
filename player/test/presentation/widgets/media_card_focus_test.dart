@@ -3,7 +3,7 @@
 // wrapping a GestureDetector, with no focus node, no keyboard activation and
 // no ring, so a remote could neither reach it nor show where it was.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

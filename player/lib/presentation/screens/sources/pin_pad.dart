@@ -1,7 +1,7 @@
 /// Digit entry that works with touch, a mouse and a TV remote's D-pad.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/sources/lock/pin_store.dart';
 import '../../../l10n/l10n.dart';

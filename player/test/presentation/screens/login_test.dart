@@ -11,7 +11,7 @@
 // one, since it needs no --dart-define=MYDIA_FORCE_TV=true to prove
 // anything.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
@@ -47,7 +47,7 @@ void main() {
         ],
         child: const MaterialApp(
           locale: Locale('es'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: LoginScreen(),
         ),

@@ -3,7 +3,7 @@
 // nothing responds to is a defect rather than polish, so activation is tested
 // alongside the visual.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';

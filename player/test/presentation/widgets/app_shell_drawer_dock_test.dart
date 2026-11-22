@@ -11,7 +11,7 @@
 // `AppShell.bannerArea` use. A hand-rolled mirror of the shell's shape
 // would stay green if the shell dropped the fade entirely.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 

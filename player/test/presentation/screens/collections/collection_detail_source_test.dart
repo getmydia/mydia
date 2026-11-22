@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide Page;
+import 'package:material_ui/material_ui.dart' hide Page;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/collection_sync_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';

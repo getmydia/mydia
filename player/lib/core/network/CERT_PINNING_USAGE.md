@@ -19,7 +19,7 @@ When connecting to a server for the first time with a self-signed certificate:
 
 ```dart
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:player/core/network/pinned_http_client.dart';
 import 'package:player/core/auth/cert_storage.dart';
 import 'package:player/presentation/widgets/cert_trust_dialog.dart';

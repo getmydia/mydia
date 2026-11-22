@@ -1,7 +1,7 @@
 // The skeleton hero exists so nothing moves when the real hero replaces it, so
 // its height has to match the loaded hero's in both layouts.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';

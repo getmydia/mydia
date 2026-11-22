@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' show Locale;
+import 'package:material_ui/material_ui.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/models/progress.dart';

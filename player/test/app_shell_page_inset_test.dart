@@ -7,7 +7,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +24,7 @@ import 'package:player/core/router/app_router.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/detail/detail_hero.dart';
 import 'package:player/presentation/screens/sources/source_search_screen.dart';
+import 'package:player/presentation/widgets/shell_rail_inset.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import 'presentation/screens/sources/fake_media_source.dart';
@@ -95,10 +96,22 @@ void main() {
     final home = tester.getTopLeft(page).dx;
     expect(home, inset, reason: 'an ordinary page is inset by the rail');
 
+    // The route transition slides and fades the page as a whole, so its
+    // window position moves mid-animation by design. What must never change
+    // is its inset inside its own route: the page keeps its geometry while
+    // another opens over it.
+    final route = find.ancestor(
+      of: page,
+      matching: find.byType(ShellPageInset, skipOffstage: false),
+    );
     Future<void> everyFrame() async {
       for (var i = 0; i < 40; i++) {
         await tester.pump(const Duration(milliseconds: 16));
-        expect(tester.getTopLeft(page).dx, home, reason: 'frame $i');
+        expect(
+          tester.getTopLeft(page).dx - tester.getTopLeft(route).dx,
+          inset,
+          reason: 'frame $i',
+        );
       }
     }
 

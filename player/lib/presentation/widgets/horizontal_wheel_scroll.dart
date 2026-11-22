@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart' show clampDouble;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// One wheel tick's animation. GTK delivers coarse discrete deltas on Linux,
 /// so each tick animates; jumping on every tick reads as teleporting.

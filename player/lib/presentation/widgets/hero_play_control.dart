@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/focus/focus_memory.dart';
 import '../../core/player/input_capabilities.dart';

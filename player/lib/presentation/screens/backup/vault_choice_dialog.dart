@@ -2,7 +2,7 @@
 /// already in its own, which one to keep.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/backup/backup_sync_service.dart';
 import '../../../l10n/l10n.dart';

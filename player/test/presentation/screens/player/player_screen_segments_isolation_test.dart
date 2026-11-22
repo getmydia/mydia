@@ -19,7 +19,7 @@
 // stub answers per operation), so the second test pins the request shape
 // instead: exactly one segments document, separate from the detail one.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/sources/source_error.dart';
 

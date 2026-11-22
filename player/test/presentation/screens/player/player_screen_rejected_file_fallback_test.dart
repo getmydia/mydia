@@ -10,7 +10,7 @@
 // direct stream for the deleted file answers "media file not found", no
 // bytes arrive and the screen sits on a black frame.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../test_utils/scripted_mydia_transport.dart';

@@ -5,7 +5,7 @@
 // Requires --dart-define=MYDIA_FORCE_TV=true. Without it the file skips
 // itself; CI runs it in the "Run television-tier tests" step.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/input_capabilities.dart';

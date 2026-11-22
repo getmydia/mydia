@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/detail_art_image.dart' show ArtSlot;
 import 'package:player/presentation/screens/detail/detail_hero.dart';

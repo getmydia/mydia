@@ -7,7 +7,7 @@
 /// `stats_metrics.dart`.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/playback/stats/playback_stats.dart';
 import '../../../core/playback/stats/stats_metrics.dart';

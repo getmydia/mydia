@@ -2,7 +2,7 @@
 // password with a TOTP challenge, the credential fields give way to a single
 // code field, whose submission and Back button reach the controller.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';

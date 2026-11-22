@@ -21,7 +21,7 @@
 // P2P connection state so the direct-play URL comes from the stub proxy rather
 // than the real media-token service.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/sources/source_error.dart';
 

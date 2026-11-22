@@ -2,7 +2,7 @@
 /// screen over it.
 library;
 
-import 'package:flutter/material.dart' hide Page;
+import 'package:material_ui/material_ui.dart' hide Page;
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` is not part of the main entrypoint's exports.

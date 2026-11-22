@@ -11,7 +11,7 @@
 // up to 0.1 times lumaMix, never above 0.1. All presets are dark, so white is the worst backdrop. Text
 // holds WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/contrast.dart';

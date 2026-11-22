@@ -17,7 +17,7 @@
 // is what makes this file, and any later directional-tier test file, picked
 // up automatically rather than relying on someone editing a list by hand.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/input_capabilities.dart';

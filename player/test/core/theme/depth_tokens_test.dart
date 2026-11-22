@@ -5,7 +5,7 @@
 // dark-only, drives the surface hierarchy from the palette, and maps a single
 // accent hue across every Material 3 accent slot (R3).
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';

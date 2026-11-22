@@ -6,7 +6,7 @@
 // itself; CI runs it in the "Run television-tier tests" step, which picks up
 // every test/**/*_tv_test.dart.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';

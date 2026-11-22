@@ -2,7 +2,7 @@
 // are NOT asserted here; they belong to the widget under test and are covered
 // by app_shell_dock_inset_test.dart. This file pins the arithmetic only.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/platform/native_tab_bar_support.dart';

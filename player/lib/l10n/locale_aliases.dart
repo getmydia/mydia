@@ -1,7 +1,12 @@
-import 'package:flutter/cupertino.dart' show CupertinoLocalizations;
+import 'package:cupertino_ui/cupertino_ui.dart'
+    show CupertinoLocalizations, GlobalCupertinoLocalizations;
 import 'package:flutter/foundation.dart' show SynchronousFuture;
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+// Material and Cupertino localizations come from material_ui and cupertino_ui,
+// whose MaterialLocalizations and CupertinoLocalizations are their own types:
+// the migrated widgets look those up, not flutter_localizations' copies.
+import 'package:flutter_localizations/flutter_localizations.dart'
+    show GlobalWidgetsLocalizations;
+import 'package:material_ui/material_ui.dart';
 
 import 'gen/app_localizations.dart';
 import 'gen/app_localizations_cnr.dart';
@@ -31,14 +36,22 @@ AppLocalizations appLocalizationsFor(Locale locale) {
   return build(alias.toString());
 }
 
-/// Every `MaterialApp`'s `localizationsDelegates`: the generated ones, with
-/// the aliased languages served by the Flutter data of their alias.
+/// Every `MaterialApp`'s `localizationsDelegates`: the app's messages plus
+/// Material, Cupertino and Widgets data, with the aliased languages served by
+/// the data of their alias.
+///
+/// The generated `AppLocalizations.localizationsDelegates` is not spread in:
+/// gen-l10n still lists flutter_localizations' Material and Cupertino
+/// delegates, which load types the material_ui and cupertino_ui widgets never
+/// read, so every locale but English would get no Material strings.
 const List<LocalizationsDelegate<dynamic>> appLocalizationsDelegates = [
   _AppMessagesDelegate(),
   _AliasDelegate<MaterialLocalizations>(GlobalMaterialLocalizations.delegate),
   _AliasDelegate<CupertinoLocalizations>(GlobalCupertinoLocalizations.delegate),
   _AliasDelegate<WidgetsLocalizations>(GlobalWidgetsLocalizations.delegate),
-  ...AppLocalizations.localizationsDelegates,
+  GlobalMaterialLocalizations.delegate,
+  GlobalCupertinoLocalizations.delegate,
+  GlobalWidgetsLocalizations.delegate,
 ];
 
 class _AppMessagesDelegate extends LocalizationsDelegate<AppLocalizations> {

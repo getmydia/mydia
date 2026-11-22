@@ -25,7 +25,7 @@
 // --dart-define=MYDIA_FORCE_TV=true) can find it by pattern instead of
 // someone remembering to add it to a list.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/browse_grid.dart';

@@ -1,7 +1,7 @@
 /// The sharp backdrop behind the Home hero.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/cache/artwork_decode.dart';
 import '../../../core/cache/poster_cache_manager.dart';

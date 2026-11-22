@@ -7,7 +7,7 @@
 // artwork's own fade mask only ever reveals the shell's dark backdrop, which
 // is darker than white art, so it cannot lower contrast either.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/breakpoints.dart';
 import 'package:player/core/theme/palette.dart';

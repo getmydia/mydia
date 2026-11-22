@@ -2,7 +2,7 @@
 /// with a back button over the page's body.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/theme/palette.dart';

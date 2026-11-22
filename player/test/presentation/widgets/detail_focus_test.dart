@@ -11,7 +11,7 @@
 // the two stops paints no ring at all. The traversalDescendants tests below
 // prove each wrapped control contributes exactly one stop.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/palette.dart';

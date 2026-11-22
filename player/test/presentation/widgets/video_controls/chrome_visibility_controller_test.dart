@@ -3,7 +3,7 @@
 // an arrow press means "seek" or "move focus". This controller is the handle
 // that lifts out, without moving the state itself.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 

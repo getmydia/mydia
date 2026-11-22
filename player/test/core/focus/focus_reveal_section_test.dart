@@ -1,7 +1,7 @@
 // Off the television tier the section must be invisible to the focus tree,
 // so phone, desktop and web traversal stay exactly as they were.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/focus/focus_reveal_section.dart';
 import 'package:player/core/player/input_capabilities.dart';

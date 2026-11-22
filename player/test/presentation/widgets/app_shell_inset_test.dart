@@ -14,7 +14,7 @@
 // test that exercises the seam directly is not a mirror that could stay
 // green if the shell dropped the wiring entirely.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/widgets/app_shell.dart';

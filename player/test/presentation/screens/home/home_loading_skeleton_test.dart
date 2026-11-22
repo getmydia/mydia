@@ -7,7 +7,7 @@
 // on load. The skeleton also inserted spacers between its rails that the
 // loaded layout does not have.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
 import 'package:player/presentation/screens/sources/continue_watching_card.dart';

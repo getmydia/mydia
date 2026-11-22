@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/settings/locale_setting.dart';
@@ -17,7 +17,7 @@ class _Host extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
     theme: AppTheme.build(ref.watch(paletteProvider), liquid: false),
     locale: ref.watch(localeSettingProvider),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: appLocalizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
     home: const Scaffold(body: LanguageSettingsRow()),
   );

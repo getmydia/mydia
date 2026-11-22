@@ -2,7 +2,7 @@
 // that contract itself, and it must render the caller's placeholder, persistent
 // overlays, and hover overlay without owning any of their appearance.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/artwork_decode.dart';

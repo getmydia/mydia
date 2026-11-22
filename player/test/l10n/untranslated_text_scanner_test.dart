@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'untranslated_text_scanner.dart';
 
 List<String> scan(String body) => findUntranslated(
-  "import 'package:flutter/material.dart';\n$body",
+  "import 'package:material_ui/material_ui.dart';\n$body",
   path: 'x.dart',
 ).map((f) => f.text).toList();
 

@@ -4,7 +4,7 @@
 // test/test_utils/osd_contrast.dart for why blur drops out and the shadow is
 // not credited). Text holds WCAG SC 1.4.3 (4.5:1), icons SC 1.4.11 (3:1).
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';

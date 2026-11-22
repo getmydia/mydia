@@ -2,7 +2,7 @@
 // Home lists its film and its detail page opens, and the backend is never
 // asked to list anything.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';

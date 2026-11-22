@@ -1,7 +1,7 @@
 // Artwork that needs request headers (a Plex or Stash credential) cannot feed
 // the ambient backdrop, which loads its image with none.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';

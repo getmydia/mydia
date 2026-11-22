@@ -10,7 +10,7 @@
 // through the real `SidebarFocusBoundary`. The rail is a single focusable
 // stand-in: what is under test is the content side of the boundary.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;

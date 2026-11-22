@@ -2,7 +2,7 @@
 // Both read sourceNavEntriesProvider; this pins that nativeSidebarFor keeps
 // SidebarContent's order and drops nothing.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';

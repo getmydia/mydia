@@ -5,7 +5,7 @@
 /// number and a diagnosis.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/playback/stats/playback_stats.dart';
 

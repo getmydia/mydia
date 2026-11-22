@@ -3,7 +3,7 @@
 // chain: a refresh inside the scheduler flush rebuilt it twice in one frame,
 // and holding it tripped an assertion when the container was disposed.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';

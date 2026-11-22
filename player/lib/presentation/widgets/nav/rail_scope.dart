@@ -7,7 +7,7 @@
 /// the pointer.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/ui/reduced_motion.dart';

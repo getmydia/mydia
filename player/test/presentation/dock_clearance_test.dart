@@ -1,7 +1,7 @@
 // End-to-end proof that content clears the dock, measured against a real
 // BottomNav inside a real shell rather than against a hardcoded guess.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/dock_insets.dart';

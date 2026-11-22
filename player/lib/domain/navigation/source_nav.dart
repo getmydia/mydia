@@ -3,7 +3,7 @@
 /// without a widget tree.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/sources/media_source.dart';
 import '../../core/sources/source.dart';

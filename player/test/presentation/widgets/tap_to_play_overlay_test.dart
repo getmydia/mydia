@@ -9,7 +9,7 @@
 // on the video starts playback, and that the tap cannot fall through to the
 // seek gestures underneath.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/tap_to_play_overlay.dart';

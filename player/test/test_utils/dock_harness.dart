@@ -6,7 +6,7 @@
 // inside a `Scaffold(extendBody: true)` carrying a real bottomNavigationBar
 // does that value become the dock height, which is what DockInsets reads.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/navigation/source_nav.dart';
 import 'package:player/l10n/gen/app_localizations.dart';

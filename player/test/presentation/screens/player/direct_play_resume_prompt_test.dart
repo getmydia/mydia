@@ -22,7 +22,7 @@
 // Tearing down instead also exercises the `!mounted` guard placed after the
 // dialog's unbounded await.
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../test_utils/scripted_mydia_transport.dart';

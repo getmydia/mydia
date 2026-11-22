@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 
@@ -9,8 +9,13 @@ import 'lab_glass.dart';
 const _ground = Color(0xFF101014);
 
 Widget _control(double radius, {Widget child = const SizedBox.expand()}) =>
-    labGlass(radius, _ground, DepthTokens.liquidControlTintOpacity,
-        adaptiveMax: DepthTokens.liquidControlAdaptiveMax, child: child);
+    labGlass(
+      radius,
+      _ground,
+      DepthTokens.liquidControlTintOpacity,
+      adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
+      child: child,
+    );
 
 /// Poster-like artwork: a night sky, saturated shapes and small text, so the
 /// glass is judged over the kind of backdrop the detail hero has. Painted,
@@ -41,8 +46,10 @@ class _ArtworkPainter extends CustomPainter {
     final star = Paint()..color = Colors.white.withValues(alpha: 0.8);
     for (var i = 0; i < 220; i++) {
       canvas.drawCircle(
-        Offset(random.nextDouble() * size.width,
-            random.nextDouble() * size.height * 0.6),
+        Offset(
+          random.nextDouble() * size.width,
+          random.nextDouble() * size.height * 0.6,
+        ),
         random.nextDouble() * 1.4 + 0.3,
         star,
       );
@@ -51,10 +58,14 @@ class _ArtworkPainter extends CustomPainter {
       Offset(size.width * 0.78, size.height * 0.18),
       70,
       Paint()
-        ..shader = const RadialGradient(
-          colors: [Color(0xFFFFF4D6), Color(0x00FFF4D6)],
-        ).createShader(Rect.fromCircle(
-            center: Offset(size.width * 0.78, size.height * 0.18), radius: 70)),
+        ..shader =
+            const RadialGradient(colors: [Color(0xFFFFF4D6), Color(0x00FFF4D6)])
+                .createShader(
+                  Rect.fromCircle(
+                    center: Offset(size.width * 0.78, size.height * 0.18),
+                    radius: 70,
+                  ),
+                ),
     );
     const bands = [
       Color(0xFFE94F8A),
@@ -74,7 +85,8 @@ class _ArtworkPainter extends CustomPainter {
     for (var line = 0; line < 9; line++) {
       final painter = TextPainter(
         text: TextSpan(
-          text: 'The lantern keeper of Velmora counts the tides at dusk '
+          text:
+              'The lantern keeper of Velmora counts the tides at dusk '
               'while the harbour bells answer from across the bay.',
           style: TextStyle(
             color: line.isEven ? Colors.white : Colors.black,
@@ -114,39 +126,48 @@ class ArtworkScene extends StatelessWidget {
           left: 24,
           width: 44,
           height: 44,
-          child: _control(22,
-              child: const Icon(Icons.arrow_back, color: Colors.white)),
+          child: _control(
+            22,
+            child: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
         ),
         Positioned(
           top: 24,
           right: 24,
           width: 44,
           height: 44,
-          child:
-              _control(22, child: const Icon(Icons.cast, color: Colors.white)),
+          child: _control(
+            22,
+            child: const Icon(Icons.cast, color: Colors.white),
+          ),
         ),
         Positioned(
           top: 300,
           left: 40,
           width: 190,
           height: 34,
-          child: _control(17,
-              child: const Center(
-                child: Text(
-                  'Next Up · S1 E3',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600),
+          child: _control(
+            17,
+            child: const Center(
+              child: Text(
+                'Next Up · S1 E3',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
-              )),
+              ),
+            ),
+          ),
         ),
         Positioned(
           top: 300,
           left: 260,
           width: 180,
           height: 50,
-          child: _control(25,
-              child:
-                  labLabel(Icons.play_arrow_rounded, 'Resume', fontSize: 18)),
+          child: _control(
+            25,
+            child: labLabel(Icons.play_arrow_rounded, 'Resume', fontSize: 18),
+          ),
         ),
         for (var i = 0; i < _actions.length; i++)
           Positioned(
@@ -154,8 +175,10 @@ class ArtworkScene extends StatelessWidget {
             left: 40 + i * 76.0,
             width: 44,
             height: 44,
-            child: _control(22,
-                child: Icon(_actions[i], color: Colors.white, size: 22)),
+            child: _control(
+              22,
+              child: Icon(_actions[i], color: Colors.white, size: 22),
+            ),
           ),
         for (var i = 0; i < 2; i++)
           Positioned(
@@ -163,31 +186,37 @@ class ArtworkScene extends StatelessWidget {
             left: 40 + i * 110.0,
             width: 96,
             height: 34,
-            child: _control(17,
-                child: Center(
-                  child: Text(
-                    i == 0 ? 'Drama' : 'Mystery',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                )),
+            child: _control(
+              17,
+              child: Center(
+                child: Text(
+                  i == 0 ? 'Drama' : 'Mystery',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
           ),
         Positioned(
           left: 330,
           right: 330,
           bottom: 24,
           height: 62,
-          child: labGlass(31, _ground, DepthTokens.liquidChromeTintOpacity,
-              adaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Icon(Icons.home_rounded, color: Colors.white),
-                  Icon(Icons.movie_outlined, color: Colors.white),
-                  Icon(Icons.tv_rounded, color: Colors.white),
-                  Icon(Icons.download_rounded, color: Colors.white),
-                  Icon(Icons.settings_outlined, color: Colors.white),
-                ],
-              )),
+          child: labGlass(
+            31,
+            _ground,
+            DepthTokens.liquidChromeTintOpacity,
+            adaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Icon(Icons.home_rounded, color: Colors.white),
+                Icon(Icons.movie_outlined, color: Colors.white),
+                Icon(Icons.tv_rounded, color: Colors.white),
+                Icon(Icons.download_rounded, color: Colors.white),
+                Icon(Icons.settings_outlined, color: Colors.white),
+              ],
+            ),
+          ),
         ),
         labTag(top: 284, left: 40, text: 'badge 34pt'),
         labTag(top: 284, left: 260, text: 'lens 50pt'),
@@ -212,18 +241,26 @@ class PanelScene extends StatelessWidget {
           left: 24,
           bottom: 24,
           width: 300,
-          child: labGlass(28, _ground, DepthTokens.liquidChromeTintOpacity,
-              adaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
-              profile: LiquidGlassProfile.panel),
+          child: labGlass(
+            28,
+            _ground,
+            DepthTokens.liquidChromeTintOpacity,
+            adaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
+            profile: LiquidGlassProfile.panel,
+          ),
         ),
         Positioned(
           top: 200,
           left: 520,
           width: 360,
           height: 220,
-          child: labGlass(34, _ground, DepthTokens.liquidModalTintOpacity,
-              adaptiveMax: DepthTokens.liquidModalAdaptiveMax,
-              profile: LiquidGlassProfile.panel),
+          child: labGlass(
+            34,
+            _ground,
+            DepthTokens.liquidModalTintOpacity,
+            adaptiveMax: DepthTokens.liquidModalAdaptiveMax,
+            profile: LiquidGlassProfile.panel,
+          ),
         ),
         labTag(top: 8, left: 24, text: 'sidebar (panel)'),
         labTag(top: 184, left: 520, text: 'dialog (panel)'),

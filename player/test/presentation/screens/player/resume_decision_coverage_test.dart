@@ -5,7 +5,7 @@
 
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/playback/playback_progress_store.dart';

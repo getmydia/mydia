@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../presentation/widgets/cast_bar/dock_extents.dart';
 import 'breakpoints.dart';
