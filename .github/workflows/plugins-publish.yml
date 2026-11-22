@@ -24,14 +24,20 @@ concurrency:
   group: ${{ github.event_name == 'pull_request' && format('plugins-publish-pr-{0}', github.ref) || 'plugins-publish-deploy' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# contents: write is for the tag-only GitHub Release step, which reads the
+# token from GH_TOKEN. The checkout does not persist it, so the cargo test and
+# build.rs code a pull request brings cannot read it from .git/config.
 permissions:
   contents: write
 
 jobs:
   publish:
+    name: Build and publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Read version pins
         run: |

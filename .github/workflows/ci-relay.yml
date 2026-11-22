@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - master
-      - main
     paths:
       - "metadata-relay/**"
       - ".github/workflows/ci-relay.yml"
@@ -20,9 +19,19 @@ on:
       - "metadata-relay/**"
       - ".github/workflows/ci-relay.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
+  # Pull requests only. On master, publish's build is the verification, so
+  # a second identical build would add nothing.
   docker:
     name: Docker / Verify
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +48,7 @@ jobs:
           file: ./metadata-relay/Dockerfile
           push: false
           tags: metadata-relay:ci-test
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/metadata-relay:buildcache
 
   # Publishes whether or not this push's relay-test passed: the image is the
   # :master tag, not a release (releases ship on a metadata-relay-v* tag).
@@ -46,7 +56,6 @@ jobs:
     name: Docker / Publish master
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    needs: [docker]
     permissions:
       contents: read
       packages: write
@@ -76,20 +85,3 @@ jobs:
           # Actions cache (see .github/ci.md).
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/metadata-relay:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/metadata-relay:buildcache,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true
-
-  status:
-    name: Status Check
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: always()
-
-    steps:
-      - name: Check results
-        env:
-          DOCKER: ${{ needs.docker.result }}
-        run: |
-          if [ "$DOCKER" != "success" ]; then
-            echo "Docker / Verify ended $DOCKER"
-            exit 1
-          fi
-          echo "All checks passed!"

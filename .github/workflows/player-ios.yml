@@ -147,6 +147,17 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
 
+      # The prep action comes from this workflow's own commit, not from
+      # inputs.sha: player-ios-refresh rebuilds an old release tag and
+      # player-ondemand can build an old branch, neither of which has it.
+      - name: Checkout CI actions
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
       # Fails in seconds, before a 20-minute build, if the runner image ever
       # hands us an SDK that App Store Connect will refuse to accept.
       - name: Check / iOS SDK
@@ -161,16 +172,6 @@ jobs:
             echo "::error::iOS SDK $sdk is older than $MIN_SDK_MAJOR; App Store Connect rejects it (ITMS-90725)." >&2
             exit 1
           fi
-
-      # No `cache: true`: the macOS SDK cache entry is about 2 GB, shared by
-      # this workflow and player-macos.yml, and it crowded ci.yml's caches
-      # out of the 10 GB Actions cache budget (2026-10-15). Downloading the SDK
-      # costs about a minute.
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
 
       # Before the version stamp, because after_latest and
       # fixed_or_after_latest need fastlane to read App Store Connect.
@@ -244,20 +245,11 @@ jobs:
           MARKETING_VERSION="${VERSION%%-*}"
           sed -i '' "s/^version: .*/version: ${MARKETING_VERSION}+${BUILD_NUMBER}/" pubspec.yaml
 
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-      - name: Brand the channel
-        working-directory: ${{ env.PLAYER_PATH }}
-        shell: bash
-        # Beta and dev builds get their own name and a ribboned icon. Stable
-        # is untouched. Uses the full version: iOS strips the prerelease suffix
-        # from pubspec, so the channel has to be read before that matters.
-        run: ./tool/apply-channel.sh "${{ inputs.version }}"
+      # The version is stamped above, so the prep leaves pubspec.yaml alone.
+      - name: Flutter prep
+        uses: ./.ci-actions/.github/actions/player-flutter-prep
+        with:
+          version: ${{ inputs.version }}
 
       - name: Install certificate and provisioning profile
         if: env.IOS_CERTIFICATE_BASE64 != ''

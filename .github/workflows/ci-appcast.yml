@@ -4,15 +4,14 @@ name: CI / Appcast
 # of the tree, so it gets its own workflow rather than a job inside ci.yml,
 # matching how site/, player/ and relay/ are split.
 #
-# Deliberately not path-filtered, for the reason ci-site.yml gives: a workflow
-# skipped by a paths: filter never reports a status, so a required check
-# pointing at it would sit Pending forever. The job costs a few seconds.
+# Test / Appcast is not a required check, so a path filter is safe: a run the
+# filter skips reports nothing and blocks nothing.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches:
-      - master
+    paths:
+      - 'scripts/appcast/**'
+      - '.github/workflows/ci-appcast.yml'
   workflow_dispatch:
 
 concurrency:

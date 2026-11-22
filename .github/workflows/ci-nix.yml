@@ -2,7 +2,7 @@ name: CI / Nix
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -96,7 +96,7 @@ jobs:
           set -euo pipefail
           hits="$(
             git ls-files -z \
-                '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
+                '*.nix' '.github/workflows/*' '.github/actions/*' '*Dockerfile*' '*compose*.yml' \
                 'scripts/*' 'dev' 'player/flatpak/*' 'player/appimage/*' \
               | xargs -0 grep -HnIiE 'flutter' \
               | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \
@@ -142,22 +142,13 @@ jobs:
       - name: Install the pinned Rust toolchain
         run: rustup show active-toolchain || rustup toolchain install
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
+      # Reads cache.mydia.dev, which CI's own builds fill (.github/ci.md,
+      # "niks3"). Nothing here builds for others, so nothing is pushed.
+      - name: Nix
+        uses: ./.github/actions/nix-ci
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      # Cachix, not magic-nix-cache: the latter wrote ~2,200 .nar entries
-      # (1.1 GB) into the 10 GB Actions cache and pushed the Mix build caches out.
-      # Read-only, with no token: CI no longer pushes to Cachix (CI's own
-      # cache is niks3, .github/ci.md "niks3").
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          extraPullNames: devenv
-          skipPush: true
+          push: 'false'
+          free-disk: 'false'
 
       - name: Assert the Android shell resolves the pinned Flutter
         run: nix eval --raw .#packages.x86_64-linux.flutter.version

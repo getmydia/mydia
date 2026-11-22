@@ -147,7 +147,8 @@ and iOS builds only inside `release.yml`.
 ## Beta and dev builds are branded by `tool/apply-channel.sh`
 
 Every platform workflow runs `player/tool/apply-channel.sh <version>` before
-`flutter build`. A `-beta.N` version becomes "Mydia Player Beta" with an amber
+`flutter build`, through the shared `.github/actions/player-flutter-prep`
+action. A `-beta.N` version becomes "Mydia Player Beta" with an amber
 ribboned icon, `-dev.N` becomes "Mydia Player Dev" with a red one, and anything
 else is left alone. It rewrites eight display-name sites in place, regenerates
 launcher icons with `flutter_launcher_icons -f flutter_launcher_icons-<channel>.yaml`,

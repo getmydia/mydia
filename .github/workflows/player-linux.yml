@@ -15,11 +15,6 @@ on:
         description: Integer build number
         type: string
         required: true
-      dry_run:
-        description: Build without publishing
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
@@ -37,6 +32,17 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
 
+      # The prep action comes from this workflow's own commit, not from
+      # inputs.sha: player-ios-refresh rebuilds an old release tag and
+      # player-ondemand can build an old branch, neither of which has it.
+      - name: Checkout CI actions
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -50,36 +56,11 @@ jobs:
             libsecret-1-dev \
             libmpv-dev
 
-      # No `cache: true`: the Linux SDK is about 2 GB per cache entry and
-      # crowded ci.yml's caches out of GitHub's 10 GB Actions cache limit
-      # (2026-10-15). Downloading the SDK costs about a minute.
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - name: Flutter prep
+        uses: ./.ci-actions/.github/actions/player-flutter-prep
         with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-
-      - name: Update version
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          VERSION="${{ inputs.version }}"
-          VERSION_CODE="${{ inputs.version_code }}"
-          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
-
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-      - name: Brand the channel
-        working-directory: ${{ env.PLAYER_PATH }}
-        shell: bash
-        # Beta and dev builds get their own name and a ribboned icon. Stable
-        # is untouched. Uses the full version: iOS strips the prerelease suffix
-        # from pubspec, so the channel has to be read before that matters.
-        run: ./tool/apply-channel.sh "${{ inputs.version }}"
+          version: ${{ inputs.version }}
+          pubspec-version: ${{ inputs.version }}+${{ inputs.version_code }}
 
       - name: Build Linux
         working-directory: ${{ env.PLAYER_PATH }}

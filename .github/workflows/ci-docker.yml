@@ -5,7 +5,7 @@ on:
   # ./Dockerfile across its db and arch matrix rather than retagging :master,
   # so release is an independent second net.
   push:
-    branches: [master, main]
+    branches: [master]
   # Pull requests build only the flutter-builder stage, and only when one of
   # its inputs changes. Full-image PR builds were dropped for costing 25
   # minutes per PR; nothing else builds this stage before merge (the player
@@ -77,7 +77,6 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Login to registry
-        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -92,7 +91,7 @@ jobs:
           build-args: |
             DATABASE_TYPE=${{ matrix.db }}
             BUILD_COMMIT=${{ github.sha }}
-          push: ${{ github.event_name == 'push' }}
+          push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag }}
           # Layer cache lives in a registry tag on the public GHCR package, not
           # the 10 GB Actions cache it used to crowd out (see .github/ci.md).

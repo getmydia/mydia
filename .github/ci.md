@@ -230,6 +230,12 @@ until someone re-runs a listed workflow. Keep the list complete, and when a
 green dependabot PR is not merging, check whether a workflow it runs is absent
 from it.
 
+The trigger also filters on `branches: ['dependabot/**']`, the triggering run's
+head branch. Unfiltered, every listed workflow on every branch woke the gate,
+nearly half of all Actions runs, only for it to find no Dependabot pull request.
+The fixup's push and the gate's own re-runs are on Dependabot branches, so they
+still wake it.
+
 ### It is edge-triggered, so a green backlog sits
 
 The gate only evaluates a PR when one of those workflows *completes*. A PR that
@@ -726,7 +732,7 @@ come from `player-linux.yml`.
 
 `ci-nix.yml` consolidates the non-VM pin, freshness, release-note, Apple-target,
 guard, and Dependabot-gate checks into two runners (`Check / Repo Contracts` and
-`Check / Pins & Freshness`) so non-VM PR checks share one Nix/Cachix setup
+`Check / Pins & Freshness`) so non-VM PR checks share one Nix setup
 instead of eight runners.
 
 ### Shards
@@ -801,7 +807,8 @@ about 0.7 GB for everything `ci.yml` needs. Warm PR CI measured about 8 minutes
 and cold about 20, so the cure was to get the big entries out of the budget:
 
 - No workflow caches the Flutter SDK (`subosito/flutter-action` without
-  `cache: true`). Once the Docker blobs were gone, `ci-player.yml` took their
+  `cache: true`; the release builds set it up once, in
+  `.github/actions/player-flutter-prep`). Once the Docker blobs were gone, `ci-player.yml` took their
   place: about 2 GB per platform per player PR. The SDK download costs about a
   minute. Pub caches are small and stay on the Windows and macOS legs; the
   Linux, web and Android player builds keep none (the Nix checks read pub
@@ -819,10 +826,12 @@ and cold about 20, so the cure was to get the big entries out of the budget:
   Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
   which GHCR needs for cache manifests and which keeps a failed cache push from
   failing the build.
-- `ci-nix.yml` and `dependabot-fixup.yml` read Cachix, and neither pushes
-  to it; ci.yml's flake checks use niks3.
-  magic-nix-cache stored every store path as its own Actions cache entry
-  (2,226 entries, 1.1 GB on 2026-10-30).
+- `ci-nix.yml` and `dependabot-fixup.yml` install Nix through the `nix-ci`
+  action with `push: 'false'`, so they read cache.mydia.dev, which ci.yml's
+  flake checks fill through niks3, and push nothing. The `mydia` Cachix cache
+  is now written only by `release.yml` and `deploy-web-player.yml`. Nothing
+  uses magic-nix-cache, which stored every store path as its own Actions
+  cache entry (2,226 entries, 1.1 GB on 2026-10-30).
 
 Check the budget with:
 

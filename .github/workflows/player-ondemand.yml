@@ -266,7 +266,6 @@ jobs:
       sha: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
-      dry_run: ${{ inputs.dry_run }}
 
   player-linux:
     name: Player / Linux
@@ -277,7 +276,6 @@ jobs:
       sha: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
-      dry_run: ${{ inputs.dry_run }}
 
 
   player-appimage:
@@ -289,7 +287,6 @@ jobs:
       sha: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
-      dry_run: ${{ inputs.dry_run }}
 
   player-flatpak:
     name: Player / Flatpak
