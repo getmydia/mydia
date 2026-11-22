@@ -14,9 +14,10 @@ permissions:
   contents: read
   security-events: write
 
-# OSV-Scanner reads every lockfile in the repository, including the eight
-# Cargo.lock files outside server/ and the two test-fixture crates nothing
-# auto-bumps. It is the advisory net behind Dependabot's version updates.
+# OSV-Scanner reads every lockfile in the repository, including the Cargo.lock
+# files outside server/ that Dependabot does not cover (the plugin test
+# fixtures among them). It is the advisory net behind Dependabot's version
+# updates.
 #
 # Non-blocking for now. mix.lock had never been scanned before this landed, so
 # a required check here could wall off every PR in the repository. Promote to

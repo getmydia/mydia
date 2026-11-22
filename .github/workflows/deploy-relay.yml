@@ -14,17 +14,12 @@ env:
 jobs:
   docker:
     name: Docker / Build and Push
-    if: startsWith(github.ref, 'refs/tags/metadata-relay-v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       attestations: write
       id-token: write
-
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      image: ${{ steps.meta.outputs.tags }}
 
     steps:
       - name: Checkout

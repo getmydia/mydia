@@ -15,9 +15,6 @@ on:
       version_code:
         type: string
         required: true
-      dry_run:
-        type: boolean
-        default: false
 
 permissions:
   contents: read

@@ -297,8 +297,11 @@ updates:
   # is always merged by hand; grouped with site and docs it would take them
   # down with it. Majors stay on: action majors are mostly Node runtime bumps,
   # and CI runs every action it bumps.
+  # "/" covers .github/workflows only. The composite actions under
+  # .github/actions need their own entry, or their pins drift from the
+  # workflows' (install-nix-action did).
   - package-ecosystem: github-actions
-    directory: /
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: monthly
     groups:

@@ -32,7 +32,6 @@ on:
   push:
     branches:
       - master
-      - main
     paths:
       - 'player/**'
       - '!player/lib/l10n/app_*.arb'
@@ -57,6 +56,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   PLAYER_PATH: 'player'
 
@@ -72,7 +74,6 @@ jobs:
             platform_dir: windows
             artifact_name: mydia-player-windows-release
             artifact_path: player/build/windows/x64/runner/Release/
-            shell: bash
           - platform: macOS
             # Matches player-macos.yml, so a PR builds with the release Xcode.
             os: xcode-27
@@ -81,36 +82,23 @@ jobs:
             # Must stay the ditto archive, not the .app directory. "Package
             # macOS app" and "Verify packaged macOS app" below both enforce this.
             artifact_path: player/build/macos/Build/Products/Release/mydia-player-macos.zip
-            shell: bash
 
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        shell: ${{ matrix.shell }}
+        shell: bash
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Check platform support
-        id: check_platform
-        run: |
-          if [ -d "${{ env.PLAYER_PATH }}/${{ matrix.platform_dir }}" ]; then
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "enabled=false" >> $GITHUB_OUTPUT
-            echo "::warning::${{ matrix.platform }} platform not configured yet. Skipping build."
-          fi
-
       - name: Setup Flutter
-        if: steps.check_platform.outputs.enabled == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
           channel: 'stable'
 
       - name: Cache pub dependencies
-        if: steps.check_platform.outputs.enabled == 'true'
         uses: actions/cache@v6
         with:
           path: |
@@ -124,24 +112,21 @@ jobs:
       # the .fvmrc SDK, instead of quietly re-resolving and building a
       # different tree. Every CI, release and E2E `pub get` carries the flag.
       - name: Install dependencies
-        if: steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub get --enforce-lockfile
 
       - name: Run code generation
-        if: steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         # --delete-conflicting-outputs was removed in build_runner 2.15 and is
         # now warned about and ignored on every run.
         run: flutter pub run build_runner build
 
       - name: Generate icons
-        if: matrix.platform == 'Windows' && steps.check_platform.outputs.enabled == 'true'
+        if: matrix.platform == 'Windows'
         working-directory: ${{ env.PLAYER_PATH }}
         run: dart run flutter_launcher_icons
 
       - name: Build ${{ matrix.platform }}
-        if: steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ${{ matrix.platform_dir }} --release
 
@@ -152,7 +137,7 @@ jobs:
       # directory that both this artifact and the installer are built from, and
       # fails the job if they are missing afterwards.
       - name: Bundle VC++ runtime
-        if: matrix.platform == 'Windows' && steps.check_platform.outputs.enabled == 'true'
+        if: matrix.platform == 'Windows'
         shell: pwsh
         run: pwsh ${{ env.PLAYER_PATH }}/tool/bundle_windows_runtime.ps1
 
@@ -165,11 +150,11 @@ jobs:
       # is ambiguous (could be app or framework)" and Gatekeeper refuses to
       # launch the app. ditto preserves symlinks, and --keepParent keeps
       # "Mydia Player.app" as the archive root so the download does not unpack as
-      # a bare Contents/. Same invocation release.yml:626 uses for notarization.
+      # a bare Contents/. Same invocation player-macos.yml uses for notarization.
       # Uploading a single file also means GitHub's own re-zip of the artifact
       # has no symlinks left to flatten. See issue #275.
       - name: Package macOS app
-        if: matrix.platform == 'macOS' && steps.check_platform.outputs.enabled == 'true'
+        if: matrix.platform == 'macOS'
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
         run: ditto -c -k --keepParent "Mydia Player.app" "mydia-player-macos.zip"
 
@@ -179,7 +164,7 @@ jobs:
       # unnoticed for every run that ever produced this artifact, which is why
       # it fails the job rather than warning.
       - name: Verify packaged macOS app
-        if: matrix.platform == 'macOS' && steps.check_platform.outputs.enabled == 'true'
+        if: matrix.platform == 'macOS'
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
         run: |
           # The guards below validate the archive. This asserts the archive is
@@ -217,7 +202,6 @@ jobs:
           rm -rf verify
 
       - name: Upload artifact
-        if: steps.check_platform.outputs.enabled == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}

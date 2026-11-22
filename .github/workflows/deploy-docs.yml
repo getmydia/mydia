@@ -47,15 +47,12 @@ jobs:
         run: |
           git fetch origin gh-pages:gh-pages || echo "gh-pages branch does not exist yet"
 
-      - name: Deploy dev (push to master)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      # A push deploys dev; a manual run deploys the requested version, and a
+      # numbered one also becomes `latest` and the site default.
+      - name: Deploy
+        env:
+          VERSION: ${{ inputs.version || 'dev' }}
         run: |
-          uv run --project docs mike deploy --push --update-aliases dev
-
-      - name: Deploy manual version
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
           if [ "$VERSION" = "dev" ]; then
             uv run --project docs mike deploy --push --update-aliases dev
           else

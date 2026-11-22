@@ -2,7 +2,7 @@ name: CI / Nix
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 

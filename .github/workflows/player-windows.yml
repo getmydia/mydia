@@ -15,11 +15,6 @@ on:
         description: Integer build number
         type: string
         required: true
-      dry_run:
-        description: Build without publishing
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
