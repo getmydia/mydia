@@ -181,7 +181,7 @@ NixOS module tests boot the same package and follow the same rule.
 
 `nix/ci/player.nix` builds the player's Linux, web and VM checks in the
 sandbox. Android is not one of them (`.github/ci.md`, "Build / Android runs
-on every PR"), and Windows and macOS stay in `ci-player.yml`.
+when its inputs change"), and Windows and macOS stay in `ci-player.yml`.
 
 - **Pub cache.** `player-pub-cache` is a `PUB_CACHE` holding every hosted
   package in `player/pubspec.lock`, read from `player/pubspec.lock.json`
@@ -228,8 +228,9 @@ on every PR"), and Windows and macOS stay in `ci-player.yml`.
 ## Outside the sandbox
 
 Three CI jobs cannot be checks. Two run as ordinary jobs in `devShells.ci`,
-and `Build / Android` runs in `devShells.android` (`.github/ci.md`, "Build /
-Android runs on every PR"):
+and `Build / Android` runs in `devShells.android`, gated by
+`ciAndroid.stamp` (`nix/ci/android.nix`; `.github/ci.md`, "Build / Android
+runs when its inputs change"):
 
 - `Lint / Ratchet` runs `mix mydia.ratchet --from-git-merge-base
   origin/master`, which reads git history, and on master pushes the
