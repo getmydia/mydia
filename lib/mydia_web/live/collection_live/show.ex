@@ -810,7 +810,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           title: media_item.title,
           year: media_item.year,
           type: media_item.type,
-          poster_url: build_poster_url(media_item)
+          poster_url: build_poster_url(Posters.effective_path(media_item))
         }
 
         {:noreply,
@@ -912,7 +912,7 @@ defmodule MydiaWeb.CollectionLive.Show do
       title: item.title,
       year: item.year,
       type: item.type,
-      poster_url: build_poster_url(item)
+      poster_url: build_poster_url(Posters.effective_path(item))
     }
   end
 

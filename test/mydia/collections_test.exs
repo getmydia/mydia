@@ -242,6 +242,22 @@ defmodule Mydia.CollectionsTest do
       assert hd(items).id == media_item.id
     end
 
+    test "poster_paths/3 prefers a poster override over the metadata poster" do
+      user = user_fixture()
+      collection = collection_fixture(%{user: user})
+
+      item = media_item_fixture(%{metadata: %{poster_path: "/meta.jpg"}})
+
+      {:ok, item} =
+        item
+        |> Mydia.Media.MediaItem.poster_override_changeset(%{poster_override: "/alt.jpg"})
+        |> Mydia.Repo.update()
+
+      {:ok, _} = Collections.add_item(collection, item.id)
+
+      assert Collections.poster_paths(Scope.unrestricted(), collection, 4) == ["/alt.jpg"]
+    end
+
     test "add_item/2 returns error for smart collection" do
       user = user_fixture()
       collection = smart_collection_fixture(%{user: user})

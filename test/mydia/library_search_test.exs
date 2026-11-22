@@ -202,5 +202,23 @@ defmodule Mydia.LibrarySearchTest do
                }
              ] = section(results, :movie).results
     end
+
+    test "a poster override replaces the metadata poster", %{user: user} do
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Alien",
+          metadata: %{poster_path: "/poster.jpg"}
+        })
+
+      {:ok, _} =
+        item
+        |> Mydia.Media.MediaItem.poster_override_changeset(%{poster_override: "/alt.jpg"})
+        |> Mydia.Repo.update()
+
+      {:ok, results} = LibrarySearch.search(user, "alien")
+
+      assert [%Result{poster_path: "/alt.jpg"}] = section(results, :movie).results
+    end
   end
 end
