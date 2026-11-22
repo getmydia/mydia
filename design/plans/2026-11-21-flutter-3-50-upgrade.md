@@ -43,7 +43,7 @@
 **Interfaces:**
 - Produces: an `.#android` shell in which `flutter build apk` on 3.50.1 succeeds without writes to `/nix/store`.
 
-- [ ] **Step 1:** Set `.fvmrc` to `3.50.1` and `player/pubspec.yaml:10,23` to `sdk: '>=3.14.0 <4.0.0'` and `flutter: '>=3.50.0 <3.51.0'` (otherwise `pub get` refuses the new SDK). Set the Gradle wrapper `distributionUrl`, the `com.android.application` version and the `org.jetbrains.kotlin.android` version in `settings.gradle.kts` to exactly what `flutter create` produces on 3.50.1: run `flutter create --platforms=android /tmp/claude-1000/flutter350-probe` inside `./dev player android shell` and copy the three values from the probe's `android/` files.
+- [ ] **Step 1:** Set `.fvmrc` to `3.50.1` and `player/pubspec.yaml:23` to `flutter: '>=3.50.0 <3.51.0'` (otherwise `pub get` refuses the new SDK); the Dart floor stays at 3.6 until Task 6. Set the Gradle wrapper `distributionUrl`, the `com.android.application` version and the `org.jetbrains.kotlin.android` version in `settings.gradle.kts` to exactly what `flutter create` produces on 3.50.1: run `flutter create --platforms=android /tmp/claude-1000/flutter350-probe` inside `./dev player android shell` and copy the three values from the probe's `android/` files.
 - [ ] **Step 2:** In `./dev player android shell`, run `cd player && flutter pub get && flutter build apk --debug`. Expected: FAIL. Record the exact Gradle error and the store path it names in the commit message.
 - [ ] **Step 3:** Fix it in the shell hook. Preferred order, stop at the first that works: (a) a Gradle/Flutter setting that relocates the included build's project cache (`--project-cache-dir` via `GRADLE_OPTS`/`gradle.properties` if Gradle 9 honours it for included builds); (b) the shell hook copies `$FLUTTER_ROOT/packages/flutter_tools/gradle` into a writable cache dir keyed on the Flutter store path and points `flutter.sdk`/the plugin loader at it; (c) a writable full SDK copy (reflink/`cp -r` once per store path into `$XDG_CACHE_HOME/mydia/flutter-<hash>`) exported as `FLUTTER_ROOT` and first on `PATH`. Comment the hook with the Gradle error it prevents. If none works, stop and report to the user (spec: PR 1 does not ship a broken Android build).
 - [ ] **Step 4:** Re-run step 2's command. Expected: `Built build/app/outputs/flutter-apk/app-debug.apk`.
@@ -83,7 +83,7 @@
 
 - [ ] **Step 1:** Without the ignore, run `cd player && dart analyze --fatal-infos 2>&1 | grep -v "material.dart\|cupertino.dart"`. Expected: the list of non-import 3.50 diagnostics. Fix each (for example remove `ignoringSemantics:` from `IgnorePointer`/`AbsorbPointer`, using `ExcludeSemantics` where the semantics were meant to be dropped).
 - [ ] **Step 2:** Add the ignore line. Run `dart analyze --fatal-infos`. Expected: `No issues found!`.
-- [ ] **Step 3:** Run `./dev player test` (or `cd player && flutter test`). Expected: all pass; any golden failure is inspected and explained in the commit before updating.
+- [ ] **Step 3:** Run `./dev player test`. Expected: all pass; any golden failure is inspected and explained in the commit before updating.
 - [ ] **Step 4:** Run `./dev player glass-diff`. Expected: pass, or a diff that is inspected and attributed to the engine.
 - [ ] **Step 5:** Commit `fix(player): Flutter 3.50 breaking changes`.
 
@@ -120,6 +120,6 @@
 - Modify: `player/analysis_options.yaml` (delete `deprecated_member_use: ignore` and its comment)
 
 - [ ] **Step 1:** Delete the line. Run `grep -n deprecated_member_use player/analysis_options.yaml`. Expected: no output. Run `dart analyze --fatal-infos`. Expected: `No issues found!`. Run `grep -rln "package:flutter/material.dart\|package:flutter/cupertino.dart" player/lib player/test player/integration_test player/packages`. Expected: only generated files noted in Task 7, or none.
-- [ ] **Step 2:** `flutter test`, then `./dev player glass-diff`. Expected: pass, no visual difference.
+- [ ] **Step 2:** `./dev player test`, then `./dev player glass-diff`. Expected: pass, no visual difference.
 - [ ] **Step 3:** Commit `build(player): fail analysis on flutter/material.dart imports`.
 - [ ] **Step 4:** Push, open the PR, run an omp code review (CodeRabbit skips >150 files), wait on the same workflow list as Task 5 step 4, merge by hand after the user agrees.
