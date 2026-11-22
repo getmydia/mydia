@@ -34,6 +34,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :is_favorite, :boolean, default: false
   attr :item_collections, :list, default: []
   attr :user_collections, :list, default: []
+  attr :can_update_media, :boolean, default: false
 
   def hero_section(assigns) do
     ~H"""
@@ -72,7 +73,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           max-height, and shares the others' px-2/pb-8/gutter. --%>
     <div class="md:sticky md:self-start md:overflow-y-auto md:overscroll-contain md:top-20 md:max-h-[calc(100vh-6rem)] lg:top-4 lg:max-h-[calc(100vh-2rem)] @7xl:static @7xl:self-stretch @7xl:max-h-none @7xl:px-2 @7xl:pb-8 @7xl:[scrollbar-gutter:stable]">
       <%!-- Poster - centered and smaller on mobile --%>
-      <div class="card bg-base-100 shadow-xl mb-4 mx-auto w-48 sm:w-56 md:w-full">
+      <div class="card bg-base-100 shadow-xl mb-4 mx-auto w-48 sm:w-56 md:w-full relative group">
         <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-box">
           <img
             src={get_poster_url(@media_item)}
@@ -80,6 +81,18 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             class="w-full h-full object-cover"
           />
         </figure>
+        <%!-- Shown on hover and keyboard focus; always shown where there is no hover (touch). --%>
+        <button
+          :if={@can_update_media}
+          id="poster-edit-button"
+          type="button"
+          phx-click="open_poster_picker"
+          class="btn btn-circle btn-sm absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+          aria-label={gettext("Change poster")}
+          title={gettext("Change poster")}
+        >
+          <.icon name="hero-pencil" class="w-4 h-4" />
+        </button>
       </div>
 
       <%!-- Quick Actions --%>

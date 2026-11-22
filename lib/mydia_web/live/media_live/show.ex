@@ -24,6 +24,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.RescanResults
   alias MydiaWeb.MediaLive.Show.FixMatchEvents
   alias MydiaWeb.MediaLive.Show.FixMatchModal
+  alias MydiaWeb.MediaLive.Show.PosterPicker
   alias MydiaWeb.MediaLive.Show.FindFileComponents
   alias MydiaWeb.MediaLive.Show.FindFileEvents
   alias MydiaWeb.MediaLive.Show.RenameEvents
@@ -110,6 +111,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:reidentify_provider, nil)
      |> assign(:reidentifying, false)
      |> assign(:fix_match, nil)
+     |> assign(:poster_picker_open, false)
      # Manual search modal state
      |> FindFileEvents.assign_defaults()
      |> assign(:show_manual_search_modal, false)
@@ -276,6 +278,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("fix_match_" <> action, params, socket),
     do: FixMatchEvents.handle_event(action, params, socket)
+
+  def handle_event("open_poster_picker", _params, socket),
+    do: {:noreply, assign(socket, :poster_picker_open, socket.assigns.can_update_media)}
+
+  def handle_event("close_poster_picker", _params, socket),
+    do: {:noreply, assign(socket, :poster_picker_open, false)}
 
   def handle_event("refresh_all_file_metadata", params, socket),
     do: FileEvents.refresh_all_file_metadata(params, socket)
@@ -890,6 +898,17 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FindFileEvents.run_progress(run, socket)
 
   def handle_info(:find_file_refresh, socket), do: FindFileEvents.deferred_refresh(socket)
+
+  # Sent by PosterPicker after it saves or resets the poster.
+  def handle_info({:poster_changed, _item}, socket) do
+    media_item = load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+
+    {:noreply,
+     socket
+     |> assign(:media_item, media_item)
+     |> assign(:poster_picker_open, false)
+     |> put_flash(:info, gettext("Poster updated"))}
+  end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 

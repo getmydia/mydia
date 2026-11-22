@@ -291,6 +291,11 @@ defmodule MydiaWeb.Router do
 
     # The transcode list lives on the Dashboard; this page duplicated it.
     get "/transcodes", RedirectController, :transcodes
+
+    # Thumbnails for the poster picker's "From folder" tab.
+    get "/media/:id/poster-candidates/:library_path_id/*path",
+        PosterCandidateController,
+        :show
   end
 
   # Admin LiveView routes
