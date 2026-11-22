@@ -67,6 +67,9 @@ abstract final class MediaRoutes {
   static const downloadSessionPrefix = 'download:';
   static const peerFileSessionPrefix = 'peerfile:';
 
+  /// Session id prefix of a server-hosted poster, a single bounded image.
+  static const artworkSessionPrefix = 'artwork:';
+
   /// URL of a session's HLS manifest.
   static String hls(String base, String sessionId) =>
       '$base/hls/$sessionId/index.m3u8';
@@ -88,6 +91,9 @@ abstract final class MediaRoutes {
   static String download(String base, String jobId) =>
       '$base/download/$jobId/file';
 
+  /// URL that proxies a server-hosted poster, named by its file name.
+  static String artwork(String base, String file) => '$base/artwork/$file';
+
   /// How a paired player's file path travels in a URL and to its host:
   /// base64url of its UTF-8, without padding. A path holds spaces, `#`, `?`,
   /// backslashes and non-ASCII letters, none of which survive a URL segment
@@ -102,7 +108,7 @@ abstract final class MediaRoutes {
 
   /// Match [path] against the table. [path] is the request path with any
   /// platform prefix already removed, so it starts at `/hls/`, `/direct/`,
-  /// `/download/` or `/peerfile/`.
+  /// `/download/`, `/peerfile/` or `/artwork/`.
   static MediaRoute resolve(String path) {
     if (path.startsWith('/hls/')) {
       final parts = path.substring('/hls/'.length).split('/');
@@ -159,6 +165,21 @@ abstract final class MediaRoutes {
         idLabel: 'Account ID',
         sessionPrefix: peerFileSessionPrefix,
         remotePath: null,
+      );
+    }
+
+    if (path.startsWith('/artwork/')) {
+      final file = path.substring('/artwork/'.length);
+      if (file.isEmpty || file.contains('/')) {
+        return const MediaRouteFailure(
+          _badRequest,
+          'Invalid artwork path format. Expected: /artwork/{file}',
+        );
+      }
+      return MediaRouteMatch(
+        sessionId: '$artworkSessionPrefix$file',
+        path: 'file',
+        kind: MediaRouteKind.hls,
       );
     }
 
