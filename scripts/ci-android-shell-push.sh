@@ -28,7 +28,12 @@ if [ "${#inputs[@]}" -eq 0 ]; then
   exit 0
 fi
 
-if leaked="$(nix-store --query --requisites "${inputs[@]}" | grep -E -- "$sdk_re")"; then
+# A failed query must stop the push, not read as "no SDK paths found".
+if ! closure="$(nix-store --query --requisites "${inputs[@]}")"; then
+  echo "::warning::not pushing the Android dev shell: could not list its inputs' closure"
+  exit 0
+fi
+if leaked="$(grep -E -- "$sdk_re" <<<"$closure")"; then
   echo "::warning::not pushing the Android dev shell: these toolchain paths depend on the unfree SDK:"
   echo "$leaked"
   exit 0
