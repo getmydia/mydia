@@ -20,7 +20,7 @@ environment:
   # ci-nix.yml's "Check / Flutter Pin" job requires exactly
   # `>=MAJOR.MINOR.0 <MAJOR.NEXT_MINOR.0` for the .fvmrc minor: bump it
   # with .fvmrc.
-  flutter: '>=3.47.0 <3.48.0'
+  flutter: '>=3.50.0 <3.51.0'
 
 dependencies:
   flutter:

@@ -187,6 +187,49 @@
           # Delete stale local.properties that may have wrong SDK paths
           rm -f player/android/local.properties 2>/dev/null || true
 
+          # Gradle 9 refuses to configure a project whose directory it cannot
+          # write ("Configuring project ':integration_test' without an existing
+          # directory is not allowed ... can't be written to"), and Flutter's
+          # plugin loader adds SDK plugins such as integration_test as projects
+          # rooted inside FLUTTER_ROOT, which is the read-only Nix store. So the
+          # SDK is mirrored into a writable tree of real directories whose every
+          # leaf is an absolute symlink back into the store (cp -s; -P would keep
+          # the store's relative bin/dart link and leave it dangling). One mirror
+          # per store path; the wrapper honours an exported FLUTTER_ROOT, and
+          # local.properties' flutter.sdk follows it.
+          #
+          # The mirror is built in a temp dir and published with mv -T only if
+          # every step succeeded: a partial copy (ENOSPC, Ctrl-C) is discarded
+          # rather than becoming the SDK every later shell trusts, and a second
+          # shell racing to publish the same mirror loses cleanly instead of
+          # nesting its copy inside the first.
+          flutterBin="$(command -v flutter || true)"
+          flutterStoreRoot=""
+          if [ -n "$flutterBin" ]; then
+            flutterStoreRoot="$(dirname "$(dirname "$(readlink -f "$flutterBin")")")"
+          fi
+          if [ -z "$flutterStoreRoot" ] || [ ! -x "$flutterStoreRoot/bin/flutter" ]; then
+            echo "ERROR: could not locate the Flutter SDK behind 'flutter' on PATH; Android Gradle builds will fail" >&2
+          else
+            flutterRoot="''${XDG_CACHE_HOME:-$HOME/.cache}/mydia/flutter-sdk/$(basename "$flutterStoreRoot")"
+            if [ ! -d "$flutterRoot" ]; then
+              if mkdir -p "$(dirname "$flutterRoot")" \
+                && flutterTmp="$(mktemp -d "$flutterRoot.XXXXXX")" \
+                && [ -n "$flutterTmp" ]; then
+                if ! { cp -rs "$flutterStoreRoot/." "$flutterTmp/" \
+                  && chmod -R u+w "$flutterTmp" \
+                  && mv -T "$flutterTmp" "$flutterRoot" 2>/dev/null; }; then
+                  rm -rf "$flutterTmp"
+                fi
+              fi
+            fi
+            if [ -d "$flutterRoot" ]; then
+              export FLUTTER_ROOT="$flutterRoot"
+            else
+              echo "ERROR: could not build the writable Flutter SDK mirror at $flutterRoot; Android Gradle builds will fail" >&2
+            fi
+          fi
+
           # flutter_rust_bridge_codegen must match the flutter_rust_bridge
           # version pinned in player/rust/mydia_player_p2p/Cargo.toml. A
           # mismatch regenerates every binding at the wrong version without
