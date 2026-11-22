@@ -22,6 +22,7 @@ cat > "$tmp/bin/nix-eval-jobs" <<'STUB'
 echo "$*" >> "$STUB_LOG"
 case "$*" in
   *ciInternal*) cat "$FIXTURES/internal.jsonl" ;;
+  *ciAndroid*) cat "$FIXTURES/android.jsonl" ;;
   *) cat "$FIXTURES/checks.jsonl" ;;
 esac
 exit "${STUB_EXIT:-0}"
@@ -78,6 +79,15 @@ write_internal() {
 }
 write_internal
 
+# The ciAndroid pass: the shell and the stamp. write_android <stamp status>
+write_android() {
+  {
+    job shell notBuilt
+    job stamp "$1"
+  } > "$FIXTURES/android.jsonl"
+}
+write_android cached
+
 # 1. Three checks, two cached: only the uncached one, no inputs.
 {
   job ci-fileset-coverage cached
@@ -92,6 +102,9 @@ expect_json "one uncached check" \
 grep -q -- '--flake \.#checks\.x86_64-linux ' "$STUB_LOG" || note_failure "checks not evaluated from .#checks.x86_64-linux"
 grep -q -- '--check-cache-status' "$STUB_LOG" || note_failure "--check-cache-status not passed"
 grep -q -- '--force-recurse' "$STUB_LOG" || note_failure "--force-recurse not passed"
+grep -q -- '--flake \.#legacyPackages\.x86_64-linux\.ciAndroid .*--check-cache-status' "$STUB_LOG" \
+  || note_failure "ciAndroid not evaluated with --check-cache-status"
+expect_json "cached stamp skips Build / Android" 'false' "$(jq -c .android <<<"$out")"
 
 # 2. Shared inputs: a ciInternal derivation that 2+ uncached checks still need
 #    is an input, named by its first alias; one needed by a single check, or a
@@ -152,7 +165,9 @@ expect_json "nixos-only input" '{
 
 # 3. Everything cached: both matrices empty, printed as [] so the workflow's
 #    empty-matrix guards match; `all` still lists every check and every
-#    ciInternal attribute (aliases included) with its output path, for pins.
+#    ciInternal attribute (aliases included) with its output path, for pins,
+#    plus the Android stamp and never the Android shell, whose closure holds
+#    the unfree SDK.
 {
   job elixir-format cached
   job test-sqlite-1 cached
@@ -167,8 +182,22 @@ expect_json "all for pins" "$(jq -cn --arg o "$(outp '')" '[
   {name: "mydiaTestBuild-postgres", out: "\($o)mydia-test-build-postgres"},
   {name: "mydiaTestBuild-sqlite", out: "\($o)mydia-test-build-sqlite"},
   {name: "nifs-mydia_subsync", out: "\($o)ci-nif-mydia_subsync"},
+  {name: "android-stamp", out: "\($o)stamp"},
   {name: "test-sqlite-1", out: "\($o)test-sqlite-1"}
-]')" "$(jq -c .all <<<"$out")"
+] | sort_by(.name)')" "$(jq -c .all <<<"$out")"
+
+# 3a. A stamp the cache lacks ("local" included) runs Build / Android; a
+#     ciAndroid pass without a stamp fails the plan rather than skipping it.
+for status in notBuilt local; do
+  write_android "$status"
+  out="$("$SCRIPT")" || note_failure "uncached stamp ($status): exited non-zero"
+  expect_json "uncached stamp ($status) runs Build / Android" 'true' "$(jq -c .android <<<"$out")"
+done
+{ job shell notBuilt; } > "$FIXTURES/android.jsonl"
+if "$SCRIPT" >/dev/null 2>&1; then
+  note_failure "missing stamp: exited zero"
+fi
+write_android cached
 
 # 3b. A ciInternal entry without a drvPath is ignored, not fatal.
 {

@@ -61,6 +61,19 @@ defmodule Mydia.P2p.RelayListTest do
       assert {[@fetched], :fetched} =
                RelayList.resolve(opts(cache_path, plug, override: "ftp://nope.example.test"))
     end
+
+    test "a configured list is used whole, in order", %{cache_path: cache_path} do
+      plug = fn _conn -> raise "the override must not fetch" end
+
+      assert {[@other, @fetched], :override} =
+               RelayList.resolve(opts(cache_path, plug, override: [@other, @fetched]))
+    end
+
+    test "an empty configured list falls through to the fetch", %{cache_path: cache_path} do
+      plug = responds(200, ~s({"p2p":{"relays":["#{@fetched}"]}}))
+
+      assert {[@fetched], :fetched} = RelayList.resolve(opts(cache_path, plug, override: []))
+    end
   end
 
   describe "fetch" do

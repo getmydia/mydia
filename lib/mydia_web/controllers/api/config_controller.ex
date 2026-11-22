@@ -15,6 +15,7 @@ defmodule MydiaWeb.Api.ConfigController do
   use MydiaWeb, :controller
 
   alias Mydia.Indexers.Cardigann.{EngineSetting, EngineSwitcher}
+  alias Mydia.Player.RemoteAccess, as: RemoteAccessSwitch
   alias Mydia.Settings
   require Logger
 
@@ -122,10 +123,19 @@ defmodule MydiaWeb.Api.ConfigController do
         # Schemaless: a field the request left out is absent, not nil.
         validated_data = Ecto.Changeset.apply_changes(changeset)
 
-        if key == EngineSetting.setting_key() do
-          update_cardigann_engine(conn, validated_data.value)
-        else
-          perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
+        cond do
+          key == EngineSetting.setting_key() ->
+            update_cardigann_engine(conn, validated_data.value)
+
+          key == RemoteAccessSwitch.relay_setting_key() ->
+            apply_relay_urls(
+              conn,
+              String.split(validated_data.value, ","),
+              Map.get(validated_data, :description)
+            )
+
+          true ->
+            perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
         end
     end
   end
@@ -153,10 +163,10 @@ defmodule MydiaWeb.Api.ConfigController do
             "Remove the environment variable to allow UI/API configuration."
       })
     else
-      if key == EngineSetting.setting_key() do
-        reset_cardigann_engine(conn)
-      else
-        delete_config_override(conn, key)
+      cond do
+        key == EngineSetting.setting_key() -> reset_cardigann_engine(conn)
+        key == RemoteAccessSwitch.relay_setting_key() -> apply_relay_urls(conn, [])
+        true -> delete_config_override(conn, key)
       end
     end
   end
@@ -281,6 +291,61 @@ defmodule MydiaWeb.Api.ConfigController do
         |> put_status(:unprocessable_entity)
         |> json(%{error: "Failed to switch engine"})
     end
+  end
+
+  # Through Mydia.Player.RemoteAccess rather than a plain row write, so a
+  # non-https URL is refused before it can fail the next config reload, and
+  # a running p2p node restarts onto the new relays. An empty list clears.
+  defp apply_relay_urls(conn, urls, description \\ nil) do
+    user = Guardian.Plug.current_resource(conn)
+    opts = [updated_by_id: user && user.id, description: description]
+
+    case RemoteAccessSwitch.set_relay_urls(urls, opts) do
+      :ok ->
+        relay_saved(conn, nil)
+
+      {:error, {:restart_failed, reason}} ->
+        Logger.error("Relay saved but the P2P node did not restart", reason: inspect(reason))
+        relay_saved(conn, "Saved, but the P2P node did not restart. Restart Mydia to apply it.")
+
+      {:error, {:invalid_url, url}} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "Validation failed", details: %{value: ["#{url} is not an https URL"]}})
+
+      {:error, :env_locked} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{
+          error:
+            "Cannot update setting controlled by environment variable. " <>
+              "Remove the environment variable to allow UI/API configuration."
+        })
+
+      {:error, reason} ->
+        Logger.error("Failed to save relay URLs", reason: inspect(reason))
+
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "Failed to save relay URLs"})
+    end
+  end
+
+  # Read back after the save: a cleared override falls through to YAML or the
+  # default, and the response says so the way delete_config_override/2 does.
+  defp relay_saved(conn, warning) do
+    key = RemoteAccessSwitch.relay_setting_key()
+    source = if Settings.get_config_setting_by_key(key), do: "database", else: "yaml_or_default"
+
+    json(conn, %{
+      message: warning || "Relay URLs saved",
+      data: %{
+        key: key,
+        value: serialize_value(RemoteAccessSwitch.relay_urls()),
+        category: :remote_access,
+        source: source
+      }
+    })
   end
 
   defp parse_cardigann_engine("builtin"), do: {:ok, :builtin}
@@ -470,6 +535,7 @@ defmodule MydiaWeb.Api.ConfigController do
       "media.tv_path" => "TV_PATH",
       "logging.level" => "LOG_LEVEL",
       "remote_access.enabled" => "ENABLE_REMOTE_ACCESS",
+      "remote_access.relay_urls" => "IROH_RELAY_URL",
       "cardigann.engine" => "CARDIGANN_ENGINE"
     }
 
@@ -509,6 +575,8 @@ defmodule MydiaWeb.Api.ConfigController do
   defp serialize_value(value) when is_number(value), do: value
   defp serialize_value(value) when is_boolean(value), do: value
   defp serialize_value(nil), do: nil
+  # Comma-joined, the format a stored row holds and Paths.cast_overlay parses.
+  defp serialize_value(value) when is_list(value), do: Enum.map_join(value, ",", &to_string/1)
   defp serialize_value(value), do: to_string(value)
 
   # Write-only settings (the built-in client's VPN credentials) are never sent

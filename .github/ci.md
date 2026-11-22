@@ -659,7 +659,7 @@ the signing key and health checks are in
   file dated to the epoch, and the job runs Mix in `nix develop .#ci`
   (`nix/ci/README.md`, "Outside the sandbox").
 - `Rust / SMB integration` runs `mydia_smb`'s Samba tests (above).
-- `Build / Android` builds the release APK on every run (below).
+- `Build / Android` builds the release APK when its inputs changed (below).
 
 The Wallaby browser suite is the `e2e-browser` check (`nix/ci/tests.nix`),
 not a job: nixpkgs chromium and chromedriver over the SQLite test build and
@@ -668,20 +668,42 @@ explicit `take_screenshot`, and a local
 `nix build .#checks.x86_64-linux.e2e-browser --keep-failed` keeps them under
 the path the failed check prints.
 
-### Build / Android runs on every PR
+### Build / Android runs when its inputs change
 
 `Build / Android` is the one player build that is not a derivation. Making it
 one needs a Gradle dependency lockfile for nixpkgs' `mitmCache` to fetch
 from, refreshed on every Android dependency bump, and Flutter's Android
 engine artifacts have never been proven inside the sandbox
 (`design/specs/2026-11-21-nix-ci-phase-2-design.md`, "Android"). So it is an
-ordinary job in `ci.yml` with no path filter: it runs on every PR, by design,
-including docs-only ones. Its toolchain is `nix develop .#android`, the shell
-`./dev player android build` uses, substituted through the `nix-ci` action
-with `push: 'false'`: a dev shell is not a check output, and the Android SDK
-packages are unfree, so cache.nixos.org does not carry them either and each
-run fetches the SDK, NDK and pub and Gradle dependencies afresh. There is no
-`actions/cache`. The steps are `flutter pub get --enforce-lockfile`,
+ordinary job in `ci.yml`, but the plan still decides whether it runs, through
+a stamp (`nix/ci/android.nix`):
+
+- `legacyPackages.x86_64-linux.ciAndroid.stamp` is a tiny derivation naming
+  the source of everything the job reads (the player app, `player/android`,
+  `mydia_player_p2p` and its path deps, the GraphQL schema,
+  `scripts/check-apk-abis.sh`, `ci.yml`, minus Markdown) and the `.#android`
+  shell's `.drv`, so a `flake.lock`, Flutter or toolchain change counts as an
+  input change.
+  It holds those as plain strings, with no store references.
+- `Nix / Plan` reports `android: true` while cache.mydia.dev lacks the stamp,
+  and the job runs; otherwise it is skipped. Of the 80 PRs merged before
+  this changed, 39 touched none of those inputs (Markdown is excluded).
+- The job pushes the stamp as its last step, after the APK built and passed
+  `scripts/check-apk-abis.sh`, so only a passing build marks inputs as done.
+  Fork PRs and Dependabot cannot push, so for them it runs every time.
+  `Build / Android` is not a required context, so a skip blocks nothing.
+
+Its toolchain is `nix develop .#android`, the shell `./dev player android
+build` uses. Before building, the job realises `ciAndroid.shell` (the shell's
+`inputDerivation`) and pushes every input of it except the `androidsdk`
+composition (`scripts/ci-android-shell-push.sh`, which refuses to push at all
+if any of those inputs' closures reaches the SDK). The SDK, NDK, platforms and
+build tools are unfree; their licence forbids redistribution and
+cache.mydia.dev is publicly readable, so each run still unpacks them (about
+8 GB). The Rust toolchain with its Android targets was the one free input no
+cache carried. Never add `ciAndroid.shell` to `ciInternal`, the pins or any
+push: its closure is the SDK. There is no `actions/cache`; pub and Gradle
+fetch on each run. The steps are `flutter pub get --enforce-lockfile`,
 `flutter pub run build_runner build` and `flutter build apk --release
 --target-platform android-arm,android-arm64`, then
 `scripts/check-apk-abis.sh` and the `mydia-player-android-apk` artifact.
@@ -734,8 +756,8 @@ names from `ci-player.yml`. `Test` needs `Guards`, `Nix / Checks`,
 `Nix / Checks`. A matrix leg's result is not addressable through `needs`, so
 every aggregator gates on the whole check matrix: a failing Rust check also
 reds `Test / Player`, and a failing `player-test` reds `Test / PostgreSQL`.
-`Build / Android` is a plain job, not an aggregator: it has no `needs`, so
-nothing can skip it. The NixOS VM tests are not in that matrix and gate
+`Build / Android` is a plain job, not an aggregator, and not required: the
+plan skips it when its stamp is cached. The NixOS VM tests are not in that matrix and gate
 neither. Each has `if: always()` and a step that fails unless
 every job it needs concluded `success` or `skipped`, so the aggregator itself
 concludes success or failure and never `skipped`. The `Guard the required-check aggregators` step in `Guards` checks

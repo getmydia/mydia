@@ -77,6 +77,46 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     end
   end
 
+  def handle_event("save_relay_urls", %{"relay_urls" => raw}, socket) do
+    urls = String.split(raw, ",")
+
+    case RemoteAccessSwitch.set_relay_urls(urls, updated_by_id: socket.assigns.current_user.id) do
+      :ok ->
+        {:noreply,
+         socket
+         |> load_remote_access_setting()
+         |> load_p2p_status()
+         |> put_flash(:info, gettext("Relay saved"))}
+
+      {:error, :env_locked} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("The relay is set by IROH_RELAY_URL and cannot be changed here.")
+         )}
+
+      {:error, {:restart_failed, reason}} ->
+        Logger.error("Relay saved but the P2P node did not restart: #{inspect(reason)}")
+
+        {:noreply,
+         socket
+         |> load_remote_access_setting()
+         |> load_p2p_status()
+         |> put_flash(
+           :error,
+           gettext("Relay saved, but the P2P node did not restart. Restart Mydia to apply it.")
+         )}
+
+      {:error, {:invalid_url, url}} ->
+        {:noreply, put_flash(socket, :error, gettext("%{url} is not an https URL.", url: url))}
+
+      {:error, reason} ->
+        Logger.error("Failed to save relay URLs: #{inspect(reason)}")
+        {:noreply, put_flash(socket, :error, gettext("Failed to save the relay"))}
+    end
+  end
+
   def handle_event("copy_peer_id", _params, socket) do
     {:noreply, put_flash(socket, :info, gettext("Node ID copied to clipboard"))}
   end
@@ -192,6 +232,16 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
       Settings.config_source(
         RemoteAccessSwitch.env_var(),
         RemoteAccessSwitch.setting_key(),
+        all_db_settings
+      )
+    )
+    |> assign(:relay_urls, RemoteAccessSwitch.relay_urls())
+    |> assign(:relay_locked, RemoteAccessSwitch.relay_env_locked?())
+    |> assign(
+      :relay_source,
+      Settings.config_source(
+        RemoteAccessSwitch.relay_env_var(),
+        RemoteAccessSwitch.relay_setting_key(),
         all_db_settings
       )
     )
