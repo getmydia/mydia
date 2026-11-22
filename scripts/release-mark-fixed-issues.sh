@@ -23,7 +23,7 @@
 #   - sets milestone vX.Y.Z (the tag without its suffix), creating it if needed
 #   - prerelease: comments "Fixed in <tag>", unless an earlier prerelease of
 #     the same version already did
-#   - stable: comments "Now in the stable release, <tag>" (or "Fixed in <tag>"
+#   - stable: comments "Now in <tag>" (or "Fixed in <tag>"
 #     when no prerelease carried it)
 #
 # A stable release then closes its milestone. Each comment carries a hidden
@@ -64,8 +64,7 @@ fi
 
 MILESTONE="${TAG%%-*}"
 case "$TAG" in
-  *-beta*) KIND=prerelease; LABEL="a beta release" ;;
-  *-rc*) KIND=prerelease; LABEL="a release candidate" ;;
+  *-beta* | *-rc*) KIND=prerelease ;;
   *) KIND=stable ;;
 esac
 RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
@@ -174,16 +173,16 @@ for issue in "${ISSUES[@]}"; do
       echo "  already announced for $MILESTONE"
       continue
     fi
-    body="Fixed in [${TAG}](${RELEASE_URL}), ${LABEL}. Thanks for reporting it!"
+    body="Fixed in [${TAG}](${RELEASE_URL})."
   else
     if grep -qF "${MARKER_PREFIX}stable -->" <<<"$bodies"; then
       echo "  already announced in stable"
       continue
     fi
     if grep -qF "${MARKER_PREFIX}prerelease -->" <<<"$bodies"; then
-      body="Now in the stable release, [${TAG}](${RELEASE_URL})."
+      body="Now in [${TAG}](${RELEASE_URL})."
     else
-      body="Fixed in [${TAG}](${RELEASE_URL}). Thanks for reporting it!"
+      body="Fixed in [${TAG}](${RELEASE_URL})."
     fi
   fi
   run gh api -X POST "repos/${REPO}/issues/${issue}/comments" \
