@@ -36,18 +36,12 @@ defmodule Mydia.Config.Schema.RemoteAccess do
   end
 
   @doc """
-  Whether `url` can be an iroh relay: https with a host, and no comma. The one
-  rule the config, the admin UI and `Mydia.P2p.RelayList` all apply. A list is
-  stored and read comma-separated, so a comma inside a URL would reload as two
-  entries.
+  Whether `url` can be an iroh relay: https with a host. The one rule the
+  config, the admin UI and `Mydia.P2p.RelayList` all apply.
   """
   @spec relay_url?(term()) :: boolean()
   def relay_url?(url) when is_binary(url) do
-    not String.contains?(url, ",") and
-      match?(
-        %URI{scheme: "https", host: host} when is_binary(host) and host != "",
-        URI.parse(url)
-      )
+    match?(%URI{scheme: "https", host: host} when is_binary(host) and host != "", URI.parse(url))
   end
 
   def relay_url?(_), do: false

@@ -190,7 +190,7 @@ defmodule Mydia.Player.RemoteAccess do
       relay_env_locked?(getenv) ->
         {:error, :env_locked}
 
-      bad = Enum.find(urls, &(not Mydia.Config.Schema.RemoteAccess.relay_url?(&1))) ->
+      bad = Enum.find(urls, &(not storable_relay?(&1))) ->
         {:error, {:invalid_url, bad}}
 
       true ->
@@ -237,6 +237,13 @@ defmodule Mydia.Player.RemoteAccess do
 
   defp maybe_put_description(attrs, nil), do: attrs
   defp maybe_put_description(attrs, description), do: Map.put(attrs, :description, description)
+
+  # The row holds the list comma-joined and the overlay splits it on commas,
+  # so a comma inside one URL would reload as two entries. Only this write
+  # path uses that encoding: YAML and the fetched relay list keep real lists
+  # and are not held to it.
+  defp storable_relay?(url),
+    do: Mydia.Config.Schema.RemoteAccess.relay_url?(url) and not String.contains?(url, ",")
 
   defp ok({:ok, _}), do: :ok
   defp ok({:error, _} = error), do: error
