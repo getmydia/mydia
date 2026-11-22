@@ -4536,16 +4536,17 @@ distributing player binaries on demand across any combination of supported platf
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Build default mobile platforms (iOS &amp; Android) from master and upload to internal store tracks</span>
 <a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Build a specific branch or commit</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">ref</span><span class="o">=</span>feat/my-feature
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
-<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># Build all platforms without uploading to stores</span>
-<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_macos</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_windows</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_linux</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_flatpak</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">upload_to_stores</span><span class="o">=</span><span class="nb">false</span>
-<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>
-<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="c1"># Test build and sign pipeline without uploading (dry run)</span>
-<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Build a branch: dispatch on the branch itself (see "Branch builds")</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span>--ref<span class="w"> </span>feat/my-feature<span class="w"> </span>-f<span class="w"> </span><span class="nv">ref</span><span class="o">=</span>feat/my-feature
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="c1"># Build all platforms without uploading to stores</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_macos</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_windows</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_linux</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_flatpak</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">upload_to_stores</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="c1"># Test build and sign pipeline without uploading (dry run)</span>
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
 </code></pre></div>
 <h3 id="dispatch-inputs_1">Dispatch inputs</h3>
 <table>
@@ -4695,7 +4696,12 @@ into it: <code>scripts/build-number.sh</code> already keeps a dev build's number
 the beta and stable of the same version, so there is nothing left for it to
 leapfrog.</p>
 <h3 id="branch-builds">Branch builds</h3>
-<p>Any ref can be dispatched. When the commit is not on <code>origin/master</code>'s
+<p>A commit that is not on master must be built from a run dispatched on its
+branch (<code>--ref</code>). Dispatched from master, the workflow stops with an error:
+a run's Actions cache scope is the ref it was dispatched on, so a branch build
+started from master could write unreviewed code into the cache that release
+builds restore.</p>
+<p>Any ref can be built. When the commit is not on <code>origin/master</code>'s
 first-parent history (<code>scripts/on-mainline.sh</code>), the run is in branch mode,
 shown in the run summary, and publishes nowhere master's builds do:</p>
 <ul>
