@@ -772,6 +772,22 @@ jobs:
 
           echo "Released: https://github.com/${REPO}/releases/tag/${TAG} (${SHA})"
 
+  # Milestones and "Fixed in" comments on the issues this release closes.
+  # Runs after publish, so a failure here never holds the release back.
+  mark-fixed-issues:
+    name: Mark Fixed Issues
+    if: ${{ !cancelled() && needs.publish.result == 'success' && !inputs.dry_run }}
+    needs:
+      - prepare
+      - publish
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    uses: ./.github/workflows/release-mark-fixed-issues.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+
   docs:
     name: Deploy Docs
     if: ${{ !cancelled() && needs.publish.result == 'success' && needs.prepare.outputs.is_prerelease == 'false' && !inputs.dry_run }}
