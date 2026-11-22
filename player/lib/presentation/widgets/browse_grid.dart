@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../core/focus/focus_memory.dart';
 import '../../core/layout/breakpoints.dart';
