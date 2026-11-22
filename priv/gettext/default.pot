@@ -244,7 +244,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/modals.ex:1112
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:73
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:145
-#: lib/mydia_web/live/media_live/show/poster_picker.ex:357
+#: lib/mydia_web/live/media_live/show/poster_picker.ex:360
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:96
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:507
 #: lib/mydia_web/live/plugin_setup_live/modal.ex:259
@@ -1238,7 +1238,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:349
 #: lib/mydia_web/live/discover_live/regional_components.ex:222
 #: lib/mydia_web/live/media_live/index/section_components.ex:68
-#: lib/mydia_web/live/media_live/show/poster_picker.ex:367
+#: lib/mydia_web/live/media_live/show/poster_picker.ex:370
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:320
 #, elixir-autogen, elixir-format
 msgid "Save"
@@ -8174,7 +8174,7 @@ msgstr ""
 
 #: lib/mydia_web/components/grid_density_components.ex:212
 #: lib/mydia_web/live/dashboard_live/edit_home_components.ex:108
-#: lib/mydia_web/live/media_live/show/poster_picker.ex:354
+#: lib/mydia_web/live/media_live/show/poster_picker.ex:357
 #, elixir-autogen, elixir-format
 msgid "Reset to default"
 msgstr ""
@@ -10238,7 +10238,7 @@ msgstr ""
 msgid "Updated the match for this group."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/poster_picker.ex:301
+#: lib/mydia_web/live/media_live/show/poster_picker.ex:304
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:91
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:509
 #, elixir-autogen, elixir-format
@@ -22505,14 +22505,14 @@ msgstr ""
 msgid "Use your own iroh relay instead of Mydia's. Separate several with commas. Leave empty for the default. iroh's public relays stay in the list, and the lowest-latency relay is used."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/poster_picker.ex:300
+#: lib/mydia_web/live/media_live/show/poster_picker.ex:303
 #, elixir-autogen, elixir-format
 msgid "Browse"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/poster_card.ex:32
 #: lib/mydia_web/live/media_live/show/poster_card.ex:33
-#: lib/mydia_web/live/media_live/show/poster_picker.ex:294
+#: lib/mydia_web/live/media_live/show/poster_picker.ex:297
 #, elixir-autogen, elixir-format
 msgid "Change poster"
 msgstr ""
@@ -22532,7 +22532,7 @@ msgstr ""
 msgid "Current"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/poster_picker.ex:302
+#: lib/mydia_web/live/media_live/show/poster_picker.ex:305
 #, elixir-autogen, elixir-format
 msgid "From folder"
 msgstr ""
