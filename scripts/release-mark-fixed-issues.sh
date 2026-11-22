@@ -12,17 +12,19 @@
 # issues those PRs close (closing keywords or the "Development" sidebar link).
 # An issue closed without a linked PR is not found.
 #
-#   beta    v0.19.0-beta.3  since the previous release of either kind
-#   stable  v0.19.0         since the previous stable release, so it covers
-#                           every beta of the version
+#   prerelease  v0.19.0-beta.3, v0.19.0-rc.1   since the previous release of
+#                                              any kind
+#   stable      v0.19.0                        since the previous stable
+#                                              release, so it covers every
+#                                              prerelease of the version
 #
 # What it does to each issue:
 #
-#   - sets milestone vX.Y.Z (the tag without -beta.N), creating it if needed
-#   - beta: comments "Fixed in <tag>", unless an earlier beta of the same
-#     version already did
-#   - stable: comments "Now in stable <tag>" (or "Fixed in <tag>" when no beta
-#     carried it)
+#   - sets milestone vX.Y.Z (the tag without its suffix), creating it if needed
+#   - prerelease: comments "Fixed in <tag>", unless an earlier prerelease of
+#     the same version already did
+#   - stable: comments "Now in the stable release, <tag>" (or "Fixed in <tag>"
+#     when no prerelease carried it)
 #
 # A stable release then closes its milestone. Each comment carries a hidden
 # marker, so re-running for the same tag posts nothing twice.
@@ -52,28 +54,37 @@ REPO="${REPO:-getmydia/mydia}"
 OWNER="${REPO%/*}"
 NAME="${REPO#*/}"
 
-readonly TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$'
+# The dot before N is optional because tags before 0.9 were spelled -rcN, the
+# same leniency docs/contributing/releasing.md describes for build numbers.
+readonly TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.?[0-9]+)?$'
 if [[ ! "$TAG" =~ $TAG_RE ]]; then
-  echo "$TAG is not a Mydia release tag (vX.Y.Z or vX.Y.Z-beta.N); nothing to do."
+  echo "$TAG is not a Mydia release tag (vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N); nothing to do."
   exit 0
 fi
 
 MILESTONE="${TAG%%-*}"
-if [[ "$TAG" == *-beta.* ]]; then KIND=beta; else KIND=stable; fi
+case "$TAG" in
+  *-beta*) KIND=prerelease; LABEL="a beta release" ;;
+  *-rc*) KIND=prerelease; LABEL="a release candidate" ;;
+  *) KIND=stable ;;
+esac
 RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
 
-# jq: a sort key that orders vX.Y.Z after every vX.Y.Z-beta.N.
-readonly VERSION_KEY='def vkey: capture("^v(?<a>[0-9]+)\\.(?<b>[0-9]+)\\.(?<c>[0-9]+)(-beta\\.(?<d>[0-9]+))?$")
-  | [(.a|tonumber), (.b|tonumber), (.c|tonumber), ((.d // "1000000000")|tonumber)];'
+# jq: a sort key ordering vX.Y.Z-beta.N < vX.Y.Z-rc.N < vX.Y.Z.
+readonly VERSION_KEY='def vkey:
+  capture("^v(?<a>[0-9]+)\\.(?<b>[0-9]+)\\.(?<c>[0-9]+)(-(?<s>beta|rc)\\.?(?<n>[0-9]+))?$")
+  | [(.a|tonumber), (.b|tonumber), (.c|tonumber),
+     ({"beta": 0, "rc": 1}[.s // ""] // 2), ((.n // "0")|tonumber)];'
 
-# The previous published release this one is measured from.
-PREV=$(gh release list --repo "$REPO" --limit 200 --exclude-drafts --json tagName \
-  | jq -r --arg tag "$TAG" --arg kind "$KIND" --arg re "$TAG_RE" "$VERSION_KEY"'
+# The previous published release this one is measured from. The limit is far
+# above the release count; gh has no "all" setting for release list.
+RELEASES=$(gh release list --repo "$REPO" --limit 1000 --exclude-drafts --json tagName)
+PREV=$(jq -r --arg tag "$TAG" --arg kind "$KIND" --arg re "$TAG_RE" "$VERSION_KEY"'
       [ .[].tagName
         | select(test($re))
-        | select($kind == "beta" or (test("-beta\\.") | not)) ]
+        | select($kind == "prerelease" or (test("-") | not)) ]
       | map(select(vkey < ($tag | vkey)))
-      | sort_by(vkey) | last // empty')
+      | sort_by(vkey) | last // empty' <<<"$RELEASES")
 
 if [[ -z "$PREV" ]]; then
   echo "::error::No published release precedes $TAG; cannot tell which issues it fixes." >&2
@@ -81,13 +92,20 @@ if [[ -z "$PREV" ]]; then
 fi
 echo "Marking issues fixed in $TAG ($KIND), commits $PREV...$TAG, milestone $MILESTONE"
 
+# Every API read is captured into a variable before it feeds an array: a failed
+# request inside `mapfile < <(...)` would read as an empty list, and a stable
+# release would then close its milestone having marked nothing.
+
 # PR numbers from the commit subjects in the range.
-mapfile -t PRS < <(
-  gh api --paginate "repos/${REPO}/compare/${PREV}...${TAG}?per_page=100" \
-    --jq '.commits[].commit.message | split("\n")[0]' \
-    | sed -nE 's/^Merge pull request #([0-9]+) from .*/\1/p; s/.*\(#([0-9]+)\)$/\1/p' \
-    | sort -un
-)
+SUBJECTS=$(gh api --paginate "repos/${REPO}/compare/${PREV}...${TAG}?per_page=100" \
+  --jq '.commits[].commit.message | split("\n")[0]')
+PRS=()
+if [[ -n "$SUBJECTS" ]]; then
+  mapfile -t PRS < <(
+    sed -nE 's/^Merge pull request #([0-9]+) from .*/\1/p; s/.*\(#([0-9]+)\)$/\1/p' <<<"$SUBJECTS" \
+      | sort -un
+  )
+fi
 echo "${#PRS[@]} PR(s) in range"
 
 # Closed-as-completed issues in this repository that those PRs close. Batched
@@ -103,16 +121,17 @@ for ((i = 0; i < ${#PRS[@]}; i += 50)); do
     query+=" nodes { number state stateReason repository { nameWithOwner } } } } }"
   done
   query+=" } }"
-  mapfile -t -O "${#ISSUES[@]}" ISSUES < <(
-    gh api graphql -f query="$query" \
-      | jq -r --arg repo "$REPO" \
-        '.data.repository[] | .closingIssuesReferences.nodes[]?
-         | select(.repository.nameWithOwner == $repo
-                  and .state == "CLOSED" and .stateReason == "COMPLETED")
-         | .number'
-  )
+  response=$(gh api graphql -f query="$query")
+  found=$(jq -r --arg repo "$REPO" \
+    '.data.repository[] | .closingIssuesReferences.nodes[]?
+     | select(.repository.nameWithOwner == $repo
+              and .state == "CLOSED" and .stateReason == "COMPLETED")
+     | .number' <<<"$response")
+  [[ -z "$found" ]] || mapfile -t -O "${#ISSUES[@]}" ISSUES <<<"$found"
 done
-mapfile -t ISSUES < <(printf '%s\n' "${ISSUES[@]}" | sed '/^$/d' | sort -un)
+if ((${#ISSUES[@]} > 0)); then
+  mapfile -t ISSUES < <(printf '%s\n' "${ISSUES[@]}" | sort -un)
+fi
 echo "${#ISSUES[@]} issue(s) fixed: ${ISSUES[*]:-none}"
 
 run() {
@@ -150,18 +169,18 @@ for issue in "${ISSUES[@]}"; do
 
   bodies=$(gh api --paginate "repos/${REPO}/issues/${issue}/comments?per_page=100" --jq '.[].body')
 
-  if [[ "$KIND" == beta ]]; then
+  if [[ "$KIND" == prerelease ]]; then
     if grep -qF "$MARKER_PREFIX" <<<"$bodies"; then
       echo "  already announced for $MILESTONE"
       continue
     fi
-    body="Fixed in [${TAG}](${RELEASE_URL}), a beta release. Thanks for reporting it!"
+    body="Fixed in [${TAG}](${RELEASE_URL}), ${LABEL}. Thanks for reporting it!"
   else
     if grep -qF "${MARKER_PREFIX}stable -->" <<<"$bodies"; then
       echo "  already announced in stable"
       continue
     fi
-    if grep -qF "${MARKER_PREFIX}beta -->" <<<"$bodies"; then
+    if grep -qF "${MARKER_PREFIX}prerelease -->" <<<"$bodies"; then
       body="Now in the stable release, [${TAG}](${RELEASE_URL})."
     else
       body="Fixed in [${TAG}](${RELEASE_URL}). Thanks for reporting it!"

@@ -71,7 +71,7 @@ the docs deploy.
 
 Once the release is published, the workflow finds every issue it fixes and
 marks it. "Fixes" means an issue closed as completed by a PR merged since the
-previous release. For a beta that is the previous release of either kind; for
+previous release. For a beta or rc that is the previous release of any kind; for
 a stable release it is the previous stable one, so the range covers all of its
 betas. Each issue:
 
@@ -89,8 +89,10 @@ To backfill a release or re-run a failed attempt (nothing is posted twice):
 
 ```bash
 gh workflow run release-mark-fixed-issues.yml --repo getmydia/mydia \
-  -f tag=v0.19.0-beta.3 [-f dry_run=true]
+  -f tag=v0.19.0-beta.3
 ```
+
+Add `-f dry_run=true` to print the plan without writing anything.
 
 Locally, `scripts/release-mark-fixed-issues.sh --dry-run <tag>` prints the same
 plan.
