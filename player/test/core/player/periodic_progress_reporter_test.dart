@@ -31,8 +31,7 @@ class _Recorder extends PeriodicProgressReporter {
     required int positionSeconds,
     required int durationSeconds,
     required bool paused,
-  }) async =>
-      progress.add((positionSeconds, durationSeconds, paused));
+  }) async => progress.add((positionSeconds, durationSeconds, paused));
 
   @override
   Future<void> sendWatched() async => watched++;
@@ -41,8 +40,7 @@ class _Recorder extends PeriodicProgressReporter {
   Future<void> sendStopped({
     required int positionSeconds,
     required int durationSeconds,
-  }) async =>
-      stopped.add(positionSeconds);
+  }) async => stopped.add(positionSeconds);
 }
 
 class _SlowRecorder extends _Recorder {
@@ -63,31 +61,32 @@ class _SlowRecorder extends _Recorder {
   Future<void> sendStopped({
     required int positionSeconds,
     required int durationSeconds,
-  }) async =>
-      order.add('stopped');
+  }) async => order.add('stopped');
 }
 
 void main() {
-  test('reports position, crosses watched once, stops at the last position',
-      () async {
-    final platform = _StaticPlatformPlayer()..at(const Duration(minutes: 10));
-    final player = Player(platformPlayer: platform);
-    final reporter = _Recorder();
+  test(
+    'reports position, crosses watched once, stops at the last position',
+    () async {
+      final platform = _StaticPlatformPlayer()..at(const Duration(minutes: 10));
+      final player = Player(platformPlayer: platform);
+      final reporter = _Recorder();
 
-    await reporter.save(player, mediaType: 'movie', mediaId: 'x');
-    expect(reporter.progress.single, (600, 6000, false));
-    expect(reporter.watched, 0);
+      await reporter.save(player, mediaType: 'movie', mediaId: 'x');
+      expect(reporter.progress.single, (600, 6000, false));
+      expect(reporter.watched, 0);
 
-    platform.at(const Duration(minutes: 95), playing: false);
-    await reporter.save(player, mediaType: 'movie', mediaId: 'x');
-    await reporter.save(player, mediaType: 'movie', mediaId: 'x');
-    expect(reporter.progress.last.$3, isTrue, reason: 'paused');
-    expect(reporter.watched, 1);
+      platform.at(const Duration(minutes: 95), playing: false);
+      await reporter.save(player, mediaType: 'movie', mediaId: 'x');
+      await reporter.save(player, mediaType: 'movie', mediaId: 'x');
+      expect(reporter.progress.last.$3, isTrue, reason: 'paused');
+      expect(reporter.watched, 1);
 
-    reporter.dispose();
-    await Future<void>.delayed(Duration.zero);
-    expect(reporter.stopped, [5700]);
-  });
+      reporter.dispose();
+      await Future<void>.delayed(Duration.zero);
+      expect(reporter.stopped, [5700]);
+    },
+  );
 
   test('reports on a seek jump, not on ordinary playback steps', () async {
     final platform = _StaticPlatformPlayer()..at(const Duration(minutes: 10));

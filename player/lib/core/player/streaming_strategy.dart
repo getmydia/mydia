@@ -40,9 +40,7 @@ class StreamingStrategyService {
   /// - Platform (web vs native)
   /// - Browser capabilities (though media_kit handles this internally)
   /// - HLS support via hls.js
-  static StreamingStrategy getOptimalStrategy({
-    bool forceHls = false,
-  }) {
+  static StreamingStrategy getOptimalStrategy({bool forceHls = false}) {
     // On web, prefer HLS for better compatibility and adaptive streaming
     if (kIsWeb || forceHls) {
       // Use HLS_COPY first (no transcoding, faster startup)

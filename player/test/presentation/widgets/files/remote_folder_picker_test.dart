@@ -13,14 +13,20 @@ Future<void> _pump(
   String root = '/',
   VoidCallback? onExit,
 }) async {
-  await tester.pumpWidget(MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(
-      body: RemoteFolderPicker(
-          backend: backend, root: root, onPicked: picked.add, onExit: onExit),
+  await tester.pumpWidget(
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: RemoteFolderPicker(
+          backend: backend,
+          root: root,
+          onPicked: picked.add,
+          onExit: onExit,
+        ),
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
@@ -33,20 +39,21 @@ class _StrayBackend extends FakeBackend {
 
   @override
   Future<List<FileEntry>> list(String dir) async => [
-        ...await super.list(dir),
-        FileEntry(
-          path: strayPath,
-          name: 'elsewhere',
-          isDir: true,
-          size: 0,
-          modified: FakeBackend.defaultModified,
-        ),
-      ];
+    ...await super.list(dir),
+    FileEntry(
+      path: strayPath,
+      name: 'elsewhere',
+      isDir: true,
+      size: 0,
+      modified: FakeBackend.defaultModified,
+    ),
+  ];
 }
 
 void main() {
-  testWidgets('walks into a folder, back up, and picks the open one',
-      (tester) async {
+  testWidgets('walks into a folder, back up, and picks the open one', (
+    tester,
+  ) async {
     final picked = <String>[];
     await _pump(tester, FakeBackend({'/A/B/x.mkv': 1, '/A/f.mkv': 1}), picked);
 
@@ -73,7 +80,7 @@ void main() {
     (const BackendUnauthorized(), 'Wrong user or password.'),
     (
       const BackendNotFound(),
-      'That shared folder no longer exists on this server.'
+      'That shared folder no longer exists on this server.',
     ),
     (const BackendPermissionLost(), "This account can't open that folder."),
     (const BackendUnreachable(), "Can't reach the server."),
@@ -100,18 +107,26 @@ void main() {
   for (final stray in ['/elsewhere', '/dav/../elsewhere', '/dav/./elsewhere']) {
     testWidgets('a folder at $stray gets no row', (tester) async {
       await _pump(
-          tester, _StrayBackend({'/dav/A/f.mkv': 1}, strayPath: stray), [],
-          root: '/dav');
+        tester,
+        _StrayBackend({'/dav/A/f.mkv': 1}, strayPath: stray),
+        [],
+        root: '/dav',
+      );
       expect(find.text('A'), findsOneWidget);
       expect(find.text('elsewhere'), findsNothing);
     });
   }
 
-  testWidgets('with onExit, back at the root calls it and stays',
-      (tester) async {
+  testWidgets('with onExit, back at the root calls it and stays', (
+    tester,
+  ) async {
     var exits = 0;
-    await _pump(tester, FakeBackend({'/A/f.mkv': 1}), [],
-        onExit: () => exits++);
+    await _pump(
+      tester,
+      FakeBackend({'/A/f.mkv': 1}),
+      [],
+      onExit: () => exits++,
+    );
     await tester.tap(find.text('A'));
     await tester.pumpAndSettle();
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));
@@ -127,8 +142,9 @@ void main() {
     expect(find.byType(RemoteFolderPicker), findsOneWidget);
   });
 
-  testWidgets('shows the empty text when a folder has no subfolders',
-      (tester) async {
+  testWidgets('shows the empty text when a folder has no subfolders', (
+    tester,
+  ) async {
     await _pump(tester, FakeBackend({'/f.mkv': 1}), []);
     expect(find.byKey(const Key('folder-picker-empty')), findsOneWidget);
   });

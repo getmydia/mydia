@@ -67,28 +67,34 @@ class _FakeHost implements P2PHost {
 }
 
 void main() {
-  test('an inbound peer files request surfaces on onPeerFilesRequest',
-      () async {
-    final host = _FakeHost();
-    addTearDown(host.inbound.close);
-    final service = P2pService()..debugSetHost(host);
-    addTearDown(service.dispose);
+  test(
+    'an inbound peer files request surfaces on onPeerFilesRequest',
+    () async {
+      final host = _FakeHost();
+      addTearDown(host.inbound.close);
+      final service = P2pService()..debugSetHost(host);
+      addTearDown(service.dispose);
 
-    final received = <FlutterInboundPeerFilesRequest>[];
-    service.onPeerFilesRequest.listen(received.add);
+      final received = <FlutterInboundPeerFilesRequest>[];
+      service.onPeerFilesRequest.listen(received.add);
 
-    host.inbound.add(const FlutterInboundPeerFilesRequest(
-      peer: 'peer1',
-      requestId: 'req1',
-      request: FlutterPeerFilesRequest.manifest(authProof: 'proof'),
-    ));
-    await pumpEventQueue();
+      host.inbound.add(
+        const FlutterInboundPeerFilesRequest(
+          peer: 'peer1',
+          requestId: 'req1',
+          request: FlutterPeerFilesRequest.manifest(authProof: 'proof'),
+        ),
+      );
+      await pumpEventQueue();
 
-    expect(received, hasLength(1));
-    expect(received.single.requestId, 'req1');
-    expect(received.single.request,
-        const FlutterPeerFilesRequest.manifest(authProof: 'proof'));
-  });
+      expect(received, hasLength(1));
+      expect(received.single.requestId, 'req1');
+      expect(
+        received.single.request,
+        const FlutterPeerFilesRequest.manifest(authProof: 'proof'),
+      );
+    },
+  );
 
   test('respondToPeerFiles and sendPeerFiles reach the host', () async {
     final host = _FakeHost();
@@ -97,13 +103,19 @@ void main() {
     addTearDown(service.dispose);
 
     await service.respondToPeerFiles(
-        'req1', const FlutterPeerFilesResponse.staleRevision());
+      'req1',
+      const FlutterPeerFilesResponse.staleRevision(),
+    );
     expect(host.responses.single.$1, 'req1');
-    expect(host.responses.single.$2,
-        const FlutterPeerFilesResponse.staleRevision());
+    expect(
+      host.responses.single.$2,
+      const FlutterPeerFilesResponse.staleRevision(),
+    );
 
     final res = await service.sendPeerFiles(
-        'peer1', const FlutterPeerFilesRequest.manifest(authProof: 'p'));
+      'peer1',
+      const FlutterPeerFilesRequest.manifest(authProof: 'p'),
+    );
     expect(res, const FlutterPeerFilesResponse.notAuthorized());
     expect(host.sent.single.$1, 'peer1');
   });
@@ -112,10 +124,14 @@ void main() {
     final service = P2pService();
     addTearDown(service.dispose);
     await service.respondToPeerFiles(
-        'req1', const FlutterPeerFilesResponse.notAuthorized());
+      'req1',
+      const FlutterPeerFilesResponse.notAuthorized(),
+    );
     expect(
       () => service.sendPeerFiles(
-          'p', const FlutterPeerFilesRequest.manifest(authProof: 'x')),
+        'p',
+        const FlutterPeerFilesRequest.manifest(authProof: 'x'),
+      ),
       throwsException,
     );
   });
@@ -130,19 +146,29 @@ void main() {
 
     final received = <FlutterPeerFileGrantRequest>[];
     transport.onPeerFileGrantRequest.listen(received.add);
-    host.grantRequests.add(const FlutterPeerFileGrantRequest(
-        requestId: 'g1', accountId: 'acct', path: 'a/b.txt'));
+    host.grantRequests.add(
+      const FlutterPeerFileGrantRequest(
+        requestId: 'g1',
+        accountId: 'acct',
+        path: 'a/b.txt',
+      ),
+    );
     await pumpEventQueue();
     expect(received.single.requestId, 'g1');
     expect(received.single.path, 'a/b.txt');
 
     const grant = FlutterPeerFileGrantAnswer.granted(
-        grant: FlutterPeerFileGrant(url: 'file:///x', headers: []));
+      grant: FlutterPeerFileGrant(url: 'file:///x', headers: []),
+    );
     await transport.respondPeerFileGrant('g1', grant);
     await transport.respondPeerFileGrant(
-        'g2', const FlutterPeerFileGrantAnswer.notShared());
+      'g2',
+      const FlutterPeerFileGrantAnswer.notShared(),
+    );
     await transport.respondPeerFileGrant(
-        'g3', const FlutterPeerFileGrantAnswer.failed());
+      'g3',
+      const FlutterPeerFileGrantAnswer.failed(),
+    );
     await transport.setPeerFilesMembers(['n1', 'n2']);
     await transport.invalidatePeerFileGrants('acct');
     expect(host.grantResponses, [
@@ -164,48 +190,56 @@ void main() {
 
     final received = <FlutterInboundPeerFilesRequest>[];
     transport.onPeerFilesRequest.listen(received.add);
-    host.inbound.add(const FlutterInboundPeerFilesRequest(
-      peer: 'peer1',
-      requestId: 'req1',
-      request: FlutterPeerFilesRequest.manifest(authProof: 'proof'),
-    ));
+    host.inbound.add(
+      const FlutterInboundPeerFilesRequest(
+        peer: 'peer1',
+        requestId: 'req1',
+        request: FlutterPeerFilesRequest.manifest(authProof: 'proof'),
+      ),
+    );
     await pumpEventQueue();
     expect(received.single.requestId, 'req1');
 
     await transport.respondToPeerFiles(
-        'req1', const FlutterPeerFilesResponse.staleRevision());
+      'req1',
+      const FlutterPeerFilesResponse.staleRevision(),
+    );
     expect(host.responses.single.$1, 'req1');
     final res = await transport.sendPeerFiles(
-        'peer1', const FlutterPeerFilesRequest.manifest(authProof: 'p'));
+      'peer1',
+      const FlutterPeerFilesRequest.manifest(authProof: 'p'),
+    );
     expect(res, const FlutterPeerFilesResponse.notAuthorized());
   });
 
-  test('the member allowlist set before a host exists reaches each new host',
-      () async {
-    final service = P2pService();
-    addTearDown(service.dispose);
-    await service.setPeerFilesMembers(['n1', 'n2']);
+  test(
+    'the member allowlist set before a host exists reaches each new host',
+    () async {
+      final service = P2pService();
+      addTearDown(service.dispose);
+      await service.setPeerFilesMembers(['n1', 'n2']);
 
-    final first = _FakeHost();
-    addTearDown(first.inbound.close);
-    addTearDown(first.grantRequests.close);
-    service.debugSetHost(first);
-    expect(first.members, [
-      ['n1', 'n2']
-    ]);
+      final first = _FakeHost();
+      addTearDown(first.inbound.close);
+      addTearDown(first.grantRequests.close);
+      service.debugSetHost(first);
+      expect(first.members, [
+        ['n1', 'n2'],
+      ]);
 
-    await service.setPeerFilesMembers(['n3']);
-    expect(first.members.last, ['n3']);
+      await service.setPeerFilesMembers(['n3']);
+      expect(first.members.last, ['n3']);
 
-    // A host built again (a reset, a relay change) starts with no list.
-    final second = _FakeHost();
-    addTearDown(second.inbound.close);
-    addTearDown(second.grantRequests.close);
-    service.debugSetHost(second);
-    expect(second.members, [
-      ['n3']
-    ]);
-  });
+      // A host built again (a reset, a relay change) starts with no list.
+      final second = _FakeHost();
+      addTearDown(second.inbound.close);
+      addTearDown(second.grantRequests.close);
+      service.debugSetHost(second);
+      expect(second.members, [
+        ['n3'],
+      ]);
+    },
+  );
 
   test('a host with no list set is pushed none', () async {
     final host = _FakeHost();
@@ -220,7 +254,9 @@ void main() {
     final service = P2pService();
     addTearDown(service.dispose);
     await service.respondPeerFileGrant(
-        'g', const FlutterPeerFileGrantAnswer.notShared());
+      'g',
+      const FlutterPeerFileGrantAnswer.notShared(),
+    );
     await service.setPeerFilesMembers(['n']);
     await service.invalidatePeerFileGrants('acct');
   });

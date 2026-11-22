@@ -38,18 +38,21 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authServiceProvider
-            .overrideWithValue(AuthService(storage: MockAuthStorage())),
-      ],
-      child: const MaterialApp(
-        locale: Locale('es'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: LoginScreen(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authServiceProvider.overrideWithValue(
+            AuthService(storage: MockAuthStorage()),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('es'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: LoginScreen(),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Vinculación rápida'), findsOneWidget);

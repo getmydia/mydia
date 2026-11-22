@@ -7,16 +7,20 @@ import '../sources/library.dart';
 bool defaultDescending(SharedSort sort) => sort != SharedSort.title;
 
 Comparable<Object>? _key(ItemSummary item, SharedSort sort) => switch (sort) {
-      SharedSort.title => (item.sortTitle ?? item.title).toLowerCase(),
-      SharedSort.added => item.addedAt,
-      // `2021-05-01` and `2021` compare correctly as strings.
-      SharedSort.released => item.airDate ?? item.year?.toString(),
-    };
+  SharedSort.title => (item.sortTitle ?? item.title).toLowerCase(),
+  SharedSort.added => item.addedAt,
+  // `2021-05-01` and `2021` compare correctly as strings.
+  SharedSort.released => item.airDate ?? item.year?.toString(),
+};
 
 /// A total order: the key in [descending] order, missing keys last either
 /// way, then source id and external id so pages never reshuffle.
-int compareForSort(ItemSummary a, ItemSummary b, SharedSort sort,
-    {required bool descending}) {
+int compareForSort(
+  ItemSummary a,
+  ItemSummary b,
+  SharedSort sort, {
+  required bool descending,
+}) {
   final ka = _key(a, sort), kb = _key(b, sort);
   if (ka != null && kb != null) {
     final c = ka.compareTo(kb);

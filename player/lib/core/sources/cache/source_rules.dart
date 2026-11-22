@@ -14,36 +14,36 @@ import 'source_keys.dart';
 abstract final class SourceRules {
   /// Watched state or progress changed, here or in the player.
   static Set<InvalidationTarget> watchedChanged(SourceId id) => {
-        for (final op in const [
-          SourceOps.item,
-          SourceOps.children,
-          SourceOps.browse,
-          SourceOps.continueWatching,
-          SourceOps.similar,
-          SourceOps.collectionItems,
-          SourceOps.unwatched,
-          SourceOps.favorites,
-          SourceOps.recentlyAdded,
-          SourceOps.trending,
-        ])
-          SourceKeys.family(id, op),
-      };
+    for (final op in const [
+      SourceOps.item,
+      SourceOps.children,
+      SourceOps.browse,
+      SourceOps.continueWatching,
+      SourceOps.similar,
+      SourceOps.collectionItems,
+      SourceOps.unwatched,
+      SourceOps.favorites,
+      SourceOps.recentlyAdded,
+      SourceOps.trending,
+    ])
+      SourceKeys.family(id, op),
+  };
 
   /// Continue Watching is not refreshed: a favorite does not change what the
   /// rail shows.
   static Set<InvalidationTarget> favoriteChanged(SourceId id) => {
-        for (final op in const [
-          SourceOps.item,
-          SourceOps.browse,
-          SourceOps.favorites,
-        ])
-          SourceKeys.family(id, op),
-      };
+    for (final op in const [
+      SourceOps.item,
+      SourceOps.browse,
+      SourceOps.favorites,
+    ])
+      SourceKeys.family(id, op),
+  };
 
   /// The rail itself.
   static Set<InvalidationTarget> continueWatchingRemoved(SourceId id) => {
-        SourceKeys.family(id, SourceOps.continueWatching),
-      };
+    SourceKeys.family(id, SourceOps.continueWatching),
+  };
 
   /// Offline positions reached the server; the rail and every watch badge
   /// may move.

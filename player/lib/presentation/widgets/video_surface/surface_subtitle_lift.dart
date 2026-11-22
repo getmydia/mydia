@@ -19,9 +19,8 @@ class SurfaceSubtitleLift implements SubtitleLift {
     required this.subtitles,
     required this.box,
     this.scaling = VideoScaling.fit,
-    Future<void> Function(Player player, double subPos) applyPosition =
-        applySubtitlePosition,
-  }) : _applyPosition = applyPosition;
+    this._applyPosition = applySubtitlePosition,
+  });
 
   final Player player;
   final MydiaSubtitleViewController subtitles;
@@ -48,7 +47,10 @@ class SurfaceSubtitleLift implements SubtitleLift {
 
   @override
   int get hashCode => Object.hash(
-      identityHashCode(player), identityHashCode(subtitles), scaling);
+    identityHashCode(player),
+    identityHashCode(subtitles),
+    scaling,
+  );
 
   @override
   void apply(double bottom, {required Duration duration}) {
@@ -65,14 +67,16 @@ class SurfaceSubtitleLift implements SubtitleLift {
     // Without the picture's size, `subPosForLift` takes it to fill the box,
     // which is what fill does.
     final fitted = scaling == VideoScaling.fit;
-    unawaited(_applyPosition(
-      player,
-      subPosForLift(
-        lift: bottom,
-        box: box(),
-        videoWidth: fitted ? player.state.width : null,
-        videoHeight: fitted ? player.state.height : null,
+    unawaited(
+      _applyPosition(
+        player,
+        subPosForLift(
+          lift: bottom,
+          box: box(),
+          videoWidth: fitted ? player.state.width : null,
+          videoHeight: fitted ? player.state.height : null,
+        ),
       ),
-    ));
+    );
   }
 }

@@ -83,8 +83,9 @@ const double kWindowsCaptionButtonsReserve = 3 * kWindowsCaptionButtonWidth;
 /// changes, so allocating a fresh `ValueNotifier` on every `build` would only
 /// create and immediately discard a `ChangeNotifier` on every rebuild for no
 /// reason. Holding one instance here avoids that churn.
-final ValueNotifier<DecorationLayout> _fallbackDecorationLayout =
-    ValueNotifier(parseDecorationLayout(kFallbackDecorationLayout));
+final ValueNotifier<DecorationLayout> _fallbackDecorationLayout = ValueNotifier(
+  parseDecorationLayout(kFallbackDecorationLayout),
+);
 
 /// How much room the OS window controls need: a band height, plus the width
 /// kept clear at each edge of that band for the controls themselves.
@@ -123,26 +124,25 @@ class WindowChromeInsets {
   static Widget scope({
     required WindowChromeInsets insets,
     required Widget child,
-  }) =>
-      _WindowChromeInsetsScope(insets: insets, child: child);
+  }) => _WindowChromeInsetsScope(insets: insets, child: child);
 
   /// Takes the band back out of `MediaQuery.padding.top` for [child], which
   /// draws its own title row into it. Anything else in the padding, such as
   /// a phone's status bar, is left in place.
   static Widget removeBand({required Widget child}) => Builder(
-        builder: (context) {
-          final band = of(context).height;
-          if (band == 0) return child;
-          final media = MediaQuery.of(context);
-          final top = media.padding.top - band;
-          return MediaQuery(
-            data: media.copyWith(
-              padding: media.padding.copyWith(top: top < 0 ? 0 : top),
-            ),
-            child: child,
-          );
-        },
+    builder: (context) {
+      final band = of(context).height;
+      if (band == 0) return child;
+      final media = MediaQuery.of(context);
+      final top = media.padding.top - band;
+      return MediaQuery(
+        data: media.copyWith(
+          padding: media.padding.copyWith(top: top < 0 ? 0 : top),
+        ),
+        child: child,
       );
+    },
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -176,8 +176,8 @@ class _WindowChromeInsetsScope extends InheritedWidget {
 double linuxButtonGroupReserve(int buttonCount) => buttonCount == 0
     ? 0
     : kLinuxChromeEdgePadding +
-        buttonCount * kLinuxWindowButtonExtent +
-        kLinuxChromeGap;
+          buttonCount * kLinuxWindowButtonExtent +
+          kLinuxChromeGap;
 
 /// How much room the OS window controls need reserved, in logical pixels.
 ///
@@ -253,10 +253,9 @@ class WindowChromeInset extends StatelessWidget {
   const WindowChromeInset({
     super.key,
     required this.child,
-    ValueListenable<bool>? fullscreen,
-    ValueListenable<DecorationLayout>? decorationLayout,
-  })  : _fullscreen = fullscreen,
-        _decorationLayout = decorationLayout;
+    this._fullscreen,
+    this._decorationLayout,
+  });
 
   final Widget child;
 

@@ -85,8 +85,9 @@ void main() {
     expect(find.byType(QualityBadge), findsNothing);
   });
 
-  testWidgets('omits the resume bar when there is no stored progress',
-      (tester) async {
+  testWidgets('omits the resume bar when there is no stored progress', (
+    tester,
+  ) async {
     await _pump(tester, media: _media());
 
     expect(
@@ -115,8 +116,9 @@ void main() {
     );
   });
 
-  testWidgets('renders the resume bar for a third-party download',
-      (tester) async {
+  testWidgets('renders the resume bar for a third-party download', (
+    tester,
+  ) async {
     await _pump(
       tester,
       media: _media(sourceId: 'plex-acct:srv'),

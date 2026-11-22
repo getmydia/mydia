@@ -43,12 +43,16 @@ void main() {
   late _RecordingMulticastLock lock;
 
   ProviderContainer buildContainer() {
-    final container = ProviderContainer(overrides: [
-      castBackendProvider.overrideWithValue(backend),
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      multicastLockProvider.overrideWithValue(lock),
-      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        castBackendProvider.overrideWithValue(backend),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        multicastLockProvider.overrideWithValue(lock),
+        sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
+      ],
+    );
     addTearDown(container.dispose);
     return container;
   }
@@ -61,7 +65,7 @@ void main() {
   test('castDiscoveryProvider starts discovery on first listen', () async {
     final container = buildContainer();
 
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    final sub = container.listen(castDiscoveryProvider, (_, _) {});
     addTearDown(sub.close);
     await Future<void>.delayed(Duration.zero);
 
@@ -70,7 +74,7 @@ void main() {
 
   test('castDiscoveryProvider surfaces discovered devices', () async {
     final container = buildContainer();
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    final sub = container.listen(castDiscoveryProvider, (_, _) {});
     addTearDown(sub.close);
     await Future<void>.delayed(Duration.zero);
 
@@ -79,86 +83,95 @@ void main() {
     ]);
     await Future<void>.delayed(Duration.zero);
 
-    expect(
-      container.read(castDiscoveryProvider).value?.single.name,
-      'TV',
-    );
+    expect(container.read(castDiscoveryProvider).value?.single.name, 'TV');
   });
 
-  test('castDiscoveryProvider stops discovery when no longer listened to',
-      () async {
-    final container = buildContainer();
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'castDiscoveryProvider stops discovery when no longer listened to',
+    () async {
+      final container = buildContainer();
+      final sub = container.listen(castDiscoveryProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
 
-    sub.close();
-    await Future<void>.delayed(Duration.zero);
+      sub.close();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(backend.discoveryStopped, isTrue);
-  });
+      expect(backend.discoveryStopped, isTrue);
+    },
+  );
 
-  test('castDiscoveryProvider holds a multicast lock while discovering',
-      () async {
-    // Without it Android's Wi-Fi stack drops the SSDP and mDNS packets
-    // discovery is made of, and the picker finds nothing.
-    final container = buildContainer();
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'castDiscoveryProvider holds a multicast lock while discovering',
+    () async {
+      // Without it Android's Wi-Fi stack drops the SSDP and mDNS packets
+      // discovery is made of, and the picker finds nothing.
+      final container = buildContainer();
+      final sub = container.listen(castDiscoveryProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
 
-    expect(lock.calls, ['acquire']);
+      expect(lock.calls, ['acquire']);
 
-    sub.close();
-    await Future<void>.delayed(Duration.zero);
+      sub.close();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(lock.calls, ['acquire', 'release']);
-  });
+      expect(lock.calls, ['acquire', 'release']);
+    },
+  );
 
-  test('castDiscoveryProvider surfaces a denied discovery to the picker',
-      () async {
-    // DartCastBackend publishes discoveryDenied on failureStream, not on the
-    // device stream. Unless the provider merges it, the picker's
-    // permission-denied branch is unreachable code.
-    final container = buildContainer();
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
-    addTearDown(sub.close);
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'castDiscoveryProvider surfaces a denied discovery to the picker',
+    () async {
+      // DartCastBackend publishes discoveryDenied on failureStream, not on the
+      // device stream. Unless the provider merges it, the picker's
+      // permission-denied branch is unreachable code.
+      final container = buildContainer();
+      final sub = container.listen(castDiscoveryProvider, (_, _) {});
+      addTearDown(sub.close);
+      await Future<void>.delayed(Duration.zero);
 
-    backend.emitFailure(CastFailureKind.discoveryDenied);
-    await Future<void>.delayed(Duration.zero);
+      backend.emitFailure(CastFailureKind.discoveryDenied);
+      await Future<void>.delayed(Duration.zero);
 
-    final error = container.read(castDiscoveryProvider).error;
-    expect(error, isA<CastBackendException>());
-    expect(
-      (error as CastBackendException).kind,
-      CastFailureKind.discoveryDenied,
-    );
-  });
+      final error = container.read(castDiscoveryProvider).error;
+      expect(error, isA<CastBackendException>());
+      expect(
+        (error as CastBackendException).kind,
+        CastFailureKind.discoveryDenied,
+      );
+    },
+  );
 
-  test('castDiscoveryProvider ignores failures that are not discovery denials',
-      () async {
-    final container = buildContainer();
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
-    addTearDown(sub.close);
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'castDiscoveryProvider ignores failures that are not discovery denials',
+    () async {
+      final container = buildContainer();
+      final sub = container.listen(castDiscoveryProvider, (_, _) {});
+      addTearDown(sub.close);
+      await Future<void>.delayed(Duration.zero);
 
-    backend.emitFailure(CastFailureKind.connectionLost);
-    await Future<void>.delayed(Duration.zero);
+      backend.emitFailure(CastFailureKind.connectionLost);
+      await Future<void>.delayed(Duration.zero);
 
-    expect(container.read(castDiscoveryProvider).hasError, isFalse);
-  });
+      expect(container.read(castDiscoveryProvider).hasError, isFalse);
+    },
+  );
 
   test('castDiscoveryProvider also surfaces Mydia devices', () async {
     final mydiaBackend = FakeCastBackend();
-    final container = ProviderContainer(overrides: [
-      castBackendProvider.overrideWithValue(backend),
-      mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      multicastLockProvider.overrideWithValue(lock),
-      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        castBackendProvider.overrideWithValue(backend),
+        mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        multicastLockProvider.overrideWithValue(lock),
+        sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
+      ],
+    );
     addTearDown(container.dispose);
 
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    final sub = container.listen(castDiscoveryProvider, (_, _) {});
     addTearDown(sub.close);
     await Future<void>.delayed(Duration.zero);
 
@@ -174,24 +187,26 @@ void main() {
     expect(devices.map((d) => d.id), containsAll(['cc-1', 'node-1']));
   });
 
-  test(
-      'castDiscoveryProvider still finds Mydia devices with no Chromecast/DLNA capability',
-      () async {
+  test('castDiscoveryProvider still finds Mydia devices with no Chromecast/DLNA capability', () async {
     // Mirrors `MydiaCastBackend.startDiscovery`'s own dartdoc: a Mydia target
     // is reached over the p2p host, not the platform's local-network
     // entitlement, so it must not disappear on a build (e.g. web) that
     // reports no other capability at all.
     final mydiaBackend = FakeCastBackend();
-    final container = ProviderContainer(overrides: [
-      castBackendProvider.overrideWithValue(backend),
-      mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.web()),
-      multicastLockProvider.overrideWithValue(lock),
-      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        castBackendProvider.overrideWithValue(backend),
+        mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.web(),
+        ),
+        multicastLockProvider.overrideWithValue(lock),
+        sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
+      ],
+    );
     addTearDown(container.dispose);
 
-    final sub = container.listen(castDiscoveryProvider, (_, __) {});
+    final sub = container.listen(castDiscoveryProvider, (_, _) {});
     addTearDown(sub.close);
     await Future<void>.delayed(Duration.zero);
 
@@ -205,9 +220,13 @@ void main() {
   });
 
   test('castCapabilitiesProvider yields no capability on web builds', () {
-    final container = ProviderContainer(overrides: [
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.web()),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.web(),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
 
     expect(container.read(castCapabilitiesProvider).any, isFalse);
@@ -246,24 +265,25 @@ void main() {
       // Chromecast route opens a real server-side session (that is what
       // gives it a session id to end and an offset to resume at).
       server.handlers['StartStreamingSession'] = (_) => {
-            '__typename': 'RootMutationType',
-            'startStreamingSession': {
-              '__typename': 'StreamingSessionResult',
-              'sessionId': 'sess-1',
-              'duration': null,
-              'startPosition': null,
-              'playlistMode': 'WINDOW',
-            },
-          };
+        '__typename': 'RootMutationType',
+        'startStreamingSession': {
+          '__typename': 'StreamingSessionResult',
+          'sessionId': 'sess-1',
+          'duration': null,
+          'startPosition': null,
+          'playlistMode': 'WINDOW',
+        },
+      };
       server.handlers['RefreshMediaToken'] = (_) => {
-            'refreshMediaToken': {
-              '__typename': 'MediaToken',
-              'token': 'tok-refreshed',
-              'expiresAt':
-                  DateTime.now().add(const Duration(days: 1)).toIso8601String(),
-              'permissions': <String>[],
-            },
-          };
+        'refreshMediaToken': {
+          '__typename': 'MediaToken',
+          'token': 'tok-refreshed',
+          'expiresAt': DateTime.now()
+              .add(const Duration(days: 1))
+              .toIso8601String(),
+          'permissions': <String>[],
+        },
+      };
       final source = testMydiaSourceOver(
         server,
         creds: MydiaCredentials(
@@ -275,17 +295,22 @@ void main() {
         ),
       );
 
-      final container = ProviderContainer(overrides: [
-        castBackendProvider.overrideWithValue(backend),
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-        multicastLockProvider.overrideWithValue(lock),
-        castSessionStoreProvider
-            .overrideWith((ref) async => InMemoryCastSessionStore()),
-        mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
-        localProxyServiceProvider
-            .overrideWithValue(LocalProxyService.forTesting()),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          castBackendProvider.overrideWithValue(backend),
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+          multicastLockProvider.overrideWithValue(lock),
+          castSessionStoreProvider.overrideWith(
+            (ref) async => InMemoryCastSessionStore(),
+          ),
+          mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
+          localProxyServiceProvider.overrideWithValue(
+            LocalProxyService.forTesting(),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
       return container;
     }
@@ -307,24 +332,30 @@ void main() {
       expect(backend.loadedRequests.single.url, contains('token=tok'));
     });
 
-    test('a token close to expiry is refreshed before the URL is built',
-        () async {
-      final container =
-          buildFullContainer(mediaTokenLifetime: const Duration(minutes: 5));
-      final manager = await readyManager(container);
-
-      await manager.startCast(device: device, request: launch);
-
-      // The client saw an imminent expiry and called the refresh mutation;
-      // without that call an idle app hands out a dead token.
-      expect(
-          server.calls.map((c) => c.operation), contains('RefreshMediaToken'));
-      expect(
-          backend.loadedRequests.single.url, contains('token=tok-refreshed'));
-    });
-
     test(
-        "castSessionProvider seeds a late subscriber with the manager's "
+      'a token close to expiry is refreshed before the URL is built',
+      () async {
+        final container = buildFullContainer(
+          mediaTokenLifetime: const Duration(minutes: 5),
+        );
+        final manager = await readyManager(container);
+
+        await manager.startCast(device: device, request: launch);
+
+        // The client saw an imminent expiry and called the refresh mutation;
+        // without that call an idle app hands out a dead token.
+        expect(
+          server.calls.map((c) => c.operation),
+          contains('RefreshMediaToken'),
+        );
+        expect(
+          backend.loadedRequests.single.url,
+          contains('token=tok-refreshed'),
+        );
+      },
+    );
+
+    test("castSessionProvider seeds a late subscriber with the manager's "
         'current session', () async {
       final container = buildFullContainer();
       final manager = await readyManager(container);
@@ -334,7 +365,7 @@ void main() {
       // is what proves the provider's async* generator yields
       // `manager.currentSession` up front rather than only reacting to
       // future stream events a late subscriber would miss.
-      final sub = container.listen(castSessionProvider, (_, __) {});
+      final sub = container.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await Future<void>.delayed(Duration.zero);
 
@@ -344,7 +375,7 @@ void main() {
     test('derived providers reflect an active session', () async {
       final container = buildFullContainer();
       final manager = await readyManager(container);
-      final sub = container.listen(castSessionProvider, (_, __) {});
+      final sub = container.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
 
       await manager.startCast(device: device, request: launch);
@@ -364,17 +395,14 @@ void main() {
       // Force the manager (and with it, castSessionProvider's upstream
       // future) to build, without ever starting a cast.
       await readyManager(container);
-      final sub = container.listen(castSessionProvider, (_, __) {});
+      final sub = container.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await Future<void>.delayed(Duration.zero);
 
       expect(container.read(isCastingProvider), isFalse);
       expect(container.read(currentCastDeviceProvider), isNull);
       expect(container.read(castMediaInfoProvider), isNull);
-      expect(
-        container.read(castPlaybackStateProvider),
-        CastPlaybackState.idle,
-      );
+      expect(container.read(castPlaybackStateProvider), CastPlaybackState.idle);
     });
   });
 
@@ -387,38 +415,48 @@ void main() {
       MydiaCredentials creds,
       LocalProxyService proxy,
     ) {
-      final container = ProviderContainer(overrides: [
-        mediaSourceProvider(testMydiaSourceId).overrideWithValue(
-            testMydiaSourceOver(FakeMydiaTransport(), creds: creds)),
-        localProxyServiceProvider.overrideWithValue(proxy),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          mediaSourceProvider(testMydiaSourceId).overrideWithValue(
+            testMydiaSourceOver(FakeMydiaTransport(), creds: creds),
+          ),
+          localProxyServiceProvider.overrideWithValue(proxy),
+        ],
+      );
       addTearDown(container.dispose);
       return container;
     }
 
     test('is null for an instance that is gone', () async {
       final container = containerFor(
-          const MydiaCredentials(instanceId: 'i', accessToken: 'a'),
-          LocalProxyService.forTesting());
+        const MydiaCredentials(instanceId: 'i', accessToken: 'a'),
+        LocalProxyService.forTesting(),
+      );
 
-      expect(await container.read(depsProvider(const SourceId('gone')).future),
-          isNull);
+      expect(
+        await container.read(depsProvider(const SourceId('gone')).future),
+        isNull,
+      );
     });
 
-    test(
-        'over p2p holds the instance target for the cast, and the bridge URL '
+    test('over p2p holds the instance target for the cast, and the bridge URL '
         'names it', () async {
       // The cast can start with no player open (a restore), so nothing else
       // keeps the target serving.
       final proxy = LocalProxyService.forTesting();
       addTearDown(proxy.shutdown);
       final container = containerFor(
-          const MydiaCredentials(
-              instanceId: 'i', accessToken: 'a', nodeAddr: '{"id":"peer"}'),
-          proxy);
+        const MydiaCredentials(
+          instanceId: 'i',
+          accessToken: 'a',
+          nodeAddr: '{"id":"peer"}',
+        ),
+        proxy,
+      );
 
-      final deps =
-          (await container.read(depsProvider(testMydiaSourceId).future))!;
+      final deps = (await container.read(
+        depsProvider(testMydiaSourceId).future,
+      ))!;
 
       expect(proxy.isRunning, isTrue);
       await proxy.setLanAccess(true);
@@ -436,14 +474,17 @@ void main() {
       final proxy = LocalProxyService.forTesting();
       addTearDown(proxy.shutdown);
       final container = containerFor(
-          const MydiaCredentials(
-              instanceId: 'i',
-              accessToken: 'a',
-              serverUrl: 'https://mydia.test'),
-          proxy);
+        const MydiaCredentials(
+          instanceId: 'i',
+          accessToken: 'a',
+          serverUrl: 'https://mydia.test',
+        ),
+        proxy,
+      );
 
-      final deps =
-          (await container.read(depsProvider(testMydiaSourceId).future))!;
+      final deps = (await container.read(
+        depsProvider(testMydiaSourceId).future,
+      ))!;
 
       expect(proxy.isRunning, isFalse);
       expect(deps.release, isNull);
@@ -458,16 +499,18 @@ void main() {
     );
 
     ProviderContainer containerWith(CastSession? session) {
-      final c = ProviderContainer(overrides: [
-        castSessionProvider.overrideWith((ref) => Stream.value(session)),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          castSessionProvider.overrideWith((ref) => Stream.value(session)),
+        ],
+      );
       addTearDown(c.dispose);
       return c;
     }
 
     test('is none with no target and no session', () async {
       final c = containerWith(null);
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
@@ -477,7 +520,7 @@ void main() {
 
     test('is chosenOffline with a target but no session', () async {
       final c = containerWith(null);
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
       c.read(castTargetProvider.notifier).set(device);
@@ -487,12 +530,14 @@ void main() {
     });
 
     test('is connecting while the connect is in flight', () async {
-      final c = containerWith(const CastSession(
-        device: device,
-        playbackState: CastPlaybackState.idle,
-        connectionState: CastConnectionState.connecting,
-      ));
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final c = containerWith(
+        const CastSession(
+          device: device,
+          playbackState: CastPlaybackState.idle,
+          connectionState: CastConnectionState.connecting,
+        ),
+      );
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
@@ -500,11 +545,13 @@ void main() {
     });
 
     test('is connectedIdle for a connected session with no media', () async {
-      final c = containerWith(const CastSession(
-        device: device,
-        playbackState: CastPlaybackState.idle,
-      ));
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final c = containerWith(
+        const CastSession(
+          device: device,
+          playbackState: CastPlaybackState.idle,
+        ),
+      );
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
@@ -513,16 +560,18 @@ void main() {
     });
 
     test('is casting once media is loaded', () async {
-      final c = containerWith(const CastSession(
-        device: device,
-        playbackState: CastPlaybackState.playing,
-        mediaInfo: CastMediaInfo(
-          title: 'Arrival',
-          duration: Duration(minutes: 116),
-          position: Duration.zero,
+      final c = containerWith(
+        const CastSession(
+          device: device,
+          playbackState: CastPlaybackState.playing,
+          mediaInfo: CastMediaInfo(
+            title: 'Arrival',
+            duration: Duration(minutes: 116),
+            position: Duration.zero,
+          ),
         ),
-      ));
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      );
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
@@ -530,12 +579,14 @@ void main() {
     });
 
     test('is chosenOffline when the connection is lost', () async {
-      final c = containerWith(const CastSession(
-        device: device,
-        playbackState: CastPlaybackState.idle,
-        connectionState: CastConnectionState.lost,
-      ));
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final c = containerWith(
+        const CastSession(
+          device: device,
+          playbackState: CastPlaybackState.idle,
+          connectionState: CastConnectionState.lost,
+        ),
+      );
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
@@ -543,8 +594,7 @@ void main() {
       expect(c.read(castDisplayDeviceProvider), device);
     });
 
-    test(
-        'castDisplayDeviceProvider names the lost session\'s device over a '
+    test('castDisplayDeviceProvider names the lost session\'s device over a '
         'newly chosen target', () async {
       // The user picked a different device while the old session is still
       // draining as lost. The session's device must still win — it is the
@@ -555,12 +605,14 @@ void main() {
         name: 'Bedroom',
         protocol: CastProtocolKind.chromecast,
       );
-      final c = containerWith(const CastSession(
-        device: device,
-        playbackState: CastPlaybackState.idle,
-        connectionState: CastConnectionState.lost,
-      ));
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final c = containerWith(
+        const CastSession(
+          device: device,
+          playbackState: CastPlaybackState.idle,
+          connectionState: CastConnectionState.lost,
+        ),
+      );
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
       c.read(castTargetProvider.notifier).set(otherDevice);
@@ -577,27 +629,37 @@ void main() {
     );
 
     test('is false for a connected session with no media', () async {
-      final c = ProviderContainer(overrides: [
-        castSessionProvider.overrideWith((ref) => Stream.value(
+      final c = ProviderContainer(
+        overrides: [
+          castSessionProvider.overrideWith(
+            (ref) => Stream.value(
               const CastSession(
                 device: device,
                 playbackState: CastPlaybackState.idle,
               ),
-            )),
-      ]);
+            ),
+          ),
+        ],
+      );
       addTearDown(c.dispose);
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
-      expect(c.read(isCastingProvider), isFalse,
-          reason: 'an idle connection must not swap PlayerScreen into its '
-              'cast placeholder or trip _restartLocalPlayback');
+      expect(
+        c.read(isCastingProvider),
+        isFalse,
+        reason:
+            'an idle connection must not swap PlayerScreen into its '
+            'cast placeholder or trip _restartLocalPlayback',
+      );
     });
 
     test('is true once media is loaded', () async {
-      final c = ProviderContainer(overrides: [
-        castSessionProvider.overrideWith((ref) => Stream.value(
+      final c = ProviderContainer(
+        overrides: [
+          castSessionProvider.overrideWith(
+            (ref) => Stream.value(
               const CastSession(
                 device: device,
                 playbackState: CastPlaybackState.playing,
@@ -607,10 +669,12 @@ void main() {
                   position: Duration.zero,
                 ),
               ),
-            )),
-      ]);
+            ),
+          ),
+        ],
+      );
       addTearDown(c.dispose);
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
@@ -624,8 +688,10 @@ void main() {
       // connection drops. Stop is the deliberate exit path out of cast mode;
       // isCastingProvider going false on a mere disconnect would fight that
       // by restarting local playback out from under the stale bar.
-      final c = ProviderContainer(overrides: [
-        castSessionProvider.overrideWith((ref) => Stream.value(
+      final c = ProviderContainer(
+        overrides: [
+          castSessionProvider.overrideWith(
+            (ref) => Stream.value(
               const CastSession(
                 device: device,
                 playbackState: CastPlaybackState.playing,
@@ -636,22 +702,27 @@ void main() {
                   position: Duration.zero,
                 ),
               ),
-            )),
-      ]);
+            ),
+          ),
+        ],
+      );
       addTearDown(c.dispose);
-      final sub = c.listen(castSessionProvider, (_, __) {});
+      final sub = c.listen(castSessionProvider, (_, _) {});
       addTearDown(sub.close);
       await c.read(castSessionProvider.future);
 
-      expect(c.read(isCastingProvider), isTrue,
-          reason: 'a lost session with media must keep the cast UI up so '
-              'Reconnect is meaningful; Stop is what tears it down');
+      expect(
+        c.read(isCastingProvider),
+        isTrue,
+        reason:
+            'a lost session with media must keep the cast UI up so '
+            'Reconnect is meaningful; Stop is what tears it down',
+      );
     });
   });
 
   group('forgetDismissalsOnStop', () {
-    test(
-        'forgets a dismissal once that player is found stopped, even with '
+    test('forgets a dismissal once that player is found stopped, even with '
         'the banner provider idle', () async {
       String? answer = 'The Lantern Keepers';
       final targets = AmbientTargets(
@@ -674,12 +745,14 @@ void main() {
                 sequence: BigInt.one,
               ),
       );
-      final c = ProviderContainer(overrides: [
-        ambientTargetsProvider.overrideWith((ref) {
-          forgetDismissalsOnStop(ref, targets);
-          return targets;
-        }),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          ambientTargetsProvider.overrideWith((ref) {
+            forgetDismissalsOnStop(ref, targets);
+            return targets;
+          }),
+        ],
+      );
       addTearDown(() async {
         c.dispose();
         await targets.dispose();
@@ -701,15 +774,18 @@ void main() {
       await targets.sweep();
       await Future<void>.delayed(Duration.zero);
 
-      expect(c.read(ambientDismissalsProvider), isEmpty,
-          reason: 'the next time that player starts, even the same title, '
-              'the banner is new information again');
+      expect(
+        c.read(ambientDismissalsProvider),
+        isEmpty,
+        reason:
+            'the next time that player starts, even the same title, '
+            'the banner is new information again',
+      );
     });
   });
 
   group('ambientPlayingProvider resweep cadence', () {
-    test(
-        'stays on its own 30-second cadence, independent of AmbientTargets\' '
+    test('stays on its own 30-second cadence, independent of AmbientTargets\' '
         'own 5-second held-target poll', () {
       fakeAsync((async) {
         var sweepCalls = 0;
@@ -723,24 +799,31 @@ void main() {
           probe: (nodeId) async => null,
         );
 
-        final c = ProviderContainer(overrides: [
-          ambientTargetsProvider.overrideWithValue(targets),
-        ]);
+        final c = ProviderContainer(
+          overrides: [ambientTargetsProvider.overrideWithValue(targets)],
+        );
 
-        final sub = c.listen(ambientPlayingProvider, (_, __) {});
+        final sub = c.listen(ambientPlayingProvider, (_, _) {});
         async.flushMicrotasks();
         expect(sweepCalls, 1, reason: 'the sweep on first listen');
 
         // Short of the 30s mark: AmbientTargets' own 5s poll only re-dials
         // *held* targets (none, here), never the whole roster via sweep().
         async.elapse(const Duration(seconds: 25));
-        expect(sweepCalls, 1,
-            reason: 'the roster is not re-dialed before 30s elapse');
+        expect(
+          sweepCalls,
+          1,
+          reason: 'the roster is not re-dialed before 30s elapse',
+        );
 
         async.elapse(const Duration(seconds: 5));
-        expect(sweepCalls, 2,
-            reason: "ambientPlayingProvider's own 30s resweep ran, "
-                're-dialing the whole roster');
+        expect(
+          sweepCalls,
+          2,
+          reason:
+              "ambientPlayingProvider's own 30s resweep ran, "
+              're-dialing the whole roster',
+        );
 
         async.elapse(const Duration(seconds: 30));
         expect(sweepCalls, 3, reason: 'the cadence repeats, not one-shot');
@@ -756,8 +839,7 @@ void main() {
       });
     });
 
-    test(
-        'sweeps again when a listener comes back, with the app still in the '
+    test('sweeps again when a listener comes back, with the app still in the '
         'foreground', () {
       fakeAsync((async) {
         var sweepCalls = 0;
@@ -769,11 +851,11 @@ void main() {
           probe: (nodeId) async => null,
         );
 
-        final c = ProviderContainer(overrides: [
-          ambientTargetsProvider.overrideWithValue(targets),
-        ]);
+        final c = ProviderContainer(
+          overrides: [ambientTargetsProvider.overrideWithValue(targets)],
+        );
 
-        var sub = c.listen(ambientPlayingProvider, (_, __) {});
+        var sub = c.listen(ambientPlayingProvider, (_, _) {});
         async.flushMicrotasks();
         expect(sweepCalls, 1);
 
@@ -781,16 +863,23 @@ void main() {
         // and the provider is disposed.
         sub.close();
         async.elapse(const Duration(seconds: 1));
-        expect(c.read(ambientPlayingProvider.exists), isFalse,
-            reason: 'baseline: autodispose ran');
+        expect(
+          c.read(ambientPlayingProvider.exists),
+          isFalse,
+          reason: 'baseline: autodispose ran',
+        );
 
         // Detached: the bar listens for the banner again.
-        sub = c.listen(ambientPlayingProvider, (_, __) {});
+        sub = c.listen(ambientPlayingProvider, (_, _) {});
         async.flushMicrotasks();
-        expect(sweepCalls, 2,
-            reason: 'losing every listener is not an app background; the '
-                'banner must come back after a detach without waiting for '
-                'the next app resume');
+        expect(
+          sweepCalls,
+          2,
+          reason:
+              'losing every listener is not an app background; the '
+              'banner must come back after a detach without waiting for '
+              'the next app resume',
+        );
 
         sub.close();
         c.dispose();

@@ -23,13 +23,17 @@ Future<MydiaCredentials?> _credentialsOf(Ref ref, SourceId id) async {
 
 /// Whether Mydia source [id] is reached over p2p. False for a third-party
 /// source, a missing one, or unreadable credentials.
-final sourceViaP2pProvider =
-    FutureProvider.family<bool, SourceId>((ref, id) async {
+final sourceViaP2pProvider = FutureProvider.family<bool, SourceId>((
+  ref,
+  id,
+) async {
   return (await _credentialsOf(ref, id))?.isP2p ?? false;
 });
 
 /// The direct URL of Mydia source [id], for diagnostics. Null over p2p.
-final sourceServerUrlProvider =
-    FutureProvider.family<String?, SourceId>((ref, id) async {
+final sourceServerUrlProvider = FutureProvider.family<String?, SourceId>((
+  ref,
+  id,
+) async {
   return (await _credentialsOf(ref, id))?.serverUrl;
 });

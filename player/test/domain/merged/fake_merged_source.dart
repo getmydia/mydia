@@ -20,35 +20,42 @@ Source fakeServer(String accountId, {SourceKind kind = SourceKind.plex}) =>
         activeProfileId: 'owner',
       ),
       profile: SourceProfile(
-          id: 'owner', accountId: accountId, name: 'Owner', isOwner: true),
+        id: 'owner',
+        accountId: accountId,
+        name: 'Owner',
+        isOwner: true,
+      ),
       server: SourceServer(
-          id: 's1',
-          accountId: accountId,
-          profileId: 'owner',
-          name: 'Server $accountId'),
+        id: 's1',
+        accountId: accountId,
+        profileId: 'owner',
+        name: 'Server $accountId',
+      ),
     );
 
-ItemSummary item(Source s, String id,
-        {ItemKind kind = ItemKind.movie,
-        String? title,
-        String? sortTitle,
-        DateTime? addedAt,
-        DateTime? lastPlayedAt,
-        String? airDate,
-        ExternalIds ids = ExternalIds.none,
-        int? progress,
-        int? durationSeconds}) =>
-    ItemSummary(
-      ref: ItemRef(sourceId: s.id, kind: kind, externalId: id),
-      durationSeconds: durationSeconds,
-      title: title ?? 'Invented $id',
-      sortTitle: sortTitle,
-      addedAt: addedAt,
-      lastPlayedAt: lastPlayedAt,
-      airDate: airDate,
-      externalIds: ids,
-      userState: UserState(progressSeconds: progress),
-    );
+ItemSummary item(
+  Source s,
+  String id, {
+  ItemKind kind = ItemKind.movie,
+  String? title,
+  String? sortTitle,
+  DateTime? addedAt,
+  DateTime? lastPlayedAt,
+  String? airDate,
+  ExternalIds ids = ExternalIds.none,
+  int? progress,
+  int? durationSeconds,
+}) => ItemSummary(
+  ref: ItemRef(sourceId: s.id, kind: kind, externalId: id),
+  durationSeconds: durationSeconds,
+  title: title ?? 'Invented $id',
+  sortTitle: sortTitle,
+  addedAt: addedAt,
+  lastPlayedAt: lastPlayedAt,
+  airDate: airDate,
+  externalIds: ids,
+  userState: UserState(progressSeconds: progress),
+);
 
 /// One movie library (and optionally a show library) served from a sorted
 /// list, plus the optional row capabilities.
@@ -67,10 +74,11 @@ class FakeMergedSource extends MediaSource
     this.sorts = const [
       SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
       SortOption(
-          id: 'added',
-          name: SortName.recentlyAdded,
-          descendingByDefault: true,
-          shared: SharedSort.added),
+        id: 'added',
+        name: SortName.recentlyAdded,
+        descendingByDefault: true,
+        shared: SharedSort.added,
+      ),
     ],
     this.resuming = const [],
     this.recent = const [],
@@ -156,12 +164,14 @@ class FakeMergedSource extends MediaSource
   @override
   T? as<T extends Object>() {
     final ok = switch (T) {
-      const (ContinueWatching) =>
-        caps.contains(SourceCapability.continueWatching),
+      const (ContinueWatching) => caps.contains(
+        SourceCapability.continueWatching,
+      ),
       const (RecentlyAdded) => caps.contains(SourceCapability.recentlyAdded),
       const (Searchable) => caps.contains(SourceCapability.searchable),
-      const (FavoritesListing) =>
-        caps.contains(SourceCapability.favoritesListing),
+      const (FavoritesListing) => caps.contains(
+        SourceCapability.favoritesListing,
+      ),
       const (Collections) => caps.contains(SourceCapability.collections),
       const (Trending) => caps.contains(SourceCapability.trending),
       _ => true,
@@ -174,22 +184,27 @@ class FakeMergedSource extends MediaSource
     await _wait();
     return [
       Library(
-          ref: LibraryRef(sourceId: id, id: 'movies'),
-          title: 'Films',
-          kind: LibraryKind.movies,
-          sortOptions: sorts),
+        ref: LibraryRef(sourceId: id, id: 'movies'),
+        title: 'Films',
+        kind: LibraryKind.movies,
+        sortOptions: sorts,
+      ),
       if (shows.isNotEmpty)
         Library(
-            ref: LibraryRef(sourceId: id, id: 'shows'),
-            title: 'Series',
-            kind: LibraryKind.shows,
-            sortOptions: sorts),
+          ref: LibraryRef(sourceId: id, id: 'shows'),
+          title: 'Series',
+          kind: LibraryKind.shows,
+          sortOptions: sorts,
+        ),
     ];
   }
 
   @override
-  Future<Page<ItemSummary>> browse(LibraryRef library, BrowseQuery query,
-      {Cursor? cursor}) async {
+  Future<Page<ItemSummary>> browse(
+    LibraryRef library,
+    BrowseQuery query, {
+    Cursor? cursor,
+  }) async {
     browseCalls.add(query);
     await _wait();
     final start = int.tryParse(cursor?.value ?? '') ?? 0;
@@ -199,13 +214,15 @@ class FakeMergedSource extends MediaSource
     }
     if (selfPointing) {
       return Page(
-          items: movies.take(query.pageSize).toList(),
-          nextCursor: cursor ?? const Cursor('0'));
+        items: movies.take(query.pageSize).toList(),
+        nextCursor: cursor ?? const Cursor('0'),
+      );
     }
     if (repeatFirstPage) {
       return Page(
-          items: movies.take(query.pageSize).toList(),
-          nextCursor: Cursor('${browseCalls.length}'));
+        items: movies.take(query.pageSize).toList(),
+        nextCursor: Cursor('${browseCalls.length}'),
+      );
     }
     if (endlessEmpty) {
       return Page(items: const [], nextCursor: Cursor('${browseCalls.length}'));
@@ -221,9 +238,10 @@ class FakeMergedSource extends MediaSource
     final page = all.skip(start).take(query.pageSize).toList();
     final next = start + page.length;
     return Page(
-        items: page,
-        total: all.length,
-        nextCursor: next < all.length ? Cursor('$next') : null);
+      items: page,
+      total: all.length,
+      nextCursor: next < all.length ? Cursor('$next') : null,
+    );
   }
 
   @override
@@ -265,7 +283,9 @@ class FakeMergedSource extends MediaSource
     final page = favs.skip(start).take(favPageSize).toList();
     final next = start + page.length;
     return Page(
-        items: page, nextCursor: next < favs.length ? Cursor('$next') : null);
+      items: page,
+      nextCursor: next < favs.length ? Cursor('$next') : null,
+    );
   }
 
   @override
@@ -275,16 +295,21 @@ class FakeMergedSource extends MediaSource
   }
 
   @override
-  Future<Page<ItemSummary>> collectionItems(String collectionId,
-          {Cursor? cursor}) async =>
-      const Page(items: []);
+  Future<Page<ItemSummary>> collectionItems(
+    String collectionId, {
+    Cursor? cursor,
+  }) async => const Page(items: []);
 
   @override
   Future<ItemDetail> item(ItemRef ref) async {
     await _wait();
-    final known = [...resuming, ...movies, ...shows, ...recent, ...favs]
-        .where((i) => i.ref == ref)
-        .firstOrNull;
+    final known = [
+      ...resuming,
+      ...movies,
+      ...shows,
+      ...recent,
+      ...favs,
+    ].where((i) => i.ref == ref).firstOrNull;
     return ItemDetail(
       summary:
           known ?? ItemSummary(ref: ref, title: 'Invented ${ref.externalId}'),

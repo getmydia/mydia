@@ -28,9 +28,9 @@ MediaFileInfo filesMediaFileInfo({
   final bitrate = probe == null
       ? null
       : probe.bitrate ??
-          (duration != null && duration > 0 && file.size > 0
-              ? (file.size * 8 / duration).round()
-              : null);
+            (duration != null && duration > 0 && file.size > 0
+                ? (file.size * 8 / duration).round()
+                : null);
 
   return MediaFileInfo(
     id: file.key,

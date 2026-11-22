@@ -10,21 +10,27 @@ import '../source.dart';
 const plexSortOptions = [
   SortOption(id: 'titleSort', name: SortName.title, shared: SharedSort.title),
   SortOption(
-      id: 'addedAt',
-      name: SortName.recentlyAdded,
-      descendingByDefault: true,
-      shared: SharedSort.added),
+    id: 'addedAt',
+    name: SortName.recentlyAdded,
+    descendingByDefault: true,
+    shared: SharedSort.added,
+  ),
   SortOption(
-      id: 'originallyAvailableAt',
-      name: SortName.releaseDate,
-      descendingByDefault: true,
-      shared: SharedSort.released),
+    id: 'originallyAvailableAt',
+    name: SortName.releaseDate,
+    descendingByDefault: true,
+    shared: SharedSort.released,
+  ),
   SortOption(
-      id: 'audienceRating', name: SortName.rating, descendingByDefault: true),
+    id: 'audienceRating',
+    name: SortName.rating,
+    descendingByDefault: true,
+  ),
   SortOption(
-      id: 'lastViewedAt',
-      name: SortName.lastWatched,
-      descendingByDefault: true),
+    id: 'lastViewedAt',
+    name: SortName.lastWatched,
+    descendingByDefault: true,
+  ),
 ];
 
 const plexFilterOptions = [
@@ -32,21 +38,22 @@ const plexFilterOptions = [
 ];
 
 ItemKind? plexItemKind(String? type) => switch (type) {
-      'movie' => ItemKind.movie,
-      'show' => ItemKind.show,
-      'season' => ItemKind.season,
-      'episode' => ItemKind.episode,
-      'clip' => ItemKind.video,
-      _ => null,
-    };
+  'movie' => ItemKind.movie,
+  'show' => ItemKind.show,
+  'season' => ItemKind.season,
+  'episode' => ItemKind.episode,
+  'clip' => ItemKind.video,
+  _ => null,
+};
 
 Library? plexLibrary(SourceId sourceId, Map<String, dynamic> d) {
   final key = d['key'];
   if (key is! String) return null;
   final kind = switch (d['type']) {
-    'movie' => '${d['agent']}'.contains('none')
-        ? LibraryKind.videos
-        : LibraryKind.movies,
+    'movie' =>
+      '${d['agent']}'.contains('none')
+          ? LibraryKind.videos
+          : LibraryKind.movies,
     'show' => LibraryKind.shows,
     _ => null,
   };
@@ -82,19 +89,19 @@ String? _firstPartId(Map<String, dynamic> m) {
 /// path. `artwork()` hands it to `/photo/:/transcode?url=`, which accepts
 /// remote URLs, so it needs no special case.
 List<Person> _roles(Object? list) => [
-      for (final r in (list is List ? list : const []))
-        if (r is Map && r['tag'] is String)
-          Person(
-            name: r['tag'] as String,
-            role: r['role'] as String?,
-            photo: _art(r['thumb']),
-          ),
-    ];
+  for (final r in (list is List ? list : const []))
+    if (r is Map && r['tag'] is String)
+      Person(
+        name: r['tag'] as String,
+        role: r['role'] as String?,
+        photo: _art(r['thumb']),
+      ),
+];
 
 ItemRef? _parentRef(SourceId sourceId, ItemKind kind, Object? key) =>
     key is String
-        ? ItemRef(sourceId: sourceId, kind: kind, externalId: key)
-        : null;
+    ? ItemRef(sourceId: sourceId, kind: kind, externalId: key)
+    : null;
 
 ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
   final kind = plexItemKind(m['type'] as String?);
@@ -103,8 +110,7 @@ ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
   final leafCount = m['leafCount'] as int?;
   final viewed = m['viewedLeafCount'] as int?;
   final watched = switch (kind) {
-    ItemKind.show ||
-    ItemKind.season =>
+    ItemKind.show || ItemKind.season =>
       leafCount != null && leafCount > 0 && (viewed ?? 0) >= leafCount,
     _ => ((m['viewCount'] as int?) ?? 0) > 0,
   };
@@ -162,9 +168,9 @@ ExternalIds plexExternalIds(Object? guids) {
 }
 
 List<String> _tags(Object? list) => [
-      for (final t in (list is List ? list : const []))
-        if (t is Map && t['tag'] is String) t['tag'] as String,
-    ];
+  for (final t in (list is List ? list : const []))
+    if (t is Map && t['tag'] is String) t['tag'] as String,
+];
 
 MediaVersion? plexVersion(Map<String, dynamic> media) {
   final parts = media['Part'];
@@ -215,10 +221,16 @@ ItemDetail plexDetail(SourceId sourceId, Map<String, dynamic> m) {
     cast: _roles(m['Role']),
     contentRating: m['contentRating'] as String?,
     show: switch (summary.ref.kind) {
-      ItemKind.episode =>
-        _parentRef(sourceId, ItemKind.show, m['grandparentRatingKey']),
-      ItemKind.season =>
-        _parentRef(sourceId, ItemKind.show, m['parentRatingKey']),
+      ItemKind.episode => _parentRef(
+        sourceId,
+        ItemKind.show,
+        m['grandparentRatingKey'],
+      ),
+      ItemKind.season => _parentRef(
+        sourceId,
+        ItemKind.show,
+        m['parentRatingKey'],
+      ),
       _ => null,
     },
     season: summary.ref.kind == ItemKind.episode
@@ -235,16 +247,16 @@ ItemDetail plexDetail(SourceId sourceId, Map<String, dynamic> m) {
 /// Intro and credits markers of one `Metadata` entry fetched with
 /// `includeMarkers=1`. Offsets are already milliseconds.
 List<MediaSegment> plexSegments(Map<String, dynamic> metadata) => [
-      for (final m in (metadata['Marker'] as List? ?? const []))
-        if (m is Map)
-          MediaSegment(
-            type: switch (m['type']) {
-              'intro' => SegmentType.intro,
-              'credits' => SegmentType.credits,
-              'commercial' => SegmentType.commercial,
-              _ => SegmentType.unknown,
-            },
-            startMs: (m['startTimeOffset'] as num?)?.toInt() ?? 0,
-            endMs: (m['endTimeOffset'] as num?)?.toInt() ?? 0,
-          ),
-    ].where((s) => s.actionable).toList();
+  for (final m in (metadata['Marker'] as List? ?? const []))
+    if (m is Map)
+      MediaSegment(
+        type: switch (m['type']) {
+          'intro' => SegmentType.intro,
+          'credits' => SegmentType.credits,
+          'commercial' => SegmentType.commercial,
+          _ => SegmentType.unknown,
+        },
+        startMs: (m['startTimeOffset'] as num?)?.toInt() ?? 0,
+        endMs: (m['endTimeOffset'] as num?)?.toInt() ?? 0,
+      ),
+].where((s) => s.actionable).toList();

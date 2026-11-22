@@ -10,17 +10,18 @@ import 'package:player/core/logging/log_record.dart';
 import 'package:player/core/logging/log_store.dart';
 
 LogRecord _record(int t) => LogRecord(
-      time: DateTime.fromMillisecondsSinceEpoch(t, isUtc: true),
-      level: LogLevel.info,
-      tag: 'Test',
-      message: 'line',
-      sessionId: 'sess0001',
-    );
+  time: DateTime.fromMillisecondsSinceEpoch(t, isUtc: true),
+  level: LogLevel.info,
+  tag: 'Test',
+  message: 'line',
+  sessionId: 'sess0001',
+);
 
 int _lineBytes() => utf8.encode(_record(1).toNdjsonLine()).length;
 
-List<int> _times(LogBatch batch) =>
-    [for (final line in batch.lines) (jsonDecode(line) as Map)['t'] as int];
+List<int> _times(LogBatch batch) => [
+  for (final line in batch.lines) (jsonDecode(line) as Map)['t'] as int,
+];
 
 void main() {
   late Directory dir;
@@ -38,15 +39,14 @@ void main() {
     int maxFileBytes = 1 << 20,
     int maxFiles = 5,
     void Function(String reason)? onDisabled,
-  }) =>
-      FileLogStore.open(
-        dir,
-        sessionId: sessionId,
-        maxFileBytes: maxFileBytes,
-        maxFiles: maxFiles,
-        flushInterval: null,
-        onDisabled: onDisabled,
-      );
+  }) => FileLogStore.open(
+    dir,
+    sessionId: sessionId,
+    maxFileBytes: maxFileBytes,
+    maxFiles: maxFiles,
+    flushInterval: null,
+    onDisabled: onDisabled,
+  );
 
   int logFileCount() => dir
       .listSync()
@@ -54,12 +54,13 @@ void main() {
       .where((f) => f.path.endsWith('.ndjson'))
       .length;
 
-  List<File> ndjsonFiles() => dir
-      .listSync()
-      .whereType<File>()
-      .where((f) => f.path.endsWith('.ndjson'))
-      .toList()
-    ..sort((a, b) => a.path.compareTo(b.path));
+  List<File> ndjsonFiles() =>
+      dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.ndjson'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
 
   test('reads back what it wrote, oldest first', () async {
     final store = await open();
@@ -106,8 +107,11 @@ void main() {
     final batch = await store.read(maxBytes: 1 << 20, untilMs: 3);
     expect(_times(batch), [1, 2, 3]);
 
-    final again =
-        await store.read(from: batch.next, maxBytes: 1 << 20, untilMs: 3);
+    final again = await store.read(
+      from: batch.next,
+      maxBytes: 1 << 20,
+      untilMs: 3,
+    );
     expect(again.lines, isEmpty);
   });
 
@@ -134,25 +138,25 @@ void main() {
   });
 
   test(
-      'a cursor into a rotated-away file resumes at the next one and flags a gap',
-      () async {
-    final store = await open(maxFileBytes: _lineBytes(), maxFiles: 3);
-    store.add(_record(1));
-    await store.flush();
-    final early = await store.read(maxBytes: 1 << 20);
-    for (var t = 2; t <= 6; t++) {
-      store.add(_record(t));
+    'a cursor into a rotated-away file resumes at the next one and flags a gap',
+    () async {
+      final store = await open(maxFileBytes: _lineBytes(), maxFiles: 3);
+      store.add(_record(1));
       await store.flush();
-    }
+      final early = await store.read(maxBytes: 1 << 20);
+      for (var t = 2; t <= 6; t++) {
+        store.add(_record(t));
+        await store.flush();
+      }
 
-    final later = await store.read(from: early.next, maxBytes: 1 << 20);
+      final later = await store.read(from: early.next, maxBytes: 1 << 20);
 
-    expect(later.gap, isTrue);
-    expect(_times(later), [5, 6]);
-  });
+      expect(later.gap, isTrue);
+      expect(_times(later), [5, 6]);
+    },
+  );
 
-  test(
-      'a trailing partial line in the newest file is held for the next '
+  test('a trailing partial line in the newest file is held for the next '
       'write', () async {
     final store = await open();
     store.add(_record(1));
@@ -161,8 +165,10 @@ void main() {
     // Simulates a write that has not reached its terminating newline yet.
     // Appended directly, bypassing the buffered writer, since the store
     // itself always writes whole lines.
-    await active.writeAsString(jsonEncode(_record(2).toJson()),
-        mode: FileMode.append);
+    await active.writeAsString(
+      jsonEncode(_record(2).toJson()),
+      mode: FileMode.append,
+    );
 
     final batch = await store.read(maxBytes: 1 << 20);
 
@@ -172,15 +178,15 @@ void main() {
     expect(batch.next.offset, utf8.encode(_record(1).toNdjsonLine()).length);
   });
 
-  test(
-      'a trailing partial line in an older, already-rotated file is '
+  test('a trailing partial line in an older, already-rotated file is '
       'skipped so later files are still read', () async {
     final store = await open();
     // An older, already-rotated file whose last line was never finished --
     // the process was killed mid-write. Nothing will ever append to it
     // again, so its dangling tail must not be held onto forever.
     final older = File(
-        '${dir.path}${Platform.pathSeparator}0000000000001-sess0001-0000.ndjson');
+      '${dir.path}${Platform.pathSeparator}0000000000001-sess0001-0000.ndjson',
+    );
     await older.writeAsString(
       '${_record(1).toNdjsonLine()}${jsonEncode(_record(2).toJson())}',
     );
@@ -190,9 +196,13 @@ void main() {
     final batch = await store.read(maxBytes: 1 << 20);
 
     expect(_times(batch), [1, 3]);
-    expect(batch.gap, isFalse,
-        reason: 'a partial trailing line is not the same loss as a whole '
-            'rotated-away file, so it is not reported as a gap');
+    expect(
+      batch.gap,
+      isFalse,
+      reason:
+          'a partial trailing line is not the same loss as a whole '
+          'rotated-away file, so it is not reported as a gap',
+    );
     final newer = ndjsonFiles().last;
     expect(batch.next.file, newer.uri.pathSegments.last);
     expect(batch.next.offset, utf8.encode(_record(3).toNdjsonLine()).length);
@@ -207,17 +217,19 @@ void main() {
     expect(_times(await store.read(from: end, maxBytes: 1 << 20)), [2]);
   });
 
-  test('endCursor on an empty store reads the next line without a gap',
-      () async {
-    final store = await open();
-    final end = await store.endCursor();
-    store.add(_record(1));
+  test(
+    'endCursor on an empty store reads the next line without a gap',
+    () async {
+      final store = await open();
+      final end = await store.endCursor();
+      store.add(_record(1));
 
-    final batch = await store.read(from: end, maxBytes: 1 << 20);
+      final batch = await store.read(from: end, maxBytes: 1 << 20);
 
-    expect(_times(batch), [1]);
-    expect(batch.gap, isFalse);
-  });
+      expect(_times(batch), [1]);
+      expect(batch.gap, isFalse);
+    },
+  );
 
   test('persists the cursor across instances', () async {
     final store = await open();
@@ -254,8 +266,7 @@ void main() {
     expect(reasons, hasLength(1));
   });
 
-  test(
-      'a file that becomes unreadable mid-read ends the read gracefully, '
+  test('a file that becomes unreadable mid-read ends the read gracefully, '
       'keeping a resumable cursor', () async {
     final store = await open(maxFileBytes: _lineBytes(), maxFiles: 10);
     for (var t = 1; t <= 3; t++) {
@@ -284,7 +295,8 @@ void main() {
   test('a foreign session file is spared until it goes stale', () async {
     final store = await open(maxFileBytes: _lineBytes(), maxFiles: 3);
     final foreign = File(
-        '${dir.path}${Platform.pathSeparator}0000000000001-foreign1-0000.ndjson');
+      '${dir.path}${Platform.pathSeparator}0000000000001-foreign1-0000.ndjson',
+    );
     foreign.writeAsStringSync('foreign\n');
 
     for (var t = 1; t <= 4; t++) {
@@ -294,8 +306,9 @@ void main() {
 
     expect(foreign.existsSync(), isTrue);
 
-    foreign
-        .setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 2)));
+    foreign.setLastModifiedSync(
+      DateTime.now().subtract(const Duration(hours: 2)),
+    );
     store.add(_record(5));
     await store.flush();
 

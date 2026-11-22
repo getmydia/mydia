@@ -38,8 +38,8 @@ class UpNextCountdown extends ChangeNotifier {
     required this.onElapsed,
     this.raceGuard = const Duration(seconds: 1),
     DateTime Function()? clock,
-  })  : _clock = clock ?? DateTime.now,
-        _remaining = total;
+  }) : _clock = clock ?? DateTime.now,
+       _remaining = total;
 
   final Duration total;
 

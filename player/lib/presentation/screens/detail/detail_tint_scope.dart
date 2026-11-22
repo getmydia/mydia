@@ -29,8 +29,9 @@ class DetailTintScope extends ConsumerWidget {
       );
     }
     final source = _sourceFor(ref, art);
-    final resolved =
-        source == null ? null : ref.watch(tintForSourceProvider(source));
+    final resolved = source == null
+        ? null
+        : ref.watch(tintForSourceProvider(source));
     return AmbientTintScope(
       // Until this screen's own tint resolves, carry the one already showing.
       colors: resolved != null && resolved.hasValue
@@ -45,19 +46,21 @@ class DetailTintScope extends ConsumerWidget {
         null => null,
         UrlArt(:final url) => BackdropSource(imageUrl: url, id: url),
         SourceArt(:final sourceId, ref: final artRef) => switch (ref
-              .watch(sourceArtworkProvider((
+            .watch(
+              sourceArtworkProvider((
                 sourceId: sourceId,
                 art: artRef,
                 width: SourceBackdrop.artworkWidth,
-              )))
-              .value) {
-            final request? => BackdropSource(
-                imageUrl: request.url,
-                id: request.cacheKey,
-                headers: request.headers,
-                cacheKey: request.cacheKey,
-              ),
-            null => null,
-          },
+              )),
+            )
+            .value) {
+          final request? => BackdropSource(
+            imageUrl: request.url,
+            id: request.cacheKey,
+            headers: request.headers,
+            cacheKey: request.cacheKey,
+          ),
+          null => null,
+        },
       };
 }

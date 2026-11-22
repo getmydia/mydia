@@ -61,14 +61,14 @@ SliverAppBar detailHeroAppBar({
           // pages: menu first, then back.
           leading:
               Breakpoints.isMobile(context) && SourceDrawerButton.shellHasDrawer
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SourceDrawerButton(color: Colors.white),
-                        back,
-                      ],
-                    )
-                  : back,
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SourceDrawerButton(color: Colors.white),
+                    back,
+                  ],
+                )
+              : back,
         ),
       ),
     ),

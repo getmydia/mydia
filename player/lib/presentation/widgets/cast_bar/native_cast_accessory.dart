@@ -22,49 +22,48 @@ import 'cast_bar_state.dart';
 NativeAccessory? nativeAccessoryFor(
   AppLocalizations l10n,
   CastBarState? state,
-) =>
-    switch (state) {
-      null => null,
-      CastBarAmbient(:final target, :final deviceName) => NativeAccessory(
-          title: target.snapshot.title,
-          subtitle: CastBarText.ambientStatus(l10n, deviceName),
-          artwork: target.snapshot.imageUrl,
-          symbol: 'tv',
-        ),
-      CastBarOffline(:final device) => NativeAccessory(
-          title: device.name,
-          subtitle: CastBarText.offlineStatus(l10n),
-          symbol: 'airplayvideo',
-        ),
-      CastBarConnecting(:final device) => NativeAccessory(
-          title: CastBarText.connectingTitle(l10n, device.name),
-          symbol: 'airplayvideo',
-        ),
-      CastBarStale(:final session) => NativeAccessory(
-          title: session.mediaInfo?.title ?? session.device.name,
-          subtitle: CastBarText.staleStatus(l10n, session.device.name),
-          artwork: session.mediaInfo?.imageUrl,
-          symbol: 'airplayvideo',
-        ),
-      CastBarIdle(:final device) => NativeAccessory(
-          title: CastBarText.idleTitle(l10n, device.name),
-          subtitle: CastBarText.idleStatus(l10n),
-          symbol: 'airplayvideo.circle.fill',
-        ),
-      CastBarPlaying(:final session) => NativeAccessory(
-          title: session.mediaInfo?.title ?? session.device.name,
-          subtitle: CastBarText.playingStatus(
-            l10n,
-            session.device.name,
-            syncing: session.isSyncing,
-          ),
-          artwork: session.mediaInfo?.imageUrl,
-          symbol: 'airplayvideo',
-          playing: session.isSyncing
-              ? null
-              : session.playbackState == CastPlaybackState.playing,
-        ),
-    };
+) => switch (state) {
+  null => null,
+  CastBarAmbient(:final target, :final deviceName) => NativeAccessory(
+    title: target.snapshot.title,
+    subtitle: CastBarText.ambientStatus(l10n, deviceName),
+    artwork: target.snapshot.imageUrl,
+    symbol: 'tv',
+  ),
+  CastBarOffline(:final device) => NativeAccessory(
+    title: device.name,
+    subtitle: CastBarText.offlineStatus(l10n),
+    symbol: 'airplayvideo',
+  ),
+  CastBarConnecting(:final device) => NativeAccessory(
+    title: CastBarText.connectingTitle(l10n, device.name),
+    symbol: 'airplayvideo',
+  ),
+  CastBarStale(:final session) => NativeAccessory(
+    title: session.mediaInfo?.title ?? session.device.name,
+    subtitle: CastBarText.staleStatus(l10n, session.device.name),
+    artwork: session.mediaInfo?.imageUrl,
+    symbol: 'airplayvideo',
+  ),
+  CastBarIdle(:final device) => NativeAccessory(
+    title: CastBarText.idleTitle(l10n, device.name),
+    subtitle: CastBarText.idleStatus(l10n),
+    symbol: 'airplayvideo.circle.fill',
+  ),
+  CastBarPlaying(:final session) => NativeAccessory(
+    title: session.mediaInfo?.title ?? session.device.name,
+    subtitle: CastBarText.playingStatus(
+      l10n,
+      session.device.name,
+      syncing: session.isSyncing,
+    ),
+    artwork: session.mediaInfo?.imageUrl,
+    symbol: 'airplayvideo',
+    playing: session.isSyncing
+        ? null
+        : session.playbackState == CastPlaybackState.playing,
+  ),
+};
 
 /// Mirrors the cast bar into the native tab bar's accessory, and answers its
 /// taps. Draws nothing itself. Mounted by `AppShell` on the native path.
@@ -77,8 +76,9 @@ class NativeCastAccessory extends ConsumerStatefulWidget {
 }
 
 class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
-  late final NativeTabBarChannel _channel =
-      ref.read(nativeTabBarChannelProvider);
+  late final NativeTabBarChannel _channel = ref.read(
+    nativeTabBarChannelProvider,
+  );
   StreamSubscription<NativeTabBarEvent>? _events;
 
   /// The native accessory sits above Flutter's modal barrier, so it can be
@@ -108,22 +108,23 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
         // than onto the same banner with a View button to tap again.
         final state = ref.read(castBarStateProvider);
         if (state is CastBarAmbient) {
-          unawaited(connectToAmbientTarget(
-            rootNavigatorKey.currentContext ?? context,
-            ref,
-            state.target,
-            state.deviceName,
-          ));
+          unawaited(
+            connectToAmbientTarget(
+              rootNavigatorKey.currentContext ?? context,
+              ref,
+              state.target,
+              state.deviceName,
+            ),
+          );
         }
         // The router's root navigator, so the sheet covers the shell; the
         // fallback is for widget tests, which have no router.
         try {
           unawaited(
-            showCastControlsSheet(
-              rootNavigatorKey.currentContext ?? context,
-            ).whenComplete(() {
-              if (mounted) _sheetOpen = false;
-            }),
+            showCastControlsSheet(rootNavigatorKey.currentContext ?? context)
+                .whenComplete(() {
+                  if (mounted) _sheetOpen = false;
+                }),
           );
         } catch (e) {
           // A synchronous throw (no navigator) never reaches whenComplete,
@@ -134,10 +135,10 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
       case NativeAccessoryPlayPause():
         unawaited(_togglePlayback());
       case NativeTabSelected() ||
-            NativeInsetsChanged() ||
-            NativeLayoutChanged() ||
-            NativeSystemAccentChanged() ||
-            NativeGlassAccessibilityChanged():
+          NativeInsetsChanged() ||
+          NativeLayoutChanged() ||
+          NativeSystemAccentChanged() ||
+          NativeGlassAccessibilityChanged():
         break;
     }
   }

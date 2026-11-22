@@ -10,10 +10,11 @@ void main() {
     test('the rest lift leaves mpv at 100', () {
       expect(
         subPosForLift(
-            lift: kSubtitleRestPadding,
-            box: box,
-            videoWidth: 1920,
-            videoHeight: 1080),
+          lift: kSubtitleRestPadding,
+          box: box,
+          videoWidth: 1920,
+          videoHeight: 1080,
+        ),
         100,
       );
     });
@@ -49,7 +50,11 @@ void main() {
     test('clamps at 0', () {
       expect(
         subPosForLift(
-            lift: 2000, box: box, videoWidth: 1920, videoHeight: 1080),
+          lift: 2000,
+          box: box,
+          videoWidth: 1920,
+          videoHeight: 1080,
+        ),
         0,
       );
     });

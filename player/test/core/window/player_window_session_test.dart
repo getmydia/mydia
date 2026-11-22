@@ -15,8 +15,8 @@ void main() {
   const playing = Rect.fromLTWH(0, 0, 2000, 838);
 
   Future<List<WorkArea>> oneDisplay() async => const [
-        WorkArea(bounds: Rect.fromLTWH(0, 0, 2560, 1400), isPrimary: true),
-      ];
+    WorkArea(bounds: Rect.fromLTWH(0, 0, 2560, 1400), isPrimary: true),
+  ];
 
   ({
     PlayerWindowSession session,
@@ -24,7 +24,8 @@ void main() {
     WindowGeometryController geometry,
     InMemoryWindowGeometryStore store,
     ManualFrames frames,
-  }) build({
+  })
+  build({
     Rect bounds = browse,
     Duration fullscreenExitTimeout = const Duration(seconds: 2),
   }) {
@@ -201,37 +202,41 @@ void main() {
   });
 
   group('next-episode handoff', () {
-    test('a player that joins before the old one leaves keeps the window',
-        () async {
-      // The order go_router actually produces: see
-      // test/core/router/player_route_handoff_test.dart.
-      final t = build();
-      addTearDown(t.geometry.dispose);
+    test(
+      'a player that joins before the old one leaves keeps the window',
+      () async {
+        // The order go_router actually produces: see
+        // test/core/router/player_route_handoff_test.dart.
+        final t = build();
+        addTearDown(t.geometry.dispose);
 
-      await t.session.join('first');
-      await t.window.setBounds(playing);
-      await t.session.join('second');
-      t.session.leave('first');
-      await t.frames.end();
+        await t.session.join('first');
+        await t.window.setBounds(playing);
+        await t.session.join('second');
+        t.session.leave('first');
+        await t.frames.end();
 
-      expect(t.window.bounds, playing);
-      expect(t.geometry.isPaused, isTrue);
-    });
+        expect(t.window.bounds, playing);
+        expect(t.geometry.isPaused, isTrue);
+      },
+    );
 
-    test('a player that joins in the same frame the old one left keeps it',
-        () async {
-      final t = build();
-      addTearDown(t.geometry.dispose);
+    test(
+      'a player that joins in the same frame the old one left keeps it',
+      () async {
+        final t = build();
+        addTearDown(t.geometry.dispose);
 
-      await t.session.join('first');
-      await t.window.setBounds(playing);
-      t.session.leave('first');
-      await t.session.join('second');
-      await t.frames.end();
+        await t.session.join('first');
+        await t.window.setBounds(playing);
+        t.session.leave('first');
+        await t.session.join('second');
+        await t.frames.end();
 
-      expect(t.window.bounds, playing);
-      expect(t.geometry.isPaused, isTrue);
-    });
+        expect(t.window.bounds, playing);
+        expect(t.geometry.isPaused, isTrue);
+      },
+    );
 
     test('the last player out restores the original browse window', () async {
       // Not the first episode's player rect: the second player must not
@@ -251,51 +256,53 @@ void main() {
       expect(await persists(t.window, t.geometry, t.store), isTrue);
     });
 
-    test('a player that joins while the restore is in flight keeps the window',
-        () async {
-      // The fake's platform calls resolve in a microtask; a real one is a
-      // genuine await gap a join() can land in. Gate isMaximized() (which
-      // the restore awaits mid-way) to force that gap open.
-      final window = _GatedIsMaximizedWindowController(bounds: browse);
-      final store = InMemoryWindowGeometryStore();
-      final geometry = WindowGeometryController(
-        window: window,
-        store: store,
-        readWorkAreas: oneDisplay,
-        debounce: const Duration(milliseconds: 10),
-      );
-      addTearDown(geometry.dispose);
-      final session = PlayerWindowSession(
-        window: window,
-        geometry: geometry,
-        // Runs the restore immediately instead of waiting on ManualFrames,
-        // so it is already parked on the gate below by the time 'second'
-        // joins.
-        afterFrame: (cb) => cb(),
-      );
+    test(
+      'a player that joins while the restore is in flight keeps the window',
+      () async {
+        // The fake's platform calls resolve in a microtask; a real one is a
+        // genuine await gap a join() can land in. Gate isMaximized() (which
+        // the restore awaits mid-way) to force that gap open.
+        final window = _GatedIsMaximizedWindowController(bounds: browse);
+        final store = InMemoryWindowGeometryStore();
+        final geometry = WindowGeometryController(
+          window: window,
+          store: store,
+          readWorkAreas: oneDisplay,
+          debounce: const Duration(milliseconds: 10),
+        );
+        addTearDown(geometry.dispose);
+        final session = PlayerWindowSession(
+          window: window,
+          geometry: geometry,
+          // Runs the restore immediately instead of waiting on ManualFrames,
+          // so it is already parked on the gate below by the time 'second'
+          // joins.
+          afterFrame: (cb) => cb(),
+        );
 
-      await session.join('first');
-      await window.setBounds(playing);
-      session.leave('first');
-      // Lets the restore run up to (and park on) the gated isMaximized().
-      await pumpEventQueue();
+        await session.join('first');
+        await window.setBounds(playing);
+        session.leave('first');
+        // Lets the restore run up to (and park on) the gated isMaximized().
+        await pumpEventQueue();
 
-      await session.join('second');
+        await session.join('second');
 
-      window.gate.complete();
-      await pumpEventQueue();
+        window.gate.complete();
+        await pumpEventQueue();
 
-      expect(window.bounds, playing);
-      expect(geometry.isPaused, isTrue);
+        expect(window.bounds, playing);
+        expect(geometry.isPaused, isTrue);
 
-      // The join took over the ending session rather than starting a new
-      // one, so the browse rect it restores is still the original.
-      session.leave('second');
-      await pumpEventQueue();
+        // The join took over the ending session rather than starting a new
+        // one, so the browse rect it restores is still the original.
+        session.leave('second');
+        await pumpEventQueue();
 
-      expect(window.bounds, browse);
-      expect(geometry.isPaused, isFalse);
-    });
+        expect(window.bounds, browse);
+        expect(geometry.isPaused, isFalse);
+      },
+    );
   });
 
   group('fullscreen exit', () {
@@ -309,8 +316,11 @@ void main() {
       t.session.leave('a');
       await t.frames.end();
 
-      expect(t.window.bounds, playing,
-          reason: 'nothing is restored until the exit is observed');
+      expect(
+        t.window.bounds,
+        playing,
+        reason: 'nothing is restored until the exit is observed',
+      );
 
       t.window.fullScreen = false;
       t.session.onWindowLeaveFullScreen();
@@ -320,22 +330,26 @@ void main() {
       expect(await persists(t.window, t.geometry, t.store), isTrue);
     });
 
-    test('the timeout resumes persistence without fighting fullscreen',
-        () async {
-      final t = build(fullscreenExitTimeout: const Duration(milliseconds: 20));
-      addTearDown(t.geometry.dispose);
+    test(
+      'the timeout resumes persistence without fighting fullscreen',
+      () async {
+        final t = build(
+          fullscreenExitTimeout: const Duration(milliseconds: 20),
+        );
+        addTearDown(t.geometry.dispose);
 
-      await t.session.join('a');
-      await t.window.setBounds(playing);
-      t.window.fullScreen = true;
-      t.session.leave('a');
-      await t.frames.end();
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+        await t.session.join('a');
+        await t.window.setBounds(playing);
+        t.window.fullScreen = true;
+        t.session.leave('a');
+        await t.frames.end();
+        await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      expect(t.window.bounds, playing);
-      t.window.fullScreen = false;
-      expect(await persists(t.window, t.geometry, t.store), isTrue);
-    });
+        expect(t.window.bounds, playing);
+        t.window.fullScreen = false;
+        expect(await persists(t.window, t.geometry, t.store), isTrue);
+      },
+    );
 
     test('a player that joins during the wait cancels the restore', () async {
       final t = build();

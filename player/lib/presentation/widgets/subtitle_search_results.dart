@@ -49,8 +49,10 @@ class SubtitleSearchResults extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
             child: Text(
               '${provider.name}: ${provider.error}',
-              style:
-                  const TextStyle(color: AppColors.warningText, fontSize: 12),
+              style: const TextStyle(
+                color: AppColors.warningText,
+                fontSize: 12,
+              ),
             ),
           ),
         if (results.isEmpty)
@@ -107,15 +109,14 @@ class _ResultTile extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: 8,
         children: [
-          Text(
-            language,
-            style: TextStyle(color: palette.textSecondary),
-          ),
+          Text(language, style: TextStyle(color: palette.textSecondary)),
           if (candidate.hashMatch)
             Text(
               context.l10n.subtitleSearchExactMatch,
-              style:
-                  const TextStyle(color: AppColors.successText, fontSize: 12),
+              style: const TextStyle(
+                color: AppColors.successText,
+                fontSize: 12,
+              ),
             ),
           if (candidate.rating != null)
             Row(

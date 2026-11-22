@@ -16,11 +16,8 @@ void main() {
 
   const mydiaId = SourceId('macct:owner:inst-1');
 
-  String? go(String location) => appRedirect(
-        location: location,
-        sourcesLoading: false,
-        sources: const [],
-      );
+  String? go(String location) =>
+      appRedirect(location: location, sourcesLoading: false, sources: const []);
 
   test('no sources at all: add a server', () {
     expect(go('/'), '/sources/add');
@@ -43,29 +40,31 @@ void main() {
 
   test('sources still loading: no redirect', () {
     expect(
-        appRedirect(
-          location: '/',
-          sourcesLoading: true,
-          sources: const [],
-        ),
-        isNull);
+      appRedirect(location: '/', sourcesLoading: true, sources: const []),
+      isNull,
+    );
   });
 
   group('legacy locations', () {
-    String? legacy(Uri u) => legacyLocation(u,
-        legacy: mydiaId, mydia: const [mydiaId], active: mydiaId);
+    String? legacy(Uri u) => legacyLocation(
+      u,
+      legacy: mydiaId,
+      mydia: const [mydiaId],
+      active: mydiaId,
+    );
 
-    String? goLegacy(String location,
-            {Set<SourceId> gated = const {},
-            List<Source> sources = const []}) =>
-        appRedirect(
-          location: location,
-          fullLocation: location,
-          sourcesLoading: false,
-          sources: sources,
-          gated: gated,
-          legacy: legacy,
-        );
+    String? goLegacy(
+      String location, {
+      Set<SourceId> gated = const {},
+      List<Source> sources = const [],
+    }) => appRedirect(
+      location: location,
+      fullLocation: location,
+      sourcesLoading: false,
+      sources: sources,
+      gated: gated,
+      legacy: legacy,
+    );
 
     test('an old Mydia page moves under its source', () {
       expect(goLegacy('/movie/1'), '/s/macct:owner:inst-1/movie/1');
@@ -78,7 +77,9 @@ void main() {
     test('a gated target moves first and is gated on the next pass', () {
       final gated = {mydiaId};
       expect(
-          goLegacy('/movie/1', gated: gated), '/s/macct:owner:inst-1/movie/1');
+        goLegacy('/movie/1', gated: gated),
+        '/s/macct:owner:inst-1/movie/1',
+      );
       expect(
         goLegacy('/s/macct:owner:inst-1/movie/1', gated: gated),
         unlockLocation('/s/macct:owner:inst-1/movie/1'),
@@ -113,19 +114,23 @@ void main() {
 
   group('with Plex or Stash and no Mydia', () {
     String? go(String location, {bool loading = false}) => appRedirect(
-          location: location,
-          sourcesLoading: loading,
-          sources: const [fakeSource],
-        );
+      location: location,
+      sourcesLoading: loading,
+      sources: const [fakeSource],
+    );
 
     test('lands on the active source instead of add-a-server', () {
       String? landing(String l) => appRedirect(
-            location: l,
-            sourcesLoading: false,
-            sources: const [fakeSource],
-            legacy: (u) => legacyLocation(u,
-                legacy: null, mydia: const [], active: fakeSource.id),
-          );
+        location: l,
+        sourcesLoading: false,
+        sources: const [fakeSource],
+        legacy: (u) => legacyLocation(
+          u,
+          legacy: null,
+          mydia: const [],
+          active: fakeSource.id,
+        ),
+      );
       expect(landing('/'), '/s/acc1:owner:aa11');
       expect(landing('/search?q=x'), '/s/acc1:owner:aa11/search?q=x');
     });
@@ -151,18 +156,26 @@ void main() {
     final gated = {const SourceId('acc1:owner:srv9')};
 
     Source sourceOf(String account, String server) => Source(
-          account: ProviderAccount(
-            id: account,
-            kind: SourceKind.plex,
-            displayName: account,
-            storageNamespace: 'source/$account',
-            activeProfileId: 'owner',
-          ),
-          profile: SourceProfile(
-              id: 'owner', accountId: account, name: 'Owner', isOwner: true),
-          server: SourceServer(
-              id: server, accountId: account, profileId: 'owner', name: server),
-        );
+      account: ProviderAccount(
+        id: account,
+        kind: SourceKind.plex,
+        displayName: account,
+        storageNamespace: 'source/$account',
+        activeProfileId: 'owner',
+      ),
+      profile: SourceProfile(
+        id: 'owner',
+        accountId: account,
+        name: 'Owner',
+        isOwner: true,
+      ),
+      server: SourceServer(
+        id: server,
+        accountId: account,
+        profileId: 'owner',
+        name: server,
+      ),
+    );
 
     String? goGated(String location, {List<Source> sources = const []}) =>
         appRedirect(
@@ -202,7 +215,9 @@ void main() {
 
     test('other source routes are untouched', () {
       expect(
-          goGated('/s/acc2:owner:x', sources: [sourceOf('acc2', 'x')]), isNull);
+        goGated('/s/acc2:owner:x', sources: [sourceOf('acc2', 'x')]),
+        isNull,
+      );
     });
 
     test('unlock is reachable with no Mydia server', () {
@@ -211,13 +226,17 @@ void main() {
 
     test('with only gated sources, a pass over the landing unlocks it', () {
       final locked = sourceOf('acc1', 'srv9');
-      expect(goGated('/s/acc1:owner:srv9', sources: [locked]),
-          unlockLocation('/s/acc1:owner:srv9'));
+      expect(
+        goGated('/s/acc1:owner:srv9', sources: [locked]),
+        unlockLocation('/s/acc1:owner:srv9'),
+      );
     });
 
-    test('Manage servers is reachable with no Mydia and every server hidden',
-        () {
-      expect(goGated('/sources/manage'), isNull);
-    });
+    test(
+      'Manage servers is reachable with no Mydia and every server hidden',
+      () {
+        expect(goGated('/sources/manage'), isNull);
+      },
+    );
   });
 }

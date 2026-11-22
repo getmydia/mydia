@@ -13,18 +13,19 @@ void main() {
   const path = '/media/films/Amber Tide (2019).mkv';
   late FakePeerProxy proxy;
 
-  PeerFilesBackend backend(FakePeerRangeTransport transport,
-          {bool connected = true,
-          String nodeId = _node,
-          String? Function(String)? addressOf}) =>
-      PeerFilesBackend(
-        nodeId: nodeId,
-        hostAccountId: 'flocal',
-        proxy: proxy,
-        transport: transport,
-        isConnected: (_) => connected,
-        addressOf: addressOf,
-      );
+  PeerFilesBackend backend(
+    FakePeerRangeTransport transport, {
+    bool connected = true,
+    String nodeId = _node,
+    String? Function(String)? addressOf,
+  }) => PeerFilesBackend(
+    nodeId: nodeId,
+    hostAccountId: 'flocal',
+    proxy: proxy,
+    transport: transport,
+    isConnected: (_) => connected,
+    addressOf: addressOf,
+  );
 
   FakePeerRangeTransport answering(int status) =>
       FakePeerRangeTransport(fakeStatusStream(status));
@@ -45,77 +46,102 @@ void main() {
 
     expect(proxy.starts.single, (targetPeer: _node, target: _target));
     expect(
-        file.url,
-        'http://127.0.0.1:4000/t/$_target/peerfile/flocal/'
-        '${open.path}/stream');
+      file.url,
+      'http://127.0.0.1:4000/t/$_target/peerfile/flocal/'
+      '${open.path}/stream',
+    );
   });
 
   test('probe_404_throws_not_found', () async {
     final transport = answering(404);
     await expectLater(
-        backend(transport).playable(path), throwsA(isA<BackendNotFound>()));
+      backend(transport).playable(path),
+      throwsA(isA<BackendNotFound>()),
+    );
     expect(transport.streams.single.isCancelled, isTrue);
   });
 
   test('probe_502_throws_unreachable', () async {
     await expectLater(
-        backend(answering(502)).playable(path),
-        throwsA(
-            isA<BackendUnreachable>().having((e) => e.status, 'status', 502)));
+      backend(answering(502)).playable(path),
+      throwsA(isA<BackendUnreachable>().having((e) => e.status, 'status', 502)),
+    );
   });
 
   test('open_failure_throws_unreachable', () async {
     await expectLater(
-        backend(FakePeerRangeTransport(Exception('dial failed')))
-            .playable(path),
-        throwsA(isA<BackendUnreachable>()
-            .having((e) => e.status, 'status', isNull)));
+      backend(FakePeerRangeTransport(Exception('dial failed'))).playable(path),
+      throwsA(
+        isA<BackendUnreachable>().having((e) => e.status, 'status', isNull),
+      ),
+    );
     expect(proxy.starts, isEmpty);
   });
 
   test('probe_403_throws_unauthorized', () async {
-    await expectLater(backend(answering(403)).playable(path),
-        throwsA(isA<BackendUnauthorized>()));
+    await expectLater(
+      backend(answering(403)).playable(path),
+      throwsA(isA<BackendUnauthorized>()),
+    );
   });
 
-  test('a disconnected host is dialed with its roster address before the probe',
-      () async {
-    const address = '{"id":"$_node","addrs":["192.0.2.7:4921"]}';
-    final asked = <String>[];
-    final transport = answering(206);
-    await backend(transport, connected: false, addressOf: (n) {
-      asked.add(n);
-      return address;
-    }).playable(path);
-    expect(asked, [_node]);
-    expect(transport.calls, ['dial $address', 'open $_node']);
-  });
+  test(
+    'a disconnected host is dialed with its roster address before the probe',
+    () async {
+      const address = '{"id":"$_node","addrs":["192.0.2.7:4921"]}';
+      final asked = <String>[];
+      final transport = answering(206);
+      await backend(
+        transport,
+        connected: false,
+        addressOf: (n) {
+          asked.add(n);
+          return address;
+        },
+      ).playable(path);
+      expect(asked, [_node]);
+      expect(transport.calls, ['dial $address', 'open $_node']);
+    },
+  );
 
   test('a connected host is not dialed', () async {
     final transport = answering(206);
-    await backend(transport, addressOf: (_) => '{"id":"$_node"}')
-        .playable(path);
+    await backend(
+      transport,
+      addressOf: (_) => '{"id":"$_node"}',
+    ).playable(path);
     expect(transport.calls, ['open $_node']);
   });
 
   test('a failed dial still probes', () async {
     final failing = answering(206)..dialFailure = Exception('no route');
-    await backend(failing, connected: false, addressOf: (_) => '{"id":"x"}')
-        .playable(path);
+    await backend(
+      failing,
+      connected: false,
+      addressOf: (_) => '{"id":"x"}',
+    ).playable(path);
     expect(failing.calls, ['dial {"id":"x"}', 'open $_node']);
   });
 
-  test('a host with no roster address is dialed by node ID before the probe',
-      () async {
-    final unknown = answering(206);
-    await backend(unknown, connected: false, addressOf: (_) => null)
-        .playable(path);
-    expect(unknown.calls, ['dial {"id":"$_node","addrs":[]}', 'open $_node']);
+  test(
+    'a host with no roster address is dialed by node ID before the probe',
+    () async {
+      final unknown = answering(206);
+      await backend(
+        unknown,
+        connected: false,
+        addressOf: (_) => null,
+      ).playable(path);
+      expect(unknown.calls, ['dial {"id":"$_node","addrs":[]}', 'open $_node']);
 
-    final noLookup = answering(206);
-    await backend(noLookup, connected: false).playable(path);
-    expect(noLookup.calls, ['dial {"id":"$_node","addrs":[]}', 'open $_node']);
-  });
+      final noLookup = answering(206);
+      await backend(noLookup, connected: false).playable(path);
+      expect(noLookup.calls, [
+        'dial {"id":"$_node","addrs":[]}',
+        'open $_node',
+      ]);
+    },
+  );
 
   test('an empty file answers the probe 416 and still plays', () async {
     final transport = answering(416);
@@ -133,38 +159,44 @@ void main() {
 
   test('probe follows whether the peer is connected', () async {
     await backend(answering(206)).probe();
-    await expectLater(backend(answering(206), connected: false).probe(),
-        throwsA(isA<BackendUnreachable>()));
+    await expectLater(
+      backend(answering(206), connected: false).probe(),
+      throwsA(isA<BackendUnreachable>()),
+    );
   });
 
-  test('a missing node id fails before dialing or starting the proxy',
-      () async {
-    final transport = answering(206);
-    final b = backend(transport, nodeId: '');
-    await expectLater(b.playable(path), throwsA(isA<BackendUnreachable>()));
-    await expectLater(b.probe(), throwsA(isA<BackendUnreachable>()));
-    expect(transport.opens, isEmpty);
-    expect(proxy.starts, isEmpty);
-  });
+  test(
+    'a missing node id fails before dialing or starting the proxy',
+    () async {
+      final transport = answering(206);
+      final b = backend(transport, nodeId: '');
+      await expectLater(b.playable(path), throwsA(isA<BackendUnreachable>()));
+      await expectLater(b.probe(), throwsA(isA<BackendUnreachable>()));
+      expect(transport.opens, isEmpty);
+      expect(proxy.starts, isEmpty);
+    },
+  );
 
-  test('every account of a host shares one held target, released once',
-      () async {
-    await backend(answering(206)).playable(path);
-    await PeerFilesBackend(
-      nodeId: _node,
-      hostAccountId: 'wshare',
-      proxy: proxy,
-      transport: answering(206),
-      isConnected: (_) => true,
-    ).playable(path);
-    expect(proxy.holders[_target], hasLength(1));
+  test(
+    'every account of a host shares one held target, released once',
+    () async {
+      await backend(answering(206)).playable(path);
+      await PeerFilesBackend(
+        nodeId: _node,
+        hostAccountId: 'wshare',
+        proxy: proxy,
+        transport: answering(206),
+        isConnected: (_) => true,
+      ).playable(path);
+      expect(proxy.holders[_target], hasLength(1));
 
-    await PeerFilesBackend.releaseHost(_node, () => proxy);
-    expect(proxy.stops, [_target]);
-    expect(proxy.holders[_target], isEmpty);
+      await PeerFilesBackend.releaseHost(_node, () => proxy);
+      expect(proxy.stops, [_target]);
+      expect(proxy.holders[_target], isEmpty);
 
-    // Nothing held: a second release reads no proxy.
-    await PeerFilesBackend.releaseHost(_node, () => throw StateError('read'));
-    expect(proxy.stops, [_target]);
-  });
+      // Nothing held: a second release reads no proxy.
+      await PeerFilesBackend.releaseHost(_node, () => throw StateError('read'));
+      expect(proxy.stops, [_target]);
+    },
+  );
 }

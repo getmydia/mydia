@@ -45,7 +45,7 @@ class RecordedSpawn {
 /// The top-level portal object: CreateUpdateMonitor and Spawn.
 class _FakeFlatpakPortal extends DBusObject {
   _FakeFlatpakPortal({required this.monitorPath})
-      : super(DBusObjectPath(_portalPath));
+    : super(DBusObjectPath(_portalPath));
 
   final DBusObjectPath monitorPath;
 
@@ -108,16 +108,13 @@ class _FakeUpdateMonitor extends DBusObject {
   }
 
   Future<void> emitUpdateAvailable(Map<String, DBusValue> info) => emitSignal(
-        _monitorInterface,
-        'UpdateAvailable',
-        [DBusDict.stringVariant(info)],
-      );
+    _monitorInterface,
+    'UpdateAvailable',
+    [DBusDict.stringVariant(info)],
+  );
 
-  Future<void> emitProgress(Map<String, DBusValue> info) => emitSignal(
-        _monitorInterface,
-        'Progress',
-        [DBusDict.stringVariant(info)],
-      );
+  Future<void> emitProgress(Map<String, DBusValue> info) =>
+      emitSignal(_monitorInterface, 'Progress', [DBusDict.stringVariant(info)]);
 
   /// A Progress signal with the wrong payload shape: no values at all,
   /// so decoding `signal.values[0]` blows up instead of just producing a
@@ -148,8 +145,9 @@ class _FlatpakPortalHarness {
 
   static Future<_FlatpakPortalHarness> start() async {
     final server = DBusServer();
-    final address =
-        await server.listenAddress(DBusAddress.unix(dir: Directory.systemTemp));
+    final address = await server.listenAddress(
+      DBusAddress.unix(dir: Directory.systemTemp),
+    );
     final serviceClient = DBusClient(address);
     final nameReply = await serviceClient.requestName(_portalName);
     if (nameReply != DBusRequestNameReply.primaryOwner) {
@@ -179,8 +177,7 @@ class _FlatpakPortalHarness {
 
   DBusFlatpakPortal makePortal({
     String executablePath = '/app/bin/mydia-player',
-  }) =>
-      DBusFlatpakPortal(client: testClient, executablePath: executablePath);
+  }) => DBusFlatpakPortal(client: testClient, executablePath: executablePath);
 
   /// Forces a full round trip on the same connection DBusFlatpakPortal uses.
   /// Signal subscriptions register their match rule with a fire-and-forget
@@ -218,8 +215,7 @@ void main() {
       expect(harness.portalObject.lastCreateMonitorInterface, _portalName);
     });
 
-    test(
-        'an UpdateAvailable signal on the returned monitor path decodes to '
+    test('an UpdateAvailable signal on the returned monitor path decodes to '
         'FlatpakCommits', () async {
       final portal = harness.makePortal();
       await portal.startMonitoring();
@@ -304,29 +300,31 @@ void main() {
       );
 
       await updateReceived.future.timeout(const Duration(seconds: 5));
-      await harness.monitorObject.emitProgress({
-        'status': const DBusUint32(2),
-      });
+      await harness.monitorObject.emitProgress({'status': const DBusUint32(2)});
 
       await expectation;
     });
 
-    test('NotSupported from Update surfaces as FlatpakUpdateNotPermitted',
-        () async {
-      harness.monitorObject.onUpdate =
-          () async => DBusMethodErrorResponse.notSupported();
-
-      final portal = harness.makePortal();
-      await portal.startMonitoring();
-
-      await expectLater(
-        portal.update(),
-        emitsInOrder([emitsError(isA<FlatpakUpdateNotPermitted>()), emitsDone]),
-      );
-    });
-
     test(
-        'a different D-Bus error surfaces as itself, not '
+      'NotSupported from Update surfaces as FlatpakUpdateNotPermitted',
+      () async {
+        harness.monitorObject.onUpdate = () async =>
+            DBusMethodErrorResponse.notSupported();
+
+        final portal = harness.makePortal();
+        await portal.startMonitoring();
+
+        await expectLater(
+          portal.update(),
+          emitsInOrder([
+            emitsError(isA<FlatpakUpdateNotPermitted>()),
+            emitsDone,
+          ]),
+        );
+      },
+    );
+
+    test('a different D-Bus error surfaces as itself, not '
         'FlatpakUpdateNotPermitted', () async {
       harness.monitorObject.onUpdate = () async =>
           DBusMethodErrorResponse('org.freedesktop.DBus.Error.AccessDenied');
@@ -349,8 +347,7 @@ void main() {
       );
     });
 
-    test(
-        'a non-DBusMethodResponseException from Update still closes the '
+    test('a non-DBusMethodResponseException from Update still closes the '
         'stream instead of hanging', () async {
       // A success reply with the wrong signature makes the *client* throw
       // DBusReplySignatureException: a real dbus-package exception, but not
@@ -358,21 +355,22 @@ void main() {
       // its generic catch clause rather than mistranslating this as
       // FlatpakUpdateNotPermitted, or (the actual regression class this
       // guards against) leaving the stream open forever.
-      harness.monitorObject.onUpdate =
-          () async => DBusMethodSuccessResponse([const DBusString('surprise')]);
+      harness.monitorObject.onUpdate = () async =>
+          DBusMethodSuccessResponse([const DBusString('surprise')]);
 
       final portal = harness.makePortal();
       await portal.startMonitoring();
 
       await expectLater(
         portal.update(),
-        emitsInOrder(
-            [emitsError(isA<DBusReplySignatureException>()), emitsDone]),
+        emitsInOrder([
+          emitsError(isA<DBusReplySignatureException>()),
+          emitsDone,
+        ]),
       );
     });
 
-    test(
-        'a malformed Progress signal does not escape as an unhandled zone '
+    test('a malformed Progress signal does not escape as an unhandled zone '
         'error and still closes the stream', () async {
       final updateReceived = Completer<void>();
       harness.monitorObject.onUpdate = () async {
@@ -402,19 +400,22 @@ void main() {
   });
 
   group('restartIntoLatest', () {
-    test('issues Spawn with flags 2, cwd /app and a NUL-terminated argv',
-        () async {
-      final portal =
-          harness.makePortal(executablePath: '/app/bin/mydia-player');
-      await portal.restartIntoLatest();
+    test(
+      'issues Spawn with flags 2, cwd /app and a NUL-terminated argv',
+      () async {
+        final portal = harness.makePortal(
+          executablePath: '/app/bin/mydia-player',
+        );
+        await portal.restartIntoLatest();
 
-      final spawn = harness.portalObject.lastSpawn;
-      expect(spawn, isNotNull);
-      expect(spawn!.flags, 2);
-      expect(spawn.cwd, [...'/app'.codeUnits, 0]);
-      expect(spawn.argv, hasLength(1));
-      expect(spawn.argv.first, [...'/app/bin/mydia-player'.codeUnits, 0]);
-    });
+        final spawn = harness.portalObject.lastSpawn;
+        expect(spawn, isNotNull);
+        expect(spawn!.flags, 2);
+        expect(spawn.cwd, [...'/app'.codeUnits, 0]);
+        expect(spawn.argv, hasLength(1));
+        expect(spawn.argv.first, [...'/app/bin/mydia-player'.codeUnits, 0]);
+      },
+    );
   });
 
   group('close', () {
@@ -438,30 +439,32 @@ void main() {
       await expectLater(harness.testClient.ping(), throwsA(anything));
     });
 
-    test('ends an in-flight update() stream instead of leaving it hanging',
-        () async {
-      // Regression guard: this method's own doc comment used to claim that
-      // closing the client tears down an in-flight update() stream. It does
-      // not -- the dbus package's underlying signal subscription just stops
-      // delivering events without ever erroring or completing, so a caller
-      // doing `await for` over update() hung forever. onUpdate never
-      // replying keeps this update() call genuinely in flight for the life
-      // of the test.
-      harness.monitorObject.onUpdate =
-          () => Completer<DBusMethodResponse>().future;
+    test(
+      'ends an in-flight update() stream instead of leaving it hanging',
+      () async {
+        // Regression guard: this method's own doc comment used to claim that
+        // closing the client tears down an in-flight update() stream. It does
+        // not -- the dbus package's underlying signal subscription just stops
+        // delivering events without ever erroring or completing, so a caller
+        // doing `await for` over update() hung forever. onUpdate never
+        // replying keeps this update() call genuinely in flight for the life
+        // of the test.
+        harness.monitorObject.onUpdate = () =>
+            Completer<DBusMethodResponse>().future;
 
-      final portal = harness.makePortal();
-      await portal.startMonitoring();
+        final portal = harness.makePortal();
+        await portal.startMonitoring();
 
-      final stream = portal.update();
-      final expectation = expectLater(
-        stream,
-        emitsInOrder([emitsError(isA<StateError>()), emitsDone]),
-      );
+        final stream = portal.update();
+        final expectation = expectLater(
+          stream,
+          emitsInOrder([emitsError(isA<StateError>()), emitsDone]),
+        );
 
-      await portal.close();
+        await portal.close();
 
-      await expectation.timeout(const Duration(seconds: 5));
-    });
+        await expectation.timeout(const Duration(seconds: 5));
+      },
+    );
   });
 }

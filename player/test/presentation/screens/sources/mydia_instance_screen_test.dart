@@ -25,6 +25,7 @@ import 'package:player/presentation/screens/sources/mydia_instance_screen.dart';
 
 import '../../../core/sources/mydia/mydia_account_harness.dart'
     show mydiaRecord;
+
 import 'package:player/presentation/widgets/cast_bar/cast_bar_state.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
@@ -38,20 +39,22 @@ class _Targets extends FakeMediaSource implements RemoteTargets {
   final revoked = <String>[];
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.remoteTargets};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.remoteTargets,
+  };
 
   @override
   Future<List<RemoteDevice>> devices() async => [
-        RemoteDevice(
-          id: 'd1',
-          deviceName: 'Hall Screen',
-          platform: 'linux',
-          lastSeenAt: DateTime.utc(2026, 8, 20),
-          isRevoked: false,
-          createdAt: DateTime.utc(2026, 8, 1),
-        ),
-      ];
+    RemoteDevice(
+      id: 'd1',
+      deviceName: 'Hall Screen',
+      platform: 'linux',
+      lastSeenAt: DateTime.utc(2026, 8, 20),
+      isRevoked: false,
+      createdAt: DateTime.utc(2026, 8, 1),
+    ),
+  ];
 
   @override
   Future<bool> revokeDevice(String deviceId) async {
@@ -108,71 +111,78 @@ void main() {
     for (final r in [recordA, recordB]) {
       await store.putAccount(r);
       await writeMydiaCredentials(
-          secrets,
-          r.account,
-          MydiaCredentials(
-            instanceId: r.servers.single.id,
-            accessToken: 'tok',
-            serverUrl: 'https://${r.account.id}.example.test',
-          ));
+        secrets,
+        r.account,
+        MydiaCredentials(
+          instanceId: r.servers.single.id,
+          accessToken: 'tok',
+          serverUrl: 'https://${r.account.id}.example.test',
+        ),
+      );
     }
     targetsA = _Targets(idA);
     registrations = _Registrations({idA: status});
     await tester.binding.setSurfaceSize(const Size(900, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        if (downloads == null)
-          noDownloadsOverride
-        else
-          downloadManagerProvider.overrideWith((ref) async => downloads),
-        noCollectionSyncOverride,
-        // The cast button's hidden-banner dot reaches the ambient roster,
-        // which `_Targets.roster` leaves unimplemented.
-        castBarAmbientHiddenProvider.overrideWithValue(false),
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(secrets),
-        mediaSourceProvider
-            .overrideWith((ref, id) => id == idA ? targetsA : null),
-        nodeRegistrationsProvider.overrideWith(() => registrations),
-        serverCompatibilityProvider
-            .overrideWith((ref, id) async => const ServerCompatibility(
-                  info: ServerCompatibilityInfo(
-                    version: '1.4.0',
-                    minPlayerVersion: '0.1.0',
-                    recommendedPlayerVersion: '0.1.0',
-                  ),
-                  verdict: CompatibilityVerdict.compatible,
-                )),
-      ],
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: (context, child) {
-          final layered = toastLayerBuilder(context, child);
-          if (insets == null) return layered;
-          return MediaQuery(
-            data: MediaQueryData(
-              size: const Size(900, 1600),
-              padding: EdgeInsets.only(top: insets.height),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          if (downloads == null)
+            noDownloadsOverride
+          else
+            downloadManagerProvider.overrideWith((ref) async => downloads),
+          noCollectionSyncOverride,
+          // The cast button's hidden-banner dot reaches the ambient roster,
+          // which `_Targets.roster` leaves unimplemented.
+          castBarAmbientHiddenProvider.overrideWithValue(false),
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(secrets),
+          mediaSourceProvider.overrideWith(
+            (ref, id) => id == idA ? targetsA : null,
+          ),
+          nodeRegistrationsProvider.overrideWith(() => registrations),
+          serverCompatibilityProvider.overrideWith(
+            (ref, id) async => const ServerCompatibility(
+              info: ServerCompatibilityInfo(
+                version: '1.4.0',
+                minPlayerVersion: '0.1.0',
+                recommendedPlayerVersion: '0.1.0',
+              ),
+              verdict: CompatibilityVerdict.compatible,
             ),
-            child: WindowChromeInsets.scope(insets: insets, child: layered),
-          );
-        },
-        routerConfig: GoRouter(
-          initialLocation: '/sources/manage/x',
-          routes: [
-            GoRoute(
+          ),
+        ],
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) {
+            final layered = toastLayerBuilder(context, child);
+            if (insets == null) return layered;
+            return MediaQuery(
+              data: MediaQueryData(
+                size: const Size(900, 1600),
+                padding: EdgeInsets.only(top: insets.height),
+              ),
+              child: WindowChromeInsets.scope(insets: insets, child: layered),
+            );
+          },
+          routerConfig: GoRouter(
+            initialLocation: '/sources/manage/x',
+            routes: [
+              GoRoute(
                 path: '/sources/manage',
-                builder: (_, __) =>
-                    const Scaffold(body: Text('manage servers stub'))),
-            GoRoute(
+                builder: (_, _) =>
+                    const Scaffold(body: Text('manage servers stub')),
+              ),
+              GoRoute(
                 path: '/sources/manage/x',
-                builder: (_, __) => MydiaInstanceScreen(sourceId: idA)),
-          ],
+                builder: (_, _) => MydiaInstanceScreen(sourceId: idA),
+              ),
+            ],
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
   }
 
@@ -194,27 +204,32 @@ void main() {
     expect(find.text('Hall Screen'), findsOneWidget);
   });
 
-  testWidgets('a failed registration offers a retry for this instance only',
-      (tester) async {
+  testWidgets('a failed registration offers a retry for this instance only', (
+    tester,
+  ) async {
     await pump(tester, status: const RegistrationFailed('offline', 2, null));
 
-    await tester
-        .tap(find.byKey(const Key('mydia-instance-registration-retry')));
+    await tester.tap(
+      find.byKey(const Key('mydia-instance-registration-retry')),
+    );
     await tester.pump();
 
     expect(registrations.retried, [idA]);
   });
 
   testWidgets('a registered device offers no retry', (tester) async {
-    await pump(tester,
-        status: RegistrationSucceeded('n' * 8, DateTime.utc(2026, 8, 1)));
+    await pump(
+      tester,
+      status: RegistrationSucceeded('n' * 8, DateTime.utc(2026, 8, 1)),
+    );
 
-    expect(find.byKey(const Key('mydia-instance-registration-retry')),
-        findsNothing);
+    expect(
+      find.byKey(const Key('mydia-instance-registration-retry')),
+      findsNothing,
+    );
   });
 
-  testWidgets(
-      'remove asks first, says what goes with it, then removes only '
+  testWidgets('remove asks first, says what goes with it, then removes only '
       'this instance and returns to the list', (tester) async {
     await pump(tester, downloads: _FakeDownloads());
 
@@ -231,8 +246,11 @@ void main() {
     expect((await store.load()).accounts.map((r) => r.account.id), ['mb']);
     expect(find.text('manage servers stub'), findsOneWidget);
     expect(await readMydiaCredentials(secrets, recordA.account), isNull);
-    expect(await readMydiaCredentials(secrets, recordB.account), isNotNull,
-        reason: 'the other instance keeps its sign-in');
+    expect(
+      await readMydiaCredentials(secrets, recordB.account),
+      isNotNull,
+      reason: 'the other instance keeps its sign-in',
+    );
   });
 
   testWidgets('the server page carries the cast button', (tester) async {
@@ -240,10 +258,13 @@ void main() {
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
   });
 
-  testWidgets('draws into the macOS title band with the cast button',
-      (tester) async {
-    await pump(tester,
-        insets: const WindowChromeInsets(height: 40, leading: 80, trailing: 0));
+  testWidgets('draws into the macOS title band with the cast button', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      insets: const WindowChromeInsets(height: 40, leading: 80, trailing: 0),
+    );
 
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
     expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);

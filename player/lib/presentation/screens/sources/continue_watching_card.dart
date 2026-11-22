@@ -47,13 +47,13 @@ class ContinueWatchingCard extends ConsumerWidget {
   static bool hasTimeLeftFor(ItemSummary item) => _timeLeft(item) != null;
 
   static String _captionOf(ItemSummary item, String? trailingLabel) => [
-        if (item.ref.kind == ItemKind.episode) ...[
-          item.subtitle,
-          // The first line is the show title only when the item has one.
-          if (item.showTitle != null) item.title,
-        ],
-        trailingLabel,
-      ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
+    if (item.ref.kind == ItemKind.episode) ...[
+      item.subtitle,
+      // The first line is the show title only when the item has one.
+      if (item.showTitle != null) item.title,
+    ],
+    trailingLabel,
+  ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 
   /// The card's height, computed from its content: the artwork, the body
   /// padding, the title line, the caption line when [hasCaption], and the
@@ -114,12 +114,14 @@ class ContinueWatchingCard extends ConsumerWidget {
     final request = art == null
         ? null
         : ref
-            .watch(sourceArtworkProvider((
-              sourceId: item.ref.sourceId,
-              art: art,
-              width: SourcePoster.artworkWidth,
-            )))
-            .value;
+              .watch(
+                sourceArtworkProvider((
+                  sourceId: item.ref.sourceId,
+                  art: art,
+                  width: SourcePoster.artworkWidth,
+                )),
+              )
+              .value;
     final hoverSource = request == null
         ? null
         : BackdropSource(
@@ -144,10 +146,12 @@ class ContinueWatchingCard extends ConsumerWidget {
         borderRadius: radius,
         child: GestureDetector(
           onTap: onTap,
-          onLongPress:
-              onContextMenu == null ? null : () => onContextMenu!(context),
-          onSecondaryTap:
-              onContextMenu == null ? null : () => onContextMenu!(context),
+          onLongPress: onContextMenu == null
+              ? null
+              : () => onContextMenu!(context),
+          onSecondaryTap: onContextMenu == null
+              ? null
+              : () => onContextMenu!(context),
           child: SizedBox(
             width: artSize.width,
             child: GlassSurface.faux(
@@ -163,9 +167,7 @@ class ContinueWatchingCard extends ConsumerWidget {
                         : SourceArtworkImage(
                             sourceId: item.ref.sourceId,
                             art: art,
-                            fallback: ColoredBox(
-                              color: palette.surfaceVariant,
-                            ),
+                            fallback: ColoredBox(color: palette.surfaceVariant),
                           ),
                   ),
                   Padding(
@@ -209,8 +211,9 @@ class ContinueWatchingCard extends ConsumerWidget {
                                   value: (status?.percentage ?? 0) / 100,
                                   minHeight: _barHeight,
                                   color: palette.primary,
-                                  backgroundColor:
-                                      Colors.white.withValues(alpha: 0.16),
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: 0.16,
+                                  ),
                                 ),
                               ),
                             ),

@@ -38,8 +38,10 @@ Future<ThemePreset?> showThemePresetPicker(
                     autofocus: preset == current,
                     leading: _Swatch(preset: preset),
                     title: Text(
-                      context.l10n
-                          .themePresetName(preset, linuxDesktop: linuxDesktop),
+                      context.l10n.themePresetName(
+                        preset,
+                        linuxDesktop: linuxDesktop,
+                      ),
                       style: TextStyle(
                         color: palette.textPrimary,
                         fontWeight: preset == current

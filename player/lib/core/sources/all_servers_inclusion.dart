@@ -15,11 +15,10 @@ List<Source> allServersIncluded(
   List<Source> sources,
   Map<SourceId, bool> choices,
   Set<SourceId> gated,
-) =>
-    [
-      for (final s in sources)
-        if (!s.account.needsReauth &&
-            !gated.contains(s.id) &&
-            includedInAllServers(s, choices))
-          s,
-    ];
+) => [
+  for (final s in sources)
+    if (!s.account.needsReauth &&
+        !gated.contains(s.id) &&
+        includedInAllServers(s, choices))
+      s,
+];

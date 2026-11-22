@@ -99,7 +99,8 @@ class EpisodeView {
 
   bool get watched => progress?.watched ?? false;
 
-  String get episodeCode => 'S${seasonNumber.toString().padLeft(2, '0')}'
+  String get episodeCode =>
+      'S${seasonNumber.toString().padLeft(2, '0')}'
       'E${episodeNumber.toString().padLeft(2, '0')}';
 
   /// [runtime] as a [Duration]; widgets format it with `AppFormatters.runtime`.
@@ -112,25 +113,24 @@ class EpisodeView {
     Progress? progress,
     bool clearProgress = false,
     List<MediaFile>? files,
-  }) =>
-      EpisodeView(
-        target: target,
-        showTarget: showTarget,
-        showTitle: showTitle,
-        seasonNumber: seasonNumber,
-        episodeNumber: episodeNumber,
-        title: title,
-        overview: overview,
-        airDate: airDate,
-        runtime: runtime,
-        still: still,
-        showBackdrop: showBackdrop,
-        showPoster: showPoster,
-        progress: clearProgress ? null : (progress ?? this.progress),
-        files: files ?? this.files,
-        hasFile: hasFile,
-        features: features,
-      );
+  }) => EpisodeView(
+    target: target,
+    showTarget: showTarget,
+    showTitle: showTitle,
+    seasonNumber: seasonNumber,
+    episodeNumber: episodeNumber,
+    title: title,
+    overview: overview,
+    airDate: airDate,
+    runtime: runtime,
+    still: still,
+    showBackdrop: showBackdrop,
+    showPoster: showPoster,
+    progress: clearProgress ? null : (progress ?? this.progress),
+    files: files ?? this.files,
+    hasFile: hasFile,
+    features: features,
+  );
 }
 
 @immutable
@@ -203,25 +203,24 @@ class MovieView {
     bool? isFavorite,
     String? trailerUrl,
     List<CastView>? cast,
-  }) =>
-      MovieView(
-        target: target,
-        title: title,
-        year: year,
-        overview: overview,
-        runtime: runtime,
-        genres: genres,
-        contentRating: contentRating,
-        rating: rating,
-        backdrop: backdrop,
-        poster: poster,
-        progress: clearProgress ? null : (progress ?? this.progress),
-        files: files,
-        isFavorite: isFavorite ?? this.isFavorite,
-        trailerUrl: trailerUrl ?? this.trailerUrl,
-        cast: cast ?? this.cast,
-        features: features,
-      );
+  }) => MovieView(
+    target: target,
+    title: title,
+    year: year,
+    overview: overview,
+    runtime: runtime,
+    genres: genres,
+    contentRating: contentRating,
+    rating: rating,
+    backdrop: backdrop,
+    poster: poster,
+    progress: clearProgress ? null : (progress ?? this.progress),
+    files: files,
+    isFavorite: isFavorite ?? this.isFavorite,
+    trailerUrl: trailerUrl ?? this.trailerUrl,
+    cast: cast ?? this.cast,
+    features: features,
+  );
 }
 
 @immutable
@@ -278,24 +277,23 @@ class ShowView {
     int? nextUpSeasonNumber,
     String? trailerUrl,
     List<CastView>? cast,
-  }) =>
-      ShowView(
-        target: target,
-        title: title,
-        year: year,
-        overview: overview,
-        status: status,
-        genres: genres,
-        contentRating: contentRating,
-        rating: rating,
-        backdrop: backdrop,
-        poster: poster,
-        seasons: seasons,
-        nextUpEpisodeId: nextUpEpisodeId ?? this.nextUpEpisodeId,
-        nextUpSeasonNumber: nextUpSeasonNumber ?? this.nextUpSeasonNumber,
-        isFavorite: isFavorite ?? this.isFavorite,
-        trailerUrl: trailerUrl ?? this.trailerUrl,
-        cast: cast ?? this.cast,
-        features: features,
-      );
+  }) => ShowView(
+    target: target,
+    title: title,
+    year: year,
+    overview: overview,
+    status: status,
+    genres: genres,
+    contentRating: contentRating,
+    rating: rating,
+    backdrop: backdrop,
+    poster: poster,
+    seasons: seasons,
+    nextUpEpisodeId: nextUpEpisodeId ?? this.nextUpEpisodeId,
+    nextUpSeasonNumber: nextUpSeasonNumber ?? this.nextUpSeasonNumber,
+    isFavorite: isFavorite ?? this.isFavorite,
+    trailerUrl: trailerUrl ?? this.trailerUrl,
+    cast: cast ?? this.cast,
+    features: features,
+  );
 }

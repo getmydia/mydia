@@ -19,45 +19,53 @@ void main() {
   }) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    container.listen(ambientBackdropControllerProvider, (_, __) {});
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 140,
-              height: 210,
-              child: PosterFrame(
-                imageUrl: 'https://example.com/a.jpg',
-                imageHeaders: headers,
-                placeholder: _placeholder,
+    container.listen(ambientBackdropControllerProvider, (_, _) {});
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 140,
+                height: 210,
+                child: PosterFrame(
+                  imageUrl: 'https://example.com/a.jpg',
+                  imageHeaders: headers,
+                  placeholder: _placeholder,
+                ),
               ),
             ),
           ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     await hoverOver(tester, find.byType(PosterFrame));
     return container;
   }
 
-  testWidgets('hovering artwork that needs headers publishes no backdrop',
-      (tester) async {
+  testWidgets('hovering artwork that needs headers publishes no backdrop', (
+    tester,
+  ) async {
     await mockNetworkImages(() async {
-      final container =
-          await hoverPoster(tester, headers: const {'X-Plex-Token': 't'});
+      final container = await hoverPoster(
+        tester,
+        headers: const {'X-Plex-Token': 't'},
+      );
       expect(container.read(ambientBackdropControllerProvider).imageUrl, null);
     });
   });
 
-  testWidgets('positive control: headerless artwork still publishes',
-      (tester) async {
+  testWidgets('positive control: headerless artwork still publishes', (
+    tester,
+  ) async {
     await mockNetworkImages(() async {
       final container = await hoverPoster(tester);
-      expect(container.read(ambientBackdropControllerProvider).imageUrl,
-          'https://example.com/a.jpg');
+      expect(
+        container.read(ambientBackdropControllerProvider).imageUrl,
+        'https://example.com/a.jpg',
+      );
     });
   });
 }

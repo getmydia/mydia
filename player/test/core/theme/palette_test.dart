@@ -159,24 +159,30 @@ void main() {
         }
       });
 
-      test("${d.name}: a null accent uses the desktop's stock accent, lifted",
-          () {
-        final p = Palettes.linux(d, null);
-        expect(
-          p.primary,
-          Palettes.legibleAccent(d.stockAccent, background: p.background),
-        );
-      });
+      test(
+        "${d.name}: a null accent uses the desktop's stock accent, lifted",
+        () {
+          final p = Palettes.linux(d, null);
+          expect(
+            p.primary,
+            Palettes.legibleAccent(d.stockAccent, background: p.background),
+          );
+        },
+      );
 
       test('${d.name}: extreme accents stay legible', () {
         for (final entry in linuxAccents.entries) {
           final p = Palettes.linux(d, entry.value);
-          expect(contrastRatio(p.primary, p.background),
-              greaterThanOrEqualTo(4.55),
-              reason: '${d.name}/${entry.key} primary');
           expect(
-              contrastRatio(p.onPrimary, p.primary), greaterThanOrEqualTo(4.5),
-              reason: '${d.name}/${entry.key} onPrimary');
+            contrastRatio(p.primary, p.background),
+            greaterThanOrEqualTo(4.55),
+            reason: '${d.name}/${entry.key} primary',
+          );
+          expect(
+            contrastRatio(p.onPrimary, p.primary),
+            greaterThanOrEqualTo(4.5),
+            reason: '${d.name}/${entry.key} onPrimary',
+          );
         }
       });
     }
@@ -198,33 +204,43 @@ void main() {
   group('ThemePreset availability', () {
     test('macOS is offered only on native macOS', () {
       expect(
-          ThemePreset.macos.isAvailableOn(TargetPlatform.macOS, isWeb: false),
-          isTrue);
-      expect(ThemePreset.macos.isAvailableOn(TargetPlatform.macOS, isWeb: true),
-          isFalse);
+        ThemePreset.macos.isAvailableOn(TargetPlatform.macOS, isWeb: false),
+        isTrue,
+      );
       expect(
-          ThemePreset.macos.isAvailableOn(TargetPlatform.android, isWeb: false),
-          isFalse);
+        ThemePreset.macos.isAvailableOn(TargetPlatform.macOS, isWeb: true),
+        isFalse,
+      );
+      expect(
+        ThemePreset.macos.isAvailableOn(TargetPlatform.android, isWeb: false),
+        isFalse,
+      );
       expect(ThemePreset.availableOn(TargetPlatform.android, isWeb: false), [
         ThemePreset.projectionBooth,
         ThemePreset.oledBlack,
-        ThemePreset.slate
+        ThemePreset.slate,
       ]);
     });
 
     test('linux is offered only on native Linux', () {
       expect(
-          ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: false),
-          isTrue);
-      expect(ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: true),
-          isFalse);
+        ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: false),
+        isTrue,
+      );
+      expect(
+        ThemePreset.linux.isAvailableOn(TargetPlatform.linux, isWeb: true),
+        isFalse,
+      );
       for (final platform in [
         TargetPlatform.macOS,
         TargetPlatform.android,
         TargetPlatform.windows,
       ]) {
-        expect(ThemePreset.linux.isAvailableOn(platform, isWeb: false), isFalse,
-            reason: platform.name);
+        expect(
+          ThemePreset.linux.isAvailableOn(platform, isWeb: false),
+          isFalse,
+          reason: platform.name,
+        );
       }
       expect(ThemePreset.availableOn(TargetPlatform.linux, isWeb: false), [
         ThemePreset.projectionBooth,
@@ -232,59 +248,93 @@ void main() {
         ThemePreset.slate,
         ThemePreset.linux,
       ]);
-      expect(ThemePreset.availableOn(TargetPlatform.macOS, isWeb: false),
-          isNot(contains(ThemePreset.linux)));
+      expect(
+        ThemePreset.availableOn(TargetPlatform.macOS, isWeb: false),
+        isNot(contains(ThemePreset.linux)),
+      );
     });
 
     test('defaults to linux on native Linux', () {
-      expect(ThemePreset.defaultFor(TargetPlatform.linux, isWeb: false),
-          ThemePreset.linux);
-      expect(ThemePreset.defaultFor(TargetPlatform.linux, isWeb: true),
-          ThemePreset.projectionBooth);
+      expect(
+        ThemePreset.defaultFor(TargetPlatform.linux, isWeb: false),
+        ThemePreset.linux,
+      );
+      expect(
+        ThemePreset.defaultFor(TargetPlatform.linux, isWeb: true),
+        ThemePreset.projectionBooth,
+      );
     });
 
     test('a stored linux elsewhere falls back', () {
-      expect(ThemePreset.resolve('linux', TargetPlatform.macOS, isWeb: false),
-          ThemePreset.macos);
-      expect(ThemePreset.resolve('linux', TargetPlatform.android, isWeb: false),
-          ThemePreset.projectionBooth);
-      expect(ThemePreset.resolve('linux', TargetPlatform.linux, isWeb: true),
-          ThemePreset.projectionBooth);
-      expect(ThemePreset.resolve('slate', TargetPlatform.linux, isWeb: false),
-          ThemePreset.slate);
+      expect(
+        ThemePreset.resolve('linux', TargetPlatform.macOS, isWeb: false),
+        ThemePreset.macos,
+      );
+      expect(
+        ThemePreset.resolve('linux', TargetPlatform.android, isWeb: false),
+        ThemePreset.projectionBooth,
+      );
+      expect(
+        ThemePreset.resolve('linux', TargetPlatform.linux, isWeb: true),
+        ThemePreset.projectionBooth,
+      );
+      expect(
+        ThemePreset.resolve('slate', TargetPlatform.linux, isWeb: false),
+        ThemePreset.slate,
+      );
     });
 
     test('defaults to macOS on native macOS, Projection Booth elsewhere', () {
-      expect(ThemePreset.defaultFor(TargetPlatform.macOS, isWeb: false),
-          ThemePreset.macos);
-      expect(ThemePreset.defaultFor(TargetPlatform.macOS, isWeb: true),
-          ThemePreset.projectionBooth);
-      expect(ThemePreset.defaultFor(TargetPlatform.android, isWeb: false),
-          ThemePreset.projectionBooth);
+      expect(
+        ThemePreset.defaultFor(TargetPlatform.macOS, isWeb: false),
+        ThemePreset.macos,
+      );
+      expect(
+        ThemePreset.defaultFor(TargetPlatform.macOS, isWeb: true),
+        ThemePreset.projectionBooth,
+      );
+      expect(
+        ThemePreset.defaultFor(TargetPlatform.android, isWeb: false),
+        ThemePreset.projectionBooth,
+      );
     });
 
     test('resolve falls back for unset, unknown and unavailable values', () {
-      expect(ThemePreset.resolve(null, TargetPlatform.macOS, isWeb: false),
-          ThemePreset.macos);
-      expect(ThemePreset.resolve('bogus', TargetPlatform.linux, isWeb: false),
-          ThemePreset.linux);
-      expect(ThemePreset.resolve('bogus', TargetPlatform.windows, isWeb: false),
-          ThemePreset.projectionBooth);
-      expect(ThemePreset.resolve('macos', TargetPlatform.android, isWeb: false),
-          ThemePreset.projectionBooth);
-      expect(ThemePreset.resolve('slate', TargetPlatform.android, isWeb: false),
-          ThemePreset.slate);
+      expect(
+        ThemePreset.resolve(null, TargetPlatform.macOS, isWeb: false),
+        ThemePreset.macos,
+      );
+      expect(
+        ThemePreset.resolve('bogus', TargetPlatform.linux, isWeb: false),
+        ThemePreset.linux,
+      );
+      expect(
+        ThemePreset.resolve('bogus', TargetPlatform.windows, isWeb: false),
+        ThemePreset.projectionBooth,
+      );
+      expect(
+        ThemePreset.resolve('macos', TargetPlatform.android, isWeb: false),
+        ThemePreset.projectionBooth,
+      );
+      expect(
+        ThemePreset.resolve('slate', TargetPlatform.android, isWeb: false),
+        ThemePreset.slate,
+      );
     });
   });
 
   testWidgets('context.palette falls back to Projection Booth', (tester) async {
     late MydiaPalette seen;
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(builder: (context) {
-        seen = context.palette;
-        return const SizedBox();
-      }),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            seen = context.palette;
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
     expect(seen, same(Palettes.projectionBooth));
   });
 

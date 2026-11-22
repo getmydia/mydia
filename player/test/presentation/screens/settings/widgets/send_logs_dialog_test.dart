@@ -55,8 +55,9 @@ void main() {
     });
   }
 
-  testWidgets('after sending, Done takes the focus Send gave up',
-      (tester) async {
+  testWidgets('after sending, Done takes the focus Send gave up', (
+    tester,
+  ) async {
     await _open(tester, tv: true);
     await tester.tap(find.byKey(_send));
     await tester.pumpAndSettle();
@@ -79,8 +80,9 @@ void main() {
     expect(find.byKey(_row), findsNothing);
   });
 
-  testWidgets('TV: row opens the field and Back returns to the row',
-      (tester) async {
+  testWidgets('TV: row opens the field and Back returns to the row', (
+    tester,
+  ) async {
     await _open(tester, tv: true);
     expect(find.byKey(_row), findsOneWidget);
     expect(find.byKey(_note), findsNothing);
@@ -103,13 +105,18 @@ void main() {
     expect(find.byType(SendLogsDialog), findsNothing);
   });
 
-  testWidgets('TV: a written note shows in the row and is sent',
-      (tester) async {
+  testWidgets('TV: a written note shows in the row and is sent', (
+    tester,
+  ) async {
     String? sent;
-    await _open(tester, tv: true, send: (n) async {
-      sent = n;
-      return 'CODE';
-    });
+    await _open(
+      tester,
+      tv: true,
+      send: (n) async {
+        sent = n;
+        return 'CODE';
+      },
+    );
     await tester.tap(find.byKey(_row));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(_note), 'stutters at start');

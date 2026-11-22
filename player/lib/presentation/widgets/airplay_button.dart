@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/airplay/airplay_providers.dart';
 import '../../core/player/platform_features.dart';
 import '../../l10n/l10n.dart';

@@ -21,21 +21,16 @@ import 'source_cache.dart';
 class SourceWatcher<T> implements CacheWatcher {
   SourceWatcher({
     required this.key,
-    required Future<T> Function() fetch,
-    required SourceCache cache,
-    required FetchLog fetchLog,
-    required Object? Function(T value) encode,
-    required T Function(Object? json) decode,
+    required this._fetch,
+    required this._cache,
+    required this._fetchLog,
+    required this._encode,
+    required this._decode,
     this.maxAge = kFreshnessThreshold,
     this.onFreshness,
     this.canRefetch,
-    DateTime Function() clock = DateTime.now,
-  })  : _fetch = fetch,
-        _cache = cache,
-        _fetchLog = fetchLog,
-        _encode = encode,
-        _decode = decode,
-        _clock = clock {
+    this._clock = DateTime.now,
+  }) {
     unawaited(_start());
   }
 
@@ -103,9 +98,11 @@ class SourceWatcher<T> implements CacheWatcher {
       return (value: _decode(entry.json), writtenAt: entry.writtenAt);
     } catch (error) {
       debugPrint('[SourceWatcher] dropping unreadable $key: $error');
-      unawaited(_cache.delete(key).catchError((Object e) {
-        debugPrint('[SourceWatcher] could not drop $key: $e');
-      }));
+      unawaited(
+        _cache.delete(key).catchError((Object e) {
+          debugPrint('[SourceWatcher] could not drop $key: $e');
+        }),
+      );
       return null;
     }
   }
@@ -136,7 +133,8 @@ class SourceWatcher<T> implements CacheWatcher {
     }
     // An answer equal to what is already out would only make every
     // dependent rebuild; the models define no `==`, so compare the JSON.
-    final unchanged = _hasEmitted &&
+    final unchanged =
+        _hasEmitted &&
         encoded != null &&
         _equality.equals(encoded, _lastEncoded);
     if (!unchanged) _add(value, encoded);
@@ -178,13 +176,15 @@ class SourceWatcher<T> implements CacheWatcher {
     bool refreshFailed = false,
   }) {
     if (_closed) return;
-    onFreshness?.call(Freshness(
-      fetchedAt: fetchedAt,
-      isRefreshing: isRefreshing && _hasData,
-      refreshFailed: refreshFailed && _hasData,
-      isStale: fetchedAt == null || _clock().difference(fetchedAt) > maxAge,
-      hasData: _hasData,
-    ));
+    onFreshness?.call(
+      Freshness(
+        fetchedAt: fetchedAt,
+        isRefreshing: isRefreshing && _hasData,
+        refreshFailed: refreshFailed && _hasData,
+        isStale: fetchedAt == null || _clock().difference(fetchedAt) > maxAge,
+        hasData: _hasData,
+      ),
+    );
   }
 
   void _add(T value, [Object? encoded]) {

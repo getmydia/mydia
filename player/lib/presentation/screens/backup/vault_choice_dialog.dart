@@ -12,7 +12,9 @@ import '../../widgets/toast/toaster.dart';
 /// Shows the choice and settles it on [service]. Closing the dialog without
 /// picking leaves the choice pending.
 Future<void> showVaultChoiceDialog(
-    BuildContext context, BackupSyncService service) async {
+  BuildContext context,
+  BackupSyncService service,
+) async {
   final l10n = context.l10n;
   final toaster = Toaster.of(context);
   final keepOffered = await showDialog<bool>(

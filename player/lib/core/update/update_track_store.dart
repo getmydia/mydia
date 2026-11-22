@@ -8,7 +8,7 @@ import 'update_track.dart';
 /// them a stub without a keychain.
 class UpdateTrackStore {
   UpdateTrackStore({SettingsService? settings})
-      : _settings = settings ?? SettingsService();
+    : _settings = settings ?? SettingsService();
 
   final SettingsService _settings;
 

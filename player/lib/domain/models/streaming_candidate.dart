@@ -47,8 +47,7 @@ class StreamingCandidate {
   }
 
   @override
-  String toString() =>
-      'StreamingCandidate(strategy: $strategy, mime: $mime)';
+  String toString() => 'StreamingCandidate(strategy: $strategy, mime: $mime)';
 }
 
 /// Metadata about the source media file

@@ -36,10 +36,10 @@ void main() {
   setUp(() async => kp = await Ed25519().newKeyPair());
 
   BackupRelayClient client(MockClientHandler h) => BackupRelayClient(
-        client: MockClient(h),
-        baseUrl: 'https://relay.test',
-        clock: () => _now,
-      );
+    client: MockClient(h),
+    baseUrl: 'https://relay.test',
+    clock: () => _now,
+  );
 
   Future<void> expectKind(Future<void> f, BackupRelayError k) async {
     await expectLater(
@@ -102,11 +102,15 @@ void main() {
       lookupHash: 'cc',
     );
     expect(await c.createVault(req), '0123456789abcdef0123456789abcdef');
-    expect(await c.lookup(Uint8List.fromList([255, 254])),
-        '0123456789abcdef0123456789abcdef');
+    expect(
+      await c.lookup(Uint8List.fromList([255, 254])),
+      '0123456789abcdef0123456789abcdef',
+    );
     expect(seen[0].headers['content-type'], backupJsonContentType);
-    expect((jsonDecode(seen[0].body) as Map)['vault_id'],
-        '0123456789abcdef0123456789abcdef');
+    expect(
+      (jsonDecode(seen[0].body) as Map)['vault_id'],
+      '0123456789abcdef0123456789abcdef',
+    );
     expect((jsonDecode(seen[0].body) as Map)['recovery_box_pub'], 'BQ');
     // The handle travels in the body, never the URL.
     expect(seen[1].method, 'POST');
@@ -122,21 +126,25 @@ void main() {
   test('createVault maps a taken vault id (409) to conflict', () async {
     final c = client((r) async => _err(409, 'vault_taken'));
     await expectLater(
-      c.createVault(const CreateVaultRequest(
-        vaultId: '0123456789abcdef0123456789abcdef',
-        signer: [1],
-        boxPub: [2],
-        slotId: 'aa',
-        envelope: [3],
-        recoverySigner: [4],
-        recoveryBoxPub: [5],
-        recoverySlotId: 'bb',
-        recoveryEnvelope: [6],
-        lookupHash: 'cc',
-      )),
-      throwsA(isA<BackupRelayException>()
-          .having((e) => e.kind, 'kind', BackupRelayError.conflict)
-          .having((e) => e.code, 'code', 'vault_taken')),
+      c.createVault(
+        const CreateVaultRequest(
+          vaultId: '0123456789abcdef0123456789abcdef',
+          signer: [1],
+          boxPub: [2],
+          slotId: 'aa',
+          envelope: [3],
+          recoverySigner: [4],
+          recoveryBoxPub: [5],
+          recoverySlotId: 'bb',
+          recoveryEnvelope: [6],
+          lookupHash: 'cc',
+        ),
+      ),
+      throwsA(
+        isA<BackupRelayException>()
+            .having((e) => e.kind, 'kind', BackupRelayError.conflict)
+            .having((e) => e.code, 'code', 'vault_taken'),
+      ),
     );
   });
 
@@ -227,10 +235,7 @@ void main() {
       '403': (_err(403, 'not_member'), BackupRelayError.notMember),
       // A WAF or bot-check page in front of the relay, not a removal:
       // retried with backoff.
-      '403 without a code': (
-        http.Response('{}', 403),
-        BackupRelayError.server,
-      ),
+      '403 without a code': (http.Response('{}', 403), BackupRelayError.server),
       '403 html': (
         http.Response('<html>Just a moment...</html>', 403),
         BackupRelayError.server,
@@ -299,13 +304,17 @@ void main() {
 
     final slot = Stopwatch()..start();
     await expectKind(c.getSlot('v', kp, 'abcd'), BackupRelayError.network);
-    expect(slot.elapsedMilliseconds, greaterThanOrEqualTo(60),
-        reason: 'slot transfers get the longer budget');
+    expect(
+      slot.elapsedMilliseconds,
+      greaterThanOrEqualTo(60),
+      reason: 'slot transfers get the longer budget',
+    );
   });
 
   test('the default budgets are 30 s for JSON and 120 s for slots', () {
     final c = BackupRelayClient(
-        client: MockClient((_) async => http.Response('', 204)));
+      client: MockClient((_) async => http.Response('', 204)),
+    );
     expect(c.requestTimeout, const Duration(seconds: 30));
     expect(c.slotTimeout, const Duration(seconds: 120));
   });

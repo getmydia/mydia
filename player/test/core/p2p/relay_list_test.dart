@@ -56,12 +56,13 @@ void main() {
       final result = await resolveRelayList(
         override: '   ',
         client: _responds(
-            200,
-            jsonEncode({
-              'p2p': {
-                'relays': [_fetched]
-              }
-            })),
+          200,
+          jsonEncode({
+            'p2p': {
+              'relays': [_fetched],
+            },
+          }),
+        ),
         storage: _MemoryStorage(),
       );
 
@@ -73,12 +74,13 @@ void main() {
       final result = await resolveRelayList(
         override: 'ftp://nope.example.test',
         client: _responds(
-            200,
-            jsonEncode({
-              'p2p': {
-                'relays': [_fetched]
-              }
-            })),
+          200,
+          jsonEncode({
+            'p2p': {
+              'relays': [_fetched],
+            },
+          }),
+        ),
         storage: _MemoryStorage(),
       );
 
@@ -92,30 +94,34 @@ void main() {
 
       final result = await resolveRelayList(
         client: _responds(
-            200,
-            jsonEncode({
-              'p2p': {
-                'relays': [_fetched, _other]
-              }
-            })),
+          200,
+          jsonEncode({
+            'p2p': {
+              'relays': [_fetched, _other],
+            },
+          }),
+        ),
         storage: storage,
       );
 
       expect(result.urls, [_fetched, _other]);
       expect(result.source, RelayListSource.fetched);
-      expect(
-          jsonDecode(storage.values[relayListStorageKey]!), [_fetched, _other]);
+      expect(jsonDecode(storage.values[relayListStorageKey]!), [
+        _fetched,
+        _other,
+      ]);
     });
 
     test('drops entries that are not https URLs', () async {
       final result = await resolveRelayList(
         client: _responds(
-            200,
-            jsonEncode({
-              'p2p': {
-                'relays': ['http://insecure.test', 'not a url', _fetched]
-              }
-            })),
+          200,
+          jsonEncode({
+            'p2p': {
+              'relays': ['http://insecure.test', 'not a url', _fetched],
+            },
+          }),
+        ),
         storage: _MemoryStorage(),
       );
 
@@ -125,14 +131,15 @@ void main() {
     test('ignores unknown keys', () async {
       final result = await resolveRelayList(
         client: _responds(
-            200,
-            jsonEncode({
-              'future': {'thing': 1},
-              'p2p': {
-                'relays': [_fetched],
-                'extra': 2
-              }
-            })),
+          200,
+          jsonEncode({
+            'future': {'thing': 1},
+            'p2p': {
+              'relays': [_fetched],
+              'extra': 2,
+            },
+          }),
+        ),
         storage: _MemoryStorage(),
       );
 
@@ -167,13 +174,16 @@ void main() {
     });
 
     test('an empty list after filtering falls back to the cache', () async {
-      final result = await withCache(_responds(
+      final result = await withCache(
+        _responds(
           200,
           jsonEncode({
             'p2p': {
-              'relays': ['http://insecure.test']
-            }
-          })));
+              'relays': ['http://insecure.test'],
+            },
+          }),
+        ),
+      );
       expect(result.urls, [_other]);
       expect(result.source, RelayListSource.cached);
     });

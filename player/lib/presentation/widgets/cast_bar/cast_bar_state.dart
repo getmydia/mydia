@@ -149,11 +149,14 @@ CastBarAmbient? _ambient(Ref ref) {
 /// The held ambient targets other than this device itself.
 Iterable<AmbientTarget> _otherPlayers(Ref ref) {
   final held = ref.watch(ambientPlayingProvider).value ?? const [];
-  final selfNodeId =
-      ref.watch(p2pStatusNotifierProvider.select((s) => s.nodeId));
-  return held.where((t) =>
-      selfNodeId == null ||
-      t.device.id.toLowerCase() != selfNodeId.toLowerCase());
+  final selfNodeId = ref.watch(
+    p2pStatusNotifierProvider.select((s) => s.nodeId),
+  );
+  return held.where(
+    (t) =>
+        selfNodeId == null ||
+        t.device.id.toLowerCase() != selfNodeId.toLowerCase(),
+  );
 }
 
 /// True when the bar is empty only because the user hid a "Playing on X"
@@ -195,10 +198,9 @@ abstract final class CastBarText {
     AppLocalizations l10n,
     String device, {
     required bool syncing,
-  }) =>
-      syncing
-          ? l10n.castBarReconnectingStatus(device)
-          : l10n.castBarCastingStatus(device);
+  }) => syncing
+      ? l10n.castBarReconnectingStatus(device)
+      : l10n.castBarCastingStatus(device);
 }
 
 /// The play/pause control, shared by the bar's button and the native

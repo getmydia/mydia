@@ -7,9 +7,9 @@ import 'cloudkit_backend.dart';
 /// [records] without the p2p group record: the group secret is never
 /// written to a cloud store, where it would sit in plaintext.
 List<BackupRecord> withoutGroupRecords(List<BackupRecord> records) => [
-      for (final r in records)
-        if (r is! GroupBackupRecord) r
-    ];
+  for (final r in records)
+    if (r is! GroupBackupRecord) r,
+];
 
 /// A [CloudBackend] as a [SlotTransport]. Slots are stored as plaintext
 /// gzip JSON ([BackupPayload.encode]): the provider is trusted.
@@ -54,8 +54,12 @@ class CloudSlotTransport implements SlotTransport {
     if (bytes.length > maxSlotBytes) {
       throw const BackupRelayException(BackupRelayError.tooLarge);
     }
-    await backend.writeBytes(ownSlotId, bytes,
-        deviceName: payload.deviceName, platform: payload.platform);
+    await backend.writeBytes(
+      ownSlotId,
+      bytes,
+      deviceName: payload.deviceName,
+      platform: payload.platform,
+    );
   }
 
   @override

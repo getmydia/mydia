@@ -9,7 +9,7 @@ import '../../sources/fake_media_source.dart';
 
 class _TestSourceSession extends SourcePlaybackSession {
   _TestSourceSession(FakeMediaSource source)
-      : super(source: source, item: fakeEpisode(1).ref, fileId: 'part-1');
+    : super(source: source, item: fakeEpisode(1).ref, fileId: 'part-1');
 
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) =>
@@ -26,8 +26,7 @@ class _TestSourceSession extends SourcePlaybackSession {
     ItemDetail detail,
     MediaVersion version, {
     String? burnSubtitleStreamId,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 }
 
 class _BrokenSession extends _TestSourceSession {
@@ -58,13 +57,15 @@ void main() {
 
   test('the next episode goes to the source player route', () {
     final session = _TestSourceSession(FakeMediaSource());
-    final location = Uri.parse(session.episodeLocation(
-      episodeId: 'e2',
-      fileId: 'part-2',
-      title: 'Invented Series - S01E02',
-      seasonNumber: 1,
-      showId: 's1',
-    ));
+    final location = Uri.parse(
+      session.episodeLocation(
+        episodeId: 'e2',
+        fileId: 'part-2',
+        title: 'Invented Series - S01E02',
+        seasonNumber: 1,
+        showId: 's1',
+      ),
+    );
     expect(location.path, '/s/${fakeSourceId.value}/player/e2');
     expect(location.queryParameters, {
       'kind': 'episode',

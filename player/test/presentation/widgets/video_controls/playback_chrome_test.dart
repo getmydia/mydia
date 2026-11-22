@@ -15,9 +15,10 @@ import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 Widget _host(Widget child) => MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(body: child));
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: child),
+);
 
 /// A [PlatformPlayer] that never touches native mpv/web bindings — safe to
 /// construct inside `flutter test`. Same shape as
@@ -72,8 +73,9 @@ void main() {
       expect(_opacity(tester), 1.0);
     });
 
-    testWidgets('hides after the auto-hide delay while playing',
-        (tester) async {
+    testWidgets('hides after the auto-hide delay while playing', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const ChromeVisibility(isPlaying: true, child: Text('chrome'))),
       );
@@ -93,8 +95,9 @@ void main() {
       expect(_opacity(tester), 1.0);
     });
 
-    testWidgets('never hides while seeking, even while playing',
-        (tester) async {
+    testWidgets('never hides while seeking, even while playing', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           const ChromeVisibility(
@@ -110,8 +113,9 @@ void main() {
       expect(_opacity(tester), 1.0);
     });
 
-    testWidgets('does not hide while the pointer is over chrome',
-        (tester) async {
+    testWidgets('does not hide while the pointer is over chrome', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           const ChromeVisibility(
@@ -124,63 +128,72 @@ void main() {
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: Offset.zero);
       addTearDown(gesture.removePointer);
-      await gesture
-          .moveTo(tester.getCenter(find.byKey(ChromeVisibility.contentKey)));
-      await tester.pump();
-
-      await tester.pump(const Duration(seconds: 10));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 1.0,
-          reason: 'chrome hid under a resting cursor');
-    });
-
-    testWidgets(
-        'keeps chrome shown once the mouse re-enters after it reappears '
-        '(hover detection survives an IgnorePointer -> interactive flip)',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(
-          const ChromeVisibility(
-            isPlaying: true,
-            child: SizedBox(width: 200, height: 100, child: Text('chrome')),
-          ),
-        ),
+      await gesture.moveTo(
+        tester.getCenter(find.byKey(ChromeVisibility.contentKey)),
       );
-
-      // Auto-hide with no pointer connected at all (same as the "hides
-      // after the auto-hide delay" case above).
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 0.0);
-
-      // Now move a mouse pointer onto where the (still hidden, ignoring)
-      // content sits. The outer desktop cursor MouseRegion's onHover fires on
-      // this movement, bringing chrome back; separately, once `ignoring`
-      // flips to false on the following frame, the content's own MouseRegion
-      // must still pick up that the cursor is already resting inside it —
-      // Flutter's mouse tracker re-hit-tests every connected device's last
-      // known position once per frame specifically to catch a region
-      // appearing/disappearing under a stationary cursor.
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: const Offset(700, 500));
-      addTearDown(gesture.removePointer);
       await tester.pump();
-      await gesture
-          .moveTo(tester.getCenter(find.byKey(ChromeVisibility.contentKey)));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 1.0);
 
-      // If pointer-over-chrome were not detected here, the auto-hide timer
-      // would still be running from `_show()` and would fire at 3s.
       await tester.pump(const Duration(seconds: 10));
       await tester.pumpAndSettle();
       expect(
         _opacity(tester),
         1.0,
-        reason: 'chrome hid again even though the cursor was already resting '
-            'on it once it reappeared',
+        reason: 'chrome hid under a resting cursor',
       );
     });
+
+    testWidgets(
+      'keeps chrome shown once the mouse re-enters after it reappears '
+      '(hover detection survives an IgnorePointer -> interactive flip)',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            const ChromeVisibility(
+              isPlaying: true,
+              child: SizedBox(width: 200, height: 100, child: Text('chrome')),
+            ),
+          ),
+        );
+
+        // Auto-hide with no pointer connected at all (same as the "hides
+        // after the auto-hide delay" case above).
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(_opacity(tester), 0.0);
+
+        // Now move a mouse pointer onto where the (still hidden, ignoring)
+        // content sits. The outer desktop cursor MouseRegion's onHover fires on
+        // this movement, bringing chrome back; separately, once `ignoring`
+        // flips to false on the following frame, the content's own MouseRegion
+        // must still pick up that the cursor is already resting inside it —
+        // Flutter's mouse tracker re-hit-tests every connected device's last
+        // known position once per frame specifically to catch a region
+        // appearing/disappearing under a stationary cursor.
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.addPointer(location: const Offset(700, 500));
+        addTearDown(gesture.removePointer);
+        await tester.pump();
+        await gesture.moveTo(
+          tester.getCenter(find.byKey(ChromeVisibility.contentKey)),
+        );
+        await tester.pumpAndSettle();
+        expect(_opacity(tester), 1.0);
+
+        // If pointer-over-chrome were not detected here, the auto-hide timer
+        // would still be running from `_show()` and would fire at 3s.
+        await tester.pump(const Duration(seconds: 10));
+        await tester.pumpAndSettle();
+        expect(
+          _opacity(tester),
+          1.0,
+          reason:
+              'chrome hid again even though the cursor was already resting '
+              'on it once it reappeared',
+        );
+      },
+    );
 
     testWidgets('reappears on tap after hiding', (tester) async {
       await tester.pumpWidget(
@@ -197,41 +210,44 @@ void main() {
     });
 
     testWidgets(
-        'a tap on an empty region hides chrome while it is visible — the '
-        'background toggle must not be permanently swallowed by an opaque '
-        'MouseRegion over content', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          const ChromeVisibility(
-            isPlaying: true,
-            // Bounded and top-left, like the panel's real pills/controls —
-            // NOT a bare `Text` directly, which `StackFit.expand` would force
-            // to fill the whole screen. `RenderParagraph.hitTestSelf` is
-            // unconditionally true across its *entire* box, not just where
-            // glyphs are drawn, so an unbounded Text would self-hit
-            // everywhere and mask exactly the regression this test targets.
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: SizedBox(width: 100, height: 40, child: Text('chrome')),
+      'a tap on an empty region hides chrome while it is visible — the '
+      'background toggle must not be permanently swallowed by an opaque '
+      'MouseRegion over content',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            const ChromeVisibility(
+              isPlaying: true,
+              // Bounded and top-left, like the panel's real pills/controls —
+              // NOT a bare `Text` directly, which `StackFit.expand` would force
+              // to fill the whole screen. `RenderParagraph.hitTestSelf` is
+              // unconditionally true across its *entire* box, not just where
+              // glyphs are drawn, so an unbounded Text would self-hit
+              // everywhere and mask exactly the regression this test targets.
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(width: 100, height: 40, child: Text('chrome')),
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(_opacity(tester), 1.0);
+        expect(_opacity(tester), 1.0);
 
-      // Tap well clear of the small, top-left content, while chrome is still
-      // fully visible (well before the 3s auto-hide would fire).
-      await tester.tapAt(const Offset(400, 300));
-      await tester.pumpAndSettle();
+        // Tap well clear of the small, top-left content, while chrome is still
+        // fully visible (well before the 3s auto-hide would fire).
+        await tester.tapAt(const Offset(400, 300));
+        await tester.pumpAndSettle();
 
-      expect(
-        _opacity(tester),
-        0.0,
-        reason: 'tap-to-hide while visible did not fire — the background '
-            'GestureDetector is unreachable while chrome is shown',
-      );
-    });
+        expect(
+          _opacity(tester),
+          0.0,
+          reason:
+              'tap-to-hide while visible did not fire — the background '
+              'GestureDetector is unreachable while chrome is shown',
+        );
+      },
+    );
 
     // --- Supplementary coverage below, added on top of the brief's own
     // test set. The brief only asserts the FadeTransition's opacity
@@ -240,57 +256,59 @@ void main() {
     // actually stops absorbing taps, only that it stopped being painted.
 
     testWidgets(
-        'once fully hidden, a tap where a real control sits reaches the '
-        'background toggle instead of the (invisible) control — proves '
-        'IgnorePointer.ignoring actually takes effect, not just the fade',
-        (tester) async {
-      var buttonTapped = false;
-      const buttonKey = Key('inner-button');
-      await tester.pumpWidget(
-        _host(
-          ChromeVisibility(
-            isPlaying: true,
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: GestureDetector(
-                key: buttonKey,
-                behavior: HitTestBehavior.opaque,
-                onTap: () => buttonTapped = true,
-                child: const SizedBox(width: 100, height: 60),
+      'once fully hidden, a tap where a real control sits reaches the '
+      'background toggle instead of the (invisible) control — proves '
+      'IgnorePointer.ignoring actually takes effect, not just the fade',
+      (tester) async {
+        var buttonTapped = false;
+        const buttonKey = Key('inner-button');
+        await tester.pumpWidget(
+          _host(
+            ChromeVisibility(
+              isPlaying: true,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: GestureDetector(
+                  key: buttonKey,
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => buttonTapped = true,
+                  child: const SizedBox(width: 100, height: 60),
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      // Sanity: while visible, the inner control receives the tap.
-      await tester.tap(find.byKey(buttonKey));
-      expect(buttonTapped, isTrue, reason: 'control should work while shown');
-      buttonTapped = false;
+        // Sanity: while visible, the inner control receives the tap.
+        await tester.tap(find.byKey(buttonKey));
+        expect(buttonTapped, isTrue, reason: 'control should work while shown');
+        buttonTapped = false;
 
-      // Auto-hide.
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 0.0);
+        // Auto-hide.
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(_opacity(tester), 0.0);
 
-      // Tap exactly where the (now hidden) control sits.
-      await tester.tap(find.byKey(buttonKey), warnIfMissed: false);
-      await tester.pumpAndSettle();
+        // Tap exactly where the (now hidden) control sits.
+        await tester.tap(find.byKey(buttonKey), warnIfMissed: false);
+        await tester.pumpAndSettle();
 
-      expect(
-        buttonTapped,
-        isFalse,
-        reason: 'hidden chrome must not still absorb taps meant for the '
-            'background toggle',
-      );
-      // The tap should have been read as "reveal chrome" instead.
-      expect(_opacity(tester), 1.0);
-    });
+        expect(
+          buttonTapped,
+          isFalse,
+          reason:
+              'hidden chrome must not still absorb taps meant for the '
+              'background toggle',
+        );
+        // The tap should have been read as "reveal chrome" instead.
+        expect(_opacity(tester), 1.0);
+      },
+    );
 
-    testWidgets(
-        'a tap mid-hide-fade restores chrome rather than hiding it '
-        'further (manual toggle reflects intent, not animation position)',
-        (tester) async {
+    testWidgets('a tap mid-hide-fade restores chrome rather than hiding it '
+        'further (manual toggle reflects intent, not animation position)', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const ChromeVisibility(isPlaying: true, child: Text('chrome'))),
       );
@@ -306,13 +324,18 @@ void main() {
       await tester.tapAt(const Offset(400, 300));
       await tester.pumpAndSettle();
 
-      expect(_opacity(tester), 1.0,
-          reason: 'a tap mid-fade should bring chrome back, not finish '
-              'hiding it');
+      expect(
+        _opacity(tester),
+        1.0,
+        reason:
+            'a tap mid-fade should bring chrome back, not finish '
+            'hiding it',
+      );
     });
 
-    testWidgets('hides immediately when the mouse leaves the window',
-        (tester) async {
+    testWidgets('hides immediately when the mouse leaves the window', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           const ChromeVisibility(
@@ -345,7 +368,8 @@ void main() {
       expect(
         _opacity(tester),
         0.0,
-        reason: 'chrome should not wait out the 3s timer once the pointer '
+        reason:
+            'chrome should not wait out the 3s timer once the pointer '
             'has left the window',
       );
     });
@@ -368,8 +392,11 @@ void main() {
       await gesture.moveTo(const Offset(-50, -50));
       await tester.pumpAndSettle();
 
-      expect(_opacity(tester), 1.0,
-          reason: 'the paused invariant must survive mouse exit');
+      expect(
+        _opacity(tester),
+        1.0,
+        reason: 'the paused invariant must survive mouse exit',
+      );
     });
 
     testWidgets('does not hide on mouse exit while seeking', (tester) async {
@@ -391,13 +418,18 @@ void main() {
       await gesture.moveTo(const Offset(-50, -50));
       await tester.pumpAndSettle();
 
-      expect(_opacity(tester), 1.0,
-          reason: 'dragging the scrubber past the window edge must not '
-              'yank the chrome away mid-seek');
+      expect(
+        _opacity(tester),
+        1.0,
+        reason:
+            'dragging the scrubber past the window edge must not '
+            'yank the chrome away mid-seek',
+      );
     });
 
-    testWidgets('does not hide on mouse exit while a modal route is on top',
-        (tester) async {
+    testWidgets('does not hide on mouse exit while a modal route is on top', (
+      tester,
+    ) async {
       // Opening the quality, audio, subtitle or cast picker pushes a route
       // over the player and moves the pointer off it. Hiding underneath would
       // leave the chrome gone after dismissal until the mouse moved again,
@@ -428,50 +460,55 @@ void main() {
       await gesture.moveTo(const Offset(-50, -50));
       await tester.pumpAndSettle();
 
-      expect(_opacity(tester), 1.0,
-          reason: 'chrome hid underneath an open selector');
+      expect(
+        _opacity(tester),
+        1.0,
+        reason: 'chrome hid underneath an open selector',
+      );
     });
 
     testWidgets(
-        'reports activity on a pointer-down over already-visible content — '
-        'a touch device has no onEnter, and tapping a control that is '
-        'already shown never calls _show() either, so onPointerDown must be '
-        'its own activity signal or the race guard never arms on phones',
-        (tester) async {
-      var activityCount = 0;
-      await tester.pumpWidget(
-        _host(
-          ChromeVisibility(
-            isPlaying: true,
-            onActivity: () => activityCount++,
-            child: const Align(
-              alignment: Alignment.topLeft,
-              child: SizedBox(width: 100, height: 40, child: Text('chrome')),
+      'reports activity on a pointer-down over already-visible content — '
+      'a touch device has no onEnter, and tapping a control that is '
+      'already shown never calls _show() either, so onPointerDown must be '
+      'its own activity signal or the race guard never arms on phones',
+      (tester) async {
+        var activityCount = 0;
+        await tester.pumpWidget(
+          _host(
+            ChromeVisibility(
+              isPlaying: true,
+              onActivity: () => activityCount++,
+              child: const Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(width: 100, height: 40, child: Text('chrome')),
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(_opacity(tester), 1.0);
-      expect(activityCount, 0);
+        expect(_opacity(tester), 1.0);
+        expect(activityCount, 0);
 
-      // Tap inside the small top-left content box, not
-      // `ChromeVisibility.contentKey`'s own center — that key sits on a
-      // wrapper the surrounding `Stack.expand` stretches to fill the whole
-      // screen, so its geometric center falls on empty background instead
-      // of the content. `tap`/`tapAt` default to `PointerDeviceKind.touch`,
-      // unlike the mouse-only gestures used elsewhere in this file for
-      // onEnter/onExit coverage.
-      await tester.tapAt(const Offset(50, 20));
-      await tester.pump();
+        // Tap inside the small top-left content box, not
+        // `ChromeVisibility.contentKey`'s own center — that key sits on a
+        // wrapper the surrounding `Stack.expand` stretches to fill the whole
+        // screen, so its geometric center falls on empty background instead
+        // of the content. `tap`/`tapAt` default to `PointerDeviceKind.touch`,
+        // unlike the mouse-only gestures used elsewhere in this file for
+        // onEnter/onExit coverage.
+        await tester.tapAt(const Offset(50, 20));
+        await tester.pump();
 
-      expect(
-        activityCount,
-        greaterThan(0),
-        reason: 'a touch tap on already-visible chrome content must report '
-            'activity directly, since neither onEnter nor _show() fires',
-      );
-    });
+        expect(
+          activityCount,
+          greaterThan(0),
+          reason:
+              'a touch tap on already-visible chrome content must report '
+              'activity directly, since neither onEnter nor _show() fires',
+        );
+      },
+    );
 
     test('auto-hide constants: 3 s by default, 5 s on the remote tier', () {
       expect(ChromeVisibility.defaultAutoHide, const Duration(seconds: 3));
@@ -483,71 +520,84 @@ void main() {
     });
 
     testWidgets(
-        'with restartOnKeyActivity, every key press restarts the countdown',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(
-          const ChromeVisibility(
-            isPlaying: true,
-            restartOnKeyActivity: true,
-            autoHide: Duration(seconds: 5),
-            child: Text('chrome'),
+      'with restartOnKeyActivity, every key press restarts the countdown',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            const ChromeVisibility(
+              isPlaying: true,
+              restartOnKeyActivity: true,
+              autoHide: Duration(seconds: 5),
+              child: Text('chrome'),
+            ),
           ),
-        ),
-      );
+        );
 
-      // t=4: countdown now ends at t=9.
-      await tester.pump(const Duration(seconds: 4));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      // t=8: countdown now ends at t=13.
-      await tester.pump(const Duration(seconds: 4));
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      // t=12.
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pump();
-      expect(_opacity(tester), 1.0,
-          reason: 'a remote press must hold the chrome open');
+        // t=4: countdown now ends at t=9.
+        await tester.pump(const Duration(seconds: 4));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        // t=8: countdown now ends at t=13.
+        await tester.pump(const Duration(seconds: 4));
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        // t=12.
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pump();
+        expect(
+          _opacity(tester),
+          1.0,
+          reason: 'a remote press must hold the chrome open',
+        );
 
-      // t=14: five seconds after the last press.
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 0.0,
-          reason: 'the chrome must still hide once the presses stop');
-    });
+        // t=14: five seconds after the last press.
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(
+          _opacity(tester),
+          0.0,
+          reason: 'the chrome must still hide once the presses stop',
+        );
+      },
+    );
 
     testWidgets(
-        'a held key counts through its repeats, and releasing it does not '
-        'count', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          const ChromeVisibility(
-            isPlaying: true,
-            restartOnKeyActivity: true,
-            autoHide: Duration(seconds: 5),
-            child: Text('chrome'),
+      'a held key counts through its repeats, and releasing it does not '
+      'count',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            const ChromeVisibility(
+              isPlaying: true,
+              restartOnKeyActivity: true,
+              autoHide: Duration(seconds: 5),
+              child: Text('chrome'),
+            ),
           ),
-        ),
-      );
+        );
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump(const Duration(seconds: 4));
-      // t=4: the repeat moves the end of the countdown to t=9.
-      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump(const Duration(seconds: 4));
-      // t=8: a key-up must not move it again.
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump();
-      expect(_opacity(tester), 1.0,
-          reason: 'the repeat at t=4 should have held the chrome to t=9');
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pump(const Duration(seconds: 4));
+        // t=4: the repeat moves the end of the countdown to t=9.
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pump(const Duration(seconds: 4));
+        // t=8: a key-up must not move it again.
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pump();
+        expect(
+          _opacity(tester),
+          1.0,
+          reason: 'the repeat at t=4 should have held the chrome to t=9',
+        );
 
-      // t=10: past t=9, and the key-up at t=8 did not extend it to t=13.
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 0.0);
-    });
+        // t=10: past t=9, and the key-up at t=8 did not extend it to t=13.
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(_opacity(tester), 0.0);
+      },
+    );
 
-    testWidgets('without restartOnKeyActivity, key presses change nothing',
-        (tester) async {
+    testWidgets('without restartOnKeyActivity, key presses change nothing', (
+      tester,
+    ) async {
       // Pins desktop and web: a keyboard press there does not hold the
       // chrome open, exactly as before this flag existed.
       await tester.pumpWidget(
@@ -561,8 +611,9 @@ void main() {
       expect(_opacity(tester), 0.0);
     });
 
-    testWidgets('the key handler never reports a key as handled',
-        (tester) async {
+    testWidgets('the key handler never reports a key as handled', (
+      tester,
+    ) async {
       // A handled key is not passed back to the platform, and on Android
       // that includes BACK. keyQ has no default shortcut, so nothing else in
       // this tree can claim it.
@@ -607,8 +658,9 @@ void main() {
       expect(controller.visible, isFalse);
     });
 
-    testWidgets('stops listening to the keyboard once disposed',
-        (tester) async {
+    testWidgets('stops listening to the keyboard once disposed', (
+      tester,
+    ) async {
       var activity = 0;
       await tester.pumpWidget(
         _host(
@@ -627,52 +679,67 @@ void main() {
 
       await tester.pumpWidget(_host(const Text('gone')));
       await tester.sendKeyEvent(LogicalKeyboardKey.keyQ);
-      expect(activity, 1,
-          reason: 'a disposed chrome must not leave a global key handler '
-              'behind');
+      expect(
+        activity,
+        1,
+        reason:
+            'a disposed chrome must not leave a global key handler '
+            'behind',
+      );
     });
 
     testWidgets(
-        'does not auto-hide while a modal route is on top, and counts down '
-        'again once it closes', (tester) async {
-      // The subtitle, audio and quality pickers are sheets and dialogs over
-      // the player. Hiding underneath one strands focus on an invisible
-      // control once it closes, so the next OK reopens the picker.
-      await tester.pumpWidget(
-        _host(const ChromeVisibility(isPlaying: true, child: Text('chrome'))),
-      );
+      'does not auto-hide while a modal route is on top, and counts down '
+      'again once it closes',
+      (tester) async {
+        // The subtitle, audio and quality pickers are sheets and dialogs over
+        // the player. Hiding underneath one strands focus on an invisible
+        // control once it closes, so the next OK reopens the picker.
+        await tester.pumpWidget(
+          _host(const ChromeVisibility(isPlaying: true, child: Text('chrome'))),
+        );
 
-      final context = tester.element(find.byType(ChromeVisibility));
-      unawaited(
-        showModalBottomSheet<void>(
-          context: context,
-          builder: (_) => const Text('picker'),
-        ),
-      );
-      await tester.pumpAndSettle();
+        final context = tester.element(find.byType(ChromeVisibility));
+        unawaited(
+          showModalBottomSheet<void>(
+            context: context,
+            builder: (_) => const Text('picker'),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 1.0,
-          reason: 'chrome hid underneath an open selector');
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(
+          _opacity(tester),
+          1.0,
+          reason: 'chrome hid underneath an open selector',
+        );
 
-      Navigator.of(context).pop();
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 1.0,
-          reason: 'closing the selector must not hide the chrome at once');
+        Navigator.of(context).pop();
+        await tester.pumpAndSettle();
+        expect(
+          _opacity(tester),
+          1.0,
+          reason: 'closing the selector must not hide the chrome at once',
+        );
 
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-      expect(_opacity(tester), 0.0,
-          reason: 'the countdown must start over once the selector closes');
-    });
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(
+          _opacity(tester),
+          0.0,
+          reason: 'the countdown must start over once the selector closes',
+        );
+      },
+    );
   });
 
   group('ChromeSlide', () {
-    testWidgets(
-        'the panel slides down (+offset) while the pills slide up '
-        '(-offset) — opposite directions from the same animation',
-        (tester) async {
+    testWidgets('the panel slides down (+offset) while the pills slide up '
+        '(-offset) — opposite directions from the same animation', (
+      tester,
+    ) async {
       const markerKey = Key('slide-marker');
       await tester.pumpWidget(
         _host(
@@ -690,11 +757,7 @@ void main() {
                 ),
                 ChromeSlide(
                   hiddenOffsetY: 8,
-                  child: SizedBox(
-                    key: markerKey,
-                    width: 40,
-                    height: 20,
-                  ),
+                  child: SizedBox(key: markerKey, width: 40, height: 20),
                 ),
               ],
             ),
@@ -702,16 +765,18 @@ void main() {
         ),
       );
 
-      final pillTopAtRest =
-          tester.getTopLeft(find.byKey(const Key('pill-marker'))).dy;
+      final pillTopAtRest = tester
+          .getTopLeft(find.byKey(const Key('pill-marker')))
+          .dy;
       final panelTopAtRest = tester.getTopLeft(find.byKey(markerKey)).dy;
 
       // Auto-hide.
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
 
-      final pillTopHidden =
-          tester.getTopLeft(find.byKey(const Key('pill-marker'))).dy;
+      final pillTopHidden = tester
+          .getTopLeft(find.byKey(const Key('pill-marker')))
+          .dy;
       final panelTopHidden = tester.getTopLeft(find.byKey(markerKey)).dy;
 
       expect(
@@ -726,8 +791,7 @@ void main() {
       );
     });
 
-    testWidgets(
-        'MediaQuery.disableAnimations drops the translate but the fade '
+    testWidgets('MediaQuery.disableAnimations drops the translate but the fade '
         'still runs', (tester) async {
       const markerKey = Key('slide-marker');
       await tester.pumpWidget(
@@ -758,29 +822,35 @@ void main() {
         reason: 'disableAnimations should suppress the translate entirely',
       );
       // The fade is not suppressed: the content should still be invisible.
-      expect(_opacity(tester), 0.0,
-          reason: 'disableAnimations must not also cancel the fade');
-    });
-
-    testWidgets('renders the child unchanged with no ChromeAnimation ancestor',
-        (tester) async {
-      const markerKey = Key('slide-marker');
-      await tester.pumpWidget(
-        _host(
-          const ChromeSlide(
-            hiddenOffsetY: 8,
-            child: SizedBox(key: markerKey, width: 40, height: 20),
-          ),
-        ),
+      expect(
+        _opacity(tester),
+        0.0,
+        reason: 'disableAnimations must not also cancel the fade',
       );
-
-      expect(find.byKey(markerKey), findsOneWidget);
     });
+
+    testWidgets(
+      'renders the child unchanged with no ChromeAnimation ancestor',
+      (tester) async {
+        const markerKey = Key('slide-marker');
+        await tester.pumpWidget(
+          _host(
+            const ChromeSlide(
+              hiddenOffsetY: 8,
+              child: SizedBox(key: markerKey, width: 40, height: 20),
+            ),
+          ),
+        );
+
+        expect(find.byKey(markerKey), findsOneWidget);
+      },
+    );
   });
 
   group('ChromeVisibility traffic lights', () {
-    testWidgets('asserts the traffic lights visible once on mount',
-        (tester) async {
+    testWidgets('asserts the traffic lights visible once on mount', (
+      tester,
+    ) async {
       final calls = <bool>[];
       await tester.pumpWidget(
         _host(
@@ -795,15 +865,17 @@ void main() {
       expect(
         calls,
         [false],
-        reason: '_visible starts true and _show() only calls the bridge on '
+        reason:
+            '_visible starts true and _show() only calls the bridge on '
             'a false -> true transition, so a freshly-mounted '
             'ChromeVisibility must assert visibility itself in initState, '
             'or the native side never learns the buttons should be shown',
       );
     });
 
-    testWidgets('hides the traffic lights when chrome auto-hides',
-        (tester) async {
+    testWidgets('hides the traffic lights when chrome auto-hides', (
+      tester,
+    ) async {
       final calls = <bool>[];
       await tester.pumpWidget(
         _host(
@@ -823,8 +895,9 @@ void main() {
       expect(calls, [false, true]);
     });
 
-    testWidgets('shows the traffic lights again when chrome reappears on tap',
-        (tester) async {
+    testWidgets('shows the traffic lights again when chrome reappears on tap', (
+      tester,
+    ) async {
       final calls = <bool>[];
       await tester.pumpWidget(
         _host(
@@ -847,49 +920,51 @@ void main() {
     });
 
     testWidgets(
-        'never calls the callback for auto-hide while paused, since chrome '
-        'never hides (only the initState mount assertion fires)',
-        (tester) async {
-      final calls = <bool>[];
-      await tester.pumpWidget(
-        _host(
-          ChromeVisibility(
-            isPlaying: false,
-            onWindowButtonsHidden: calls.add,
-            child: const Text('chrome'),
+      'never calls the callback for auto-hide while paused, since chrome '
+      'never hides (only the initState mount assertion fires)',
+      (tester) async {
+        final calls = <bool>[];
+        await tester.pumpWidget(
+          _host(
+            ChromeVisibility(
+              isPlaying: false,
+              onWindowButtonsHidden: calls.add,
+              child: const Text('chrome'),
+            ),
           ),
-        ),
-      );
+        );
 
-      await tester.pump(const Duration(seconds: 10));
-      await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 10));
+        await tester.pumpAndSettle();
 
-      expect(calls, [false]);
-    });
+        expect(calls, [false]);
+      },
+    );
 
     testWidgets(
-        'restores the traffic lights on dispose even if chrome was hidden',
-        (tester) async {
-      final calls = <bool>[];
-      await tester.pumpWidget(
-        _host(
-          ChromeVisibility(
-            isPlaying: true,
-            onWindowButtonsHidden: calls.add,
-            child: const Text('chrome'),
+      'restores the traffic lights on dispose even if chrome was hidden',
+      (tester) async {
+        final calls = <bool>[];
+        await tester.pumpWidget(
+          _host(
+            ChromeVisibility(
+              isPlaying: true,
+              onWindowButtonsHidden: calls.add,
+              child: const Text('chrome'),
+            ),
           ),
-        ),
-      );
+        );
 
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-      expect(calls, [false, true]);
+        await tester.pump(const Duration(seconds: 4));
+        await tester.pumpAndSettle();
+        expect(calls, [false, true]);
 
-      // Replace the tree so ChromeVisibility disposes.
-      await tester.pumpWidget(_host(const Text('gone')));
+        // Replace the tree so ChromeVisibility disposes.
+        await tester.pumpWidget(_host(const Text('gone')));
 
-      expect(calls, [false, true, false]);
-    });
+        expect(calls, [false, true, false]);
+      },
+    );
   });
 
   group('PlaybackChrome gating', () {
@@ -902,26 +977,26 @@ void main() {
     tearDown(() => player.dispose());
 
     Widget host({required bool isFullscreen}) => _host(
-          PlaybackChrome(
-            player: player,
-            onFullscreenTap: () {},
-            isFullscreen: isFullscreen,
-            // These gating tests are about window drag and double-tap, not
-            // seeking, so a zero timeline and an inert seek callback keep the
-            // chrome constructible without pulling stream state into scope.
-            timeline: StreamTimeline.zero,
-            onSeekToReal: (_) async {},
-          ),
-        );
+      PlaybackChrome(
+        player: player,
+        onFullscreenTap: () {},
+        isFullscreen: isFullscreen,
+        // These gating tests are about window drag and double-tap, not
+        // seeking, so a zero timeline and an inert seek callback keep the
+        // chrome constructible without pulling stream state into scope.
+        timeline: StreamTimeline.zero,
+        onSeekToReal: (_) async {},
+      ),
+    );
 
-    testWidgets(
-        'not fullscreen: both the window drag and the double-tap '
+    testWidgets('not fullscreen: both the window drag and the double-tap '
         'fullscreen-exit callbacks reach ChromeVisibility', (tester) async {
       await tester.pumpWidget(host(isFullscreen: false));
       await tester.pumpAndSettle();
 
-      final chromeVisibility =
-          tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+      final chromeVisibility = tester.widget<ChromeVisibility>(
+        find.byType(ChromeVisibility),
+      );
 
       expect(
         chromeVisibility.onWindowDrag,
@@ -936,66 +1011,74 @@ void main() {
     });
 
     testWidgets(
-        'fullscreen: the window drag callback is gone (no window to move) '
-        'but double-tap survives (it is how fullscreen is exited)',
-        (tester) async {
-      await tester.pumpWidget(host(isFullscreen: true));
-      await tester.pumpAndSettle();
-
-      final chromeVisibility =
-          tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
-
-      expect(
-        chromeVisibility.onWindowDrag,
-        isNull,
-        reason: 'there is no window to drag while fullscreen',
-      );
-      expect(
-        chromeVisibility.onDoubleTap,
-        isNotNull,
-        reason: 'double-tap is the only way to exit fullscreen',
-      );
-    });
-
-    group('off the remote tier', () {
-      testWidgets(
-          'Back, Cast, the volume controls and Fullscreen all render, on the '
-          'default auto-hide', (tester) async {
-        tester.view.physicalSize = const Size(1280, 720);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
-
-        await tester.pumpWidget(
-          _host(
-            PlaybackChrome(
-              player: player,
-              timeline: StreamTimeline.zero,
-              onSeekToReal: (_) async {},
-              onBack: () {},
-              castAction: const Icon(Icons.cast_rounded),
-              onCastTap: () {},
-              onFullscreenTap: () {},
-            ),
-          ),
-        );
+      'fullscreen: the window drag callback is gone (no window to move) '
+      'but double-tap survives (it is how fullscreen is exited)',
+      (tester) async {
+        await tester.pumpWidget(host(isFullscreen: true));
         await tester.pumpAndSettle();
 
-        expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
-        expect(find.byKey(ChromeTopBar.castKey), findsOneWidget);
-        expect(find.byKey(VolumeSurface.muteKey), findsOneWidget);
-        expect(find.byKey(VolumeSurface.sliderKey), findsOneWidget);
-        expect(find.byKey(SecondaryCluster.fullscreenKey), findsOneWidget);
+        final chromeVisibility = tester.widget<ChromeVisibility>(
+          find.byType(ChromeVisibility),
+        );
 
-        final visibility =
-            tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
-        expect(visibility.autoHide, ChromeVisibility.defaultAutoHide);
-        expect(visibility.restartOnKeyActivity, isFalse);
-      });
-    },
-        skip: InputCapabilities.directionalPrimary
-            ? 'covers the pointer and touch tiers; '
+        expect(
+          chromeVisibility.onWindowDrag,
+          isNull,
+          reason: 'there is no window to drag while fullscreen',
+        );
+        expect(
+          chromeVisibility.onDoubleTap,
+          isNotNull,
+          reason: 'double-tap is the only way to exit fullscreen',
+        );
+      },
+    );
+
+    group(
+      'off the remote tier',
+      () {
+        testWidgets(
+          'Back, Cast, the volume controls and Fullscreen all render, on the '
+          'default auto-hide',
+          (tester) async {
+            tester.view.physicalSize = const Size(1280, 720);
+            tester.view.devicePixelRatio = 1.0;
+            addTearDown(tester.view.reset);
+
+            await tester.pumpWidget(
+              _host(
+                PlaybackChrome(
+                  player: player,
+                  timeline: StreamTimeline.zero,
+                  onSeekToReal: (_) async {},
+                  onBack: () {},
+                  castAction: const Icon(Icons.cast_rounded),
+                  onCastTap: () {},
+                  onFullscreenTap: () {},
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
+            expect(find.byKey(ChromeTopBar.castKey), findsOneWidget);
+            expect(find.byKey(VolumeSurface.muteKey), findsOneWidget);
+            expect(find.byKey(VolumeSurface.sliderKey), findsOneWidget);
+            expect(find.byKey(SecondaryCluster.fullscreenKey), findsOneWidget);
+
+            final visibility = tester.widget<ChromeVisibility>(
+              find.byType(ChromeVisibility),
+            );
+            expect(visibility.autoHide, ChromeVisibility.defaultAutoHide);
+            expect(visibility.restartOnKeyActivity, isFalse);
+          },
+        );
+      },
+      skip: InputCapabilities.directionalPrimary
+          ? 'covers the pointer and touch tiers; '
                 'playback_chrome_tv_test.dart covers the remote one'
-            : false);
+          : false,
+    );
   });
 
   group('PlaybackChrome subtitle lift', () {
@@ -1007,26 +1090,33 @@ void main() {
 
     tearDown(() => player.dispose());
 
-    testWidgets('lifts subtitles above the panel, and drops them on hide',
-        (tester) async {
+    testWidgets('lifts subtitles above the panel, and drops them on hide', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
       final lift = _RecordingSubtitleLift();
       final visibility = ChromeVisibilityController();
-      await tester.pumpWidget(_host(PlaybackChrome(
-        player: player,
-        timeline: StreamTimeline.zero,
-        onSeekToReal: (_) async {},
-        chromeVisibility: visibility,
-        subtitleLift: lift,
-      )));
+      await tester.pumpWidget(
+        _host(
+          PlaybackChrome(
+            player: player,
+            timeline: StreamTimeline.zero,
+            onSeekToReal: (_) async {},
+            chromeVisibility: visibility,
+            subtitleLift: lift,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final panelTop = tester.getTopLeft(find.byType(ChromeSubtitleLift)).dy;
-      expect(lift.bottoms.last,
-          closeTo(900 - panelTop + ChromeSubtitleLift.gap, 0.5));
+      expect(
+        lift.bottoms.last,
+        closeTo(900 - panelTop + ChromeSubtitleLift.gap, 0.5),
+      );
 
       visibility.hide();
       await tester.pumpAndSettle();

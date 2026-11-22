@@ -26,20 +26,15 @@ class RemoteControlReceiver {
   /// Receives each intent with the node id of the peer that sent it.
   final void Function(RemoteControlIntent, String peerNodeId) _onIntent;
   final Future<void> Function(String requestId, FlutterRemoteControlResponse)
-      _respond;
+  _respond;
 
   RemoteControlReceiver({
-    required DeviceRoster roster,
-    required String targetName,
-    required PlaybackSnapshotSource snapshotSource,
-    required void Function(RemoteControlIntent, String peerNodeId) onIntent,
-    required Future<void> Function(String, FlutterRemoteControlResponse)
-        respond,
-  })  : _roster = roster,
-        _targetName = targetName,
-        _snapshotSource = snapshotSource,
-        _onIntent = onIntent,
-        _respond = respond;
+    required this._roster,
+    required this._targetName,
+    required this._snapshotSource,
+    required this._onIntent,
+    required this._respond,
+  });
 
   Future<void> handle(FlutterInboundControlRequest inbound) async {
     // The peer node ID is authenticated by iroh during the handshake, so this
@@ -106,7 +101,9 @@ class RemoteControlReceiver {
 
     _onIntent(intent, inbound.peer);
     await _respond(
-        inbound.requestId, const FlutterRemoteControlResponse_Accepted());
+      inbound.requestId,
+      const FlutterRemoteControlResponse_Accepted(),
+    );
   }
 
   /// What this build can do. Reported from the live snapshot when there is one

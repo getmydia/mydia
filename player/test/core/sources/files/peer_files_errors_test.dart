@@ -64,26 +64,31 @@ void main() {
   test('BackendUnreachable maps to peerFilesHostUnreachable', () async {
     final (m, key) = await peerSource(const BackendUnreachable('gone'));
     final e = await playFailure(m, key);
-    expect(l10n.sourceError(e),
-        "Den Desktop isn't reachable. It needs to be on with Mydia Player open.");
+    expect(
+      l10n.sourceError(e),
+      "Den Desktop isn't reachable. It needs to be on with Mydia Player open.",
+    );
   });
 
   test('a 502 maps to peerFilesShareDown and keeps the status', () async {
-    final (m, key) =
-        await peerSource(const BackendUnreachable('answered 502', 502));
+    final (m, key) = await peerSource(
+      const BackendUnreachable('answered 502', 502),
+    );
     final before = m.connection;
     final e = await playFailure(m, key);
     expect(l10n.sourceError(e), "Den Desktop can't reach its share right now.");
     expect(m.connection, before);
   });
 
-  test('BackendNotFound maps to peerFilesFileGone and refreshes the host',
-      () async {
-    final (m, key) = await peerSource(const BackendNotFound());
-    final e = await playFailure(m, key);
-    expect(l10n.sourceError(e), 'This file is no longer on Den Desktop.');
-    expect(h.client.refreshed, [hostNode]);
-  });
+  test(
+    'BackendNotFound maps to peerFilesFileGone and refreshes the host',
+    () async {
+      final (m, key) = await peerSource(const BackendNotFound());
+      final e = await playFailure(m, key);
+      expect(l10n.sourceError(e), 'This file is no longer on Den Desktop.');
+      expect(h.client.refreshed, [hostNode]);
+    },
+  );
 
   test('BackendUnauthorized refreshes the host', () async {
     final (m, key) = await peerSource(const BackendUnauthorized());
@@ -94,17 +99,21 @@ void main() {
 
   test('unreachable_status_when_member_disconnected', () async {
     final lent = lentFlocal();
-    final backend = FakeBackend({},
-        probeFailure: const BackendUnreachable('peer not connected'));
+    final backend = FakeBackend(
+      {},
+      probeFailure: const BackendUnreachable('peer not connected'),
+    );
     h.backends[peerFilesSource(lent)] = backend;
     h.client.list.value = [lent];
     final c = await h.container();
     addTearDown(c.dispose);
     final id = c.read(sourcesProvider).last.id;
-    c.listen(sourceStatusProvider(id), (_, __) {});
+    c.listen(sourceStatusProvider(id), (_, _) {});
     await _settle();
     expect(
-        c.read(sourceStatusProvider(id)), SourceConnectionStatus.unreachable);
+      c.read(sourceStatusProvider(id)),
+      SourceConnectionStatus.unreachable,
+    );
 
     backend.probeFailure = null;
     h.connected.add(hostNode);

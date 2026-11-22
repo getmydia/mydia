@@ -8,24 +8,31 @@ void main() {
 
   group('registrationStatusText', () {
     test('reads as off when idle', () {
-      expect(en.registrationStatusText(const RegistrationIdle()),
-          'Not advertising this device');
+      expect(
+        en.registrationStatusText(const RegistrationIdle()),
+        'Not advertising this device',
+      );
     });
 
     test('names the dependency it is waiting on', () {
       expect(
         en.registrationStatusText(
-            const RegistrationWaiting(RegistrationDependency.serverConnection)),
+          const RegistrationWaiting(RegistrationDependency.serverConnection),
+        ),
         'Waiting for a server connection',
       );
       expect(
-        en.registrationStatusText(const RegistrationWaiting(
-            RegistrationDependency.remoteControlSetting)),
+        en.registrationStatusText(
+          const RegistrationWaiting(
+            RegistrationDependency.remoteControlSetting,
+          ),
+        ),
         'Waiting for the remote control setting',
       );
       expect(
         en.registrationStatusText(
-            const RegistrationWaiting(RegistrationDependency.deviceOnline)),
+          const RegistrationWaiting(RegistrationDependency.deviceOnline),
+        ),
         'Waiting for this device to come online',
       );
     });
@@ -40,7 +47,8 @@ void main() {
     test('confirms success', () {
       expect(
         en.registrationStatusText(
-            RegistrationSucceeded('abc', DateTime(2026, 9, 1))),
+          RegistrationSucceeded('abc', DateTime(2026, 9, 1)),
+        ),
         'Discoverable by your other devices',
       );
     });
@@ -48,7 +56,8 @@ void main() {
     test('surfaces the failure reason verbatim', () {
       expect(
         en.registrationStatusText(
-            const RegistrationFailed('server rejected the node id', 3, null)),
+          const RegistrationFailed('server rejected the node id', 3, null),
+        ),
         'Not discoverable: server rejected the node id',
       );
     });

@@ -178,14 +178,15 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
             child: SizedBox(
               width: layout.contentWidth,
               child: switch (items[index]) {
-                final MonthDivider divider =>
-                  CalendarMonthRule(month: divider.month),
+                final MonthDivider divider => CalendarMonthRule(
+                  month: divider.month,
+                ),
                 final TimelineDay day => CalendarDayGroup(
-                    item: day,
-                    today: widget.today,
-                    layout: layout,
-                    firstEntryIndex: firstEntryIndex[index],
-                  ),
+                  item: day,
+                  today: widget.today,
+                  layout: layout,
+                  firstEntryIndex: firstEntryIndex[index],
+                ),
               },
             ),
           ),

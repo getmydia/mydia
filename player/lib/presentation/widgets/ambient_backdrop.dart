@@ -83,8 +83,10 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
         artworkImageProvider(
           url,
           cacheManager: BackdropCacheManager(),
-          decodeWidth:
-              viewportDecodeWidth(context, sourceWidth: backdropSourceWidth),
+          decodeWidth: viewportDecodeWidth(
+            context,
+            sourceWidth: backdropSourceWidth,
+          ),
           headers: widget.headers.isEmpty ? null : widget.headers,
           cacheKey: widget.cacheKey,
         ),
@@ -112,7 +114,7 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
               fit: StackFit.expand,
               children: [
                 ..._dedupedByKey(previousChildren, currentChild),
-                if (currentChild != null) currentChild,
+                ?currentChild,
               ],
             ),
             child: _buildLayer(context),
@@ -201,8 +203,10 @@ class _ArtworkLayer extends StatelessWidget {
             cacheManager: BackdropCacheManager(),
             // Viewport width rather than a LayoutBuilder, so it matches the
             // precache in _AmbientBackdropState.didUpdateWidget exactly.
-            decodeWidth:
-                viewportDecodeWidth(context, sourceWidth: backdropSourceWidth),
+            decodeWidth: viewportDecodeWidth(
+              context,
+              sourceWidth: backdropSourceWidth,
+            ),
             // No placeholder/error chrome: the constant dark base behind the
             // switcher covers the gap, keeping the scrim color stable.
             placeholder: (_) => const SizedBox.expand(),

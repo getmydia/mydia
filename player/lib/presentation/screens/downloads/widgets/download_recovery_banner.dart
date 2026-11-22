@@ -13,7 +13,9 @@ String downloadStateLabel(AppLocalizations l10n, DownloadTask task) {
       return l10n.downloadsStateInterrupted;
     case 'stalled':
       return l10n.downloadsStateStalled(
-          task.recoveryAttempts, maxRecoveryAttempts);
+        task.recoveryAttempts,
+        maxRecoveryAttempts,
+      );
     default:
       return '';
   }
@@ -46,18 +48,18 @@ class DownloadRecoveryBanner extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(Icons.pause_circle_outline_rounded,
-            color: palette.textSecondary, size: 14),
+        Icon(
+          Icons.pause_circle_outline_rounded,
+          color: palette.textSecondary,
+          size: 14,
+        ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: palette.textSecondary,
-              fontSize: 10,
-            ),
+            style: TextStyle(color: palette.textSecondary, fontSize: 10),
           ),
         ),
         TextButton(
@@ -67,8 +69,10 @@ class DownloadRecoveryBanner extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             minimumSize: const Size(0, 28),
           ),
-          child: Text(context.l10n.commonResume,
-              style: const TextStyle(fontSize: 11)),
+          child: Text(
+            context.l10n.commonResume,
+            style: const TextStyle(fontSize: 11),
+          ),
         ),
       ],
     );

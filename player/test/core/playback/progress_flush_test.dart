@@ -22,7 +22,10 @@ class RecordingProgressService extends Fake implements ProgressService {
 
   @override
   Future<bool> syncMoviePosition(
-      String movieId, Duration position, Duration duration) async {
+    String movieId,
+    Duration position,
+    Duration duration,
+  ) async {
     if (failNext) return false;
     movies.add((movieId, position, duration));
     return true;
@@ -30,7 +33,10 @@ class RecordingProgressService extends Fake implements ProgressService {
 
   @override
   Future<bool> syncEpisodePosition(
-      String episodeId, Duration position, Duration duration) async {
+    String episodeId,
+    Duration position,
+    Duration duration,
+  ) async {
     if (failNext) return false;
     episodes.add((episodeId, position, duration));
     return true;
@@ -62,16 +68,13 @@ void main() {
       expect(saved.positionSeconds, 900);
       expect(saved.syncedAt, DateTime.utc(2026, 8, 2, 12));
       expect(store.unsynced(), isEmpty);
-      expect(
-          service.movies,
-          [
-            (
-              'movie-1',
-              const Duration(seconds: 900),
-              const Duration(seconds: 5400)
-            )
-          ],
-          reason: 'the server gets the same position that was stored locally');
+      expect(service.movies, [
+        (
+          'movie-1',
+          const Duration(seconds: 900),
+          const Duration(seconds: 5400),
+        ),
+      ], reason: 'the server gets the same position that was stored locally');
     });
 
     test('leaves the record unsynced when the server declines', () async {
@@ -88,8 +91,11 @@ void main() {
         now: DateTime.utc(2026, 8, 2, 12),
       );
 
-      expect(store.get(key('movie-1'))!.positionSeconds, 900,
-          reason: 'the local write still happened; only the marking did not');
+      expect(
+        store.get(key('movie-1'))!.positionSeconds,
+        900,
+        reason: 'the local write still happened; only the marking did not',
+      );
       expect(store.get(key('movie-1'))!.syncedAt, isNull);
       expect(store.unsynced().map((p) => p.mediaId), ['movie-1']);
     });
@@ -108,9 +114,9 @@ void main() {
       );
 
       expect(store.get(key('ep-1'))!.syncedAt, isNull);
-      expect(store.unsynced().map((p) => p.mediaId), ['ep-1'],
-          reason:
-              'a throwing server must never cost the user the local record');
+      expect(store.unsynced().map((p) => p.mediaId), [
+        'ep-1',
+      ], reason: 'a throwing server must never cost the user the local record');
     });
 
     test('routes an episode to the episode mutation', () async {
@@ -137,13 +143,19 @@ void main() {
 class _ThrowingProgressService extends Fake implements ProgressService {
   @override
   Future<bool> syncMoviePosition(
-      String movieId, Duration position, Duration duration) async {
+    String movieId,
+    Duration position,
+    Duration duration,
+  ) async {
     throw StateError('server unreachable');
   }
 
   @override
   Future<bool> syncEpisodePosition(
-      String episodeId, Duration position, Duration duration) async {
+    String episodeId,
+    Duration position,
+    Duration duration,
+  ) async {
     throw StateError('server unreachable');
   }
 }

@@ -52,16 +52,14 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         children: [
           Text(
             context.l10n.downloadQualityTitle,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
             widget.title,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: palette.textSecondary,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: palette.textSecondary),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -70,10 +68,14 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
       content: SizedBox(
         width: double.maxFinite,
         child: switch (snapshot) {
-          AsyncSnapshot(hasError: true, :final error) =>
-            _buildErrorContent(context, error!),
-          AsyncSnapshot(hasData: true, :final data) =>
-            _buildOptionsContent(context, data!),
+          AsyncSnapshot(hasError: true, :final error) => _buildErrorContent(
+            context,
+            error!,
+          ),
+          AsyncSnapshot(hasData: true, :final data) => _buildOptionsContent(
+            context,
+            data!,
+          ),
           _ => _buildLoadingContent(),
         },
       ),
@@ -82,7 +84,9 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
   }
 
   Widget _buildOptionsContent(
-      BuildContext context, List<DownloadOption> options) {
+    BuildContext context,
+    List<DownloadOption> options,
+  ) {
     final palette = context.palette;
     if (options.isEmpty) {
       return Column(
@@ -96,9 +100,8 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
           const SizedBox(height: 12),
           Text(
             context.l10n.downloadNoOptions,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: palette.textSecondary,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: palette.textSecondary),
             textAlign: TextAlign.center,
           ),
         ],
@@ -133,8 +136,9 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
     if (_selectedResolution == null && sortedOptions.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          final preTranscoded =
-              sortedOptions.where((o) => o.isPreTranscoded).toList();
+          final preTranscoded = sortedOptions
+              .where((o) => o.isPreTranscoded)
+              .toList();
           setState(() {
             _selectedResolution = preTranscoded.isNotEmpty
                 ? preTranscoded.first.resolution
@@ -150,9 +154,8 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
       children: [
         Text(
           context.l10n.downloadSelectQuality,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         ...sortedOptions.map((option) => _buildQualityOption(option)),
@@ -206,9 +209,8 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
                         option.resolution == 'original'
                             ? context.l10n.qualityOriginal
                             : option.label,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style: Theme.of(context).textTheme.bodyLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       if (option.isPreTranscoded) ...[
                         const SizedBox(width: 8),
@@ -223,9 +225,8 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
                         option.isPreTranscoded
                             ? option.formattedDisplaySize
                             : '~${option.formattedSize}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: palette.textSecondary,
-                            ),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: palette.textSecondary),
                       ),
                       if (option.isTranscoding) ...[
                         const SizedBox(width: 8),
@@ -236,11 +237,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
                 ],
               ),
             ),
-            if (isSelected)
-              Icon(
-                Icons.check_circle,
-                color: palette.primary,
-              ),
+            if (isSelected) Icon(Icons.check_circle, color: palette.primary),
           ],
         ),
       ),
@@ -257,10 +254,8 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         ),
         child: Text(
           context.l10n.downloadOptionReady,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.success,
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600),
         ),
       );
     } else if (option.isTranscoding) {
@@ -273,10 +268,8 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         ),
         child: Text(
           context.l10n.downloadOptionTranscoding((progress * 100).round()),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.warning,
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: AppColors.warning, fontWeight: FontWeight.w600),
         ),
       );
     }
@@ -299,24 +292,18 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
-          Icons.error_outline,
-          size: 48,
-          color: AppColors.error,
-        ),
+        const Icon(Icons.error_outline, size: 48, color: AppColors.error),
         const SizedBox(height: 12),
         Text(
           context.l10n.downloadLoadFailed,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
           error.toString(),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: palette.textSecondary,
-              ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: palette.textSecondary),
           textAlign: TextAlign.center,
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
@@ -331,14 +318,16 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
   ) {
     final palette = context.palette;
     final hasOptions = options != null && options.isNotEmpty;
-    final canDownload = hasOptions &&
+    final canDownload =
+        hasOptions &&
         (_isLoneOriginal(options) || _selectedResolution != null) &&
         !_isStartingDownload;
 
     return [
       TextButton(
-        onPressed:
-            _isStartingDownload ? null : () => Navigator.of(context).pop(null),
+        onPressed: _isStartingDownload
+            ? null
+            : () => Navigator.of(context).pop(null),
         child: Text(
           context.l10n.commonCancel,
           style: TextStyle(
@@ -391,9 +380,7 @@ Future<DownloadOption?> pickDownloadOption(
   BuildContext context, {
   required String title,
   required Future<List<DownloadOption>> options,
-}) =>
-    showDialog<DownloadOption>(
-      context: context,
-      builder: (context) =>
-          QualityDownloadDialog(title: title, options: options),
-    );
+}) => showDialog<DownloadOption>(
+  context: context,
+  builder: (context) => QualityDownloadDialog(title: title, options: options),
+);

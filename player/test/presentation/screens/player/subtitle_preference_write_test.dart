@@ -168,13 +168,19 @@ class _DelayedWriteTransport extends ScriptedMydiaTransport {
     if (mutationDelays.isNotEmpty &&
         ScriptedMydiaTransport.operationOf(query) == 'SetSubtitlePreference') {
       final started = _writesStarted++;
-      final delay = mutationDelays[started < mutationDelays.length
-          ? started
-          : mutationDelays.length - 1];
+      final delay =
+          mutationDelays[started < mutationDelays.length
+              ? started
+              : mutationDelays.length - 1];
       await Future<void>.delayed(delay);
     }
-    return super.send(query, variables,
-        token: token, deviceProfile: deviceProfile, timeout: timeout);
+    return super.send(
+      query,
+      variables,
+      token: token,
+      deviceProfile: deviceProfile,
+      timeout: timeout,
+    );
   }
 }
 
@@ -222,9 +228,11 @@ ScriptedMydiaTransport _link({
       };
     }
     if (request.operation == 'MovieDetail') {
-      return movieDetailResponse(files: [
-        mediaFileWithSubtitle(language: language, title: title, forced: true),
-      ]);
+      return movieDetailResponse(
+        files: [
+          mediaFileWithSubtitle(language: language, title: title, forced: true),
+        ],
+      );
     }
     if (request.operation == 'MovieSegments') {
       return movieSegmentsResponse();
@@ -290,16 +298,15 @@ int _sheetCount() => find.byType(SubtitleTrackSelectorSheet).evaluate().length;
 /// `trackId` dartdoc -- and is exactly what the remote's
 /// `SelectSubtitleTrack { id: null }` becomes.
 void _pickRemotely(ProviderContainer container, String? trackId) {
-  container.read(remoteTargetControllerProvider).submit(
-        TrackSelectionIntent(kind: TrackKind.subtitle, trackId: trackId),
-      );
+  container
+      .read(remoteTargetControllerProvider)
+      .submit(TrackSelectionIntent(kind: TrackKind.subtitle, trackId: trackId));
 }
 
 void main() {
   useInMemorySubtitlePrefs();
 
-  testWidgets(
-      'a track picked from the remote is written back with its '
+  testWidgets('a track picked from the remote is written back with its '
       'language and flags', (tester) async {
     final link = _link();
     final container = await _mount(tester, link, _ProbedPlayer());
@@ -307,9 +314,13 @@ void main() {
     _pickRemotely(container, _serverTrackId);
     await pumpUntil(tester, () => _writes(link).isNotEmpty);
 
-    expect(_writes(link), hasLength(1),
-        reason: 'one pick is one preference: not once per track-list revision '
-            'and not once per source switch');
+    expect(
+      _writes(link),
+      hasLength(1),
+      reason:
+          'one pick is one preference: not once per track-list revision '
+          'and not once per source switch',
+    );
     final written = _writes(link).single.variables;
     expect(written['mode'], 'TRACK');
     expect(written['language'], 'eng');
@@ -318,8 +329,7 @@ void main() {
     expect(written['trackTitle'], _trackTitle);
   });
 
-  testWidgets(
-      'a remote Off is written back as an Off, carrying nothing '
+  testWidgets('a remote Off is written back as an Off, carrying nothing '
       'over', (tester) async {
     final player = _ProbedPlayer();
     final link = _link();
@@ -337,21 +347,33 @@ void main() {
     _pickRemotely(container, null);
     await pumpUntil(tester, () => _writes(link).length >= 2);
 
-    expect(player.selectedSubtitleTracks.last, SubtitleTrack.no(),
-        reason: 'the Off has to have reached the player before it is worth '
-            'anything as a stored preference');
-    expect(_writes(link), hasLength(2),
-        reason: 'the track and then the Off, one write each');
+    expect(
+      player.selectedSubtitleTracks.last,
+      SubtitleTrack.no(),
+      reason:
+          'the Off has to have reached the player before it is worth '
+          'anything as a stored preference',
+    );
+    expect(
+      _writes(link),
+      hasLength(2),
+      reason: 'the track and then the Off, one write each',
+    );
     final written = _writes(link).last.variables;
     expect(written['mode'], 'OFF');
-    expect(written.keys.toSet(), {'fileId', 'mode'},
-        reason: 'an Off names no track at all: nothing of the previous '
-            'selection may be carried into it, since the server rejects an '
-            'Off that arrives with a language');
+    expect(
+      written.keys.toSet(),
+      {'fileId', 'mode'},
+      reason:
+          'an Off names no track at all: nothing of the previous '
+          'selection may be carried into it, since the server rejects an '
+          'Off that arrives with a language',
+    );
   });
 
-  testWidgets('a track picked from the sheet is written back too',
-      (tester) async {
+  testWidgets('a track picked from the sheet is written back too', (
+    tester,
+  ) async {
     final link = _link();
     await _mount(tester, link, _ProbedPlayer());
 
@@ -368,13 +390,17 @@ void main() {
     await tester.tap(tile);
     await pumpUntil(tester, () => _writes(link).isNotEmpty);
 
-    expect(_writes(link), hasLength(1),
-        reason: 'a sheet pick is as deliberate as a remote one');
+    expect(
+      _writes(link),
+      hasLength(1),
+      reason: 'a sheet pick is as deliberate as a remote one',
+    );
     expect(_writes(link).single.variables['trackTitle'], _trackTitle);
   });
 
-  testWidgets('a rejected write costs the preference and not the playback',
-      (tester) async {
+  testWidgets('a rejected write costs the preference and not the playback', (
+    tester,
+  ) async {
     final player = _ProbedPlayer();
     final link = _link(rejectWrite: true);
     final container = await _mount(tester, link, player);
@@ -386,13 +412,18 @@ void main() {
     // track had already reached the player, and its rejection must not have
     // undone that.
     expect(player.selectedSubtitleTracks, hasLength(1));
-    expect(find.textContaining('Could not'), findsNothing,
-        reason: 'the viewer picked a track that is playing; a preference the '
-            'server refused is not something they can act on');
+    expect(
+      find.textContaining('Could not'),
+      findsNothing,
+      reason:
+          'the viewer picked a track that is playing; a preference the '
+          'server refused is not something they can act on',
+    );
   });
 
-  testWidgets('a pick whose body never arrives is not remembered',
-      (tester) async {
+  testWidgets('a pick whose body never arrives is not remembered', (
+    tester,
+  ) async {
     final link = _link(deliverContent: false);
     final container = await _mount(tester, link, _ProbedPlayer());
 
@@ -400,13 +431,19 @@ void main() {
     // Identified point: the failure line the viewer sees, which is the apply
     // itself finishing and failing. Anything this test asserts about the
     // write has to stand after that, not on an empty state.
-    await pumpUntil(tester,
-        () => find.textContaining('Could not load').evaluate().isNotEmpty);
+    await pumpUntil(
+      tester,
+      () => find.textContaining('Could not load').evaluate().isNotEmpty,
+    );
     await tester.pump(const Duration(seconds: 1));
 
-    expect(_writes(link), isEmpty,
-        reason: 'a track that never loaded is not what this show should open '
-            'on next time; the write goes after the apply for exactly this');
+    expect(
+      _writes(link),
+      isEmpty,
+      reason:
+          'a track that never loaded is not what this show should open '
+          'on next time; the write goes after the apply for exactly this',
+    );
   });
 
   testWidgets('a track with no language tag is not remembered', (tester) async {
@@ -420,12 +457,16 @@ void main() {
     await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
     await tester.pump(const Duration(seconds: 1));
 
-    expect(_writes(link), isEmpty,
-        reason: 'nothing usable to remember, so nothing is remembered');
+    expect(
+      _writes(link),
+      isEmpty,
+      reason: 'nothing usable to remember, so nothing is remembered',
+    );
   });
 
-  testWidgets('an mpv-native pick keeps what mpv reported about it',
-      (tester) async {
+  testWidgets('an mpv-native pick keeps what mpv reported about it', (
+    tester,
+  ) async {
     final link = _link();
     final container = await _mount(tester, link, _ProbedPlayer());
 
@@ -447,8 +488,9 @@ void main() {
     expect(written['hearingImpaired'], isFalse);
   });
 
-  testWidgets('a sheet Off with nothing applied is applied and remembered',
-      (tester) async {
+  testWidgets('a sheet Off with nothing applied is applied and remembered', (
+    tester,
+  ) async {
     final link = _link();
     final player = _ProbedPlayer();
     await _mount(tester, link, player);
@@ -474,23 +516,27 @@ void main() {
     await pumpUntil(tester, () => _sheetCount() == 0);
     await pumpUntil(tester, () => _writes(link).isNotEmpty);
 
-    expect(player.selectedSubtitleTracks, isNotEmpty,
-        reason: 'the Off reached the player, which is the step the write '
-            'follows from');
+    expect(
+      player.selectedSubtitleTracks,
+      isNotEmpty,
+      reason:
+          'the Off reached the player, which is the step the write '
+          'follows from',
+    );
     expect(_writes(link), hasLength(1));
     expect(_writes(link).single.variables['mode'], 'OFF');
   });
 
-  testWidgets('two picks in flight are written in the order they were made',
-      (tester) async {
+  testWidgets('two picks in flight are written in the order they were made', (
+    tester,
+  ) async {
     // The server's upsert is unconditional, so whichever write lands last
     // wins. Without a queue, a slow first write can land after a fast second
     // one and pin the show to a choice the viewer already moved past: the
     // hold below is what gives the first write that chance.
-    final link = _link(mutationDelays: [
-      const Duration(milliseconds: 300),
-      Duration.zero,
-    ]);
+    final link = _link(
+      mutationDelays: [const Duration(milliseconds: 300), Duration.zero],
+    );
     final player = _ProbedPlayer();
     final container = await _mount(tester, link, player);
 
@@ -511,61 +557,70 @@ void main() {
     // Both have landed: the second immediately, since it is the fast one.
     await pumpUntil(tester, () => _writes(link).length >= 2);
 
-    expect(_writes(link).map((w) => w.variables['mode']).toList(),
-        ['TRACK', 'OFF'],
-        reason: 'the queue preserves the order the viewer picked in');
+    expect(_writes(link).map((w) => w.variables['mode']).toList(), [
+      'TRACK',
+      'OFF',
+    ], reason: 'the queue preserves the order the viewer picked in');
   });
 
   testWidgets(
-      'a pick still waiting in the queue is not written against the file the '
-      'viewer moved to', (tester) async {
-    // The first write is held at the transport, so the second pick's write is
-    // still waiting in the queue -- not yet looked at -- when the State is
-    // handed a different file. That is the navigation go_router performs
-    // without rebuilding the State; see `player_screen_file_change_test.dart`
-    // for the reuse itself.
-    final link = _link(mutationDelays: [const Duration(milliseconds: 300)]);
-    final player = _ProbedPlayer();
-    final container = await _mount(tester, link, player);
+    'a pick still waiting in the queue is not written against the file the '
+    'viewer moved to',
+    (tester) async {
+      // The first write is held at the transport, so the second pick's write is
+      // still waiting in the queue -- not yet looked at -- when the State is
+      // handed a different file. That is the navigation go_router performs
+      // without rebuilding the State; see `player_screen_file_change_test.dart`
+      // for the reuse itself.
+      final link = _link(mutationDelays: [const Duration(milliseconds: 300)]);
+      final player = _ProbedPlayer();
+      final container = await _mount(tester, link, player);
 
-    // First pick: applied, and its write is now held by the transport.
-    _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
-    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
-    await tester.pump();
+      // First pick: applied, and its write is now held by the transport.
+      _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
+      await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+      await tester.pump();
 
-    // Second pick: applied, and its write is chained behind the held one.
-    _pickRemotely(container, _serverTrackId);
-    await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 2);
-    await tester.pump();
-    expect(_writes(link), isEmpty,
-        reason: 'the held write is what keeps the second one waiting, so this '
-            'is the queue state the test below depends on');
+      // Second pick: applied, and its write is chained behind the held one.
+      _pickRemotely(container, _serverTrackId);
+      await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 2);
+      await tester.pump();
+      expect(
+        _writes(link),
+        isEmpty,
+        reason:
+            'the held write is what keeps the second one waiting, so this '
+            'is the queue state the test below depends on',
+      );
 
-    // The same State, a different file.
-    await pumpPlayerScreen(
-      tester,
-      container,
-      fileId: 'file-2',
-      createPlayer: () => Player(platformPlayer: player),
-    );
+      // The same State, a different file.
+      await pumpPlayerScreen(
+        tester,
+        container,
+        fileId: 'file-2',
+        createPlayer: () => Player(platformPlayer: player),
+      );
 
-    // Past the hold and past the second write's own turn: whatever was queued
-    // has been sent, or deliberately not.
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(seconds: 1));
+      // Past the hold and past the second write's own turn: whatever was queued
+      // has been sent, or deliberately not.
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(
-      _writes(link).map((w) => w.variables['fileId']).toSet(),
-      {'file-1'},
-      reason: 'a pick made on one file is not a preference for another: the '
-          'queued write names the file it was made on, or it is not sent at '
-          'all',
-    );
-  });
+      expect(
+        _writes(link).map((w) => w.variables['fileId']).toSet(),
+        {'file-1'},
+        reason:
+            'a pick made on one file is not a preference for another: the '
+            'queued write names the file it was made on, or it is not sent at '
+            'all',
+      );
+    },
+  );
 
-  testWidgets('a pick superseded while it waited in the queue is not written',
-      (tester) async {
+  testWidgets('a pick superseded while it waited in the queue is not written', (
+    tester,
+  ) async {
     final link = _link(mutationDelays: [const Duration(milliseconds: 300)]);
     final player = _ProbedPlayer();
     final container = await _mount(tester, link, player);
@@ -601,9 +656,13 @@ void main() {
     // comes.
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
-    expect(player.selectedSubtitleTracks, hasLength(3),
-        reason: 'the Off is still held at the player, which is what leaves the '
-            'superseded pick looking current');
+    expect(
+      player.selectedSubtitleTracks,
+      hasLength(3),
+      reason:
+          'the Off is still held at the player, which is what leaves the '
+          'superseded pick looking current',
+    );
 
     // Released only now: the Off commits from here, and its own write is
     // queued behind the one that was just turned away.
@@ -616,13 +675,15 @@ void main() {
     expect(
       _writes(link).map((w) => w.variables['mode']).toList(),
       ['TRACK', 'OFF'],
-      reason: 'only the pick that is still the viewer\'s choice is stored: the '
+      reason:
+          'only the pick that is still the viewer\'s choice is stored: the '
           'superseded second pick names a track nothing is showing',
     );
     expect(
       _writes(link).map((w) => w.variables['language']).toList(),
       ['jpn', null],
-      reason: 'the superseded pick is the one omitted, not the first: the '
+      reason:
+          'the superseded pick is the one omitted, not the first: the '
           'queue still keeps the order the two surviving picks were made in',
     );
   });

@@ -27,12 +27,14 @@ class _HeldRead extends SettingsService {
 void main() {
   test('a choice made before the first read lands is kept', () async {
     final settings = _HeldRead();
-    final container = ProviderContainer(overrides: [
-      coreSettingsServiceProvider.overrideWithValue(settings),
-    ]);
+    final container = ProviderContainer(
+      overrides: [coreSettingsServiceProvider.overrideWithValue(settings)],
+    );
     addTearDown(container.dispose);
-    final sub =
-        container.listen(legacyMacVideoOutputProvider, (previous, next) {});
+    final sub = container.listen(
+      legacyMacVideoOutputProvider,
+      (previous, next) {},
+    );
     addTearDown(sub.close);
 
     await container.read(legacyMacVideoOutputProvider.notifier).set(true);
@@ -47,12 +49,14 @@ void main() {
 
   test('resolves to the stored value without a choice', () async {
     final settings = _HeldRead();
-    final container = ProviderContainer(overrides: [
-      coreSettingsServiceProvider.overrideWithValue(settings),
-    ]);
+    final container = ProviderContainer(
+      overrides: [coreSettingsServiceProvider.overrideWithValue(settings)],
+    );
     addTearDown(container.dispose);
-    final sub =
-        container.listen(legacyMacVideoOutputProvider, (previous, next) {});
+    final sub = container.listen(
+      legacyMacVideoOutputProvider,
+      (previous, next) {},
+    );
     addTearDown(sub.close);
 
     settings.read.complete(true);

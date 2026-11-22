@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../l10n/l10n.dart';
 import '../theme/app_theme.dart';
 import '../crash_reporting/startup_report_controller.dart';
@@ -22,11 +23,11 @@ class StartupErrorApp extends StatelessWidget {
   /// the lock on the shared data directory. Specifically detected, so the
   /// message can be user-actionable instead of a generic error dump.
   factory StartupErrorApp.alreadyRunning(Object error) => StartupErrorApp(
-        title: (l10n) => l10n.startupAlreadyRunningTitle,
-        message: (l10n) => l10n.startupAlreadyRunningMessage,
-        details: '$error',
-        key: const Key('startup-error-already-running'),
-      );
+    title: (l10n) => l10n.startupAlreadyRunningTitle,
+    message: (l10n) => l10n.startupAlreadyRunningMessage,
+    details: '$error',
+    key: const Key('startup-error-already-running'),
+  );
 
   /// Shown for any other fatal startup failure, with whatever underlying
   /// error text is available so the user (or a bug report) has something to
@@ -34,14 +35,13 @@ class StartupErrorApp extends StatelessWidget {
   factory StartupErrorApp.generic(
     Object error, {
     StartupReportController? report,
-  }) =>
-      StartupErrorApp(
-        title: (l10n) => l10n.startupGenericTitle,
-        message: (l10n) => l10n.startupGenericMessage,
-        details: '$error',
-        report: report,
-        key: const Key('startup-error-generic'),
-      );
+  }) => StartupErrorApp(
+    title: (l10n) => l10n.startupGenericTitle,
+    message: (l10n) => l10n.startupGenericMessage,
+    details: '$error',
+    report: report,
+    key: const Key('startup-error-generic'),
+  );
 
   /// Selectors rather than text: the factories run before any
   /// [Localizations] exists, so the strings are looked up in [build].
@@ -101,10 +101,7 @@ class StartupErrorApp extends StatelessWidget {
                 SelectableText(
                   details!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
                 ),
               ],
               if (report != null) ...[
@@ -133,28 +130,28 @@ class _SendReportButton extends StatelessWidget {
         final l10n = context.l10n;
         final (icon, label, onPressed) = switch (state) {
           StartupReportState.idle => (
-              const Icon(Icons.send_outlined),
-              l10n.startupSendReport,
-              controller.send,
-            ),
+            const Icon(Icons.send_outlined),
+            l10n.startupSendReport,
+            controller.send,
+          ),
           StartupReportState.sending => (
-              const SizedBox.square(
-                dimension: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              l10n.startupSendingReport,
-              null,
+            const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
+            l10n.startupSendingReport,
+            null,
+          ),
           StartupReportState.sent => (
-              const Icon(Icons.check),
-              l10n.startupReportSent,
-              null,
-            ),
+            const Icon(Icons.check),
+            l10n.startupReportSent,
+            null,
+          ),
           StartupReportState.failed => (
-              const Icon(Icons.refresh),
-              l10n.startupReportFailed,
-              controller.send,
-            ),
+            const Icon(Icons.refresh),
+            l10n.startupReportFailed,
+            controller.send,
+          ),
         };
         return OutlinedButton.icon(
           key: const Key('startup-report-button'),

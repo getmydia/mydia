@@ -30,9 +30,11 @@ List<SubtitleTrack> selectableTracks(
   if (isDirectPlay) return tracks;
 
   return tracks
-      .where((t) => isImageSubtitleTrack(t)
-          ? imageSidecars && isImageSidecarCandidate(t)
-          : t.deliverable)
+      .where(
+        (t) => isImageSubtitleTrack(t)
+            ? imageSidecars && isImageSidecarCandidate(t)
+            : t.deliverable,
+      )
       .toList();
 }
 
@@ -364,8 +366,8 @@ enum SubtitleNotice {
 /// Original; anything else is worth another try.
 SubtitleNotice imageSidecarFailureNotice(SidecarFetch fetch) =>
     fetch is SidecarUnsupported
-        ? SubtitleNotice.imageOnlyAtOriginal
-        : SubtitleNotice.loadFailed;
+    ? SubtitleNotice.imageOnlyAtOriginal
+    : SubtitleNotice.loadFailed;
 
 /// The viewer's subtitle choice while a source switch carries it, in the
 /// server's id space, which every source can resolve.
@@ -438,10 +440,12 @@ SubtitleIntent? subtitleIntentBeforeSwitch({
   if (selectedStreamIndex == null) return const IntentUnmappable();
 
   final match = serverTracks
-      .where((t) =>
-          t.embedded &&
-          int.tryParse(t.id) == selectedStreamIndex &&
-          subtitleLanguagesCompatible(t.language, selected.language))
+      .where(
+        (t) =>
+            t.embedded &&
+            int.tryParse(t.id) == selectedStreamIndex &&
+            subtitleLanguagesCompatible(t.language, selected.language),
+      )
       .firstOrNull;
   return match == null ? const IntentUnmappable() : IntentTrack(match);
 }
@@ -529,8 +533,9 @@ SubtitleRestore resolveSubtitleIntent({
         );
         if (native != null) return RestoreTrack(native);
 
-        final onNativeSource =
-            tracks.any((t) => isMpvNativeSubtitleTrackId(t.id));
+        final onNativeSource = tracks.any(
+          (t) => isMpvNativeSubtitleTrackId(t.id),
+        );
         if (isImageSubtitleTrack(track) && !onNativeSource) {
           return const RestoreUnavailable(SubtitleNotice.imageOnlyAtOriginal);
         }
@@ -547,12 +552,11 @@ SubtitleRestore resolveSubtitleIntent({
 bool subtitleRestoreConsumed({
   required SubtitleRestore restore,
   required SubtitleTrack? selected,
-}) =>
-    switch (restore) {
-      RestoreTrack(:final track) => selected?.id == track.id,
-      RestoreOff() => selected == null,
-      RestoreUnavailable() => false,
-    };
+}) => switch (restore) {
+  RestoreTrack(:final track) => selected?.id == track.id,
+  RestoreOff() => selected == null,
+  RestoreUnavailable() => false,
+};
 
 /// Whether `_syncSelectedSubtitleTrack` may overwrite the selection with
 /// whatever media_kit reports.
@@ -564,8 +568,7 @@ bool subtitleRestoreConsumed({
 bool shouldSyncSubtitleSelectionFromPlayer({
   required bool switchInFlight,
   required bool intentPending,
-}) =>
-    !switchInFlight && !intentPending;
+}) => !switchInFlight && !intentPending;
 
 /// Whether a subtitle pick from the sheet or a remote may start now.
 ///
@@ -658,13 +661,12 @@ class SubtitleDelayNotice {
 SubtitleDelayNotice subtitleDelayNudgeNotice({
   required int totalMs,
   required bool appliesImmediately,
-}) =>
-    SubtitleDelayNotice(
-      appliesImmediately
-          ? SubtitleDelayNoticeKind.adjusted
-          : SubtitleDelayNoticeKind.adjustedAfterSave,
-      totalMs: totalMs,
-    );
+}) => SubtitleDelayNotice(
+  appliesImmediately
+      ? SubtitleDelayNoticeKind.adjusted
+      : SubtitleDelayNoticeKind.adjustedAfterSave,
+  totalMs: totalMs,
+);
 
 /// What the toast should say right after a successful subtitle delay
 /// save.
@@ -686,10 +688,10 @@ SubtitleDelayNotice subtitleDelayNudgeNotice({
 /// `shouldApplySubtitleSelection`) that took real effort to get right, on a
 /// surface (the Flutter web build) that is not the primary UI. The message
 /// is corrected instead of the behavior.
-SubtitleDelayNotice subtitleDelaySavedNotice(
-        {required bool appliesImmediately}) =>
-    SubtitleDelayNotice(
-      appliesImmediately
-          ? SubtitleDelayNoticeKind.saved
-          : SubtitleDelayNoticeKind.savedAppliesLater,
-    );
+SubtitleDelayNotice subtitleDelaySavedNotice({
+  required bool appliesImmediately,
+}) => SubtitleDelayNotice(
+  appliesImmediately
+      ? SubtitleDelayNoticeKind.saved
+      : SubtitleDelayNoticeKind.savedAppliesLater,
+);

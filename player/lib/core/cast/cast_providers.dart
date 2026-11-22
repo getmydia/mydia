@@ -94,9 +94,11 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   // never started, and an adopted session sat at a zero duration forever.
   // `nodeAddr` is left out too: neither provider reads it, and it arrives
   // after `nodeId` on every launch, which rebuilt both for nothing.
-  final identity = ref.watch(p2pStatusNotifierProvider.select(
-    (status) => (status.isInitialized, status.nodeId),
-  ));
+  final identity = ref.watch(
+    p2pStatusNotifierProvider.select(
+      (status) => (status.isInitialized, status.nodeId),
+    ),
+  );
   final host = p2pService.host;
   final selfNodeId = identity.$2;
   final roster = ref.watch(mergedRosterProvider);
@@ -154,9 +156,11 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   // full status record and disposed the `AmbientTargets` that opened it.
   // `nodeAddr` is left out too: neither provider reads it, and it arrives
   // after `nodeId` on every launch, which rebuilt both for nothing.
-  final identity = ref.watch(p2pStatusNotifierProvider.select(
-    (status) => (status.isInitialized, status.nodeId),
-  ));
+  final identity = ref.watch(
+    p2pStatusNotifierProvider.select(
+      (status) => (status.isInitialized, status.nodeId),
+    ),
+  );
   final host = p2pService.host;
   final selfNodeId = identity.$2;
   final roster = ref.watch(mergedRosterProvider);
@@ -171,7 +175,8 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
     // on-demand timeout on every scan.
     rosterSource: () async => (await roster.onlineEntries())
         .where(
-            (entry) => entry.nodeId.toLowerCase() != selfNodeId.toLowerCase())
+          (entry) => entry.nodeId.toLowerCase() != selfNodeId.toLowerCase(),
+        )
         .map((entry) => entry.nodeId)
         .toList(growable: false),
     probe: (nodeId) => probeMydiaNodeState(transport, nodeId),
@@ -205,8 +210,9 @@ void forgetDismissalsOnStop(Ref ref, AmbientTargets targets) {
 /// is no cast session and no remembered target of its own. Losing every
 /// listener drops the held connections via [AmbientTargets.release] (see
 /// `ref.onDispose` below); gaining one again re-sweeps.
-final ambientPlayingProvider =
-    StreamProvider.autoDispose<List<AmbientTarget>>((ref) async* {
+final ambientPlayingProvider = StreamProvider.autoDispose<List<AmbientTarget>>((
+  ref,
+) async* {
   final targets = ref.watch(ambientTargetsProvider);
   if (targets == null) {
     yield const [];
@@ -237,8 +243,9 @@ final ambientPlayingProvider =
 /// Every consumer here and `app.dart`'s receiver reads the one
 /// [mergedRosterProvider], so a device known to several Mydia instances is
 /// named once.
-final remoteDeviceNamesProvider =
-    FutureProvider<Map<String, String>>((ref) async {
+final remoteDeviceNamesProvider = FutureProvider<Map<String, String>>((
+  ref,
+) async {
   final entries = await ref.watch(mergedRosterProvider).entries();
   return {for (final entry in entries) entry.nodeId: entry.deviceName};
 });
@@ -249,8 +256,9 @@ final multicastLockProvider = Provider<MulticastLock>((ref) {
 });
 
 final castSessionStoreProvider = FutureProvider<CastSessionStore>((ref) async {
-  final box =
-      await Hive.openBox<Map<dynamic, dynamic>>(HiveCastSessionStore.boxName);
+  final box = await Hive.openBox<Map<dynamic, dynamic>>(
+    HiveCastSessionStore.boxName,
+  );
   ref.onDispose(() => unawaited(box.close()));
   // Read when a record is loaded: a record from before casts named their
   // instance belongs to the migrated one.
@@ -276,8 +284,12 @@ Future<MydiaCastDeps?> mydiaCastDepsFor(Ref ref, SourceId id) async {
 
   final holdsTarget = credentials.isP2p;
   if (holdsTarget) {
-    await mydiaProxyBase(proxy, credentials,
-        owner: streamingSessions, target: target);
+    await mydiaProxyBase(
+      proxy,
+      credentials,
+      owner: streamingSessions,
+      target: target,
+    );
   }
 
   return MydiaCastDeps(
@@ -313,8 +325,9 @@ Future<MydiaCastDeps?> mydiaCastDepsFor(Ref ref, SourceId id) async {
   );
 }
 
-final castSessionManagerProvider =
-    FutureProvider<CastSessionManager>((ref) async {
+final castSessionManagerProvider = FutureProvider<CastSessionManager>((
+  ref,
+) async {
   final store = await ref.watch(castSessionStoreProvider.future);
 
   // Deliberately `read`, not `watch`: rebuilding disposes a live
@@ -345,8 +358,9 @@ final castSessionManagerProvider =
 ///
 /// Autodispose is load-bearing: discovery is multicast chatter and a battery
 /// drain, so it runs only while the picker is open.
-final castDiscoveryProvider =
-    StreamProvider.autoDispose<List<CastDevice>>((ref) {
+final castDiscoveryProvider = StreamProvider.autoDispose<List<CastDevice>>((
+  ref,
+) {
   final backend = ref.watch(castBackendProvider);
   final mydiaBackend = ref.watch(mydiaCastBackendProvider);
   final capabilities = ref.watch(castCapabilitiesProvider);
@@ -356,10 +370,7 @@ final castDiscoveryProvider =
   // reached over the already-connected p2p host, not the platform's
   // local-network entitlement, so it stays in the sweep even on a build
   // (e.g. web) with no other capability at all.
-  final backends = [
-    if (capabilities.any) backend,
-    if (mydiaBackend != null) mydiaBackend,
-  ];
+  final backends = [if (capabilities.any) backend, ?mydiaBackend];
 
   if (backends.isEmpty) return Stream.value(const []);
 
@@ -372,17 +383,21 @@ final castDiscoveryProvider =
   // empty network, and the picker's permission-denied branch never renders.
   final controller = StreamController<List<CastDevice>>();
 
-  final deviceSub = mergeCastDiscovery(backends, capabilities: capabilities)
-      .listen(controller.add, onError: controller.addError);
+  final deviceSub = mergeCastDiscovery(
+    backends,
+    capabilities: capabilities,
+  ).listen(controller.add, onError: controller.addError);
 
   final failureSub = backend.failureStream
       .where((failure) => failure == CastFailureKind.discoveryDenied)
       .listen((failure) {
-    controller.addError(const CastBackendException(
-      'Discovery was refused by the operating system.',
-      CastFailureKind.discoveryDenied,
-    ));
-  });
+        controller.addError(
+          const CastBackendException(
+            'Discovery was refused by the operating system.',
+            CastFailureKind.discoveryDenied,
+          ),
+        );
+      });
 
   ref.onDispose(() {
     backend.stopDiscovery();
@@ -432,7 +447,9 @@ final castSessionProvider = StreamProvider<CastSession?>((ref) async* {
 /// goes false, so widening it back to "any session" would blank the player the
 /// moment a user chose a device.
 final isCastingProvider = Provider<bool>((ref) {
-  return ref.watch(castSessionProvider).maybeWhen(
+  return ref
+      .watch(castSessionProvider)
+      .maybeWhen(
         data: (session) => session?.mediaInfo != null,
         orElse: () => false,
       );
@@ -495,21 +512,21 @@ final castDisplayDeviceProvider = Provider<CastDevice?>((ref) {
 });
 
 final currentCastDeviceProvider = Provider<CastDevice?>((ref) {
-  return ref.watch(castSessionProvider).maybeWhen(
-        data: (session) => session?.device,
-        orElse: () => null,
-      );
+  return ref
+      .watch(castSessionProvider)
+      .maybeWhen(data: (session) => session?.device, orElse: () => null);
 });
 
 final castMediaInfoProvider = Provider<CastMediaInfo?>((ref) {
-  return ref.watch(castSessionProvider).maybeWhen(
-        data: (session) => session?.mediaInfo,
-        orElse: () => null,
-      );
+  return ref
+      .watch(castSessionProvider)
+      .maybeWhen(data: (session) => session?.mediaInfo, orElse: () => null);
 });
 
 final castPlaybackStateProvider = Provider<CastPlaybackState>((ref) {
-  return ref.watch(castSessionProvider).maybeWhen(
+  return ref
+      .watch(castSessionProvider)
+      .maybeWhen(
         data: (session) => session?.playbackState ?? CastPlaybackState.idle,
         orElse: () => CastPlaybackState.idle,
       );

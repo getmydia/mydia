@@ -10,16 +10,19 @@ String xml(String code, {String? region}) =>
     '<Error><Code>$code</Code><Message>m</Message>'
     '${region == null ? '' : '<Region>$region</Region>'}</Error>';
 
-BackendFailure map(int status, String body,
-        {bool atProbe = true, String? regionHeader}) =>
-    s3Failure(
-      status: status,
-      body: body,
-      host: 's3.example.com',
-      bucket: 'mybucket',
-      atProbe: atProbe,
-      regionHeader: regionHeader,
-    );
+BackendFailure map(
+  int status,
+  String body, {
+  bool atProbe = true,
+  String? regionHeader,
+}) => s3Failure(
+  status: status,
+  body: body,
+  host: 's3.example.com',
+  bucket: 'mybucket',
+  atProbe: atProbe,
+  regionHeader: regionHeader,
+);
 
 void noLeak(BackendFailure f) {
   expect(f.toString(), isNot(contains('X-Amz-Signature')));
@@ -120,8 +123,10 @@ void main() {
   });
 
   test('handshake error is TLS', () {
-    final f = s3TransportFailure(const HandshakeException('bad'),
-        host: 's3.example.com');
+    final f = s3TransportFailure(
+      const HandshakeException('bad'),
+      host: 's3.example.com',
+    );
     expect(f, isA<BackendUnreachable>());
     expect(f.code, kS3CodeTls);
   });

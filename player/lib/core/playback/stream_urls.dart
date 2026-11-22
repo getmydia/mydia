@@ -35,21 +35,21 @@ class ProxyStreamUrls implements StreamUrls {
 
   @override
   Future<ResolvedSource> directPlay(String fileId) async => ResolvedSource(
-        url: _proxy.buildDirectStreamUrl(fileId, target: target),
-        headers: const {},
-      );
+    url: _proxy.buildDirectStreamUrl(fileId, target: target),
+    headers: const {},
+  );
 
   @override
   ResolvedSource hls(String sessionId) => ResolvedSource(
-        url: _proxy.buildHlsUrl(sessionId, target: target),
-        headers: const {},
-      );
+    url: _proxy.buildHlsUrl(sessionId, target: target),
+    headers: const {},
+  );
 
   @override
   ResolvedSource hlsFile(String sessionId, String name) => ResolvedSource(
-        url: MediaRoutes.hlsFile(_proxy.targetBaseUrl(target), sessionId, name),
-        headers: const {},
-      );
+    url: MediaRoutes.hlsFile(_proxy.targetBaseUrl(target), sessionId, name),
+    headers: const {},
+  );
 }
 
 class HttpStreamUrls implements StreamUrls {
@@ -78,15 +78,15 @@ class HttpStreamUrls implements StreamUrls {
 
   @override
   ResolvedSource hls(String sessionId) => ResolvedSource(
-        url: '$serverUrl/api/v1/hls/$sessionId/index.m3u8',
-        headers: const {},
-        probeHeaders: {'Authorization': 'Bearer $bearerToken'},
-      );
+    url: '$serverUrl/api/v1/hls/$sessionId/index.m3u8',
+    headers: const {},
+    probeHeaders: {'Authorization': 'Bearer $bearerToken'},
+  );
 
   @override
   ResolvedSource hlsFile(String sessionId, String name) => ResolvedSource(
-        url: '$serverUrl/api/v1/hls/$sessionId/$name',
-        headers: const {},
-        probeHeaders: {'Authorization': 'Bearer $bearerToken'},
-      );
+    url: '$serverUrl/api/v1/hls/$sessionId/$name',
+    headers: const {},
+    probeHeaders: {'Authorization': 'Bearer $bearerToken'},
+  );
 }

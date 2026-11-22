@@ -52,8 +52,9 @@ Future<Box<Map<dynamic, dynamic>>> openPlaybackMemoryBox({
 }
 
 /// The persistent box backing [playbackMemoryProvider].
-final playbackMemoryBoxProvider =
-    FutureProvider<Box<Map<dynamic, dynamic>>>((ref) async {
+final playbackMemoryBoxProvider = FutureProvider<Box<Map<dynamic, dynamic>>>((
+  ref,
+) async {
   return openPlaybackMemoryBox();
 });
 

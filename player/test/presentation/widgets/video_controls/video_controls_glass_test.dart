@@ -9,22 +9,22 @@ import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(
-        body: Stack(
-          children: [
-            const Positioned.fill(child: ColoredBox(color: Colors.white)),
-            child,
-          ],
-        ),
-      ),
-    );
+  home: Scaffold(
+    body: Stack(
+      children: [
+        const Positioned.fill(child: ColoredBox(color: Colors.white)),
+        child,
+      ],
+    ),
+  ),
+);
 
 ChromePanel _panel() => ChromePanel(
-      metrics: PanelMetrics.forWidth(1600),
-      transport: const SizedBox(width: 200, height: 48),
-      scrubber: const SizedBox(width: 300, height: 32),
-      secondary: const SizedBox(width: 120, height: 40),
-    );
+  metrics: PanelMetrics.forWidth(1600),
+  transport: const SizedBox(width: 200, height: 48),
+  scrubber: const SizedBox(width: 300, height: 32),
+  secondary: const SizedBox(width: 120, height: 40),
+);
 
 void main() {
   group('ChromePanel OSD material', () {
@@ -44,16 +44,18 @@ void main() {
     testWidgets('fills flat at the OSD opacity', (tester) async {
       await tester.pumpWidget(_host(_panel()));
 
-      final fill = tester
-          .widget<DecoratedBox>(
-            find
-                .descendant(
-                  of: find.byType(BackdropFilter),
-                  matching: find.byType(DecoratedBox),
-                )
-                .first,
-          )
-          .decoration as BoxDecoration;
+      final fill =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(
+                          of: find.byType(BackdropFilter),
+                          matching: find.byType(DecoratedBox),
+                        )
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
       expect(
         fill.color,
         DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),

@@ -6,9 +6,14 @@ void main() {
   group('QualityChoice', () {
     test('fromRung maps Original to original and others to fixed', () {
       expect(
-          QualityChoice.fromRung(QualityRung.original), QualityChoice.original);
-      const rung =
-          QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+        QualityChoice.fromRung(QualityRung.original),
+        QualityChoice.original,
+      );
+      const rung = QualityRung(
+        label: '720p',
+        height: 720,
+        maxBitrateKbps: 4000,
+      );
       final choice = QualityChoice.fromRung(rung);
       expect(choice.kind, QualityChoiceKind.fixed);
       expect(choice.rung, rung);
@@ -43,16 +48,13 @@ void main() {
 
   group('FileShape.fromCandidates', () {
     test('takes the leading candidate video codec and buckets the height', () {
-      final shape = FileShape.fromCandidates(
-        const [
-          CandidateStrategy(
-            strategy: 'DIRECT_PLAY',
-            mime: 'video/mp4; codecs="hvc1.2.4.L120.B0, mp4a.40.2"',
-            videoCodec: 'hvc1.2.4.L120.B0',
-          ),
-        ],
-        sourceHeight: 1080,
-      );
+      final shape = FileShape.fromCandidates(const [
+        CandidateStrategy(
+          strategy: 'DIRECT_PLAY',
+          mime: 'video/mp4; codecs="hvc1.2.4.L120.B0, mp4a.40.2"',
+          videoCodec: 'hvc1.2.4.L120.B0',
+        ),
+      ], sourceHeight: 1080);
       expect(shape.videoCodec, 'hvc1.2.4.L120.B0');
       expect(shape.heightBucket, 1080);
     });
@@ -63,10 +65,9 @@ void main() {
         'unknown',
       );
       expect(
-        FileShape.fromCandidates(
-          const [CandidateStrategy(strategy: 'TRANSCODE', mime: 'video/mp2t')],
-          sourceHeight: 720,
-        ).videoCodec,
+        FileShape.fromCandidates(const [
+          CandidateStrategy(strategy: 'TRANSCODE', mime: 'video/mp2t'),
+        ], sourceHeight: 720).videoCodec,
         'unknown',
       );
     });

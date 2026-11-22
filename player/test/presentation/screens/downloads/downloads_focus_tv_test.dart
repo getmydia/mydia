@@ -30,26 +30,26 @@ const _source = 'acc1:owner:aa11';
 class _IdleDownloads extends Fake implements DownloadService {}
 
 DownloadedMedia _movie(int n) => DownloadedMedia(
-      id: 'row-m$n',
-      mediaId: 'm$n',
-      title: 'Lantern Accord $n',
-      quality: '1080p',
-      filePath: '/nowhere/m$n',
-      fileSize: 1,
-      // Newest first in the grid, so m0 leads.
-      downloadedAt: DateTime(2026, 1, 30 - n),
-      sourceId: _source,
-    );
+  id: 'row-m$n',
+  mediaId: 'm$n',
+  title: 'Lantern Accord $n',
+  quality: '1080p',
+  filePath: '/nowhere/m$n',
+  fileSize: 1,
+  // Newest first in the grid, so m0 leads.
+  downloadedAt: DateTime(2026, 1, 30 - n),
+  sourceId: _source,
+);
 
 DownloadTask _failed(int n) => DownloadTask(
-      id: 'failed-$n',
-      mediaId: 'x$n',
-      title: 'Quill Harbor $n',
-      quality: '1080p',
-      status: 'failed',
-      createdAt: DateTime(2026, 1, 1),
-      sourceId: _source,
-    );
+  id: 'failed-$n',
+  mediaId: 'x$n',
+  title: 'Quill Harbor $n',
+  quality: '1080p',
+  status: 'failed',
+  createdAt: DateTime(2026, 1, 1),
+  sourceId: _source,
+);
 
 void main() {
   group('Downloads focus memory (requires MYDIA_FORCE_TV=true)', () {
@@ -68,26 +68,26 @@ void main() {
     void downloadsTest(
       String description,
       Future<void> Function(WidgetTester tester) body,
-    ) =>
-        testWidgets(description, (tester) async {
-          final reportError = FlutterError.onError;
-          FlutterError.onError = (details) {
-            final where = [
-              for (final node in details.informationCollector?.call() ??
+    ) => testWidgets(description, (tester) async {
+      final reportError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        final where = [
+          for (final node
+              in details.informationCollector?.call() ??
                   const <DiagnosticsNode>[])
-                node.toStringDeep(),
-            ].join('\n');
-            final overflow =
-                details.exceptionAsString().contains('overflowed') &&
-                    where.contains('failed-download-');
-            if (!overflow) reportError?.call(details);
-          };
-          try {
-            await body(tester);
-          } finally {
-            FlutterError.onError = reportError;
-          }
-        });
+            node.toStringDeep(),
+        ].join('\n');
+        final overflow =
+            details.exceptionAsString().contains('overflowed') &&
+            where.contains('failed-download-');
+        if (!overflow) reportError?.call(details);
+      };
+      try {
+        await body(tester);
+      } finally {
+        FlutterError.onError = reportError;
+      }
+    });
 
     Future<void> pumpDownloads(
       WidgetTester tester, {
@@ -100,12 +100,17 @@ void main() {
         tester,
         const DownloadsScreen(),
         overrides: [
-          downloadedMediaProvider.overrideWith((ref) =>
-              Stream.value(media ?? [for (var n = 0; n < 24; n++) _movie(n)])),
+          downloadedMediaProvider.overrideWith(
+            (ref) =>
+                Stream.value(media ?? [for (var n = 0; n < 24; n++) _movie(n)]),
+          ),
           downloadQueueProvider.overrideWith((ref) => Stream.value(queue)),
           downloadManagerProvider.overrideWith((ref) async => _IdleDownloads()),
-          failedDownloadsProvider.overrideWith((ref) =>
-              Stream.value([for (var n = 0; n < failedCount; n++) _failed(n)])),
+          failedDownloadsProvider.overrideWith(
+            (ref) => Stream.value([
+              for (var n = 0; n < failedCount; n++) _failed(n),
+            ]),
+          ),
           storageQuotaStatusProvider.overrideWith(
             (ref) async => const StorageQuotaStatus(
               usedBytes: 1,
@@ -122,19 +127,21 @@ void main() {
     }
 
     downloadsTest(
-        'the grid entered for the first time lands on its first title',
-        (tester) async {
-      await pumpDownloads(tester);
-      // At the far right, over the grid's last column.
-      await focusIn(tester, storageSettings);
+      'the grid entered for the first time lands on its first title',
+      (tester) async {
+        await pumpDownloads(tester);
+        // At the far right, over the grid's last column.
+        await focusIn(tester, storageSettings);
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
+        await press(tester, LogicalKeyboardKey.arrowDown);
 
-      expectFocusIn(group(0));
-    });
+        expectFocusIn(group(0));
+      },
+    );
 
-    downloadsTest('the grid is re-entered on the title that left it',
-        (tester) async {
+    downloadsTest('the grid is re-entered on the title that left it', (
+      tester,
+    ) async {
       await pumpDownloads(tester, failedCount: 3);
       // Under the third failed card, so UP enters the failed row (further
       // right it reaches the row's Retry all button instead).
@@ -153,8 +160,9 @@ void main() {
       expectFocusIn(group(3));
     });
 
-    downloadsTest('the failed row is re-entered on the card that left it',
-        (tester) async {
+    downloadsTest('the failed row is re-entered on the card that left it', (
+      tester,
+    ) async {
       await pumpDownloads(tester, failedCount: 3);
       await focusIn(tester, failed(2));
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -167,8 +175,7 @@ void main() {
       expectFocusIn(failed(2));
     });
 
-    downloadsTest(
-        "LEFT from the grid's first column reaches the rail, RIGHT "
+    downloadsTest("LEFT from the grid's first column reaches the rail, RIGHT "
         'returns', (tester) async {
       await pumpDownloads(tester);
       // The first title of the second row: the grid's width in titles
@@ -184,8 +191,11 @@ void main() {
       await focusIn(tester, group(second));
 
       await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(shell.sidebarRow.hasPrimaryFocus, isTrue,
-          reason: 'focus is on ${describeFocus()}');
+      expect(
+        shell.sidebarRow.hasPrimaryFocus,
+        isTrue,
+        reason: 'focus is on ${describeFocus()}',
+      );
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expectFocusIn(group(second));
@@ -203,19 +213,24 @@ void main() {
       expect(shell.router.state.uri.path, '/s/$_source/player/m0');
     });
 
-    downloadsTest('OK on a movie still downloading offers to cancel it',
-        (tester) async {
-      await pumpDownloads(tester, media: const [], queue: [
-        DownloadTask(
-          id: 'active-0',
-          mediaId: 'a0',
-          title: 'Marrow Lane',
-          quality: '1080p',
-          status: 'downloading',
-          createdAt: DateTime(2026, 1, 1),
-          sourceId: _source,
-        ),
-      ]);
+    downloadsTest('OK on a movie still downloading offers to cancel it', (
+      tester,
+    ) async {
+      await pumpDownloads(
+        tester,
+        media: const [],
+        queue: [
+          DownloadTask(
+            id: 'active-0',
+            mediaId: 'a0',
+            title: 'Marrow Lane',
+            quality: '1080p',
+            status: 'downloading',
+            createdAt: DateTime(2026, 1, 1),
+            sourceId: _source,
+          ),
+        ],
+      );
       await focusIn(tester, const ValueKey('download-group-$_source|a0'));
 
       await press(tester, LogicalKeyboardKey.select);
@@ -224,23 +239,26 @@ void main() {
     });
 
     downloadsTest('OK on a series opens its episodes', (tester) async {
-      await pumpDownloads(tester, media: [
-        DownloadedMedia(
-          id: 'row-e1',
-          mediaId: 'e1',
-          title: 'Pilot',
-          quality: '1080p',
-          filePath: '/nowhere/e1',
-          fileSize: 1,
-          mediaType: 'episode',
-          showId: 's1',
-          showTitle: 'Copper Tide',
-          seasonNumber: 1,
-          episodeNumber: 1,
-          downloadedAt: DateTime(2026, 1, 1),
-          sourceId: _source,
-        ),
-      ]);
+      await pumpDownloads(
+        tester,
+        media: [
+          DownloadedMedia(
+            id: 'row-e1',
+            mediaId: 'e1',
+            title: 'Pilot',
+            quality: '1080p',
+            filePath: '/nowhere/e1',
+            fileSize: 1,
+            mediaType: 'episode',
+            showId: 's1',
+            showTitle: 'Copper Tide',
+            seasonNumber: 1,
+            episodeNumber: 1,
+            downloadedAt: DateTime(2026, 1, 1),
+            sourceId: _source,
+          ),
+        ],
+      );
       await focusIn(tester, const ValueKey('download-group-$_source|s1'));
 
       await press(tester, LogicalKeyboardKey.select);

@@ -70,7 +70,10 @@ class FakeSmbNative implements SmbNative {
 
   @override
   Future<List<FileEntry>> list(
-      SmbTarget t, SmbCredentials c, String dir) async {
+    SmbTarget t,
+    SmbCredentials c,
+    String dir,
+  ) async {
     _check(t);
     final tree = _shares[t.share] ?? {};
     if (dir != '/' && tree[dir]?.isDir != true) {
@@ -98,7 +101,10 @@ class FakeSmbNative implements SmbNative {
 
   @override
   Future<List<String>> listShares(
-      String host, int port, SmbCredentials c) async {
+    String host,
+    int port,
+    SmbCredentials c,
+  ) async {
     _check();
     final h = hostFailures[host];
     if (h != null) throw h;

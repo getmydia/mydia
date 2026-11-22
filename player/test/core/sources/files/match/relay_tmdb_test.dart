@@ -7,10 +7,10 @@ import 'package:player/core/sources/files/match/relay_tmdb.dart';
 
 void main() {
   http.Response json(Object body, [int status = 200]) => http.Response(
-        jsonEncode(body),
-        status,
-        headers: {'content-type': 'application/json'},
-      );
+    jsonEncode(body),
+    status,
+    headers: {'content-type': 'application/json'},
+  );
 
   test('searchMovies sends query and year and reads candidates', () async {
     late Uri seen;
@@ -33,8 +33,10 @@ void main() {
     final c = await tmdb.searchMovies('Copper Valley', year: 2018);
     expect(seen.path, '/tmdb/movies/search');
     expect(seen.queryParameters, {'query': 'Copper Valley', 'year': '2018'});
-    expect((c.single.id, c.single.title, c.single.year),
-        (7, 'Copper Valley', 2018));
+    expect(
+      (c.single.id, c.single.title, c.single.year),
+      (7, 'Copper Valley', 2018),
+    );
     expect(c.single.originalTitle, 'Vallée');
   });
 
@@ -80,18 +82,22 @@ void main() {
 
   test('movie maps details', () async {
     final tmdb = RelayTmdb(
-      client: MockClient((_) async => json({
-            'title': 'Copper Valley',
-            'release_date': '2018-05-01',
-            'overview': 'Words',
-            'poster_path': '/p.jpg',
-            'backdrop_path': '/b.jpg',
-            'runtime': 101,
-          })),
+      client: MockClient(
+        (_) async => json({
+          'title': 'Copper Valley',
+          'release_date': '2018-05-01',
+          'overview': 'Words',
+          'poster_path': '/p.jpg',
+          'backdrop_path': '/b.jpg',
+          'runtime': 101,
+        }),
+      ),
     );
     final m = await tmdb.movie(7);
-    expect((m.tmdbId, m.year, m.runtimeMinutes, m.posterPath),
-        (7, 2018, 101, '/p.jpg'));
+    expect(
+      (m.tmdbId, m.year, m.runtimeMinutes, m.posterPath),
+      (7, 2018, 101, '/p.jpg'),
+    );
     expect(m.releaseDate, '2018-05-01');
   });
 
@@ -114,7 +120,7 @@ void main() {
               'episode_number': 1,
               'name': 'Pilot',
               'still_path': '/s.jpg',
-              'air_date': '2001-01-01'
+              'air_date': '2001-01-01',
             },
             {'episode_number': 2, 'name': 'Two', 'runtime': 50},
           ],
@@ -122,8 +128,11 @@ void main() {
       }),
     );
     final s = await tmdb.show(3, seasons: [2, 2, 4]);
-    expect(paths,
-        ['/tmdb/tv/shows/3', '/tmdb/tv/shows/3/2', '/tmdb/tv/shows/3/4']);
+    expect(paths, [
+      '/tmdb/tv/shows/3',
+      '/tmdb/tv/shows/3/2',
+      '/tmdb/tv/shows/3/4',
+    ]);
     expect(s.seasons.keys, unorderedEquals([2, 4]));
     final eps = s.seasons[2]!;
     expect(eps[0].runtimeMinutes, 45);

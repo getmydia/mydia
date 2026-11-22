@@ -10,8 +10,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 // A constructor call or a `.new` tear-off. Type references alone are fine.
-final RegExp _rawImage =
-    RegExp(r'\bCachedNetworkImage(Provider)?\s*(\(|\.new\b)');
+final RegExp _rawImage = RegExp(
+  r'\bCachedNetworkImage(Provider)?\s*(\(|\.new\b)',
+);
 
 // The one file allowed to name the provider: it defines the subclass.
 const String _allowed = 'lib/core/cache/artwork_decode.dart';
@@ -51,7 +52,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'Use ArtworkImage(...) or artworkImageProvider(...):\n'
+      reason:
+          'Use ArtworkImage(...) or artworkImageProvider(...):\n'
           '${offenders.join('\n')}',
     );
   });

@@ -61,8 +61,9 @@ class CastBarRow extends StatelessWidget {
                       Flexible(
                         child: Text(
                           status,
-                          style: text.bodySmall
-                              ?.copyWith(color: palette.textSecondary),
+                          style: text.bodySmall?.copyWith(
+                            color: palette.textSecondary,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

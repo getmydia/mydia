@@ -6,14 +6,17 @@ import 'package:player/presentation/screens/settings/widgets/settings_section.da
 
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(
-    MaterialApp(home: Scaffold(body: ListView(children: [child]))),
+    MaterialApp(
+      home: Scaffold(body: ListView(children: [child])),
+    ),
   );
   await tester.pump();
 }
 
 void main() {
-  testWidgets('SettingsSection renders its label above its card',
-      (tester) async {
+  testWidgets('SettingsSection renders its label above its card', (
+    tester,
+  ) async {
     await _pump(
       tester,
       SettingsSection(
@@ -36,8 +39,9 @@ void main() {
     expect(labelY, lessThan(cardY));
   });
 
-  testWidgets('SettingsSection tracks out its label for the eyebrow style',
-      (tester) async {
+  testWidgets('SettingsSection tracks out its label for the eyebrow style', (
+    tester,
+  ) async {
     await _pump(
       tester,
       const SettingsSection(label: 'Playback', children: [SizedBox()]),
@@ -48,35 +52,39 @@ void main() {
   });
 
   testWidgets(
-      'SettingsCard draws a divider between rows but not after the last',
-      (tester) async {
-    await _pump(
-      tester,
-      SettingsCard(
-        children: [
-          SettingsRow.navigation(
-              icon: Icons.looks_one, title: 'One', onTap: () {}),
-          SettingsRow.navigation(
-              icon: Icons.looks_two, title: 'Two', onTap: () {}),
-          SettingsRow.navigation(
-              icon: Icons.looks_3, title: 'Three', onTap: () {}),
-        ],
-      ),
-    );
+    'SettingsCard draws a divider between rows but not after the last',
+    (tester) async {
+      await _pump(
+        tester,
+        SettingsCard(
+          children: [
+            SettingsRow.navigation(
+              icon: Icons.looks_one,
+              title: 'One',
+              onTap: () {},
+            ),
+            SettingsRow.navigation(
+              icon: Icons.looks_two,
+              title: 'Two',
+              onTap: () {},
+            ),
+            SettingsRow.navigation(
+              icon: Icons.looks_3,
+              title: 'Three',
+              onTap: () {},
+            ),
+          ],
+        ),
+      );
 
-    expect(find.byType(Divider), findsNWidgets(2));
-  });
+      expect(find.byType(Divider), findsNWidgets(2));
+    },
+  );
 
   testWidgets('SettingsCard uses the shared card radius', (tester) async {
-    await _pump(
-      tester,
-      const SettingsCard(children: [SizedBox(height: 40)]),
-    );
+    await _pump(tester, const SettingsCard(children: [SizedBox(height: 40)]));
 
     final clip = tester.widget<ClipRRect>(find.byType(ClipRRect).first);
-    expect(
-      clip.borderRadius,
-      BorderRadius.circular(AppTheme.radiusCard),
-    );
+    expect(clip.borderRadius, BorderRadius.circular(AppTheme.radiusCard));
   });
 }

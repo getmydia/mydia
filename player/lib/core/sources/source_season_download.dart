@@ -35,11 +35,13 @@ Future<BulkDownloadResult> queueSourceSeason({
         continue;
       }
       try {
-        await manager.start(DownloadRequest(
-          ref: episode.ref,
-          optionId: optionId,
-          metadata: metadataFor(episode),
-        ));
+        await manager.start(
+          DownloadRequest(
+            ref: episode.ref,
+            optionId: optionId,
+            metadata: metadataFor(episode),
+          ),
+        );
         queued++;
       } catch (e) {
         debugPrint('Failed to queue download for ${episode.title}: $e');

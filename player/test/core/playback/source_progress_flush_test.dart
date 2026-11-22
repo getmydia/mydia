@@ -9,6 +9,7 @@ import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
+
 import '../../test_utils/mydia_test_source.dart';
 import '../../test_utils/scripted_mydia_transport.dart';
 
@@ -44,15 +45,21 @@ LocalPlaybackProgress _p(String source, String id, int pos) =>
 void main() {
   test('every source key is prefixed with its source id', () {
     expect(
-        progressKey(const ItemRef(
-            sourceId: testMydiaSourceId,
-            kind: ItemKind.movie,
-            externalId: '7')),
-        'macct:owner:inst-1|7');
+      progressKey(
+        const ItemRef(
+          sourceId: testMydiaSourceId,
+          kind: ItemKind.movie,
+          externalId: '7',
+        ),
+      ),
+      'macct:owner:inst-1|7',
+    );
     expect(
-        progressKey(const ItemRef(
-            sourceId: _plex, kind: ItemKind.movie, externalId: '7')),
-        'acc1:owner:aa11|7');
+      progressKey(
+        const ItemRef(sourceId: _plex, kind: ItemKind.movie, externalId: '7'),
+      ),
+      'acc1:owner:aa11|7',
+    );
   });
 
   test('a record without a source id is kept as pre-account', () async {
@@ -107,8 +114,8 @@ void main() {
   });
 
   test('two Mydia instances each receive only their own records', () async {
-    final transportA = ScriptedMydiaTransport((_, __) => <String, dynamic>{});
-    final transportB = ScriptedMydiaTransport((_, __) => <String, dynamic>{});
+    final transportA = ScriptedMydiaTransport((_, _) => <String, dynamic>{});
+    final transportB = ScriptedMydiaTransport((_, _) => <String, dynamic>{});
     final a = testMydiaSourceOver(transportA, accountId: 'macct');
     final b = testMydiaSourceOver(transportB, accountId: 'macctb');
     expect(a.source.id, isNot(b.source.id));
@@ -129,44 +136,47 @@ void main() {
     final sentA = transportA.requests.map((r) => r.variables).toList();
     final sentB = transportB.requests.map((r) => r.variables).toList();
     expect(sentA, [
-      {'movieId': '10', 'positionSeconds': 11, 'durationSeconds': 100}
+      {'movieId': '10', 'positionSeconds': 11, 'durationSeconds': 100},
     ]);
     expect(sentB, [
-      {'movieId': '10', 'positionSeconds': 22, 'durationSeconds': 100}
+      {'movieId': '10', 'positionSeconds': 22, 'durationSeconds': 100},
     ]);
     expect(store.unsynced(), isEmpty);
   });
 
-  test('invalidates once per source with an accepted push, not failures',
-      () async {
-    final store = InMemoryPlaybackProgressStore();
-    await store.save(_p(_plex.value, '1', 10));
-    await store.save(_p(_plex.value, '2', 20));
-    await store.save(_p(_jelly.value, '3', 30));
-    final plex = _Sync();
-    final jelly = _Sync()..fail = true;
-    final invalidated = <Set<InvalidationTarget>>[];
+  test(
+    'invalidates once per source with an accepted push, not failures',
+    () async {
+      final store = InMemoryPlaybackProgressStore();
+      await store.save(_p(_plex.value, '1', 10));
+      await store.save(_p(_plex.value, '2', 20));
+      await store.save(_p(_jelly.value, '3', 30));
+      final plex = _Sync();
+      final jelly = _Sync()..fail = true;
+      final invalidated = <Set<InvalidationTarget>>[];
 
-    await flushSourceProgress(
-      store: store,
-      syncFor: (id) => id == _plex ? plex : jelly,
-      reachable: (_) => true,
-      now: DateTime(2026),
-      invalidate: (targets) async => invalidated.add(targets.toSet()),
-    );
+      await flushSourceProgress(
+        store: store,
+        syncFor: (id) => id == _plex ? plex : jelly,
+        reachable: (_) => true,
+        now: DateTime(2026),
+        invalidate: (targets) async => invalidated.add(targets.toSet()),
+      );
 
-    expect(invalidated, [SourceRules.offlineProgressSynced(_plex)]);
-  });
+      expect(invalidated, [SourceRules.offlineProgressSynced(_plex)]);
+    },
+  );
 
   test('a failed push stays unsynced', () async {
     final store = InMemoryPlaybackProgressStore();
     await store.save(_p(_plex.value, '1', 10));
     final plex = _Sync()..fail = true;
     await flushSourceProgress(
-        store: store,
-        syncFor: (_) => plex,
-        reachable: (_) => true,
-        now: DateTime(2026));
+      store: store,
+      syncFor: (_) => plex,
+      reachable: (_) => true,
+      now: DateTime(2026),
+    );
     expect(store.unsynced(), hasLength(1));
   });
 }

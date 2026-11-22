@@ -109,7 +109,7 @@ class SidebarFocusBoundary {
     final scope = contentScope;
     final fallback =
         (scope == null ? null : FocusMemory.landingTargetWithin(scope)) ??
-            _firstFocusableInContent();
+        _firstFocusableInContent();
     if (fallback == null) return false;
     fallback.requestFocus();
     return _landed(fallback);

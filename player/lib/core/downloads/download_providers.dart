@@ -84,7 +84,8 @@ Future<DownloadService> downloadManager(Ref ref) async {
   // The lock screen shows the foreground notification, so a locked or hidden
   // source never names its downloads there.
   service.setDiscreetSources(
-      (source) => ref.read(sourceLocksProvider).containsKey(source));
+    (source) => ref.read(sourceLocksProvider).containsKey(source),
+  );
 
   service.setArtworkFetcher((task, art) async {
     final request = await ref
@@ -108,8 +109,9 @@ bool _sourceMayReturn(Ref ref, SourceId source) {
   final records = ref.read(sourceRecordsProvider);
   final snapshot = records.value;
   if (snapshot == null) return true;
-  return snapshot.accounts
-      .any((record) => source.value.startsWith('${record.account.id}:'));
+  return snapshot.accounts.any(
+    (record) => source.value.startsWith('${record.account.id}:'),
+  );
 }
 
 /// Sources whose downloads may be listed: every source the switcher shows.
@@ -117,8 +119,8 @@ bool _sourceMayReturn(Ref ref, SourceId source) {
 /// it.
 @riverpod
 Set<SourceId> visibleDownloadSources(Ref ref) => {
-      for (final source in ref.watch(sourcesProvider)) source.id,
-    };
+  for (final source in ref.watch(sourcesProvider)) source.id,
+};
 
 @riverpod
 Stream<List<DownloadTask>> downloadQueue(Ref ref) async* {
@@ -145,17 +147,18 @@ List<T> _visibleOnly<T>(
   Iterable<T> rows,
   Set<SourceId> visible,
   SourceId Function(T) sourceOf,
-) =>
-    rows.where((row) => visible.contains(sourceOf(row))).toList();
+) => rows.where((row) => visible.contains(sourceOf(row))).toList();
 
 /// Returns only active tasks (not failed, completed, or cancelled).
 List<DownloadTask> _getActiveTasks(DownloadDatabase database) {
   return database
       .getAllTasks()
-      .where((t) =>
-          t.status != 'failed' &&
-          t.status != 'completed' &&
-          t.status != 'cancelled')
+      .where(
+        (t) =>
+            t.status != 'failed' &&
+            t.status != 'completed' &&
+            t.status != 'cancelled',
+      )
       .toList();
 }
 

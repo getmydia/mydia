@@ -18,12 +18,11 @@ ServerCompatibilityInfo server({
   String version = currentVersion,
   String min = currentVersion,
   String recommended = currentVersion,
-}) =>
-    ServerCompatibilityInfo(
-      version: version,
-      minPlayerVersion: min,
-      recommendedPlayerVersion: recommended,
-    );
+}) => ServerCompatibilityInfo(
+  version: version,
+  minPlayerVersion: min,
+  recommendedPlayerVersion: recommended,
+);
 
 void main() {
   group('evaluateCompatibility', () {
@@ -34,16 +33,18 @@ void main() {
       );
     });
 
-    test('a server that predates the compatibility query is required to update',
-        () {
-      expect(
-        evaluateCompatibility(
-          playerVersion: currentVersion,
-          server: const ServerCompatibilityInfo.predatesQuery(),
-        ),
-        CompatibilityVerdict.serverUpdateRequired,
-      );
-    });
+    test(
+      'a server that predates the compatibility query is required to update',
+      () {
+        expect(
+          evaluateCompatibility(
+            playerVersion: currentVersion,
+            server: const ServerCompatibilityInfo.predatesQuery(),
+          ),
+          CompatibilityVerdict.serverUpdateRequired,
+        );
+      },
+    );
 
     test('a null server means unknown', () {
       expect(
@@ -115,7 +116,10 @@ void main() {
         evaluateCompatibility(
           playerVersion: currentVersion,
           server: server(
-              version: '0.15.0-beta.1', min: '0.0.0', recommended: '0.0.0'),
+            version: '0.15.0-beta.1',
+            min: '0.0.0',
+            recommended: '0.0.0',
+          ),
         ),
         CompatibilityVerdict.serverUpdateRecommended,
       );
@@ -190,10 +194,7 @@ void main() {
 
     test('an unversioned dev-build player yields unknown, symmetrically', () {
       expect(
-        evaluateCompatibility(
-          playerVersion: '0.0.0-dev',
-          server: server(),
-        ),
+        evaluateCompatibility(playerVersion: '0.0.0-dev', server: server()),
         CompatibilityVerdict.unknown,
       );
     });
@@ -222,7 +223,9 @@ void main() {
     test('recommendedServerVersion parses as a version', () {
       expect(
         VersionComparator.compareCore(
-            Compatibility.recommendedServerVersion, '0.0.0'),
+          Compatibility.recommendedServerVersion,
+          '0.0.0',
+        ),
         isNotNull,
       );
     });
@@ -256,18 +259,26 @@ void main() {
       expect(CompatibilityVerdict.playerUpdateRecommended.showsBanner, isTrue);
       expect(CompatibilityVerdict.playerUpdateRecommended.isRequired, isFalse);
       expect(
-          CompatibilityVerdict.playerUpdateRecommended.isDismissible, isTrue);
+        CompatibilityVerdict.playerUpdateRecommended.isDismissible,
+        isTrue,
+      );
       expect(
-          CompatibilityVerdict.serverUpdateRecommended.isDismissible, isTrue);
+        CompatibilityVerdict.serverUpdateRecommended.isDismissible,
+        isTrue,
+      );
     });
 
     test('isPlayerBehind is true only for the two player-side verdicts', () {
       expect(CompatibilityVerdict.playerUpdateRequired.isPlayerBehind, isTrue);
       expect(
-          CompatibilityVerdict.playerUpdateRecommended.isPlayerBehind, isTrue);
+        CompatibilityVerdict.playerUpdateRecommended.isPlayerBehind,
+        isTrue,
+      );
       expect(CompatibilityVerdict.serverUpdateRequired.isPlayerBehind, isFalse);
       expect(
-          CompatibilityVerdict.serverUpdateRecommended.isPlayerBehind, isFalse);
+        CompatibilityVerdict.serverUpdateRecommended.isPlayerBehind,
+        isFalse,
+      );
       expect(CompatibilityVerdict.compatible.isPlayerBehind, isFalse);
       expect(CompatibilityVerdict.unknown.isPlayerBehind, isFalse);
     });

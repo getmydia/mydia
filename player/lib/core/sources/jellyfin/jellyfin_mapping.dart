@@ -22,29 +22,34 @@ LibraryKind? jellyfinLibraryKind(String? collectionType) =>
     };
 
 ItemKind? jellyfinItemKind(String? type) => switch (type) {
-      'Movie' => ItemKind.movie,
-      'Series' => ItemKind.show,
-      'Season' => ItemKind.season,
-      'Episode' => ItemKind.episode,
-      'Video' || 'MusicVideo' => ItemKind.video,
-      'Folder' || 'CollectionFolder' => ItemKind.folder,
-      _ => null,
-    };
+  'Movie' => ItemKind.movie,
+  'Series' => ItemKind.show,
+  'Season' => ItemKind.season,
+  'Episode' => ItemKind.episode,
+  'Video' || 'MusicVideo' => ItemKind.video,
+  'Folder' || 'CollectionFolder' => ItemKind.folder,
+  _ => null,
+};
 
 const jellyfinSortOptions = [
   SortOption(id: 'SortName', name: SortName.title, shared: SharedSort.title),
   SortOption(
-      id: 'DateCreated',
-      name: SortName.recentlyAdded,
-      descendingByDefault: true,
-      shared: SharedSort.added),
+    id: 'DateCreated',
+    name: SortName.recentlyAdded,
+    descendingByDefault: true,
+    shared: SharedSort.added,
+  ),
   SortOption(
-      id: 'PremiereDate',
-      name: SortName.releaseDate,
-      descendingByDefault: true,
-      shared: SharedSort.released),
+    id: 'PremiereDate',
+    name: SortName.releaseDate,
+    descendingByDefault: true,
+    shared: SharedSort.released,
+  ),
   SortOption(
-      id: 'CommunityRating', name: SortName.rating, descendingByDefault: true),
+    id: 'CommunityRating',
+    name: SortName.rating,
+    descendingByDefault: true,
+  ),
 ];
 
 const jellyfinFilterOptions = [
@@ -62,19 +67,22 @@ const jellyfinIdFields = 'ProviderIds';
 ExternalIds jellyfinExternalIds(Object? providerIds) {
   final ids = providerIds is Map ? providerIds : const <String, Object?>{};
   String? read(String key) => switch (ids[key]) {
-        final String v when v.isNotEmpty => v,
-        _ => null,
-      };
+    final String v when v.isNotEmpty => v,
+    _ => null,
+  };
   return ExternalIds(
-      tmdb: read('Tmdb'), tvdb: read('Tvdb'), imdb: read('Imdb'));
+    tmdb: read('Tmdb'),
+    tvdb: read('Tvdb'),
+    imdb: read('Imdb'),
+  );
 }
 
 /// `IncludeItemTypes` for browsing a library of [kind].
 String jellyfinItemTypes(LibraryKind kind) => switch (kind) {
-      LibraryKind.movies => 'Movie',
-      LibraryKind.shows => 'Series',
-      LibraryKind.videos => 'Video,Movie,Episode,MusicVideo',
-    };
+  LibraryKind.movies => 'Movie',
+  LibraryKind.shows => 'Series',
+  LibraryKind.videos => 'Video,Movie,Episode,MusicVideo',
+};
 
 /// The format the player asks Jellyfin to convert a sidecar to.
 String jellyfinSubtitleExtension(String? codec) =>
@@ -120,15 +128,18 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
       : null;
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: kind, externalId: id),
-    title: json['Name'] as String? ??
+    title:
+        json['Name'] as String? ??
         'Untitled', // l10n-ignore: stored name for a server item that has none
     subtitle: episode ? episodeSubtitle(parentIndex, index) : null,
     showTitle: episode ? json['SeriesName'] as String? : null,
     year: json['ProductionYear'] as int?,
-    poster: seriesPoster ??
+    poster:
+        seriesPoster ??
         image('Primary', tags['Primary']) ??
         image('Thumb', tags['Thumb']),
-    backdrop: (episode ? image('Primary', tags['Primary']) : null) ??
+    backdrop:
+        (episode ? image('Primary', tags['Primary']) : null) ??
         image('Backdrop', backdrops.firstOrNull) ??
         image('Thumb', tags['Thumb']),
     durationSeconds: jellyfinSeconds(json['RunTimeTicks']),
@@ -165,17 +176,18 @@ ItemRef? _jref(SourceId sourceId, ItemKind kind, Object? id) => id is String
     : null;
 
 List<Person> _actors(Object? list) => [
-      for (final p in (list is List ? list : const []))
-        if (p is Map && p['Type'] == 'Actor' && p['Name'] is String)
-          Person(
-            name: p['Name'] as String,
-            role: p['Role'] as String?,
-            photo: p['Id'] is String && p['PrimaryImageTag'] is String
-                ? ArtworkRef(
-                    '/Items/${p['Id']}/Images/Primary?tag=${p['PrimaryImageTag']}')
-                : null,
-          ),
-    ];
+  for (final p in (list is List ? list : const []))
+    if (p is Map && p['Type'] == 'Actor' && p['Name'] is String)
+      Person(
+        name: p['Name'] as String,
+        role: p['Role'] as String?,
+        photo: p['Id'] is String && p['PrimaryImageTag'] is String
+            ? ArtworkRef(
+                '/Items/${p['Id']}/Images/Primary?tag=${p['PrimaryImageTag']}',
+              )
+            : null,
+      ),
+];
 
 String? _trailerUrl(Object? trailers) {
   if (trailers is! List || trailers.isEmpty) return null;
@@ -184,12 +196,15 @@ String? _trailerUrl(Object? trailers) {
 }
 
 List<String> _names(Object? list) => [
-      for (final p in (list is List ? list : const []))
-        if (p is Map && p['Name'] is String) p['Name'] as String,
-    ];
+  for (final p in (list is List ? list : const []))
+    if (p is Map && p['Name'] is String) p['Name'] as String,
+];
 
 MediaStreamInfo? _stream(
-    String itemId, String sourceId, Map<String, dynamic> s) {
+  String itemId,
+  String sourceId,
+  Map<String, dynamic> s,
+) {
   final kind = switch (s['Type']) {
     'Audio' => MediaStreamKind.audio,
     'Subtitle' => MediaStreamKind.subtitle,
@@ -232,10 +247,7 @@ MediaVersion? _version(String itemId, Map<String, dynamic> source) {
     bitrateKbps: bitrate == null ? null : (bitrate / 1000).round(),
     durationSeconds: jellyfinSeconds(source['RunTimeTicks']),
     streamPath: '/Videos/$itemId/stream?static=true&mediaSourceId=$id',
-    streams: [
-      for (final s in streams)
-        if (_stream(itemId, id, s) case final info?) info,
-    ],
+    streams: [for (final s in streams) ?_stream(itemId, id, s)],
   );
 }
 
@@ -272,24 +284,23 @@ ItemDetail? jellyfinDetail(SourceId sourceId, Map<String, dynamic> json) {
         : null,
     versions: [
       for (final s in (json['MediaSources'] as List? ?? const []))
-        if (s is Map)
-          if (_version(itemId, s.cast<String, dynamic>()) case final v?) v,
+        if (s is Map) ?_version(itemId, s.cast<String, dynamic>()),
     ],
   );
 }
 
 /// A `/MediaSegments/{id}` answer. Ticks are 100ns, so 10,000 per ms.
 List<MediaSegment> jellyfinSegments(Map<String, dynamic> body) => [
-      for (final s in (body['Items'] as List? ?? const []))
-        if (s is Map)
-          MediaSegment(
-            type: switch (s['Type']) {
-              'Intro' => SegmentType.intro,
-              'Outro' => SegmentType.credits,
-              'Commercial' => SegmentType.commercial,
-              _ => SegmentType.unknown,
-            },
-            startMs: ((s['StartTicks'] as num?)?.toInt() ?? 0) ~/ 10000,
-            endMs: ((s['EndTicks'] as num?)?.toInt() ?? 0) ~/ 10000,
-          ),
-    ].where((s) => s.actionable).toList();
+  for (final s in (body['Items'] as List? ?? const []))
+    if (s is Map)
+      MediaSegment(
+        type: switch (s['Type']) {
+          'Intro' => SegmentType.intro,
+          'Outro' => SegmentType.credits,
+          'Commercial' => SegmentType.commercial,
+          _ => SegmentType.unknown,
+        },
+        startMs: ((s['StartTicks'] as num?)?.toInt() ?? 0) ~/ 10000,
+        endMs: ((s['EndTicks'] as num?)?.toInt() ?? 0) ~/ 10000,
+      ),
+].where((s) => s.actionable).toList();

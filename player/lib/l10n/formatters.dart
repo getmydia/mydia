@@ -83,8 +83,7 @@ extension AppFormatters on AppLocalizations {
       SourceFault.serverRefused => sourceFaultServerRefused,
       SourceFault.serverHttp => sourceFaultServerHttp(value),
       SourceFault.serverUnreadable ||
-      SourceFault.stashUnreadable =>
-        sourceFaultServerUnreadable,
+      SourceFault.stashUnreadable => sourceFaultServerUnreadable,
       SourceFault.serverNoData => sourceFaultServerNoData,
       SourceFault.noFileToDownload => sourceFaultNoFileToDownload,
       SourceFault.mydiaBadServerId => sourceFaultMydiaBadServerId,
@@ -123,13 +122,16 @@ extension AppFormatters on AppLocalizations {
     final detail = failure.detail ?? '';
     return switch (failure.code) {
       DownloadFailureCode.cancelled => downloadsFailureCancelled,
-      DownloadFailureCode.stalled =>
-        downloadsFailureStalled(failure.count ?? 0),
+      DownloadFailureCode.stalled => downloadsFailureStalled(
+        failure.count ?? 0,
+      ),
       DownloadFailureCode.startingUp => downloadsFailureStartingUp,
       DownloadFailureCode.source => sourceError(failure.sourceException()),
       DownloadFailureCode.transcodeFailed => downloadsFailureTranscode(detail),
-      DownloadFailureCode.networkRetries =>
-        downloadsFailureNetworkRetries(failure.count ?? 0, detail),
+      DownloadFailureCode.networkRetries => downloadsFailureNetworkRetries(
+        failure.count ?? 0,
+        detail,
+      ),
       DownloadFailureCode.network => downloadsFailureNetwork(detail),
       DownloadFailureCode.networkKind => downloadsFailureNetworkKind(detail),
       DownloadFailureCode.jobGone => downloadsFailureJobGone,
@@ -167,47 +169,46 @@ extension AppFormatters on AppLocalizations {
 
   /// The sign-in error line for [failure]; the server's own words verbatim.
   String loginFailure(LoginFailure failure) => switch (failure) {
-        LoginFailureFromServer(:final message) => message,
-        LoginFailureOfSource(:final error) => sourceError(error),
-        LoginFailureOfKind(:final kind) => switch (kind) {
-            LoginFailureKind.cannotConnect => loginErrorCannotConnect,
-            LoginFailureKind.serverNotFound => loginErrorServerNotFound,
-            LoginFailureKind.invalidCredentials => loginErrorInvalidCredentials,
-            LoginFailureKind.loginFailed => loginErrorFailed,
-            LoginFailureKind.invalidCode => loginErrorInvalidCode,
-            LoginFailureKind.signInExpired => loginErrorSignInExpired,
-            LoginFailureKind.tooManyAttempts => loginErrorTooManyAttempts,
-          },
-        LoginFailureOfPairing(:final failure) => switch (failure.kind) {
-            PairingFailureKind.serviceUnavailable => loginPairErrorUnavailable,
-            PairingFailureKind.cannotConnect => loginPairErrorCannotConnect,
-            PairingFailureKind.invalidServerAddress =>
-              loginPairErrorInvalidAddress,
-            PairingFailureKind.invalidQrServerAddress =>
-              loginPairErrorInvalidQrAddress,
-            PairingFailureKind.missingTokens => loginPairErrorMissingTokens,
-            PairingFailureKind.invalidCode => loginPairErrorInvalidCode,
-            PairingFailureKind.tooManyAttempts => loginPairErrorTooManyAttempts,
-            PairingFailureKind.serverOffline => loginPairErrorServerOffline,
-            PairingFailureKind.timedOut => loginPairErrorTimedOut,
-            PairingFailureKind.other => switch (failure.detail) {
-                final detail? => loginPairErrorFailed(detail),
-                null => loginPairErrorFailedGeneric,
-              },
-          },
-      };
+    LoginFailureFromServer(:final message) => message,
+    LoginFailureOfSource(:final error) => sourceError(error),
+    LoginFailureOfKind(:final kind) => switch (kind) {
+      LoginFailureKind.cannotConnect => loginErrorCannotConnect,
+      LoginFailureKind.serverNotFound => loginErrorServerNotFound,
+      LoginFailureKind.invalidCredentials => loginErrorInvalidCredentials,
+      LoginFailureKind.loginFailed => loginErrorFailed,
+      LoginFailureKind.invalidCode => loginErrorInvalidCode,
+      LoginFailureKind.signInExpired => loginErrorSignInExpired,
+      LoginFailureKind.tooManyAttempts => loginErrorTooManyAttempts,
+    },
+    LoginFailureOfPairing(:final failure) => switch (failure.kind) {
+      PairingFailureKind.serviceUnavailable => loginPairErrorUnavailable,
+      PairingFailureKind.cannotConnect => loginPairErrorCannotConnect,
+      PairingFailureKind.invalidServerAddress => loginPairErrorInvalidAddress,
+      PairingFailureKind.invalidQrServerAddress =>
+        loginPairErrorInvalidQrAddress,
+      PairingFailureKind.missingTokens => loginPairErrorMissingTokens,
+      PairingFailureKind.invalidCode => loginPairErrorInvalidCode,
+      PairingFailureKind.tooManyAttempts => loginPairErrorTooManyAttempts,
+      PairingFailureKind.serverOffline => loginPairErrorServerOffline,
+      PairingFailureKind.timedOut => loginPairErrorTimedOut,
+      PairingFailureKind.other => switch (failure.detail) {
+        final detail? => loginPairErrorFailed(detail),
+        null => loginPairErrorFailedGeneric,
+      },
+    },
+  };
 
   /// The progress line under the code field while pairing.
   String pairingStepText(PairingStep step) => switch (step) {
-        PairingStep.lookingUpCode => loginPairStepLookingUp,
-        PairingStep.validatingQr => loginPairStepValidatingQr,
-        PairingStep.resolvingCode => loginPairStepResolving,
-        PairingStep.initializing => loginPairStepInitializing,
-        PairingStep.connecting => loginPairStepConnecting,
-        PairingStep.submitting => loginPairStepSubmitting,
-        PairingStep.succeeded => loginPairStepSucceeded,
-        PairingStep.paired => loginPairStepPaired,
-      };
+    PairingStep.lookingUpCode => loginPairStepLookingUp,
+    PairingStep.validatingQr => loginPairStepValidatingQr,
+    PairingStep.resolvingCode => loginPairStepResolving,
+    PairingStep.initializing => loginPairStepInitializing,
+    PairingStep.connecting => loginPairStepConnecting,
+    PairingStep.submitting => loginPairStepSubmitting,
+    PairingStep.succeeded => loginPairStepSucceeded,
+    PairingStep.paired => loginPairStepPaired,
+  };
 
   /// A coarse relative time ("3 hours ago"). [now] pins the clock in tests.
   String relativeTime(DateTime timestamp, {DateTime? now}) {
@@ -277,51 +278,50 @@ extension AppFormatters on AppLocalizations {
   }
 
   String remoteDeviceStatus(RemoteDeviceStatus status) => switch (status) {
-        RemoteDeviceStatus.revoked => settingsDevicesStatusRevoked,
-        RemoteDeviceStatus.neverActive => remoteDeviceNeverActive,
-        RemoteDeviceStatus.active => settingsDevicesStatusActive,
-        RemoteDeviceStatus.inactive => settingsDevicesStatusInactive,
-      };
+    RemoteDeviceStatus.revoked => settingsDevicesStatusRevoked,
+    RemoteDeviceStatus.neverActive => remoteDeviceNeverActive,
+    RemoteDeviceStatus.active => settingsDevicesStatusActive,
+    RemoteDeviceStatus.inactive => settingsDevicesStatusInactive,
+  };
 
   /// [linuxDesktop] names the desktop the `linux` preset follows.
   String themePresetName(
     ThemePreset preset, {
     LinuxDesktop linuxDesktop = LinuxDesktop.other,
-  }) =>
-      switch (preset) {
-        ThemePreset.projectionBooth => themePresetProjectionBooth,
-        ThemePreset.oledBlack => themePresetOledBlack,
-        ThemePreset.slate => themePresetSlate,
-        ThemePreset.macos => themePresetMacos,
-        ThemePreset.linux => switch (linuxDesktop.displayName) {
-            final name? => themePresetLinux(name),
-            null => themePresetLinuxGeneric,
-          },
-      };
+  }) => switch (preset) {
+    ThemePreset.projectionBooth => themePresetProjectionBooth,
+    ThemePreset.oledBlack => themePresetOledBlack,
+    ThemePreset.slate => themePresetSlate,
+    ThemePreset.macos => themePresetMacos,
+    ThemePreset.linux => switch (linuxDesktop.displayName) {
+      final name? => themePresetLinux(name),
+      null => themePresetLinuxGeneric,
+    },
+  };
 
   String glassMaterialName(GlassMaterial material) => switch (material) {
-        GlassMaterial.liquid => glassMaterialLiquid,
-        GlassMaterial.frosted => glassMaterialFrosted,
-      };
+    GlassMaterial.liquid => glassMaterialLiquid,
+    GlassMaterial.frosted => glassMaterialFrosted,
+  };
 
   String subtitleSizeName(SubtitleSize size) => switch (size) {
-        SubtitleSize.small => subtitleSizeSmall,
-        SubtitleSize.medium => subtitleSizeMedium,
-        SubtitleSize.large => subtitleSizeLarge,
-        SubtitleSize.extraLarge => subtitleSizeExtraLarge,
-      };
+    SubtitleSize.small => subtitleSizeSmall,
+    SubtitleSize.medium => subtitleSizeMedium,
+    SubtitleSize.large => subtitleSizeLarge,
+    SubtitleSize.extraLarge => subtitleSizeExtraLarge,
+  };
 
   String updateTrackName(UpdateTrack track) => switch (track) {
-        UpdateTrack.stable => updateTrackStable,
-        UpdateTrack.beta => updateTrackBeta,
-        UpdateTrack.dev => updateTrackDev,
-      };
+    UpdateTrack.stable => updateTrackStable,
+    UpdateTrack.beta => updateTrackBeta,
+    UpdateTrack.dev => updateTrackDev,
+  };
 
   String updateTrackDescription(UpdateTrack track) => switch (track) {
-        UpdateTrack.stable => updateTrackStableDescription,
-        UpdateTrack.beta => updateTrackBetaDescription,
-        UpdateTrack.dev => updateTrackDevDescription,
-      };
+    UpdateTrack.stable => updateTrackStableDescription,
+    UpdateTrack.beta => updateTrackBetaDescription,
+    UpdateTrack.dev => updateTrackDevDescription,
+  };
 
   /// Auto and Original are words; a capped rung is its own label, a
   /// resolution such as "720p" that reads the same in every language.
@@ -336,15 +336,13 @@ extension AppFormatters on AppLocalizations {
   String fullscreenFailureMessage(FullscreenFailure failure) =>
       switch (failure.cause) {
         FullscreenFailureCause.documentExitRejected ||
-        FullscreenFailureCause.videoExitFailed =>
-          fullscreenExitFailed,
+        FullscreenFailureCause.videoExitFailed => fullscreenExitFailed,
         FullscreenFailureCause.documentEnabledProbeFailed ||
         FullscreenFailureCause.videoSupportProbeFailed ||
         FullscreenFailureCause.documentRequestRejected ||
         FullscreenFailureCause.playerNotWebPlayer ||
         FullscreenFailureCause.noVideoElement ||
-        FullscreenFailureCause.videoEnterFailed =>
-          fullscreenEnterFailed,
+        FullscreenFailureCause.videoEnterFailed => fullscreenEnterFailed,
       };
 
   /// The error line under the update card, or null when there is none.
@@ -408,20 +406,20 @@ extension AppFormatters on AppLocalizations {
       entry.shortLabel ? navShowsShort : navEntryLabel(entry);
 
   String _builtinNavName(String id) => switch (id) {
-        'search' => navSearch,
-        'home' => navHome,
-        'continue_watching' => nextUpContinueWatching,
-        'movies' => navMovies,
-        'shows' => navShows,
-        'calendar' => navCalendar,
-        'recently_added' => navRecentlyAdded,
-        'unwatched' => navUnwatched,
-        'favorites' => navFavorites,
-        'collections' => navCollections,
-        'downloads' => navDownloads,
-        'settings' => settingsTitle,
-        _ => id,
-      };
+    'search' => navSearch,
+    'home' => navHome,
+    'continue_watching' => nextUpContinueWatching,
+    'movies' => navMovies,
+    'shows' => navShows,
+    'calendar' => navCalendar,
+    'recently_added' => navRecentlyAdded,
+    'unwatched' => navUnwatched,
+    'favorites' => navFavorites,
+    'collections' => navCollections,
+    'downloads' => navDownloads,
+    'settings' => settingsTitle,
+    _ => id,
+  };
 
   /// A library's name: its server's, else one for its kind.
   String libraryTitle(Library library) =>
@@ -436,37 +434,37 @@ extension AppFormatters on AppLocalizations {
       };
 
   String sortName(SortName name) => switch (name) {
-        SortName.title => sortTitle,
-        SortName.year => sortYear,
-        SortName.recentlyAdded => sortRecentlyAdded,
-        SortName.dateAdded => sortDateAdded,
-        SortName.rating => sortRating,
-        SortName.duration => sortDuration,
-        SortName.popularity => sortPopularity,
-        SortName.contentRating => sortContentRating,
-        SortName.releaseDate => sortReleaseDate,
-        SortName.date => sortDate,
-        SortName.lastPlayed => sortLastPlayed,
-        SortName.lastWatched => sortLastWatched,
-        SortName.mostPlayed => sortMostPlayed,
-        SortName.watchState => sortWatchState,
-        SortName.random => sortRandom,
-      };
+    SortName.title => sortTitle,
+    SortName.year => sortYear,
+    SortName.recentlyAdded => sortRecentlyAdded,
+    SortName.dateAdded => sortDateAdded,
+    SortName.rating => sortRating,
+    SortName.duration => sortDuration,
+    SortName.popularity => sortPopularity,
+    SortName.contentRating => sortContentRating,
+    SortName.releaseDate => sortReleaseDate,
+    SortName.date => sortDate,
+    SortName.lastPlayed => sortLastPlayed,
+    SortName.lastWatched => sortLastWatched,
+    SortName.mostPlayed => sortMostPlayed,
+    SortName.watchState => sortWatchState,
+    SortName.random => sortRandom,
+  };
 
   /// A library sort sheet row.
   String sortFieldName(SortField field) => switch (field) {
-        SortField.title => sortTitle,
-        SortField.year => sortYear,
-        SortField.addedAt => sortDateAdded,
-        SortField.rating => sortRating,
-        SortField.runtime => sortDuration,
-        SortField.popularity => sortPopularity,
-        SortField.contentRating => sortContentRating,
-        SortField.releaseDate => sortReleaseDate,
-        SortField.lastPlayed => sortLastPlayed,
-        SortField.watchState => sortWatchState,
-        SortField.random => sortRandom,
-      };
+    SortField.title => sortTitle,
+    SortField.year => sortYear,
+    SortField.addedAt => sortDateAdded,
+    SortField.rating => sortRating,
+    SortField.runtime => sortDuration,
+    SortField.popularity => sortPopularity,
+    SortField.contentRating => sortContentRating,
+    SortField.releaseDate => sortReleaseDate,
+    SortField.lastPlayed => sortLastPlayed,
+    SortField.watchState => sortWatchState,
+    SortField.random => sortRandom,
+  };
 
   /// A filter chip's name.
   String filterOptionName(FilterOption option) {
@@ -481,52 +479,52 @@ extension AppFormatters on AppLocalizations {
   }
 
   String categoryFilterName(MediaCategoryFilter category) => switch (category) {
-        MediaCategoryFilter.movie => navMovies,
-        MediaCategoryFilter.animeMovie => filterCategoryAnimeMovies,
-        MediaCategoryFilter.cartoonMovie => filterCategoryCartoonMovies,
-        MediaCategoryFilter.tvShow => navShows,
-        MediaCategoryFilter.animeSeries => filterCategoryAnimeSeries,
-        MediaCategoryFilter.cartoonSeries => filterCategoryCartoonSeries,
-      };
+    MediaCategoryFilter.movie => navMovies,
+    MediaCategoryFilter.animeMovie => filterCategoryAnimeMovies,
+    MediaCategoryFilter.cartoonMovie => filterCategoryCartoonMovies,
+    MediaCategoryFilter.tvShow => navShows,
+    MediaCategoryFilter.animeSeries => filterCategoryAnimeSeries,
+    MediaCategoryFilter.cartoonSeries => filterCategoryCartoonSeries,
+  };
 
   String statsRowLabel(StatsRowId id) => switch (id) {
-        StatsRowId.playing => statsRowPlaying,
-        StatsRowId.why => statsRowWhy,
-        StatsRowId.source => statsRowSource,
-        StatsRowId.video => statsRowVideo,
-        StatsRowId.hdr => statsRowHdr,
-        StatsRowId.color => statsRowColor,
-        StatsRowId.display => statsRowDisplay,
-        StatsRowId.decoder => statsRowDecoder,
-        StatsRowId.audio => statsRowAudio,
-        StatsRowId.frames => statsRowFrames,
-        StatsRowId.buffer => statsRowBuffer,
-        StatsRowId.throughput => statsRowThroughput,
-        StatsRowId.link => statsRowLink,
-        StatsRowId.position => statsRowPosition,
-      };
+    StatsRowId.playing => statsRowPlaying,
+    StatsRowId.why => statsRowWhy,
+    StatsRowId.source => statsRowSource,
+    StatsRowId.video => statsRowVideo,
+    StatsRowId.hdr => statsRowHdr,
+    StatsRowId.color => statsRowColor,
+    StatsRowId.display => statsRowDisplay,
+    StatsRowId.decoder => statsRowDecoder,
+    StatsRowId.audio => statsRowAudio,
+    StatsRowId.frames => statsRowFrames,
+    StatsRowId.buffer => statsRowBuffer,
+    StatsRowId.throughput => statsRowThroughput,
+    StatsRowId.link => statsRowLink,
+    StatsRowId.position => statsRowPosition,
+  };
 
   /// Confirms a scaling change, which matters when the video already matches
   /// the screen and the two modes look identical.
   String videoScalingToast(VideoScaling scaling) => switch (scaling) {
-        VideoScaling.fit => videoScalingFitToast,
-        VideoScaling.fill => videoScalingFillToast,
-      };
+    VideoScaling.fit => videoScalingFitToast,
+    VideoScaling.fill => videoScalingFillToast,
+  };
 
   /// The badge before the Playing value.
   String statsPill(PlaybackMode mode) => switch (mode) {
-        PlaybackMode.direct => statsPillDirect,
-        PlaybackMode.copy => statsPillCopy,
-        PlaybackMode.transcode => statsPillTranscode,
-        PlaybackMode.localFile => statsModeLocalFile,
-      };
+    PlaybackMode.direct => statsPillDirect,
+    PlaybackMode.copy => statsPillCopy,
+    PlaybackMode.transcode => statsPillTranscode,
+    PlaybackMode.localFile => statsModeLocalFile,
+  };
 
   String statsModeName(PlaybackMode mode) => switch (mode) {
-        PlaybackMode.direct => statsModeDirectPlay,
-        PlaybackMode.copy => statsModeStreamCopy,
-        PlaybackMode.transcode => statsModeTranscode,
-        PlaybackMode.localFile => statsModeLocalFile,
-      };
+    PlaybackMode.direct => statsModeDirectPlay,
+    PlaybackMode.copy => statsModeStreamCopy,
+    PlaybackMode.transcode => statsModeTranscode,
+    PlaybackMode.localFile => statsModeLocalFile,
+  };
 
   /// The HDR row's value: the source format, `, RPU applied` when the
   /// Dolby Vision RPU is in use, then how it is rendered.
@@ -538,12 +536,12 @@ extension AppFormatters on AppLocalizations {
       HdrTonemapper.server => statsHdrByServer(source),
       HdrTonemapper.playerLibplacebo => statsHdrByPlayerLibplacebo(source),
       HdrTonemapper.edr => () {
-          final output = statsHdrOutput(
-            hdr.transfer ?? '',
-            NumberFormat('0.0', localeName).format(hdr.headroom ?? 1),
-          );
-          return statsHdrSourceThenOutput(source, output);
-        }(),
+        final output = statsHdrOutput(
+          hdr.transfer ?? '',
+          NumberFormat('0.0', localeName).format(hdr.headroom ?? 1),
+        );
+        return statsHdrSourceThenOutput(source, output);
+      }(),
     };
   }
 
@@ -560,44 +558,49 @@ extension AppFormatters on AppLocalizations {
   }
 
   String statsValue(StatsValue value) => switch (value) {
-        StatsText(:final text) => text,
-        StatsWhyValue(:final why) => statsWhyText(why),
-        StatsHdrValue(:final hdr) => statsHdrText(hdr),
-        StatsColorValue(:final source, :final output) => switch ((
-            source,
-            output
-          )) {
-            (final s?, final o?) =>
-              statsColorSourceToOutput(_colorText(s), _colorText(o)),
-            (final s?, null) => _colorText(s),
-            (null, final o?) => statsColorOutputOnly(_colorText(o)),
-            (null, null) => '',
-          },
-        StatsDisplayValue(:final headroom, :final potential) => () {
-            final number = NumberFormat('0.0', localeName);
-            return potential == null
-                ? statsDisplayHeadroom(number.format(headroom))
-                : statsDisplayHeadroomOf(
-                    number.format(headroom), number.format(potential));
-          }(),
-        StatsQualityValue(:final quality) => statsQualityText(quality),
-        StatsModeValue(:final mode) => statsModeName(mode),
-        StatsDecoderValue(:final label, :final hardware) => switch (hardware) {
-            null => label,
-            true => statsDecoderHardware(label),
-            false => statsDecoderSoftware(label),
-          },
-        StatsFramesValue(:final dropped, :final total) =>
-          statsFramesDropped(dropped, total),
-        // One decimal: a buffer that reads `18 s` for eighteen seconds
-        // running looks frozen while `18.4` visibly moves.
-        StatsBufferValue(:final ahead) => statsBufferAhead(
-            NumberFormat('0.0', localeName)
-                .format((ahead.inMilliseconds / 100).round() / 10),
-          ),
-        StatsPositionValue(:final position, :final duration) =>
-          '${statsTimecode(position)} / ${statsTimecode(duration)}',
-      };
+    StatsText(:final text) => text,
+    StatsWhyValue(:final why) => statsWhyText(why),
+    StatsHdrValue(:final hdr) => statsHdrText(hdr),
+    StatsColorValue(:final source, :final output) => switch ((source, output)) {
+      (final s?, final o?) => statsColorSourceToOutput(
+        _colorText(s),
+        _colorText(o),
+      ),
+      (final s?, null) => _colorText(s),
+      (null, final o?) => statsColorOutputOnly(_colorText(o)),
+      (null, null) => '',
+    },
+    StatsDisplayValue(:final headroom, :final potential) => () {
+      final number = NumberFormat('0.0', localeName);
+      return potential == null
+          ? statsDisplayHeadroom(number.format(headroom))
+          : statsDisplayHeadroomOf(
+              number.format(headroom),
+              number.format(potential),
+            );
+    }(),
+    StatsQualityValue(:final quality) => statsQualityText(quality),
+    StatsModeValue(:final mode) => statsModeName(mode),
+    StatsDecoderValue(:final label, :final hardware) => switch (hardware) {
+      null => label,
+      true => statsDecoderHardware(label),
+      false => statsDecoderSoftware(label),
+    },
+    StatsFramesValue(:final dropped, :final total) => statsFramesDropped(
+      dropped,
+      total,
+    ),
+    // One decimal: a buffer that reads `18 s` for eighteen seconds
+    // running looks frozen while `18.4` visibly moves.
+    StatsBufferValue(:final ahead) => statsBufferAhead(
+      NumberFormat(
+        '0.0',
+        localeName,
+      ).format((ahead.inMilliseconds / 100).round() / 10),
+    ),
+    StatsPositionValue(:final position, :final duration) =>
+      '${statsTimecode(position)} / ${statsTimecode(duration)}',
+  };
 
   /// An audio track's name: its own title, else its language.
   String audioTrackName(AudioTrack track) =>
@@ -609,16 +612,16 @@ extension AppFormatters on AppLocalizations {
 
   String _trackName(String? title, String language) =>
       title != null && title.isNotEmpty
-          ? title
-          : languageName(language) ?? language;
+      ? title
+      : languageName(language) ?? language;
 
   /// How the Original rung is delivered, shown under it in the quality picker.
   String originalDeliveryText(OriginalDelivery delivery) => switch (delivery) {
-        OriginalDelivery.directPlay => qualityDirectPlay,
-        OriginalDelivery.lossless => qualityOriginalLossless,
-        OriginalDelivery.transcode => qualityOriginalReencode,
-        OriginalDelivery.preference => qualityOriginalPreference,
-      };
+    OriginalDelivery.directPlay => qualityDirectPlay,
+    OriginalDelivery.lossless => qualityOriginalLossless,
+    OriginalDelivery.transcode => qualityOriginalReencode,
+    OriginalDelivery.preference => qualityOriginalPreference,
+  };
 
   /// Under a capped rung: it always re-encodes, up to [maxBitrateKbps] when
   /// the rung has a cap (a rung synthesised from the server's answer may not).
@@ -627,61 +630,58 @@ extension AppFormatters on AppLocalizations {
       : qualityTranscodesUpTo(maxBitrateKbps);
 
   String connectionLabel(ConnectionSummary summary) => switch (summary.kind) {
-        ConnectionKind.server => connectionServerLabel,
-        ConnectionKind.direct => connectionDirectLabel,
-        ConnectionKind.relay => connectionRelayLabel,
-        ConnectionKind.mixed => connectionMixedLabel,
-        ConnectionKind.reconnecting => connectionReconnectingLabel,
-        ConnectionKind.connecting => connectionConnectingLabel,
-      };
+    ConnectionKind.server => connectionServerLabel,
+    ConnectionKind.direct => connectionDirectLabel,
+    ConnectionKind.relay => connectionRelayLabel,
+    ConnectionKind.mixed => connectionMixedLabel,
+    ConnectionKind.reconnecting => connectionReconnectingLabel,
+    ConnectionKind.connecting => connectionConnectingLabel,
+  };
 
   /// One sentence of detail under [connectionLabel].
   String connectionDetail(ConnectionSummary summary) => switch (summary.kind) {
-        ConnectionKind.server => connectionServerDetail,
-        ConnectionKind.direct => connectionDirectDetail,
-        ConnectionKind.relay => connectionRelayDetail,
-        ConnectionKind.mixed => connectionMixedDetail,
-        ConnectionKind.reconnecting => connectionReconnectingDetail,
-        ConnectionKind.connecting => connectionConnectingDetail,
-      };
+    ConnectionKind.server => connectionServerDetail,
+    ConnectionKind.direct => connectionDirectDetail,
+    ConnectionKind.relay => connectionRelayDetail,
+    ConnectionKind.mixed => connectionMixedDetail,
+    ConnectionKind.reconnecting => connectionReconnectingDetail,
+    ConnectionKind.connecting => connectionConnectingDetail,
+  };
 
   /// The skip button's label for a media segment.
   String segmentSkipLabel(SegmentType type) => switch (type) {
-        SegmentType.intro => segmentSkipIntro,
-        SegmentType.credits => segmentSkipCredits,
-        SegmentType.commercial => segmentSkipCommercial,
-        SegmentType.unknown => segmentSkip,
-      };
+    SegmentType.intro => segmentSkipIntro,
+    SegmentType.credits => segmentSkipCredits,
+    SegmentType.commercial => segmentSkipCommercial,
+    SegmentType.unknown => segmentSkip,
+  };
 
   /// The message after a remote or cast request to open something was
   /// declined, or null when it was opened.
   String? pushOutcomeMessage(PushOutcome outcome) => switch (outcome) {
-        PushOutcome.blockedByPlayer => pushBlockedByPlayer,
-        PushOutcome.blockedByForm => pushBlockedByForm,
-        PushOutcome.pushed || PushOutcome.pushedAfterClosingPages => null,
-      };
+    PushOutcome.blockedByPlayer => pushBlockedByPlayer,
+    PushOutcome.blockedByForm => pushBlockedByForm,
+    PushOutcome.pushed || PushOutcome.pushedAfterClosingPages => null,
+  };
 
   /// The line under a Mydia server's name in the remote registration status.
   String registrationStatusText(RegistrationStatus status) => switch (status) {
-        RegistrationIdle() => registrationNotAdvertising,
-        RegistrationWaiting(:final dependency) => switch (dependency) {
-            RegistrationDependency.remoteControlSetting =>
-              registrationWaitingForSetting,
-            RegistrationDependency.deviceOnline => registrationWaitingForOnline,
-            RegistrationDependency.serverConnection =>
-              registrationWaitingForServer,
-          },
-        RegistrationInFlight(:final attempt) =>
-          registrationRegistering(attempt),
-        RegistrationSucceeded() => registrationDiscoverable,
-        RegistrationFailed(:final reason) =>
-          registrationNotDiscoverable(reason),
-      };
+    RegistrationIdle() => registrationNotAdvertising,
+    RegistrationWaiting(:final dependency) => switch (dependency) {
+      RegistrationDependency.remoteControlSetting =>
+        registrationWaitingForSetting,
+      RegistrationDependency.deviceOnline => registrationWaitingForOnline,
+      RegistrationDependency.serverConnection => registrationWaitingForServer,
+    },
+    RegistrationInFlight(:final attempt) => registrationRegistering(attempt),
+    RegistrationSucceeded() => registrationDiscoverable,
+    RegistrationFailed(:final reason) => registrationNotDiscoverable(reason),
+  };
 
   String cleanupPolicyName(CleanupPolicy policy) => switch (policy) {
-        CleanupPolicy.byDate => storageCleanupOldestFirst,
-        CleanupPolicy.lru => storageCleanupLeastRecentlyUsed,
-      };
+    CleanupPolicy.byDate => storageCleanupOldestFirst,
+    CleanupPolicy.lru => storageCleanupLeastRecentlyUsed,
+  };
 
   /// The way a download's size reads, or a word for a size nobody knows.
   String downloadTaskSize(DownloadTask task) =>
@@ -693,65 +693,68 @@ extension AppFormatters on AppLocalizations {
         NotificationDownloading() => downloadNotificationDownloading,
         NotificationWaiting() => downloadNotificationWaiting,
         NotificationTaskTitle(:final title) => title,
-        NotificationPreparing(:final title) =>
-          downloadNotificationPreparing(title),
+        NotificationPreparing(:final title) => downloadNotificationPreparing(
+          title,
+        ),
         NotificationProgress(:final title, :final percent) =>
           downloadNotificationProgress(title, percent),
       };
 
   /// The line the update card shows when there is nothing left to do.
   String updateNoticeText(UpdateNotice notice) => switch (notice) {
-        UpdateNotice.upToDate => settingsUpdateCheckUpToDate,
-        UpdateNotice.handedOff => settingsUpdateNoticeHandedOff,
-        UpdateNotice.reopenToFinish => settingsUpdateNoticeReopen,
-      };
+    UpdateNotice.upToDate => settingsUpdateCheckUpToDate,
+    UpdateNotice.handedOff => settingsUpdateNoticeHandedOff,
+    UpdateNotice.reopenToFinish => settingsUpdateNoticeReopen,
+  };
 
   /// Why sending logs failed.
   String logUploadFailure(LogUploadException error) => switch (error.failure) {
-        LogUploadFailure.relayBusy => settingsDiagnosticsRelayBusy,
-        LogUploadFailure.relayRejected => settingsDiagnosticsRelayRejected,
-        LogUploadFailure.relayNoCode => settingsDiagnosticsRelayNoCode,
-        LogUploadFailure.relayUnreachable =>
-          settingsDiagnosticsRelayUnreachable,
-        LogUploadFailure.relayHttp =>
-          settingsDiagnosticsRelayHttp(error.status ?? 0),
-        LogUploadFailure.noLogs => settingsDiagnosticsNoLogs,
-        LogUploadFailure.unavailable => settingsDiagnosticsLogsUnavailable,
-      };
+    LogUploadFailure.relayBusy => settingsDiagnosticsRelayBusy,
+    LogUploadFailure.relayRejected => settingsDiagnosticsRelayRejected,
+    LogUploadFailure.relayNoCode => settingsDiagnosticsRelayNoCode,
+    LogUploadFailure.relayUnreachable => settingsDiagnosticsRelayUnreachable,
+    LogUploadFailure.relayHttp => settingsDiagnosticsRelayHttp(
+      error.status ?? 0,
+    ),
+    LogUploadFailure.noLogs => settingsDiagnosticsNoLogs,
+    LogUploadFailure.unavailable => settingsDiagnosticsLogsUnavailable,
+  };
 
   /// The line under the player's spinner while a stream opens.
   String loadingStepText(LoadingStep step) => switch (step.kind) {
-        LoadingStepKind.startingStream => playerLoadingStarting,
-        LoadingStepKind.preparingStream => playerLoadingPreparing(step.percent),
-        LoadingStepKind.startingTranscode =>
-          playerLoadingTranscoding(step.attempt, step.maxAttempts),
-        LoadingStepKind.connectingP2p => playerLoadingP2p,
-        LoadingStepKind.checkingCompatibility => playerLoadingCompatibility,
-      };
+    LoadingStepKind.startingStream => playerLoadingStarting,
+    LoadingStepKind.preparingStream => playerLoadingPreparing(step.percent),
+    LoadingStepKind.startingTranscode => playerLoadingTranscoding(
+      step.attempt,
+      step.maxAttempts,
+    ),
+    LoadingStepKind.connectingP2p => playerLoadingP2p,
+    LoadingStepKind.checkingCompatibility => playerLoadingCompatibility,
+  };
 
   /// The toast after the player switched to transcoding on its own.
   String fallbackMessage(FailureReason reason) => switch (reason) {
-        FailureReason.decodeFailed => playerFallbackDecodeFailed,
-        FailureReason.decodeTooSlow => playerFallbackDecodeTooSlow,
-        FailureReason.bandwidth => playerFallbackBandwidth,
-      };
+    FailureReason.decodeFailed => playerFallbackDecodeFailed,
+    FailureReason.decodeTooSlow => playerFallbackDecodeTooSlow,
+    FailureReason.bandwidth => playerFallbackBandwidth,
+  };
 
   /// The Why row of the stats panel.
   String statsWhyText(StatsWhy why) => switch (why) {
-        StatsWhyPlain(:final kind) => switch (kind) {
-            StatsWhyKind.containerNotDirect => statsWhyContainerNotDirect,
-            StatsWhyKind.copyRejectedByMime => statsWhyCopyRejected,
-            StatsWhyKind.serverReencoding => statsWhyServerReencoding,
-            StatsWhyKind.browserReencodes => statsWhyBrowserReencodes,
-            StatsWhyKind.switchedEarlier => statsWhySwitchedEarlier,
-            StatsWhyKind.recentStall => statsWhyRecentStall,
-            StatsWhyKind.macSurfaceFallback => statsWhyMacSurfaceFallback,
-          },
-        StatsWhyCapped(:final rung) => statsWhyQualityCapped(qualityName(rung)),
-        StatsWhyRemembered(:final codec) => statsWhyRememberedFailure(codec),
-        StatsWhyStalled(:final minutes) => statsWhyStalledMinutes(minutes),
-        StatsWhyFallback(:final reason) => fallbackMessage(reason),
-      };
+    StatsWhyPlain(:final kind) => switch (kind) {
+      StatsWhyKind.containerNotDirect => statsWhyContainerNotDirect,
+      StatsWhyKind.copyRejectedByMime => statsWhyCopyRejected,
+      StatsWhyKind.serverReencoding => statsWhyServerReencoding,
+      StatsWhyKind.browserReencodes => statsWhyBrowserReencodes,
+      StatsWhyKind.switchedEarlier => statsWhySwitchedEarlier,
+      StatsWhyKind.recentStall => statsWhyRecentStall,
+      StatsWhyKind.macSurfaceFallback => statsWhyMacSurfaceFallback,
+    },
+    StatsWhyCapped(:final rung) => statsWhyQualityCapped(qualityName(rung)),
+    StatsWhyRemembered(:final codec) => statsWhyRememberedFailure(codec),
+    StatsWhyStalled(:final minutes) => statsWhyStalledMinutes(minutes),
+    StatsWhyFallback(:final reason) => fallbackMessage(reason),
+  };
 
   /// The Playing row's quality: the choice, and for Auto what it resolved to.
   String statsQualityText(StatsQuality quality) {
@@ -765,11 +768,11 @@ extension AppFormatters on AppLocalizations {
 
   /// A subtitle toast the player raised on its own.
   String subtitleNoticeText(SubtitleNotice notice) => switch (notice) {
-        SubtitleNotice.notCarried => subtitleNoticeNotCarried,
-        SubtitleNotice.imageOnlyAtOriginal => subtitleNoticeImageOnlyAtOriginal,
-        SubtitleNotice.loadFailed => subtitleNoticeLoadFailed,
-        SubtitleNotice.preparingImage => subtitleNoticePreparingImage,
-      };
+    SubtitleNotice.notCarried => subtitleNoticeNotCarried,
+    SubtitleNotice.imageOnlyAtOriginal => subtitleNoticeImageOnlyAtOriginal,
+    SubtitleNotice.loadFailed => subtitleNoticeLoadFailed,
+    SubtitleNotice.preparingImage => subtitleNoticePreparingImage,
+  };
 
   /// The toast for a subtitle delay nudge or save.
   String subtitleDelayNoticeText(SubtitleDelayNotice notice) {
@@ -778,8 +781,9 @@ extension AppFormatters on AppLocalizations {
     );
     return switch (notice.kind) {
       SubtitleDelayNoticeKind.adjusted => subtitleDelayToastAdjusted(delay),
-      SubtitleDelayNoticeKind.adjustedAfterSave =>
-        subtitleDelayToastAfterSave(delay),
+      SubtitleDelayNoticeKind.adjustedAfterSave => subtitleDelayToastAfterSave(
+        delay,
+      ),
       SubtitleDelayNoticeKind.saved => subtitleDelayToastSaved,
       SubtitleDelayNoticeKind.savedAppliesLater => subtitleDelayToastSavedLater,
       SubtitleDelayNoticeKind.saveFailed => subtitleDelaySaveFailed,
@@ -788,14 +792,14 @@ extension AppFormatters on AppLocalizations {
 
   /// Why a subtitle search or download did not happen.
   String subtitleIssueText(SubtitleIssue issue) => switch (issue) {
-        SubtitleIssue.searchMydiaOnly => subtitleIssueSearchMydiaOnly,
-        SubtitleIssue.downloadMydiaOnly => subtitleIssueDownloadMydiaOnly,
-        SubtitleIssue.searchOffline => subtitleIssueSearchOffline,
-        SubtitleIssue.downloadOffline => subtitleIssueDownloadOffline,
-        SubtitleIssue.searchUnreachable => subtitleIssueSearchUnreachable,
-        SubtitleIssue.searchFailed => subtitleSearchFailed,
-        SubtitleIssue.downloadFailed => subtitleDownloadFailed,
-      };
+    SubtitleIssue.searchMydiaOnly => subtitleIssueSearchMydiaOnly,
+    SubtitleIssue.downloadMydiaOnly => subtitleIssueDownloadMydiaOnly,
+    SubtitleIssue.searchOffline => subtitleIssueSearchOffline,
+    SubtitleIssue.downloadOffline => subtitleIssueDownloadOffline,
+    SubtitleIssue.searchUnreachable => subtitleIssueSearchUnreachable,
+    SubtitleIssue.searchFailed => subtitleSearchFailed,
+    SubtitleIssue.downloadFailed => subtitleDownloadFailed,
+  };
 }
 
 /// ISO 639-1, 639-2/T and 639-2/B codes to the two letter key the

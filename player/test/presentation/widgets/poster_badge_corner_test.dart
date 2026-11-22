@@ -3,21 +3,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/poster_badge_corner.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(
-        body: Stack(children: [
-          SizedBox(width: 200, height: 300, child: Stack(children: [child]))
-        ]),
-      ),
-    );
+  home: Scaffold(
+    body: Stack(
+      children: [
+        SizedBox(width: 200, height: 300, child: Stack(children: [child])),
+      ],
+    ),
+  ),
+);
 
 void main() {
   group('PosterBadgeCorner', () {
-    testWidgets('lays its children out left to right in the order given',
-        (tester) async {
+    testWidgets('lays its children out left to right in the order given', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _host(const PosterBadgeCorner(
-          children: [Text('first'), Text('second')],
-        )),
+        _host(
+          const PosterBadgeCorner(children: [Text('first'), Text('second')]),
+        ),
       );
 
       final firstX = tester.getTopLeft(find.text('first')).dx;
@@ -27,15 +30,14 @@ void main() {
     });
 
     testWidgets('renders nothing when given no children', (tester) async {
-      await tester.pumpWidget(
-        _host(const PosterBadgeCorner(children: [])),
-      );
+      await tester.pumpWidget(_host(const PosterBadgeCorner(children: [])));
 
       expect(find.byType(Row), findsNothing);
     });
 
-    testWidgets('drops empty children so spacing does not accumulate',
-        (tester) async {
+    testWidgets('drops empty children so spacing does not accumulate', (
+      tester,
+    ) async {
       // Measure the Row, not the text.
       //
       // Asserting the text exists passes whether or not the filter works, and
@@ -49,9 +51,9 @@ void main() {
       final alone = tester.getSize(find.byType(Row));
 
       await tester.pumpWidget(
-        _host(const PosterBadgeCorner(
-          children: [SizedBox.shrink(), Text('only')],
-        )),
+        _host(
+          const PosterBadgeCorner(children: [SizedBox.shrink(), Text('only')]),
+        ),
       );
 
       expect(tester.getSize(find.byType(Row)), alone);

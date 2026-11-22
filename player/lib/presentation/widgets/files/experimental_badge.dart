@@ -30,9 +30,7 @@ class FilesExperimentalNotice extends StatelessWidget {
           Expanded(
             child: Text(
               context.l10n.filesExperimentalNotice,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
+              style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: scheme.onTertiaryContainer),
             ),
           ),

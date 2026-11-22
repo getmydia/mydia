@@ -82,7 +82,8 @@ class SourcePosterRow extends StatelessWidget {
               final item = items[index];
               return SizedBox(
                 width: itemWidth ?? posterWidth,
-                child: posterFor?.call(context, item) ??
+                child:
+                    posterFor?.call(context, item) ??
                     SourcePoster(
                       key: ValueKey('source-poster-${item.ref.externalId}'),
                       item: item,

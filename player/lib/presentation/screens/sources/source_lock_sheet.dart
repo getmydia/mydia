@@ -15,8 +15,12 @@ import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/toast/toaster.dart';
 import 'pin_pad.dart';
 
-Future<void> changeServerLock(BuildContext context, WidgetRef ref,
-    SourceAccountRecord record, SourceServer server) async {
+Future<void> changeServerLock(
+  BuildContext context,
+  WidgetRef ref,
+  SourceAccountRecord record,
+  SourceServer server,
+) async {
   final anyLock = ref.read(sourceLocksProvider).isNotEmpty;
   if (anyLock && !ref.read(sourceLockProvider)) {
     await context.push(unlockLocation());

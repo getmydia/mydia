@@ -49,14 +49,11 @@ class WindowGeometryController with WindowListener {
   int _pauseGeneration = 0;
 
   WindowGeometryController({
-    required WindowController window,
-    required WindowGeometryStore store,
-    required WorkAreaReader readWorkAreas,
-    Duration debounce = const Duration(milliseconds: 500),
-  })  : _window = window,
-        _store = store,
-        _readWorkAreas = readWorkAreas,
-        _debounce = debounce;
+    required this._window,
+    required this._store,
+    required this._readWorkAreas,
+    this._debounce = const Duration(milliseconds: 500),
+  });
 
   Duration get debounce => _debounce;
 
@@ -195,8 +192,10 @@ class WindowGeometryController with WindowListener {
         return;
       }
 
-      final geometry =
-          WindowGeometry(bounds: await _window.getBounds(), maximized: false);
+      final geometry = WindowGeometry(
+        bounds: await _window.getBounds(),
+        maximized: false,
+      );
       if (_paused || _pauseGeneration != generation) return;
       await _store.save(geometry);
     } catch (e) {

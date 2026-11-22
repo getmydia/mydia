@@ -113,5 +113,6 @@ class SourceLockController extends Notifier<bool> {
   }
 }
 
-final sourceLockProvider =
-    NotifierProvider<SourceLockController, bool>(SourceLockController.new);
+final sourceLockProvider = NotifierProvider<SourceLockController, bool>(
+  SourceLockController.new,
+);

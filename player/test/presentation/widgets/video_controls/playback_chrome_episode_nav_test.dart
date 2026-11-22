@@ -51,48 +51,45 @@ void main() {
     tearDown(() => player.dispose());
 
     Widget host(double width) => MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: SizedBox(
-              width: width,
-              height: 600,
-              child: PlaybackChrome(
-                player: player,
-                timeline: StreamTimeline.zero,
-                onSeekToReal: (_) async {},
-                onPreviousEpisode: () => previousCalls++,
-                onNextEpisode: () => nextCalls++,
-              ),
-            ),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: SizedBox(
+          width: width,
+          height: 600,
+          child: PlaybackChrome(
+            player: player,
+            timeline: StreamTimeline.zero,
+            onSeekToReal: (_) async {},
+            onPreviousEpisode: () => previousCalls++,
+            onNextEpisode: () => nextCalls++,
           ),
-        );
+        ),
+      ),
+    );
 
     testWidgets(
-        'at a desktop width (touchTargets false), episode-nav buttons are '
-        'wired into the transport and fire the supplied callbacks',
-        (tester) async {
-      tester.view.physicalSize = const Size(1600, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+      'at a desktop width (touchTargets false), episode-nav buttons are '
+      'wired into the transport and fire the supplied callbacks',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(host(1600));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(host(1600));
+        await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(TransportSurface.previousEpisodeKey),
-        findsOneWidget,
-      );
-      expect(find.byKey(TransportSurface.nextEpisodeKey), findsOneWidget);
+        expect(find.byKey(TransportSurface.previousEpisodeKey), findsOneWidget);
+        expect(find.byKey(TransportSurface.nextEpisodeKey), findsOneWidget);
 
-      await tester.tap(find.byKey(TransportSurface.previousEpisodeKey));
-      await tester.tap(find.byKey(TransportSurface.nextEpisodeKey));
-      expect(previousCalls, 1);
-      expect(nextCalls, 1);
-    });
+        await tester.tap(find.byKey(TransportSurface.previousEpisodeKey));
+        await tester.tap(find.byKey(TransportSurface.nextEpisodeKey));
+        expect(previousCalls, 1);
+        expect(nextCalls, 1);
+      },
+    );
 
-    testWidgets(
-        'at a mobile width (touchTargets true), the transport drops to '
+    testWidgets('at a mobile width (touchTargets true), the transport drops to '
         'play/pause only — episode-nav (and seek) buttons are gone, not '
         'just disabled', (tester) async {
       tester.view.physicalSize = const Size(400, 800);

@@ -86,11 +86,11 @@ Rect? defaultWindowRect(List<WorkArea> areas) {
 }
 
 Rect _centerIn(Size size, Rect area) => Rect.fromLTWH(
-      area.left + (area.width - size.width) / 2,
-      area.top + (area.height - size.height) / 2,
-      size.width,
-      size.height,
-    );
+  area.left + (area.width - size.width) / 2,
+  area.top + (area.height - size.height) / 2,
+  size.width,
+  size.height,
+);
 
 /// The display holding [window]'s centre, else the primary, else null.
 WorkArea? areaContaining(Rect window, List<WorkArea> areas) {

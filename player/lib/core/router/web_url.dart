@@ -11,8 +11,9 @@ import 'package:web/web.dart' as web;
 /// the hash before any potential timing issues with window.location.
 String getInitialRoute() {
   // First, try to read the hash that Phoenix captured before Flutter loaded
-  final phoenixHash =
-      globalContext.getProperty<JSString?>('mydiaInitialHash'.toJS)?.toDart;
+  final phoenixHash = globalContext
+      .getProperty<JSString?>('mydiaInitialHash'.toJS)
+      ?.toDart;
 
   // Also try direct access as fallback
   final hash = web.window.location.hash;

@@ -10,9 +10,10 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
     var saved = 0;
     const item = ItemRef(
-        sourceId: SourceId('files:local'),
-        kind: ItemKind.episode,
-        externalId: '201-1-2');
+      sourceId: SourceId('files:local'),
+      kind: ItemKind.episode,
+      externalId: '201-1-2',
+    );
     final reporter = LocalProgressReporter(
       store: store,
       item: item,
@@ -21,7 +22,10 @@ void main() {
     );
 
     await reporter.sendProgress(
-        positionSeconds: 90, durationSeconds: 1200, paused: false);
+      positionSeconds: 90,
+      durationSeconds: 1200,
+      paused: false,
+    );
 
     final record = store.get(progressKey(item))!;
     expect(record.positionSeconds, 90);

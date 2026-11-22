@@ -17,10 +17,14 @@ void main() {
   });
 
   test('LibraryRef and ArtworkRef compare by value', () {
-    expect(const LibraryRef(sourceId: plex, id: '1'),
-        const LibraryRef(sourceId: plex, id: '1'));
-    expect(const ArtworkRef('/library/metadata/1/thumb/9'),
-        const ArtworkRef('/library/metadata/1/thumb/9'));
+    expect(
+      const LibraryRef(sourceId: plex, id: '1'),
+      const LibraryRef(sourceId: plex, id: '1'),
+    );
+    expect(
+      const ArtworkRef('/library/metadata/1/thumb/9'),
+      const ArtworkRef('/library/metadata/1/thumb/9'),
+    );
   });
 
   test('BrowseQuery compares by value and copies', () {
@@ -33,18 +37,27 @@ void main() {
   test('Page knows whether more remain', () {
     expect(const Page<int>(items: [1]).hasMore, isFalse);
     expect(
-        const Page<int>(items: [1], nextCursor: Cursor('60')).hasMore, isTrue);
+      const Page<int>(items: [1], nextCursor: Cursor('60')).hasMore,
+      isTrue,
+    );
   });
 
   test('SourceException.toString is English log text, not viewer text', () {
     expect(const SourceException.unreachable().toString(), contains('reach'));
-    expect(const SourceException.server('Transcoder busy').toString(),
-        'Transcoder busy');
     expect(
-        const SourceException.fault(SourceFault.serverHttp, detail: '502')
-            .toString(),
-        'The server answered HTTP 502.');
-    expect(const SourceException.unsupportedFault(SourceFault.serverGone).kind,
-        SourceErrorKind.unsupported);
+      const SourceException.server('Transcoder busy').toString(),
+      'Transcoder busy',
+    );
+    expect(
+      const SourceException.fault(
+        SourceFault.serverHttp,
+        detail: '502',
+      ).toString(),
+      'The server answered HTTP 502.',
+    );
+    expect(
+      const SourceException.unsupportedFault(SourceFault.serverGone).kind,
+      SourceErrorKind.unsupported,
+    );
   });
 }

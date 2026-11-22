@@ -29,10 +29,10 @@ void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
-          'flag (bool.fromEnvironment), so this file is a deliberate no-op '
-          'unless the whole test process is compiled with that define. CI '
-          'runs it explicitly in the "Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
+            'flag (bool.fromEnvironment), so this file is a deliberate no-op '
+            'unless the whole test process is compiled with that define. CI '
+            'runs it explicitly in the "Run television-tier tests" step.';
 
   group('Sidebar region boundary (requires MYDIA_FORCE_TV=true)', () {
     late FocusNode sidebarSelected;
@@ -119,7 +119,8 @@ void main() {
                     node: contentScope,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: content ??
+                      child:
+                          content ??
                           Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -143,8 +144,9 @@ void main() {
       );
     }
 
-    testWidgets('LEFT from the leftmost card focuses the sidebar',
-        (tester) async {
+    testWidgets('LEFT from the leftmost card focuses the sidebar', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -185,8 +187,9 @@ void main() {
       expect(firstCard.hasFocus, isTrue);
     });
 
-    testWidgets('RIGHT returns the card that left, not the first card',
-        (tester) async {
+    testWidgets('RIGHT returns the card that left, not the first card', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -211,8 +214,7 @@ void main() {
       expect(firstCard.hasFocus, isFalse);
     });
 
-    testWidgets(
-        'RIGHT after navigating from the sidebar lands in the new route, '
+    testWidgets('RIGHT after navigating from the sidebar lands in the new route, '
         'whose remembered card is gone', (tester) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1.0;
@@ -257,252 +259,261 @@ void main() {
     });
 
     testWidgets(
-        'activating a section lands on its grid, not the controls above it, '
-        'and RIGHT from the sidebar returns there', (tester) async {
-      tester.view.physicalSize = const Size(960, 540);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-      createShellNodes();
+      'activating a section lands on its grid, not the controls above it, '
+      'and RIGHT from the sidebar returns there',
+      (tester) async {
+        tester.view.physicalSize = const Size(960, 540);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        createShellNodes();
 
-      String focused() => FocusManager.instance.primaryFocus?.debugLabel ?? '';
+        String focused() =>
+            FocusManager.instance.primaryFocus?.debugLabel ?? '';
 
-      // A section page as go_router's ShellRoute hosts it: a page of the
-      // shell's own navigator, so a route of its own, apart from the
-      // sidebar's. A filter control sits above the grid, first in the tree.
-      Widget section(String name, {int firstCard = 0}) => Navigator(
-            key: const ValueKey('shell-navigator'),
-            pages: [
-              MaterialPage<void>(
-                key: ValueKey(name),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Focus(
-                      debugLabel: '$name-filter',
-                      child: const SizedBox(width: 160, height: 40),
-                    ),
-                    FocusMemoryRegion(
-                      landing: true,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (var i = firstCard; i < 3; i++)
-                            FocusMemoryItem(
-                              id: i,
-                              index: i,
-                              child: Focus(
-                                debugLabel: '$name-card-$i',
-                                child: const SizedBox(width: 100, height: 150),
-                              ),
+        // A section page as go_router's ShellRoute hosts it: a page of the
+        // shell's own navigator, so a route of its own, apart from the
+        // sidebar's. A filter control sits above the grid, first in the tree.
+        Widget section(String name, {int firstCard = 0}) => Navigator(
+          key: const ValueKey('shell-navigator'),
+          pages: [
+            MaterialPage<void>(
+              key: ValueKey(name),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Focus(
+                    debugLabel: '$name-filter',
+                    child: const SizedBox(width: 160, height: 40),
+                  ),
+                  FocusMemoryRegion(
+                    landing: true,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = firstCard; i < 3; i++)
+                          FocusMemoryItem(
+                            id: i,
+                            index: i,
+                            child: Focus(
+                              debugLabel: '$name-card-$i',
+                              child: const SizedBox(width: 100, height: 150),
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-            onDidRemovePage: (_) {},
-          );
+            ),
+          ],
+          onDidRemovePage: (_) {},
+        );
 
-      await tester.pumpWidget(buildShell(content: section('movies')));
-      await tester.pumpAndSettle();
-      sidebarSelected.requestFocus();
-      await tester.pumpAndSettle();
-      expect(sidebarSelected.hasFocus, isTrue);
+        await tester.pumpWidget(buildShell(content: section('movies')));
+        await tester.pumpAndSettle();
+        sidebarSelected.requestFocus();
+        await tester.pumpAndSettle();
+        expect(sidebarSelected.hasFocus, isTrue);
 
-      // Activating a sidebar row: `context.go` replaces the shell's page.
-      await tester.pumpWidget(buildShell(content: section('shows')));
-      await tester.pumpAndSettle();
-      expect(focused(), 'shows-card-0');
+        // Activating a sidebar row: `context.go` replaces the shell's page.
+        await tester.pumpWidget(buildShell(content: section('shows')));
+        await tester.pumpAndSettle();
+        expect(focused(), 'shows-card-0');
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-      await tester.pumpAndSettle();
-      expect(sidebarSelected.hasFocus, isTrue);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pumpAndSettle();
-      expect(focused(), 'shows-card-0');
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pumpAndSettle();
+        expect(sidebarSelected.hasFocus, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(focused(), 'shows-card-0');
 
-      // The card the sidebar remembers leaves the page (a refresh dropped
-      // it) while the viewer is in the sidebar. The page is not new, so
-      // nothing lands; RIGHT falls back to the grid, not to the filter that
-      // comes first in the tree.
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-      await tester.pumpAndSettle();
-      expect(sidebarSelected.hasFocus, isTrue);
-      await tester
-          .pumpWidget(buildShell(content: section('shows', firstCard: 1)));
-      await tester.pumpAndSettle();
-      expect(sidebarSelected.hasFocus, isTrue);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pumpAndSettle();
-      expect(focused(), 'shows-card-1');
-    });
+        // The card the sidebar remembers leaves the page (a refresh dropped
+        // it) while the viewer is in the sidebar. The page is not new, so
+        // nothing lands; RIGHT falls back to the grid, not to the filter that
+        // comes first in the tree.
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pumpAndSettle();
+        expect(sidebarSelected.hasFocus, isTrue);
+        await tester.pumpWidget(
+          buildShell(content: section('shows', firstCard: 1)),
+        );
+        await tester.pumpAndSettle();
+        expect(sidebarSelected.hasFocus, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(focused(), 'shows-card-1');
+      },
+    );
 
     testWidgets(
-        'LEFT from the first card of a rail reaches the sidebar while another '
-        'rail is scrolled', (tester) async {
-      tester.view.physicalSize = const Size(960, 540);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+      'LEFT from the first card of a rail reaches the sidebar while another '
+      'rail is scrolled',
+      (tester) async {
+        tester.view.physicalSize = const Size(960, 540);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-      createShellNodes();
+        createShellNodes();
 
-      final upperController = ScrollController();
-      final lowerController = ScrollController();
-      addTearDown(upperController.dispose);
-      addTearDown(lowerController.dispose);
+        final upperController = ScrollController();
+        final lowerController = ScrollController();
+        addTearDown(upperController.dispose);
+        addTearDown(lowerController.dispose);
 
-      List<FocusNode> railNodes(String label) {
-        final nodes = List.generate(
-          10,
-          (i) => FocusNode(debugLabel: '$label-$i'),
-        );
-        for (final node in nodes) {
-          addTearDown(node.dispose);
+        List<FocusNode> railNodes(String label) {
+          final nodes = List.generate(
+            10,
+            (i) => FocusNode(debugLabel: '$label-$i'),
+          );
+          for (final node in nodes) {
+            addTearDown(node.dispose);
+          }
+          return nodes;
         }
-        return nodes;
-      }
 
-      final upperCards = railNodes('upper');
-      final lowerCards = railNodes('lower');
+        final upperCards = railNodes('upper');
+        final lowerCards = railNodes('lower');
 
-      // Built the way HorizontalRail builds on the television tier: a
-      // horizontal list whose cache keeps cards built well past each edge.
-      // Those off-screen cards are what Flutter's search used to jump to.
-      Widget rail(ScrollController controller, List<FocusNode> nodes) {
-        return SizedBox(
-          width: 680,
-          height: 120,
-          child: ListView.builder(
-            controller: controller,
-            scrollDirection: Axis.horizontal,
-            scrollCacheExtent: const ScrollCacheExtent.pixels(2400),
-            itemCount: nodes.length,
-            itemExtent: 160,
-            itemBuilder: (context, index) => Focus(
-              focusNode: nodes[index],
+        // Built the way HorizontalRail builds on the television tier: a
+        // horizontal list whose cache keeps cards built well past each edge.
+        // Those off-screen cards are what Flutter's search used to jump to.
+        Widget rail(ScrollController controller, List<FocusNode> nodes) {
+          return SizedBox(
+            width: 680,
+            height: 120,
+            child: ListView.builder(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(2400),
+              itemCount: nodes.length,
+              itemExtent: 160,
+              itemBuilder: (context, index) => Focus(
+                focusNode: nodes[index],
+                child: const SizedBox(width: 150, height: 100),
+              ),
+            ),
+          );
+        }
+
+        await tester.pumpWidget(
+          buildShell(
+            content: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                rail(upperController, upperCards),
+                rail(lowerController, lowerCards),
+              ],
+            ),
+          ),
+        );
+
+        // Cards 0 to 4 of the upper rail now sit left of the lower rail's
+        // first card, all still built.
+        upperController.jumpTo(800);
+        await tester.pump();
+
+        lowerCards.first.requestFocus();
+        await tester.pump();
+        expect(lowerCards.first.hasFocus, isTrue);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pump();
+
+        expect(sidebarSelected.hasFocus, isTrue);
+        expect(upperCards.any((node) => node.hasFocus), isFalse);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pump();
+
+        expect(lowerCards.first.hasFocus, isTrue);
+      },
+    );
+
+    testWidgets(
+      'RIGHT from the sidebar returns to the remembered card after rows '
+      'were re-scrolled',
+      (tester) async {
+        tester.view.physicalSize = const Size(960, 540);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        createShellNodes();
+
+        String focused() =>
+            FocusManager.instance.primaryFocus?.debugLabel ?? '';
+        Future<void> press(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        ScrollPosition railPosition(String name) => tester
+            .state<ScrollableState>(
+              find.descendant(
+                of: find.byKey(ValueKey('rail-$name')),
+                matching: find.byType(Scrollable),
+              ),
+            )
+            .position;
+
+        // The real rail, with item ids, so this is the rail the shell's screens
+        // build rather than a stand-in for it.
+        Widget rail(String name) {
+          final ids = [for (var i = 0; i < 12; i++) '$name-$i'];
+          return HorizontalRail(
+            key: ValueKey('rail-$name'),
+            itemCount: ids.length,
+            height: 120,
+            leftFadeKey: ValueKey('$name-left-fade'),
+            rightFadeKey: ValueKey('$name-right-fade'),
+            itemId: (i) => ids[i],
+            itemBuilder: (context, i) => Focus(
+              debugLabel: ids[i],
               child: const SizedBox(width: 150, height: 100),
             ),
-          ),
-        );
-      }
+          );
+        }
 
-      await tester.pumpWidget(
-        buildShell(
-          content: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              rail(upperController, upperCards),
-              rail(lowerController, lowerCards),
-            ],
-          ),
-        ),
-      );
-
-      // Cards 0 to 4 of the upper rail now sit left of the lower rail's
-      // first card, all still built.
-      upperController.jumpTo(800);
-      await tester.pump();
-
-      lowerCards.first.requestFocus();
-      await tester.pump();
-      expect(lowerCards.first.hasFocus, isTrue);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-      await tester.pump();
-
-      expect(sidebarSelected.hasFocus, isTrue);
-      expect(upperCards.any((node) => node.hasFocus), isFalse);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump();
-
-      expect(lowerCards.first.hasFocus, isTrue);
-    });
-
-    testWidgets(
-        'RIGHT from the sidebar returns to the remembered card after rows '
-        'were re-scrolled', (tester) async {
-      tester.view.physicalSize = const Size(960, 540);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      createShellNodes();
-
-      String focused() => FocusManager.instance.primaryFocus?.debugLabel ?? '';
-      Future<void> press(LogicalKeyboardKey key) async {
-        await tester.sendKeyEvent(key);
-        await tester.pumpAndSettle();
-      }
-
-      ScrollPosition railPosition(String name) => tester
-          .state<ScrollableState>(
-            find.descendant(
-              of: find.byKey(ValueKey('rail-$name')),
-              matching: find.byType(Scrollable),
+        await tester.pumpWidget(
+          buildShell(
+            content: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [rail('upper'), rail('lower')],
             ),
-          )
-          .position;
-
-      // The real rail, with item ids, so this is the rail the shell's screens
-      // build rather than a stand-in for it.
-      Widget rail(String name) {
-        final ids = [for (var i = 0; i < 12; i++) '$name-$i'];
-        return HorizontalRail(
-          key: ValueKey('rail-$name'),
-          itemCount: ids.length,
-          height: 120,
-          leftFadeKey: ValueKey('$name-left-fade'),
-          rightFadeKey: ValueKey('$name-right-fade'),
-          itemId: (i) => ids[i],
-          itemBuilder: (context, i) => Focus(
-            debugLabel: ids[i],
-            child: const SizedBox(width: 150, height: 100),
           ),
         );
-      }
+        await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        buildShell(
-          content: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [rail('upper'), rail('lower')],
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        FocusManager.instance.rootScope.descendants
+            .singleWhere((n) => n.debugLabel == 'upper-4')
+            .requestFocus();
+        await tester.pumpAndSettle();
+        expect(focused(), 'upper-4');
 
-      FocusManager.instance.rootScope.descendants
-          .singleWhere((n) => n.debugLabel == 'upper-4')
-          .requestFocus();
-      await tester.pumpAndSettle();
-      expect(focused(), 'upper-4');
+        // Into the lower rail, which has nothing remembered, so it lands on its
+        // first card, and from there LEFT is the rail's edge.
+        await press(LogicalKeyboardKey.arrowDown);
+        expect(focused(), 'lower-0');
+        await press(LogicalKeyboardKey.arrowLeft);
+        expect(sidebarSelected.hasFocus, isTrue);
 
-      // Into the lower rail, which has nothing remembered, so it lands on its
-      // first card, and from there LEFT is the rail's edge.
-      await press(LogicalKeyboardKey.arrowDown);
-      expect(focused(), 'lower-0');
-      await press(LogicalKeyboardKey.arrowLeft);
-      expect(sidebarSelected.hasFocus, isTrue);
+        // While the viewer is in the sidebar, both rows are scrolled: the upper
+        // one to its end, so the card geometrically above lower-0 is no longer
+        // upper-4.
+        final upper = railPosition('upper');
+        upper.jumpTo(upper.maxScrollExtent);
+        final lower = railPosition('lower');
+        lower.jumpTo(lower.maxScrollExtent / 2);
+        await tester.pumpAndSettle();
 
-      // While the viewer is in the sidebar, both rows are scrolled: the upper
-      // one to its end, so the card geometrically above lower-0 is no longer
-      // upper-4.
-      final upper = railPosition('upper');
-      upper.jumpTo(upper.maxScrollExtent);
-      final lower = railPosition('lower');
-      lower.jumpTo(lower.maxScrollExtent / 2);
-      await tester.pumpAndSettle();
+        await press(LogicalKeyboardKey.arrowRight);
+        expect(focused(), 'lower-0');
 
-      await press(LogicalKeyboardKey.arrowRight);
-      expect(focused(), 'lower-0');
-
-      // And the upper row still remembers its card through the shell's
-      // content-region policy.
-      await press(LogicalKeyboardKey.arrowUp);
-      expect(focused(), 'upper-4');
-    });
+        // And the upper row still remembers its card through the shell's
+        // content-region policy.
+        await press(LogicalKeyboardKey.arrowUp);
+        expect(focused(), 'upper-4');
+      },
+    );
   }, skip: skipReason);
 }

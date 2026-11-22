@@ -31,11 +31,7 @@ class DownloadArtwork extends StatelessWidget {
     final empty = placeholder?.call(context) ?? const SizedBox.shrink();
     final path = localPath;
     if (path != null && File(path).existsSync()) {
-      return Image.file(
-        File(path),
-        fit: fit,
-        errorBuilder: (_, __, ___) => empty,
-      );
+      return Image.file(File(path), fit: fit, errorBuilder: (_, _, _) => empty);
     }
     final url = fallbackUrl;
     if (url != null &&

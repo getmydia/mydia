@@ -109,10 +109,7 @@ void main() {
       const proxy = 'GET http://127.0.0.1:53412/hls/master.m3u8 failed';
       expect(sanitizeString(relay), relay);
       expect(sanitizeString(proxy), proxy);
-      expect(
-        sanitizeString('http://[::1]:8080/x'),
-        'http://[::1]:8080/x',
-      );
+      expect(sanitizeString('http://[::1]:8080/x'), 'http://[::1]:8080/x');
     });
 
     test("redacts the host in dart:io's SocketException wording", () {
@@ -135,7 +132,8 @@ void main() {
     });
 
     test('keeps long identifiers with no digit', () {
-      const message = 'setState() called after dispose(): '
+      const message =
+          'setState() called after dispose(): '
           '_OfflineSentinelStreamingFallbackState#1a2b3';
       expect(sanitizeString(message), message);
     });
@@ -170,7 +168,8 @@ void main() {
 
   group('sanitizeReport', () {
     test('sanitizes the message and truncates after redacting', () {
-      final jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.'
+      final jwt =
+          'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.'
           'c2lnbmF0dXJlMTIzNDU2Nzg5MA';
       final message = '${'a' * 4090} $jwt';
 
@@ -179,17 +178,13 @@ void main() {
 
       expect(sanitized, isNot(contains('eyJ')));
       expect(sanitized, endsWith('...[truncated]'));
-      expect(
-        sanitized.length,
-        kMaxCrashMessageChars + '...[truncated]'.length,
-      );
+      expect(sanitized.length, kMaxCrashMessageChars + '...[truncated]'.length);
     });
 
     test('leaves a short message untruncated', () {
-      expect(
-        sanitizeReport({'error_message': 'Bad state: No element'}),
-        {'error_message': 'Bad state: No element'},
-      );
+      expect(sanitizeReport({'error_message': 'Bad state: No element'}), {
+        'error_message': 'Bad state: No element',
+      });
     });
 
     test('redacts home directories in frame files and leaves functions', () {

@@ -8,125 +8,162 @@ import 'package:player/presentation/widgets/glass/glass_chip.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 Widget _host(Widget chip, {required bool liquid}) => MaterialApp(
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
-      home: Scaffold(body: Center(child: chip)),
-    );
+  theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+  home: Scaffold(body: Center(child: chip)),
+);
 
 void main() {
-  testWidgets('liquid GlassChip is a 34pt capsule with a 44pt target',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      GlassChip(
-          label: const Text('Sort A'), selected: false, onSelected: (_) {}),
-      liquid: true,
-    ));
-    expect(tester.getSize(find.byType(GlassSurface)).height,
-        LiquidGeometry.buttonMedium);
-    expect(tester.getSize(find.byType(GlassChip)).height,
-        greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+  testWidgets('liquid GlassChip is a 34pt capsule with a 44pt target', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          label: const Text('Sort A'),
+          selected: false,
+          onSelected: (_) {},
+        ),
+        liquid: true,
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(GlassSurface)).height,
+      LiquidGeometry.buttonMedium,
+    );
+    expect(
+      tester.getSize(find.byType(GlassChip)).height,
+      greaterThanOrEqualTo(LiquidGeometry.minHitTarget),
+    );
   });
 
-  testWidgets('in a 48pt chip row the glass is still 34 with a 44pt+ target',
-      (tester) async {
+  testWidgets('in a 48pt chip row the glass is still 34 with a 44pt+ target', (
+    tester,
+  ) async {
     bool? last;
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
-      home: Scaffold(
-        body: SizedBox(
-          height: 48,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: GlassChip(
-                  label: const Text('Sort A'),
-                  selected: false,
-                  onSelected: (v) => last = v,
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+        home: Scaffold(
+          body: SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: GlassChip(
+                    label: const Text('Sort A'),
+                    selected: false,
+                    onSelected: (v) => last = v,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ));
-    expect(tester.getSize(find.byType(GlassSurface)).height,
-        LiquidGeometry.buttonMedium);
-    expect(tester.getSize(find.byType(GlassChip)).height,
-        greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+    );
+    expect(
+      tester.getSize(find.byType(GlassSurface)).height,
+      LiquidGeometry.buttonMedium,
+    );
+    expect(
+      tester.getSize(find.byType(GlassChip)).height,
+      greaterThanOrEqualTo(LiquidGeometry.minHitTarget),
+    );
     final top = tester.getTopLeft(find.byType(GlassSurface));
     await tester.tapAt(top + const Offset(20, -4));
     expect(last, isTrue);
   });
 
-  testWidgets('a large text scale grows the chip glass instead of clipping',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: const TextScaler.linear(2.0),
+  testWidgets('a large text scale grows the chip glass instead of clipping', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(2.0)),
+          child: child!,
         ),
-        child: child!,
-      ),
-      home: Scaffold(
-        body: Center(
-          child: GlassChip(
-              label: const Text('Sort A'), selected: false, onSelected: (_) {}),
+        home: Scaffold(
+          body: Center(
+            child: GlassChip(
+              label: const Text('Sort A'),
+              selected: false,
+              onSelected: (_) {},
+            ),
+          ),
         ),
       ),
-    ));
+    );
     expect(tester.takeException(), isNull);
-    expect(tester.getSize(find.byType(GlassSurface)).height,
-        greaterThan(LiquidGeometry.buttonMedium));
+    expect(
+      tester.getSize(find.byType(GlassSurface)).height,
+      greaterThan(LiquidGeometry.buttonMedium),
+    );
   });
 
-  testWidgets('a liquid button and chip lay out inside IntrinsicWidth',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      IntrinsicWidth(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            GlassButton(label: 'Cancel', onPressed: () {}),
-            GlassChip(
+  testWidgets('a liquid button and chip lay out inside IntrinsicWidth', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GlassButton(label: 'Cancel', onPressed: () {}),
+              GlassChip(
                 label: const Text('Sort A'),
                 selected: false,
-                onSelected: (_) {}),
-          ],
+                onSelected: (_) {},
+              ),
+            ],
+          ),
         ),
+        liquid: true,
       ),
-      liquid: true,
-    ));
+    );
     expect(tester.takeException(), isNull);
     final glass = find.byType(GlassSurface);
     expect(tester.getSize(glass.at(0)).height, LiquidGeometry.buttonMedium);
     expect(tester.getSize(glass.at(1)).height, LiquidGeometry.buttonMedium);
     expect(
-        tester.getSize(glass.at(0)).width, tester.getSize(glass.at(1)).width);
+      tester.getSize(glass.at(0)).width,
+      tester.getSize(glass.at(1)).width,
+    );
   });
 
   testWidgets('Frosted chip keeps its Material height', (tester) async {
-    await tester.pumpWidget(_host(
-      GlassChip(
-          label: const Text('Sort A'), selected: false, onSelected: (_) {}),
-      liquid: false,
-    ));
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          label: const Text('Sort A'),
+          selected: false,
+          onSelected: (_) {},
+        ),
+        liquid: false,
+      ),
+    );
     expect(tester.getSize(find.byType(ChoiceChip)).height, 48);
   });
 
   testWidgets('Liquid Glass: a glass capsule that toggles', (tester) async {
     bool? last;
-    await tester.pumpWidget(_host(
-      GlassChip(
-        key: const Key('chip'),
-        label: const Text('Sort A'),
-        selected: false,
-        onSelected: (v) => last = v,
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          key: const Key('chip'),
+          label: const Text('Sort A'),
+          selected: false,
+          onSelected: (v) => last = v,
+        ),
+        liquid: true,
       ),
-      liquid: true,
-    ));
+    );
     expect(find.byType(GlassSurface), findsOneWidget);
     expect(find.byType(ChoiceChip), findsNothing);
     await tester.tap(find.byKey(const Key('chip')));
@@ -134,78 +171,92 @@ void main() {
   });
 
   testWidgets('selected uses the prominent white glass', (tester) async {
-    await tester.pumpWidget(_host(
-      GlassChip(
-        label: const Text('Sort A'),
-        selected: true,
-        onSelected: (_) {},
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          label: const Text('Sort A'),
+          selected: true,
+          onSelected: (_) {},
+        ),
+        liquid: true,
       ),
-      liquid: true,
-    ));
+    );
     final surface = tester.widget<GlassSurface>(find.byType(GlassSurface));
     expect(surface.fillColor, isNotNull);
   });
 
-  testWidgets('Frosted: single select is a ChoiceChip, multi a FilterChip',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      GlassChip(
-        label: const Text('Sort A'),
-        selected: true,
-        onSelected: (_) {},
+  testWidgets('Frosted: single select is a ChoiceChip, multi a FilterChip', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          label: const Text('Sort A'),
+          selected: true,
+          onSelected: (_) {},
+        ),
+        liquid: false,
       ),
-      liquid: false,
-    ));
+    );
     expect(find.byType(ChoiceChip), findsOneWidget);
-    await tester.pumpWidget(_host(
-      GlassChip(
-        label: const Text('Filter B'),
-        selected: false,
-        multiSelect: true,
-        onSelected: (_) {},
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          label: const Text('Filter B'),
+          selected: false,
+          multiSelect: true,
+          onSelected: (_) {},
+        ),
+        liquid: false,
       ),
-      liquid: false,
-    ));
+    );
     expect(find.byType(FilterChip), findsOneWidget);
   });
 
   testWidgets('Frosted: the avatar reaches the chip', (tester) async {
-    await tester.pumpWidget(_host(
-      GlassChip(
-        avatar: const Icon(Icons.movie, key: Key('av')),
-        label: const Text('Sort A'),
-        selected: false,
-        onSelected: (_) {},
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          avatar: const Icon(Icons.movie, key: Key('av')),
+          label: const Text('Sort A'),
+          selected: false,
+          onSelected: (_) {},
+        ),
+        liquid: false,
       ),
-      liquid: false,
-    ));
+    );
     expect(find.byKey(const Key('av')), findsOneWidget);
   });
 
-  testWidgets('glass avatar takes the label colour when selected',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      GlassChip(
-        avatar: const Icon(Icons.dns, key: Key('av')),
-        label: const Text('Sort A'),
-        selected: true,
-        onSelected: (_) {},
+  testWidgets('glass avatar takes the label colour when selected', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          avatar: const Icon(Icons.dns, key: Key('av')),
+          label: const Text('Sort A'),
+          selected: true,
+          onSelected: (_) {},
+        ),
+        liquid: true,
       ),
-      liquid: true,
-    ));
+    );
     final context = tester.element(find.byKey(const Key('av')));
     expect(IconTheme.of(context).color, context.palette.background);
   });
 
   testWidgets('the semantics report selection', (tester) async {
-    await tester.pumpWidget(_host(
-      GlassChip(
-        label: const Text('Sort A'),
-        selected: true,
-        onSelected: (_) {},
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          label: const Text('Sort A'),
+          selected: true,
+          onSelected: (_) {},
+        ),
+        liquid: true,
       ),
-      liquid: true,
-    ));
+    );
     final data = tester.getSemantics(find.text('Sort A')).getSemanticsData();
     // ignore: deprecated_member_use
     expect(data.flagsCollection.isSelected.index, isNot(0));

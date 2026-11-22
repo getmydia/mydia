@@ -10,24 +10,15 @@ QueryKey _collectionItems(String id) =>
 void main() {
   group('KeyTarget', () {
     test('two targets over equal keys are equal', () {
-      expect(
-        KeyTarget(_showDetail('7')),
-        KeyTarget(_showDetail('7')),
-      );
+      expect(KeyTarget(_showDetail('7')), KeyTarget(_showDetail('7')));
     });
 
     test('two targets over different keys are not equal', () {
-      expect(
-        KeyTarget(_showDetail('7')),
-        isNot(KeyTarget(_showDetail('8'))),
-      );
+      expect(KeyTarget(_showDetail('7')), isNot(KeyTarget(_showDetail('8'))));
     });
 
     test('equal targets collapse in a set, as the rules rely on', () {
-      final targets = {
-        KeyTarget(_home),
-        KeyTarget(_home),
-      };
+      final targets = {KeyTarget(_home), KeyTarget(_home)};
 
       expect(targets, hasLength(1));
     });

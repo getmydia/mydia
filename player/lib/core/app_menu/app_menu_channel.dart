@@ -21,8 +21,9 @@ import 'now_playing.dart';
 /// `applicationDockMenu` is synchronous and cannot wait on Dart, the same
 /// constraint `UpdaterDelegate` in `AppDelegate.swift` documents for the
 /// release track. The name is matched literally in `AppMenu.swift`.
-const MethodChannel kAppMenuChannel =
-    MethodChannel('dev.mydia.player/app_menu');
+const MethodChannel kAppMenuChannel = MethodChannel(
+  'dev.mydia.player/app_menu',
+);
 
 /// Whether this build has a native app menu to talk to.
 bool get appMenuSupported =>
@@ -38,14 +39,11 @@ bool get appMenuSupported =>
 /// `togglePlayPause` case).
 class AppMenuCommands {
   AppMenuCommands({
-    required void Function(String route) go,
-    required void Function() back,
-    required RemoteTargetController remote,
-    required NowPlaying? Function() nowPlaying,
-  })  : _go = go,
-        _back = back,
-        _remote = remote,
-        _nowPlaying = nowPlaying;
+    required this._go,
+    required this._back,
+    required this._remote,
+    required this._nowPlaying,
+  });
 
   final void Function(String route) _go;
   final void Function() _back;
@@ -73,9 +71,11 @@ class AppMenuCommands {
       case 'togglePlayPause':
         final current = _nowPlaying();
         if (current == null) return null;
-        _remote.submit(TransportIntent(
-          current.isPlaying ? TransportAction.pause : TransportAction.play,
-        ));
+        _remote.submit(
+          TransportIntent(
+            current.isPlaying ? TransportAction.pause : TransportAction.play,
+          ),
+        );
       case 'nextEpisode':
         _remote.submit(const EpisodeStepIntent(EpisodeStep.next));
       default:

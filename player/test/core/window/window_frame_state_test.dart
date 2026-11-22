@@ -5,9 +5,11 @@ void main() {
   group('WindowFrameState.fromChannel', () {
     test('reads all three flags', () {
       expect(
-        WindowFrameState.fromChannel(
-          const {'maximized': true, 'tiled': false, 'fullscreen': true},
-        ),
+        WindowFrameState.fromChannel(const {
+          'maximized': true,
+          'tiled': false,
+          'fullscreen': true,
+        }),
         const WindowFrameState(maximized: true, fullscreen: true),
       );
     });
@@ -22,7 +24,9 @@ void main() {
     test('anything that is not a map is the floating state', () {
       expect(WindowFrameState.fromChannel(null), WindowFrameState.floating);
       expect(
-          WindowFrameState.fromChannel('maximized'), WindowFrameState.floating);
+        WindowFrameState.fromChannel('maximized'),
+        WindowFrameState.floating,
+      );
     });
 
     test('reads solidFrame', () {

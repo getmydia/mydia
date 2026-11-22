@@ -67,12 +67,9 @@ void main() {
       publisher.publish(newer, _playing);
 
       publisher.publish(
-          older,
-          const NowPlaying(
-            title: 'Stale',
-            isPlaying: false,
-            hasNext: false,
-          ));
+        older,
+        const NowPlaying(title: 'Stale', isPlaying: false, hasNext: false),
+      );
       publisher.clear(older);
 
       expect(sent, [_playing]);
@@ -117,9 +114,9 @@ void main() {
     void mock(Future<Object?> Function(MethodCall call) handler) {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(kAppMenuChannel, (call) async {
-        calls.add(call);
-        return handler(call);
-      });
+            calls.add(call);
+            return handler(call);
+          });
     }
 
     setUp(() {

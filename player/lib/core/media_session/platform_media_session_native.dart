@@ -13,8 +13,10 @@ Future<SystemMediaSession> createPlatformMediaSession({
   DBusClient? client;
   try {
     client = DBusClient.session();
-    final session =
-        await MprisMediaSession.connect(client: client, position: position);
+    final session = await MprisMediaSession.connect(
+      client: client,
+      position: position,
+    );
     if (session != null) return session;
   } catch (e) {
     debugPrint('[MediaSession] no session bus: $e');

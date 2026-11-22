@@ -55,15 +55,15 @@ class PlanInputs {
   final Set<FailureKey> knownFailures;
 
   PlanInputs copyWith({QualityChoice? choice}) => PlanInputs(
-        candidates: candidates,
-        isWeb: isWeb,
-        typeSupported: typeSupported,
-        choice: choice ?? this.choice,
-        sourceHeight: sourceHeight,
-        fileBitrateKbps: fileBitrateKbps,
-        recentStall: recentStall,
-        knownFailures: knownFailures,
-      );
+    candidates: candidates,
+    isWeb: isWeb,
+    typeSupported: typeSupported,
+    choice: choice ?? this.choice,
+    sourceHeight: sourceHeight,
+    fileBitrateKbps: fileBitrateKbps,
+    recentStall: recentStall,
+    knownFailures: knownFailures,
+  );
 
   FileShape get shape =>
       FileShape.fromCandidates(candidates, sourceHeight: sourceHeight);
@@ -93,8 +93,9 @@ int? stallCeilingKbps({
   required int? fileBitrateKbps,
 }) {
   final cap = fileBitrateKbps == null ? null : (fileBitrateKbps * 0.9).round();
-  final measured =
-      measuredKbps != null && measuredKbps > 0 ? measuredKbps : null;
+  final measured = measuredKbps != null && measuredKbps > 0
+      ? measuredKbps
+      : null;
   if (measured == null) return cap;
   if (cap == null) return measured;
   return measured < cap ? measured : cap;
@@ -196,7 +197,8 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   final isAuto = choice.kind == QualityChoiceKind.auto;
   final knownToFail = isAuto && inputs.knownFailures.contains(failureKey);
   final ceiling = inputs.recentStall?.ceilingKbps;
-  final fits = !isAuto ||
+  final fits =
+      !isAuto ||
       bitrateFits(
         fileBitrateKbps: inputs.fileBitrateKbps,
         throughputKbps: ceiling,
@@ -253,7 +255,8 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   // When there was no copy candidate at all, and direct play was blocked by
   // the platform or the list rather than by memory or bandwidth, the
   // structural blocker is the more useful thing to log.
-  final structural = blocker == PlanReason.noDirectPlayCandidate ||
+  final structural =
+      blocker == PlanReason.noDirectPlayCandidate ||
       blocker == PlanReason.webNeverDirectPlays;
   final reported = copy == null && structural ? blocker : reason;
 

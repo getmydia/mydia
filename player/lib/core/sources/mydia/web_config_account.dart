@@ -38,7 +38,8 @@ Future<void> upsertWebConfigAccount(
 
   // An account that holds this id but whose credentials are unreadable is
   // still that account: refresh its secret and leave its record alone.
-  final existing = resolved.existing ??
+  final existing =
+      resolved.existing ??
       snapshot.accounts
           .map((r) => r.account)
           .where((a) => a.id == resolved.accountId)

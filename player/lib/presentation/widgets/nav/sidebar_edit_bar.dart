@@ -9,11 +9,7 @@ import '../../../l10n/l10n.dart';
 /// confirmation lives with the caller, which has the provider access to act on
 /// the answer.
 class SidebarEditBar extends StatelessWidget {
-  const SidebarEditBar({
-    super.key,
-    required this.onDone,
-    this.onReset,
-  });
+  const SidebarEditBar({super.key, required this.onDone, this.onReset});
 
   final VoidCallback onDone;
 
@@ -39,9 +35,7 @@ class SidebarEditBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: palette.primary.withValues(alpha: 0.28),
-        ),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.28)),
       ),
       child: Row(
         children: [

@@ -135,8 +135,7 @@ class P2pControlTransport implements MydiaControlTransport {
   Future<FlutterRemoteControlResponse> send(
     String nodeId,
     FlutterRemoteControlRequest request,
-  ) =>
-      host.sendRemoteControlRequest(peer: nodeId, req: request);
+  ) => host.sendRemoteControlRequest(peer: nodeId, req: request);
 }
 
 /// A [CastBackend] over Mydia's own remote-control protocol, rather than
@@ -292,7 +291,7 @@ class MydiaCastBackend
     if (sources != null && sources.isNotEmpty) {
       metadata = {
         ...metadata,
-        'sources': sources.map((s) => s.value).join(',')
+        'sources': sources.map((s) => s.value).join(','),
       };
     }
 
@@ -350,10 +349,12 @@ class MydiaCastBackend
 
     final FlutterRemoteControlResponse response;
     try {
-      response = await _send(const FlutterRemoteControlRequest.hello(
-        controllerName: _controllerName,
-        protocolVersion: remoteControlProtocolVersion,
-      ));
+      response = await _send(
+        const FlutterRemoteControlRequest.hello(
+          controllerName: _controllerName,
+          protocolVersion: remoteControlProtocolVersion,
+        ),
+      );
     } catch (_) {
       // `_send` already reported this on `failureStream` and rethrew a
       // `CastBackendException`. This call must not leave `connectedDevice`
@@ -376,10 +377,7 @@ class MydiaCastBackend
           ? CastFailureKind.notAuthorized
           : CastFailureKind.targetRefused;
       if (!_disposed) _failures.add(kind);
-      throw CastBackendException(
-        'The Mydia target refused this device.',
-        kind,
-      );
+      throw CastBackendException('The Mydia target refused this device.', kind);
     }
 
     if (response.protocolVersion != remoteControlProtocolVersion) {
@@ -461,17 +459,19 @@ class MydiaCastBackend
       );
     }
 
-    await _sendCommand(FlutterRemoteControlRequest.loadContent(
-      FlutterLoadContentRequest(
-        mediaItemId: ref.mediaItemId,
-        episodeId: ref.episodeId,
-        positionMs: BigInt.from(request.startPosition?.inMilliseconds ?? 0),
-        audioTrack: ref.audioTrack,
-        subtitleTrack: ref.subtitleTrack,
-        autoplay: true,
-        serverInstanceId: ref.serverInstanceId,
+    await _sendCommand(
+      FlutterRemoteControlRequest.loadContent(
+        FlutterLoadContentRequest(
+          mediaItemId: ref.mediaItemId,
+          episodeId: ref.episodeId,
+          positionMs: BigInt.from(request.startPosition?.inMilliseconds ?? 0),
+          audioTrack: ref.audioTrack,
+          subtitleTrack: ref.subtitleTrack,
+          autoplay: true,
+          serverInstanceId: ref.serverInstanceId,
+        ),
       ),
-    ));
+    );
   }
 
   @override
@@ -486,25 +486,23 @@ class MydiaCastBackend
 
   @override
   Future<void> seek(Duration position) => _sendCommand(
-        FlutterRemoteControlRequest.seek(
-          positionMs: BigInt.from(position.inMilliseconds),
-        ),
-      );
+    FlutterRemoteControlRequest.seek(
+      positionMs: BigInt.from(position.inMilliseconds),
+    ),
+  );
 
   @override
   Future<void> selectSubtitle(CastSubtitleTrack? track) => _sendCommand(
-        FlutterRemoteControlRequest.selectSubtitleTrack(id: track?.trackId),
-      );
+    FlutterRemoteControlRequest.selectSubtitleTrack(id: track?.trackId),
+  );
 
   @override
-  Future<void> setVolume(double level) => _sendCommand(
-        FlutterRemoteControlRequest.setVolume(level: level),
-      );
+  Future<void> setVolume(double level) =>
+      _sendCommand(FlutterRemoteControlRequest.setVolume(level: level));
 
   @override
-  Future<void> setMuted(bool muted) => _sendCommand(
-        FlutterRemoteControlRequest.setMute(muted: muted),
-      );
+  Future<void> setMuted(bool muted) =>
+      _sendCommand(FlutterRemoteControlRequest.setMute(muted: muted));
 
   @override
   Stream<CastPlaybackState> get stateStream => _states.stream;
@@ -607,7 +605,9 @@ class MydiaCastBackend
           : CastFailureKind.unreachable;
       if (reportFailure && !_disposed) _failures.add(kind);
       throw CastBackendException(
-          'Could not reach the Mydia target: $error', kind);
+        'Could not reach the Mydia target: $error',
+        kind,
+      );
     }
   }
 
@@ -689,8 +689,9 @@ class MydiaCastBackend
     _pollTimer?.cancel();
     _positionTicker?.cancel();
 
-    final interval =
-        _remoteUiVisible ? _visiblePollInterval : _backgroundPollInterval;
+    final interval = _remoteUiVisible
+        ? _visiblePollInterval
+        : _backgroundPollInterval;
     _pollTimer = Timer.periodic(interval, (_) {
       _checkFreshness(interval);
       unawaited(_pollOnce());
@@ -796,7 +797,8 @@ Future<FlutterPlaybackSnapshot?> probeMydiaNodeState(
     if (response is! FlutterRemoteControlResponse_State) return null;
 
     final snapshot = response.field0;
-    final playingOrPaused = snapshot.state == FlutterPlaybackState.playing ||
+    final playingOrPaused =
+        snapshot.state == FlutterPlaybackState.playing ||
         snapshot.state == FlutterPlaybackState.paused;
     return playingOrPaused ? snapshot : null;
   } catch (_) {

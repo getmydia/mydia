@@ -22,12 +22,12 @@ void main() {
   }
 
   Future<void> push(Map<String, bool> state) => messenger.handlePlatformMessage(
-        channel.name,
-        const StandardMethodCodec().encodeMethodCall(
-          MethodCall('onWindowStateChanged', state),
-        ),
-        (_) {},
-      );
+    channel.name,
+    const StandardMethodCodec().encodeMethodCall(
+      MethodCall('onWindowStateChanged', state),
+    ),
+    (_) {},
+  );
 
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
@@ -50,16 +50,18 @@ void main() {
       expect(source.state.value, const WindowFrameState(maximized: true));
     });
 
-    test('stays floating when the channel throws, and does not rethrow',
-        () async {
-      stubChannel(null);
-      final source = WindowFrameStateSource();
-      addTearDown(source.dispose);
+    test(
+      'stays floating when the channel throws, and does not rethrow',
+      () async {
+        stubChannel(null);
+        final source = WindowFrameStateSource();
+        addTearDown(source.dispose);
 
-      await source.load();
+        await source.load();
 
-      expect(source.state.value, WindowFrameState.floating);
-    });
+        expect(source.state.value, WindowFrameState.floating);
+      },
+    );
 
     test('follows pushed changes', () async {
       stubChannel({});
@@ -88,24 +90,30 @@ void main() {
       expect(source.state.value, const WindowFrameState(solidFrame: true));
     });
 
-    test('a state pushed mid-load survives the older read landing after it',
-        () async {
-      final gate = Completer<Map<String, bool>>();
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        if (call.method != 'getWindowState') return null;
-        return gate.future;
-      });
-      final source = WindowFrameStateSource();
-      addTearDown(source.dispose);
+    test(
+      'a state pushed mid-load survives the older read landing after it',
+      () async {
+        final gate = Completer<Map<String, bool>>();
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method != 'getWindowState') return null;
+          return gate.future;
+        });
+        final source = WindowFrameStateSource();
+        addTearDown(source.dispose);
 
-      final pending = source.load();
-      await push({'maximized': false, 'tiled': true, 'fullscreen': false});
-      gate.complete({'maximized': true});
-      await pending;
+        final pending = source.load();
+        await push({'maximized': false, 'tiled': true, 'fullscreen': false});
+        gate.complete({'maximized': true});
+        await pending;
 
-      expect(source.state.value, const WindowFrameState(tiled: true),
-          reason: 'the superseded startup read overwrote a newer pushed '
-              'state, leaving the clip wrong until the window changed again');
-    });
+        expect(
+          source.state.value,
+          const WindowFrameState(tiled: true),
+          reason:
+              'the superseded startup read overwrote a newer pushed '
+              'state, leaving the clip wrong until the window changed again',
+        );
+      },
+    );
   });
 }

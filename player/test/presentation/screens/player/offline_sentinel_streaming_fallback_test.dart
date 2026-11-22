@@ -59,85 +59,91 @@ void main() {
   }
 
   testWidgets(
-      'a downloaded file missing from disk still reaches a real stream, '
-      'not the offline sentinel', (tester) async {
-    // A path that was never written: `_resolveDownloadedFilePath` fails its
-    // first check (`file_utils.fileExists`) and, with `path_provider` mocked
-    // to a temp dir that shares no files with this one, every fallback it
-    // tries misses too — reproducing a download whose backing file rotted
-    // out from under a stale record.
-    final tempDir = Directory.systemTemp
-        .createTempSync('mydia_offline_sentinel_fallback_test_');
-    addTearDown(() => tempDir.deleteSync(recursive: true));
-    final missingPath = '${tempDir.path}/arrival.mkv';
-
-    final proxyService = TrackingLocalProxyService();
-
-    // `streamingCandidatesResponse` hardcodes fileId 'file-1' — the id the
-    // server ranked highest for the movie. Direct play must end up streaming
-    // that id, never the literal string 'offline'.
-    final server = serverFor(
-        streamingCandidatesResponse(duration: 5400, directPlay: true));
-
-    final container = buildPlayerScreenContainer(
-      server: server,
-      // P2P so the direct-play URL is built by the tracked proxy, not the
-      // real media-token service — same choice as
-      // player_honors_selected_file_test.dart, for the same reason.
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
-      castManager: CapturingCastSessionManager(),
-      proxyService: proxyService,
-      // Online mode (default authStatus), but with a download on record: the
-      // "already downloaded, still online" branch, not the offline-mode one.
-      downloaded: downloadedItem(filePath: missingPath, runtimeMinutes: 90),
-    );
-    addTearDown(container.dispose);
-
-    // `_resolveDownloadedFilePath`'s fallbacks do real `dart:io` and
-    // `path_provider` I/O (see offline_resume_test.dart's doc comments for
-    // why plain `pump()` can't observe that), so this has to run inside
-    // `runAsync` and poll for the real outcome rather than pump a fixed
-    // number of times.
-    await tester.runAsync(() async {
-      await pumpPlayerScreen(tester, container, fileId: 'offline');
-      await pumpUntilReal(
-        tester,
-        () => proxyService.directStreamFileIds.isNotEmpty,
+    'a downloaded file missing from disk still reaches a real stream, '
+    'not the offline sentinel',
+    (tester) async {
+      // A path that was never written: `_resolveDownloadedFilePath` fails its
+      // first check (`file_utils.fileExists`) and, with `path_provider` mocked
+      // to a temp dir that shares no files with this one, every fallback it
+      // tries misses too — reproducing a download whose backing file rotted
+      // out from under a stale record.
+      final tempDir = Directory.systemTemp.createTempSync(
+        'mydia_offline_sentinel_fallback_test_',
       );
-    });
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      final missingPath = '${tempDir.path}/arrival.mkv';
 
-    expect(
-      proxyService.directStreamFileIds,
-      ['file-1'],
-      reason: 'the offline sentinel must never reach the direct-play URL — '
-          'once streaming takes over it has to play whatever the server '
-          'ranked for the media item',
-    );
+      final proxyService = TrackingLocalProxyService();
 
-    // The pre-play queries now fire concurrently, so their position in
-    // `server.requests` is no longer fixed -- pick the `StreamingCandidates`
-    // call out by the variable unique to it instead.
-    final candidatesVariables = server.requests
-        .firstWhere((r) => r.variables.containsKey('contentType'))
-        .variables;
-    expect(
-      candidatesVariables['contentType'],
-      'movie',
-      reason: 'there is no file to ask about once the sentinel is in play, '
-          'so the fallback has to ask by media item instead',
-    );
-    expect(candidatesVariables['id'], 'movie-1');
+      // `streamingCandidatesResponse` hardcodes fileId 'file-1' — the id the
+      // server ranked highest for the movie. Direct play must end up streaming
+      // that id, never the literal string 'offline'.
+      final server = serverFor(
+        streamingCandidatesResponse(duration: 5400, directPlay: true),
+      );
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
-  });
+      final container = buildPlayerScreenContainer(
+        server: server,
+        // P2P so the direct-play URL is built by the tracked proxy, not the
+        // real media-token service — same choice as
+        // player_honors_selected_file_test.dart, for the same reason.
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
+        castManager: CapturingCastSessionManager(),
+        proxyService: proxyService,
+        // Online mode (default authStatus), but with a download on record: the
+        // "already downloaded, still online" branch, not the offline-mode one.
+        downloaded: downloadedItem(filePath: missingPath, runtimeMinutes: 90),
+      );
+      addTearDown(container.dispose);
 
-  testWidgets(
-      'a downloaded file missing from disk, when the candidates query '
+      // `_resolveDownloadedFilePath`'s fallbacks do real `dart:io` and
+      // `path_provider` I/O (see offline_resume_test.dart's doc comments for
+      // why plain `pump()` can't observe that), so this has to run inside
+      // `runAsync` and poll for the real outcome rather than pump a fixed
+      // number of times.
+      await tester.runAsync(() async {
+        await pumpPlayerScreen(tester, container, fileId: 'offline');
+        await pumpUntilReal(
+          tester,
+          () => proxyService.directStreamFileIds.isNotEmpty,
+        );
+      });
+
+      expect(
+        proxyService.directStreamFileIds,
+        ['file-1'],
+        reason:
+            'the offline sentinel must never reach the direct-play URL — '
+            'once streaming takes over it has to play whatever the server '
+            'ranked for the media item',
+      );
+
+      // The pre-play queries now fire concurrently, so their position in
+      // `server.requests` is no longer fixed -- pick the `StreamingCandidates`
+      // call out by the variable unique to it instead.
+      final candidatesVariables = server.requests
+          .firstWhere((r) => r.variables.containsKey('contentType'))
+          .variables;
+      expect(
+        candidatesVariables['contentType'],
+        'movie',
+        reason:
+            'there is no file to ask about once the sentinel is in play, '
+            'so the fallback has to ask by media item instead',
+      );
+      expect(candidatesVariables['id'], 'movie-1');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('a downloaded file missing from disk, when the candidates query '
       'itself fails, surfaces an error instead of streaming the offline '
       'sentinel', (tester) async {
-    final tempDir = Directory.systemTemp
-        .createTempSync('mydia_offline_sentinel_fallback_error_test_');
+    final tempDir = Directory.systemTemp.createTempSync(
+      'mydia_offline_sentinel_fallback_error_test_',
+    );
     addTearDown(() => tempDir.deleteSync(recursive: true));
     final missingPath = '${tempDir.path}/arrival.mkv';
 
@@ -174,14 +180,16 @@ void main() {
     expect(
       find.byIcon(Icons.error_outline),
       findsOneWidget,
-      reason: 'a failed candidates call must surface as a real error, not '
+      reason:
+          'a failed candidates call must surface as a real error, not '
           'a silent hang and not an unhandled exception',
     );
 
     expect(
       proxyService.directStreamFileIds,
       isEmpty,
-      reason: 'direct play must never start when the candidates call '
+      reason:
+          'direct play must never start when the candidates call '
           'failed — there is no server-ranked file to play',
     );
 
@@ -189,7 +197,8 @@ void main() {
       expect(
         request.variables['fileId'],
         isNot('offline'),
-        reason: 'the offline sentinel must never reach a '
+        reason:
+            'the offline sentinel must never reach a '
             'StartStreamingSession (or any other) mutation sent to the '
             'server',
       );

@@ -21,10 +21,10 @@ class NowPlaying {
   final bool hasNext;
 
   Map<String, Object> toWire() => {
-        'title': title,
-        'isPlaying': isPlaying,
-        'hasNext': hasNext,
-      };
+    'title': title,
+    'isPlaying': isPlaying,
+    'hasNext': hasNext,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -68,7 +68,7 @@ Future<void> sendNowPlaying(
 /// [publish] or [clear].
 class NowPlayingPublisher {
   NowPlayingPublisher(this._send, {bool Function()? redact})
-      : _redact = redact ?? (() => false);
+    : _redact = redact ?? (() => false);
 
   final Future<void> Function(NowPlaying?) _send;
 

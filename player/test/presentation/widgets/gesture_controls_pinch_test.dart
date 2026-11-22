@@ -28,14 +28,14 @@ class _FakePlatformPlayer extends PlatformPlayer {
 }
 
 Widget _host(Player player, ValueChanged<VideoScaling> onPinch) => MaterialApp(
-      home: GestureControls(
-        player: player,
-        timeline: StreamTimeline.zero,
-        onSeekToReal: (_) async {},
-        onPinch: onPinch,
-        child: const SizedBox.expand(),
-      ),
-    );
+  home: GestureControls(
+    player: player,
+    timeline: StreamTimeline.zero,
+    onSeekToReal: (_) async {},
+    onPinch: onPinch,
+    child: const SizedBox.expand(),
+  ),
+);
 
 void main() {
   testWidgets('a two-finger spread asks for fill', (tester) async {
@@ -54,8 +54,9 @@ void main() {
     expect(asked, [VideoScaling.fill]);
   });
 
-  testWidgets('a single-finger vertical drag never reports a pinch',
-      (tester) async {
+  testWidgets('a single-finger vertical drag never reports a pinch', (
+    tester,
+  ) async {
     final player = Player(platformPlayer: _FakePlatformPlayer());
     addTearDown(player.dispose);
     final asked = <VideoScaling>[];
@@ -68,8 +69,9 @@ void main() {
     expect(asked, isEmpty);
   });
 
-  testWidgets('a diagonal two-finger spread does not change the volume',
-      (tester) async {
+  testWidgets('a diagonal two-finger spread does not change the volume', (
+    tester,
+  ) async {
     final platform = _FakePlatformPlayer();
     final player = Player(platformPlayer: platform);
     addTearDown(player.dispose);

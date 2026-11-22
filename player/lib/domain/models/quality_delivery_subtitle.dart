@@ -47,7 +47,7 @@ OriginalDelivery originalDelivery({
 /// lossless. A 1080p HEVC episode therefore reports "Original · re-encoding
 /// required" here, matching what the server dashboard shows.
 OriginalDelivery originalDeliveryForPlan(PlaybackPlan plan) => switch (plan) {
-      DirectPlayPlan() => OriginalDelivery.directPlay,
-      HlsPlan(strategy: HlsStrategy.copy) => OriginalDelivery.lossless,
-      HlsPlan() => OriginalDelivery.transcode,
-    };
+  DirectPlayPlan() => OriginalDelivery.directPlay,
+  HlsPlan(strategy: HlsStrategy.copy) => OriginalDelivery.lossless,
+  HlsPlan() => OriginalDelivery.transcode,
+};

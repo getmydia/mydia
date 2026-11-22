@@ -38,24 +38,28 @@ class GoogleSignInMethod {
 
 /// The sign-in for [auth], the way `googleAuthForPlatform` chose it.
 GoogleSignInMethod? googleSignInMethodFor(GoogleAuth? auth) => switch (auth) {
-      null => null,
-      final GoogleSignInAuth a =>
-        GoogleSignInMethod(currentEmail: a.currentEmail, signIn: a.signIn),
-      final GoogleTokenAuth a when a.clientKind == 'tv' => GoogleSignInMethod(
-          currentEmail: a.currentEmail,
-          deviceCode: () => DeviceCodeFlow().signIn(a),
-        ),
-      final GoogleTokenAuth a => GoogleSignInMethod(
-          currentEmail: a.currentEmail,
-          signIn: () => LoopbackPkceFlow().signIn(a),
-        ),
-      _ => null,
-    };
+  null => null,
+  final GoogleSignInAuth a => GoogleSignInMethod(
+    currentEmail: a.currentEmail,
+    signIn: a.signIn,
+  ),
+  final GoogleTokenAuth a when a.clientKind == 'tv' => GoogleSignInMethod(
+    currentEmail: a.currentEmail,
+    deviceCode: () => DeviceCodeFlow().signIn(a),
+  ),
+  final GoogleTokenAuth a => GoogleSignInMethod(
+    currentEmail: a.currentEmail,
+    signIn: () => LoopbackPkceFlow().signIn(a),
+  ),
+  _ => null,
+};
 
 /// This device's Google sign-in, null where Drive is not offered.
 final Provider<GoogleSignInMethod?> googleSignInMethodProvider =
-    Provider<GoogleSignInMethod?>((ref) =>
-        googleSignInMethodFor(ref.watch(backupControllerProvider).googleAuth));
+    Provider<GoogleSignInMethod?>(
+      (ref) =>
+          googleSignInMethodFor(ref.watch(backupControllerProvider).googleAuth),
+    );
 
 /// Signs in to Google unless already signed in ([force] signs in
 /// regardless, for an account whose access was revoked). True once signed
@@ -65,8 +69,12 @@ final Provider<GoogleSignInMethod?> googleSignInMethodProvider =
 bool _sameGoogleAccount(String a, String b) =>
     a.trim().toLowerCase() == b.trim().toLowerCase();
 
-Future<bool> signInToGoogle(BuildContext context, GoogleSignInMethod? method,
-    {bool force = false, String? expectedAccount}) async {
+Future<bool> signInToGoogle(
+  BuildContext context,
+  GoogleSignInMethod? method, {
+  bool force = false,
+  String? expectedAccount,
+}) async {
   if (method == null) return false;
   final expected = expectedAccount?.trim();
   final wantAccount = (expected == null || expected.isEmpty) ? null : expected;
@@ -97,8 +105,10 @@ Future<bool> signInToGoogle(BuildContext context, GoogleSignInMethod? method,
         return false;
       }
       if (!_sameGoogleAccount(actual, wantAccount)) {
-        toaster.show(l10n.backupGoogleAccountMismatch(actual, wantAccount),
-            kind: ToastKind.error);
+        toaster.show(
+          l10n.backupGoogleAccountMismatch(actual, wantAccount),
+          kind: ToastKind.error,
+        );
         return false;
       }
     }
@@ -122,14 +132,13 @@ Future<bool> signInToGoogle(BuildContext context, GoogleSignInMethod? method,
 /// another device. True once signed in; false when declined, cancelled or
 /// failed (a failure is toasted). An expired code can be replaced.
 Future<bool> showGoogleDeviceCodeSheet(
-    BuildContext context, Stream<DeviceCodeState> Function() start) async {
+  BuildContext context,
+  Stream<DeviceCodeState> Function() start,
+) async {
   final done = await showDialog<bool>(
     context: context,
     builder: (_) => GlassDialog(
-      content: SizedBox(
-        width: 460,
-        child: GoogleDeviceCodeSheet(start: start),
-      ),
+      content: SizedBox(width: 460, child: GoogleDeviceCodeSheet(start: start)),
     ),
   );
   return done ?? false;
@@ -219,11 +228,12 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
     }
     final l10n = context.l10n;
     showToast(
-        context,
-        e is BackupRelayException && e.code == googleScopeMissingCode
-            ? l10n.backupGoogleScopeMissing
-            : l10n.backupActionFailed,
-        kind: ToastKind.error);
+      context,
+      e is BackupRelayException && e.code == googleScopeMissingCode
+          ? l10n.backupGoogleScopeMissing
+          : l10n.backupActionFailed,
+      kind: ToastKind.error,
+    );
     _close(false);
   }
 
@@ -242,8 +252,10 @@ class _GoogleDeviceCodeSheetState extends State<GoogleDeviceCodeSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l10n.googleDeviceCodeTitle,
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              l10n.googleDeviceCodeTitle,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             if (_expired)
               Text(

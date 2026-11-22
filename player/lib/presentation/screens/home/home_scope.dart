@@ -38,9 +38,7 @@ final class OneServer extends HomeScope {
   final SourceId id;
 
   @override
-  List<MediaSource> sources(Ref ref) => [
-        if (ref.watch(mediaSourceProvider(id)) case final source?) source,
-      ];
+  List<MediaSource> sources(Ref ref) => [?ref.watch(mediaSourceProvider(id))];
 
   @override
   bool operator ==(Object other) => other is OneServer && other.id == id;

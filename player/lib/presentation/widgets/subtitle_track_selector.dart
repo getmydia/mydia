@@ -204,8 +204,11 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _outcome = const SubtitleSearchOutcome(results: [], providers: []);
-        _error =
-            _viewerMessage(context.l10n, e, context.l10n.subtitleSearchFailed);
+        _error = _viewerMessage(
+          context.l10n,
+          e,
+          context.l10n.subtitleSearchFailed,
+        );
         _mode = _SheetMode.results;
       });
     }
@@ -255,7 +258,10 @@ class _SubtitleTrackSelectorSheetState
       setState(() {
         _mode = _SheetMode.results;
         _error = _viewerMessage(
-            context.l10n, e, context.l10n.subtitleDownloadFailed);
+          context.l10n,
+          e,
+          context.l10n.subtitleDownloadFailed,
+        );
       });
     }
   }
@@ -278,7 +284,10 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _delayError = _viewerMessage(
-            context.l10n, e, context.l10n.subtitleDelayAdjustFailed);
+          context.l10n,
+          e,
+          context.l10n.subtitleDelayAdjustFailed,
+        );
       });
     }
   }
@@ -292,7 +301,10 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _delayError = _viewerMessage(
-            context.l10n, e, context.l10n.subtitleDelayResetFailed);
+          context.l10n,
+          e,
+          context.l10n.subtitleDelayResetFailed,
+        );
       });
     }
   }
@@ -306,7 +318,10 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _delayError = _viewerMessage(
-            context.l10n, e, context.l10n.subtitleDelaySaveFailed);
+          context.l10n,
+          e,
+          context.l10n.subtitleDelaySaveFailed,
+        );
       });
     }
   }
@@ -330,9 +345,9 @@ class _SubtitleTrackSelectorSheetState
               child: Text(
                 context.l10n.commonSubtitles,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: palette.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: palette.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -346,10 +361,12 @@ class _SubtitleTrackSelectorSheetState
   Widget _buildBody(BuildContext context) {
     return switch (_mode) {
       _SheetMode.tracks => _buildTracks(context),
-      _SheetMode.searching =>
-        _buildProgress(context.l10n.subtitleSearchSearching),
-      _SheetMode.downloading =>
-        _buildProgress(context.l10n.subtitleSearchDownloading),
+      _SheetMode.searching => _buildProgress(
+        context.l10n.subtitleSearchSearching,
+      ),
+      _SheetMode.downloading => _buildProgress(
+        context.l10n.subtitleSearchDownloading,
+      ),
       _SheetMode.results => _buildResults(context),
     };
   }
@@ -576,8 +593,9 @@ class _LanguageChip extends StatelessWidget {
     final palette = context.palette;
     final label = context.l10n.languageName(code) ?? code.toUpperCase();
     return Material(
-      color:
-          isSelected ? palette.primary : Colors.white.withValues(alpha: 0.06),
+      color: isSelected
+          ? palette.primary
+          : Colors.white.withValues(alpha: 0.06),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -624,10 +642,7 @@ class _TrackTile extends StatelessWidget {
         ),
       ),
       subtitle: subtitle != null
-          ? Text(
-              subtitle!,
-              style: TextStyle(color: palette.textSecondary),
-            )
+          ? Text(subtitle!, style: TextStyle(color: palette.textSecondary))
           : null,
       trailing: isSelected ? Icon(Icons.check, color: palette.primary) : null,
       onTap: onTap,

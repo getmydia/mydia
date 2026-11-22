@@ -54,12 +54,15 @@ import 'smb_native.dart' show smbNativeProvider;
 /// index, playback progress, and the peer sync store. Called at startup after
 /// `initAppHive()`; Hive hands back an already-open box.
 Future<void> openFilesLibraryBoxes() async {
-  final indexBox =
-      await Hive.openBox<Map<dynamic, dynamic>>(FileLibraryIndex.boxName);
+  final indexBox = await Hive.openBox<Map<dynamic, dynamic>>(
+    FileLibraryIndex.boxName,
+  );
   final progressBox = await Hive.openBox<Map<dynamic, dynamic>>(
-      HivePlaybackProgressStore.boxName);
-  final syncBox =
-      await Hive.openBox<Map<dynamic, dynamic>>(PeerSyncStore.boxName);
+    HivePlaybackProgressStore.boxName,
+  );
+  final syncBox = await Hive.openBox<Map<dynamic, dynamic>>(
+    PeerSyncStore.boxName,
+  );
   final syncStore = HivePeerSyncStore(syncBox);
   final progressStore = HivePlaybackProgressStore(progressBox);
   await seedPeerSyncStoreIfNeeded(
@@ -97,7 +100,8 @@ Future<void> openPeerFilesBoxes() async {
 
 /// The `files_index` box, opened by [openFilesLibraryBoxes].
 final filesIndexBoxProvider = Provider<Box<Map<dynamic, dynamic>>>(
-    (ref) => Hive.box<Map<dynamic, dynamic>>(FileLibraryIndex.boxName));
+  (ref) => Hive.box<Map<dynamic, dynamic>>(FileLibraryIndex.boxName),
+);
 
 /// One index per account, shared by its source, its scans and the add flows:
 /// a second instance would hold its own copy of the records.
@@ -109,16 +113,19 @@ final filesIndexProvider = Provider.family<FileLibraryIndex, String>(
 /// The playback progress store, read synchronously. It wraps the same open
 /// box `playbackProgressStoreProvider` resolves to, so both see one set of
 /// records.
-final filesProgressStoreProvider = Provider<PlaybackProgressStore>((ref) =>
-    HivePlaybackProgressStore(
-        Hive.box<Map<dynamic, dynamic>>(HivePlaybackProgressStore.boxName)));
+final filesProgressStoreProvider = Provider<PlaybackProgressStore>(
+  (ref) => HivePlaybackProgressStore(
+    Hive.box<Map<dynamic, dynamic>>(HivePlaybackProgressStore.boxName),
+  ),
+);
 
 /// The peer sync store, read synchronously. It wraps the open box
 /// [PeerSyncStore.boxName] when open, falling back to an in-memory store in tests.
 final peerSyncStoreProvider = Provider<PeerSyncStore>((ref) {
   if (Hive.isBoxOpen(PeerSyncStore.boxName)) {
     return HivePeerSyncStore(
-        Hive.box<Map<dynamic, dynamic>>(PeerSyncStore.boxName));
+      Hive.box<Map<dynamic, dynamic>>(PeerSyncStore.boxName),
+    );
   }
   return InMemoryPeerSyncStore();
 });
@@ -128,7 +135,8 @@ final peerSyncStoreProvider = Provider<PeerSyncStore>((ref) {
 final filesMediaInfoCacheProvider = Provider<FilesMediaInfoCache?>((ref) {
   if (!Hive.isBoxOpen(FilesMediaInfoCache.boxName)) return null;
   return FilesMediaInfoCache(
-      Hive.box<Map<dynamic, dynamic>>(FilesMediaInfoCache.boxName));
+    Hive.box<Map<dynamic, dynamic>>(FilesMediaInfoCache.boxName),
+  );
 });
 
 /// Whether the boxes [openFilesLibraryBoxes] opens are there. False when
@@ -151,11 +159,14 @@ final relayTmdbProvider = Provider<RelayTmdb>((ref) => RelayTmdb());
 final filesClockProvider = Provider<DateTime Function()>((_) => DateTime.now);
 
 typedef FilesBackendBuilder = FileSystemBackend Function(
-    Ref ref, Source source);
+  Ref ref,
+  Source source,
+);
 
 /// How a files source reaches its files. Tests override it with a fake.
-final filesBackendBuilderProvider =
-    Provider<FilesBackendBuilder>((_) => defaultFilesBackend);
+final filesBackendBuilderProvider = Provider<FilesBackendBuilder>(
+  (_) => defaultFilesBackend,
+);
 
 /// Folders on this device probe each of the account's roots. A WebDAV or SMB
 /// share, or an S3 bucket, reads its credentials on first use.
@@ -233,7 +244,8 @@ FilesMediaSource buildFilesSource(
   // Playback keeps a reporter, and with it this callback, past a rebuild of
   // this source; `ref` is disposed by then. The container is not.
   final container = ref.container;
-  final syncMutation = onSyncMutation ??
+  final syncMutation =
+      onSyncMutation ??
       () {
         unawaited(
           container
@@ -255,9 +267,11 @@ FilesMediaSource buildFilesSource(
     // not this device's to lend, and its matcher writes nothing.
     onPinned: peer
         ? null
-        : () => unawaited(container
-            .read(peerFilesHostProvider)
-            .bumpRevision(source.account.id)),
+        : () => unawaited(
+            container
+                .read(peerFilesHostProvider)
+                .bumpRevision(source.account.id),
+          ),
     readOnly: peer,
   );
   late final FilesMediaSource media;
@@ -270,9 +284,9 @@ FilesMediaSource buildFilesSource(
   final hostNode = source.server.machineIdentifier?.toLowerCase();
   final StreamSubscription<Object?> events = peer
       ? ref
-          .read(peerConnectedProvider)
-          .where((n) => n.toLowerCase() == hostNode)
-          .listen((_) => unawaited(media.probe()))
+            .read(peerConnectedProvider)
+            .where((n) => n.toLowerCase() == hostNode)
+            .listen((_) => unawaited(media.probe()))
       : ref.read(connectionRefreshBusProvider).events.listen((_) {
           unawaited(media.probe());
           _scanIfDue(ref, source, index);
@@ -293,17 +307,17 @@ FilesMediaSource buildFilesSource(
     // Read when an error is worded, so a renamed device shows its new name.
     peerDeviceName: peer
         ? () =>
-            container
-                .read(peerFilesAccountsProvider)
-                .where((a) => a.localAccountId == source.account.id)
-                .firstOrNull
-                ?.deviceName ??
-            source.server.name
+              container
+                  .read(peerFilesAccountsProvider)
+                  .where((a) => a.localAccountId == source.account.id)
+                  .firstOrNull
+                  ?.deviceName ??
+              source.server.name
         : null,
     onPeerFilesChanged: peer
-        ? (nodeId) => unawaited(container.read(peerFilesClientProvider).refresh(
-              nodeId: nodeId,
-            ))
+        ? (nodeId) => unawaited(
+            container.read(peerFilesClientProvider).refresh(nodeId: nodeId),
+          )
         : null,
     probe: ref.read(mediaProbeProvider),
     mediaInfoCache: ref.read(filesMediaInfoCacheProvider),
@@ -351,9 +365,11 @@ void _scanIfDue(Ref ref, Source source, FileLibraryIndex index) {
     if (!ref.mounted) return;
     final scan = ref.read(filesScanProvider(source.id).notifier);
     if (ref.read(filesScanProvider(source.id)).running) return;
-    unawaited(scan.rescan().catchError((Object e) {
-      debugPrint('[FilesSource] Scan on open failed: $e');
-    }));
+    unawaited(
+      scan.rescan().catchError((Object e) {
+        debugPrint('[FilesSource] Scan on open failed: $e');
+      }),
+    );
   });
 }
 
@@ -405,8 +421,8 @@ abstract class LazyFilesBackend<B extends FileSystemBackend>
     required this.credentials,
     http.Client? client,
     @visibleForTesting http.Client Function()? newClient,
-  })  : _owned = client == null ? (newClient ?? http.Client.new)() : null,
-        _given = client;
+  }) : _owned = client == null ? (newClient ?? http.Client.new)() : null,
+       _given = client;
 
   final Future<String?> Function() credentials;
   final http.Client? _owned;
@@ -434,12 +450,12 @@ abstract class LazyFilesBackend<B extends FileSystemBackend>
   }
 
   Future<B> _resolve() => _backend ??= _build().then(
-        (b) => b,
-        onError: (Object e, StackTrace st) {
-          _backend = null;
-          Error.throwWithStackTrace(e, st);
-        },
-      );
+    (b) => b,
+    onError: (Object e, StackTrace st) {
+      _backend = null;
+      Error.throwWithStackTrace(e, st);
+    },
+  );
 
   Future<B> _build() async {
     final stored = await credentials();
@@ -450,7 +466,8 @@ abstract class LazyFilesBackend<B extends FileSystemBackend>
       // Only the message: the exception's source is the stored token,
       // which holds the password or secret.
       debugPrint(
-          '[FilesSource] Unreadable $credentialsLabel credentials: ${e.message}');
+        '[FilesSource] Unreadable $credentialsLabel credentials: ${e.message}',
+      );
       throw const BackendUnauthorized('unreadable credentials');
     }
   }
@@ -486,7 +503,11 @@ class LazyWebDavBackend extends LazyFilesBackend<WebDavBackend> {
   WebDavBackend build(String stored, http.Client client) {
     final c = WebDavCredentials.fromJson(stored);
     return WebDavBackend(
-        base: base, user: c.user, password: c.password, client: client);
+      base: base,
+      user: c.user,
+      password: c.password,
+      client: client,
+    );
   }
 }
 

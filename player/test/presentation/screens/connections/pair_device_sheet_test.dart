@@ -21,8 +21,11 @@ import '../backup/fake_backup_controller.dart';
 import 'fake_peer_sync_service.dart';
 
 Widget _wrap(
-    FakePeerSyncService service, PeerSyncStore store, PairSheetMode mode,
-    {FakeBackupController? backup}) {
+  FakePeerSyncService service,
+  PeerSyncStore store,
+  PairSheetMode mode, {
+  FakeBackupController? backup,
+}) {
   final roster = PeerGroupRoster(
     store: store,
     localNodeId: () => service.localNodeId,
@@ -67,8 +70,9 @@ Future<(FakePeerSyncService, PeerSyncStore)> _open(
 }
 
 void main() {
-  testWidgets('show mode starts an offer on open and shows code and QR',
-      (tester) async {
+  testWidgets('show mode starts an offer on open and shows code and QR', (
+    tester,
+  ) async {
     final (service, _) = await _open(tester, PairSheetMode.show);
 
     expect(service.startOfferCount, 1);
@@ -90,13 +94,15 @@ void main() {
     expect(find.byKey(const Key('pair-code-input')), findsNothing);
   });
 
-  testWidgets('cancel button closes the sheet and cancels the offer',
-      (tester) async {
+  testWidgets('cancel button closes the sheet and cancels the offer', (
+    tester,
+  ) async {
     final (service, _) = await _open(tester, PairSheetMode.show);
 
     // The sheet scrolls once its header is in: bring the button up first.
-    await tester
-        .ensureVisible(find.byKey(const Key('pair-cancel-offer-button')));
+    await tester.ensureVisible(
+      find.byKey(const Key('pair-cancel-offer-button')),
+    );
     await tester.tap(find.byKey(const Key('pair-cancel-offer-button')));
     await tester.pumpAndSettle();
 
@@ -117,7 +123,8 @@ void main() {
 
   /// Opens the show sheet with its offer still pending, then closes it.
   Future<(FakePeerSyncService, Completer<void>)> openPendingThenClose(
-      WidgetTester tester) async {
+    WidgetTester tester,
+  ) async {
     final store = InMemoryPeerSyncStore();
     final service = FakePeerSyncService(store: store);
     final gate = Completer<void>();
@@ -136,8 +143,9 @@ void main() {
     return (service, gate);
   }
 
-  testWidgets('an offer that arrives after the sheet closed is cancelled',
-      (tester) async {
+  testWidgets('an offer that arrives after the sheet closed is cancelled', (
+    tester,
+  ) async {
     final (service, gate) = await openPendingThenClose(tester);
 
     gate.complete();
@@ -158,8 +166,9 @@ void main() {
     expect(service.activeOffer?.code, 'XYZ789');
   });
 
-  testWidgets('enter mode shows a focused code input and no offer',
-      (tester) async {
+  testWidgets('enter mode shows a focused code input and no offer', (
+    tester,
+  ) async {
     final (service, _) = await _open(tester, PairSheetMode.enter);
 
     expect(service.startOfferCount, 0);
@@ -176,33 +185,40 @@ void main() {
     expect(service.cancelOfferCount, 0);
   });
 
-  testWidgets('each mode names the sheet and tells the other side what to do',
-      (tester) async {
+  testWidgets('each mode names the sheet and tells the other side what to do', (
+    tester,
+  ) async {
     await _open(tester, PairSheetMode.show);
     expect(find.byKey(const Key('pair-sheet-title')), findsOneWidget);
     expect(find.text('Sync another Mydia Player'), findsOneWidget);
     expect(
-      find.text('Open Mydia Player on your other device, go to Servers & '
-          'devices, and choose Enter code from other device.'),
+      find.text(
+        'Open Mydia Player on your other device, go to Servers & '
+        'devices, and choose Enter code from other device.',
+      ),
       findsOneWidget,
     );
 
-    await tester
-        .ensureVisible(find.byKey(const Key('pair-cancel-offer-button')));
+    await tester.ensureVisible(
+      find.byKey(const Key('pair-cancel-offer-button')),
+    );
     await tester.tap(find.byKey(const Key('pair-cancel-offer-button')));
     await tester.pumpAndSettle();
 
     await _open(tester, PairSheetMode.enter);
     expect(find.text('Sync another Mydia Player'), findsOneWidget);
     expect(
-      find.text('On your other device, open Servers & devices and choose '
-          'Show code on this device. Then enter that code here.'),
+      find.text(
+        'On your other device, open Servers & devices and choose '
+        'Show code on this device. Then enter that code here.',
+      ),
       findsOneWidget,
     );
   });
 
-  testWidgets('hides the scan button where the scanner is unsupported',
-      (tester) async {
+  testWidgets('hides the scan button where the scanner is unsupported', (
+    tester,
+  ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     try {
       await _open(tester, PairSheetMode.enter);
@@ -213,8 +229,9 @@ void main() {
     }
   });
 
-  testWidgets('shows the scan button where the scanner is supported',
-      (tester) async {
+  testWidgets('shows the scan button where the scanner is supported', (
+    tester,
+  ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       await _open(tester, PairSheetMode.enter);
@@ -224,8 +241,9 @@ void main() {
     }
   });
 
-  testWidgets('submitting a code pairs, toasts once and closes the sheet',
-      (tester) async {
+  testWidgets('submitting a code pairs, toasts once and closes the sheet', (
+    tester,
+  ) async {
     final (service, _) = await _open(tester, PairSheetMode.enter);
 
     await tester.enterText(find.byKey(const Key('pair-code-input')), 'abc-123');
@@ -237,18 +255,24 @@ void main() {
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
 
-  testWidgets('a join that brings a cloud store hint says where to sign in',
-      (tester) async {
+  testWidgets('a join that brings a cloud store hint says where to sign in', (
+    tester,
+  ) async {
     final store = InMemoryPeerSyncStore();
     final backup = FakeBackupController(
-        offered: const {BackupStoreKind.relay, BackupStoreKind.gdrive});
+      offered: const {BackupStoreKind.relay, BackupStoreKind.gdrive},
+    );
     // Pairing keeps the host's store as a hint before the join completes.
     final service = _HintingPeerSync(
-        store: store,
-        onPair: () => backup.hintNotifier.value =
-            const CloudStoreHint(BackupStoreKind.gdrive, 'ana@example.com'));
-    await tester
-        .pumpWidget(_wrap(service, store, PairSheetMode.enter, backup: backup));
+      store: store,
+      onPair: () => backup.hintNotifier.value = const CloudStoreHint(
+        BackupStoreKind.gdrive,
+        'ana@example.com',
+      ),
+    );
+    await tester.pumpWidget(
+      _wrap(service, store, PairSheetMode.enter, backup: backup),
+    );
     await tester.tap(find.byKey(const Key('open-sheet')));
     await tester.pumpAndSettle();
 
@@ -256,15 +280,21 @@ void main() {
     await tester.tap(find.byKey(const Key('pair-submit-code-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Your devices back up to Google Drive. Sign in to join.'),
-        findsOneWidget);
-    expect(backup.calls, isNot(contains('acknowledgeHint')),
-        reason: 'Backup & sync keeps the hint until it is answered');
+    expect(
+      find.text('Your devices back up to Google Drive. Sign in to join.'),
+      findsOneWidget,
+    );
+    expect(
+      backup.calls,
+      isNot(contains('acknowledgeHint')),
+      reason: 'Backup & sync keeps the hint until it is answered',
+    );
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
 
-  testWidgets('a joined code with no member yet toasts a plain success',
-      (tester) async {
+  testWidgets('a joined code with no member yet toasts a plain success', (
+    tester,
+  ) async {
     final store = InMemoryPeerSyncStore();
     final service = FakePeerSyncService(store: store)..skipJoinedMember = true;
     await tester.pumpWidget(_wrap(service, store, PairSheetMode.enter));
@@ -279,8 +309,9 @@ void main() {
     expect(find.byType(PairDeviceSheet), findsNothing);
   });
 
-  testWidgets('a join that also fires onPeerPaired toasts once',
-      (tester) async {
+  testWidgets('a join that also fires onPeerPaired toasts once', (
+    tester,
+  ) async {
     final store = InMemoryPeerSyncStore();
     final service = FakePeerSyncService(store: store)..emitPairedOnJoin = true;
     await tester.pumpWidget(_wrap(service, store, PairSheetMode.enter));
@@ -288,7 +319,8 @@ void main() {
     await tester.pumpAndSettle();
     // A second toast replaces the first, so count what was shown.
     final toasts = Toaster.maybeControllerOf(
-        tester.element(find.byType(PairDeviceSheet)))!;
+      tester.element(find.byType(PairDeviceSheet)),
+    )!;
     final shown = <int>{};
     toasts.addListener(() {
       final id = toasts.current?.id;
@@ -308,12 +340,14 @@ void main() {
     final (service, store) = await _open(tester, PairSheetMode.show);
     expect(find.byType(PairDeviceSheet), findsOneWidget);
 
-    await service.hostPaired(PeerMember(
-      nodeId: 'peer-device-qr',
-      deviceName: 'Bedroom TV',
-      platform: 'ios',
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await service.hostPaired(
+      PeerMember(
+        nodeId: 'peer-device-qr',
+        deviceName: 'Bedroom TV',
+        platform: 'ios',
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Synced with Bedroom TV'), findsOneWidget);
@@ -332,8 +366,9 @@ void main() {
     expect(find.byKey(const Key('pair-active-code')), findsNothing);
   });
 
-  testWidgets('a failed code shows the failure banner and keeps the sheet',
-      (tester) async {
+  testWidgets('a failed code shows the failure banner and keeps the sheet', (
+    tester,
+  ) async {
     final store = InMemoryPeerSyncStore();
     final service = FakePeerSyncService(store: store)..failPairing = true;
     await tester.pumpWidget(_wrap(service, store, PairSheetMode.enter));
@@ -359,8 +394,9 @@ void main() {
     expect(find.byType(BottomSheet), findsNothing);
   });
 
-  testWidgets('narrow windows open the sheet as a bottom sheet',
-      (tester) async {
+  testWidgets('narrow windows open the sheet as a bottom sheet', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);

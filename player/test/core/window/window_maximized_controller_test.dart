@@ -6,23 +6,29 @@ import 'fake_window_controller.dart';
 
 void main() {
   group('WindowMaximizedController', () {
-    test('seed reads the window once, for a launch into a maximized window',
-        () async {
-      final window = FakeWindowController(maximized: true);
-      final signal = ValueNotifier(false);
-      final controller =
-          WindowMaximizedController(window: window, signal: signal);
+    test(
+      'seed reads the window once, for a launch into a maximized window',
+      () async {
+        final window = FakeWindowController(maximized: true);
+        final signal = ValueNotifier(false);
+        final controller = WindowMaximizedController(
+          window: window,
+          signal: signal,
+        );
 
-      await controller.seed();
+        await controller.seed();
 
-      expect(signal.value, isTrue);
-    });
+        expect(signal.value, isTrue);
+      },
+    );
 
     test('seed leaves the signal alone when the read throws', () async {
       final window = _ThrowingWindowController();
       final signal = ValueNotifier(false);
-      final controller =
-          WindowMaximizedController(window: window, signal: signal);
+      final controller = WindowMaximizedController(
+        window: window,
+        signal: signal,
+      );
 
       await controller.seed();
 

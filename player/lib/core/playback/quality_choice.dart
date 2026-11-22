@@ -18,8 +18,7 @@ bool qualityPickNeedsReopen({
   required PlaybackPlan next,
   required PlaybackPlan? current,
   required bool isFallback,
-}) =>
-    isFallback || current == null || !sameDelivery(next, current);
+}) => isFallback || current == null || !sameDelivery(next, current);
 
 /// Puts [selected] into effect, restoring [previous] if that fails.
 ///
@@ -58,7 +57,7 @@ Future<void> applyQualityChoice({
   required void Function(QualityRung rung) adopt,
   required Future<void> Function(QualityRung rung) remember,
   required Future<bool> Function(QualityRung rung, {required bool isFallback})
-      restart,
+  restart,
   required bool Function() stillActive,
   required void Function(Object error) onGaveUp,
 }) async {
@@ -66,8 +65,10 @@ Future<void> applyQualityChoice({
 
   try {
     if (!await restart(selected, isFallback: false)) {
-      debugPrint('[PlayerScreen] Quality change to ${selected.label} '
-          'abandoned: another source switch took over');
+      debugPrint(
+        '[PlayerScreen] Quality change to ${selected.label} '
+        'abandoned: another source switch took over',
+      );
       return;
     }
     await _remember(selected, remember);
@@ -75,20 +76,25 @@ Future<void> applyQualityChoice({
     // Fall back to the rung that was working rather than stranding the
     // viewer on a black screen at a rung this file or server cannot serve.
     debugPrint(
-        '[PlayerScreen] Quality change to ${selected.label} failed: $error');
+      '[PlayerScreen] Quality change to ${selected.label} failed: $error',
+    );
     if (!stillActive()) return;
     adopt(previous);
 
     try {
       if (!await restart(previous, isFallback: true)) {
-        debugPrint('[PlayerScreen] Restoring ${previous.label} abandoned: '
-            'another source switch took over');
+        debugPrint(
+          '[PlayerScreen] Restoring ${previous.label} abandoned: '
+          'another source switch took over',
+        );
         return;
       }
       await _remember(previous, remember);
     } catch (fallbackError) {
-      debugPrint('[PlayerScreen] Restoring ${previous.label} failed too: '
-          '$fallbackError');
+      debugPrint(
+        '[PlayerScreen] Restoring ${previous.label} failed too: '
+        '$fallbackError',
+      );
       if (!stillActive()) return;
       onGaveUp(fallbackError);
     }

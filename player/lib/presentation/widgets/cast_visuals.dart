@@ -28,29 +28,29 @@ CastVisuals castVisualsFor(
   final name = deviceName ?? l10n.castDeviceFallbackName;
   return switch (connection) {
     CastConnection.none => (
-        connected: false,
-        color: Colors.white,
-        tooltip: l10n.castTooltipIdle,
-      ),
+      connected: false,
+      color: Colors.white,
+      tooltip: l10n.castTooltipIdle,
+    ),
     CastConnection.connecting => (
-        connected: false,
-        color: Colors.blue,
-        tooltip: l10n.castTooltipConnecting(name),
-      ),
+      connected: false,
+      color: Colors.blue,
+      tooltip: l10n.castTooltipConnecting(name),
+    ),
     CastConnection.connectedIdle => (
-        connected: true,
-        color: Colors.blue,
-        tooltip: l10n.castTooltipConnected(name),
-      ),
+      connected: true,
+      color: Colors.blue,
+      tooltip: l10n.castTooltipConnected(name),
+    ),
     CastConnection.casting => (
-        connected: true,
-        color: Colors.blue,
-        tooltip: l10n.castTooltipCasting(name),
-      ),
+      connected: true,
+      color: Colors.blue,
+      tooltip: l10n.castTooltipCasting(name),
+    ),
     CastConnection.chosenOffline => (
-        connected: false,
-        color: Colors.blue,
-        tooltip: l10n.castTooltipOffline(name),
-      ),
+      connected: false,
+      color: Colors.blue,
+      tooltip: l10n.castTooltipOffline(name),
+    ),
   };
 }

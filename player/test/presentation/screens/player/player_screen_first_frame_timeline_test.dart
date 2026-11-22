@@ -148,55 +148,61 @@ void main() {
   }
 
   testWidgets(
-      'a first real frame logs one playback: summary carrying every mark',
-      (tester) async {
-    final fake = _FakePlatformPlayer();
-    final container = buildPlayerScreenContainer(
-      server: _server(),
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-    );
-    addTearDown(container.dispose);
-
-    final logged = <String>[];
-    await withCapturedDebugPrint(logged, () async {
-      await pumpPlayerScreen(
-        tester,
-        container,
-        createPlayer: () => Player(platformPlayer: fake),
+    'a first real frame logs one playback: summary carrying every mark',
+    (tester) async {
+      final fake = _FakePlatformPlayer();
+      final container = buildPlayerScreenContainer(
+        server: _server(),
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
       );
-      await pumpUntil(
-          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+      addTearDown(container.dispose);
 
-      // The first real frame: media_kit reports a positive width once mpv has
-      // actually decoded one, distinct from the zero/null it carries while
-      // still opening.
-      fake.emitWidth(1920);
+      final logged = <String>[];
+      await withCapturedDebugPrint(logged, () async {
+        await pumpPlayerScreen(
+          tester,
+          container,
+          createPlayer: () => Player(platformPlayer: fake),
+        );
+        await pumpUntil(
+          tester,
+          () => find.byType(PlaybackChrome).evaluate().isNotEmpty,
+        );
 
-      await pumpUntil(
-        tester,
-        () => logged.any((l) => l.startsWith('playback:')),
+        // The first real frame: media_kit reports a positive width once mpv has
+        // actually decoded one, distinct from the zero/null it carries while
+        // still opening.
+        fake.emitWidth(1920);
+
+        await pumpUntil(
+          tester,
+          () => logged.any((l) => l.startsWith('playback:')),
+        );
+      });
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+
+      final summaries = logged.where((l) => l.startsWith('playback:')).toList();
+      expect(
+        summaries,
+        hasLength(1),
+        reason:
+            'StartupTimeline.logOnce must only ever print once per load, '
+            'not once per mark and not again from dispose',
       );
-    });
 
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
+      final summary = summaries.single;
+      expect(summary, contains('planned='));
+      expect(summary, contains('opened='));
+      expect(summary, contains('tracks_ready='));
+      expect(summary, contains('first_frame='));
+    },
+  );
 
-    final summaries = logged.where((l) => l.startsWith('playback:')).toList();
-    expect(summaries, hasLength(1),
-        reason: 'StartupTimeline.logOnce must only ever print once per load, '
-            'not once per mark and not again from dispose');
-
-    final summary = summaries.single;
-    expect(summary, contains('planned='));
-    expect(summary, contains('opened='));
-    expect(summary, contains('tracks_ready='));
-    expect(summary, contains('first_frame='));
-  });
-
-  testWidgets(
-      'no first frame still logs one summary, from dispose, with no '
+  testWidgets('no first frame still logs one summary, from dispose, with no '
       'first_frame mark', (tester) async {
     final fake = _FakePlatformPlayer();
     final container = buildPlayerScreenContainer(
@@ -215,7 +221,9 @@ void main() {
         createPlayer: () => Player(platformPlayer: fake),
       );
       await pumpUntil(
-          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+        tester,
+        () => find.byType(PlaybackChrome).evaluate().isNotEmpty,
+      );
 
       // No frame ever arrives on this player. Disposing the screen must
       // still flush the timeline exactly once, with whatever marks it
@@ -242,47 +250,60 @@ void main() {
   // called `logOnce()`, the summary would appear right after the failure,
   // before this screen is ever disposed.
   testWidgets(
-      '_disposePlayer alone does not flush the timeline; only dispose() '
-      'does, once, afterward', (tester) async {
-    final fake = _ThrowingOpenPlayer();
-    final container = buildPlayerScreenContainer(
-      server: _server(),
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-    );
-    addTearDown(container.dispose);
-
-    final logged = <String>[];
-    await withCapturedDebugPrint(logged, () async {
-      await pumpPlayerScreen(
-        tester,
-        container,
-        createPlayer: () => Player(platformPlayer: fake),
+    '_disposePlayer alone does not flush the timeline; only dispose() '
+    'does, once, afterward',
+    (tester) async {
+      final fake = _ThrowingOpenPlayer();
+      final container = buildPlayerScreenContainer(
+        server: _server(),
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
       );
-      // `pumpUntil`'s virtual-clock pumps alone never resolve
-      // `_tracksSubscription?.cancel()` here -- cancelling a subscription on
-      // media_kit's `distinct()`-wrapped tracks stream needs real event-loop
-      // progress, the same reason `pumpUntilReal` exists (see its own
-      // dartdoc). `runAsync` is required for that: without it, this line
-      // would silently never observe `fake.disposed` becoming true, and the
-      // `isEmpty` check below would pass vacuously regardless of whether
-      // `_disposePlayer` actually flushed the timeline.
-      await tester.runAsync(() => pumpUntilReal(tester, () => fake.disposed));
+      addTearDown(container.dispose);
 
-      expect(logged.where((l) => l.startsWith('playback:')), isEmpty,
-          reason: '_disposePlayer must not flush the timeline on its own');
+      final logged = <String>[];
+      await withCapturedDebugPrint(logged, () async {
+        await pumpPlayerScreen(
+          tester,
+          container,
+          createPlayer: () => Player(platformPlayer: fake),
+        );
+        // `pumpUntil`'s virtual-clock pumps alone never resolve
+        // `_tracksSubscription?.cancel()` here -- cancelling a subscription on
+        // media_kit's `distinct()`-wrapped tracks stream needs real event-loop
+        // progress, the same reason `pumpUntilReal` exists (see its own
+        // dartdoc). `runAsync` is required for that: without it, this line
+        // would silently never observe `fake.disposed` becoming true, and the
+        // `isEmpty` check below would pass vacuously regardless of whether
+        // `_disposePlayer` actually flushed the timeline.
+        await tester.runAsync(() => pumpUntilReal(tester, () => fake.disposed));
 
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump();
-    });
+        expect(
+          logged.where((l) => l.startsWith('playback:')),
+          isEmpty,
+          reason: '_disposePlayer must not flush the timeline on its own',
+        );
 
-    final summaries = logged.where((l) => l.startsWith('playback:')).toList();
-    expect(summaries, hasLength(1),
-        reason: 'State.dispose() must still flush exactly once, whatever '
-            'the load reached before the failed open');
-    expect(summaries.single, isNot(contains('opened=')),
-        reason: 'open() itself threw, so this load never reached the '
-            'opened mark');
-  });
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      });
+
+      final summaries = logged.where((l) => l.startsWith('playback:')).toList();
+      expect(
+        summaries,
+        hasLength(1),
+        reason:
+            'State.dispose() must still flush exactly once, whatever '
+            'the load reached before the failed open',
+      );
+      expect(
+        summaries.single,
+        isNot(contains('opened=')),
+        reason:
+            'open() itself threw, so this load never reached the '
+            'opened mark',
+      );
+    },
+  );
 }

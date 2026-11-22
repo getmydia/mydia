@@ -60,8 +60,10 @@ void main() {
     expect(d.platform, 'android');
     expect(d.createdAt, 5);
     expect(d.records.map(_enc), p.records.map(_enc));
-    expect(d.records.map((r) => r.runtimeType).toList(),
-        p.records.map((r) => r.runtimeType).toList());
+    expect(
+      d.records.map((r) => r.runtimeType).toList(),
+      p.records.map((r) => r.runtimeType).toList(),
+    );
     final acc = d.records[2] as AccountBackupRecord;
     expect(acc.secrets['token'], 'super-secret-token');
   });
@@ -80,109 +82,134 @@ void main() {
   });
 
   test('unknown type is dropped on decode, not fatal', () {
-    final d = BackupPayload.decode(_gz({
-      'v': 1,
-      'deviceName': 'd',
-      'platform': 'p',
-      'createdAt': 1,
-      'records': [
-        {'type': 'hologram', 'key': 'k', 'updatedAt': 1, 'deleted': false},
-        _enc(_watch),
-      ],
-    }));
+    final d = BackupPayload.decode(
+      _gz({
+        'v': 1,
+        'deviceName': 'd',
+        'platform': 'p',
+        'createdAt': 1,
+        'records': [
+          {'type': 'hologram', 'key': 'k', 'updatedAt': 1, 'deleted': false},
+          _enc(_watch),
+        ],
+      }),
+    );
     expect(d.records, hasLength(1));
     expect(d.records.single, isA<WatchBackupRecord>());
   });
 
   test('movedTo_roundtrips_and_is_absent_when_null', () {
     const base = BackupPayload(
-        deviceName: 'd', platform: 'p', createdAt: 1, records: []);
+      deviceName: 'd',
+      platform: 'p',
+      createdAt: 1,
+      records: [],
+    );
     expect(BackupPayload.decode(base.encode()).movedTo, isNull);
-    expect(jsonDecode(utf8.decode(gzipDecode(base.encode()))),
-        isNot(contains('movedTo')));
+    expect(
+      jsonDecode(utf8.decode(gzipDecode(base.encode()))),
+      isNot(contains('movedTo')),
+    );
     const moved = BackupPayload(
-        deviceName: 'd',
-        platform: 'p',
-        createdAt: 1,
-        records: [],
-        movedTo: 'icloud');
+      deviceName: 'd',
+      platform: 'p',
+      createdAt: 1,
+      records: [],
+      movedTo: 'icloud',
+    );
     expect(BackupPayload.decode(moved.encode()).movedTo, 'icloud');
   });
 
   test('payload_with_unknown_top_level_field_decodes', () {
-    final d = BackupPayload.decode(_gz({
-      'v': 1,
-      'deviceName': 'd',
-      'platform': 'p',
-      'createdAt': 1,
-      'records': <Object>[],
-      'somethingNew': {'a': 1},
-    }));
+    final d = BackupPayload.decode(
+      _gz({
+        'v': 1,
+        'deviceName': 'd',
+        'platform': 'p',
+        'createdAt': 1,
+        'records': <Object>[],
+        'somethingNew': {'a': 1},
+      }),
+    );
     expect(d.deviceName, 'd');
     expect(d.movedTo, isNull);
   });
 
   test('newer_version_throws_NewerBackupVersionException', () {
-    expect(() => BackupPayload.decode(_gz({'v': 2, 'records': <Object>[]})),
-        throwsA(isA<NewerBackupVersionException>()));
-    expect(() => BackupPayload.decode(_gz({'v': 0, 'records': <Object>[]})),
-        throwsA(isNot(isA<NewerBackupVersionException>())));
+    expect(
+      () => BackupPayload.decode(_gz({'v': 2, 'records': <Object>[]})),
+      throwsA(isA<NewerBackupVersionException>()),
+    );
+    expect(
+      () => BackupPayload.decode(_gz({'v': 0, 'records': <Object>[]})),
+      throwsA(isNot(isA<NewerBackupVersionException>())),
+    );
   });
 
   test('decode throws FormatException for bad input', () {
     expect(() => BackupPayload.decode([1, 2, 3]), throwsFormatException);
-    expect(() => BackupPayload.decode(gzipEncode(utf8.encode('{nope'))),
-        throwsFormatException);
-    expect(() => BackupPayload.decode(_gz({'v': 2, 'records': <Object>[]})),
-        throwsFormatException);
     expect(
-        () => BackupPayload.decode(
-            _gz({'v': 1, 'deviceName': 3, 'records': 'x'})),
-        throwsFormatException);
+      () => BackupPayload.decode(gzipEncode(utf8.encode('{nope'))),
+      throwsFormatException,
+    );
+    expect(
+      () => BackupPayload.decode(_gz({'v': 2, 'records': <Object>[]})),
+      throwsFormatException,
+    );
+    expect(
+      () =>
+          BackupPayload.decode(_gz({'v': 1, 'deviceName': 3, 'records': 'x'})),
+      throwsFormatException,
+    );
     expect(() => BackupPayload.decode(_gz([1])), throwsFormatException);
     expect(
-        () => BackupPayload.decode(_gz({
-              'v': 1,
-              'deviceName': 'd',
-              'platform': 'p',
-              'createdAt': 1,
-              'records': [
-                {'type': 'watch', 'key': 'k'},
-              ],
-            })),
-        throwsFormatException);
+      () => BackupPayload.decode(
+        _gz({
+          'v': 1,
+          'deviceName': 'd',
+          'platform': 'p',
+          'createdAt': 1,
+          'records': [
+            {'type': 'watch', 'key': 'k'},
+          ],
+        }),
+      ),
+      throwsFormatException,
+    );
   });
 
   test('unknown-type record without key is skipped, not fatal', () {
-    final d = BackupPayload.decode(_gz({
-      'v': 1,
-      'deviceName': 'd',
-      'platform': 'p',
-      'createdAt': 1,
-      'records': [
-        {'type': 'hologram', 'updatedAt': 'soon'},
-        _enc(_watch),
-      ],
-    }));
+    final d = BackupPayload.decode(
+      _gz({
+        'v': 1,
+        'deviceName': 'd',
+        'platform': 'p',
+        'createdAt': 1,
+        'records': [
+          {'type': 'hologram', 'updatedAt': 'soon'},
+          _enc(_watch),
+        ],
+      }),
+    );
     expect(d.records.single, isA<WatchBackupRecord>());
   });
 
   test('account id derives from key; bad account key is a FormatException', () {
     expect(_account.accountId, 'acc1');
     expect(
-        () => BackupPayload.decode(_gz({
-              'v': 1,
-              'deviceName': 'd',
-              'platform': 'p',
-              'createdAt': 1,
-              'records': [
-                {
-                  ..._enc(_account),
-                  'key': 'acc1',
-                },
-              ],
-            })),
-        throwsFormatException);
+      () => BackupPayload.decode(
+        _gz({
+          'v': 1,
+          'deviceName': 'd',
+          'platform': 'p',
+          'createdAt': 1,
+          'records': [
+            {..._enc(_account), 'key': 'acc1'},
+          ],
+        }),
+      ),
+      throwsFormatException,
+    );
   });
 
   test('toString never leaks secrets', () {

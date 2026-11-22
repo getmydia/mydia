@@ -38,46 +38,62 @@ void main() {
     });
   });
 
-  testWidgets('LocalNetworkSettingsButton renders a tappable action',
-      (tester) async {
-    await tester.pumpWidget(const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: LocalNetworkSettingsButton(available: true)),
-    ));
+  testWidgets('LocalNetworkSettingsButton renders a tappable action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: LocalNetworkSettingsButton(available: true)),
+      ),
+    );
 
     expect(
-        find.byKey(const Key('local-network-settings-button')), findsOneWidget);
+      find.byKey(const Key('local-network-settings-button')),
+      findsOneWidget,
+    );
     expect(find.text('Open Settings'), findsOneWidget);
   });
 
-  testWidgets('LocalNetworkSettingsButton renders nothing off Apple platforms',
-      (tester) async {
-    // discoveryDenied also covers Android's multicast lock failing, which no
-    // settings pane fixes. Offering the button there deep-linked to an Apple
-    // URL and then printed macOS instructions on a phone.
-    await tester.pumpWidget(const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: LocalNetworkSettingsButton(available: false)),
-    ));
+  testWidgets(
+    'LocalNetworkSettingsButton renders nothing off Apple platforms',
+    (tester) async {
+      // discoveryDenied also covers Android's multicast lock failing, which no
+      // settings pane fixes. Offering the button there deep-linked to an Apple
+      // URL and then printed macOS instructions on a phone.
+      await tester.pumpWidget(
+        const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: LocalNetworkSettingsButton(available: false)),
+        ),
+      );
 
-    expect(
-        find.byKey(const Key('local-network-settings-button')), findsNothing);
-    expect(find.text('Open Settings'), findsNothing);
-  });
+      expect(
+        find.byKey(const Key('local-network-settings-button')),
+        findsNothing,
+      );
+      expect(find.text('Open Settings'), findsNothing);
+    },
+  );
 
-  testWidgets('the default is the real platform, which a test host never is',
-      (tester) async {
+  testWidgets('the default is the real platform, which a test host never is', (
+    tester,
+  ) async {
     // Guards the production default: no override means no button here.
-    await tester.pumpWidget(const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: LocalNetworkSettingsButton()),
-    ));
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: LocalNetworkSettingsButton()),
+      ),
+    );
 
     expect(localNetworkSettingsAvailable(), isFalse);
     expect(
-        find.byKey(const Key('local-network-settings-button')), findsNothing);
+      find.byKey(const Key('local-network-settings-button')),
+      findsNothing,
+    );
   });
 }

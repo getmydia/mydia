@@ -22,18 +22,20 @@ void main() {
       expect(params.autoplay, isFalse);
     });
 
-    test('defaults to autoplay true and every other field null when absent',
-        () {
-      final params = PlayerRouteParams.fromUri(Uri.parse('/player/movie/m1'));
+    test(
+      'defaults to autoplay true and every other field null when absent',
+      () {
+        final params = PlayerRouteParams.fromUri(Uri.parse('/player/movie/m1'));
 
-      expect(params.fileId, isNull);
-      expect(params.title, isNull);
-      expect(params.showId, isNull);
-      expect(params.seasonNumber, isNull);
-      expect(params.resumeSeconds, isNull);
-      expect(params.audioTrack, isNull);
-      expect(params.subtitleTrack, isNull);
-      expect(params.autoplay, isTrue);
-    });
+        expect(params.fileId, isNull);
+        expect(params.title, isNull);
+        expect(params.showId, isNull);
+        expect(params.seasonNumber, isNull);
+        expect(params.resumeSeconds, isNull);
+        expect(params.audioTrack, isNull);
+        expect(params.subtitleTrack, isNull);
+        expect(params.autoplay, isTrue);
+      },
+    );
   });
 }

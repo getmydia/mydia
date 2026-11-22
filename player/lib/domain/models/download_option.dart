@@ -24,13 +24,13 @@ class DownloadOption {
 
   const DownloadOption({
     required this.resolution,
-    String? label,
+    this._label,
     required this.estimatedSize,
     this.transcodeStatus,
     this.transcodeProgress,
     this.actualSize,
     this.container,
-  }) : _label = label;
+  });
 
   /// Display label - uses server-provided label or falls back to resolution
   String get label => _label ?? resolution;
@@ -102,24 +102,21 @@ class DownloadOptionsResponse {
   /// List of available quality options
   final List<DownloadOption> options;
 
-  const DownloadOptionsResponse({
-    required this.options,
-  });
+  const DownloadOptionsResponse({required this.options});
 
   factory DownloadOptionsResponse.fromJson(Map<String, dynamic> json) {
     final optionsList = json['options'] as List<dynamic>? ?? [];
     return DownloadOptionsResponse(
       options: optionsList
-          .map((option) =>
-              DownloadOption.fromJson(option as Map<String, dynamic>))
+          .map(
+            (option) => DownloadOption.fromJson(option as Map<String, dynamic>),
+          )
           .toList(),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'options': options.map((o) => o.toJson()).toList(),
-    };
+    return {'options': options.map((o) => o.toJson()).toList()};
   }
 }
 

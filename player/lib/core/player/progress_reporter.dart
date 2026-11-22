@@ -12,13 +12,19 @@ abstract interface class ProgressReporter {
   set timeline(StreamTimeline value);
 
   /// Starts periodic reporting for [player].
-  void start(Player player,
-      {required String mediaType, required String mediaId});
+  void start(
+    Player player, {
+    required String mediaType,
+    required String mediaId,
+  });
 
   /// Reports the current position now. [mediaType] and [mediaId] name the
   /// item being credited, which during a switch is not the one taking over.
-  Future<void> save(Player player,
-      {required String mediaType, required String mediaId});
+  Future<void> save(
+    Player player, {
+    required String mediaType,
+    required String mediaId,
+  });
 
   /// Past the watched threshold.
   bool isWatched(Player player);

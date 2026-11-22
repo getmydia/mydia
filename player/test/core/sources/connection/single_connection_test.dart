@@ -7,8 +7,10 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/source_error.dart';
 
 void main() {
-  final lan =
-      ServerConnection(uri: Uri.parse('http://192.168.1.20:9999'), local: true);
+  final lan = ServerConnection(
+    uri: Uri.parse('http://192.168.1.20:9999'),
+    local: true,
+  );
 
   test('probes once, then answers from memory', () async {
     var probes = 0;
@@ -27,8 +29,10 @@ void main() {
 
   test('reports unreachable and recovers on refresh', () async {
     var up = false;
-    final connection =
-        SingleConnection(connection: lan, probe: (_) async => up);
+    final connection = SingleConnection(
+      connection: lan,
+      probe: (_) async => up,
+    );
     await expectLater(connection.base(), throwsA(isA<SourceException>()));
     expect(connection.status.value, SourceConnectionStatus.unreachable);
     up = true;
@@ -36,17 +40,21 @@ void main() {
     expect(connection.status.value, SourceConnectionStatus.local);
   });
 
-  test('base after dispose fails cleanly and leaves the notifier alone',
-      () async {
-    final gate = Completer<bool>();
-    final connection =
-        SingleConnection(connection: lan, probe: (_) => gate.future);
-    final pending = connection.base();
-    connection.dispose();
-    gate.complete(true);
-    await expectLater(pending, throwsA(isA<SourceException>()));
-    await expectLater(connection.base(), throwsA(isA<SourceException>()));
-  });
+  test(
+    'base after dispose fails cleanly and leaves the notifier alone',
+    () async {
+      final gate = Completer<bool>();
+      final connection = SingleConnection(
+        connection: lan,
+        probe: (_) => gate.future,
+      );
+      final pending = connection.base();
+      connection.dispose();
+      gate.complete(true);
+      await expectLater(pending, throwsA(isA<SourceException>()));
+      await expectLater(connection.base(), throwsA(isA<SourceException>()));
+    },
+  );
 
   test('knows private hosts', () {
     for (final host in [

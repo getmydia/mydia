@@ -49,9 +49,9 @@ class UpdateHost {
     this.flatpakBranch,
     this.installedFromPlay = false,
   }) : assert(
-          !isFlatpak || isLinux,
-          'Flatpak is a Linux packaging format; isFlatpak implies isLinux.',
-        );
+         !isFlatpak || isLinux,
+         'Flatpak is a Linux packaging format; isFlatpak implies isLinux.',
+       );
 
   /// The best guess available without awaiting anything.
   ///

@@ -13,7 +13,7 @@ enum CleanupPolicy {
   byDate,
 
   /// Clean up least recently used downloads first
-  lru;
+  lru,
 }
 
 /// Storage settings configuration.

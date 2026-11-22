@@ -12,44 +12,49 @@ import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/mydia_test_source.dart';
 
 Source _plex({bool needsReauth = false}) => Source(
-      account: ProviderAccount(
-        id: 'acc1',
-        kind: SourceKind.plex,
-        displayName: 'someone@example.test',
-        storageNamespace: 'source/acc1',
-        activeProfileId: 'owner',
-        needsReauth: needsReauth,
-      ),
-      profile: const SourceProfile(
-        id: 'owner',
-        accountId: 'acc1',
-        name: 'Owner',
-        isOwner: true,
-      ),
-      server: const SourceServer(
-        id: 'srv9',
-        accountId: 'acc1',
-        profileId: 'owner',
-        name: 'Basement',
-      ),
-    );
+  account: ProviderAccount(
+    id: 'acc1',
+    kind: SourceKind.plex,
+    displayName: 'someone@example.test',
+    storageNamespace: 'source/acc1',
+    activeProfileId: 'owner',
+    needsReauth: needsReauth,
+  ),
+  profile: const SourceProfile(
+    id: 'owner',
+    accountId: 'acc1',
+    name: 'Owner',
+    isOwner: true,
+  ),
+  server: const SourceServer(
+    id: 'srv9',
+    accountId: 'acc1',
+    profileId: 'owner',
+    name: 'Basement',
+  ),
+);
 
 Source _guest() => const Source(
-      account: ProviderAccount(
-        id: 'mguest',
-        kind: SourceKind.mydia,
-        displayName: 'Lakeside',
-        storageNamespace: 'source/mguest',
-        activeProfileId: 'owner',
-      ),
-      profile: SourceProfile(
-          id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
-      server: SourceServer(
-          id: 'inst-2',
-          accountId: 'mguest',
-          profileId: 'owner',
-          name: 'Lakeside'),
-    );
+  account: ProviderAccount(
+    id: 'mguest',
+    kind: SourceKind.mydia,
+    displayName: 'Lakeside',
+    storageNamespace: 'source/mguest',
+    activeProfileId: 'owner',
+  ),
+  profile: SourceProfile(
+    id: 'owner',
+    accountId: 'mguest',
+    name: 'Owner',
+    isOwner: true,
+  ),
+  server: SourceServer(
+    id: 'inst-2',
+    accountId: 'mguest',
+    profileId: 'owner',
+    name: 'Lakeside',
+  ),
+);
 
 class _Calls {
   final navigations = <String>[];
@@ -68,12 +73,16 @@ Future<(ProviderContainer, _Calls)> _pump(
   // The rail geometry is a scope the rail's content provides.
   Widget wrap(Widget child) => compact
       ? RailScope(
-          labelsVisible: false, child: SizedBox(width: 272, child: child))
+          labelsVisible: false,
+          child: SizedBox(width: 272, child: child),
+        )
       : child;
   final container = ProviderContainer(
     overrides: [
-      thirdPartySourcesProvider
-          .overrideWithValue([testMydiaSource, ...thirdParty]),
+      thirdPartySourcesProvider.overrideWithValue([
+        testMydiaSource,
+        ...thirdParty,
+      ]),
       allServersSourcesProvider.overrideWithValue(included),
     ],
   );
@@ -122,20 +131,28 @@ void main() {
   testWidgets('is one row, not a list of servers', (tester) async {
     await _pump(tester, thirdParty: [_plex()]);
     expect(find.byKey(_header), findsOneWidget);
-    expect(find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')),
-        findsNothing);
+    expect(
+      find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('source-switcher-add')), findsNothing);
   });
 
   testWidgets('names the server the page belongs to', (tester) async {
-    await _pump(tester,
-        thirdParty: [_plex()], location: '/s/acc1:owner:srv9/library/x');
+    await _pump(
+      tester,
+      thirdParty: [_plex()],
+      location: '/s/acc1:owner:srv9/library/x',
+    );
     expect(_headerName(tester), 'Basement');
   });
 
   testWidgets('names the remembered pick off a source route', (tester) async {
-    final (container, _) =
-        await _pump(tester, thirdParty: [_plex()], location: '/settings');
+    final (container, _) = await _pump(
+      tester,
+      thirdParty: [_plex()],
+      location: '/settings',
+    );
     container.read(selectedSourceIdProvider.notifier).select(_plex().id);
     await tester.pump();
     expect(_headerName(tester), 'Basement');
@@ -145,66 +162,92 @@ void main() {
     await _pump(tester, thirdParty: [_plex()]);
     expect(
       find.descendant(
-          of: find.byKey(_header), matching: find.text('Mydia · Harborview')),
+        of: find.byKey(_header),
+        matching: find.text('Mydia · Harborview'),
+      ),
       findsOneWidget,
     );
   });
 
   testWidgets('a third-party header keeps its account caption', (tester) async {
-    await _pump(tester,
-        thirdParty: [_plex()], location: '/s/acc1:owner:srv9/library/x');
+    await _pump(
+      tester,
+      thirdParty: [_plex()],
+      location: '/s/acc1:owner:srv9/library/x',
+    );
     expect(find.text('Plex · someone@example.test'), findsOneWidget);
   });
 
-  testWidgets('a Plex Home with other users names the active one',
-      (tester) async {
+  testWidgets('a Plex Home with other users names the active one', (
+    tester,
+  ) async {
     final calls = _Calls();
-    final container = ProviderContainer(overrides: [
-      thirdPartySourcesProvider.overrideWithValue([testMydiaSource, _plex()]),
-      accountProfilesProvider('acc1').overrideWithValue(const [
-        SourceProfile(
-            id: 'owner', accountId: 'acc1', name: 'Owner', isOwner: true),
-        SourceProfile(
-            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
-      ]),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        thirdPartySourcesProvider.overrideWithValue([testMydiaSource, _plex()]),
+        accountProfilesProvider('acc1').overrideWithValue(const [
+          SourceProfile(
+            id: 'owner',
+            accountId: 'acc1',
+            name: 'Owner',
+            isOwner: true,
+          ),
+          SourceProfile(
+            id: 'kid0001',
+            accountId: 'acc1',
+            name: 'Pip',
+            isOwner: false,
+          ),
+        ]),
+      ],
+    );
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: SourceSwitcher(
-            location: '/s/acc1:owner:srv9',
-            onNavigate: calls.navigations.add,
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SourceSwitcher(
+              location: '/s/acc1:owner:srv9',
+              onNavigate: calls.navigations.add,
+            ),
           ),
         ),
       ),
-    ));
+    );
     expect(find.text('Plex · someone@example.test · Owner'), findsOneWidget);
   });
 
-  testWidgets('the header is announced as a button naming the server',
-      (tester) async {
+  testWidgets('the header is announced as a button naming the server', (
+    tester,
+  ) async {
     await _pump(tester, thirdParty: [_plex()]);
     expect(find.bySemanticsLabel(RegExp('Switch server')), findsOneWidget);
   });
 
-  testWidgets('switching servers selects it and uses onSwitchSource',
-      (tester) async {
+  testWidgets('switching servers selects it and uses onSwitchSource', (
+    tester,
+  ) async {
     final (container, calls) = await _pump(tester, thirdParty: [_plex()]);
     await _openAndTap(
-        tester, const ValueKey('source-switcher-acc1:owner:srv9'));
+      tester,
+      const ValueKey('source-switcher-acc1:owner:srv9'),
+    );
     expect(container.read(activeSourceIdProvider), _plex().id);
     expect(calls.switches, ['/s/acc1:owner:srv9']);
     expect(calls.navigations, isEmpty);
   });
 
-  testWidgets('in the rail it is a 48px button that opens the same picker',
-      (tester) async {
-    final (_, calls) =
-        await _pump(tester, thirdParty: [_plex()], compact: true);
+  testWidgets('in the rail it is a 48px button that opens the same picker', (
+    tester,
+  ) async {
+    final (_, calls) = await _pump(
+      tester,
+      thirdParty: [_plex()],
+      compact: true,
+    );
     const compactKey = ValueKey('source-switcher-compact');
     expect(find.byKey(_header), findsNothing);
     expect(tester.getSize(find.byKey(compactKey)), const Size(48, 48));
@@ -212,39 +255,59 @@ void main() {
 
     await tester.tap(find.byKey(compactKey));
     await tester.pumpAndSettle();
-    await tester
-        .tap(find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')));
+    await tester.tap(
+      find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')),
+    );
     await tester.pumpAndSettle();
     expect(calls.switches, ['/s/acc1:owner:srv9']);
   });
 
   testWidgets('every Mydia opens its own routes', (tester) async {
-    final (_, calls) = await _pump(tester,
-        thirdParty: [_guest()], location: '/s/mguest:owner:inst-2');
+    final (_, calls) = await _pump(
+      tester,
+      thirdParty: [_guest()],
+      location: '/s/mguest:owner:inst-2',
+    );
     expect(find.text('Mydia · Lakeside'), findsOneWidget);
     await _openAndTap(
-        tester, const ValueKey('source-switcher-macct:owner:inst-1'));
+      tester,
+      const ValueKey('source-switcher-macct:owner:inst-1'),
+    );
     expect(calls.switches, ['/s/macct:owner:inst-1']);
     await _openAndTap(
-        tester, const ValueKey('source-switcher-mguest:owner:inst-2'));
+      tester,
+      const ValueKey('source-switcher-mguest:owner:inst-2'),
+    );
     expect(calls.switches.last, '/s/mguest:owner:inst-2');
   });
 
-  testWidgets('switching to the first Mydia goes to its own home, not `/`',
-      (tester) async {
-    final (_, calls) = await _pump(tester,
-        thirdParty: [_plex()], location: '/s/acc1:owner:srv9');
+  testWidgets('switching to the first Mydia goes to its own home, not `/`', (
+    tester,
+  ) async {
+    final (_, calls) = await _pump(
+      tester,
+      thirdParty: [_plex()],
+      location: '/s/acc1:owner:srv9',
+    );
     await _openAndTap(
-        tester, const ValueKey('source-switcher-macct:owner:inst-1'));
+      tester,
+      const ValueKey('source-switcher-macct:owner:inst-1'),
+    );
     expect(calls.switches, ['/s/macct:owner:inst-1']);
   });
 
-  testWidgets('without onSwitchSource a switch goes through onNavigate',
-      (tester) async {
-    final (_, calls) =
-        await _pump(tester, thirdParty: [_plex()], withSwitchCallback: false);
+  testWidgets('without onSwitchSource a switch goes through onNavigate', (
+    tester,
+  ) async {
+    final (_, calls) = await _pump(
+      tester,
+      thirdParty: [_plex()],
+      withSwitchCallback: false,
+    );
     await _openAndTap(
-        tester, const ValueKey('source-switcher-acc1:owner:srv9'));
+      tester,
+      const ValueKey('source-switcher-acc1:owner:srv9'),
+    );
     expect(calls.navigations, ['/s/acc1:owner:srv9']);
   });
 
@@ -256,14 +319,20 @@ void main() {
     expect(calls.switches, isEmpty);
   });
 
-  testWidgets('an account that needs sign-in routes to re-auth',
-      (tester) async {
+  testWidgets('an account that needs sign-in routes to re-auth', (
+    tester,
+  ) async {
     final flagged = _plex(needsReauth: true);
-    final (_, calls) = await _pump(tester,
-        thirdParty: [flagged], location: '/s/acc1:owner:srv9');
+    final (_, calls) = await _pump(
+      tester,
+      thirdParty: [flagged],
+      location: '/s/acc1:owner:srv9',
+    );
     expect(find.text('Sign in again'), findsOneWidget);
     await _openAndTap(
-        tester, const ValueKey('source-switcher-acc1:owner:srv9'));
+      tester,
+      const ValueKey('source-switcher-acc1:owner:srv9'),
+    );
     expect(calls.navigations, ['/sources/add/plex?account=acc1']);
     expect(calls.switches, isEmpty);
   });
@@ -275,9 +344,11 @@ void main() {
 
   testWidgets('picking All servers navigates to /all', (tester) async {
     final plex = _plex();
-    final (_, calls) = await _pump(tester,
-        thirdParty: [plex],
-        included: [FakeMergedSource(plex), FakeMergedSource(_guest())]);
+    final (_, calls) = await _pump(
+      tester,
+      thirdParty: [plex],
+      included: [FakeMergedSource(plex), FakeMergedSource(_guest())],
+    );
     await _openAndTap(tester, const ValueKey('source-switcher-all'));
     expect(calls.switches, ['/all']);
   });
@@ -286,11 +357,13 @@ void main() {
     final plex = _plex();
     const mydia = testMydiaSource;
     expect(
-        SourceSwitcher.currentFor(
-            [mydia, plex], '/s/acc1:owner:srv9', mydia.id),
-        plex);
+      SourceSwitcher.currentFor([mydia, plex], '/s/acc1:owner:srv9', mydia.id),
+      plex,
+    );
     expect(
-        SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id), plex);
+      SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id),
+      plex,
+    );
     expect(SourceSwitcher.currentFor([plex], '/sources/manage', plex.id), plex);
     expect(SourceSwitcher.currentFor([plex, mydia], '/settings', null), plex);
   });

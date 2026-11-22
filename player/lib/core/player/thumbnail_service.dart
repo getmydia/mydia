@@ -63,8 +63,9 @@ class ThumbnailService {
   }) : _client = client ?? http.Client();
 
   /// Headers the sprite image request must carry.
-  Map<String, String> get imageHeaders =>
-      {'Authorization': 'Bearer $authToken'};
+  Map<String, String> get imageHeaders => {
+    'Authorization': 'Bearer $authToken',
+  };
 
   /// The sprite sheet for [fileId].
   ///
@@ -94,7 +95,8 @@ class ThumbnailService {
         return _cache[fileId] = const [];
       }
       debugPrint(
-          '[ThumbnailService] thumbnails.vtt answered ${response.statusCode}');
+        '[ThumbnailService] thumbnails.vtt answered ${response.statusCode}',
+      );
       return const [];
     } catch (e) {
       debugPrint('[ThumbnailService] thumbnails.vtt failed: $e');
@@ -182,8 +184,9 @@ class ThumbnailService {
     final minutes = int.tryParse(parts[1]) ?? 0;
     final secondsParts = parts[2].split('.');
     final seconds = int.tryParse(secondsParts[0]) ?? 0;
-    final millis =
-        secondsParts.length > 1 ? int.tryParse(secondsParts[1]) ?? 0 : 0;
+    final millis = secondsParts.length > 1
+        ? int.tryParse(secondsParts[1]) ?? 0
+        : 0;
 
     return hours * 3600.0 + minutes * 60.0 + seconds + millis / 1000.0;
   }

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'test_utils/no_downloads.dart';
+
 import 'package:player/app.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -36,21 +37,24 @@ Future<(ProviderContainer, GoRouter)> _pumpApp(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(overrides: [
-    noProgressFlushOverride,
-    sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
-    sourcesLoadingProvider.overrideWithValue(false),
-    hasMydiaProvider.overrideWithValue(false),
-    thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
-    mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-    sourceArtworkProvider.overrideWith((ref, key) async => null),
-    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      noProgressFlushOverride,
+      sidebarLayoutStoreProvider.overrideWithValue(
+        InMemorySidebarLayoutStore(),
+      ),
+      sourcesLoadingProvider.overrideWithValue(false),
+      hasMydiaProvider.overrideWithValue(false),
+      thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      sourceArtworkProvider.overrideWith((ref, key) async => null),
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+    ],
+  );
   addTearDown(container.dispose);
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: const MyApp(),
-  ));
+  await tester.pumpWidget(
+    UncontrolledProviderScope(container: container, child: const MyApp()),
+  );
   // A frame first: navigating before the router has built its first page
   // never returns.
   await tester.pump(const Duration(milliseconds: 50));
@@ -79,8 +83,9 @@ void main() {
     );
   });
 
-  testWidgets('a page opened over another never moves it, on any frame',
-      (tester) async {
+  testWidgets('a page opened over another never moves it, on any frame', (
+    tester,
+  ) async {
     final (_, router) = await _pumpApp(tester);
     router.go('/s/$_id/search');
     await _settle(tester);
@@ -107,8 +112,7 @@ void main() {
     expect(tester.getTopLeft(page).dx, home);
   });
 
-  testWidgets(
-      'a detail page paints its art to x=0, its back button beside '
+  testWidgets('a detail page paints its art to x=0, its back button beside '
       'the rail', (tester) async {
     final (_, router) = await _pumpApp(tester);
     router.go('/s/$_id/search');
@@ -122,15 +126,19 @@ void main() {
     expect(tester.getTopLeft(art).dy, 0);
 
     final back = tester.getRect(find.byTooltip('Back'));
-    expect(back.left, greaterThanOrEqualTo(inset),
-        reason: 'never under the rail');
+    expect(
+      back.left,
+      greaterThanOrEqualTo(inset),
+      reason: 'never under the rail',
+    );
     // The title row's own gutter, not a second rail inset.
     expect(back.left, lessThan(inset + 40));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('below 600 there is no rail and nothing is inset',
-      (tester) async {
+  testWidgets('below 600 there is no rail and nothing is inset', (
+    tester,
+  ) async {
     // The test font overflows the bottom bar's labels; that is not under test.
     final onError = FlutterError.onError;
     FlutterError.onError = (details) {
@@ -148,7 +156,9 @@ void main() {
     // No rail inset: the drawer's Menu button leads the row, Back follows.
     final menu = tester.getRect(find.byTooltip('Menu'));
     expect(menu.left, lessThan(24));
-    expect(tester.getRect(find.byTooltip('Back')).left,
-        greaterThanOrEqualTo(menu.right));
+    expect(
+      tester.getRect(find.byTooltip('Back')).left,
+      greaterThanOrEqualTo(menu.right),
+    );
   });
 }

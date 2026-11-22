@@ -35,8 +35,9 @@ void main() {
   ProviderContainer containerWith(MockAuthStorage storage) {
     final container = ProviderContainer(
       overrides: [
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: storage)),
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: storage),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -82,33 +83,39 @@ void main() {
         .read(subtitleSizeSettingProvider.notifier)
         .set(SubtitleSize.extraLarge);
 
-    expect(container.read(subtitleSizeSettingProvider).value,
-        SubtitleSize.extraLarge);
+    expect(
+      container.read(subtitleSizeSettingProvider).value,
+      SubtitleSize.extraLarge,
+    );
     await pending;
     expect(storage.contents['subtitle_size'], 'extraLarge');
   });
 
-  test('a throwing write does not escape set, and the state stays changed',
-      () async {
-    final storage = MockAuthStorage()..failAllWrites = true;
-    final container = containerWith(storage);
-    await container.read(subtitleSizeSettingProvider.future);
+  test(
+    'a throwing write does not escape set, and the state stays changed',
+    () async {
+      final storage = MockAuthStorage()..failAllWrites = true;
+      final container = containerWith(storage);
+      await container.read(subtitleSizeSettingProvider.future);
 
-    await container
-        .read(subtitleSizeSettingProvider.notifier)
-        .set(SubtitleSize.small);
+      await container
+          .read(subtitleSizeSettingProvider.notifier)
+          .set(SubtitleSize.small);
 
-    expect(
-        container.read(subtitleSizeSettingProvider).value, SubtitleSize.small);
-    expect(storage.contents.containsKey('subtitle_size'), isFalse);
-  });
+      expect(
+        container.read(subtitleSizeSettingProvider).value,
+        SubtitleSize.small,
+      );
+      expect(storage.contents.containsKey('subtitle_size'), isFalse);
+    },
+  );
 
   test('a selection made during the first read survives that read', () async {
     final storage = _GatedStorage()..readGate = Completer<void>();
     storage.seedData({'subtitle_size': 'small'});
     final container = containerWith(storage);
     // Auto-dispose would drop the notifier between the awaits below.
-    container.listen(subtitleSizeSettingProvider, (_, __) {});
+    container.listen(subtitleSizeSettingProvider, (_, _) {});
     final initial = container.read(subtitleSizeSettingProvider.future);
 
     final pending = container
@@ -121,34 +128,40 @@ void main() {
     await pending;
 
     expect(
-        container.read(subtitleSizeSettingProvider).value, SubtitleSize.large);
+      container.read(subtitleSizeSettingProvider).value,
+      SubtitleSize.large,
+    );
   });
 
-  test('writes run in call order, so the last selection is persisted last',
-      () async {
-    final storage = _GatedStorage();
-    final container = containerWith(storage);
-    container.listen(subtitleSizeSettingProvider, (_, __) {});
-    await container.read(subtitleSizeSettingProvider.future);
-    final notifier = container.read(subtitleSizeSettingProvider.notifier);
+  test(
+    'writes run in call order, so the last selection is persisted last',
+    () async {
+      final storage = _GatedStorage();
+      final container = containerWith(storage);
+      container.listen(subtitleSizeSettingProvider, (_, _) {});
+      await container.read(subtitleSizeSettingProvider.future);
+      final notifier = container.read(subtitleSizeSettingProvider.notifier);
 
-    final first = notifier.set(SubtitleSize.large);
-    final second = notifier.set(SubtitleSize.extraLarge);
-    await Future<void>.delayed(Duration.zero);
+      final first = notifier.set(SubtitleSize.large);
+      final second = notifier.set(SubtitleSize.extraLarge);
+      await Future<void>.delayed(Duration.zero);
 
-    expect(storage.startedWrites, ['large']);
-    expect(container.read(subtitleSizeSettingProvider).value,
-        SubtitleSize.extraLarge);
+      expect(storage.startedWrites, ['large']);
+      expect(
+        container.read(subtitleSizeSettingProvider).value,
+        SubtitleSize.extraLarge,
+      );
 
-    storage.writeGates[0].complete();
-    await first;
-    await Future<void>.delayed(Duration.zero);
-    expect(storage.startedWrites, ['large', 'extraLarge']);
+      storage.writeGates[0].complete();
+      await first;
+      await Future<void>.delayed(Duration.zero);
+      expect(storage.startedWrites, ['large', 'extraLarge']);
 
-    storage.writeGates[1].complete();
-    await second;
-    expect(storage.contents['subtitle_size'], 'extraLarge');
-  });
+      storage.writeGates[1].complete();
+      await second;
+      expect(storage.contents['subtitle_size'], 'extraLarge');
+    },
+  );
 
   test('a failed write does not break the chain', () async {
     final storage = MockAuthStorage()..failAllWrites = true;

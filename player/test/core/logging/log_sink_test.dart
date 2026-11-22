@@ -36,8 +36,11 @@ void main() {
   });
 
   test('records made before attach wait, then drain in order', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     sink.recordLine('[A] one');
     sink.recordLine('[B] two');
     final store = MemoryLogStore();
@@ -48,8 +51,11 @@ void main() {
   });
 
   test('the pending buffer stops at maxPending', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     for (var i = 0; i < LogSink.maxPending + 10; i++) {
       sink.recordLine('line $i');
     }
@@ -61,8 +67,11 @@ void main() {
   });
 
   test('redacts before storing', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     final store = MemoryLogStore();
     sink.attach(store);
 
@@ -72,8 +81,11 @@ void main() {
   });
 
   test('recordError stores an error record with the stack', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     final store = MemoryLogStore();
     sink.attach(store);
 
@@ -86,13 +98,17 @@ void main() {
   });
 
   test('recordRustEvent keeps the level and target', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     final store = MemoryLogStore();
     sink.attach(store);
 
     sink.recordRustEvent(
-        '{"l":"warn","target":"iroh::magicsock","msg":"path lost"}');
+      '{"l":"warn","target":"iroh::magicsock","msg":"path lost"}',
+    );
 
     final record = store.records.single;
     expect(record.source, LogSource.rust);
@@ -102,8 +118,11 @@ void main() {
   });
 
   test('recordRustEvent ignores malformed input', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     final store = MemoryLogStore();
     sink.attach(store);
 
@@ -114,8 +133,11 @@ void main() {
   });
 
   test('recordSession writes one Session record', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     final store = MemoryLogStore();
     sink.attach(store);
 
@@ -139,11 +161,13 @@ void main() {
     expect(console.single, startsWith('[LogSink] Dropped a record'));
   });
 
-  test(
-      'a message far longer than the limit is stored truncated, and a '
+  test('a message far longer than the limit is stored truncated, and a '
       'secret placed beyond the pre-cut cannot appear', () {
-    final sink =
-        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final sink = LogSink(
+      sessionId: 's',
+      now: () => now,
+      console: (_, {wrapWidth}) {},
+    );
     final store = MemoryLogStore();
     sink.attach(store);
 

@@ -44,9 +44,10 @@ class _FakeCloudKit {
 
   _FakeZone get zone => zones.putIfAbsent(user, _FakeZone.new);
 
-  void install(MethodChannel channel) =>
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
+  void install(MethodChannel channel) => TestDefaultBinaryMessengerBinding
+      .instance
+      .defaultBinaryMessenger
+      .setMockMethodCallHandler(channel, (call) async {
         calls.add(call);
         final queued = failures[call.method];
         if (queued != null && queued.isNotEmpty) {
@@ -58,7 +59,7 @@ class _FakeCloudKit {
   Object? _handle(MethodCall call) {
     final args =
         (call.arguments as Map<Object?, Object?>?)?.cast<String, Object?>() ??
-            {};
+        {};
     switch (call.method) {
       case 'accountStatus':
         return {
@@ -122,10 +123,10 @@ class _FakeCloudKit {
   }
 
   List<Object?> tokensSent() => [
-        for (final c in calls)
-          if (c.method == 'fetchChanges')
-            (c.arguments as Map<Object?, Object?>)['token'],
-      ];
+    for (final c in calls)
+      if (c.method == 'fetchChanges')
+        (c.arguments as Map<Object?, Object?>)['token'],
+  ];
 }
 
 BackupMetaStore _meta() => BackupMetaStore(InMemoryBackupMetaStorage());
@@ -157,11 +158,13 @@ void main() {
       ..install(channelB);
     return (
       CloudSlotTransport(
-          CloudKitBackend(channel: channelA, events: events, meta: _meta()),
-          _a),
+        CloudKitBackend(channel: channelA, events: events, meta: _meta()),
+        _a,
+      ),
       CloudSlotTransport(
-          CloudKitBackend(channel: channelB, events: events, meta: _meta()),
-          _b),
+        CloudKitBackend(channel: channelB, events: events, meta: _meta()),
+        _b,
+      ),
     );
   });
 
@@ -171,9 +174,12 @@ void main() {
     late CloudKitBackend backend;
     late CloudKitBackend other;
 
-    Future<void> write(CloudKitBackend b, String slot, List<int> bytes,
-            {String name = 'Living Room'}) =>
-        b.writeBytes(slot, bytes, deviceName: name, platform: 'ios');
+    Future<void> write(
+      CloudKitBackend b,
+      String slot,
+      List<int> bytes, {
+      String name = 'Living Room',
+    }) => b.writeBytes(slot, bytes, deviceName: name, platform: 'ios');
 
     setUp(() {
       fake = _FakeCloudKit()
@@ -209,8 +215,11 @@ void main() {
     test('table_survives_a_new_backend_instance', () async {
       await write(backend, _a, [1]);
       await backend.list();
-      final again =
-          CloudKitBackend(channel: channelA, events: events, meta: meta);
+      final again = CloudKitBackend(
+        channel: channelA,
+        events: events,
+        meta: meta,
+      );
       final l = (await again.list())!;
       expect(fake.tokensSent().last, 'tok-1');
       expect(l.slots.single.slotId, _a);
@@ -244,11 +253,13 @@ void main() {
       await backend.list();
       fake.failures['fetchChanges'] = [
         'changeTokenExpired',
-        'changeTokenExpired'
+        'changeTokenExpired',
       ];
       fake.calls.clear();
-      await expectLater(backend.list(),
-          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.server)));
+      await expectLater(
+        backend.list(),
+        throwsA(predicate((e) => _kindOf(e) == BackupRelayError.server)),
+      );
       expect(fake.tokensSent(), ['tok-1', null]);
     });
 
@@ -305,33 +316,45 @@ void main() {
     test('not_authenticated_maps_to_cloudUnavailable', () async {
       fake.failures['fetchChanges'] = ['notAuthenticated'];
       await expectLater(
-          backend.list(),
-          throwsA(predicate(
-              (e) => _kindOf(e) == BackupRelayError.cloudUnavailable)));
+        backend.list(),
+        throwsA(
+          predicate((e) => _kindOf(e) == BackupRelayError.cloudUnavailable),
+        ),
+      );
       fake.failures['save'] = ['unavailable'];
       await expectLater(
-          write(backend, _a, [1]),
-          throwsA(predicate(
-              (e) => _kindOf(e) == BackupRelayError.cloudUnavailable)));
+        write(backend, _a, [1]),
+        throwsA(
+          predicate((e) => _kindOf(e) == BackupRelayError.cloudUnavailable),
+        ),
+      );
     });
 
     test('signed_out_account_lists_as_cloudUnavailable', () async {
       fake.status = 'noAccount';
       await expectLater(
-          backend.list(),
-          throwsA(predicate(
-              (e) => _kindOf(e) == BackupRelayError.cloudUnavailable)));
+        backend.list(),
+        throwsA(
+          predicate((e) => _kindOf(e) == BackupRelayError.cloudUnavailable),
+        ),
+      );
       expect(fake.tokensSent(), isEmpty);
     });
 
     test('other_codes_map_to_kinds', () async {
       fake.failures['save'] = ['quotaExceeded', 'network', 'other'];
-      await expectLater(write(backend, _a, [1]),
-          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.quotaFull)));
-      await expectLater(write(backend, _a, [1]),
-          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.network)));
-      await expectLater(write(backend, _a, [1]),
-          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.server)));
+      await expectLater(
+        write(backend, _a, [1]),
+        throwsA(predicate((e) => _kindOf(e) == BackupRelayError.quotaFull)),
+      );
+      await expectLater(
+        write(backend, _a, [1]),
+        throwsA(predicate((e) => _kindOf(e) == BackupRelayError.network)),
+      );
+      await expectLater(
+        write(backend, _a, [1]),
+        throwsA(predicate((e) => _kindOf(e) == BackupRelayError.server)),
+      );
     });
 
     test('availability_maps_account_status', () async {
@@ -340,14 +363,22 @@ void main() {
       expect(backend.kind, CloudStoreKind.icloud);
       for (final s in ['noAccount', 'restricted']) {
         fake.status = s;
-        expect(await backend.availability(), isA<CloudUnavailable>(),
-            reason: s);
+        expect(
+          await backend.availability(),
+          isA<CloudUnavailable>(),
+          reason: s,
+        );
       }
       fake.status = 'temporarilyUnavailable';
       await expectLater(
         backend.availability(),
-        throwsA(isA<BackupRelayException>()
-            .having((e) => e.kind, 'kind', BackupRelayError.network)),
+        throwsA(
+          isA<BackupRelayException>().having(
+            (e) => e.kind,
+            'kind',
+            BackupRelayError.network,
+          ),
+        ),
       );
       fake.failures['accountStatus'] = ['other'];
       expect(await backend.availability(), isA<CloudUnavailable>());
@@ -357,16 +388,20 @@ void main() {
       fake.status = 'disabled';
       expect(await backend.availability(), isA<CloudUnavailable>());
       await expectLater(
-          backend.list(),
-          throwsA(predicate(
-              (e) => _kindOf(e) == BackupRelayError.cloudUnavailable)));
+        backend.list(),
+        throwsA(
+          predicate((e) => _kindOf(e) == BackupRelayError.cloudUnavailable),
+        ),
+      );
       expect(fake.tokensSent(), isEmpty);
     });
 
     test('transient_account_status_error_is_not_unavailable', () async {
       fake.failures['accountStatus'] = ['network'];
-      await expectLater(backend.availability(),
-          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.network)));
+      await expectLater(
+        backend.availability(),
+        throwsA(predicate((e) => _kindOf(e) == BackupRelayError.network)),
+      );
       // Recovers on the next check.
       expect(await backend.availability(), isA<CloudAvailable>());
     });
@@ -379,17 +414,23 @@ void main() {
       expect(await CloudKitBackend.isEnabled(channel: channelA), isFalse);
       // No plugin at all (any platform but iOS and macOS).
       expect(
-          await CloudKitBackend.isEnabled(
-              channel: const MethodChannel('test/cloudkit-none')),
-          isFalse);
+        await CloudKitBackend.isEnabled(
+          channel: const MethodChannel('test/cloudkit-none'),
+        ),
+        isFalse,
+      );
     });
 
     test('read_of_missing_slot_is_not_found', () async {
-      await expectLater(backend.readBytes(_a),
-          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.notFound)));
+      await expectLater(
+        backend.readBytes(_a),
+        throwsA(predicate((e) => _kindOf(e) == BackupRelayError.notFound)),
+      );
       fake.failures['fetchPayload'] = ['zoneNotFound'];
-      await expectLater(backend.readBytes(_a),
-          throwsA(predicate((e) => _kindOf(e) == BackupRelayError.notFound)));
+      await expectLater(
+        backend.readBytes(_a),
+        throwsA(predicate((e) => _kindOf(e) == BackupRelayError.notFound)),
+      );
     });
 
     test('delete_of_missing_slot_is_success', () async {
@@ -422,9 +463,12 @@ void main() {
     test('changes_emit_on_native_events', () async {
       late MockStreamHandlerEventSink sink;
       messenger.setMockStreamHandler(
-          events,
-          MockStreamHandler.inline(
-              onListen: (_, s) => sink = s, onCancel: (_) {}));
+        events,
+        MockStreamHandler.inline(
+          onListen: (_, s) => sink = s,
+          onCancel: (_) {},
+        ),
+      );
       final got = <void>[];
       final sub = backend.changes.listen(got.add);
       await pumpEventQueue();
@@ -445,8 +489,11 @@ void main() {
 
       // Even though meta.cloudkitSlots still held _a, a null-cursor list
       // resets the cached table instead of resurrecting deleted records.
-      final freshBackend =
-          CloudKitBackend(channel: channelA, events: events, meta: meta);
+      final freshBackend = CloudKitBackend(
+        channel: channelA,
+        events: events,
+        meta: meta,
+      );
       final afterReset = (await freshBackend.list())!;
       expect(afterReset.slots, isEmpty);
     });
@@ -454,9 +501,12 @@ void main() {
     test('completePush_reports_outcome_only_when_push_is_pending', () async {
       late MockStreamHandlerEventSink sink;
       messenger.setMockStreamHandler(
-          events,
-          MockStreamHandler.inline(
-              onListen: (_, s) => sink = s, onCancel: (_) {}));
+        events,
+        MockStreamHandler.inline(
+          onListen: (_, s) => sink = s,
+          onCancel: (_) {},
+        ),
+      );
       final sub = backend.changes.listen((_) {});
       await pumpEventQueue();
 
@@ -470,11 +520,14 @@ void main() {
       await pumpEventQueue();
       await backend.completePush('newData');
       await backend.completePush('noData');
-      final pushCalls =
-          fake.calls.where((c) => c.method == 'completePush').toList();
+      final pushCalls = fake.calls
+          .where((c) => c.method == 'completePush')
+          .toList();
       expect(pushCalls, hasLength(1));
-      expect((pushCalls.single.arguments as Map<Object?, Object?>)['result'],
-          'newData');
+      expect(
+        (pushCalls.single.arguments as Map<Object?, Object?>)['result'],
+        'newData',
+      );
       await sub.cancel();
     });
   });

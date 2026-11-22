@@ -24,12 +24,12 @@ const Set<String> fullBleedShellRoutes = {
 /// whole window and does not pad, so a page pushed over another never moves
 /// it. Routes named in [fullBleedShellRoutes] are returned as they are.
 List<RouteBase> shellPages(List<RouteBase> routes) => [
-      for (final route in routes)
-        if (route is GoRoute && !fullBleedShellRoutes.contains(route.name))
-          _inset(route)
-        else
-          route,
-    ];
+  for (final route in routes)
+    if (route is GoRoute && !fullBleedShellRoutes.contains(route.name))
+      _inset(route)
+    else
+      route,
+];
 
 GoRoute _inset(GoRoute route) {
   final builder = route.builder;

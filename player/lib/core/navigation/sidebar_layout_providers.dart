@@ -17,7 +17,8 @@ part 'sidebar_layout_providers.g.dart';
 Future<SidebarLayoutStore> sidebarLayoutStoreAsync(Ref ref) async {
   try {
     final box = await Hive.openBox<Map<dynamic, dynamic>>(
-        HiveSidebarLayoutStore.boxName);
+      HiveSidebarLayoutStore.boxName,
+    );
     return HiveSidebarLayoutStore(box);
   } catch (e) {
     debugPrint('[SidebarLayout] Box unavailable, not persisting: $e');
@@ -141,10 +142,10 @@ class SidebarLayoutController {
   /// Rule 3 in `reconcileLayout` appends the preserved filters back onto the
   /// default order, so they return at the bottom of the list.
   Future<void> resetToDefaults() => _mutate(
-        (layout) => SidebarLayout(
-          order: SidebarLayout.defaults.order,
-          hidden: const {},
-          filters: layout.filters,
-        ),
-      );
+    (layout) => SidebarLayout(
+      order: SidebarLayout.defaults.order,
+      hidden: const {},
+      filters: layout.filters,
+    ),
+  );
 }

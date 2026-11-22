@@ -17,9 +17,17 @@ import 'fake_capable_source.dart';
 import 'fake_media_source.dart';
 
 const _stored = SourceCollection(
-    sourceId: fakeSourceId, id: 'c0', name: 'Stored Shelf', itemCount: 1);
+  sourceId: fakeSourceId,
+  id: 'c0',
+  name: 'Stored Shelf',
+  itemCount: 1,
+);
 const _live = SourceCollection(
-    sourceId: fakeSourceId, id: 'c1', name: 'Live Shelf', itemCount: 2);
+  sourceId: fakeSourceId,
+  id: 'c1',
+  name: 'Live Shelf',
+  itemCount: 2,
+);
 
 /// Answers [collections] only when [release] completes.
 class _SlowCollectionsSource extends FakeCapableSource {
@@ -33,30 +41,40 @@ class _SlowCollectionsSource extends FakeCapableSource {
 }
 
 void main() {
-  ProviderContainer containerFor(FakeMediaSource source,
-      {InMemorySourceCache? cache}) {
-    final container = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-      if (cache != null) sourceCacheProvider.overrideWithValue(cache),
-      if (cache != null)
-        fetchLogProvider.overrideWithValue(InMemoryFetchLog({
-          SourceKeys.collections(fakeSourceId):
-              DateTime.now().subtract(const Duration(hours: 1)),
-        })),
-    ]);
+  ProviderContainer containerFor(
+    FakeMediaSource source, {
+    InMemorySourceCache? cache,
+  }) {
+    final container = ProviderContainer(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        if (cache != null) sourceCacheProvider.overrideWithValue(cache),
+        if (cache != null)
+          fetchLogProvider.overrideWithValue(
+            InMemoryFetchLog({
+              SourceKeys.collections(fakeSourceId): DateTime.now().subtract(
+                const Duration(hours: 1),
+              ),
+            }),
+          ),
+      ],
+    );
     addTearDown(container.dispose);
     return container;
   }
 
   Future<T> firstValue<T>(ProviderContainer c, StreamProvider<T> provider) {
-    c.listen(provider, (_, __) {});
+    c.listen(provider, (_, _) {});
     return c.read(provider.future);
   }
 
   test('collections emit the stored answer before the live one', () async {
     final cache = InMemorySourceCache();
-    await cache.write(SourceKeys.collections(fakeSourceId),
-        encodeCollections(const [_stored]), DateTime.now());
+    await cache.write(
+      SourceKeys.collections(fakeSourceId),
+      encodeCollections(const [_stored]),
+      DateTime.now(),
+    );
     final source = _SlowCollectionsSource()..collectionsResult = const [_live];
     final container = containerFor(source, cache: cache);
 
@@ -65,8 +83,9 @@ void main() {
       if (next case AsyncData(:final value)) seen.add(value);
     });
     await pumpEventQueue();
-    expect(seen.map((l) => l.single.name), ['Stored Shelf'],
-        reason: 'served from the cache while the fetch is held');
+    expect(seen.map((l) => l.single.name), [
+      'Stored Shelf',
+    ], reason: 'served from the cache while the fetch is held');
 
     source.release.complete();
     await pumpEventQueue();
@@ -79,8 +98,10 @@ void main() {
     final container = containerFor(source);
 
     final before = calendarWindow(DateTime.now());
-    final items =
-        await firstValue(container, sourceCalendarProvider(fakeSourceId));
+    final items = await firstValue(
+      container,
+      sourceCalendarProvider(fakeSourceId),
+    );
     final after = calendarWindow(DateTime.now());
 
     expect(items, hasLength(2));
@@ -95,8 +116,10 @@ void main() {
   test('recently added comes from a source that has it', () async {
     final source = FakeCapableSource()..recentlyAddedResult = [fakeMovie(4)];
     final container = containerFor(source);
-    final items =
-        await firstValue(container, sourceRecentlyAddedProvider(fakeSourceId));
+    final items = await firstValue(
+      container,
+      sourceRecentlyAddedProvider(fakeSourceId),
+    );
     expect(items.single.ref.externalId, 'm4');
   });
 
@@ -105,7 +128,7 @@ void main() {
       ..mediaInfoResult = const [MediaFileInfo(id: 'f1')];
     final container = containerFor(source);
     final item = fakeMovie(1).ref;
-    container.listen(sourceMediaInfoProvider(item), (_, __) {});
+    container.listen(sourceMediaInfoProvider(item), (_, _) {});
 
     final files = await container.read(sourceMediaInfoProvider(item).future);
 
@@ -113,28 +136,42 @@ void main() {
     expect(source.calls, ['mediaInfo(m1)']);
   });
 
-  test('media info is unsupported for a source without the capability',
-      () async {
-    final container = containerFor(FakeMediaSource());
-    final item = fakeMovie(1).ref;
-    container.listen(sourceMediaInfoProvider(item), (_, __) {});
+  test(
+    'media info is unsupported for a source without the capability',
+    () async {
+      final container = containerFor(FakeMediaSource());
+      final item = fakeMovie(1).ref;
+      container.listen(sourceMediaInfoProvider(item), (_, _) {});
 
-    await expectLater(
-      container.read(sourceMediaInfoProvider(item).future),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unsupported)),
-    );
-  });
+      await expectLater(
+        container.read(sourceMediaInfoProvider(item).future),
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.unsupported,
+          ),
+        ),
+      );
+    },
+  );
 
-  test('every listing is empty, with no call, without the capability',
-      () async {
-    final container = containerFor(FakeMediaSource());
-    expect(await firstValue(container, sourceCollectionsProvider(fakeSourceId)),
-        isEmpty);
-    expect(await firstValue(container, sourceCalendarProvider(fakeSourceId)),
-        isEmpty);
-    expect(
+  test(
+    'every listing is empty, with no call, without the capability',
+    () async {
+      final container = containerFor(FakeMediaSource());
+      expect(
+        await firstValue(container, sourceCollectionsProvider(fakeSourceId)),
+        isEmpty,
+      );
+      expect(
+        await firstValue(container, sourceCalendarProvider(fakeSourceId)),
+        isEmpty,
+      );
+      expect(
         await firstValue(container, sourceRecentlyAddedProvider(fakeSourceId)),
-        isEmpty);
-  });
+        isEmpty,
+      );
+    },
+  );
 }

@@ -6,68 +6,73 @@ import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/media_info/media_info_content.dart';
 
 MediaFileInfo _richFile() => const MediaFileInfo(
-      id: 'f1',
-      fileName: 'Blade.Runner.2049.2160p.mkv',
-      directory: '/media/movies/Blade Runner 2049 (2017)',
-      container: 'mkv',
-      durationSeconds: 9780,
-      sizeBytes: 58200000000,
-      bitrate: 47300000,
-      resolution: '2160p',
+  id: 'f1',
+  fileName: 'Blade.Runner.2049.2160p.mkv',
+  directory: '/media/movies/Blade Runner 2049 (2017)',
+  container: 'mkv',
+  durationSeconds: 9780,
+  sizeBytes: 58200000000,
+  bitrate: 47300000,
+  resolution: '2160p',
+  codec: 'hevc',
+  streams: [
+    MediaStream(
+      index: 0,
+      type: MediaStreamType.video,
       codec: 'hevc',
-      streams: [
-        MediaStream(
-          index: 0,
-          type: MediaStreamType.video,
-          codec: 'hevc',
-          profile: 'Main 10',
-          width: 3840,
-          height: 2160,
-          frameRate: 23.976,
-          bitDepth: 10,
-        ),
-        MediaStream(
-          index: 1,
-          type: MediaStreamType.audio,
-          codec: 'truehd',
-          channels: 8,
-          channelLayout: '7.1',
-          language: 'eng',
-          isDefault: true,
-        ),
-        MediaStream(
-          index: 2,
-          type: MediaStreamType.subtitle,
-          codec: 'subrip',
-          language: 'spa',
-          isForced: true,
-        ),
-      ],
-    );
+      profile: 'Main 10',
+      width: 3840,
+      height: 2160,
+      frameRate: 23.976,
+      bitDepth: 10,
+    ),
+    MediaStream(
+      index: 1,
+      type: MediaStreamType.audio,
+      codec: 'truehd',
+      channels: 8,
+      channelLayout: '7.1',
+      language: 'eng',
+      isDefault: true,
+    ),
+    MediaStream(
+      index: 2,
+      type: MediaStreamType.subtitle,
+      codec: 'subrip',
+      language: 'spa',
+      isForced: true,
+    ),
+  ],
+);
 
 MediaFileInfo _bareFile() => const MediaFileInfo(
-      id: 'f2',
-      fileName: 'Old.Movie.1080p.mkv',
-      resolution: '1080p',
-      codec: 'h264',
-      sizeBytes: 8400000,
-      streams: null,
-    );
+  id: 'f2',
+  fileName: 'Old.Movie.1080p.mkv',
+  resolution: '1080p',
+  codec: 'h264',
+  sizeBytes: 8400000,
+  streams: null,
+);
 
 Widget _wrap(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: child),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: child),
+);
 
 void main() {
-  testWidgets('renders file, video, audio and subtitle sections',
-      (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: [_richFile()],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+  testWidgets('renders file, video, audio and subtitle sections', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: [_richFile()],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
+        ),
+      ),
+    );
 
     expect(find.text('Blade.Runner.2049.2160p.mkv'), findsOneWidget);
     expect(find.textContaining('54.2 GB'), findsOneWidget);
@@ -79,28 +84,38 @@ void main() {
     expect(find.textContaining('Spanish'), findsOneWidget);
   });
 
-  testWidgets('shows the not-yet-captured note when streams are null',
-      (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: [_bareFile()],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+  testWidgets('shows the not-yet-captured note when streams are null', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: [_bareFile()],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
+        ),
+      ),
+    );
 
     expect(
       find.text(
-          lookupAppLocalizations(const Locale('en')).mediaInfoStreamsPending),
+        lookupAppLocalizations(const Locale('en')).mediaInfoStreamsPending,
+      ),
       findsOneWidget,
     );
     expect(find.textContaining('1080p'), findsWidgets);
   });
 
   testWidgets('hides the version switcher for a single file', (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: [_richFile()],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: [_richFile()],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
+        ),
+      ),
+    );
 
     expect(find.byKey(const Key('media-info-versions')), findsNothing);
   });
@@ -108,11 +123,15 @@ void main() {
   testWidgets('reports the tapped version', (tester) async {
     var selected = -1;
 
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: [_richFile(), _bareFile()],
-      selectedIndex: 0,
-      onSelectVersion: (index) => selected = index,
-    )));
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: [_richFile(), _bareFile()],
+          selectedIndex: 0,
+          onSelectVersion: (index) => selected = index,
+        ),
+      ),
+    );
 
     expect(find.byKey(const Key('media-info-versions')), findsOneWidget);
     await tester.tap(find.byKey(const Key('media-info-version-1')));
@@ -122,43 +141,47 @@ void main() {
   });
 
   MediaFileInfo manySubtitlesFile() => MediaFileInfo(
-        id: 'f3',
-        fileName: 'Remux.2160p.mkv',
-        container: 'mkv',
-        resolution: '2160p',
+    id: 'f3',
+    fileName: 'Remux.2160p.mkv',
+    container: 'mkv',
+    resolution: '2160p',
+    codec: 'hevc',
+    streams: [
+      const MediaStream(
+        index: 0,
+        type: MediaStreamType.video,
         codec: 'hevc',
-        streams: [
-          const MediaStream(
-            index: 0,
-            type: MediaStreamType.video,
-            codec: 'hevc',
-            width: 3840,
-            height: 2160,
-          ),
-          const MediaStream(
-            index: 1,
-            type: MediaStreamType.audio,
-            codec: 'truehd',
-            language: 'eng',
-            channels: 8,
-            channelLayout: '7.1',
-          ),
-          for (var i = 2; i < 36; i++)
-            MediaStream(
-              index: i,
-              type: MediaStreamType.subtitle,
-              codec: 'subrip',
-              language: 'eng',
-            ),
-        ],
-      );
+        width: 3840,
+        height: 2160,
+      ),
+      const MediaStream(
+        index: 1,
+        type: MediaStreamType.audio,
+        codec: 'truehd',
+        language: 'eng',
+        channels: 8,
+        channelLayout: '7.1',
+      ),
+      for (var i = 2; i < 36; i++)
+        MediaStream(
+          index: i,
+          type: MediaStreamType.subtitle,
+          codec: 'subrip',
+          language: 'eng',
+        ),
+    ],
+  );
 
   testWidgets('labels each section with its stream count', (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: [manySubtitlesFile()],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: [manySubtitlesFile()],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
+        ),
+      ),
+    );
 
     expect(find.byKey(const Key('media-info-header-file')), findsOneWidget);
     expect(find.byKey(const Key('media-info-header-video')), findsOneWidget);
@@ -170,17 +193,22 @@ void main() {
     expect(find.text('SUBTITLES · 34'), findsOneWidget);
   });
 
-  testWidgets('keeps the subtitles header pinned while scrolling',
-      (tester) async {
+  testWidgets('keeps the subtitles header pinned while scrolling', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(520, 700);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: [manySubtitlesFile()],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: [manySubtitlesFile()],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
+        ),
+      ),
+    );
 
     // scrollUntilVisible rather than a fixed drag distance: rows build lazily,
     // so a hardcoded offset would depend on per-row heights that Task 4 then
@@ -201,29 +229,38 @@ void main() {
     );
   });
 
-  testWidgets('shows external subtitles under the subtitles header',
-      (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: const [
-        MediaFileInfo(
-          id: 'f4',
-          fileName: 'Movie.mkv',
-          streams: [
-            MediaStream(index: 0, type: MediaStreamType.video, codec: 'h264'),
-          ],
-          externalSubtitles: [
-            SubtitleTrack(
-              id: 'ext-1',
-              language: 'por',
-              title: 'Portugues',
-              format: 'srt',
+  testWidgets('shows external subtitles under the subtitles header', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: const [
+            MediaFileInfo(
+              id: 'f4',
+              fileName: 'Movie.mkv',
+              streams: [
+                MediaStream(
+                  index: 0,
+                  type: MediaStreamType.video,
+                  codec: 'h264',
+                ),
+              ],
+              externalSubtitles: [
+                SubtitleTrack(
+                  id: 'ext-1',
+                  language: 'por',
+                  title: 'Portugues',
+                  format: 'srt',
+                ),
+              ],
             ),
           ],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
         ),
-      ],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+      ),
+    );
 
     expect(
       find.byKey(const Key('media-info-header-subtitles')),
@@ -233,28 +270,32 @@ void main() {
   });
 
   testWidgets('renders an audio stream as one aligned line', (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: const [
-        MediaFileInfo(
-          id: 'f5',
-          fileName: 'Movie.mkv',
-          streams: [
-            MediaStream(
-              index: 1,
-              type: MediaStreamType.audio,
-              codec: 'truehd',
-              language: 'eng',
-              channels: 8,
-              channelLayout: '7.1',
-              sampleRate: 48000,
-              isDefault: true,
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: const [
+            MediaFileInfo(
+              id: 'f5',
+              fileName: 'Movie.mkv',
+              streams: [
+                MediaStream(
+                  index: 1,
+                  type: MediaStreamType.audio,
+                  codec: 'truehd',
+                  language: 'eng',
+                  channels: 8,
+                  channelLayout: '7.1',
+                  sampleRate: 48000,
+                  isDefault: true,
+                ),
+              ],
             ),
           ],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
         ),
-      ],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+      ),
+    );
 
     expect(find.text('TRUEHD'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
@@ -262,40 +303,47 @@ void main() {
     expect(find.text('Default'), findsOneWidget);
   });
 
-  testWidgets('a titleless subtitle row is one line, a titled one is taller',
-      (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: const [
-        MediaFileInfo(
-          id: 'f6',
-          fileName: 'Movie.mkv',
-          streams: [
-            MediaStream(
-              index: 2,
-              type: MediaStreamType.subtitle,
-              codec: 'subrip',
-              language: 'eng',
-            ),
-            MediaStream(
-              index: 3,
-              type: MediaStreamType.subtitle,
-              codec: 'hdmv_pgs_subtitle',
-              language: 'fre',
-              title: 'Forced narrative only',
+  testWidgets('a titleless subtitle row is one line, a titled one is taller', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: const [
+            MediaFileInfo(
+              id: 'f6',
+              fileName: 'Movie.mkv',
+              streams: [
+                MediaStream(
+                  index: 2,
+                  type: MediaStreamType.subtitle,
+                  codec: 'subrip',
+                  language: 'eng',
+                ),
+                MediaStream(
+                  index: 3,
+                  type: MediaStreamType.subtitle,
+                  codec: 'hdmv_pgs_subtitle',
+                  language: 'fre',
+                  title: 'Forced narrative only',
+                ),
+              ],
             ),
           ],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
         ),
-      ],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+      ),
+    );
 
     // getSize throws unless exactly one widget carries each key, so these two
     // calls also assert one row per stream.
-    final plain =
-        tester.getSize(find.byKey(const Key('media-info-stream-2'))).height;
-    final titled =
-        tester.getSize(find.byKey(const Key('media-info-stream-3'))).height;
+    final plain = tester
+        .getSize(find.byKey(const Key('media-info-stream-2')))
+        .height;
+    final titled = tester
+        .getSize(find.byKey(const Key('media-info-stream-3')))
+        .height;
 
     expect(plain, lessThan(28));
     expect(titled, greaterThan(plain));
@@ -304,29 +352,38 @@ void main() {
     expect(find.text('Forced narrative only'), findsOneWidget);
   });
 
-  testWidgets('an external subtitle row shows its title and External flag',
-      (tester) async {
-    await tester.pumpWidget(_wrap(MediaInfoContent(
-      files: const [
-        MediaFileInfo(
-          id: 'f7',
-          fileName: 'Movie.mkv',
-          streams: [
-            MediaStream(index: 0, type: MediaStreamType.video, codec: 'h264'),
-          ],
-          externalSubtitles: [
-            SubtitleTrack(
-              id: 'ext-1',
-              language: 'por',
-              title: 'Portugues do Brasil',
-              format: 'srt',
+  testWidgets('an external subtitle row shows its title and External flag', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        MediaInfoContent(
+          files: const [
+            MediaFileInfo(
+              id: 'f7',
+              fileName: 'Movie.mkv',
+              streams: [
+                MediaStream(
+                  index: 0,
+                  type: MediaStreamType.video,
+                  codec: 'h264',
+                ),
+              ],
+              externalSubtitles: [
+                SubtitleTrack(
+                  id: 'ext-1',
+                  language: 'por',
+                  title: 'Portugues do Brasil',
+                  format: 'srt',
+                ),
+              ],
             ),
           ],
+          selectedIndex: 0,
+          onSelectVersion: (_) {},
         ),
-      ],
-      selectedIndex: 0,
-      onSelectVersion: (_) {},
-    )));
+      ),
+    );
 
     expect(find.text('SRT'), findsOneWidget);
     expect(find.text('Portuguese'), findsOneWidget);

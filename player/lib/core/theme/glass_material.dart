@@ -20,18 +20,16 @@ enum GlassMaterial {
     TargetPlatform platform, {
     bool isWeb = kIsWeb,
     bool? isTv,
-  }) =>
-      this != liquid || !(isTv ?? InputCapabilities.directionalPrimary);
+  }) => this != liquid || !(isTv ?? InputCapabilities.directionalPrimary);
 
   static List<GlassMaterial> availableOn(
     TargetPlatform platform, {
     bool isWeb = kIsWeb,
     bool? isTv,
-  }) =>
-      [
-        for (final m in values)
-          if (m.isAvailableOn(platform, isWeb: isWeb, isTv: isTv)) m,
-      ];
+  }) => [
+    for (final m in values)
+      if (m.isAvailableOn(platform, isWeb: isWeb, isTv: isTv)) m,
+  ];
 
   /// Liquid Glass on native iOS and macOS, Frosted everywhere else. The web
   /// build on a Mac reports [TargetPlatform.macOS] too, hence [isWeb].
@@ -40,7 +38,8 @@ enum GlassMaterial {
     bool isWeb = kIsWeb,
     bool? isTv,
   }) {
-    final apple = !isWeb &&
+    final apple =
+        !isWeb &&
         (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS);
     return apple && liquid.isAvailableOn(platform, isWeb: isWeb, isTv: isTv)
         ? liquid

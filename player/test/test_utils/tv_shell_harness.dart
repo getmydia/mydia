@@ -29,8 +29,8 @@ import 'toast_harness.dart';
 final Object tvSkipReason = InputCapabilities.directionalPrimary
     ? false
     : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-        'InputCapabilities.directionalPrimary; CI runs it in the '
-        '"Run television-tier tests" step.';
+          'InputCapabilities.directionalPrimary; CI runs it in the '
+          '"Run television-tier tests" step.';
 
 /// The key on the stand-in page [TvShell] pushes for any detail location.
 const tvDetailStandInKey = Key('tv-detail-stand-in');
@@ -73,52 +73,56 @@ class TvShell {
     container = ProviderContainer(overrides: overrides);
     addTearDown(container.dispose);
 
-    router = GoRouter(routes: [
-      ShellRoute(
-        builder: (context, state, child) => AppShell.railLayers(
-          regionsEnabled: true,
-          contentLeft: Breakpoints.railContentInset(pinned: false),
-          railScope: railScope,
-          contentScope: contentScope,
-          boundary: boundary,
-          content: child,
-          railBuilder: (_) => Align(
-            alignment: Alignment.centerLeft,
-            child: Focus(
-              focusNode: sidebarRow,
-              child: const SizedBox(width: 48, height: 48),
-            ),
-          ),
-        ),
-        routes: [
-          GoRoute(path: '/', builder: (_, __) => screen),
-          GoRoute(
-            path: '/s/:id/:kind/:item',
-            builder: (_, __) => Scaffold(
-              body: Center(
-                child: TextButton(
-                  key: tvDetailStandInKey,
-                  autofocus: true,
-                  onPressed: () {},
-                  child: const Text('Detail'),
-                ),
+    router = GoRouter(
+      routes: [
+        ShellRoute(
+          builder: (context, state, child) => AppShell.railLayers(
+            regionsEnabled: true,
+            contentLeft: Breakpoints.railContentInset(pinned: false),
+            railScope: railScope,
+            contentScope: contentScope,
+            boundary: boundary,
+            content: child,
+            railBuilder: (_) => Align(
+              alignment: Alignment.centerLeft,
+              child: Focus(
+                focusNode: sidebarRow,
+                child: const SizedBox(width: 48, height: 48),
               ),
             ),
           ),
-        ],
-      ),
-    ]);
+          routes: [
+            GoRoute(path: '/', builder: (_, _) => screen),
+            GoRoute(
+              path: '/s/:id/:kind/:item',
+              builder: (_, _) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    key: tvDetailStandInKey,
+                    autofocus: true,
+                    onPressed: () {},
+                    child: const Text('Detail'),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
     addTearDown(router.dispose);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(
-        routerConfig: router,
-        builder: toastLayerBuilder,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          routerConfig: router,
+          builder: toastLayerBuilder,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
   }
 }

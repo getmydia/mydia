@@ -33,10 +33,7 @@ class ProgressService implements ProgressReporter {
   /// Starts syncing progress for a movie.
   ///
   /// Updates progress every 10 seconds while playing.
-  void startMovieSync(
-    Player player,
-    String movieId,
-  ) {
+  void startMovieSync(Player player, String movieId) {
     _syncTimer?.cancel();
     _syncTimer = Timer.periodic(_syncInterval, (_) {
       _syncMovieProgress(player, movieId);
@@ -46,10 +43,7 @@ class ProgressService implements ProgressReporter {
   /// Starts syncing progress for an episode.
   ///
   /// Updates progress every 10 seconds while playing.
-  void startEpisodeSync(
-    Player player,
-    String episodeId,
-  ) {
+  void startEpisodeSync(Player player, String episodeId) {
     _syncTimer?.cancel();
     _syncTimer = Timer.periodic(_syncInterval, (_) {
       _syncEpisodeProgress(player, episodeId);
@@ -90,18 +84,12 @@ class ProgressService implements ProgressReporter {
   }
 
   /// Saves movie progress immediately (call on pause/exit).
-  Future<void> saveMovieProgress(
-    Player player,
-    String movieId,
-  ) async {
+  Future<void> saveMovieProgress(Player player, String movieId) async {
     await _syncMovieProgress(player, movieId);
   }
 
   /// Saves episode progress immediately (call on pause/exit).
-  Future<void> saveEpisodeProgress(
-    Player player,
-    String episodeId,
-  ) async {
+  Future<void> saveEpisodeProgress(Player player, String episodeId) async {
     await _syncEpisodeProgress(player, episodeId);
   }
 
@@ -140,10 +128,7 @@ class ProgressService implements ProgressReporter {
     return (positionSeconds: pos, durationSeconds: duration);
   }
 
-  Future<void> _syncMovieProgress(
-    Player player,
-    String movieId,
-  ) async {
+  Future<void> _syncMovieProgress(Player player, String movieId) async {
     final progress = resolveSync(
       player.state.position,
       player.state.duration,
@@ -175,10 +160,7 @@ class ProgressService implements ProgressReporter {
     await _mutateMovieProgress(movieId, progress);
   }
 
-  Future<void> _syncEpisodeProgress(
-    Player player,
-    String episodeId,
-  ) async {
+  Future<void> _syncEpisodeProgress(Player player, String episodeId) async {
     final progress = resolveSync(
       player.state.position,
       player.state.duration,

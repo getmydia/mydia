@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/p2p/p2p_keystore.dart';
@@ -42,7 +43,8 @@ class P2pStatusNotifier extends Notifier<P2pStatus> {
     // Listen to status changes
     _subscription = service.onStatusChanged.listen((status) {
       debugPrint(
-          '[P2pStatusNotifier] Received status update: peerConnectionType=${status.peerConnectionType}');
+        '[P2pStatusNotifier] Received status update: peerConnectionType=${status.peerConnectionType}',
+      );
       // `onDispose` cancels this subscription, but `cancel()` is async and
       // does not retract an event already queued for delivery, so one can
       // still arrive here after the provider is gone. Writing `state` then
@@ -55,7 +57,8 @@ class P2pStatusNotifier extends Notifier<P2pStatus> {
     // Return initial state from service
     final initialStatus = service.status;
     debugPrint(
-        '[P2pStatusNotifier] Initial status: peerConnectionType=${initialStatus.peerConnectionType}');
+      '[P2pStatusNotifier] Initial status: peerConnectionType=${initialStatus.peerConnectionType}',
+    );
     return initialStatus;
   }
 
@@ -130,13 +133,13 @@ class P2pStatus {
   });
 
   const P2pStatus.initial()
-      : isInitialized = false,
-        isRelayConnected = false,
-        connectedPeersCount = 0,
-        nodeAddr = null,
-        nodeId = null,
-        relayUrl = null,
-        peerConnectionType = P2pConnectionType.none;
+    : isInitialized = false,
+      isRelayConnected = false,
+      connectedPeersCount = 0,
+      nodeAddr = null,
+      nodeId = null,
+      relayUrl = null,
+      peerConnectionType = P2pConnectionType.none;
 
   P2pStatus copyWith({
     bool? isInitialized,
@@ -421,9 +424,14 @@ class P2pService {
   void _replayPeerFilesMembers(P2PHost host) {
     final members = _peerFilesMembers;
     if (members == null) return;
-    unawaited(host.setPeerFilesMembers(nodeIds: members).catchError(
-        (Object e) =>
-            debugPrint('[P2P] Restoring the peer files members failed: $e')));
+    unawaited(
+      host
+          .setPeerFilesMembers(nodeIds: members)
+          .catchError(
+            (Object e) =>
+                debugPrint('[P2P] Restoring the peer files members failed: $e'),
+          ),
+    );
   }
 
   /// Drop the host's cached grants for [accountId].
@@ -447,7 +455,8 @@ class P2pService {
   ) {
     return host.peerFilesStream().listen((request) {
       debugPrint(
-          '[P2P] Peer files request: ${request.requestId} from ${request.peer}');
+        '[P2P] Peer files request: ${request.requestId} from ${request.peer}',
+      );
       if (_peerFilesRequestController.isClosed) return;
       _peerFilesRequestController.add(request);
     });
@@ -621,14 +630,18 @@ class P2pService {
 
     final attempt = _readOrCreateNodeSecret(_keystoreFactory());
     _nodeSecretLoad = attempt;
-    attempt.then<void>((_) {}, onError: (Object _) {
-      if (identical(_nodeSecretLoad, attempt)) _nodeSecretLoad = null;
-    });
+    attempt.then<void>(
+      (_) {},
+      onError: (Object _) {
+        if (identical(_nodeSecretLoad, attempt)) _nodeSecretLoad = null;
+      },
+    );
     return attempt;
   }
 
   static Future<Uint8List?> _readOrCreateNodeSecret(
-      P2pKeystore keystore) async {
+    P2pKeystore keystore,
+  ) async {
     final stored = await keystore.read().timeout(_keystoreTimeout);
     if (stored != null) return stored;
     final secret = _generateNodeSecret();
@@ -676,7 +689,8 @@ class P2pService {
 
     try {
       debugPrint(
-          '[P2P] Initializing iroh-based P2P Host with relays: $resolved');
+        '[P2P] Initializing iroh-based P2P Host with relays: $resolved',
+      );
 
       Uint8List? keypairBytes;
       try {
@@ -711,8 +725,9 @@ class P2pService {
         // A Rust log line forwarded by the p2p layer. Recorded directly, not
         // printed: the Rust side already writes it to the console.
         if (event.startsWith(rustLogEventPrefix)) {
-          LogSink.instance
-              ?.recordRustEvent(event.substring(rustLogEventPrefix.length));
+          LogSink.instance?.recordRustEvent(
+            event.substring(rustLogEventPrefix.length),
+          );
           return;
         }
         debugPrint('[P2P] Event: $event');
@@ -733,12 +748,14 @@ class P2pService {
           }
           _emitStatus();
         } else if (event.startsWith('connection_type_changed:')) {
-          final parts =
-              event.substring('connection_type_changed:'.length).split(':');
+          final parts = event
+              .substring('connection_type_changed:'.length)
+              .split(':');
           final peerId = parts.first;
           final connectionType = parts.length > 1 ? parts[1] : 'unknown';
           debugPrint(
-              '[P2P] Connection type changed: $peerId -> $connectionType');
+            '[P2P] Connection type changed: $peerId -> $connectionType',
+          );
           _currentConnectionType = _parseConnectionType(connectionType);
           _emitStatus();
         } else if (event.startsWith('disconnected:')) {
@@ -773,7 +790,8 @@ class P2pService {
       // that matters.
       _controlSubscription = _host!.remoteControlStream().listen((request) {
         debugPrint(
-            '[P2P] Control request: ${request.requestId} from ${request.peer}');
+          '[P2P] Control request: ${request.requestId} from ${request.peer}',
+        );
         if (_controlRequestController.isClosed) return;
         _controlRequestController.add(request);
       });
@@ -781,7 +799,8 @@ class P2pService {
       // Start Peer-Sync Stream.
       _peerSyncSubscription = _host!.peerSyncStream().listen((request) {
         debugPrint(
-            '[P2P] Peer sync request: ${request.requestId} from ${request.peer}');
+          '[P2P] Peer sync request: ${request.requestId} from ${request.peer}',
+        );
         if (_peerSyncRequestController.isClosed) return;
         _peerSyncRequestController.add(request);
       });
@@ -800,14 +819,19 @@ class P2pService {
       // `ready:` event sets `_nodeAddr` too; this call covers a `ready:` that
       // fired before the subscription above attached. Read through the local
       // `host`, not `_host!`, so a reset() in the meantime cannot throw here.
-      unawaited(host.getNodeAddr().then((nodeAddr) {
-        if (stale()) return;
-        _nodeAddr = nodeAddr;
-        debugPrint('[P2P] Initial node addr: $_nodeAddr');
-        _emitStatus();
-      }, onError: (Object e) {
-        debugPrint('[P2P] Failed to read the initial node addr: $e');
-      }));
+      unawaited(
+        host.getNodeAddr().then(
+          (nodeAddr) {
+            if (stale()) return;
+            _nodeAddr = nodeAddr;
+            debugPrint('[P2P] Initial node addr: $_nodeAddr');
+            _emitStatus();
+          },
+          onError: (Object e) {
+            debugPrint('[P2P] Failed to read the initial node addr: $e');
+          },
+        ),
+      );
     } catch (e) {
       debugPrint('[P2P] Failed to initialize: $e');
       rethrow;
@@ -955,8 +979,10 @@ class P2pService {
       deviceOs: kIsWeb ? 'web' : Platform.operatingSystem,
     );
 
-    final res =
-        await host.sendPairingRequest(peer: normalized.nodeId, req: req);
+    final res = await host.sendPairingRequest(
+      peer: normalized.nodeId,
+      req: req,
+    );
 
     if (res.success) {
       return {
@@ -1020,16 +1046,19 @@ class P2pService {
       deviceProfile: deviceProfile,
     );
 
-    final res =
-        await host.sendGraphqlRequest(peer: normalized.nodeId, req: req);
+    final res = await host.sendGraphqlRequest(
+      peer: normalized.nodeId,
+      req: req,
+    );
 
     // Parse the response
     if (res.errors != null) {
       final errors = _decodeJson(res.errors!);
       if (errors is List && errors.isNotEmpty) {
         final firstError = errors.first;
-        final message =
-            firstError is Map<String, Object?> ? firstError['message'] : null;
+        final message = firstError is Map<String, Object?>
+            ? firstError['message']
+            : null;
         throw P2pGraphQLError(message?.toString() ?? 'GraphQL error');
       }
     }
@@ -1198,8 +1227,10 @@ class P2pService {
     return (nodeId: nodeId, endpointAddrJson: null);
   }
 
-  Future<void> _waitForConnectedPeer(String nodeId,
-      {Duration timeout = const Duration(seconds: 10)}) async {
+  Future<void> _waitForConnectedPeer(
+    String nodeId, {
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
     final connected = await waitForPeer(
       nodeId: nodeId,
       isConnected: () => isConnectedToPeer(nodeId),
@@ -1228,32 +1259,47 @@ class P2pService {
   void _detachNativeSubscriptions(String reason) {
     final subscription = _eventSubscription;
     _eventSubscription = null;
-    unawaited(subscription?.cancel().catchError((Object e) {
-      debugPrint('[P2P] Error cancelling event subscription on $reason: $e');
-    }));
+    unawaited(
+      subscription?.cancel().catchError((Object e) {
+        debugPrint('[P2P] Error cancelling event subscription on $reason: $e');
+      }),
+    );
     final controlSubscription = _controlSubscription;
     _controlSubscription = null;
-    unawaited(controlSubscription?.cancel().catchError((Object e) {
-      debugPrint('[P2P] Error cancelling control subscription on $reason: $e');
-    }));
+    unawaited(
+      controlSubscription?.cancel().catchError((Object e) {
+        debugPrint(
+          '[P2P] Error cancelling control subscription on $reason: $e',
+        );
+      }),
+    );
     final peerSyncSubscription = _peerSyncSubscription;
     _peerSyncSubscription = null;
-    unawaited(peerSyncSubscription?.cancel().catchError((Object e) {
-      debugPrint(
-          '[P2P] Error cancelling peer sync subscription on $reason: $e');
-    }));
+    unawaited(
+      peerSyncSubscription?.cancel().catchError((Object e) {
+        debugPrint(
+          '[P2P] Error cancelling peer sync subscription on $reason: $e',
+        );
+      }),
+    );
     final peerFilesSubscription = _peerFilesSubscription;
     _peerFilesSubscription = null;
-    unawaited(peerFilesSubscription?.cancel().catchError((Object e) {
-      debugPrint(
-          '[P2P] Error cancelling peer files subscription on $reason: $e');
-    }));
+    unawaited(
+      peerFilesSubscription?.cancel().catchError((Object e) {
+        debugPrint(
+          '[P2P] Error cancelling peer files subscription on $reason: $e',
+        );
+      }),
+    );
     final peerFileGrantSubscription = _peerFileGrantSubscription;
     _peerFileGrantSubscription = null;
-    unawaited(peerFileGrantSubscription?.cancel().catchError((Object e) {
-      debugPrint(
-          '[P2P] Error cancelling peer file grant subscription on $reason: $e');
-    }));
+    unawaited(
+      peerFileGrantSubscription?.cancel().catchError((Object e) {
+        debugPrint(
+          '[P2P] Error cancelling peer file grant subscription on $reason: $e',
+        );
+      }),
+    );
   }
 
   Future<void> dispose() async {

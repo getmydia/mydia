@@ -23,13 +23,13 @@ Future<CrashAppContext> loadCrashAppContext() async {
 /// The same names `DeviceInfoService.getPlatform` uses.
 @visibleForTesting
 String crashPlatformName(TargetPlatform platform) => switch (platform) {
-      TargetPlatform.android => 'android',
-      TargetPlatform.iOS => 'ios',
-      TargetPlatform.macOS => 'macos',
-      TargetPlatform.windows => 'windows',
-      TargetPlatform.linux => 'linux',
-      TargetPlatform.fuchsia => 'fuchsia',
-    };
+  TargetPlatform.android => 'android',
+  TargetPlatform.iOS => 'ios',
+  TargetPlatform.macOS => 'macos',
+  TargetPlatform.windows => 'windows',
+  TargetPlatform.linux => 'linux',
+  TargetPlatform.fuchsia => 'fuchsia',
+};
 
 /// `prod` in release builds, matching what the server sends in production.
 @visibleForTesting
@@ -45,15 +45,17 @@ Future<String> _osVersion() async {
   try {
     return switch (defaultTargetPlatform) {
       TargetPlatform.android => await plugin.androidInfo.then(
-          (i) => 'Android ${i.version.release} (SDK ${i.version.sdkInt})',
-        ),
-      TargetPlatform.iOS =>
-        await plugin.iosInfo.then((i) => 'iOS ${i.systemVersion}'),
-      TargetPlatform.macOS =>
-        await plugin.macOsInfo.then((i) => 'macOS ${i.osRelease}'),
+        (i) => 'Android ${i.version.release} (SDK ${i.version.sdkInt})',
+      ),
+      TargetPlatform.iOS => await plugin.iosInfo.then(
+        (i) => 'iOS ${i.systemVersion}',
+      ),
+      TargetPlatform.macOS => await plugin.macOsInfo.then(
+        (i) => 'macOS ${i.osRelease}',
+      ),
       TargetPlatform.windows => await plugin.windowsInfo.then(
-          (i) => 'Windows ${i.displayVersion} (${i.buildNumber})',
-        ),
+        (i) => 'Windows ${i.displayVersion} (${i.buildNumber})',
+      ),
       TargetPlatform.linux => await plugin.linuxInfo.then((i) => i.prettyName),
       TargetPlatform.fuchsia => 'unknown',
     };

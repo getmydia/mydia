@@ -39,11 +39,13 @@ void main() {
     });
 
     test('drops leading framework frames so frame 0 is player code', () {
-      final frames = parseCrashFrames(StackTrace.fromString('''
+      final frames = parseCrashFrames(
+        StackTrace.fromString('''
 #0      State.setState (package:flutter/src/widgets/framework.dart:1219:9)
 #1      _DownloadsScreenState._onProgress (package:player/presentation/screens/downloads/downloads_screen.dart:88:5)
 #2      _rootRunUnary (dart:async/zone.dart:1538:47)
-'''));
+'''),
+      );
 
       expect(frames.map((f) => f.file), [
         'package:player/presentation/screens/downloads/downloads_screen.dart',
@@ -53,21 +55,25 @@ void main() {
     });
 
     test('keeps a trace with no player frame whole', () {
-      final frames = parseCrashFrames(StackTrace.fromString('''
+      final frames = parseCrashFrames(
+        StackTrace.fromString('''
 #0      RenderFlex.performLayout (package:flutter/src/rendering/flex.dart:1016:32)
 #1      RenderObject.layout (package:flutter/src/rendering/object.dart:2656:7)
-'''));
+'''),
+      );
 
       expect(frames, hasLength(2));
       expect(frames.first.file, 'package:flutter/src/rendering/flex.dart');
     });
 
     test('names closures and skips the VM fold marker', () {
-      final frames = parseCrashFrames(StackTrace.fromString('''
+      final frames = parseCrashFrames(
+        StackTrace.fromString('''
 #0      _PlayerScreenState.build.<anonymous closure> (package:player/presentation/screens/player/player_screen.dart:900:13)
 ...
 #1      _InkResponseState.handleTap (package:flutter/src/material/ink_well.dart:1224:21)
-'''));
+'''),
+      );
 
       expect(frames.map((f) => f.function), [
         '_PlayerScreenState.build.<fn>',

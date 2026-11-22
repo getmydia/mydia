@@ -30,8 +30,9 @@ Future<void> _pumpSliverScreen(WidgetTester tester, Widget child) {
 
 void main() {
   group('DetailLoadingState', () {
-    testWidgets('shows a spinner under the hero and the back button',
-        (tester) async {
+    testWidgets('shows a spinner under the hero and the back button', (
+      tester,
+    ) async {
       await _pumpSliverScreen(tester, const DetailLoadingState());
       await tester.pump();
 
@@ -41,8 +42,9 @@ void main() {
   });
 
   group('DetailErrorState', () {
-    testWidgets('names the noun, shows the error, and retries on tap',
-        (tester) async {
+    testWidgets('names the noun, shows the error, and retries on tap', (
+      tester,
+    ) async {
       var retries = 0;
       await _pumpSliverScreen(
         tester,

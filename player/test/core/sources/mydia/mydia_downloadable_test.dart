@@ -31,15 +31,15 @@ void main() {
   tearDown(() => proxy.shutdown());
 
   MydiaSource guestSource(MydiaCredentials creds) => MydiaSource(
-        source: guest,
-        client: MydiaClient(
-          transport: FakeMydiaTransport(),
-          load: () async => creds,
-          save: (_) async {},
-          onUnauthorized: () {},
-        ),
-        proxy: () => proxy,
-      );
+    source: guest,
+    client: MydiaClient(
+      transport: FakeMydiaTransport(),
+      load: () async => creds,
+      save: (_) async {},
+      onUnauthorized: () {},
+    ),
+    proxy: () => proxy,
+  );
 
   Future<DirectFile> fileOf(MydiaSource source) async {
     final plan = await source.resolve(_movie, 'original') as TranscodeJob;
@@ -47,29 +47,40 @@ void main() {
   }
 
   group('guest file resolution', () {
-    test('HTTP uses the bearer header and keeps the token out of the URL',
-        () async {
-      final file = await fileOf(guestSource(_http));
-      expect(file.url, 'https://lake.example/api/v1/download/job/job-7/file');
-      expect(file.url, isNot(contains('secret-token')));
-      expect(file.headers, {'Authorization': 'Bearer secret-token'});
-      expect(file.extension, 'mp4');
-    });
+    test(
+      'HTTP uses the bearer header and keeps the token out of the URL',
+      () async {
+        final file = await fileOf(guestSource(_http));
+        expect(file.url, 'https://lake.example/api/v1/download/job/job-7/file');
+        expect(file.url, isNot(contains('secret-token')));
+        expect(file.headers, {'Authorization': 'Bearer secret-token'});
+        expect(file.extension, 'mp4');
+      },
+    );
 
     test('HTTP without a server URL is unreachable', () async {
-      const creds =
-          MydiaCredentials(instanceId: 'inst-2', accessToken: 'secret-token');
+      const creds = MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'secret-token',
+      );
       expect(
         fileOf(guestSource(creds)),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)),
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.unreachable,
+          ),
+        ),
       );
     });
 
     test('p2p goes through the guest proxy target with no header', () async {
       final file = await fileOf(guestSource(_p2p));
-      expect(file.url,
-          MediaRoutes.download(proxy.targetBaseUrl('mguest'), 'job-7'));
+      expect(
+        file.url,
+        MediaRoutes.download(proxy.targetBaseUrl('mguest'), 'job-7'),
+      );
       expect(file.headers, isEmpty);
       expect(proxy.isRunning, isTrue);
     });
@@ -84,14 +95,16 @@ void main() {
     expect(proxy.isRunning, isFalse);
   });
 
-  test('disposing a source that never downloaded leaves the proxy alone',
-      () async {
-    final source = guestSource(_p2p);
-    final other = Object();
-    await proxy.start(owner: other, targetPeer: 'peer', target: 'macct');
-    source.dispose();
-    await pumpEventQueue();
-    expect(proxy.isRunning, isTrue);
-    await proxy.release(other);
-  });
+  test(
+    'disposing a source that never downloaded leaves the proxy alone',
+    () async {
+      final source = guestSource(_p2p);
+      final other = Object();
+      await proxy.start(owner: other, targetPeer: 'peer', target: 'macct');
+      source.dispose();
+      await pumpEventQueue();
+      expect(proxy.isRunning, isTrue);
+      await proxy.release(other);
+    },
+  );
 }

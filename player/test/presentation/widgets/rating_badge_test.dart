@@ -3,8 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/rating_badge.dart';
 
-Widget _host(Widget child) =>
-    MaterialApp(home: Scaffold(body: Center(child: child)));
+Widget _host(Widget child) => MaterialApp(
+  home: Scaffold(body: Center(child: child)),
+);
 
 void main() {
   testWidgets('rounds the score to one decimal place', (tester) async {
@@ -21,16 +22,18 @@ void main() {
     expect(find.text('8.0'), findsOneWidget);
   });
 
-  testWidgets('carries a star in the app accent, matching the detail screen',
-      (tester) async {
+  testWidgets('carries a star in the app accent, matching the detail screen', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(const RatingBadge(rating: 6.1)));
 
     final icon = tester.widget<Icon>(find.byIcon(Icons.star_rounded));
     expect(icon.color, Palettes.projectionBooth.primary);
   });
 
-  testWidgets('sits on a dark scrim rather than a palette surface',
-      (tester) async {
+  testWidgets('sits on a dark scrim rather than a palette surface', (
+    tester,
+  ) async {
     // The chip is drawn straight onto poster artwork, so its legibility comes
     // from the scrim. A palette surface colour would wash out over a bright
     // poster.

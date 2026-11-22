@@ -16,8 +16,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          coreSettingsServiceProvider
-              .overrideWithValue(SettingsService(storage: storage)),
+          coreSettingsServiceProvider.overrideWithValue(
+            SettingsService(storage: storage),
+          ),
         ],
         child: MaterialApp(
           home: Scaffold(

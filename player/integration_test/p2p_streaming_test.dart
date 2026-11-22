@@ -46,7 +46,8 @@ void main() {
       try {
         final claim = await apiClient.generateClaimCode();
         debugPrint(
-            '[P2P Streaming Test] Generated fresh claim code: ${claim.code}');
+          '[P2P Streaming Test] Generated fresh claim code: ${claim.code}',
+        );
         return claim.code;
       } catch (error) {
         if (attempt == maxAttempts) {
@@ -54,7 +55,8 @@ void main() {
         }
 
         debugPrint(
-            '[P2P Streaming Test] Claim code generation attempt $attempt failed: $error');
+          '[P2P Streaming Test] Claim code generation attempt $attempt failed: $error',
+        );
         await Future<void>.delayed(const Duration(seconds: 2));
       }
     }
@@ -63,8 +65,10 @@ void main() {
   }
 
   /// Wait for pairing to complete and home screen to appear
-  Future<bool> waitForPairingComplete(WidgetTester tester,
-      {int maxSeconds = 120}) async {
+  Future<bool> waitForPairingComplete(
+    WidgetTester tester, {
+    int maxSeconds = 120,
+  }) async {
     debugPrint('[P2P Streaming Test] Waiting for pairing to complete...');
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
@@ -87,7 +91,8 @@ void main() {
     );
     if (landing == AppLanding.signedIn) {
       debugPrint(
-          '[P2P Streaming Test] A Mydia account is already stored, skipping pairing');
+        '[P2P Streaming Test] A Mydia account is already stored, skipping pairing',
+      );
       return;
     }
 
@@ -113,8 +118,10 @@ void main() {
 
   /// Wait for the media library to load.
   /// Returns true if loaded, false if timed out.
-  Future<bool> waitForMediaLibrary(WidgetTester tester,
-      {int maxSeconds = 60}) async {
+  Future<bool> waitForMediaLibrary(
+    WidgetTester tester, {
+    int maxSeconds = 60,
+  }) async {
     debugPrint('[P2P Streaming Test] Waiting for media library...');
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
@@ -123,8 +130,9 @@ void main() {
       final movieGrid = find.byType(GridView);
       final noMoviesText = find.text('No movies yet');
       final noShowsText = find.text('No TV shows yet');
-      final emptyLibraryMessage =
-          find.text('Add content to your library to see it here');
+      final emptyLibraryMessage = find.text(
+        'Add content to your library to see it here',
+      );
       final testMovieText = find.textContaining('E2E Test');
 
       if (movieGrid.evaluate().isNotEmpty ||
@@ -133,12 +141,14 @@ void main() {
           emptyLibraryMessage.evaluate().isNotEmpty ||
           testMovieText.evaluate().isNotEmpty) {
         debugPrint(
-            '[P2P Streaming Test] Media library loaded after $i seconds');
+          '[P2P Streaming Test] Media library loaded after $i seconds',
+        );
         return true;
       }
     }
     debugPrint(
-        '[P2P Streaming Test] Media library not loaded after $maxSeconds seconds');
+      '[P2P Streaming Test] Media library not loaded after $maxSeconds seconds',
+    );
     return false;
   }
 
@@ -160,7 +170,8 @@ void main() {
       final fileId = await streaming.getTestMediaFileId();
       if (fileId == null) {
         debugPrint(
-            '[P2P Streaming Test] Skipping direct streaming assertions: no media file found in E2E library');
+          '[P2P Streaming Test] Skipping direct streaming assertions: no media file found in E2E library',
+        );
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 100));
         return;
@@ -175,7 +186,8 @@ void main() {
         expect(session, isNotNull);
         expect(session!.hasHlsUrl, isTrue);
         debugPrint(
-            '[P2P Streaming Test] Streaming session: ${session.sessionId}');
+          '[P2P Streaming Test] Streaming session: ${session.sessionId}',
+        );
         debugPrint('[P2P Streaming Test] HLS URL: ${session.hlsUrl}');
 
         // Wait for HLS playlist to be ready
@@ -184,8 +196,11 @@ void main() {
           minSegments: 2,
           maxRetries: 30,
         );
-        expect(playlistReady, isTrue,
-            reason: 'HLS playlist should be ready with segments');
+        expect(
+          playlistReady,
+          isTrue,
+          reason: 'HLS playlist should be ready with segments',
+        );
         debugPrint('[P2P Streaming Test] HLS playlist is ready');
 
         // Verify segments are accessible
@@ -193,8 +208,11 @@ void main() {
           session.hlsUrl!,
           maxRetries: 10,
         );
-        expect(segmentsReady, isTrue,
-            reason: 'HLS segments should be accessible');
+        expect(
+          segmentsReady,
+          isTrue,
+          reason: 'HLS segments should be accessible',
+        );
         debugPrint('[P2P Streaming Test] HLS segments are accessible');
       } finally {
         if (session != null) {
@@ -209,8 +227,9 @@ void main() {
       debugPrint('[P2P Streaming Test] Direct HTTP streaming test passed!');
     });
 
-    testWidgets('P2P connection can be established',
-        (WidgetTester tester) async {
+    testWidgets('P2P connection can be established', (
+      WidgetTester tester,
+    ) async {
       debugPrint('[P2P Streaming Test] Starting P2P connection test');
 
       // Launch the app
@@ -226,15 +245,19 @@ void main() {
       // Verify remote access status query works
       final status = await streaming.getP2pConnectionStatus();
       debugPrint('[P2P Streaming Test] P2P status: $status');
-      expect(status.enabled, isTrue,
-          reason: 'Remote access should be enabled in E2E mode');
+      expect(
+        status.enabled,
+        isTrue,
+        reason: 'Remote access should be enabled in E2E mode',
+      );
 
       // Wait for P2P connection
       final connected = await streaming.waitForP2pConnection(
         timeout: const Duration(seconds: 30),
       );
       debugPrint(
-          '[P2P Streaming Test] waitForP2pConnection result: $connected');
+        '[P2P Streaming Test] waitForP2pConnection result: $connected',
+      );
 
       // Stop app
       await tester.pumpWidget(const SizedBox.shrink());
@@ -260,8 +283,11 @@ void main() {
       final p2pConnected = await streaming.waitForP2pConnection(
         timeout: const Duration(seconds: 30),
       );
-      expect(p2pConnected, isTrue,
-          reason: 'P2P connection must be established for P2P streaming');
+      expect(
+        p2pConnected,
+        isTrue,
+        reason: 'P2P connection must be established for P2P streaming',
+      );
 
       // Get test media file ID
       final fileId = await streaming.getTestMediaFileId();
@@ -297,10 +323,12 @@ void main() {
       debugPrint('[P2P Streaming Test] P2P streaming test passed!');
     });
 
-    testWidgets('Streaming candidates query returns valid candidates',
-        (WidgetTester tester) async {
+    testWidgets('Streaming candidates query returns valid candidates', (
+      WidgetTester tester,
+    ) async {
       debugPrint(
-          '[P2P Streaming Test] Starting streaming candidates query test');
+        '[P2P Streaming Test] Starting streaming candidates query test',
+      );
 
       // Launch the app
       await tester.pumpWidget(testApp());
@@ -316,7 +344,8 @@ void main() {
       final fileId = await streaming.getTestMediaFileId();
       if (fileId == null) {
         debugPrint(
-            '[P2P Streaming Test] Skipping candidates test: no media file found');
+          '[P2P Streaming Test] Skipping candidates test: no media file found',
+        );
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 100));
         return;
@@ -344,8 +373,9 @@ void main() {
       String? mediaItemId;
       for (final edge in edges) {
         final movie = edge.object('node');
-        final files =
-            movie.field<Object?>('files') == null ? null : movie.list('files');
+        final files = movie.field<Object?>('files') == null
+            ? null
+            : movie.list('files');
         if (files != null &&
             files.any((f) => f.field<Object?>('id') == fileId)) {
           mediaItemId = movie.field<String>('id');
@@ -353,8 +383,11 @@ void main() {
         }
       }
 
-      expect(mediaItemId, isNotNull,
-          reason: 'Should find media item ID for test file');
+      expect(
+        mediaItemId,
+        isNotNull,
+        reason: 'Should find media item ID for test file',
+      );
 
       // Fetch streaming candidates using the "movie" content type
       final candidates = await streaming.fetchStreamingCandidates(
@@ -362,44 +395,78 @@ void main() {
         id: mediaItemId!,
       );
 
-      expect(candidates, isNotNull,
-          reason: 'Streaming candidates should be returned');
+      expect(
+        candidates,
+        isNotNull,
+        reason: 'Streaming candidates should be returned',
+      );
       debugPrint('[P2P Streaming Test] Candidates result: $candidates');
 
       // Verify we got candidates
-      expect(candidates!.candidates, isNotEmpty,
-          reason: 'Should have at least one streaming candidate');
+      expect(
+        candidates!.candidates,
+        isNotEmpty,
+        reason: 'Should have at least one streaming candidate',
+      );
 
       // The E2E test video is H.264/AAC/MP4, which should be direct-playable
-      expect(candidates.hasDirectPlay, isTrue,
-          reason: 'H.264/AAC/MP4 test video should have DIRECT_PLAY candidate');
+      expect(
+        candidates.hasDirectPlay,
+        isTrue,
+        reason: 'H.264/AAC/MP4 test video should have DIRECT_PLAY candidate',
+      );
 
       // Should also have a TRANSCODE fallback
-      expect(candidates.hasTranscode, isTrue,
-          reason: 'Should always have TRANSCODE fallback candidate');
+      expect(
+        candidates.hasTranscode,
+        isTrue,
+        reason: 'Should always have TRANSCODE fallback candidate',
+      );
 
       // Verify file ID is returned
-      expect(candidates.fileId, isNotEmpty,
-          reason: 'Candidates should include fileId');
+      expect(
+        candidates.fileId,
+        isNotEmpty,
+        reason: 'Candidates should include fileId',
+      );
 
       // Verify metadata
-      expect(candidates.metadata, isNotNull,
-          reason: 'Candidates should include metadata');
-      expect(candidates.metadata!.duration, isNotNull,
-          reason: 'Metadata should include duration');
-      expect(candidates.metadata!.duration!, greaterThan(0),
-          reason: 'Duration should be positive');
+      expect(
+        candidates.metadata,
+        isNotNull,
+        reason: 'Candidates should include metadata',
+      );
+      expect(
+        candidates.metadata!.duration,
+        isNotNull,
+        reason: 'Metadata should include duration',
+      );
+      expect(
+        candidates.metadata!.duration!,
+        greaterThan(0),
+        reason: 'Duration should be positive',
+      );
 
       // Verify each candidate has required fields
       for (final candidate in candidates.candidates) {
-        expect(candidate.strategy, isNotEmpty,
-            reason: 'Candidate should have a strategy');
-        expect(candidate.mime, isNotEmpty,
-            reason: 'Candidate should have a mime type');
-        expect(candidate.container, isNotEmpty,
-            reason: 'Candidate should have a container');
+        expect(
+          candidate.strategy,
+          isNotEmpty,
+          reason: 'Candidate should have a strategy',
+        );
+        expect(
+          candidate.mime,
+          isNotEmpty,
+          reason: 'Candidate should have a mime type',
+        );
+        expect(
+          candidate.container,
+          isNotEmpty,
+          reason: 'Candidate should have a container',
+        );
         debugPrint(
-            '[P2P Streaming Test] Candidate: ${candidate.strategy} - ${candidate.mime}');
+          '[P2P Streaming Test] Candidate: ${candidate.strategy} - ${candidate.mime}',
+        );
       }
 
       // Also test with "file" content type
@@ -407,21 +474,29 @@ void main() {
         contentType: 'file',
         id: fileId,
       );
-      expect(fileCandidates, isNotNull,
-          reason: 'Should also work with "file" content type');
-      expect(fileCandidates!.candidates.length, candidates.candidates.length,
-          reason: 'File and movie candidates should match');
+      expect(
+        fileCandidates,
+        isNotNull,
+        reason: 'Should also work with "file" content type',
+      );
+      expect(
+        fileCandidates!.candidates.length,
+        candidates.candidates.length,
+        reason: 'File and movie candidates should match',
+      );
 
       // Stop app
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 100));
 
       debugPrint(
-          '[P2P Streaming Test] Streaming candidates query test passed!');
+        '[P2P Streaming Test] Streaming candidates query test passed!',
+      );
     });
 
-    testWidgets('Direct file streaming works via HTTP',
-        (WidgetTester tester) async {
+    testWidgets('Direct file streaming works via HTTP', (
+      WidgetTester tester,
+    ) async {
       debugPrint('[P2P Streaming Test] Starting direct file streaming test');
 
       // Launch the app
@@ -438,7 +513,8 @@ void main() {
       final fileId = await streaming.getTestMediaFileId();
       if (fileId == null) {
         debugPrint(
-            '[P2P Streaming Test] Skipping direct streaming test: no media file found');
+          '[P2P Streaming Test] Skipping direct streaming test: no media file found',
+        );
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 100));
         return;
@@ -447,10 +523,14 @@ void main() {
 
       // Verify direct file stream endpoint works (HTTP path)
       final directStreamOk = await streaming.verifyDirectFileStream(fileId);
-      expect(directStreamOk, isTrue,
-          reason: 'Direct file stream endpoint should return 200 or 206');
+      expect(
+        directStreamOk,
+        isTrue,
+        reason: 'Direct file stream endpoint should return 200 or 206',
+      );
       debugPrint(
-          '[P2P Streaming Test] Direct file stream endpoint is accessible');
+        '[P2P Streaming Test] Direct file stream endpoint is accessible',
+      );
 
       // Verify the full URL is also accessible via verifyUrlAccessible
       final directUrl = streaming.getDirectStreamUrl(fileId);
@@ -465,8 +545,9 @@ void main() {
       debugPrint('[P2P Streaming Test] Direct file streaming test passed!');
     });
 
-    testWidgets('Player can navigate to video and start playback',
-        (WidgetTester tester) async {
+    testWidgets('Player can navigate to video and start playback', (
+      WidgetTester tester,
+    ) async {
       debugPrint('[P2P Streaming Test] Starting player navigation test');
 
       // Launch the app
@@ -481,7 +562,8 @@ void main() {
       final fileId = await streaming.getTestMediaFileId();
       if (fileId == null) {
         debugPrint(
-            '[P2P Streaming Test] Skipping player navigation assertions: no test media exists');
+          '[P2P Streaming Test] Skipping player navigation assertions: no test media exists',
+        );
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 100));
         return;
@@ -490,7 +572,8 @@ void main() {
       final libraryLoaded = await waitForMediaLibrary(tester);
       if (!libraryLoaded) {
         debugPrint(
-            '[P2P Streaming Test] Skipping player navigation: media library UI did not render');
+          '[P2P Streaming Test] Skipping player navigation: media library UI did not render',
+        );
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 100));
         return;
@@ -501,7 +584,8 @@ void main() {
       if (testMovieFinder.evaluate().isEmpty) {
         // Try finding any movie
         debugPrint(
-            '[P2P Streaming Test] E2E Test movie not found, looking for any movie');
+          '[P2P Streaming Test] E2E Test movie not found, looking for any movie',
+        );
         final anyMovieCard = find.byType(GridView);
         expect(anyMovieCard, findsOneWidget);
 
@@ -538,7 +622,8 @@ void main() {
           if (loadingIndicator.evaluate().isEmpty) {
             // Player loaded
             debugPrint(
-                '[P2P Streaming Test] Player loaded after ${i + 1} seconds');
+              '[P2P Streaming Test] Player loaded after ${i + 1} seconds',
+            );
             break;
           }
         }

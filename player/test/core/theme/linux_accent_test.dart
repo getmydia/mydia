@@ -14,9 +14,11 @@ const _key = 'accent-color';
 DBusValue rgb(double r, double g, double b) =>
     DBusStruct([DBusDouble(r), DBusDouble(g), DBusDouble(b)]);
 
-PortalSettingChange change(DBusValue value,
-        {String namespace = _ns, String key = _key}) =>
-    (namespace: namespace, key: key, value: DBusVariant(value));
+PortalSettingChange change(
+  DBusValue value, {
+  String namespace = _ns,
+  String key = _key,
+}) => (namespace: namespace, key: key, value: DBusVariant(value));
 
 class _FakePortal implements PortalSettingsClient {
   final readOneResult = Completer<DBusValue>();
@@ -58,7 +60,8 @@ class _FakePortal implements PortalSettingsClient {
 }
 
 DBusUnknownMethodException unknownMethod() => DBusUnknownMethodException(
-    DBusMethodErrorResponse('org.freedesktop.DBus.Error.UnknownMethod'));
+  DBusMethodErrorResponse('org.freedesktop.DBus.Error.UnknownMethod'),
+);
 
 Future<void> settle() => Future<void>.delayed(Duration.zero);
 
@@ -66,25 +69,31 @@ void main() {
   tearDown(() => LinuxAccent.debugIsNativeLinux = null);
 
   ProviderContainer container(_FakePortal portal) {
-    final c = ProviderContainer(overrides: [
-      portalSettingsClientProvider.overrideWith((ref) {
-        ref.onDispose(portal.close);
-        return portal;
-      }),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        portalSettingsClientProvider.overrideWith((ref) {
+          ref.onDispose(portal.close);
+          return portal;
+        }),
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
 
   group('decodePortalAccent', () {
     test('decodes a plain struct, rounding to 8 bits', () {
-      expect(decodePortalAccent(rgb(0.2078, 0.5176, 0.8941)),
-          const Color(0xFF3584E4));
+      expect(
+        decodePortalAccent(rgb(0.2078, 0.5176, 0.8941)),
+        const Color(0xFF3584E4),
+      );
     });
 
     test("unwraps variants, including Read's double wrap", () {
-      expect(decodePortalAccent(DBusVariant(DBusVariant(rgb(1, 0, 0)))),
-          const Color(0xFFFF0000));
+      expect(
+        decodePortalAccent(DBusVariant(DBusVariant(rgb(1, 0, 0)))),
+        const Color(0xFFFF0000),
+      );
     });
 
     test('non-finite components are rejected, not thrown on', () {
@@ -99,13 +108,20 @@ void main() {
 
     test('wrong shapes are null', () {
       expect(
-          decodePortalAccent(DBusStruct(const [DBusDouble(1), DBusDouble(1)])),
-          isNull);
+        decodePortalAccent(DBusStruct(const [DBusDouble(1), DBusDouble(1)])),
+        isNull,
+      );
       expect(decodePortalAccent(const DBusString('blue')), isNull);
       expect(
-          decodePortalAccent(DBusStruct(
-              [const DBusInt32(1), const DBusInt32(1), const DBusInt32(1)])),
-          isNull);
+        decodePortalAccent(
+          DBusStruct([
+            const DBusInt32(1),
+            const DBusInt32(1),
+            const DBusInt32(1),
+          ]),
+        ),
+        isNull,
+      );
     });
   });
 
@@ -113,12 +129,14 @@ void main() {
     test('off Linux it is null and never builds the client', () async {
       LinuxAccent.debugIsNativeLinux = false;
       var built = false;
-      final c = ProviderContainer(overrides: [
-        portalSettingsClientProvider.overrideWith((ref) {
-          built = true;
-          return _FakePortal();
-        }),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          portalSettingsClientProvider.overrideWith((ref) {
+            built = true;
+            return _FakePortal();
+          }),
+        ],
+      );
       addTearDown(c.dispose);
       expect(c.read(linuxAccentProvider), isNull);
       await settle();
@@ -152,8 +170,9 @@ void main() {
     test('no portal: stays null without an unhandled error', () async {
       LinuxAccent.debugIsNativeLinux = true;
       final portal = _FakePortal()
-        ..readOneError = DBusMethodResponseException(DBusMethodErrorResponse(
-            'org.freedesktop.DBus.Error.ServiceUnknown'))
+        ..readOneError = DBusMethodResponseException(
+          DBusMethodErrorResponse('org.freedesktop.DBus.Error.ServiceUnknown'),
+        )
         ..readError = StateError('unreachable');
       final c = container(portal);
       expect(c.read(linuxAccentProvider), isNull);
@@ -163,10 +182,13 @@ void main() {
 
     test('no session bus: stays null without an unhandled error', () async {
       LinuxAccent.debugIsNativeLinux = true;
-      final c = ProviderContainer(overrides: [
-        portalSettingsClientProvider
-            .overrideWith((ref) => throw const SocketException('no bus')),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          portalSettingsClientProvider.overrideWith(
+            (ref) => throw const SocketException('no bus'),
+          ),
+        ],
+      );
       addTearDown(c.dispose);
       expect(c.read(linuxAccentProvider), isNull);
       await settle();
@@ -176,37 +198,45 @@ void main() {
     // The real client never throws on construction: a missing bus surfaces
     // as a failed connect behind the first call or subscription. flutter_test
     // fails the test on any error that escapes the notifier.
-    test('an unreachable bus with the real client stays null quietly',
-        () async {
-      LinuxAccent.debugIsNativeLinux = true;
-      final logs = <String?>[];
-      final previous = debugPrint;
-      debugPrint = (message, {wrapWidth}) => logs.add(message);
-      addTearDown(() => debugPrint = previous);
-      final client = DBusPortalSettingsClient(
-        client: DBusClient(DBusAddress('unix:path=/nonexistent/mydia-bus')),
-      );
-      final c = ProviderContainer(overrides: [
-        portalSettingsClientProvider.overrideWith((ref) => client),
-      ]);
-      addTearDown(c.dispose);
-      expect(c.read(linuxAccentProvider), isNull);
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(c.read(linuxAccentProvider), isNull);
-      expect(logs.where((l) => l?.startsWith('[LinuxAccent]') ?? false),
-          hasLength(1));
-    });
+    test(
+      'an unreachable bus with the real client stays null quietly',
+      () async {
+        LinuxAccent.debugIsNativeLinux = true;
+        final logs = <String?>[];
+        final previous = debugPrint;
+        debugPrint = (message, {wrapWidth}) => logs.add(message);
+        addTearDown(() => debugPrint = previous);
+        final client = DBusPortalSettingsClient(
+          client: DBusClient(DBusAddress('unix:path=/nonexistent/mydia-bus')),
+        );
+        final c = ProviderContainer(
+          overrides: [
+            portalSettingsClientProvider.overrideWith((ref) => client),
+          ],
+        );
+        addTearDown(c.dispose);
+        expect(c.read(linuxAccentProvider), isNull);
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        expect(c.read(linuxAccentProvider), isNull);
+        expect(
+          logs.where((l) => l?.startsWith('[LinuxAccent]') ?? false),
+          hasLength(1),
+        );
+      },
+    );
 
     test('under flutter test it never touches the bus unless forced', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
       var built = false;
-      final c = ProviderContainer(overrides: [
-        portalSettingsClientProvider.overrideWith((ref) {
-          built = true;
-          return _FakePortal();
-        }),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          portalSettingsClientProvider.overrideWith((ref) {
+            built = true;
+            return _FakePortal();
+          }),
+        ],
+      );
       addTearDown(c.dispose);
       expect(c.read(linuxAccentProvider), isNull);
       await settle();
@@ -221,8 +251,9 @@ void main() {
       portal.readOneResult.complete(DBusVariant(rgb(1, 0, 0)));
       await settle();
       portal.emit(change(const DBusUint32(1), key: 'color-scheme'));
-      portal
-          .emit(change(rgb(0, 1, 0), namespace: 'org.gnome.desktop.interface'));
+      portal.emit(
+        change(rgb(0, 1, 0), namespace: 'org.gnome.desktop.interface'),
+      );
       await settle();
       expect(c.read(linuxAccentProvider), const Color(0xFFFF0000));
     });
@@ -255,12 +286,14 @@ void main() {
     test('disposal closes the client', () async {
       LinuxAccent.debugIsNativeLinux = true;
       final portal = _FakePortal();
-      final c = ProviderContainer(overrides: [
-        portalSettingsClientProvider.overrideWith((ref) {
-          ref.onDispose(portal.close);
-          return portal;
-        }),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          portalSettingsClientProvider.overrideWith((ref) {
+            ref.onDispose(portal.close);
+            return portal;
+          }),
+        ],
+      );
       c.read(linuxAccentProvider);
       c.dispose();
       await settle();

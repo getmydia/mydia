@@ -37,9 +37,7 @@ class ConnectionResult {
   /// Creates a successful direct connection result.
   ///
   /// The [url] indicates which direct URL was successfully connected.
-  factory ConnectionResult.direct({
-    required String url,
-  }) {
+  factory ConnectionResult.direct({required String url}) {
     return ConnectionResult._(
       success: true,
       type: ConnectionType.direct,
@@ -49,18 +47,12 @@ class ConnectionResult {
 
   /// Creates a successful P2P connection result.
   factory ConnectionResult.p2p() {
-    return const ConnectionResult._(
-      success: true,
-      type: ConnectionType.p2p,
-    );
+    return const ConnectionResult._(success: true, type: ConnectionType.p2p);
   }
 
   /// Creates a failed connection result.
   factory ConnectionResult.error(String error) {
-    return ConnectionResult._(
-      success: false,
-      error: error,
-    );
+    return ConnectionResult._(success: false, error: error);
   }
 
   /// Whether this is a direct connection.

@@ -13,8 +13,7 @@ class _RecordingReporter extends PeriodicProgressReporter {
     required int positionSeconds,
     required int durationSeconds,
     required bool paused,
-  }) async =>
-      progress.add((positionSeconds, durationSeconds, paused));
+  }) async => progress.add((positionSeconds, durationSeconds, paused));
 
   @override
   Future<void> sendWatched() async => watched++;
@@ -23,8 +22,7 @@ class _RecordingReporter extends PeriodicProgressReporter {
   Future<void> sendStopped({
     required int positionSeconds,
     required int durationSeconds,
-  }) async =>
-      stops.add((positionSeconds, durationSeconds));
+  }) async => stops.add((positionSeconds, durationSeconds));
 }
 
 class _ThrowingReporter extends _RecordingReporter {
@@ -33,46 +31,51 @@ class _ThrowingReporter extends _RecordingReporter {
     required int positionSeconds,
     required int durationSeconds,
     required bool paused,
-  }) async =>
-      throw Exception('offline');
+  }) async => throw Exception('offline');
 }
 
 void main() {
   group('ReporterCastProgressSink', () {
-    test('reports positions and marks watched once past the threshold',
-        () async {
-      final reporter = _RecordingReporter();
-      final sink = ReporterCastProgressSink(reporter);
-      const duration = Duration(minutes: 100);
+    test(
+      'reports positions and marks watched once past the threshold',
+      () async {
+        final reporter = _RecordingReporter();
+        final sink = ReporterCastProgressSink(reporter);
+        const duration = Duration(minutes: 100);
 
-      await sink.report(
+        await sink.report(
           position: const Duration(minutes: 10),
           duration: duration,
-          paused: false);
-      await sink.report(
+          paused: false,
+        );
+        await sink.report(
           position: const Duration(minutes: 95),
           duration: duration,
-          paused: true);
-      await sink.report(
+          paused: true,
+        );
+        await sink.report(
           position: const Duration(minutes: 96),
           duration: duration,
-          paused: false);
+          paused: false,
+        );
 
-      expect(reporter.progress, [
-        (600, 6000, false),
-        (5700, 6000, true),
-        (5760, 6000, false),
-      ]);
-      expect(reporter.watched, 1);
-    });
+        expect(reporter.progress, [
+          (600, 6000, false),
+          (5700, 6000, true),
+          (5760, 6000, false),
+        ]);
+        expect(reporter.watched, 1);
+      },
+    );
 
     test('stopped reports the last position, once', () async {
       final reporter = _RecordingReporter();
       final sink = ReporterCastProgressSink(reporter);
       await sink.report(
-          position: const Duration(seconds: 42),
-          duration: const Duration(seconds: 600),
-          paused: false);
+        position: const Duration(seconds: 42),
+        duration: const Duration(seconds: 600),
+        paused: false,
+      );
 
       await sink.stopped();
       await sink.stopped();
@@ -83,18 +86,20 @@ void main() {
     test('an unknown duration reports nothing', () async {
       final reporter = _RecordingReporter();
       await ReporterCastProgressSink(reporter).report(
-          position: const Duration(seconds: 5),
-          duration: Duration.zero,
-          paused: false);
+        position: const Duration(seconds: 5),
+        duration: Duration.zero,
+        paused: false,
+      );
       expect(reporter.progress, isEmpty);
     });
 
     test('a failing reporter does not make report throw', () async {
       final sink = ReporterCastProgressSink(_ThrowingReporter());
       await sink.report(
-          position: const Duration(minutes: 10),
-          duration: const Duration(minutes: 100),
-          paused: false);
+        position: const Duration(minutes: 10),
+        duration: const Duration(minutes: 100),
+        paused: false,
+      );
     });
   });
 

@@ -25,10 +25,10 @@ enum BackupStoreKind {
 
   /// The cloud store this is, null for the relay.
   CloudStoreKind? get cloudKind => switch (this) {
-        BackupStoreKind.relay => null,
-        BackupStoreKind.icloud => CloudStoreKind.icloud,
-        BackupStoreKind.gdrive => CloudStoreKind.gdrive,
-      };
+    BackupStoreKind.relay => null,
+    BackupStoreKind.icloud => CloudStoreKind.icloud,
+    BackupStoreKind.gdrive => CloudStoreKind.gdrive,
+  };
 
   static BackupStoreKind? parse(String? id) =>
       BackupStoreKind.values.where((k) => k.name == id).firstOrNull;
@@ -74,7 +74,8 @@ typedef _OldStore = ({
 
 /// Builds the [CloudBackupService] of a cloud store kind.
 typedef CloudServiceBuilder = Future<CloudBackupService> Function(
-    BackupStoreKind kind);
+  BackupStoreKind kind,
+);
 
 /// The stores this device offers: the relay on every native platform,
 /// Google Drive where [google] (a [GoogleAuth] exists for the platform),
@@ -144,17 +145,14 @@ Future<CloudBackupService> buildCloudBackupService({
 /// (see [BackupSyncService.switchAway]); only switching back wakes it.
 class BackupController {
   BackupController({
-    required BackupSyncService relay,
+    required this._relay,
     required AuthStorage authStorage,
-    required CloudServiceBuilder buildCloud,
-    required Future<Set<BackupStoreKind>> Function() resolveOffered,
+    required this._buildCloud,
+    required this._resolveOffered,
     Set<BackupStoreKind> initialOffered = const {},
     this.googleAuth,
-  })  : _relay = relay,
-        _auth = authStorage,
-        _buildCloud = buildCloud,
-        _resolveOffered = resolveOffered,
-        _offered = ValueNotifier(initialOffered) {
+  }) : _auth = authStorage,
+       _offered = ValueNotifier(initialOffered) {
     ready = _init();
     // Reported through [start]; never an unhandled error.
     unawaited(ready.catchError((Object _) {}));
@@ -313,8 +311,10 @@ class BackupController {
     try {
       await ready;
     } catch (e) {
-      debugPrint('[Backup] Store not read, starting the relay: '
-          '${e.runtimeType}');
+      debugPrint(
+        '[Backup] Store not read, starting the relay: '
+        '${e.runtimeType}',
+      );
       if (_disposed) return;
       final relayActive = !_relay.dormant;
       if (relayActive) _active.value = BackupStoreKind.relay;
@@ -431,8 +431,11 @@ class BackupController {
   /// vault with [relayKey], which the caller made with
   /// `relay.prepareEnable()` and showed: without one this throws
   /// [ArgumentError] before touching anything.
-  Future<void> switchTo(BackupStoreKind to,
-      {required bool deleteOld, RecoveryKey? relayKey}) async {
+  Future<void> switchTo(
+    BackupStoreKind to, {
+    required bool deleteOld,
+    RecoveryKey? relayKey,
+  }) async {
     await ready;
     if (_switching > 0) {
       throw StateError('backup store change in progress');
@@ -449,10 +452,10 @@ class BackupController {
     final old = switch (from) {
       null => null,
       BackupStoreKind.relay => (
-          pause: _relay.pauseSync,
-          resume: _relay.resumeSync,
-          leave: () => _relay.switchAway(to.name, deleteOld: deleteOld),
-        ),
+        pause: _relay.pauseSync,
+        resume: _relay.resumeSync,
+        leave: () => _relay.switchAway(to.name, deleteOld: deleteOld),
+      ),
       final kind => _storeOps(cloud(kind), to, deleteOld),
     };
     _switching++;
@@ -496,20 +499,24 @@ class BackupController {
 
   /// What [switchTo] does to the cloud store [s] it leaves for [to].
   static _OldStore _storeOps(
-          CloudBackupService s, BackupStoreKind to, bool deleteOld) =>
-      (
-        pause: s.pauseSync,
-        resume: s.resumeSync,
-        leave: () => s.switchAway(to.name, deleteOld: deleteOld),
-      );
+    CloudBackupService s,
+    BackupStoreKind to,
+    bool deleteOld,
+  ) => (
+    pause: s.pauseSync,
+    resume: s.resumeSync,
+    leave: () => s.switchAway(to.name, deleteOld: deleteOld),
+  );
 
   /// Dismisses [storeHint], here and across restarts.
   void acknowledgeHint() {
     if (_disposed) return;
     _hint.value = null;
-    unawaited(_auth.delete(hintKey).catchError((Object e) {
-      debugPrint('[Backup] Store hint not cleared: ${e.runtimeType}');
-    }));
+    unawaited(
+      _auth.delete(hintKey).catchError((Object e) {
+        debugPrint('[Backup] Store hint not cleared: ${e.runtimeType}');
+      }),
+    );
   }
 
   // Pairing
@@ -579,23 +586,27 @@ class BackupController {
         (status is BackupIdle || status is BackupUploading)) {
       _active.value = kind;
       if (_hint.value?.kind == kind) acknowledgeHint();
-      unawaited(_auth.write(storeKey, kind.name).catchError((Object e) {
-        debugPrint('[Backup] Active store not saved: ${e.runtimeType}');
-      }));
+      unawaited(
+        _auth.write(storeKey, kind.name).catchError((Object e) {
+          debugPrint('[Backup] Active store not saved: ${e.runtimeType}');
+        }),
+      );
     } else if (!on &&
         active == kind &&
         (status is BackupOff || status is BackupRemoved)) {
       _active.value = null;
-      unawaited(_auth.write(storeKey, _off).catchError((Object e) {
-        debugPrint('[Backup] Active store not saved: ${e.runtimeType}');
-      }));
+      unawaited(
+        _auth.write(storeKey, _off).catchError((Object e) {
+          debugPrint('[Backup] Active store not saved: ${e.runtimeType}');
+        }),
+      );
     }
   }
 
   Future<String?> _readStrict(String key) => switch (_auth) {
-        final StrictAuthRead s => s.readStrict(key),
-        final a => a.read(key),
-      };
+    final StrictAuthRead s => s.readStrict(key),
+    final a => a.read(key),
+  };
 
   Future<void> _setActive(BackupStoreKind? kind) async {
     if (_disposed) return;
@@ -612,8 +623,7 @@ class BackupController {
 BackupPairingHooks backupPairingHooksFor(BackupController Function() of) =>
     BackupPairingHooks(
       backupKeysForPair: () => of().pairKeys(),
-      onJoinerBackupKeys: (nodeId, signer, box, deadline) => of()
-          .relay
+      onJoinerBackupKeys: (nodeId, signer, box, deadline) => of().relay
           .addMemberForPair(signer, box, nodeId: nodeId, deadline: deadline),
       onJoinedVault: (vaultId) => of().relay.adoptVault(vaultId),
       onPeerRevoked: (nodeId, name) =>

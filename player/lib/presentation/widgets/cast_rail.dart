@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/palette.dart';
 import '../../domain/detail/detail_views.dart';
 import '../../l10n/l10n.dart';
@@ -35,9 +36,8 @@ class CastRail extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 context.l10n.castRailTitle,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -108,10 +108,7 @@ class _CastCard extends StatelessWidget {
           if (member.character != null)
             Text(
               member.character!,
-              style: TextStyle(
-                fontSize: 10.5,
-                color: palette.textSecondary,
-              ),
+              style: TextStyle(fontSize: 10.5, color: palette.textSecondary),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

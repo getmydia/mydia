@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'codec_support_stub.dart'
-    if (dart.library.js_interop) 'codec_support_web.dart' as platform;
+    if (dart.library.js_interop) 'codec_support_web.dart'
+    as platform;
 
 /// Service to detect codec and format support on the current platform.
 ///

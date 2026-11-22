@@ -38,11 +38,9 @@ class WindowsUpdater extends PlatformUpdater {
     );
 
     debugPrint('[WindowsUpdater] Launching silent installer');
-    await Process.start(
-      installerPath,
-      ['/SILENT'],
-      mode: ProcessStartMode.detached,
-    );
+    await Process.start(installerPath, [
+      '/SILENT',
+    ], mode: ProcessStartMode.detached);
 
     exit(0);
   }

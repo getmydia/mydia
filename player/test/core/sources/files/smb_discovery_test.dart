@@ -9,22 +9,21 @@ BonsoirService _svc(
   String? hostname,
   List<String> addresses = const [],
   int port = 445,
-}) =>
-    BonsoirService(
-      name: name,
-      type: '_smb._tcp',
-      port: port,
-      hostname: hostname,
-      hostAddresses: addresses,
-    );
+}) => BonsoirService(
+  name: name,
+  type: '_smb._tcp',
+  port: port,
+  hostname: hostname,
+  hostAddresses: addresses,
+);
 
 BonsoirDiscoveryEvent _resolved(
   String name, {
   String? hostname,
   List<String> addresses = const [],
-}) =>
-    BonsoirDiscoveryServiceResolvedEvent(
-        service: _svc(name, hostname: hostname, addresses: addresses));
+}) => BonsoirDiscoveryServiceResolvedEvent(
+  service: _svc(name, hostname: hostname, addresses: addresses),
+);
 
 void main() {
   late StreamController<BonsoirDiscoveryEvent> events;
@@ -48,41 +47,47 @@ void main() {
 
   tearDown(() => events.close());
 
-  test('two resolves for the same host give one entry, first name wins',
-      () async {
-    final seen = <List<DiscoveredSmbServer>>[];
-    final sub = discovery.browse().listen(seen.add);
-    await pumpEventQueue();
-    events.add(_resolved('Nas B', hostname: 'nas.local.'));
-    events.add(_resolved('Nas A', hostname: 'nas.local.'));
-    await pumpEventQueue();
-    expect(seen.last, [
-      const DiscoveredSmbServer(
-        name: 'Nas A',
-        host: 'nas.local',
-        port: 445,
-        hostname: 'nas.local',
-      ),
-    ]);
-    await sub.cancel();
-  });
+  test(
+    'two resolves for the same host give one entry, first name wins',
+    () async {
+      final seen = <List<DiscoveredSmbServer>>[];
+      final sub = discovery.browse().listen(seen.add);
+      await pumpEventQueue();
+      events.add(_resolved('Nas B', hostname: 'nas.local.'));
+      events.add(_resolved('Nas A', hostname: 'nas.local.'));
+      await pumpEventQueue();
+      expect(seen.last, [
+        const DiscoveredSmbServer(
+          name: 'Nas A',
+          host: 'nas.local',
+          port: 445,
+          hostname: 'nas.local',
+        ),
+      ]);
+      await sub.cancel();
+    },
+  );
 
-  test('entries are sorted by name and a service without a host is ignored',
-      () async {
-    final seen = <List<DiscoveredSmbServer>>[];
-    final sub = discovery.browse().listen(seen.add);
-    await pumpEventQueue();
-    events.add(_resolved('Zed', hostname: 'z.local'));
-    events.add(_resolved('Hostless'));
-    events.add(_resolved('Alpha', hostname: 'a.local'));
-    await pumpEventQueue();
-    expect(seen.length, 2);
-    expect(seen.last.map((s) => s.name), ['Alpha', 'Zed']);
-    await sub.cancel();
-  });
+  test(
+    'entries are sorted by name and a service without a host is ignored',
+    () async {
+      final seen = <List<DiscoveredSmbServer>>[];
+      final sub = discovery.browse().listen(seen.add);
+      await pumpEventQueue();
+      events.add(_resolved('Zed', hostname: 'z.local'));
+      events.add(_resolved('Hostless'));
+      events.add(_resolved('Alpha', hostname: 'a.local'));
+      await pumpEventQueue();
+      expect(seen.length, 2);
+      expect(seen.last.map((s) => s.name), ['Alpha', 'Zed']);
+      await sub.cancel();
+    },
+  );
 
-  Future<String> hostFor(
-      {String? hostname, List<String> addresses = const []}) async {
+  Future<String> hostFor({
+    String? hostname,
+    List<String> addresses = const [],
+  }) async {
     final seen = <List<DiscoveredSmbServer>>[];
     final sub = discovery.browse().listen(seen.add);
     await pumpEventQueue();
@@ -114,7 +119,8 @@ void main() {
     final sub = discovery.browse().listen(seen.add);
     await pumpEventQueue();
     events.add(
-        _resolved('Nas', hostname: 'NAS.local.', addresses: ['192.168.1.5']));
+      _resolved('Nas', hostname: 'NAS.local.', addresses: ['192.168.1.5']),
+    );
     await pumpEventQueue();
     await sub.cancel();
     final server = seen.last.single;
@@ -156,12 +162,13 @@ void main() {
     final seen = <List<DiscoveredSmbServer>>[];
     final sub = discovery.browse().listen(seen.add);
     await pumpEventQueue();
-    events.add(_resolved('Nas', hostname: 'nas.local', addresses: [
-      '2001:db8::7',
-      '172.17.0.1',
-      'fe80::1',
-      '192.168.1.20',
-    ]));
+    events.add(
+      _resolved(
+        'Nas',
+        hostname: 'nas.local',
+        addresses: ['2001:db8::7', '172.17.0.1', 'fe80::1', '192.168.1.20'],
+      ),
+    );
     await pumpEventQueue();
     final server = seen.last.single;
     expect(server.host, '172.17.0.1');
@@ -173,10 +180,16 @@ void main() {
     final seen = <List<DiscoveredSmbServer>>[];
     final sub = discovery.browse().listen(seen.add);
     await pumpEventQueue();
-    events.add(BonsoirDiscoveryServiceResolvedEvent(
-        service: _svc('A', addresses: ['10.0.0.9'])));
-    events.add(BonsoirDiscoveryServiceResolvedEvent(
-        service: _svc('B', addresses: ['10.0.0.9'], port: 4455)));
+    events.add(
+      BonsoirDiscoveryServiceResolvedEvent(
+        service: _svc('A', addresses: ['10.0.0.9']),
+      ),
+    );
+    events.add(
+      BonsoirDiscoveryServiceResolvedEvent(
+        service: _svc('B', addresses: ['10.0.0.9'], port: 4455),
+      ),
+    );
     await pumpEventQueue();
     expect(seen.last.map((s) => (s.name, s.port)), [('A', 445), ('B', 4455)]);
     await sub.cancel();
@@ -217,9 +230,12 @@ void main() {
       resolve: (s) async => throw StateError('avahi refused ${s.name}'),
     );
     final seen = <List<DiscoveredSmbServer>>[];
-    final sub = failing.browse().listen(seen.add, onError: (_) {
-      fail('error leaked to the listener');
-    });
+    final sub = failing.browse().listen(
+      seen.add,
+      onError: (_) {
+        fail('error leaked to the listener');
+      },
+    );
     await pumpEventQueue();
     events.add(_resolved('Other', hostname: 'other.local'));
     events.add(BonsoirDiscoveryServiceFoundEvent(service: _svc('Nas')));
@@ -243,9 +259,12 @@ void main() {
 
   test('an error gives an empty list and is not thrown', () async {
     final seen = <List<DiscoveredSmbServer>>[];
-    final sub = discovery.browse().listen(seen.add, onError: (_) {
-      fail('error leaked to the listener');
-    });
+    final sub = discovery.browse().listen(
+      seen.add,
+      onError: (_) {
+        fail('error leaked to the listener');
+      },
+    );
     await pumpEventQueue();
     events.add(_resolved('Nas', hostname: 'nas.local'));
     await pumpEventQueue();

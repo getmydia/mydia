@@ -88,7 +88,8 @@ class Freshness {
       Object.hash(fetchedAt, isRefreshing, refreshFailed, isStale, hasData);
 
   @override
-  String toString() => 'Freshness(fetchedAt: $fetchedAt, '
+  String toString() =>
+      'Freshness(fetchedAt: $fetchedAt, '
       'isRefreshing: $isRefreshing, refreshFailed: $refreshFailed, '
       'isStale: $isStale, hasData: $hasData)';
 }
@@ -125,7 +126,7 @@ class FreshnessRegistry extends Notifier<Map<QueryKey, Freshness>> {
 }
 
 final NotifierProvider<FreshnessRegistry, Map<QueryKey, Freshness>>
-    freshnessRegistryProvider =
+freshnessRegistryProvider =
     NotifierProvider<FreshnessRegistry, Map<QueryKey, Freshness>>(
-  FreshnessRegistry.new,
-);
+      FreshnessRegistry.new,
+    );

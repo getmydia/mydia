@@ -26,8 +26,8 @@ class RelayApiClient {
     this.baseUrl = metadataRelayBaseUrl,
     http.Client? client,
     PairingKeyFactory? pairingKeys,
-  })  : _client = client ?? http.Client(),
-        _pairingKeys = pairingKeys ?? defaultPairingKeyFactory;
+  }) : _client = client ?? http.Client(),
+       _pairingKeys = pairingKeys ?? defaultPairingKeyFactory;
 
   /// Publishes a sealed claim code to the relay.
   Future<({String lookupKey, String sealed})> publishClaimCode({

@@ -129,19 +129,21 @@ void main() {
   useInMemorySubtitlePrefs();
 
   testWidgets('opens on the OSD material with legible text', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate, _hiCandidate],
-        providers: [
-          _quotaProvider,
-          SubtitleProviderStatus(
-            name: 'OpenSubtitles',
-            error: 'Daily quota exhausted',
-          ),
-        ],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate, _hiCandidate],
+          providers: [
+            _quotaProvider,
+            SubtitleProviderStatus(
+              name: 'OpenSubtitles',
+              error: 'Daily quota exhausted',
+            ),
+          ],
+        ),
+        onDownload: (_) async => _downloaded,
       ),
-      onDownload: (_) async => _downloaded,
-    ));
+    );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -152,8 +154,10 @@ void main() {
       ),
       findsOneWidget,
     );
-    final colors =
-        osdParagraphColors(tester, find.byType(SubtitleTrackSelectorSheet));
+    final colors = osdParagraphColors(
+      tester,
+      find.byType(SubtitleTrackSelectorSheet),
+    );
     expect(colors, isNotEmpty);
     for (final color in colors) {
       expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
@@ -180,19 +184,24 @@ void main() {
     }
     expect(
       contrastRatio(
-          Palettes.projectionBooth.onPrimary, Palettes.projectionBooth.primary),
+        Palettes.projectionBooth.onPrimary,
+        Palettes.projectionBooth.primary,
+      ),
       greaterThanOrEqualTo(4.5),
     );
   });
 
-  testWidgets('empty state on the OSD material keeps legible text',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      tracks: const [],
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-    ));
+  testWidgets('empty state on the OSD material keeps legible text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        tracks: const [],
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+      ),
+    );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -211,18 +220,22 @@ void main() {
       expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
     }
     expect(
-      contrastRatio(Palettes.projectionBooth.background,
-          Palettes.projectionBooth.textPrimary),
+      contrastRatio(
+        Palettes.projectionBooth.background,
+        Palettes.projectionBooth.textPrimary,
+      ),
       greaterThanOrEqualTo(4.5),
     );
   });
 
   testWidgets('lists existing tracks and a search entry', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -232,17 +245,20 @@ void main() {
     expect(find.text('Search online'), findsOneWidget);
   });
 
-  testWidgets('offers search as the empty state when the file has no tracks',
-      (tester) async {
+  testWidgets('offers search as the empty state when the file has no tracks', (
+    tester,
+  ) async {
     var searched = false;
-    await tester.pumpWidget(_host(
-      tracks: const [],
-      onSearch: (_) async {
-        searched = true;
-        return const SubtitleSearchOutcome(results: [], providers: []);
-      },
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        tracks: const [],
+        onSearch: (_) async {
+          searched = true;
+          return const SubtitleSearchOutcome(results: [], providers: []);
+        },
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -265,25 +281,25 @@ void main() {
     expect(searched, isTrue);
   });
 
-  testWidgets('keeps the bottom search row when the file has tracks',
-      (tester) async {
+  testWidgets('keeps the bottom search row when the file has tracks', (
+    tester,
+  ) async {
     var searched = false;
-    await tester.pumpWidget(_host(
-      onSearch: (_) async {
-        searched = true;
-        return const SubtitleSearchOutcome(results: [], providers: []);
-      },
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async {
+          searched = true;
+          return const SubtitleSearchOutcome(results: [], providers: []);
+        },
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
     expect(find.text('This file has no subtitles.'), findsNothing);
-    expect(
-      find.byKey(SubtitleTrackSelectorSheet.emptySearchKey),
-      findsNothing,
-    );
+    expect(find.byKey(SubtitleTrackSelectorSheet.emptySearchKey), findsNothing);
 
     await tester.tap(find.text('Search online'));
     await tester.pumpAndSettle();
@@ -291,16 +307,19 @@ void main() {
     expect(searched, isTrue);
   });
 
-  testWidgets('tapping Off returns SubtitleTrackOff, not a cancellation',
-      (tester) async {
+  testWidgets('tapping Off returns SubtitleTrackOff, not a cancellation', (
+    tester,
+  ) async {
     SubtitleTrackSelection? result;
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      capture: (r) => result = r,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        capture: (r) => result = r,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -311,17 +330,18 @@ void main() {
     expect(result, isNot(isA<SubtitleTrackSelectionCancelled>()));
   });
 
-  testWidgets(
-      'dismissing the sheet with a barrier tap returns a cancellation, '
+  testWidgets('dismissing the sheet with a barrier tap returns a cancellation, '
       'not Off', (tester) async {
     SubtitleTrackSelection? result;
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      capture: (r) => result = r,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        capture: (r) => result = r,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -337,16 +357,19 @@ void main() {
     expect(result, isNot(isA<SubtitleTrackOff>()));
   });
 
-  testWidgets('tapping an existing track returns it wrapped in a pick',
-      (tester) async {
+  testWidgets('tapping an existing track returns it wrapped in a pick', (
+    tester,
+  ) async {
     SubtitleTrackSelection? result;
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      capture: (r) => result = r,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        capture: (r) => result = r,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -358,13 +381,15 @@ void main() {
   });
 
   testWidgets('shows results after searching', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) async => _downloaded,
       ),
-      onDownload: (_) async => _downloaded,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -377,13 +402,15 @@ void main() {
   });
 
   testWidgets('reports an empty result set', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) async => _downloaded,
       ),
-      onDownload: (_) async => _downloaded,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -394,18 +421,20 @@ void main() {
   });
 
   testWidgets('surfaces a provider error', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [],
-        providers: [
-          SubtitleProviderStatus(
-            name: 'Mydia Relay',
-            error: 'Daily quota exhausted',
-          ),
-        ],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [],
+          providers: [
+            SubtitleProviderStatus(
+              name: 'Mydia Relay',
+              error: 'Daily quota exhausted',
+            ),
+          ],
+        ),
+        onDownload: (_) async => _downloaded,
       ),
-      onDownload: (_) async => _downloaded,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -415,15 +444,18 @@ void main() {
     expect(find.textContaining('Daily quota exhausted'), findsOneWidget);
   });
 
-  testWidgets('shows provider quota and a hearing-impaired marker',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_hiCandidate],
-        providers: [_quotaProvider],
+  testWidgets('shows provider quota and a hearing-impaired marker', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_hiCandidate],
+          providers: [_quotaProvider],
+        ),
+        onDownload: (_) async => _downloaded,
       ),
-      onDownload: (_) async => _downloaded,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -437,10 +469,12 @@ void main() {
   testWidgets('shows searching progress before results arrive', (tester) async {
     final completer = Completer<SubtitleSearchOutcome>();
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) => completer.future,
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) => completer.future,
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -453,28 +487,33 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Movie.2020.1080p.BluRay.srt'), findsNothing);
 
-    completer.complete(const SubtitleSearchOutcome(
-      results: [_candidate],
-      providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
-    ));
+    completer.complete(
+      const SubtitleSearchOutcome(
+        results: [_candidate],
+        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Movie.2020.1080p.BluRay.srt'), findsOneWidget);
   });
 
-  testWidgets('shows downloading progress before the sheet closes',
-      (tester) async {
+  testWidgets('shows downloading progress before the sheet closes', (
+    tester,
+  ) async {
     final completer = Completer<SubtitleTrack>();
     SubtitleTrackSelection? result;
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) => completer.future,
+        capture: (r) => result = r,
       ),
-      onDownload: (_) => completer.future,
-      capture: (r) => result = r,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -495,18 +534,21 @@ void main() {
     expect(result, isA<SubtitleTrackPicked>());
   });
 
-  testWidgets('returns the downloaded track when a result is tapped',
-      (tester) async {
+  testWidgets('returns the downloaded track when a result is tapped', (
+    tester,
+  ) async {
     SubtitleTrackSelection? result;
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) async => _downloaded,
+        capture: (r) => result = r,
       ),
-      onDownload: (_) async => _downloaded,
-      capture: (r) => result = r,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -519,13 +561,14 @@ void main() {
     expect((result as SubtitleTrackPicked).track.id, 'uuid-new');
   });
 
-  testWidgets(
-      'surfaces a search failure with a plain message, not the raw '
+  testWidgets('surfaces a search failure with a plain message, not the raw '
       'exception', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => throw Exception('relay unreachable'),
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => throw Exception('relay unreachable'),
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -539,19 +582,20 @@ void main() {
     expect(find.textContaining('Subtitle search failed'), findsOneWidget);
   });
 
-  testWidgets(
-      'surfaces a download failure with a plain message, not the raw '
+  testWidgets('surfaces a download failure with a plain message, not the raw '
       'exception, and does not close the sheet', (tester) async {
     SubtitleTrackSelection? result;
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) async => throw Exception('download failed'),
+        capture: (r) => result = r,
       ),
-      onDownload: (_) async => throw Exception('download failed'),
-      capture: (r) => result = r,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -565,18 +609,19 @@ void main() {
     expect(result, isNull);
   });
 
-  testWidgets(
-      'shows a SubtitleActionException message verbatim instead of the '
+  testWidgets('shows a SubtitleActionException message verbatim instead of the '
       'generic download copy', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) async => throw const SubtitleActionException(
+          'These search results expired. Search again.',
+        ),
       ),
-      onDownload: (_) async => throw const SubtitleActionException(
-        'These search results expired. Search again.',
-      ),
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -599,15 +644,16 @@ void main() {
     expect(find.textContaining('SubtitleActionException'), findsNothing);
   });
 
-  testWidgets(
-      'shows a SubtitleActionException message verbatim instead of the '
+  testWidgets('shows a SubtitleActionException message verbatim instead of the '
       'generic search copy', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => throw const SubtitleActionException(
-        'Subtitle search needs a connection to your server.',
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => throw const SubtitleActionException(
+          'Subtitle search needs a connection to your server.',
+        ),
+        onDownload: (_) async => _downloaded,
       ),
-      onDownload: (_) async => _downloaded,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -621,18 +667,19 @@ void main() {
     expect(find.textContaining('Subtitle search failed'), findsNothing);
   });
 
-  testWidgets(
-      'adjusting a language chip re-runs the search with a different '
+  testWidgets('adjusting a language chip re-runs the search with a different '
       'language set', (tester) async {
     final calls = <List<String>>[];
 
-    await tester.pumpWidget(_host(
-      onSearch: (languages) async {
-        calls.add(languages);
-        return const SubtitleSearchOutcome(results: [], providers: []);
-      },
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (languages) async {
+          calls.add(languages);
+          return const SubtitleSearchOutcome(results: [], providers: []);
+        },
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -653,17 +700,20 @@ void main() {
     expect(calls[1].contains('es'), isNot(calls[0].contains('es')));
   });
 
-  testWidgets('refuses to deselect the last remaining language',
-      (tester) async {
+  testWidgets('refuses to deselect the last remaining language', (
+    tester,
+  ) async {
     final calls = <List<String>>[];
 
-    await tester.pumpWidget(_host(
-      onSearch: (languages) async {
-        calls.add(languages);
-        return const SubtitleSearchOutcome(results: [], providers: []);
-      },
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (languages) async {
+          calls.add(languages);
+          return const SubtitleSearchOutcome(results: [], providers: []);
+        },
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -690,8 +740,7 @@ void main() {
     expect(calls, hasLength(callsBeforeLastToggle));
   });
 
-  testWidgets(
-      'a language outside the curated chip roster still gets a chip and '
+  testWidgets('a language outside the curated chip roster still gets a chip and '
       'can be adjusted', (tester) async {
     // The in-memory box `useInMemorySubtitlePrefs()` opens in setUp. It must
     // stay in memory: toggling a chip below fires `SubtitleLanguagePrefs.save`,
@@ -702,11 +751,13 @@ void main() {
     // scenario a device locale outside that fixed list produces.
     await box.put('languages', ['th', 'en']);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -725,15 +776,18 @@ void main() {
     expect(find.text('TH'), findsNothing);
   });
 
-  testWidgets('tapping "Back to tracks" returns to the track list',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+  testWidgets('tapping "Back to tracks" returns to the track list', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) async => _downloaded,
       ),
-      onDownload: (_) async => _downloaded,
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -751,22 +805,23 @@ void main() {
     expect(find.text('Movie.2020.1080p.BluRay.srt'), findsNothing);
   });
 
-  testWidgets(
-      'a second tap on a result while the first download is still in '
+  testWidgets('a second tap on a result while the first download is still in '
       'flight is ignored', (tester) async {
     var downloadCalls = 0;
     final completer = Completer<SubtitleTrack>();
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async => const SubtitleSearchOutcome(
-        results: [_candidate],
-        providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async => const SubtitleSearchOutcome(
+          results: [_candidate],
+          providers: [SubtitleProviderStatus(name: 'Mydia Relay')],
+        ),
+        onDownload: (_) {
+          downloadCalls++;
+          return completer.future;
+        },
       ),
-      onDownload: (_) {
-        downloadCalls++;
-        return completer.future;
-      },
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -789,11 +844,13 @@ void main() {
   });
 
   testWidgets('hides the delay row when the notifier is null', (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -801,18 +858,19 @@ void main() {
     expect(find.text('Subtitle delay'), findsNothing);
   });
 
-  testWidgets(
-      'shows the delay row with the current value when the '
+  testWidgets('shows the delay row with the current value when the '
       'notifier has one', (tester) async {
     final delay = ValueNotifier<int?>(250);
     addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        subtitleDelayMs: delay,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -821,8 +879,7 @@ void main() {
     expect(find.text('+250 ms'), findsOneWidget);
   });
 
-  testWidgets(
-      'the delay row updates live when the notifier changes while the '
+  testWidgets('the delay row updates live when the notifier changes while the '
       'sheet is already open', (tester) async {
     // The sheet is a separate route from whatever owns the notifier, so
     // this is what proves a keyboard nudge (or the initial offsets load)
@@ -830,12 +887,14 @@ void main() {
     final delay = ValueNotifier<int?>(0);
     addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        subtitleDelayMs: delay,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -847,19 +906,22 @@ void main() {
     expect(find.text('-400 ms'), findsOneWidget);
   });
 
-  testWidgets('the stepper buttons nudge by the documented +/-100ms',
-      (tester) async {
+  testWidgets('the stepper buttons nudge by the documented +/-100ms', (
+    tester,
+  ) async {
     final deltas = <int>[];
     final delay = ValueNotifier<int?>(0);
     addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      onNudgeSubtitleDelay: (delta) async => deltas.add(delta),
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        subtitleDelayMs: delay,
+        onNudgeSubtitleDelay: (delta) async => deltas.add(delta),
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -877,14 +939,16 @@ void main() {
     final delay = ValueNotifier<int?>(300);
     addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      onResetSubtitleDelay: () async => resetCalls++,
-      onSaveSubtitleDelay: () async => saveCalls++,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        subtitleDelayMs: delay,
+        onResetSubtitleDelay: () async => resetCalls++,
+        onSaveSubtitleDelay: () async => saveCalls++,
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -898,42 +962,61 @@ void main() {
   });
 
   testWidgets(
-      'hides Save but keeps the steppers and Reset when canSaveDelay is '
-      'false', (tester) async {
-    // Stands in for the sheet having been opened on an mpv-native track:
-    // the caller (player_screen.dart) computes canSaveDelay from
-    // canSaveSubtitleDelay(currentTrack?.id) and passes false for that
-    // case. This test only pins the sheet's own reaction to that flag, not
-    // the id-space reasoning behind it -- that lives in
-    // subtitle_track_loading_test.dart's canSaveSubtitleDelay coverage.
-    final delay = ValueNotifier<int?>(300);
-    addTearDown(delay.dispose);
+    'hides Save but keeps the steppers and Reset when canSaveDelay is '
+    'false',
+    (tester) async {
+      // Stands in for the sheet having been opened on an mpv-native track:
+      // the caller (player_screen.dart) computes canSaveDelay from
+      // canSaveSubtitleDelay(currentTrack?.id) and passes false for that
+      // case. This test only pins the sheet's own reaction to that flag, not
+      // the id-space reasoning behind it -- that lives in
+      // subtitle_track_loading_test.dart's canSaveSubtitleDelay coverage.
+      final delay = ValueNotifier<int?>(300);
+      addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      canSaveDelay: false,
-    ));
+      await tester.pumpWidget(
+        _host(
+          onSearch: (_) async =>
+              const SubtitleSearchOutcome(results: [], providers: []),
+          onDownload: (_) async => _downloaded,
+          subtitleDelayMs: delay,
+          canSaveDelay: false,
+        ),
+      );
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Subtitle delay'), findsOneWidget,
-        reason: 'the row itself must still show -- the live delay still '
+      expect(
+        find.text('Subtitle delay'),
+        findsOneWidget,
+        reason:
+            'the row itself must still show -- the live delay still '
             'applies for the current session even though it cannot be '
-            'saved');
-    expect(
-        find.byKey(const ValueKey('subtitle-delay-decrement')), findsOneWidget);
-    expect(
-        find.byKey(const ValueKey('subtitle-delay-increment')), findsOneWidget);
-    expect(find.byKey(const ValueKey('subtitle-delay-reset')), findsOneWidget);
-    expect(find.byKey(const ValueKey('subtitle-delay-save')), findsNothing,
-        reason: 'Save must be absent, not merely disabled -- a control that '
+            'saved',
+      );
+      expect(
+        find.byKey(const ValueKey('subtitle-delay-decrement')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('subtitle-delay-increment')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('subtitle-delay-reset')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('subtitle-delay-save')),
+        findsNothing,
+        reason:
+            'Save must be absent, not merely disabled -- a control that '
             'reports success and silently does not persist is worse than no '
-            'control at all');
-  });
+            'control at all',
+      );
+    },
+  );
 
   // Regression coverage: the delay row's IconButton/TextButton onPressed
   // fields take a VoidCallback, so a bare `() => onNudge(-100)` discards the
@@ -942,117 +1025,131 @@ void main() {
   // that each action is awaited by a guarded handler that catches the
   // failure and surfaces it instead of letting it escape.
   testWidgets(
-      'a rejected nudge surfaces an error instead of an unhandled exception',
-      (tester) async {
-    final delay = ValueNotifier<int?>(0);
-    addTearDown(delay.dispose);
+    'a rejected nudge surfaces an error instead of an unhandled exception',
+    (tester) async {
+      final delay = ValueNotifier<int?>(0);
+      addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      onNudgeSubtitleDelay: (_) async => throw Exception('nudge failed'),
-    ));
+      await tester.pumpWidget(
+        _host(
+          onSearch: (_) async =>
+              const SubtitleSearchOutcome(results: [], providers: []),
+          onDownload: (_) async => _downloaded,
+          subtitleDelayMs: delay,
+          onNudgeSubtitleDelay: (_) async => throw Exception('nudge failed'),
+        ),
+      );
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Could not adjust'), findsOneWidget);
-  });
-
-  testWidgets(
-      'a rejected reset surfaces an error instead of an unhandled exception',
-      (tester) async {
-    final delay = ValueNotifier<int?>(300);
-    addTearDown(delay.dispose);
-
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      onResetSubtitleDelay: () async => throw Exception('reset failed'),
-    ));
-
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('subtitle-delay-reset')));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('Could not reset'), findsOneWidget);
-  });
+      expect(find.textContaining('Could not adjust'), findsOneWidget);
+    },
+  );
 
   testWidgets(
-      'a rejected save surfaces an error instead of an unhandled exception',
-      (tester) async {
-    final delay = ValueNotifier<int?>(300);
-    addTearDown(delay.dispose);
+    'a rejected reset surfaces an error instead of an unhandled exception',
+    (tester) async {
+      final delay = ValueNotifier<int?>(300);
+      addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      onSaveSubtitleDelay: () async => throw Exception('save failed'),
-    ));
+      await tester.pumpWidget(
+        _host(
+          onSearch: (_) async =>
+              const SubtitleSearchOutcome(results: [], providers: []),
+          onDownload: (_) async => _downloaded,
+          subtitleDelayMs: delay,
+          onResetSubtitleDelay: () async => throw Exception('reset failed'),
+        ),
+      );
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('subtitle-delay-save')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('subtitle-delay-reset')));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Could not save'), findsOneWidget);
-  });
+      expect(find.textContaining('Could not reset'), findsOneWidget);
+    },
+  );
 
-  testWidgets('a SubtitleActionException from a delay action is shown verbatim',
-      (tester) async {
-    final delay = ValueNotifier<int?>(0);
-    addTearDown(delay.dispose);
+  testWidgets(
+    'a rejected save surfaces an error instead of an unhandled exception',
+    (tester) async {
+      final delay = ValueNotifier<int?>(300);
+      addTearDown(delay.dispose);
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      onNudgeSubtitleDelay: (_) async => throw const SubtitleActionException(
-        'Your session expired. Sign in again.',
-      ),
-    ));
+      await tester.pumpWidget(
+        _host(
+          onSearch: (_) async =>
+              const SubtitleSearchOutcome(results: [], providers: []),
+          onDownload: (_) async => _downloaded,
+          subtitleDelayMs: delay,
+          onSaveSubtitleDelay: () async => throw Exception('save failed'),
+        ),
+      );
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('subtitle-delay-save')));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.text('Your session expired. Sign in again.'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Could not adjust'), findsNothing);
-  });
+      expect(find.textContaining('Could not save'), findsOneWidget);
+    },
+  );
 
-  testWidgets('a successful nudge after a prior failure clears the error',
-      (tester) async {
+  testWidgets(
+    'a SubtitleActionException from a delay action is shown verbatim',
+    (tester) async {
+      final delay = ValueNotifier<int?>(0);
+      addTearDown(delay.dispose);
+
+      await tester.pumpWidget(
+        _host(
+          onSearch: (_) async =>
+              const SubtitleSearchOutcome(results: [], providers: []),
+          onDownload: (_) async => _downloaded,
+          subtitleDelayMs: delay,
+          onNudgeSubtitleDelay: (_) async =>
+              throw const SubtitleActionException(
+                'Your session expired. Sign in again.',
+              ),
+        ),
+      );
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('subtitle-delay-increment')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your session expired. Sign in again.'), findsOneWidget);
+      expect(find.textContaining('Could not adjust'), findsNothing);
+    },
+  );
+
+  testWidgets('a successful nudge after a prior failure clears the error', (
+    tester,
+  ) async {
     final delay = ValueNotifier<int?>(0);
     addTearDown(delay.dispose);
     var shouldFail = true;
 
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      subtitleDelayMs: delay,
-      onNudgeSubtitleDelay: (_) async {
-        if (shouldFail) throw Exception('nudge failed');
-      },
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        subtitleDelayMs: delay,
+        onNudgeSubtitleDelay: (_) async {
+          if (shouldFail) throw Exception('nudge failed');
+        },
+      ),
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -1068,35 +1165,42 @@ void main() {
     expect(find.textContaining('Could not adjust'), findsNothing);
   });
 
-  testWidgets('the sheet carries the size row even with no track selected',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-    ));
+  testWidgets('the sheet carries the size row even with no track selected', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+      ),
+    );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('subtitle-size-value')), findsOneWidget);
   });
 
-  testWidgets('stepping the size stores it and dismissing still cancels',
-      (tester) async {
+  testWidgets('stepping the size stores it and dismissing still cancels', (
+    tester,
+  ) async {
     final storage = MockAuthStorage();
     SubtitleTrackSelection? outcome;
-    await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
-      onDownload: (_) async => _downloaded,
-      settingsStorage: storage,
-      capture: (result) => outcome = result,
-    ));
+    await tester.pumpWidget(
+      _host(
+        onSearch: (_) async =>
+            const SubtitleSearchOutcome(results: [], providers: []),
+        onDownload: (_) async => _downloaded,
+        settingsStorage: storage,
+        capture: (result) => outcome = result,
+      ),
+    );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('subtitle-size-increment')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('subtitle-size-increment')),
+    );
     await tester.tap(find.byKey(const ValueKey('subtitle-size-increment')));
     await tester.pumpAndSettle();
     expect(storage.contents['subtitle_size'], 'large');

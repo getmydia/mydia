@@ -54,13 +54,12 @@ class _ProbeState extends State<_Probe> {
 }
 
 void main() {
-  testWidgets(
-      'going to the next episode builds a new player State before '
+  testWidgets('going to the next episode builds a new player State before '
       'disposing the old one', (tester) async {
     final log = <String>[];
     final router = GoRouter(
       routes: [
-        GoRoute(path: '/', builder: (_, __) => const Text('home')),
+        GoRoute(path: '/', builder: (_, _) => const Text('home')),
         GoRoute(
           path: '/player/:type/:id',
           builder: (_, state) => _Probe(state.pathParameters['id']!, log),
@@ -83,36 +82,37 @@ void main() {
   });
 
   testWidgets(
-      'a later episode advance reuses the State instead of replacing it',
-      (tester) async {
-    final log = <String>[];
-    final router = GoRouter(
-      routes: [
-        GoRoute(path: '/', builder: (_, __) => const Text('home')),
-        GoRoute(
-          path: '/player/:type/:id',
-          builder: (_, state) => _Probe(state.pathParameters['id']!, log),
-        ),
-      ],
-    );
-    addTearDown(router.dispose);
+    'a later episode advance reuses the State instead of replacing it',
+    (tester) async {
+      final log = <String>[];
+      final router = GoRouter(
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const Text('home')),
+          GoRoute(
+            path: '/player/:type/:id',
+            builder: (_, state) => _Probe(state.pathParameters['id']!, log),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
 
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    // Completes when the route pops, which the test never waits for.
-    unawaited(router.push<void>('/player/episode/first'));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      // Completes when the route pops, which the test never waits for.
+      unawaited(router.push<void>('/player/episode/first'));
+      await tester.pumpAndSettle();
 
-    router.go('/player/episode/second');
-    await tester.pumpAndSettle();
-    log.clear();
+      router.go('/player/episode/second');
+      await tester.pumpAndSettle();
+      log.clear();
 
-    router.go('/player/episode/third');
-    await tester.pump();
-    log.add('frame');
-    await tester.pumpAndSettle();
+      router.go('/player/episode/third');
+      await tester.pump();
+      log.add('frame');
+      await tester.pumpAndSettle();
 
-    // No init/dispose: the second State survives and is handed `third` as
-    // a widget update, unlike the first advance above.
-    expect(log, ['update second->third', 'frame']);
-  });
+      // No init/dispose: the second State survives and is handed `third` as
+      // a widget update, unlike the first advance above.
+      expect(log, ['update second->third', 'frame']);
+    },
+  );
 }

@@ -38,24 +38,24 @@ void main() {
     });
 
     test('pq adds hdr10+ and hdr10', () {
-      expect(
-        webHdrFormats(highDynamicRange: true, pq: true, hlg: false),
-        ['hdr10+', 'hdr10'],
-      );
+      expect(webHdrFormats(highDynamicRange: true, pq: true, hlg: false), [
+        'hdr10+',
+        'hdr10',
+      ]);
     });
 
     test('hlg alone adds hlg', () {
-      expect(
-        webHdrFormats(highDynamicRange: true, pq: false, hlg: true),
-        ['hlg'],
-      );
+      expect(webHdrFormats(highDynamicRange: true, pq: false, hlg: true), [
+        'hlg',
+      ]);
     });
 
     test('both curves give all three', () {
-      expect(
-        webHdrFormats(highDynamicRange: true, pq: true, hlg: true),
-        ['hdr10+', 'hdr10', 'hlg'],
-      );
+      expect(webHdrFormats(highDynamicRange: true, pq: true, hlg: true), [
+        'hdr10+',
+        'hdr10',
+        'hlg',
+      ]);
     });
   });
 
@@ -64,6 +64,8 @@ void main() {
     final withHdr = base.copyWith(hdrFormats: nativeHdrFormats);
     expect(withHdr.hdrFormats, nativeHdrFormats);
     expect(
-        withHdr.copyWith(codecProfiles: const []).hdrFormats, nativeHdrFormats);
+      withHdr.copyWith(codecProfiles: const []).hdrFormats,
+      nativeHdrFormats,
+    );
   });
 }

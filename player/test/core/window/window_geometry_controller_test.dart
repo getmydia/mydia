@@ -21,19 +21,20 @@ void main() {
     required FakeWindowController window,
     required WindowGeometryStore store,
     WorkAreaReader? readWorkAreas,
-  }) =>
-      WindowGeometryController(
-        window: window,
-        store: store,
-        readWorkAreas: readWorkAreas ?? oneDisplay,
-        debounce: const Duration(milliseconds: 10),
-      );
+  }) => WindowGeometryController(
+    window: window,
+    store: store,
+    readWorkAreas: readWorkAreas ?? oneDisplay,
+    debounce: const Duration(milliseconds: 10),
+  );
 
   group('restore', () {
     test('applies the centered default when nothing is stored', () async {
       final window = FakeWindowController();
-      await build(window: window, store: InMemoryWindowGeometryStore())
-          .restore();
+      await build(
+        window: window,
+        store: InMemoryWindowGeometryStore(),
+      ).restore();
 
       expect(window.setBoundsCalls, [
         const Rect.fromLTWH(320, 152.5, 1280, 800),
@@ -42,18 +43,22 @@ void main() {
 
     test('always sets the minimum size', () async {
       final window = FakeWindowController();
-      await build(window: window, store: InMemoryWindowGeometryStore())
-          .restore();
+      await build(
+        window: window,
+        store: InMemoryWindowGeometryStore(),
+      ).restore();
 
       expect(window.minimumSize, kMinWindowSize);
     });
 
     test('applies stored bounds', () async {
       final store = InMemoryWindowGeometryStore();
-      await store.save(const WindowGeometry(
-        bounds: Rect.fromLTWH(200, 100, 1400, 900),
-        maximized: false,
-      ));
+      await store.save(
+        const WindowGeometry(
+          bounds: Rect.fromLTWH(200, 100, 1400, 900),
+          maximized: false,
+        ),
+      );
       final window = FakeWindowController();
 
       await build(window: window, store: store).restore();
@@ -66,10 +71,12 @@ void main() {
       // Order matters: maximizing first would make the bounds the thing the
       // user sees on unmaximize, which is not what was stored.
       final store = InMemoryWindowGeometryStore();
-      await store.save(const WindowGeometry(
-        bounds: Rect.fromLTWH(200, 100, 1400, 900),
-        maximized: true,
-      ));
+      await store.save(
+        const WindowGeometry(
+          bounds: Rect.fromLTWH(200, 100, 1400, 900),
+          maximized: true,
+        ),
+      );
       final window = FakeWindowController();
 
       await build(window: window, store: store).restore();
@@ -79,17 +86,20 @@ void main() {
       expect(
         window.callLog,
         ['setMinimumSize', 'setBounds', 'maximize'],
-        reason: 'maximizing first would make the maximized frame what the user '
+        reason:
+            'maximizing first would make the maximized frame what the user '
             'sees on a later unmaximize, not the bounds that were stored',
       );
     });
 
     test('recovers bounds saved on a display that is now gone', () async {
       final store = InMemoryWindowGeometryStore();
-      await store.save(const WindowGeometry(
-        bounds: Rect.fromLTWH(2400, 100, 1200, 800),
-        maximized: false,
-      ));
+      await store.save(
+        const WindowGeometry(
+          bounds: Rect.fromLTWH(2400, 100, 1200, 800),
+          maximized: false,
+        ),
+      );
       final window = FakeWindowController();
 
       await build(window: window, store: store).restore();
@@ -159,7 +169,8 @@ void main() {
       expect(
         store.saveCount,
         1,
-        reason: '50 debounced events must land as one write, not 50 '
+        reason:
+            '50 debounced events must land as one write, not 50 '
             'identical ones',
       );
     });
@@ -274,8 +285,7 @@ void main() {
       );
     });
 
-    test('a first-ever maximize with no readable display writes nothing',
-        () async {
+    test('a first-ever maximize with no readable display writes nothing', () async {
       // No display means no sensible rect to invent, and the flag alone is not
       // worth a fabricated size.
       final window = FakeWindowController(maximized: true);
@@ -376,32 +386,35 @@ void main() {
       expect(store.get()!.bounds, const Rect.fromLTWH(5, 5, 800, 500));
     });
 
-    test('a stale resume from a superseded owner does not un-pause it',
-        () async {
-      // Guards against a stale detach() (e.g. from a previous player
-      // session) resuming a controller a *different*, still-live owner
-      // paused after it.
-      final window = FakeWindowController(
-        bounds: const Rect.fromLTWH(5, 5, 800, 500),
-      );
-      final store = InMemoryWindowGeometryStore();
-      final controller = build(window: window, store: store);
-      addTearDown(controller.dispose);
+    test(
+      'a stale resume from a superseded owner does not un-pause it',
+      () async {
+        // Guards against a stale detach() (e.g. from a previous player
+        // session) resuming a controller a *different*, still-live owner
+        // paused after it.
+        final window = FakeWindowController(
+          bounds: const Rect.fromLTWH(5, 5, 800, 500),
+        );
+        final store = InMemoryWindowGeometryStore();
+        final controller = build(window: window, store: store);
+        addTearDown(controller.dispose);
 
-      final firstOwner = controller.pause();
-      controller.pause(); // A second owner takes over.
+        final firstOwner = controller.pause();
+        controller.pause(); // A second owner takes over.
 
-      controller.resume(firstOwner);
-      controller.onWindowResize();
-      await settle();
+        controller.resume(firstOwner);
+        controller.onWindowResize();
+        await settle();
 
-      expect(
-        store.get(),
-        isNull,
-        reason: 'the second owner still holds the pause; a stale resume '
-            'from the first owner must not un-pause it',
-      );
-    });
+        expect(
+          store.get(),
+          isNull,
+          reason:
+              'the second owner still holds the pause; a stale resume '
+              'from the first owner must not un-pause it',
+        );
+      },
+    );
 
     test('close writes the pending change without waiting', () async {
       final window = FakeWindowController(

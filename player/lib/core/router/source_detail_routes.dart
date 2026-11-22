@@ -14,10 +14,10 @@ import '../../presentation/screens/sources/source_show_selection_route.dart';
 import '../sources/source.dart';
 
 ItemRef _refOf(GoRouterState state, ItemKind kind) => ItemRef(
-      sourceId: SourceId(state.pathParameters['sourceId']!),
-      kind: kind,
-      externalId: state.pathParameters['itemId']!,
-    );
+  sourceId: SourceId(state.pathParameters['sourceId']!),
+  kind: kind,
+  externalId: state.pathParameters['itemId']!,
+);
 
 ItemKind _kindParam(GoRouterState state) =>
     ItemKind.values.asNameMap()[state.pathParameters['kind']] ?? ItemKind.movie;
@@ -25,59 +25,59 @@ ItemKind _kindParam(GoRouterState state) =>
 /// `/s/:sourceId/item/:kind/:itemId`. Movies, shows, seasons and episodes
 /// redirect to their detail route; video and folder keep the generic screen.
 GoRoute sourceItemRoute() => GoRoute(
-      path: '/s/:sourceId/item/:kind/:itemId',
-      name: 'source_item',
-      redirect: (context, state) {
-        final kind = _kindParam(state);
-        if (detailKindOf(kind) == null) return null;
-        return detailLocation(SourceTarget(_refOf(state, kind)));
-      },
-      builder: (context, state) =>
-          SourceItemScreen(item: _refOf(state, _kindParam(state))),
-    );
+  path: '/s/:sourceId/item/:kind/:itemId',
+  name: 'source_item',
+  redirect: (context, state) {
+    final kind = _kindParam(state);
+    if (detailKindOf(kind) == null) return null;
+    return detailLocation(SourceTarget(_refOf(state, kind)));
+  },
+  builder: (context, state) =>
+      SourceItemScreen(item: _refOf(state, _kindParam(state))),
+);
 
 /// A collection's page. It opens item pages with `push`, so it sits in the
 /// shell like them: go_router cannot push a shell route above a page on the
 /// root navigator.
 GoRoute sourceCollectionRoute() => GoRoute(
-      path: '/s/:sourceId/collection/:collectionId',
-      name: 'source_collection',
-      builder: (context, state) => CollectionDetailScreen(
-        sourceId: SourceId(state.pathParameters['sourceId']!),
-        collectionId: state.pathParameters['collectionId']!,
-      ),
-    );
+  path: '/s/:sourceId/collection/:collectionId',
+  name: 'source_collection',
+  builder: (context, state) => CollectionDetailScreen(
+    sourceId: SourceId(state.pathParameters['sourceId']!),
+    collectionId: state.pathParameters['collectionId']!,
+  ),
+);
 
 /// Source detail routes. They are registered inside the shell route, so the
 /// rail (or the phone bottom bar) stays beside them; a push from a card adds
 /// a page to the shell's own navigator and Back pops to where the viewer was.
 List<GoRoute> sourceDetailRoutes() => [
-      GoRoute(
-        path: '/s/:sourceId/movie/:itemId',
-        name: 'source_movie_detail',
-        builder: (context, state) => MovieDetailScreen.target(
-          target: SourceTarget(_refOf(state, ItemKind.movie)),
-        ),
-      ),
-      GoRoute(
-        path: '/s/:sourceId/show/:itemId',
-        name: 'source_show_detail',
-        builder: (context, state) => ShowDetailScreen.target(
-          target: SourceTarget(_refOf(state, ItemKind.show)),
-        ),
-      ),
-      GoRoute(
-        path: '/s/:sourceId/season/:itemId',
-        name: 'source_season_detail',
-        builder: (context, state) =>
-            SourceShowSelectionRoute(item: _refOf(state, ItemKind.season)),
-      ),
-      // An episode has no page of its own: it opens its show with the
-      // episode selected.
-      GoRoute(
-        path: '/s/:sourceId/episode/:itemId',
-        name: 'source_episode_detail',
-        builder: (context, state) =>
-            SourceShowSelectionRoute(item: _refOf(state, ItemKind.episode)),
-      ),
-    ];
+  GoRoute(
+    path: '/s/:sourceId/movie/:itemId',
+    name: 'source_movie_detail',
+    builder: (context, state) => MovieDetailScreen.target(
+      target: SourceTarget(_refOf(state, ItemKind.movie)),
+    ),
+  ),
+  GoRoute(
+    path: '/s/:sourceId/show/:itemId',
+    name: 'source_show_detail',
+    builder: (context, state) => ShowDetailScreen.target(
+      target: SourceTarget(_refOf(state, ItemKind.show)),
+    ),
+  ),
+  GoRoute(
+    path: '/s/:sourceId/season/:itemId',
+    name: 'source_season_detail',
+    builder: (context, state) =>
+        SourceShowSelectionRoute(item: _refOf(state, ItemKind.season)),
+  ),
+  // An episode has no page of its own: it opens its show with the
+  // episode selected.
+  GoRoute(
+    path: '/s/:sourceId/episode/:itemId',
+    name: 'source_episode_detail',
+    builder: (context, state) =>
+        SourceShowSelectionRoute(item: _refOf(state, ItemKind.episode)),
+  ),
+];

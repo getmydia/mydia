@@ -61,11 +61,13 @@ Future<void> playItem(BuildContext context, WidgetRef ref, ItemRef item) async {
     return;
   }
   if (!context.mounted) return;
-  await context.push(sourcePlayerLocation(
-    detail.summary.ref,
-    fileId: fileId,
-    title: detail.summary.title,
-  ));
+  await context.push(
+    sourcePlayerLocation(
+      detail.summary.ref,
+      fileId: fileId,
+      title: detail.summary.title,
+    ),
+  );
   if (!context.mounted) return;
   invalidateSourceItemWrites(ref, item);
 }

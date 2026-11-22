@@ -20,15 +20,16 @@ import 'package:player/presentation/widgets/horizontal_rail.dart';
 const double _cardWidth = 220;
 const double _railHeight = 300;
 
-List<String> _ids(String rail, [int count = 14]) =>
-    [for (var i = 0; i < count; i++) '$rail-$i'];
+List<String> _ids(String rail, [int count = 14]) => [
+  for (var i = 0; i < count; i++) '$rail-$i',
+];
 
 void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; CI runs it in the '
-          '"Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; CI runs it in the '
+            '"Run television-tier tests" step.';
 
   String focused() => FocusManager.instance.primaryFocus?.debugLabel ?? '';
 
@@ -138,43 +139,41 @@ void main() {
       },
     );
 
-    testWidgets(
-      'a reordered rail returns to the remembered item by id',
-      (tester) async {
-        await pumpRails(tester, a: _ids('a'), b: _ids('b'));
-        await focus(tester, 'a-5');
-        await press(tester, LogicalKeyboardKey.arrowDown);
-        expect(focused(), startsWith('b-'));
+    testWidgets('a reordered rail returns to the remembered item by id', (
+      tester,
+    ) async {
+      await pumpRails(tester, a: _ids('a'), b: _ids('b'));
+      await focus(tester, 'a-5');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focused(), startsWith('b-'));
 
-        // a-5 moves to the front, the way Continue Watching reorders.
-        final reordered = _ids('a')..remove('a-5');
-        reordered.insert(0, 'a-5');
-        await pumpRails(tester, a: reordered, b: _ids('b'));
-        await press(tester, LogicalKeyboardKey.arrowRight);
-        expect(focused(), startsWith('b-'));
+      // a-5 moves to the front, the way Continue Watching reorders.
+      final reordered = _ids('a')..remove('a-5');
+      reordered.insert(0, 'a-5');
+      await pumpRails(tester, a: reordered, b: _ids('b'));
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focused(), startsWith('b-'));
 
-        await press(tester, LogicalKeyboardKey.arrowUp);
-        expect(focused(), 'a-5');
-      },
-    );
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focused(), 'a-5');
+    });
 
-    testWidgets(
-      'a keyed card keeps focus when the rail reorders around it',
-      (tester) async {
-        // The app's cards carry their item's key (Continue Watching's
-        // `home-continue-...`), so a slot handed to another item replaces
-        // the card, and its focus node with it, unless the slot itself
-        // follows the item.
-        await pumpRails(tester, a: _ids('a'), b: _ids('b'), keyed: true);
-        await focus(tester, 'a-5');
+    testWidgets('a keyed card keeps focus when the rail reorders around it', (
+      tester,
+    ) async {
+      // The app's cards carry their item's key (Continue Watching's
+      // `home-continue-...`), so a slot handed to another item replaces
+      // the card, and its focus node with it, unless the slot itself
+      // follows the item.
+      await pumpRails(tester, a: _ids('a'), b: _ids('b'), keyed: true);
+      await focus(tester, 'a-5');
 
-        // Back from playing a-5, Continue Watching moves it to the front.
-        final reordered = _ids('a')..remove('a-5');
-        reordered.insert(0, 'a-5');
-        await pumpRails(tester, a: reordered, b: _ids('b'), keyed: true);
+      // Back from playing a-5, Continue Watching moves it to the front.
+      final reordered = _ids('a')..remove('a-5');
+      reordered.insert(0, 'a-5');
+      await pumpRails(tester, a: reordered, b: _ids('b'), keyed: true);
 
-        expect(focused(), 'a-5');
-      },
-    );
+      expect(focused(), 'a-5');
+    });
   }, skip: skipReason);
 }

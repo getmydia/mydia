@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import 'widgets/download_artwork.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
@@ -43,14 +44,18 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
     // Filter for this show
     final showDownloads = downloaded
-        .where((m) =>
-            m.source == sourceId &&
-            (m.showId == showId || (m.showId == null && m.mediaId == showId)))
+        .where(
+          (m) =>
+              m.source == sourceId &&
+              (m.showId == showId || (m.showId == null && m.mediaId == showId)),
+        )
         .toList();
     final showQueue = queue
-        .where((t) =>
-            t.source == sourceId &&
-            (t.showId == showId || (t.showId == null && t.mediaId == showId)))
+        .where(
+          (t) =>
+              t.source == sourceId &&
+              (t.showId == showId || (t.showId == null && t.mediaId == showId)),
+        )
         .toList();
 
     // Sort by Season/Episode
@@ -88,7 +93,8 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Center(
-                        child: Text(context.l10n.downloadsEpisodesNotFound)),
+                      child: Text(context.l10n.downloadsEpisodesNotFound),
+                    ),
                   ),
               ]),
             ),
@@ -103,8 +109,12 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   // Hero Section
   // ---------------------------------------------------------------------------
 
-  Widget _buildHeroSection(BuildContext context, WidgetRef ref,
-      List<DownloadedMedia> showDownloads, List<DownloadTask> showQueue) {
+  Widget _buildHeroSection(
+    BuildContext context,
+    WidgetRef ref,
+    List<DownloadedMedia> showDownloads,
+    List<DownloadTask> showQueue,
+  ) {
     final palette = context.palette;
     return SliverAppBar(
       expandedHeight: 280,
@@ -135,8 +145,10 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 },
                 child: const Padding(
                   padding: EdgeInsets.all(8),
-                  child: Icon(Icons.delete_outline_rounded,
-                      color: AppColors.error),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.error,
+                  ),
                 ),
               ),
             ),
@@ -219,18 +231,16 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                       children: [
                         Text(
                           showTitle,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
+                          style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.8),
-                                blurRadius: 8,
+                                fontWeight: FontWeight.bold,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.8),
+                                    blurRadius: 8,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -249,7 +259,9 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   }
 
   Widget _buildPoster(
-      MydiaPalette palette, List<DownloadedMedia> showDownloads) {
+    MydiaPalette palette,
+    List<DownloadedMedia> showDownloads,
+  ) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -283,8 +295,11 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeroStats(BuildContext context, List<DownloadedMedia> downloads,
-      List<DownloadTask> queue) {
+  Widget _buildHeroStats(
+    BuildContext context,
+    List<DownloadedMedia> downloads,
+    List<DownloadTask> queue,
+  ) {
     final palette = context.palette;
     final totalEpisodes = downloads.length + queue.length;
     final seasons = <int>{
@@ -345,8 +360,11 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   // Stats Bar
   // ---------------------------------------------------------------------------
 
-  Widget _buildStatsBar(BuildContext context, List<DownloadedMedia> downloads,
-      List<DownloadTask> queue) {
+  Widget _buildStatsBar(
+    BuildContext context,
+    List<DownloadedMedia> downloads,
+    List<DownloadTask> queue,
+  ) {
     final allQualities = <String>{
       ...downloads.map((d) => d.quality),
       ...queue.map((t) => t.quality),
@@ -362,8 +380,9 @@ class SeriesDownloadsScreen extends ConsumerWidget {
         child: Wrap(
           spacing: 6,
           runSpacing: 6,
-          children:
-              allQualities.map((q) => QualityBadge.resolution(q)).toList(),
+          children: allQualities
+              .map((q) => QualityBadge.resolution(q))
+              .toList(),
         ),
       ),
     );
@@ -374,16 +393,17 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   // ---------------------------------------------------------------------------
 
   List<Widget> _buildDownloadedSection(
-      BuildContext context, WidgetRef ref, List<DownloadedMedia> downloads) {
+    BuildContext context,
+    WidgetRef ref,
+    List<DownloadedMedia> downloads,
+  ) {
     final widgets = <Widget>[
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
           context.l10n.commonDownloaded,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: AppColors.success,
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
         ),
       ),
       const SizedBox(height: 12),
@@ -396,24 +416,37 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       if (!first) widgets.add(const SizedBox(height: 20));
       first = false;
 
-      widgets.add(Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: _buildSeasonHeader(context, ref, entry.key, entry.value.length),
-      ));
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _buildSeasonHeader(
+            context,
+            ref,
+            entry.key,
+            entry.value.length,
+          ),
+        ),
+      );
       widgets.add(const SizedBox(height: 12));
-      widgets.add(DownloadedEpisodeRail(
-        key: ValueKey('downloaded-season-${entry.key}'),
-        episodes: entry.value,
-        showId: showId,
-        seasonNumber: entry.key,
-      ));
+      widgets.add(
+        DownloadedEpisodeRail(
+          key: ValueKey('downloaded-season-${entry.key}'),
+          episodes: entry.value,
+          showId: showId,
+          seasonNumber: entry.key,
+        ),
+      );
     }
 
     return widgets;
   }
 
   Widget _buildSeasonHeader(
-      BuildContext context, WidgetRef ref, int seasonNumber, int episodeCount) {
+    BuildContext context,
+    WidgetRef ref,
+    int seasonNumber,
+    int episodeCount,
+  ) {
     final palette = context.palette;
     final label = seasonLabel(context.l10n, seasonNumber);
     return Padding(
@@ -422,10 +455,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(
-              color: palette.divider,
-              width: 0.5,
-            ),
+            bottom: BorderSide(color: palette.divider, width: 0.5),
           ),
         ),
         child: Row(
@@ -433,16 +463,16 @@ class SeriesDownloadsScreen extends ConsumerWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: palette.textSecondary,
-                  ),
+                fontWeight: FontWeight.w600,
+                color: palette.textSecondary,
+              ),
             ),
             const SizedBox(width: 8),
             Text(
               context.l10n.downloadsSeasonEpisodeCount(episodeCount),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: palette.textSecondary.withValues(alpha: 0.7),
-                  ),
+                color: palette.textSecondary.withValues(alpha: 0.7),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -482,17 +512,18 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   // ---------------------------------------------------------------------------
 
   List<Widget> _buildQueueSection(
-      BuildContext context, WidgetRef ref, List<DownloadTask> queue) {
+    BuildContext context,
+    WidgetRef ref,
+    List<DownloadTask> queue,
+  ) {
     final palette = context.palette;
     final widgets = <Widget>[
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
           context.l10n.downloadsSectionDownloading,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: palette.primary,
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(color: palette.primary, fontWeight: FontWeight.bold),
         ),
       ),
     ];
@@ -503,10 +534,12 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     if (!hasMultipleSeasons) {
       widgets.add(const SizedBox(height: 8));
       for (final task in queue) {
-        widgets.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: DownloadQueueRow(key: ValueKey(task.id), task: task),
-        ));
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DownloadQueueRow(key: ValueKey(task.id), task: task),
+          ),
+        );
       }
     } else {
       widgets.add(const SizedBox(height: 12));
@@ -514,17 +547,24 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       for (final entry in seasonMap.entries) {
         if (!first) widgets.add(const SizedBox(height: 16));
         first = false;
-        widgets.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child:
-              _buildQueueSeasonHeader(context, entry.key, entry.value.length),
-        ));
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildQueueSeasonHeader(
+              context,
+              entry.key,
+              entry.value.length,
+            ),
+          ),
+        );
         widgets.add(const SizedBox(height: 8));
         for (final task in entry.value) {
-          widgets.add(Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: DownloadQueueRow(key: ValueKey(task.id), task: task),
-          ));
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: DownloadQueueRow(key: ValueKey(task.id), task: task),
+            ),
+          );
         }
       }
     }
@@ -533,7 +573,10 @@ class SeriesDownloadsScreen extends ConsumerWidget {
   }
 
   Widget _buildQueueSeasonHeader(
-      BuildContext context, int seasonNumber, int taskCount) {
+    BuildContext context,
+    int seasonNumber,
+    int taskCount,
+  ) {
     final palette = context.palette;
     final label = seasonLabel(context.l10n, seasonNumber);
     return Padding(
@@ -542,10 +585,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(
-              color: palette.divider,
-              width: 0.5,
-            ),
+            bottom: BorderSide(color: palette.divider, width: 0.5),
           ),
         ),
         child: Row(
@@ -553,16 +593,16 @@ class SeriesDownloadsScreen extends ConsumerWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: palette.textSecondary,
-                  ),
+                fontWeight: FontWeight.w600,
+                color: palette.textSecondary,
+              ),
             ),
             const SizedBox(width: 8),
             Text(
               context.l10n.downloadsSeasonDownloadingCount(taskCount),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: palette.textSecondary.withValues(alpha: 0.7),
-                  ),
+                color: palette.textSecondary.withValues(alpha: 0.7),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(

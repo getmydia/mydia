@@ -35,11 +35,8 @@ Future<bool> showFixMatchSheet(
   final changed = await showGlassSheet<bool>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => FixMatchSheet(
-      editing: editing,
-      item: ref,
-      initialTitle: title,
-    ),
+    builder: (_) =>
+        FixMatchSheet(editing: editing, item: ref, initialTitle: title),
   );
   return changed ?? false;
 }
@@ -147,8 +144,10 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(l10n.filesFixMatch,
-              style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            l10n.filesFixMatch,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -156,8 +155,9 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
                 child: TextField(
                   key: const Key('fix-match-title'),
                   controller: _title,
-                  decoration:
-                      InputDecoration(labelText: l10n.filesFixMatchTitleLabel),
+                  decoration: InputDecoration(
+                    labelText: l10n.filesFixMatchTitleLabel,
+                  ),
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _search(),
                 ),
@@ -168,8 +168,9 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
                 child: TextField(
                   key: const Key('fix-match-year'),
                   controller: _year,
-                  decoration:
-                      InputDecoration(labelText: l10n.filesFixMatchYearLabel),
+                  decoration: InputDecoration(
+                    labelText: l10n.filesFixMatchYearLabel,
+                  ),
                   keyboardType: TextInputType.number,
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _search(),
@@ -186,8 +187,10 @@ class _FixMatchSheetState extends ConsumerState<FixMatchSheet> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(l10n.sourceError(_error!),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: Text(
+                l10n.sourceError(_error!),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
           if (results != null && results.isEmpty && _error == null)
             Padding(
@@ -258,8 +261,12 @@ VoidCallback? fixMatchAction(
   final source = ref.watch(mediaSourceProvider(item.sourceId));
   if (source == null || !canFixMatch(source, item)) return null;
   return () async {
-    final changed =
-        await showFixMatchSheet(context, source, item, title: title);
+    final changed = await showFixMatchSheet(
+      context,
+      source,
+      item,
+      title: title,
+    );
     if (!changed || !context.mounted) return;
     try {
       await source.item(item);

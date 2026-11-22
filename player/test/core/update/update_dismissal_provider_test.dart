@@ -13,15 +13,14 @@ var _boxCounter = 0;
 /// about ten minutes. The name must be unique per call, because
 /// `Hive.openBox` hands back the already-open instance for a repeated name,
 /// which would leak dismissal keys between tests.
-Future<Box<bool>> memoryBox() =>
-    Hive.openBox<bool>('update-dismissal-test-${_boxCounter++}',
-        bytes: Uint8List(0));
+Future<Box<bool>> memoryBox() => Hive.openBox<bool>(
+  'update-dismissal-test-${_boxCounter++}',
+  bytes: Uint8List(0),
+);
 
 ProviderContainer harness(Box<bool> box) {
   final container = ProviderContainer(
-    overrides: [
-      updateDismissalBoxProvider.overrideWith((ref) async => box),
-    ],
+    overrides: [updateDismissalBoxProvider.overrideWith((ref) async => box)],
   );
   addTearDown(container.dispose);
   return container;
@@ -78,19 +77,22 @@ void main() {
     expect(await container.read(updateDismissalProvider.future), isEmpty);
   });
 
-  test('a box that will not open dismisses nothing rather than everything',
-      () async {
-    // Fails open on purpose. A broken box must not silence a real update,
-    // and the alternative failure mode is invisible: the user simply never
-    // hears about an update again.
-    final container = ProviderContainer(
-      overrides: [
-        updateDismissalBoxProvider
-            .overrideWith((ref) async => throw StateError('box unavailable')),
-      ],
-    );
-    addTearDown(container.dispose);
+  test(
+    'a box that will not open dismisses nothing rather than everything',
+    () async {
+      // Fails open on purpose. A broken box must not silence a real update,
+      // and the alternative failure mode is invisible: the user simply never
+      // hears about an update again.
+      final container = ProviderContainer(
+        overrides: [
+          updateDismissalBoxProvider.overrideWith(
+            (ref) async => throw StateError('box unavailable'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    expect(await container.read(updateDismissalProvider.future), isEmpty);
-  });
+      expect(await container.read(updateDismissalProvider.future), isEmpty);
+    },
+  );
 }

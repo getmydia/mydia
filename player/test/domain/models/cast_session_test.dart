@@ -52,9 +52,7 @@ void main() {
         playbackState: CastPlaybackState.playing,
       );
 
-      final lost = session.copyWith(
-        connectionState: CastConnectionState.lost,
-      );
+      final lost = session.copyWith(connectionState: CastConnectionState.lost);
 
       expect(lost.isStale, isTrue);
       expect(lost.playbackState, CastPlaybackState.playing);

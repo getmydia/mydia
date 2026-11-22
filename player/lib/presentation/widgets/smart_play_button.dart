@@ -129,10 +129,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
                 compact
                     ? '${nextUpShortLabel(context.l10n, state)} · $cueLine'
                     : cueLine,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: palette.textSecondary,
-                ),
+                style: TextStyle(fontSize: 12, color: palette.textSecondary),
               ),
             ],
           ],
@@ -192,23 +189,26 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _remembered(
-            _playId,
-            0,
-            FocusEmphasis(
-                borderRadius: const BorderRadius.all(
-                  Radius.circular(AppTheme.radiusButton),
-                ),
-                child: FilledButton.icon(
-                  onPressed: _selectedFile != null
-                      ? () => widget.onFileSelected(_selectedFile!)
-                      : null,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                  label: Text(nextUpLabel(context.l10n, widget.state!)),
-                  style: FilledButton.styleFrom(
+          _playId,
+          0,
+          FocusEmphasis(
+            borderRadius: const BorderRadius.all(
+              Radius.circular(AppTheme.radiusButton),
+            ),
+            child: FilledButton.icon(
+              onPressed: _selectedFile != null
+                  ? () => widget.onFileSelected(_selectedFile!)
+                  : null,
+              icon: const Icon(Icons.play_arrow_rounded, size: 20),
+              label: Text(nextUpLabel(context.l10n, widget.state!)),
+              style:
+                  FilledButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: palette.background,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 14),
+                      horizontal: 18,
+                      vertical: 14,
+                    ),
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.all(
                         Radius.circular(AppTheme.radiusButton),
@@ -224,13 +224,16 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
                     // focused pill gets a gold outline. On a television
                     // FocusEmphasis draws a larger ring outside it instead.
                     side: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.focused) &&
+                      (states) =>
+                          states.contains(WidgetState.focused) &&
                               !InputCapabilities.directionalPrimary
                           ? BorderSide(color: palette.primary, width: 2)
                           : BorderSide.none,
                     ),
                   ),
-                ))),
+            ),
+          ),
+        ),
         if (hasMultiple) ...[
           SizedBox(width: _pickerGap),
           _versionPicker(context),
@@ -241,19 +244,19 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
 
   /// The dropdown beside Play that opens the quality selector.
   Widget _versionPicker(BuildContext context) => _remembered(
-        _versionId,
-        1,
-        _DropdownButton(
-          key: SmartPlayButton.versionPickerKey,
-          onTap: () async {
-            final picked = await showQualitySelector(context, widget.files);
-            if (picked != null) {
-              setState(() => _selectedFile = picked);
-              widget.onFileSelected(picked);
-            }
-          },
-        ),
-      );
+    _versionId,
+    1,
+    _DropdownButton(
+      key: SmartPlayButton.versionPickerKey,
+      onTap: () async {
+        final picked = await showQualitySelector(context, widget.files);
+        if (picked != null) {
+          setState(() => _selectedFile = picked);
+          widget.onFileSelected(picked);
+        }
+      },
+    ),
+  );
 
   static const _playId = 'play';
   static const _versionId = 'version';
@@ -274,12 +277,8 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
   /// untouched.
   Widget _remembered(String id, int index, Widget control) =>
       InputCapabilities.directionalPrimary
-          ? FocusMemoryItem(
-              id: id,
-              index: index,
-              child: control,
-            )
-          : control;
+      ? FocusMemoryItem(id: id, index: index, child: control)
+      : control;
 }
 
 class _DropdownButton extends StatelessWidget {

@@ -56,8 +56,7 @@ void main() {
       );
     });
 
-    test(
-        'false on a television: it is already landscape and has no rotation '
+    test('false on a television: it is already landscape and has no rotation '
         'to pin, and pinning it logs a platform error on some Google TV '
         'builds', () {
       expect(

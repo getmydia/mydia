@@ -63,9 +63,7 @@ import '../../../test_utils/mydia_test_source.dart';
 class HarnessLink {
   // Not const, so the many call sites do not each need a `const` to satisfy
   // `prefer_const_constructors`.
-  HarnessLink.direct()
-      : isP2p = false,
-        serverNodeAddr = null;
+  HarnessLink.direct() : isP2p = false, serverNodeAddr = null;
   HarnessLink.p2p({this.serverNodeAddr}) : isP2p = true;
 
   final bool isP2p;
@@ -339,9 +337,9 @@ void mockPathProviderDocumentsDirectory() {
   TestWidgetsFlutterBinding.ensureInitialized();
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
-    const MethodChannel('plugins.flutter.io/path_provider'),
-    (call) async => Directory.systemTemp.path,
-  );
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (call) async => Directory.systemTemp.path,
+      );
 }
 
 /// A downloaded item pointing at [filePath].
@@ -356,18 +354,17 @@ void mockPathProviderDocumentsDirectory() {
 DownloadedMedia downloadedItem({
   required String filePath,
   int? runtimeMinutes,
-}) =>
-    DownloadedMedia(
-      id: 'dl-1',
-      mediaId: 'movie-1',
-      title: 'The Long Aurora',
-      quality: '1080p',
-      filePath: filePath,
-      fileSize: 1,
-      mediaType: 'movie',
-      downloadedAt: DateTime(2026, 1, 1),
-      runtime: runtimeMinutes,
-    );
+}) => DownloadedMedia(
+  id: 'dl-1',
+  mediaId: 'movie-1',
+  title: 'The Long Aurora',
+  quality: '1080p',
+  filePath: filePath,
+  fileSize: 1,
+  mediaType: 'movie',
+  downloadedAt: DateTime(2026, 1, 1),
+  runtime: runtimeMinutes,
+);
 
 /// Writes a local progress record into a container's store before the screen
 /// mounts, standing in for a previous playback session.
@@ -380,14 +377,16 @@ Future<void> seedLocalProgress(
   DateTime? updatedAt,
 }) async {
   final store = await container.read(playbackProgressStoreProvider.future);
-  await store.save(LocalPlaybackProgress(
-    sourceId: testMydiaSourceId.value,
-    mediaId: mediaId,
-    mediaType: mediaType,
-    positionSeconds: positionSeconds,
-    durationSeconds: durationSeconds,
-    updatedAt: updatedAt ?? DateTime.utc(2026, 8, 2, 12),
-  ));
+  await store.save(
+    LocalPlaybackProgress(
+      sourceId: testMydiaSourceId.value,
+      mediaId: mediaId,
+      mediaType: mediaType,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      updatedAt: updatedAt ?? DateTime.utc(2026, 8, 2, 12),
+    ),
+  );
 }
 
 /// A well-formed `MovieDetail` response. All fields beyond the required ones
@@ -424,7 +423,7 @@ Map<String, dynamic> movieDetailResponse({
           'watched': false,
           'lastWatchedAt': null,
         },
-      if (files != null) 'files': files,
+      'files': ?files,
     },
   };
 }
@@ -561,11 +560,7 @@ Map<String, dynamic> movieSegmentsResponse({
       '__typename': 'Movie',
       'id': 'movie-1',
       'files': [
-        {
-          '__typename': 'MediaFile',
-          'id': 'file-1',
-          'segments': segments,
-        },
+        {'__typename': 'MediaFile', 'id': 'file-1', 'segments': segments},
       ],
     },
   };
@@ -584,10 +579,7 @@ Map<String, dynamic> movieSegmentsResponse({
 Map<String, dynamic> subtitleTrackSettingsResponse({
   List<Map<String, dynamic>> settings = const [],
 }) {
-  return {
-    '__typename': 'Query',
-    'subtitleTrackSettings': settings,
-  };
+  return {'__typename': 'Query', 'subtitleTrackSettings': settings};
 }
 
 /// A well-formed `StreamingCandidates` response.
@@ -686,10 +678,7 @@ Map<String, dynamic> startStreamingSessionResponse({
 }
 
 Map<String, dynamic> endStreamingSessionResponse({bool ok = true}) {
-  return {
-    '__typename': 'RootMutationType',
-    'endStreamingSession': ok,
-  };
+  return {'__typename': 'RootMutationType', 'endStreamingSession': ok};
 }
 
 /// Builds a [ProviderContainer] with the overrides every `PlayerScreen` mount
@@ -755,45 +744,56 @@ ProviderContainer buildPlayerScreenContainer({
           status: ValueNotifier(SourceConnectionStatus.unreachable),
         )
       : base;
-  return ProviderContainer(overrides: [
-    if (smbNative != null) smbNativeProvider.overrideWithValue(smbNative),
-    if (appVersion != null) ...[
-      installedVersionReaderProvider.overrideWithValue(() async => appVersion),
-      updateBackendFactoryProvider
-          .overrideWithValue(({required String currentVersion}) async => null),
-    ],
-    mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
-    for (final entry in extraSources.entries)
-      mediaSourceProvider(entry.key).overrideWithValue(entry.value),
-    settingsServiceProvider
-        .overrideWithValue(settingsService ?? FakeSettingsService()),
-    if (coreSettingsService != null)
-      coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
-    downloadManagerProvider.overrideWith((ref) async =>
-        downloadService ?? FakeDownloadService(downloaded: downloaded)),
-    localProxyServiceProvider.overrideWithValue(proxyService),
-    castSessionManagerProvider.overrideWith((ref) async {
-      final gate = castManagerGate;
-      if (gate != null) {
-        if (castManagerRequested?.isCompleted == false) {
-          castManagerRequested!.complete();
+  return ProviderContainer(
+    overrides: [
+      if (smbNative != null) smbNativeProvider.overrideWithValue(smbNative),
+      if (appVersion != null) ...[
+        installedVersionReaderProvider.overrideWithValue(
+          () async => appVersion,
+        ),
+        updateBackendFactoryProvider.overrideWithValue(
+          ({required String currentVersion}) async => null,
+        ),
+      ],
+      mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
+      for (final entry in extraSources.entries)
+        mediaSourceProvider(entry.key).overrideWithValue(entry.value),
+      settingsServiceProvider.overrideWithValue(
+        settingsService ?? FakeSettingsService(),
+      ),
+      if (coreSettingsService != null)
+        coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
+      downloadManagerProvider.overrideWith(
+        (ref) async =>
+            downloadService ?? FakeDownloadService(downloaded: downloaded),
+      ),
+      localProxyServiceProvider.overrideWithValue(proxyService),
+      castSessionManagerProvider.overrideWith((ref) async {
+        final gate = castManagerGate;
+        if (gate != null) {
+          if (castManagerRequested?.isCompleted == false) {
+            castManagerRequested!.complete();
+          }
+          await gate.future;
         }
-        await gate.future;
-      }
-      return castManager;
-    }),
-    // Null by default: no receiver, so `isCastingProvider` stays false and the
-    // screen builds its local body. Pass a stream to stand in for a live cast,
-    // which is the only way to reach `CastPlaceholderView`: the real
-    // provider derives from `CastSessionManager`, and the fake above has no
-    // session machinery to drive it.
-    castSessionProvider
-        .overrideWith((ref) => castSessionStream ?? Stream.value(null)),
-    playbackProgressStoreProvider.overrideWith(
-        (ref) async => progressStore ?? InMemoryPlaybackProgressStore()),
-    playbackMemoryProvider
-        .overrideWith((ref) async => InMemoryPlaybackMemory()),
-  ]);
+        return castManager;
+      }),
+      // Null by default: no receiver, so `isCastingProvider` stays false and the
+      // screen builds its local body. Pass a stream to stand in for a live cast,
+      // which is the only way to reach `CastPlaceholderView`: the real
+      // provider derives from `CastSessionManager`, and the fake above has no
+      // session machinery to drive it.
+      castSessionProvider.overrideWith(
+        (ref) => castSessionStream ?? Stream.value(null),
+      ),
+      playbackProgressStoreProvider.overrideWith(
+        (ref) async => progressStore ?? InMemoryPlaybackProgressStore(),
+      ),
+      playbackMemoryProvider.overrideWith(
+        (ref) async => InMemoryPlaybackMemory(),
+      ),
+    ],
+  );
 }
 
 /// Mounts `PlayerScreen` under [container] and pumps once.
@@ -830,27 +830,29 @@ Future<void> pumpPlayerScreen(
     seasonNumber: seasonNumber,
     proxy: () => container.read(mediaProxyProvider),
   );
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: PlayerScreen(
-        mediaId: mediaId,
-        mediaType: mediaType,
-        fileId: fileId,
-        showId: showId,
-        seasonNumber: seasonNumber,
-        title: 'The Long Aurora',
-        session: session,
-        createPlayer: createPlayer,
-        createWindowSizer: createWindowSizer,
-        surface: surface,
-        outputPath: outputPath,
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: PlayerScreen(
+          mediaId: mediaId,
+          mediaType: mediaType,
+          fileId: fileId,
+          showId: showId,
+          seasonNumber: seasonNumber,
+          title: 'The Long Aurora',
+          session: session,
+          createPlayer: createPlayer,
+          createWindowSizer: createWindowSizer,
+          surface: surface,
+          outputPath: outputPath,
+        ),
       ),
     ),
-  ));
+  );
   await tester.pump();
 }
 

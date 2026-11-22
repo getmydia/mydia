@@ -94,7 +94,7 @@ const constellationCentre = Offset(0.5, 0.46);
 const _serverSlots = [
   Offset(0.16, 0.21),
   Offset(0.84, 0.21),
-  Offset(0.11, 0.68)
+  Offset(0.11, 0.68),
 ];
 const _deviceSlots = [Offset(0.89, 0.68), Offset(0.5, 0.80)];
 

@@ -29,8 +29,8 @@ class LogSink {
     required this.sessionId,
     DateTime Function()? now,
     DebugPrintCallback? console,
-  })  : _now = now ?? DateTime.now,
-        _console = console ?? debugPrint;
+  }) : _now = now ?? DateTime.now,
+       _console = console ?? debugPrint;
 
   static LogSink? _instance;
 
@@ -65,8 +65,11 @@ class LogSink {
   /// Wraps `debugPrint` and makes the new sink [instance].
   static LogSink install({DateTime Function()? now}) {
     final original = debugPrint;
-    final sink =
-        LogSink(sessionId: newSessionId(), now: now, console: original);
+    final sink = LogSink(
+      sessionId: newSessionId(),
+      now: now,
+      console: original,
+    );
     debugPrint = (String? message, {int? wrapWidth}) {
       if (message != null) sink.recordLine(message);
       original(message, wrapWidth: wrapWidth);
@@ -98,45 +101,46 @@ class LogSink {
   }
 
   void recordLine(String line, {LogLevel level = LogLevel.info}) => _safely(() {
-        final (tag, message) = splitTag(line);
-        _add(tag: tag, message: message, level: level);
-      });
+    final (tag, message) = splitTag(line);
+    _add(tag: tag, message: message, level: level);
+  });
 
   void recordError(Object error, StackTrace? stack) => _safely(() {
-        final frames = stack
-            ?.toString()
-            .split('\n')
-            .where((line) => line.isNotEmpty)
-            .take(_stackFrames)
-            .join('\n');
-        _add(
-          tag: 'Error',
-          message:
-              frames == null || frames.isEmpty ? '$error' : '$error\n$frames',
-          level: LogLevel.error,
-        );
-      });
+    final frames = stack
+        ?.toString()
+        .split('\n')
+        .where((line) => line.isNotEmpty)
+        .take(_stackFrames)
+        .join('\n');
+    _add(
+      tag: 'Error',
+      message: frames == null || frames.isEmpty ? '$error' : '$error\n$frames',
+      level: LogLevel.error,
+    );
+  });
 
   /// Records a Rust `tracing` event forwarded as `{"l","target","msg"}`.
   void recordRustEvent(String json) => _safely(() {
-        final decoded = jsonDecode(json);
-        if (decoded is! Map) return;
-        final target = decoded['target'];
-        final message = decoded['msg'];
-        _add(
-          tag: target is String && target.isNotEmpty ? target : 'rust',
-          message: message is String ? message : '$message',
-          level: LogLevel.fromWire(decoded['l']) ?? LogLevel.info,
-          source: LogSource.rust,
-        );
-      });
+    final decoded = jsonDecode(json);
+    if (decoded is! Map) return;
+    final target = decoded['target'];
+    final message = decoded['msg'];
+    _add(
+      tag: target is String && target.isNotEmpty ? target : 'rust',
+      message: message is String ? message : '$message',
+      level: LogLevel.fromWire(decoded['l']) ?? LogLevel.info,
+      source: LogSource.rust,
+    );
+  });
 
   /// One `Session` record describing this launch.
-  void recordSession(Map<String, String> fields) => _safely(() => _add(
-        tag: 'Session',
-        message: fields.entries.map((e) => '${e.key}="${e.value}"').join(' '),
-        level: LogLevel.info,
-      ));
+  void recordSession(Map<String, String> fields) => _safely(
+    () => _add(
+      tag: 'Session',
+      message: fields.entries.map((e) => '${e.key}="${e.value}"').join(' '),
+      level: LogLevel.info,
+    ),
+  );
 
   /// Prints without recording, for the sink's and the store's own trouble.
   void consoleOnly(String message) => _console(message);

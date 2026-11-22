@@ -31,11 +31,12 @@ Future<SourceAccountRecord> saveStashSource(
   final existing = reauthAccountId == null
       ? null
       : snapshot.accounts
-          .where((a) => a.account.id == reauthAccountId)
-          .firstOrNull;
+            .where((a) => a.account.id == reauthAccountId)
+            .firstOrNull;
   final accountId =
       existing?.account.id ?? const Uuid().v4().replaceAll('-', '');
-  final account = existing?.account.copyWith(needsReauth: false) ??
+  final account =
+      existing?.account.copyWith(needsReauth: false) ??
       ProviderAccount(
         id: accountId,
         kind: SourceKind.stash,
@@ -53,7 +54,11 @@ Future<SourceAccountRecord> saveStashSource(
     account: account,
     profiles: [
       SourceProfile(
-          id: 'owner', accountId: accountId, name: 'Owner', isOwner: true),
+        id: 'owner',
+        accountId: accountId,
+        name: 'Owner',
+        isOwner: true,
+      ),
     ],
     servers: [
       SourceServer(
@@ -115,16 +120,16 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
   Future<void> _connect() async {
     final uri = parseStashUrl(_url.text);
     if (uri == null) {
-      setState(() => _error = const SignInProblem(
-            SignInIssue.stashAddressInvalid,
-          ));
+      setState(
+        () => _error = const SignInProblem(SignInIssue.stashAddressInvalid),
+      );
       return;
     }
     final key = _key.text.trim();
     if (uri.scheme == 'http' && key.isNotEmpty && !isPrivateHost(uri.host)) {
-      setState(() => _error = const SignInProblem(
-            SignInIssue.stashHttpsRequired,
-          ));
+      setState(
+        () => _error = const SignInProblem(SignInIssue.stashHttpsRequired),
+      );
       return;
     }
     setState(() {
@@ -141,20 +146,27 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
         http: ref.read(sourceHttpProvider),
         apiKey: () async => key.isEmpty ? null : key,
       ).checkStatus();
-      final record = await saveStashSource(ref,
-          uri: uri, apiKey: key, reauthAccountId: widget.reauthAccountId);
+      final record = await saveStashSource(
+        ref,
+        uri: uri,
+        apiKey: key,
+        reauthAccountId: widget.reauthAccountId,
+      );
       if (!mounted) return;
       context.go(sourceHomeLocation(record.sources.first.id));
     } on SourceException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.kind == SourceErrorKind.unauthorized
-          ? const SignInProblem(SignInIssue.stashKeyRejected)
-          : SignInProblem.fromError(e));
+      setState(
+        () => _error = e.kind == SourceErrorKind.unauthorized
+            ? const SignInProblem(SignInIssue.stashKeyRejected)
+            : SignInProblem.fromError(e),
+      );
     } catch (_) {
       // Secure storage or the record store failed after the server answered.
       if (!mounted) return;
       setState(
-          () => _error = const SignInProblem(SignInIssue.saveServerFailed));
+        () => _error = const SignInProblem(SignInIssue.saveServerFailed),
+      );
     } finally {
       connection.dispose();
       if (mounted) setState(() => _busy = false);
@@ -194,9 +206,10 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
               ),
               if (_error case final error?) ...[
                 const SizedBox(height: 16),
-                Text(context.l10n.signInProblemText(error),
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error)),
+                Text(
+                  context.l10n.signInProblemText(error),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ],
               const SizedBox(height: 24),
               FilledButton(
@@ -205,7 +218,8 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
                 child: _busy
                     ? const SizedBox.square(
                         dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : Text(context.l10n.loginConnect),
               ),
             ],

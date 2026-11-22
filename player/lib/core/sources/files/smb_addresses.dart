@@ -34,8 +34,9 @@ ServerConnection smbConnectionOf(SmbTarget t) {
   final host = normalizeSmbHost(t.host);
   final authority = host.contains(':') ? '[$host]' : host;
   final port = t.port == kSmbDefaultPort ? '' : ':${t.port}';
-  final uri =
-      Uri.parse('smb://$authority$port/${Uri.encodeComponent(t.share)}');
+  final uri = Uri.parse(
+    'smb://$authority$port/${Uri.encodeComponent(t.share)}',
+  );
   return ServerConnection(
     uri: Uri.parse(normalizeSmbUrl(uri)),
     local: isPrivateHost(host),
@@ -131,12 +132,13 @@ bool _validPort(int? port) => port != null && port >= 1 && port <= 65535;
 /// refused login or an SMB1-only server would answer the same anywhere. The
 /// last address's failure is rethrown.
 Future<(List<String> shares, String host)> listSharesAtFirstReachable(
-    SmbNative native,
-    List<String> hosts,
-    int port,
-    SmbCredentials credentials) async {
+  SmbNative native,
+  List<String> hosts,
+  int port,
+  SmbCredentials credentials,
+) async {
   assert(hosts.isNotEmpty, 'at least one address to try');
-  for (var i = 0;; i++) {
+  for (var i = 0; ; i++) {
     final host = hosts[i];
     try {
       return (await native.listShares(host, port, credentials), host);
@@ -147,5 +149,6 @@ Future<(List<String> shares, String host)> listSharesAtFirstReachable(
   }
 }
 
-List<SmbTarget> smbTargetsOf(List<ServerConnection> connections) =>
-    [for (final c in connections) smbTargetOf(c.uri)];
+List<SmbTarget> smbTargetsOf(List<ServerConnection> connections) => [
+  for (final c in connections) smbTargetOf(c.uri),
+];

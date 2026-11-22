@@ -15,10 +15,11 @@ import '../sources/source_browse_providers.dart';
 import 'home_rows.dart';
 import 'home_scope.dart';
 
-final homeRowsProvider = Provider.autoDispose
-    .family<HomeRows, HomeScope>((ref, scope) => buildHomeRows([
-          for (final source in scope.sources(ref)) _feedsOf(ref, source),
-        ]));
+final homeRowsProvider = Provider.autoDispose.family<HomeRows, HomeScope>(
+  (ref, scope) => buildHomeRows([
+    for (final source in scope.sources(ref)) _feedsOf(ref, source),
+  ]),
+);
 
 HomeFeeds _feedsOf(Ref ref, MediaSource source) {
   final id = source.id;
@@ -44,13 +45,13 @@ HomeFeeds _feedsOf(Ref ref, MediaSource source) {
 /// left out on purpose: it is optional, so a failed or slow trending refetch
 /// must not raise Home's "couldn't refresh" banner or refresh line.
 List<QueryKey> homeQueryKeys(Iterable<SourceId> ids) => [
-      for (final id in ids) ...[
-        SourceKeys.libraries(id),
-        SourceKeys.continueWatching(id),
-        SourceKeys.recentlyAdded(id),
-        SourceKeys.favoritesRow(id),
-      ],
-    ];
+  for (final id in ids) ...[
+    SourceKeys.libraries(id),
+    SourceKeys.continueWatching(id),
+    SourceKeys.recentlyAdded(id),
+    SourceKeys.favoritesRow(id),
+  ],
+];
 
 /// Refetches every feed Home reads for [ids]. Completes when the libraries
 /// have answered, so the pull-to-refresh indicator stops then.
@@ -71,8 +72,12 @@ Future<void> refreshHome(WidgetRef ref, Iterable<SourceId> ids) async {
   ref.invalidate(sourceLibraryPreviewProvider);
   await Future.wait([
     for (final id in ids)
-      ref.read(sourceLibrariesProvider(id).future).then<void>((_) {},
-          // The screen shows the error; the indicator only has to stop.
-          onError: (Object _) {}),
+      ref
+          .read(sourceLibrariesProvider(id).future)
+          .then<void>(
+            (_) {},
+            // The screen shows the error; the indicator only has to stop.
+            onError: (Object _) {},
+          ),
   ]);
 }

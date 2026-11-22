@@ -43,7 +43,7 @@ class _SecureStorageBackend implements SecretBackend {
 
 class NativeP2pKeystore implements P2pKeystore {
   NativeP2pKeystore({SecretBackend? backend})
-      : _backend = backend ?? const _SecureStorageBackend();
+    : _backend = backend ?? const _SecureStorageBackend();
 
   final SecretBackend _backend;
 
@@ -56,7 +56,8 @@ class NativeP2pKeystore implements P2pKeystore {
     final bytes = base64Decode(stored);
     if (bytes.length != 32) {
       throw FormatException(
-          'Stored p2p node secret is ${bytes.length} bytes, expected 32');
+        'Stored p2p node secret is ${bytes.length} bytes, expected 32',
+      );
     }
     return bytes;
   }

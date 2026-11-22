@@ -13,10 +13,10 @@ import 'package:player/presentation/widgets/media_card.dart';
 // ProviderScope is required: PosterFrame, which MediaCard composes, is a
 // ConsumerStatefulWidget and reads a provider in initState.
 Widget _host(Widget child) => ProviderScope(
-      child: MaterialApp(
-        home: Scaffold(body: Center(child: child)),
-      ),
-    );
+  child: MaterialApp(
+    home: Scaffold(body: Center(child: child)),
+  ),
+);
 
 void main() {
   // FocusHighlight's ring is gated on FocusManager.highlightMode, which

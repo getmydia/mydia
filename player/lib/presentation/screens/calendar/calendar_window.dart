@@ -17,6 +17,6 @@ const int kCalendarDaysForward = 90;
 /// `Duration`-based add/subtract would drift by an hour across such a
 /// transition, which running this in a DST-observing timezone reproduces.
 ({DateTime start, DateTime end}) calendarWindow(DateTime now) => (
-      start: DateTime(now.year, now.month, now.day - kCalendarDaysBack),
-      end: DateTime(now.year, now.month, now.day + kCalendarDaysForward),
-    );
+  start: DateTime(now.year, now.month, now.day - kCalendarDaysBack),
+  end: DateTime(now.year, now.month, now.day + kCalendarDaysForward),
+);

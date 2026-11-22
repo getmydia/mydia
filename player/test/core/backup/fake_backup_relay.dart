@@ -160,8 +160,11 @@ class FakeBackupRelay {
       if (r.method == 'GET') {
         final slot = vault.slots[parts[3]];
         if (slot == null) return _err(404, 'not_found');
-        return http.Response.bytes(slot.body, 200,
-            headers: {'etag': '"${slot.seq}"'});
+        return http.Response.bytes(
+          slot.body,
+          200,
+          headers: {'etag': '"${slot.seq}"'},
+        );
       }
     }
     return http.Response('Not found', 404);
@@ -259,7 +262,11 @@ class FakeBackupRelay {
   }
 
   http.Response _putSlot(
-      http.Request r, FakeVault v, String signer, String slotId) {
+    http.Request r,
+    FakeVault v,
+    String signer,
+    String slotId,
+  ) {
     final m = v.members[signer]!;
     if (m.slotId != slotId || signer == v.recoverySigner) {
       return _err(403, 'not_owner');
@@ -275,8 +282,12 @@ class FakeBackupRelay {
       return _err(412, 'precondition_failed');
     }
     final seq = (ifMatch ?? 0) + 1;
-    v.slots[slotId] = FakeSlot(seq, epoch, Uint8List.fromList(r.bodyBytes),
-        now?.call() ?? DateTime.now().millisecondsSinceEpoch);
+    v.slots[slotId] = FakeSlot(
+      seq,
+      epoch,
+      Uint8List.fromList(r.bodyBytes),
+      now?.call() ?? DateTime.now().millisecondsSinceEpoch,
+    );
     v.version++;
     slotWrites[slotId] = (slotWrites[slotId] ?? 0) + 1;
     return _json(200, {'seq': seq}, headers: {'etag': '"$seq"'});
@@ -370,8 +381,10 @@ class FakeBackupRelay {
       utf8.encode('${r.method}\n${r.url.path}\n${_hex(hash.bytes)}\n$ts'),
       signature: Signature(
         backupUnb64(sig),
-        publicKey:
-            SimplePublicKey(backupUnb64(signer), type: KeyPairType.ed25519),
+        publicKey: SimplePublicKey(
+          backupUnb64(signer),
+          type: KeyPairType.ed25519,
+        ),
       ),
     );
     return ok ? signer : null;
@@ -383,10 +396,15 @@ class FakeBackupRelay {
   static String _hex(List<int> bytes) =>
       [for (final b in bytes) b.toRadixString(16).padLeft(2, '0')].join();
 
-  static http.Response _json(int status, Object body,
-          {Map<String, String> headers = const {}}) =>
-      http.Response(jsonEncode(body), status,
-          headers: {'content-type': 'application/json', ...headers});
+  static http.Response _json(
+    int status,
+    Object body, {
+    Map<String, String> headers = const {},
+  }) => http.Response(
+    jsonEncode(body),
+    status,
+    headers: {'content-type': 'application/json', ...headers},
+  );
 
   static http.Response _err(int status, String code) =>
       _json(status, {'error': code});

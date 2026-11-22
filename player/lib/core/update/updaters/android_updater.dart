@@ -20,9 +20,9 @@ class AndroidUpdater extends PlatformUpdater {
     AndroidInstaller? installer,
     Dio? dio,
     Future<Directory> Function()? cacheDir,
-  })  : _installer = installer ?? const AndroidInstaller(),
-        _dio = dio ?? Dio(),
-        _cacheDir = cacheDir ?? getTemporaryDirectory;
+  }) : _installer = installer ?? const AndroidInstaller(),
+       _dio = dio ?? Dio(),
+       _cacheDir = cacheDir ?? getTemporaryDirectory;
 
   final AndroidInstaller _installer;
   final Dio _dio;

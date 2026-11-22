@@ -180,7 +180,7 @@ class FakePlexServer {
               'summary': 'Two lighthouses, one keeper.',
               if (q['includeOnDeck'] == '1' && !nothingOnDeck)
                 'OnDeck': {
-                  'Metadata': [_episode(2)]
+                  'Metadata': [_episode(2)],
                 },
             },
           ],
@@ -207,10 +207,7 @@ class FakePlexServer {
           'offset': 0,
           'size': 2,
           'totalSize': 2,
-          'Metadata': [
-            _episode(1),
-            _episode(2),
-          ],
+          'Metadata': [_episode(1), _episode(2)],
         });
       case '/hubs/search':
         return _container({
@@ -271,73 +268,73 @@ class FakePlexServer {
   });
 
   static Map<String, dynamic> _movie(String id, String title, int year) => {
-        'ratingKey': id,
-        'type': 'movie',
-        'title': title,
-        'year': year,
-        'thumb': '/library/metadata/$id/thumb/1700',
-        'art': '/library/metadata/$id/art/1700',
-        'duration': 5400000,
-        'librarySectionID': 1,
-      };
+    'ratingKey': id,
+    'type': 'movie',
+    'title': title,
+    'year': year,
+    'thumb': '/library/metadata/$id/thumb/1700',
+    'art': '/library/metadata/$id/art/1700',
+    'duration': 5400000,
+    'librarySectionID': 1,
+  };
 
   static Map<String, dynamic> _episode(int n) => {
-        'ratingKey': '40$n',
-        'type': 'episode',
-        'title': n == 1 ? 'First Light' : 'Fog Bank',
-        'index': n,
-        'parentIndex': 1,
-        'grandparentTitle': 'Harbour Lights',
-        'grandparentRatingKey': '201',
-        'parentRatingKey': '301',
-        'summary': 'An invented episode.',
-        'originallyAvailableAt': '2024-01-0$n',
-        if (n == 1) 'viewCount': 1,
-        if (n == 2) 'viewOffset': 600000,
-        'duration': 1800000,
-        'thumb': '/library/metadata/40$n/thumb/1',
-        'Media': [
-          {
-            'id': 60 + n,
-            'Part': [
-              {'id': 500 + n},
-            ],
-          },
+    'ratingKey': '40$n',
+    'type': 'episode',
+    'title': n == 1 ? 'First Light' : 'Fog Bank',
+    'index': n,
+    'parentIndex': 1,
+    'grandparentTitle': 'Harbour Lights',
+    'grandparentRatingKey': '201',
+    'parentRatingKey': '301',
+    'summary': 'An invented episode.',
+    'originallyAvailableAt': '2024-01-0$n',
+    if (n == 1) 'viewCount': 1,
+    if (n == 2) 'viewOffset': 600000,
+    'duration': 1800000,
+    'thumb': '/library/metadata/40$n/thumb/1',
+    'Media': [
+      {
+        'id': 60 + n,
+        'Part': [
+          {'id': 500 + n},
         ],
-      };
+      },
+    ],
+  };
 
   /// Episode 402, mid-way, as Continue Watching returns it.
   static Map<String, dynamic> get resumingEpisode => {
-        'ratingKey': '402',
-        'type': 'episode',
-        'title': 'Fog Bank',
-        'index': 2,
-        'parentIndex': 1,
-        'grandparentTitle': 'Harbour Lights',
-        'grandparentThumb': '/library/metadata/201/thumb/1',
-        'thumb': '/library/metadata/402/thumb/1',
-        'viewOffset': 600000,
-        'duration': 1800000,
-        'librarySectionID': 2,
-      };
+    'ratingKey': '402',
+    'type': 'episode',
+    'title': 'Fog Bank',
+    'index': 2,
+    'parentIndex': 1,
+    'grandparentTitle': 'Harbour Lights',
+    'grandparentThumb': '/library/metadata/201/thumb/1',
+    'thumb': '/library/metadata/402/thumb/1',
+    'viewOffset': 600000,
+    'duration': 1800000,
+    'librarySectionID': 2,
+  };
 
   static Map<String, dynamic> get showSummary => {
-        'ratingKey': '201',
-        'type': 'show',
-        'title': 'Harbour Lights',
-        'year': 2020,
-        'thumb': '/library/metadata/201/thumb/1',
-        'leafCount': 2,
-        'viewedLeafCount': 1,
-        'librarySectionID': 2,
-      };
+    'ratingKey': '201',
+    'type': 'show',
+    'title': 'Harbour Lights',
+    'year': 2020,
+    'thumb': '/library/metadata/201/thumb/1',
+    'leafCount': 2,
+    'viewedLeafCount': 1,
+    'librarySectionID': 2,
+  };
 
   static http.Response _container(Map<String, dynamic> body) =>
       _json({'MediaContainer': body});
 
   static http.Response _json(Object body) => http.Response(
-        jsonEncode(body),
-        200,
-        headers: {'content-type': 'application/json; charset=utf-8'},
-      );
+    jsonEncode(body),
+    200,
+    headers: {'content-type': 'application/json; charset=utf-8'},
+  );
 }

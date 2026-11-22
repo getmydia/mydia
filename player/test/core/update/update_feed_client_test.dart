@@ -69,8 +69,10 @@ Dio _dioReturning(Object body, {int status = 200}) {
 void main() {
   test('resolves the entry for a platform and track', () async {
     final client = UpdateFeedClient(dio: _dioReturning(_feed));
-    final entry =
-        await client.fetch(track: UpdateTrack.dev, platform: 'android');
+    final entry = await client.fetch(
+      track: UpdateTrack.dev,
+      platform: 'android',
+    );
 
     expect(entry, isNotNull);
     expect(entry!.version, '0.16.0-dev.7');
@@ -80,35 +82,46 @@ void main() {
 
   test('a track the platform does not publish is null, not an error', () async {
     final client = UpdateFeedClient(dio: _dioReturning(_feed));
-    expect(await client.fetch(track: UpdateTrack.beta, platform: 'android'),
-        isNull);
-    expect(await client.fetch(track: UpdateTrack.stable, platform: 'windows'),
-        isNull);
+    expect(
+      await client.fetch(track: UpdateTrack.beta, platform: 'android'),
+      isNull,
+    );
+    expect(
+      await client.fetch(track: UpdateTrack.stable, platform: 'windows'),
+      isNull,
+    );
   });
 
   test('an unknown platform is null', () async {
     final client = UpdateFeedClient(dio: _dioReturning(_feed));
-    expect(await client.fetch(track: UpdateTrack.stable, platform: 'toaster'),
-        isNull);
+    expect(
+      await client.fetch(track: UpdateTrack.stable, platform: 'toaster'),
+      isNull,
+    );
   });
 
   test('a failed request is null rather than a throw', () async {
     final client = UpdateFeedClient(dio: _dioReturning({}, status: 503));
-    expect(await client.fetch(track: UpdateTrack.stable, platform: 'android'),
-        isNull);
+    expect(
+      await client.fetch(track: UpdateTrack.stable, platform: 'android'),
+      isNull,
+    );
   });
 
   test('a malformed payload is null rather than a throw', () async {
     final client = UpdateFeedClient(dio: _dioReturning('not a feed'));
-    expect(await client.fetch(track: UpdateTrack.stable, platform: 'android'),
-        isNull);
+    expect(
+      await client.fetch(track: UpdateTrack.stable, platform: 'android'),
+      isNull,
+    );
   });
 
   test('toAppUpdate carries the download and the notes', () async {
     final client = UpdateFeedClient(dio: _dioReturning(_feed));
-    final update =
-        (await client.fetch(track: UpdateTrack.stable, platform: 'android'))!
-            .toAppUpdate();
+    final update = (await client.fetch(
+      track: UpdateTrack.stable,
+      platform: 'android',
+    ))!.toAppUpdate();
 
     expect(update.version, '0.15.0');
     expect(update.downloadUrl, endsWith('.apk'));
@@ -129,15 +142,14 @@ void main() {
       bool isLinux = false,
       bool isMacOS = false,
       bool isAppImage = false,
-    }) =>
-        UpdateFeedClient.resolveSlug(
-          isWeb: isWeb,
-          isAndroid: isAndroid,
-          isWindows: isWindows,
-          isLinux: isLinux,
-          isMacOS: isMacOS,
-          isAppImage: isAppImage,
-        );
+    }) => UpdateFeedClient.resolveSlug(
+      isWeb: isWeb,
+      isAndroid: isAndroid,
+      isWindows: isWindows,
+      isLinux: isLinux,
+      isMacOS: isMacOS,
+      isAppImage: isAppImage,
+    );
 
     test('each platform maps to its own slug', () {
       expect(slug(isAndroid: true), 'android');

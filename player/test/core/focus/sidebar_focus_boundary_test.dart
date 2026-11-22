@@ -55,8 +55,9 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('the trip back returns the card that left, not the first',
-      (tester) async {
+  testWidgets('the trip back returns the card that left, not the first', (
+    tester,
+  ) async {
     await pump(tester);
     final boundary = SidebarFocusBoundary(sidebarNode: sidebarNode);
 
@@ -86,8 +87,9 @@ void main() {
     expect(firstCard.hasFocus, isTrue, reason: 'focus must not move');
   });
 
-  testWidgets('a remembered card that has left the tree reports no move',
-      (tester) async {
+  testWidgets('a remembered card that has left the tree reports no move', (
+    tester,
+  ) async {
     await pump(tester);
     final boundary = SidebarFocusBoundary(sidebarNode: sidebarNode);
 
@@ -111,8 +113,9 @@ void main() {
     expect(boundary.focusContent(), isFalse);
   });
 
-  testWidgets('a card that returns after a refused move does not steal focus',
-      (tester) async {
+  testWidgets('a card that returns after a refused move does not steal focus', (
+    tester,
+  ) async {
     await pump(tester);
     final boundary = SidebarFocusBoundary(sidebarNode: sidebarNode);
 
@@ -164,8 +167,10 @@ void main() {
   ///
   /// The region scope is what the fallback enumerates, so the tests below need
   /// the cards to be inside it rather than merely on screen.
-  Widget scopedContentShell(FocusScopeNode scope,
-      {List<FocusNode> cards = const []}) {
+  Widget scopedContentShell(
+    FocusScopeNode scope, {
+    List<FocusNode> cards = const [],
+  }) {
     return MaterialApp(
       home: Scaffold(
         body: Row(
@@ -195,41 +200,45 @@ void main() {
   }
 
   testWidgets(
-      'a remembered card that has left the tree falls back to the first '
-      'focusable still in the content region', (tester) async {
-    final contentScope = FocusScopeNode(debugLabel: 'content-region');
-    addTearDown(contentScope.dispose);
-    final freshCard = FocusNode(debugLabel: 'fresh-card');
-    addTearDown(freshCard.dispose);
+    'a remembered card that has left the tree falls back to the first '
+    'focusable still in the content region',
+    (tester) async {
+      final contentScope = FocusScopeNode(debugLabel: 'content-region');
+      addTearDown(contentScope.dispose);
+      final freshCard = FocusNode(debugLabel: 'fresh-card');
+      addTearDown(freshCard.dispose);
 
-    await tester.pumpWidget(
-      scopedContentShell(contentScope, cards: [firstCard, secondCard]),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        scopedContentShell(contentScope, cards: [firstCard, secondCard]),
+      );
+      await tester.pump();
 
-    final boundary = SidebarFocusBoundary(
-      sidebarNode: sidebarNode,
-      contentScope: contentScope,
-    );
-    secondCard.requestFocus();
-    await tester.pump();
-    expect(boundary.focusSidebar(), isTrue);
+      final boundary = SidebarFocusBoundary(
+        sidebarNode: sidebarNode,
+        contentScope: contentScope,
+      );
+      secondCard.requestFocus();
+      await tester.pump();
+      expect(boundary.focusSidebar(), isTrue);
 
-    // Re-pump with a different card, the way `context.go` replaces the routed
-    // child: the remembered node is gone and the region holds a new focusable
-    // in its place. RIGHT must land there rather than doing nothing.
-    await tester
-        .pumpWidget(scopedContentShell(contentScope, cards: [freshCard]));
-    await tester.pump();
+      // Re-pump with a different card, the way `context.go` replaces the routed
+      // child: the remembered node is gone and the region holds a new focusable
+      // in its place. RIGHT must land there rather than doing nothing.
+      await tester.pumpWidget(
+        scopedContentShell(contentScope, cards: [freshCard]),
+      );
+      await tester.pump();
 
-    expect(boundary.focusContent(), isTrue);
-    expect(
-      FocusManager.instance.primaryFocus,
-      same(freshCard),
-      reason: 'the fallback must land on a real node in the region, not merely '
-          'report that it moved',
-    );
-  });
+      expect(boundary.focusContent(), isTrue);
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(freshCard),
+        reason:
+            'the fallback must land on a real node in the region, not merely '
+            'report that it moved',
+      );
+    },
+  );
 
   testWidgets('an empty content region reports no move', (tester) async {
     final contentScope = FocusScopeNode(debugLabel: 'content-region');

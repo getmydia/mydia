@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 
 class PlayButton extends StatefulWidget {
   final VoidCallback? onPressed;
 
-  const PlayButton({
-    super.key,
-    this.onPressed,
-  });
+  const PlayButton({super.key, this.onPressed});
 
   @override
   State<PlayButton> createState() => _PlayButtonState();
@@ -28,9 +26,10 @@ class _PlayButtonState extends State<PlayButton>
       duration: const Duration(milliseconds: 100),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.90).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.90,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override

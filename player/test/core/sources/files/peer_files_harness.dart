@@ -58,32 +58,32 @@ PeerSharedAccount lentFlocal({
   int revision = 1,
   String name = 'Folders',
   String accountId = kFilesLocalAccountId,
-}) =>
-    PeerSharedAccount(
-      nodeId: hostNode,
-      deviceName: 'Den Desktop',
-      wire: FlutterWireSharedAccount(
-        accountId: accountId,
-        kind: 'local',
-        name: name,
-        revision: BigInt.from(revision),
-      ),
-    );
+}) => PeerSharedAccount(
+  nodeId: hostNode,
+  deviceName: 'Den Desktop',
+  wire: FlutterWireSharedAccount(
+    accountId: accountId,
+    kind: 'local',
+    name: name,
+    revision: BigInt.from(revision),
+  ),
+);
 
 /// The host's own `flocal` index: one invented film and a loose file whose
 /// name could not be read, under a root of its own.
 Future<FileLibraryIndex> hostIndex(Box<Map<dynamic, dynamic>> box) async {
   final index = FileLibraryIndex(box, accountId: kFilesLocalAccountId);
-  await index.putRoot(const LibraryRoot(
-    id: 'rhost',
-    path: '/srv/films',
-    kind: FilesLibraryKind.mixed,
-    title: 'Host films',
-  ));
-  final parsed = FakeMediaNames()
-      .parseBatch(
-          '/srv/films', ['Quiet Meridian (2027).mkv'], FilesLibraryKind.mixed)
-      .single;
+  await index.putRoot(
+    const LibraryRoot(
+      id: 'rhost',
+      path: '/srv/films',
+      kind: FilesLibraryKind.mixed,
+      title: 'Host films',
+    ),
+  );
+  final parsed = FakeMediaNames().parseBatch('/srv/films', [
+    'Quiet Meridian (2027).mkv',
+  ], FilesLibraryKind.mixed).single;
   await index.putFiles([
     IndexedFile(
       key: fileKeyFor('rhost', parsed.path),
@@ -103,17 +103,17 @@ Future<FileLibraryIndex> hostIndex(Box<Map<dynamic, dynamic>> box) async {
       firstSeen: filesT0,
     ),
   ]);
-  await index.putGroup(GroupMatch(
-    groupKey: parsed.groupKey,
-    isShow: false,
-    tmdbId: 301,
-    matchedAt: filesT0,
-  ));
-  await index.putMovie(const MatchedMovie(
-    tmdbId: 301,
-    title: 'Quiet Meridian',
-    year: 2027,
-  ));
+  await index.putGroup(
+    GroupMatch(
+      groupKey: parsed.groupKey,
+      isShow: false,
+      tmdbId: 301,
+      matchedAt: filesT0,
+    ),
+  );
+  await index.putMovie(
+    const MatchedMovie(tmdbId: 301, title: 'Quiet Meridian', year: 2027),
+  );
   return index;
 }
 
@@ -141,32 +141,39 @@ class PeerHarness {
   /// [inMemory] as in [FilesFixture.create].
   Future<void> seed({bool inMemory = false}) async {
     final bytes = inMemory ? Uint8List(0) : null;
-    store = PeerFilesStore(await Hive.openBox<Map<dynamic, dynamic>>(
+    store = PeerFilesStore(
+      await Hive.openBox<Map<dynamic, dynamic>>(
         'peer_files_test',
-        bytes: bytes));
-    host = await hostIndex(await Hive.openBox<Map<dynamic, dynamic>>(
+        bytes: bytes,
+      ),
+    );
+    host = await hostIndex(
+      await Hive.openBox<Map<dynamic, dynamic>>(
         'host_index_test',
-        bytes: bytes));
+        bytes: bytes,
+      ),
+    );
     await store.replace(peerLocalId, 1, pageIndex(host));
   }
 
   List<Override> overrides(SourceStore sources) => [
-        ...noHiveOverrides,
-        sourceStoreProvider.overrideWith((ref) async => sources),
-        filesIndexBoxProvider.overrideWithValue(f.box),
-        filesProgressStoreProvider.overrideWithValue(f.progress),
-        mediaNamesProvider.overrideWithValue(FakeMediaNames()),
-        relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-        filesBackendBuilderProvider.overrideWithValue((ref, source) =>
-            backends.putIfAbsent(source, () => FakeBackend({}))),
-        filesClockProvider.overrideWithValue(() => DateTime.utc(2030)),
-        peerFilesStoreProvider.overrideWithValue(store),
-        peerFilesClientProvider.overrideWithValue(client),
-        peerSyncStoreProvider.overrideWithValue(syncStore),
-        peerSyncServiceProvider.overrideWithValue(QuietPeerSync()),
-        peerConnectedProvider.overrideWithValue(connected.stream),
-        mediaProxyProvider.overrideWithValue(proxy),
-      ];
+    ...noHiveOverrides,
+    sourceStoreProvider.overrideWith((ref) async => sources),
+    filesIndexBoxProvider.overrideWithValue(f.box),
+    filesProgressStoreProvider.overrideWithValue(f.progress),
+    mediaNamesProvider.overrideWithValue(FakeMediaNames()),
+    relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
+    filesBackendBuilderProvider.overrideWithValue(
+      (ref, source) => backends.putIfAbsent(source, () => FakeBackend({})),
+    ),
+    filesClockProvider.overrideWithValue(() => DateTime.utc(2030)),
+    peerFilesStoreProvider.overrideWithValue(store),
+    peerFilesClientProvider.overrideWithValue(client),
+    peerSyncStoreProvider.overrideWithValue(syncStore),
+    peerSyncServiceProvider.overrideWithValue(QuietPeerSync()),
+    peerConnectedProvider.overrideWithValue(connected.stream),
+    mediaProxyProvider.overrideWithValue(proxy),
+  ];
 
   /// A container that also holds this device's own `flocal` account.
   Future<ProviderContainer> container() async {

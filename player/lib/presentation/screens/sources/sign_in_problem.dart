@@ -32,16 +32,16 @@ enum SignInIssue {
 /// server sent.
 class SignInProblem {
   const SignInProblem(SignInIssue this.issue)
-      : serverMessage = null,
-        error = null;
+    : serverMessage = null,
+      error = null;
   const SignInProblem.fromServer(String this.serverMessage)
-      : issue = null,
-        error = null;
+    : issue = null,
+      error = null;
 
   /// A source failure, worded with `AppLocalizations.sourceError`.
   const SignInProblem.fromError(SourceException this.error)
-      : issue = null,
-        serverMessage = null;
+    : issue = null,
+      serverMessage = null;
 
   final SignInIssue? issue;
   final String? serverMessage;

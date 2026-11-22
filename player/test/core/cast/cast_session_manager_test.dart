@@ -29,12 +29,12 @@ FakeMydiaTransport _progressServer() {
 
 /// The progress mutations a server received.
 List<({String operation, Map<String, dynamic> vars})> _progressCalls(
-        FakeMydiaTransport server) =>
-    [
-      for (final c in server.calls)
-        if (c.operation.startsWith('Update'))
-          (operation: c.operation, vars: c.vars),
-    ];
+  FakeMydiaTransport server,
+) => [
+  for (final c in server.calls)
+    if (c.operation.startsWith('Update'))
+      (operation: c.operation, vars: c.vars),
+];
 
 /// A store whose next save can be held open, to interleave a progress tick
 /// with a cast change.
@@ -81,8 +81,7 @@ class FakeBackend implements CastBackend {
   Stream<List<CastDevice>> startDiscovery({
     required CastCapabilities capabilities,
     Duration timeout = const Duration(seconds: 10),
-  }) =>
-      Stream.value(devices);
+  }) => Stream.value(devices);
 
   @override
   void stopDiscovery() {}
@@ -170,26 +169,25 @@ FlutterPlaybackSnapshot _snapshot({
   List<FlutterTrackInfo> subtitleTracks = const [],
   String? selectedSubtitle,
   BigInt? sequence,
-}) =>
-    FlutterPlaybackSnapshot(
-      state: state,
-      mediaItemId: mediaItemId,
-      episodeId: episodeId,
-      title: title,
-      imageUrl: imageUrl,
-      positionMs: positionMs ?? BigInt.zero,
-      durationMs: durationMs ?? BigInt.from(60000),
-      muted: false,
-      audioTracks: const [],
-      subtitleTracks: subtitleTracks,
-      selectedSubtitle: selectedSubtitle,
-      capabilities: const FlutterTargetCapabilities(
-        volume: true,
-        trackSelection: true,
-        nextPrevious: false,
-      ),
-      sequence: sequence ?? BigInt.one,
-    );
+}) => FlutterPlaybackSnapshot(
+  state: state,
+  mediaItemId: mediaItemId,
+  episodeId: episodeId,
+  title: title,
+  imageUrl: imageUrl,
+  positionMs: positionMs ?? BigInt.zero,
+  durationMs: durationMs ?? BigInt.from(60000),
+  muted: false,
+  audioTracks: const [],
+  subtitleTracks: subtitleTracks,
+  selectedSubtitle: selectedSubtitle,
+  capabilities: const FlutterTargetCapabilities(
+    volume: true,
+    trackSelection: true,
+    nextPrevious: false,
+  ),
+  sequence: sequence ?? BigInt.one,
+);
 
 void main() {
   const device = CastDevice(
@@ -324,7 +322,8 @@ void main() {
       expect(
         backend.loadedRequests.single.url,
         startsWith(
-            'https://mydia.test/api/v1/hls/${sessions.started.single}/index.m3u8'),
+          'https://mydia.test/api/v1/hls/${sessions.started.single}/index.m3u8',
+        ),
       );
       expect(sessions.requestedFileIds.single, 'file-1');
       expect(backend.loadedRequests.single.kind, CastMediaKind.hls);
@@ -346,8 +345,10 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(lanCalls, [true]);
-      expect(backend.loadedRequests.single.url,
-          startsWith('http://192.168.1.20:5000/g/abcd/'));
+      expect(
+        backend.loadedRequests.single.url,
+        startsWith('http://192.168.1.20:5000/g/abcd/'),
+      );
     });
 
     test('persists the session', () async {
@@ -381,60 +382,68 @@ void main() {
 
       await expectLater(
         manager.startCast(device: device, request: launch),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)),
+        throwsA(
+          isA<CastBackendException>().having(
+            (e) => e.kind,
+            'kind',
+            CastFailureKind.unreachable,
+          ),
+        ),
       );
     });
   });
 
   group('switching cast items without stopping', () {
-    test('does not sync a new item using the previous item\'s duration',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'does not sync a new item using the previous item\'s duration',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(device: device, request: launch);
-      // Only the duration arrives for the first item — no position event,
-      // so nothing syncs yet, but `_lastDuration` is now 200s.
-      backend.emitDuration(const Duration(seconds: 200));
-      await Future<void>.delayed(Duration.zero);
+        await manager.startCast(device: device, request: launch);
+        // Only the duration arrives for the first item — no position event,
+        // so nothing syncs yet, but `_lastDuration` is now 200s.
+        backend.emitDuration(const Duration(seconds: 200));
+        await Future<void>.delayed(Duration.zero);
 
-      final secondLaunch = CastLaunchRequest(
-        sourceId: _src,
-        fileId: 'file-2',
-        mediaId: 'movie-2',
-        mediaType: 'movie',
-        title: 'Contact',
-      );
-      await manager.startCast(device: device, request: secondLaunch);
+        final secondLaunch = CastLaunchRequest(
+          sourceId: _src,
+          fileId: 'file-2',
+          mediaId: 'movie-2',
+          mediaType: 'movie',
+          title: 'Contact',
+        );
+        await manager.startCast(device: device, request: secondLaunch);
 
-      // The second item's receiver hasn't reported a duration yet. If the
-      // first item's duration leaked through, this would incorrectly sync.
-      backend.emitPosition(const Duration(seconds: 5));
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        // The second item's receiver hasn't reported a duration yet. If the
+        // first item's duration leaked through, this would incorrectly sync.
+        backend.emitPosition(const Duration(seconds: 5));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(_progressCalls(server), isEmpty);
-    });
+        expect(_progressCalls(server), isEmpty);
+      },
+    );
   });
 
   group('startCast failure rollback', () {
-    test('disables LAN access and disconnects when the bridge retry fails',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-      backend.failAllLoads(CastFailureKind.unreachable);
-
-      await expectLater(
-        manager.startCast(device: device, request: launch),
-        throwsA(isA<CastBackendException>()),
-      );
-
-      expect(lanCalls, [true, false]);
-      expect(backend.connectedDevice, isNull);
-    });
-
     test(
-        'disables LAN access when the direct-route escalation exhausts '
+      'disables LAN access and disconnects when the bridge retry fails',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
+        backend.failAllLoads(CastFailureKind.unreachable);
+
+        await expectLater(
+          manager.startCast(device: device, request: launch),
+          throwsA(isA<CastBackendException>()),
+        );
+
+        expect(lanCalls, [true, false]);
+        expect(backend.connectedDevice, isNull);
+      },
+    );
+
+    test('disables LAN access when the direct-route escalation exhausts '
         'both the bridge and TRANSCODE attempts', () async {
       final manager = build();
       addTearDown(manager.dispose);
@@ -455,24 +464,31 @@ void main() {
       expect(backend.connectedDevice, isNull);
     });
 
-    test('does not retry a codec failure on the bridge route, and rolls back',
-        () async {
-      final manager = build(isP2pMode: true);
-      addTearDown(manager.dispose);
-      backend.failNextLoad(CastFailureKind.mediaLoadFailed);
+    test(
+      'does not retry a codec failure on the bridge route, and rolls back',
+      () async {
+        final manager = build(isP2pMode: true);
+        addTearDown(manager.dispose);
+        backend.failNextLoad(CastFailureKind.mediaLoadFailed);
 
-      await expectLater(
-        manager.startCast(device: device, request: launch),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.mediaLoadFailed)),
-      );
+        await expectLater(
+          manager.startCast(device: device, request: launch),
+          throwsA(
+            isA<CastBackendException>().having(
+              (e) => e.kind,
+              'kind',
+              CastFailureKind.mediaLoadFailed,
+            ),
+          ),
+        );
 
-      // LAN was turned on for the one bridge attempt, then rolled back —
-      // never a second attempt with a rebuilt (identical) bridge URL.
-      expect(lanCalls, [true, false]);
-      expect(backend.loadedRequests, isEmpty);
-      expect(backend.connectedDevice, isNull);
-    });
+        // LAN was turned on for the one bridge attempt, then rolled back —
+        // never a second attempt with a rebuilt (identical) bridge URL.
+        expect(lanCalls, [true, false]);
+        expect(backend.loadedRequests, isEmpty);
+        expect(backend.connectedDevice, isNull);
+      },
+    );
   });
 
   group('direct-route load failure', () {
@@ -484,8 +500,10 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(lanCalls, [true]);
-      expect(backend.loadedRequests.single.url,
-          startsWith('http://192.168.1.20:5000/g/abcd/'));
+      expect(
+        backend.loadedRequests.single.url,
+        startsWith('http://192.168.1.20:5000/g/abcd/'),
+      );
     });
 
     test('rethrows when the bridge retry also fails', () async {
@@ -495,8 +513,13 @@ void main() {
 
       await expectLater(
         manager.startCast(device: device, request: launch),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)),
+        throwsA(
+          isA<CastBackendException>().having(
+            (e) => e.kind,
+            'kind',
+            CastFailureKind.unreachable,
+          ),
+        ),
       );
       expect(backend.loadedRequests, isEmpty);
     });
@@ -504,43 +527,49 @@ void main() {
 
   group('codec failure escalation', () {
     test(
-        'retries via the bridge rather than TRANSCODE when a bridge is available',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-      backend.failNextLoad(CastFailureKind.mediaLoadFailed);
+      'retries via the bridge rather than TRANSCODE when a bridge is available',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
+        backend.failNextLoad(CastFailureKind.mediaLoadFailed);
 
-      await manager.startCast(device: device, request: launch);
+        await manager.startCast(device: device, request: launch);
 
-      expect(lanCalls, [true]);
-      expect(backend.loadedRequests.single.url,
-          startsWith('http://192.168.1.20:5000/g/abcd/'));
-    });
-
-    test('falls back to TRANSCODE directly when no bridge is available',
-        () async {
-      hasLanInterface = false;
-      final manager = build();
-      addTearDown(manager.dispose);
-      backend.failNextLoad(CastFailureKind.mediaLoadFailed);
-
-      await manager.startCast(device: device, request: launch);
-
-      // Whether a bridge exists cannot be known without binding the proxy —
-      // `lanBaseUrl` only exists once LAN access is on. So the bridge retry
-      // turns it on, discovers there is no LAN interface, and turns it
-      // straight back off before escalating to TRANSCODE.
-      expect(lanCalls, [true, false]);
-      // The Chromecast escalation now rides on the server-side session rather
-      // than a `strategy=` query param, so the fake's transcode marker in the
-      // session id is where it shows.
-      expect(sessions.started.last, contains('transcode'));
-      expect(
-          backend.loadedRequests.single.url, contains(sessions.started.last));
-    });
+        expect(lanCalls, [true]);
+        expect(
+          backend.loadedRequests.single.url,
+          startsWith('http://192.168.1.20:5000/g/abcd/'),
+        );
+      },
+    );
 
     test(
-        'escalates direct -> bridge -> TRANSCODE when both the direct and '
+      'falls back to TRANSCODE directly when no bridge is available',
+      () async {
+        hasLanInterface = false;
+        final manager = build();
+        addTearDown(manager.dispose);
+        backend.failNextLoad(CastFailureKind.mediaLoadFailed);
+
+        await manager.startCast(device: device, request: launch);
+
+        // Whether a bridge exists cannot be known without binding the proxy —
+        // `lanBaseUrl` only exists once LAN access is on. So the bridge retry
+        // turns it on, discovers there is no LAN interface, and turns it
+        // straight back off before escalating to TRANSCODE.
+        expect(lanCalls, [true, false]);
+        // The Chromecast escalation now rides on the server-side session rather
+        // than a `strategy=` query param, so the fake's transcode marker in the
+        // session id is where it shows.
+        expect(sessions.started.last, contains('transcode'));
+        expect(
+          backend.loadedRequests.single.url,
+          contains(sessions.started.last),
+        );
+      },
+    );
+
+    test('escalates direct -> bridge -> TRANSCODE when both the direct and '
         'bridge attempts fail', () async {
       final manager = build();
       addTearDown(manager.dispose);
@@ -550,11 +579,15 @@ void main() {
 
       await manager.startCast(device: device, request: launch);
 
-      expect(backend.loadedRequests.single.url,
-          startsWith('https://mydia.test/api/v1/hls/'));
+      expect(
+        backend.loadedRequests.single.url,
+        startsWith('https://mydia.test/api/v1/hls/'),
+      );
       expect(sessions.started.last, contains('transcode'));
       expect(
-          backend.loadedRequests.single.url, contains(sessions.started.last));
+        backend.loadedRequests.single.url,
+        contains(sessions.started.last),
+      );
     });
 
     test('stops escalating after the TRANSCODE attempt and rethrows', () async {
@@ -567,8 +600,13 @@ void main() {
 
       await expectLater(
         manager.startCast(device: device, request: launch),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.mediaLoadFailed)),
+        throwsA(
+          isA<CastBackendException>().having(
+            (e) => e.kind,
+            'kind',
+            CastFailureKind.mediaLoadFailed,
+          ),
+        ),
       );
 
       // Bridge was tried (turning LAN on), then TRANSCODE back on the
@@ -590,38 +628,45 @@ void main() {
       expect(manager.currentSession?.isStale, isTrue);
     });
 
-    test('a revoked pairing (notAuthorized) also marks the session stale',
-        () async {
-      // A Mydia target that revokes this app mid-session cannot take any
-      // further commands, same as one that dropped off the network — without
-      // this the controller would keep showing live transport controls for a
-      // target refusing every one of them.
-      final manager = build();
-      addTearDown(manager.dispose);
-      await manager.startCast(device: device, request: launch);
+    test(
+      'a revoked pairing (notAuthorized) also marks the session stale',
+      () async {
+        // A Mydia target that revokes this app mid-session cannot take any
+        // further commands, same as one that dropped off the network — without
+        // this the controller would keep showing live transport controls for a
+        // target refusing every one of them.
+        final manager = build();
+        addTearDown(manager.dispose);
+        await manager.startCast(device: device, request: launch);
 
-      backend.emitFailure(CastFailureKind.notAuthorized);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        backend.emitFailure(CastFailureKind.notAuthorized);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(manager.currentSession?.isStale, isTrue);
-    });
+        expect(manager.currentSession?.isStale, isTrue);
+      },
+    );
 
-    test('notPlaying is left alone: not an error the UI needs to see',
-        () async {
-      // Mydia's own backend treats `notPlaying` as a benign state to
-      // re-sync from, not a failure. Routing it to the session state here
-      // would raise an alarming "lost" bar for a non-event.
-      final manager = build();
-      addTearDown(manager.dispose);
-      await manager.startCast(device: device, request: launch);
-      final before = manager.currentSession;
+    test(
+      'notPlaying is left alone: not an error the UI needs to see',
+      () async {
+        // Mydia's own backend treats `notPlaying` as a benign state to
+        // re-sync from, not a failure. Routing it to the session state here
+        // would raise an alarming "lost" bar for a non-event.
+        final manager = build();
+        addTearDown(manager.dispose);
+        await manager.startCast(device: device, request: launch);
+        final before = manager.currentSession;
 
-      backend.emitFailure(CastFailureKind.notPlaying);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        backend.emitFailure(CastFailureKind.notPlaying);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(manager.currentSession?.connectionState, before?.connectionState);
-      expect(manager.currentSession?.isStale, isFalse);
-    });
+        expect(
+          manager.currentSession?.connectionState,
+          before?.connectionState,
+        );
+        expect(manager.currentSession?.isStale, isFalse);
+      },
+    );
 
     test('keeps the stored session so it can be reconnected', () async {
       final manager = build();
@@ -678,19 +723,23 @@ void main() {
       backend.emitDuration(const Duration(minutes: 108));
       await Future<void>.delayed(Duration.zero);
 
-      expect(manager.currentSession?.mediaInfo?.duration,
-          const Duration(minutes: 108));
+      expect(
+        manager.currentSession?.mediaInfo?.duration,
+        const Duration(minutes: 108),
+      );
     });
 
-    test('persists the duration so a reconnect keeps a usable scrub bar',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'persists the duration so a reconnect keeps a usable scrub bar',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(device: device, request: launchWithDuration);
+        await manager.startCast(device: device, request: launchWithDuration);
 
-      expect((await store.load())?.duration, knownRuntime);
-    });
+        expect((await store.load())?.duration, knownRuntime);
+      },
+    );
   });
 
   group('progress sync', () {
@@ -744,30 +793,32 @@ void main() {
       expect((await store.load())?.position, const Duration(seconds: 100));
     });
 
-    test('sends the episode mutation, not the movie one, for an episode cast',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-      final episodeLaunch = CastLaunchRequest(
-        sourceId: _src,
-        fileId: 'file-3',
-        mediaId: 'ep-1',
-        mediaType: 'episode',
-        title: 'Pilot',
-      );
-      await manager.startCast(device: device, request: episodeLaunch);
+    test(
+      'sends the episode mutation, not the movie one, for an episode cast',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
+        final episodeLaunch = CastLaunchRequest(
+          sourceId: _src,
+          fileId: 'file-3',
+          mediaId: 'ep-1',
+          mediaType: 'episode',
+          title: 'Pilot',
+        );
+        await manager.startCast(device: device, request: episodeLaunch);
 
-      backend.emitDuration(const Duration(seconds: 200));
-      backend.emitPosition(const Duration(seconds: 100));
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        backend.emitDuration(const Duration(seconds: 200));
+        backend.emitPosition(const Duration(seconds: 100));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      // Counting calls alone would pass even if syncMoviePosition and
-      // syncEpisodePosition were swapped — assert on the actual mutation
-      // document sent, not just that *a* mutation fired.
-      final calls = _progressCalls(server);
-      expect(calls, hasLength(1));
-      expect(calls.single.operation, 'UpdateEpisodeProgress');
-    });
+        // Counting calls alone would pass even if syncMoviePosition and
+        // syncEpisodePosition were swapped — assert on the actual mutation
+        // document sent, not just that *a* mutation fired.
+        final calls = _progressCalls(server);
+        expect(calls, hasLength(1));
+        expect(calls.single.operation, 'UpdateEpisodeProgress');
+      },
+    );
 
     /// `CastSessionManager` owns one long-lived `ProgressService` instance
     /// (this manager is a keep-alive provider reused across every cast
@@ -777,8 +828,7 @@ void main() {
     /// own duration stream is exactly the thing that authority guards
     /// against: Mydia's HLS playlists carry no `#EXT-X-ENDLIST` until FFmpeg
     /// finishes, so the receiver reports a partial, still-growing figure.
-    test(
-        'syncs against the request\'s known duration, not whatever the '
+    test('syncs against the request\'s known duration, not whatever the '
         'receiver reports', () async {
       final manager = build();
       addTearDown(manager.dispose);
@@ -839,13 +889,19 @@ void main() {
 
       await manager.detach();
 
-      expect(backend.stopCallCount, 0,
-          reason: 'detach must never tell the receiver to stop');
+      expect(
+        backend.stopCallCount,
+        0,
+        reason: 'detach must never tell the receiver to stop',
+      );
       expect(backend.disconnectCallCount, disconnectsBefore + 1);
       expect(backend.connectedDevice, isNull);
       expect(manager.currentSession, isNull);
-      expect(await store.load(), isNull,
-          reason: 'a relaunch must not re-adopt a session the user let go of');
+      expect(
+        await store.load(),
+        isNull,
+        reason: 'a relaunch must not re-adopt a session the user let go of',
+      );
       expect(lanCalls, [true, false]);
     });
 
@@ -874,9 +930,13 @@ void main() {
       backend.releaseConnect();
       await connecting;
 
-      expect(manager.currentSession, isNull,
-          reason: 'a connect resolving after the detach must not resurrect '
-              'the session');
+      expect(
+        manager.currentSession,
+        isNull,
+        reason:
+            'a connect resolving after the detach must not resurrect '
+            'the session',
+      );
       expect(backend.connectedDevice, isNull);
       expect(backend.stopCallCount, 0);
     });
@@ -999,18 +1059,20 @@ void main() {
       expect(await store.load(), isNull);
     });
 
-    test('discards the session when the receiver state is unknowable',
-        () async {
-      // This is what the real DartCastBackend always answers today.
-      await storeSession();
-      backend.receiverContentUrl = null;
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'discards the session when the receiver state is unknowable',
+      () async {
+        // This is what the real DartCastBackend always answers today.
+        await storeSession();
+        backend.receiverContentUrl = null;
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      expect(await manager.restoreSession(), isFalse);
-      expect(backend.connectedDevice, isNull);
-      expect(await store.load(), isNull);
-    });
+        expect(await manager.restoreSession(), isFalse);
+        expect(backend.connectedDevice, isNull);
+        expect(await store.load(), isNull);
+      },
+    );
 
     test('discards a record written before URLs were persisted', () async {
       await storeSession(mediaUrl: '');
@@ -1051,21 +1113,23 @@ void main() {
       expect(_progressCalls(server), hasLength(1));
     });
 
-    test('marks a restored session stale when the receiver disconnects',
-        () async {
-      await storeSession();
-      backend.receiverContentUrl =
-          'https://mydia.test/api/v1/stream/file/file-1';
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'marks a restored session stale when the receiver disconnects',
+      () async {
+        await storeSession();
+        backend.receiverContentUrl =
+            'https://mydia.test/api/v1/stream/file/file-1';
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      expect(await manager.restoreSession(), isTrue);
+        expect(await manager.restoreSession(), isTrue);
 
-      backend.emitFailure(CastFailureKind.connectionLost);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        backend.emitFailure(CastFailureKind.connectionLost);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(manager.currentSession?.isStale, isTrue);
-    });
+        expect(manager.currentSession?.isStale, isTrue);
+      },
+    );
 
     test('reloads a bridge-route session at the stored position', () async {
       // The bridge byte source died with the app: the proxy is on a new port
@@ -1086,15 +1150,19 @@ void main() {
 
       expect(lanCalls, [true]);
       expect(backend.loadedRequests, hasLength(1));
-      expect(backend.loadedRequests.single.url,
-          startsWith('http://192.168.1.20:5000/g/abcd/hls/'));
+      expect(
+        backend.loadedRequests.single.url,
+        startsWith('http://192.168.1.20:5000/g/abcd/hls/'),
+      );
       // The stored position is now asked of the server, so the rebuilt HLS
       // session starts there rather than at the beginning.
       expect(sessions.requestedStart, const Duration(minutes: 5));
       // This fake echoes an offset of zero, i.e. an older server that ignored
       // the request, so the whole position is still left to a receiver seek.
-      expect(backend.loadedRequests.single.startPosition,
-          const Duration(minutes: 5));
+      expect(
+        backend.loadedRequests.single.startPosition,
+        const Duration(minutes: 5),
+      );
 
       // Proves `_lanEnabled` was actually flipped back on, not just that
       // setLanAccess was called once — a later stopCast must still be able
@@ -1120,31 +1188,32 @@ void main() {
       expect(lanCalls, [true, false]);
     });
 
-    test('keeps the persisted subtitle choice across a bridge-route reload',
-        () async {
-      // The bridge branch reloads through `_loadOnRoute`, which re-saves
-      // `_persisted` from the rebuilt request. If `restoreSession` didn't
-      // carry `selectedSubtitleTrackId` onto that request, this reload would
-      // silently overwrite the store's real choice with null.
-      const bridgeUrl =
-          'http://192.168.1.20:4999/g/old/hls/session-old/index.m3u8';
-      await storeSession(
-        routeKind: CastRouteKind.localBridge,
-        mediaUrl: bridgeUrl,
-        selectedSubtitleTrackId: '3',
-      );
-      backend.receiverContentUrl = bridgeUrl;
-      final manager = build(isP2pMode: true);
-      addTearDown(manager.dispose);
-
-      expect(await manager.restoreSession(), isTrue);
-
-      expect((await store.load())?.selectedSubtitleTrackId, '3');
-      expect(manager.persistedSession?.selectedSubtitleTrackId, '3');
-    });
-
     test(
-        'a stored Mydia session survives restoreSession when no Mydia '
+      'keeps the persisted subtitle choice across a bridge-route reload',
+      () async {
+        // The bridge branch reloads through `_loadOnRoute`, which re-saves
+        // `_persisted` from the rebuilt request. If `restoreSession` didn't
+        // carry `selectedSubtitleTrackId` onto that request, this reload would
+        // silently overwrite the store's real choice with null.
+        const bridgeUrl =
+            'http://192.168.1.20:4999/g/old/hls/session-old/index.m3u8';
+        await storeSession(
+          routeKind: CastRouteKind.localBridge,
+          mediaUrl: bridgeUrl,
+          selectedSubtitleTrackId: '3',
+        );
+        backend.receiverContentUrl = bridgeUrl;
+        final manager = build(isP2pMode: true);
+        addTearDown(manager.dispose);
+
+        expect(await manager.restoreSession(), isTrue);
+
+        expect((await store.load())?.selectedSubtitleTrackId, '3');
+        expect(manager.persistedSession?.selectedSubtitleTrackId, '3');
+      },
+    );
+
+    test('a stored Mydia session survives restoreSession when no Mydia '
         'backend exists yet, and is restored once one appears', () async {
       const mydiaDevice = CastDevice(
         id: 'node-tv',
@@ -1153,18 +1222,20 @@ void main() {
       );
       const mediaUrl = 'https://mydia.test/api/v1/stream/file/file-1';
       final mydiaStore = InMemoryCastSessionStore();
-      await mydiaStore.save(PersistedCastSession(
-        sourceId: _src,
-        device: mydiaDevice,
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: 'file-1',
-        title: 'Arrival',
-        position: const Duration(minutes: 5),
-        routeKind: CastRouteKind.directServer,
-        savedAt: DateTime.utc(2026, 7, 28, 11),
-        mediaUrl: mediaUrl,
-      ));
+      await mydiaStore.save(
+        PersistedCastSession(
+          sourceId: _src,
+          device: mydiaDevice,
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          fileId: 'file-1',
+          title: 'Arrival',
+          position: const Duration(minutes: 5),
+          routeKind: CastRouteKind.directServer,
+          savedAt: DateTime.utc(2026, 7, 28, 11),
+          mediaUrl: mediaUrl,
+        ),
+      );
 
       CastBackend? mydia;
       final manager = buildManagerWithBackends(
@@ -1179,9 +1250,13 @@ void main() {
       // throws, and the stored session must be left alone rather than
       // cleared like every other restore failure above.
       expect(await manager.restoreSession(), isFalse);
-      expect(await mydiaStore.load(), isNotNull,
-          reason: 'a Mydia backend that is not ready yet must not cost the '
-              'user their stored session');
+      expect(
+        await mydiaStore.load(),
+        isNotNull,
+        reason:
+            'a Mydia backend that is not ready yet must not cost the '
+            'user their stored session',
+      );
 
       // The Mydia backend comes up (P2P host finished starting) and reports
       // the receiver is still playing what was stored; a second restore call
@@ -1196,23 +1271,25 @@ void main() {
   });
 
   group('reconnectStoredSession', () {
-    test('re-casts the stored media, not whatever the caller is showing',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-      await manager.startCast(device: device, request: launch);
-      backend.loadedRequests.clear();
+    test(
+      're-casts the stored media, not whatever the caller is showing',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
+        await manager.startCast(device: device, request: launch);
+        backend.loadedRequests.clear();
 
-      backend.emitFailure(CastFailureKind.connectionLost);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        backend.emitFailure(CastFailureKind.connectionLost);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      await manager.reconnectStoredSession();
+        await manager.reconnectStoredSession();
 
-      // The URL is session-addressed now, so the file id only shows in what
-      // the route asked the server for.
-      expect(sessions.requestedFileIds.last, 'file-1');
-      expect(backend.loadedRequests.single.title, 'Arrival');
-    });
+        // The URL is session-addressed now, so the file id only shows in what
+        // the route asked the server for.
+        expect(sessions.requestedFileIds.last, 'file-1');
+        expect(backend.loadedRequests.single.title, 'Arrival');
+      },
+    );
 
     test('reports a missing session rather than casting nothing', () async {
       final manager = build();
@@ -1224,8 +1301,7 @@ void main() {
       );
     });
 
-    test(
-        'keeps the persisted subtitle choice rather than overwriting it '
+    test('keeps the persisted subtitle choice rather than overwriting it '
         'with null', () async {
       // Unlike restoreSession's direct-route branch (which adopts a
       // receiver without reloading), this always reaches `_loadOnRoute` via
@@ -1304,8 +1380,7 @@ void main() {
       duration: const Duration(hours: 1),
     );
 
-    test(
-        'seeks the receiver in place, translated to player coordinates, '
+    test('seeks the receiver in place, translated to player coordinates, '
         'when the target is within reach', () async {
       sessions.echoedStartOffset = const Duration(seconds: 2394);
       final manager = build();
@@ -1314,15 +1389,18 @@ void main() {
 
       await manager.seek(const Duration(seconds: 2410));
 
-      expect(backend.seeks, [const Duration(seconds: 16)],
-          reason: 'real target minus the offset the server actually used');
-      expect(backend.loadedRequests, hasLength(1),
-          reason: 'a reachable target seeks in place, no restart');
+      expect(backend.seeks, [
+        const Duration(seconds: 16),
+      ], reason: 'real target minus the offset the server actually used');
+      expect(
+        backend.loadedRequests,
+        hasLength(1),
+        reason: 'a reachable target seeks in place, no restart',
+      );
       expect(sessions.started, hasLength(1));
     });
 
-    test(
-        'restarts the session on the same item when the target is far '
+    test('restarts the session on the same item when the target is far '
         'ahead of the current position', () async {
       sessions.echoedStartOffset = const Duration(seconds: 2394);
       final manager = build();
@@ -1331,8 +1409,11 @@ void main() {
 
       await manager.seek(const Duration(seconds: 3000));
 
-      expect(backend.seeks, isEmpty,
-          reason: 'the receiver was reloaded, not seeked in place');
+      expect(
+        backend.seeks,
+        isEmpty,
+        reason: 'the receiver was reloaded, not seeked in place',
+      );
       expect(backend.loadedRequests, hasLength(2));
       expect(sessions.requestedStart, const Duration(seconds: 3000));
       expect(manager.persistedSession?.position, const Duration(seconds: 3000));
@@ -1342,22 +1423,23 @@ void main() {
       expect(backend.loadedRequests.last.title, 'Arrival');
     });
 
-    test('restarts the session when the target is before the start offset',
-        () async {
-      sessions.echoedStartOffset = const Duration(seconds: 2394);
-      final manager = build();
-      addTearDown(manager.dispose);
-      await manager.startCast(device: device, request: launchWithPosition);
+    test(
+      'restarts the session when the target is before the start offset',
+      () async {
+        sessions.echoedStartOffset = const Duration(seconds: 2394);
+        final manager = build();
+        addTearDown(manager.dispose);
+        await manager.startCast(device: device, request: launchWithPosition);
 
-      await manager.seek(const Duration(seconds: 300));
+        await manager.seek(const Duration(seconds: 300));
 
-      expect(backend.seeks, isEmpty);
-      expect(backend.loadedRequests, hasLength(2));
-      expect(sessions.requestedStart, const Duration(seconds: 300));
-    });
+        expect(backend.seeks, isEmpty);
+        expect(backend.loadedRequests, hasLength(2));
+        expect(sessions.requestedStart, const Duration(seconds: 300));
+      },
+    );
 
-    test('a restart keeps the subtitles and artwork the cast was launched with',
-        () async {
+    test('a restart keeps the subtitles and artwork the cast was launched with', () async {
       // `PersistedCastSession` carries neither, because it exists to survive
       // the app being killed and a cold restore cannot act on them. Rebuilding
       // the restart request from it stripped subtitle tracks off the receiver
@@ -1390,13 +1472,19 @@ void main() {
         ),
       );
 
-      expect(backend.loadedRequests.first.subtitles, hasLength(1),
-          reason: 'guard: the initial cast really did carry a subtitle track');
+      expect(
+        backend.loadedRequests.first.subtitles,
+        hasLength(1),
+        reason: 'guard: the initial cast really did carry a subtitle track',
+      );
 
       await manager.seek(const Duration(seconds: 3000));
 
-      expect(backend.loadedRequests, hasLength(2),
-          reason: 'guard: the seek really did restart rather than seek');
+      expect(
+        backend.loadedRequests,
+        hasLength(2),
+        reason: 'guard: the seek really did restart rather than seek',
+      );
       final reloaded = backend.loadedRequests.last;
       expect(reloaded.subtitles, hasLength(1));
       expect(reloaded.subtitles.single.language, 'en');
@@ -1404,8 +1492,7 @@ void main() {
       expect(reloaded.imageUrl, 'https://mydia.test/poster.jpg');
     });
 
-    test(
-        'a seek that arrives while a restart is running is dropped, '
+    test('a seek that arrives while a restart is running is dropped, '
         'not queued', () async {
       // A user dragging the scrub bar (or double-tapping skip-forward) can
       // fire a second `seek` before the first one's restart (`startCast`)
@@ -1443,44 +1530,48 @@ void main() {
       expect(sessions.live, isEmpty);
     });
 
-    test('ends the direct route\'s session too, rather than leaking it',
-        () async {
-      // The direct Chromecast route used to redirect through
-      // /api/v1/stream/file/:id, which returns no session id — so
-      // `_adoptHlsSession` had nothing to end and the session it had started
-      // leaked until the server's inactivity timeout.
-      final manager = build();
-      addTearDown(manager.dispose);
-      await manager.startCast(device: device, request: launch);
+    test(
+      'ends the direct route\'s session too, rather than leaking it',
+      () async {
+        // The direct Chromecast route used to redirect through
+        // /api/v1/stream/file/:id, which returns no session id — so
+        // `_adoptHlsSession` had nothing to end and the session it had started
+        // leaked until the server's inactivity timeout.
+        final manager = build();
+        addTearDown(manager.dispose);
+        await manager.startCast(device: device, request: launch);
 
-      expect(sessions.live, hasLength(1));
+        expect(sessions.live, hasLength(1));
 
-      await manager.stopCast();
+        await manager.stopCast();
 
-      expect(sessions.live, isEmpty);
-    });
+        expect(sessions.live, isEmpty);
+      },
+    );
 
-    test('ends the direct route\'s previous session when switching items',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-      await manager.startCast(device: device, request: launch);
-      final first = sessions.started.single;
+    test(
+      'ends the direct route\'s previous session when switching items',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
+        await manager.startCast(device: device, request: launch);
+        final first = sessions.started.single;
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          sourceId: _src,
-          fileId: 'file-2',
-          mediaId: 'movie-2',
-          mediaType: 'movie',
-          title: 'Contact',
-        ),
-      );
+        await manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            sourceId: _src,
+            fileId: 'file-2',
+            mediaId: 'movie-2',
+            mediaType: 'movie',
+            title: 'Contact',
+          ),
+        );
 
-      expect(sessions.ended, contains(first));
-      expect(sessions.live, hasLength(1));
-    });
+        expect(sessions.ended, contains(first));
+        expect(sessions.live, hasLength(1));
+      },
+    );
 
     test('a DLNA cast still opens no session at all', () async {
       // Progressive routes are served straight from the file endpoint, so
@@ -1509,8 +1600,9 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(sessions.started, hasLength(3));
-      expect(sessions.live, [sessions.started.last],
-          reason: 'only the attempt that actually loaded survives');
+      expect(sessions.live, [
+        sessions.started.last,
+      ], reason: 'only the attempt that actually loaded survives');
     });
 
     test('ends every session started by a wholly failed cast', () async {
@@ -1562,7 +1654,9 @@ void main() {
 
       expect(sessions.started.last, contains('transcode'));
       expect(
-          backend.loadedRequests.single.url, contains(sessions.started.last));
+        backend.loadedRequests.single.url,
+        contains(sessions.started.last),
+      );
       expect(lanCalls, [true, false]);
     });
 
@@ -1633,8 +1727,10 @@ void main() {
 
       expect(backend.connectedDevice, device);
       expect(manager.currentSession?.device, device);
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connected,
+      );
       expect(manager.currentSession?.mediaInfo, isNull);
       expect(manager.currentSession?.isStale, isFalse);
     });
@@ -1665,9 +1761,13 @@ void main() {
       await manager.connectTo(device);
 
       expect(backend.loadedRequests, isEmpty);
-      expect(sessions.started, isEmpty,
-          reason: 'an idle connection resolves no route, so there is nothing '
-              'to serve and no HLS session to open');
+      expect(
+        sessions.started,
+        isEmpty,
+        reason:
+            'an idle connection resolves no route, so there is nothing '
+            'to serve and no HLS session to open',
+      );
     });
 
     test('never enables LAN access, even in p2p mode', () async {
@@ -1721,18 +1821,23 @@ void main() {
       expect(manager.currentSession?.isStale, isTrue);
     });
 
-    test('marks the session lost when the pairing is revoked (notAuthorized)',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'marks the session lost when the pairing is revoked (notAuthorized)',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.connectTo(device);
-      backend.emitFailure(CastFailureKind.notAuthorized);
-      await Future<void>.delayed(Duration.zero);
+        await manager.connectTo(device);
+        backend.emitFailure(CastFailureKind.notAuthorized);
+        await Future<void>.delayed(Duration.zero);
 
-      expect(manager.currentSession?.connectionState, CastConnectionState.lost);
-      expect(manager.currentSession?.isStale, isTrue);
-    });
+        expect(
+          manager.currentSession?.connectionState,
+          CastConnectionState.lost,
+        );
+        expect(manager.currentSession?.isStale, isTrue);
+      },
+    );
   });
 
   group('connectTo cancellation', () {
@@ -1745,90 +1850,111 @@ void main() {
     // had nothing to tear down, and the connect resurrected a "connected"
     // session once it finally resolved.
     test(
-        'a cancel that lands while connect is still in flight tears down the '
-        'connection the backend just established, and never republishes it',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-      backend.holdNextConnect();
+      'a cancel that lands while connect is still in flight tears down the '
+      'connection the backend just established, and never republishes it',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
+        backend.holdNextConnect();
 
-      final connecting = manager.connectTo(device);
-      await Future<void>.delayed(Duration.zero);
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connecting);
+        final connecting = manager.connectTo(device);
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          manager.currentSession?.connectionState,
+          CastConnectionState.connecting,
+        );
 
-      // The cancel: `stopCast` runs to completion — including its own
-      // unconditional `disconnect()` — entirely before the backend's
-      // `connect` resolves.
-      await manager.stopCast();
-      expect(manager.currentSession, isNull);
+        // The cancel: `stopCast` runs to completion — including its own
+        // unconditional `disconnect()` — entirely before the backend's
+        // `connect` resolves.
+        await manager.stopCast();
+        expect(manager.currentSession, isNull);
 
-      // Now let the in-flight connect finally resolve.
-      backend.releaseConnect();
-      await connecting;
+        // Now let the in-flight connect finally resolve.
+        backend.releaseConnect();
+        await connecting;
 
-      expect(manager.currentSession, isNull,
-          reason: 'the connect that resolved after the cancel must not '
-              'resurrect a "connected" session');
-      expect(backend.connectedDevice, isNull,
-          reason: 'the superseded connect must disconnect what it just '
+        expect(
+          manager.currentSession,
+          isNull,
+          reason:
+              'the connect that resolved after the cancel must not '
+              'resurrect a "connected" session',
+        );
+        expect(
+          backend.connectedDevice,
+          isNull,
+          reason:
+              'the superseded connect must disconnect what it just '
               'established rather than leaving a live receiver session '
-              'nothing can stop');
-      // stopCast's own unconditional disconnect, plus the superseded
-      // connect's cleanup disconnect.
-      expect(backend.disconnectCallCount, 2);
-    });
+              'nothing can stop',
+        );
+        // stopCast's own unconditional disconnect, plus the superseded
+        // connect's cleanup disconnect.
+        expect(backend.disconnectCallCount, 2);
+      },
+    );
 
     test(
-        'a second connectTo before the first resolves keeps only the '
-        'second\'s session, and disconnects the first instead of publishing it',
-        () async {
-      const other = CastDevice(
-        id: 'd2',
-        name: 'Bedroom',
-        protocol: CastProtocolKind.chromecast,
-      );
-      final manager = build();
-      addTearDown(manager.dispose);
-      backend.holdNextConnect();
+      'a second connectTo before the first resolves keeps only the '
+      'second\'s session, and disconnects the first instead of publishing it',
+      () async {
+        const other = CastDevice(
+          id: 'd2',
+          name: 'Bedroom',
+          protocol: CastProtocolKind.chromecast,
+        );
+        final manager = build();
+        addTearDown(manager.dispose);
+        backend.holdNextConnect();
 
-      final first = manager.connectTo(device);
-      await Future<void>.delayed(Duration.zero);
+        final first = manager.connectTo(device);
+        await Future<void>.delayed(Duration.zero);
 
-      // The user picked a different device before the first connect
-      // resolved — the cast button stays tappable while "Connecting…" shows.
-      final second = manager.connectTo(other);
-      await second;
+        // The user picked a different device before the first connect
+        // resolved — the cast button stays tappable while "Connecting…" shows.
+        final second = manager.connectTo(other);
+        await second;
 
-      expect(manager.currentSession?.device, other);
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
+        expect(manager.currentSession?.device, other);
+        expect(
+          manager.currentSession?.connectionState,
+          CastConnectionState.connected,
+        );
 
-      backend.releaseConnect();
-      await first;
+        backend.releaseConnect();
+        await first;
 
-      expect(manager.currentSession?.device, other,
-          reason: 'the superseded first connect must not clobber the '
-              'session the second, winning connect published');
-      // Not `backend.connectedDevice` here: this fake (like the real
-      // `DartCastBackend`) has its own single connected-device slot
-      // unconditionally overwritten by *whichever* `connect()` call's own
-      // await resolves last — so the moment the held first connect is
-      // released, it stamps that slot back to `device` itself, before this
-      // test (or the manager's own cleanup) gets any chance to observe it
-      // still reading `other`. That makes `disconnectCallCount: 1` below
-      // correct — the backend genuinely is holding `device`'s connection at
-      // that point, and tearing it down is right — but it also means this
-      // particular interleaving cannot prove the backend's slot survives
-      // pointing at `other`. The test below this one constructs the
-      // interleaving where it can.
-      expect(backend.disconnectCallCount, 1,
-          reason: 'the superseded connect must tear itself down instead of '
-              'being published');
-    });
+        expect(
+          manager.currentSession?.device,
+          other,
+          reason:
+              'the superseded first connect must not clobber the '
+              'session the second, winning connect published',
+        );
+        // Not `backend.connectedDevice` here: this fake (like the real
+        // `DartCastBackend`) has its own single connected-device slot
+        // unconditionally overwritten by *whichever* `connect()` call's own
+        // await resolves last — so the moment the held first connect is
+        // released, it stamps that slot back to `device` itself, before this
+        // test (or the manager's own cleanup) gets any chance to observe it
+        // still reading `other`. That makes `disconnectCallCount: 1` below
+        // correct — the backend genuinely is holding `device`'s connection at
+        // that point, and tearing it down is right — but it also means this
+        // particular interleaving cannot prove the backend's slot survives
+        // pointing at `other`. The test below this one constructs the
+        // interleaving where it can.
+        expect(
+          backend.disconnectCallCount,
+          1,
+          reason:
+              'the superseded connect must tear itself down instead of '
+              'being published',
+        );
+      },
+    );
 
-    test(
-        'a second connectTo whose connect finishes first leaves the backend '
+    test('a second connectTo whose connect finishes first leaves the backend '
         'already moved on by the time the first connect resolves, and the '
         'first must not disconnect it', () async {
       // The reverse of the test above. There, the *first* call's own
@@ -1865,15 +1991,25 @@ void main() {
       await second;
 
       expect(manager.currentSession?.device, other);
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
-      expect(backend.connectedDevice, other,
-          reason: 'the winning connection must survive the superseded '
-              'first call\'s cleanup');
-      expect(backend.disconnectCallCount, 0,
-          reason: 'the backend never held the first call\'s device by the '
-              'time its cleanup ran, so there is nothing of its own left to '
-              'tear down');
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connected,
+      );
+      expect(
+        backend.connectedDevice,
+        other,
+        reason:
+            'the winning connection must survive the superseded '
+            'first call\'s cleanup',
+      );
+      expect(
+        backend.disconnectCallCount,
+        0,
+        reason:
+            'the backend never held the first call\'s device by the '
+            'time its cleanup ran, so there is nothing of its own left to '
+            'tear down',
+      );
     });
   });
 
@@ -1899,8 +2035,10 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       expect(manager.currentSession?.mediaInfo?.title, 'Arrival');
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connected,
+      );
     });
 
     test('does connect when the chosen device is a different one', () async {
@@ -1977,8 +2115,7 @@ void main() {
   });
 
   group('startCast invalidates an in-flight connectTo', () {
-    test(
-        'a connectTo suspended when startCast begins does not clobber the '
+    test('a connectTo suspended when startCast begins does not clobber the '
         'media session startCast publishes', () async {
       // The real-world shape: the user picks a device (connectTo starts,
       // and its own `_backend.connect` can take up to 15s), then immediately
@@ -1990,14 +2127,20 @@ void main() {
 
       final connecting = manager.connectTo(device);
       await Future<void>.delayed(Duration.zero);
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connecting);
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connecting,
+      );
 
       await manager.startCast(device: device, request: launch);
 
-      expect(manager.currentSession?.mediaInfo, isNotNull,
-          reason: 'startCast must publish the media-bearing session it just '
-              'loaded');
+      expect(
+        manager.currentSession?.mediaInfo,
+        isNotNull,
+        reason:
+            'startCast must publish the media-bearing session it just '
+            'loaded',
+      );
 
       final disconnectCallsBeforeLateResolve = backend.disconnectCallCount;
 
@@ -2005,27 +2148,42 @@ void main() {
       backend.releaseConnect();
       await connecting;
 
-      expect(manager.currentSession?.mediaInfo, isNotNull,
-          reason: 'the late-resolving connectTo must not clobber the media '
-              'session startCast published with an idle one');
       expect(
-          manager.currentSession?.playbackState, isNot(CastPlaybackState.idle),
-          reason: 'the late connectTo publishing over startCast\'s session '
-              'would silently drop back to an idle state');
+        manager.currentSession?.mediaInfo,
+        isNotNull,
+        reason:
+            'the late-resolving connectTo must not clobber the media '
+            'session startCast published with an idle one',
+      );
+      expect(
+        manager.currentSession?.playbackState,
+        isNot(CastPlaybackState.idle),
+        reason:
+            'the late connectTo publishing over startCast\'s session '
+            'would silently drop back to an idle state',
+      );
       // The assertion that actually catches the bug: `currentSession` alone
       // stays intact even when the stale connectTo's cleanup disconnects the
       // socket startCast is using, because that cleanup never touches
       // `_current` — it only calls `_backend.disconnect()`. A test that
       // checks only the session, not the backend's actual connection, passes
       // right over a published session with no live socket behind it.
-      expect(backend.connectedDevice, device,
-          reason: 'the stale connectTo must not tear down the connection '
-              'startCast adopted and is actively using, just because it '
-              'happens to be the same device the stale call itself was '
-              'connecting to');
-      expect(backend.disconnectCallCount, disconnectCallsBeforeLateResolve,
-          reason: 'the stale connectTo\'s cleanup must not disconnect a '
-              'socket a newer call now owns');
+      expect(
+        backend.connectedDevice,
+        device,
+        reason:
+            'the stale connectTo must not tear down the connection '
+            'startCast adopted and is actively using, just because it '
+            'happens to be the same device the stale call itself was '
+            'connecting to',
+      );
+      expect(
+        backend.disconnectCallCount,
+        disconnectCallsBeforeLateResolve,
+        reason:
+            'the stale connectTo\'s cleanup must not disconnect a '
+            'socket a newer call now owns',
+      );
     });
   });
 
@@ -2039,68 +2197,80 @@ void main() {
       ),
     ];
 
-    test('the launch request\'s tracks are rewritten to session URLs',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'the launch request\'s tracks are rewritten to session URLs',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          sourceId: _src,
-          fileId: 'file-1',
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          title: 'A Movie',
-          subtitles: requestTracks,
-        ),
-      );
+        await manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            sourceId: _src,
+            fileId: 'file-1',
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            title: 'A Movie',
+            subtitles: requestTracks,
+          ),
+        );
 
-      final loaded = backend.loadedRequests.single;
-      expect(loaded.subtitles, hasLength(1));
-      // The media-file URL the request came in with must not survive: the
-      // receiver has to fetch through the session, which is the only shape
-      // that works on both the direct and bridge routes.
-      expect(loaded.subtitles.first.url, contains('/subs_3.vtt'));
-      expect(loaded.subtitles.first.url, isNot(contains('/api/player/v1/')));
-    });
+        final loaded = backend.loadedRequests.single;
+        expect(loaded.subtitles, hasLength(1));
+        // The media-file URL the request came in with must not survive: the
+        // receiver has to fetch through the session, which is the only shape
+        // that works on both the direct and bridge routes.
+        expect(loaded.subtitles.first.url, contains('/subs_3.vtt'));
+        expect(loaded.subtitles.first.url, isNot(contains('/api/player/v1/')));
+      },
+    );
 
-    test('re-targeting reuses the live request rather than the persisted one',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      're-targeting reuses the live request rather than the persisted one',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          sourceId: _src,
-          fileId: 'file-1',
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          title: 'A Movie',
-          imageUrl: 'https://art.test/poster.jpg',
-          subtitleLabel: 'S1E3',
-          subtitles: requestTracks,
-        ),
-      );
+        await manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            sourceId: _src,
+            fileId: 'file-1',
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            title: 'A Movie',
+            imageUrl: 'https://art.test/poster.jpg',
+            subtitleLabel: 'S1E3',
+            subtitles: requestTracks,
+          ),
+        );
 
-      await manager.retargetTo(otherDevice);
+        await manager.retargetTo(otherDevice);
 
-      final loaded = backend.loadedRequests.last;
-      // All three are dropped today, because pickCastDevice rebuilds the
-      // request from PersistedCastSession, which carries none of them.
-      expect(loaded.subtitles, isNotEmpty);
-      expect(loaded.imageUrl, 'https://art.test/poster.jpg');
-      expect(loaded.subtitle, 'S1E3');
-    });
+        final loaded = backend.loadedRequests.last;
+        // All three are dropped today, because pickCastDevice rebuilds the
+        // request from PersistedCastSession, which carries none of them.
+        expect(loaded.subtitles, isNotEmpty);
+        expect(loaded.imageUrl, 'https://art.test/poster.jpg');
+        expect(loaded.subtitle, 'S1E3');
+      },
+    );
   });
 
   group('which subtitle track is active', () {
     test('orderSubtitlesForLoad puts the chosen track first', () {
       const a = CastSubtitleTrack(
-          trackId: '1', url: 'u1', label: 'A', language: 'eng');
+        trackId: '1',
+        url: 'u1',
+        label: 'A',
+        language: 'eng',
+      );
       const b = CastSubtitleTrack(
-          trackId: '2', url: 'u2', label: 'B', language: 'spa');
+        trackId: '2',
+        url: 'u2',
+        label: 'B',
+        language: 'spa',
+      );
 
       expect(orderSubtitlesForLoad([a, b], '2'), [b, a]);
       expect(orderSubtitlesForLoad([a, b], '1'), [a, b]);
@@ -2129,50 +2299,53 @@ void main() {
       ),
     ];
 
-    test('a cast with no chosen track disables subtitles after loading',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'a cast with no chosen track disables subtitles after loading',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          sourceId: _src,
-          fileId: 'file-1',
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          title: 'A Movie',
-          subtitles: twoTracks,
-        ),
-      );
+        await manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            sourceId: _src,
+            fileId: 'file-1',
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            title: 'A Movie',
+            subtitles: twoTracks,
+          ),
+        );
 
-      // dart_cast force-activates the first track at LOAD, so an explicit
-      // disable is the only way to reach parity with local playback.
-      expect(backend.subtitleSelections, [null]);
-    });
+        // dart_cast force-activates the first track at LOAD, so an explicit
+        // disable is the only way to reach parity with local playback.
+        expect(backend.subtitleSelections, [null]);
+      },
+    );
 
     test(
-        'a cast that carries a chosen track loads it first and does not disable',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+      'a cast that carries a chosen track loads it first and does not disable',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          sourceId: _src,
-          fileId: 'file-1',
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          title: 'A Movie',
-          subtitles: twoTracks,
-          selectedSubtitleTrackId: '3',
-        ),
-      );
+        await manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            sourceId: _src,
+            fileId: 'file-1',
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            title: 'A Movie',
+            subtitles: twoTracks,
+            selectedSubtitleTrackId: '3',
+          ),
+        );
 
-      expect(backend.subtitleSelections, isEmpty);
-      expect(backend.loadedRequests.single.subtitles.first.trackId, '3');
-    });
+        expect(backend.subtitleSelections, isEmpty);
+        expect(backend.loadedRequests.single.subtitles.first.trackId, '3');
+      },
+    );
 
     test('a cast with no tracks at all does not issue a disable', () async {
       final manager = build();
@@ -2195,33 +2368,34 @@ void main() {
       expect(backend.subtitleSelections, isEmpty);
     });
 
-    test('selectSubtitle forwards the loaded instance and records the choice',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          sourceId: _src,
-          fileId: 'file-1',
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          title: 'A Movie',
-          subtitles: twoTracks,
-        ),
-      );
-
-      final track = backend.loadedRequests.single.subtitles.first;
-      await manager.selectSubtitle(track);
-
-      // dart_cast keys its internal track map by URL, so the instance handed
-      // back must be the one that was loaded, not one rebuilt from the id.
-      expect(backend.subtitleSelections.last?.url, track.url);
-    });
-
     test(
-        'a selected id matching no offered track defaults to off, not '
+      'selectSubtitle forwards the loaded instance and records the choice',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
+
+        await manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            sourceId: _src,
+            fileId: 'file-1',
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            title: 'A Movie',
+            subtitles: twoTracks,
+          ),
+        );
+
+        final track = backend.loadedRequests.single.subtitles.first;
+        await manager.selectSubtitle(track);
+
+        // dart_cast keys its internal track map by URL, so the instance handed
+        // back must be the one that was loaded, not one rebuilt from the id.
+        expect(backend.subtitleSelections.last?.url, track.url);
+      },
+    );
+
+    test('a selected id matching no offered track defaults to off, not '
         'whatever dart_cast loaded first', () async {
       final manager = build();
       addTearDown(manager.dispose);
@@ -2248,8 +2422,11 @@ void main() {
       // without it the receiver would keep showing a track the UI reports
       // as unselected.
       expect(backend.subtitleSelections, [null]);
-      expect(manager.currentSession?.selectedSubtitle, isNull,
-          reason: 'the UI and the receiver must agree that nothing is on');
+      expect(
+        manager.currentSession?.selectedSubtitle,
+        isNull,
+        reason: 'the UI and the receiver must agree that nothing is on',
+      );
 
       // The persisted record must not carry 'not-offered' forward either:
       // it never resolved to a real track, so a cold restore must not claim
@@ -2257,8 +2434,7 @@ void main() {
       expect((await store.load())?.selectedSubtitleTrackId, isNull);
     });
 
-    test(
-        'subtitles and the selected track survive an unrelated session '
+    test('subtitles and the selected track survive an unrelated session '
         'update', () async {
       final manager = build();
       addTearDown(manager.dispose);
@@ -2302,46 +2478,59 @@ void main() {
 
     test('orderSubtitlesForLoad does not mutate its input', () {
       const a = CastSubtitleTrack(
-          trackId: '1', url: 'u1', label: 'A', language: 'eng');
+        trackId: '1',
+        url: 'u1',
+        label: 'A',
+        language: 'eng',
+      );
       const b = CastSubtitleTrack(
-          trackId: '2', url: 'u2', label: 'B', language: 'spa');
+        trackId: '2',
+        url: 'u2',
+        label: 'B',
+        language: 'spa',
+      );
       final tracks = [a, b];
 
       orderSubtitlesForLoad(tracks, '2');
 
-      expect(tracks, [a, b],
-          reason: 'the caller\'s own list must survive untouched');
+      expect(tracks, [
+        a,
+        b,
+      ], reason: 'the caller\'s own list must survive untouched');
     });
 
-    test('selectSubtitle persists the choice so a cold restore remembers it',
-        () async {
-      final manager = build();
-      addTearDown(manager.dispose);
+    test(
+      'selectSubtitle persists the choice so a cold restore remembers it',
+      () async {
+        final manager = build();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(
-        device: device,
-        request: CastLaunchRequest(
-          sourceId: _src,
-          fileId: 'file-1',
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          title: 'A Movie',
-          subtitles: twoTracks,
-        ),
-      );
+        await manager.startCast(
+          device: device,
+          request: CastLaunchRequest(
+            sourceId: _src,
+            fileId: 'file-1',
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            title: 'A Movie',
+            subtitles: twoTracks,
+          ),
+        );
 
-      final track = backend.loadedRequests.single.subtitles
-          .firstWhere((t) => t.trackId == '3');
-      await manager.selectSubtitle(track);
+        final track = backend.loadedRequests.single.subtitles.firstWhere(
+          (t) => t.trackId == '3',
+        );
+        await manager.selectSubtitle(track);
 
-      expect((await store.load())?.selectedSubtitleTrackId, '3');
+        expect((await store.load())?.selectedSubtitleTrackId, '3');
 
-      // Turning subtitles back off must persist as *no* selection, not leave
-      // the previous track id behind.
-      await manager.selectSubtitle(null);
+        // Turning subtitles back off must persist as *no* selection, not leave
+        // the previous track id behind.
+        await manager.selectSubtitle(null);
 
-      expect((await store.load())?.selectedSubtitleTrackId, isNull);
-    });
+        expect((await store.load())?.selectedSubtitleTrackId, isNull);
+      },
+    );
 
     // The brief's own snippet for this test declared a local, non-const
     // `tracks` list and then passed it as `subtitles: tracks` inside a
@@ -2367,8 +2556,9 @@ void main() {
 
       // Pick the second one, so a restart that dropped the choice would come
       // back with '2' first and fail loudly.
-      final track = backend.loadedRequests.single.subtitles
-          .firstWhere((t) => t.trackId == '3');
+      final track = backend.loadedRequests.single.subtitles.firstWhere(
+        (t) => t.trackId == '3',
+      );
       await manager.selectSubtitle(track);
       await manager.seek(const Duration(minutes: 10));
 
@@ -2383,59 +2573,73 @@ void main() {
   });
 
   group('multi-protocol routing', () {
-    test('merges Mydia targets into the same device list as Chromecast',
-        () async {
-      // One picker, three protocols. A second picker would be a worse UX and
-      // would duplicate the offline-row and reconnect behaviour this manager
-      // already has.
-      final manager = buildManagerWithBackends(
-        chromecast: FakeBackend(devices: [
-          const CastDevice(
-              id: 'cc-1', name: 'TV', protocol: CastProtocolKind.chromecast),
-        ]),
-        mydia: FakeBackend(devices: [
+    test(
+      'merges Mydia targets into the same device list as Chromecast',
+      () async {
+        // One picker, three protocols. A second picker would be a worse UX and
+        // would duplicate the offline-row and reconnect behaviour this manager
+        // already has.
+        final manager = buildManagerWithBackends(
+          chromecast: FakeBackend(
+            devices: [
+              const CastDevice(
+                id: 'cc-1',
+                name: 'TV',
+                protocol: CastProtocolKind.chromecast,
+              ),
+            ],
+          ),
+          mydia: FakeBackend(
+            devices: [
+              const CastDevice(
+                id: 'node-tv',
+                name: 'Living Room',
+                protocol: CastProtocolKind.mydia,
+                metadata: {'nodeId': 'node-tv'},
+              ),
+            ],
+          ),
+          sessions: FakeStreamingSessionService(),
+        );
+        addTearDown(manager.dispose);
+
+        final devices = await manager.discoveredDevices.first;
+
+        expect(
+          devices.map((d) => d.protocol),
+          containsAll([CastProtocolKind.chromecast, CastProtocolKind.mydia]),
+        );
+      },
+    );
+
+    test(
+      'routes a command to the backend that owns the selected protocol',
+      () async {
+        final chromecast = FakeBackend(devices: const []);
+        final mydia = FakeBackend(devices: const []);
+        final manager = buildManagerWithBackends(
+          chromecast: chromecast,
+          mydia: mydia,
+          sessions: FakeStreamingSessionService(),
+        );
+        addTearDown(manager.dispose);
+
+        await manager.connectTo(
           const CastDevice(
             id: 'node-tv',
             name: 'Living Room',
             protocol: CastProtocolKind.mydia,
             metadata: {'nodeId': 'node-tv'},
           ),
-        ]),
-        sessions: FakeStreamingSessionService(),
-      );
-      addTearDown(manager.dispose);
+        );
+        await manager.pause();
 
-      final devices = await manager.discoveredDevices.first;
+        expect(mydia.calls, contains('pause'));
+        expect(chromecast.calls, isEmpty);
+      },
+    );
 
-      expect(devices.map((d) => d.protocol),
-          containsAll([CastProtocolKind.chromecast, CastProtocolKind.mydia]));
-    });
-
-    test('routes a command to the backend that owns the selected protocol',
-        () async {
-      final chromecast = FakeBackend(devices: const []);
-      final mydia = FakeBackend(devices: const []);
-      final manager = buildManagerWithBackends(
-        chromecast: chromecast,
-        mydia: mydia,
-        sessions: FakeStreamingSessionService(),
-      );
-      addTearDown(manager.dispose);
-
-      await manager.connectTo(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv'},
-      ));
-      await manager.pause();
-
-      expect(mydia.calls, contains('pause'));
-      expect(chromecast.calls, isEmpty);
-    });
-
-    test(
-        'a device with no distinct backend throws instead of falling back '
+    test('a device with no distinct backend throws instead of falling back '
         'to the primary one', () async {
       // A manager built with no Mydia backend at all (P2P not ready — see
       // `mydiaCastBackendProvider`) must not silently hand a Mydia device to
@@ -2448,21 +2652,24 @@ void main() {
       addTearDown(manager.dispose);
 
       await expectLater(
-        manager.connectTo(const CastDevice(
-          id: 'node-tv',
-          name: 'Living Room',
-          protocol: CastProtocolKind.mydia,
-          metadata: {'nodeId': 'node-tv'},
-        )),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)
-            .having((e) => e.message, 'message', kMydiaNotReadyMessage)),
+        manager.connectTo(
+          const CastDevice(
+            id: 'node-tv',
+            name: 'Living Room',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-tv'},
+          ),
+        ),
+        throwsA(
+          isA<CastBackendException>()
+              .having((e) => e.kind, 'kind', CastFailureKind.unreachable)
+              .having((e) => e.message, 'message', kMydiaNotReadyMessage),
+        ),
       );
       expect(chromecast.calls, isEmpty);
     });
 
-    test(
-        'reaches a Mydia backend that became available after the manager was '
+    test('reaches a Mydia backend that became available after the manager was '
         'built', () async {
       // The iPhone repro: the manager is built at launch, before P2P is up,
       // so a backend captured at construction would stay null forever.
@@ -2477,19 +2684,20 @@ void main() {
       addTearDown(manager.dispose);
 
       available = mydia;
-      await manager.connectTo(const CastDevice(
-        id: 'node-den',
-        name: 'Den',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-den'},
-      ));
+      await manager.connectTo(
+        const CastDevice(
+          id: 'node-den',
+          name: 'Den',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-den'},
+        ),
+      );
 
       expect(mydia.connectAttempts.map((d) => d.id), ['node-den']);
       expect(chromecast.connectAttempts, isEmpty);
     });
 
-    test(
-        'refuses a Mydia device while no Mydia backend exists instead of '
+    test('refuses a Mydia device while no Mydia backend exists instead of '
         'handing it to the Chromecast backend', () async {
       final chromecast = FakeCastBackend();
       final manager = buildManagerWithBackends(
@@ -2500,19 +2708,26 @@ void main() {
       addTearDown(manager.dispose);
 
       await expectLater(
-        manager.connectTo(const CastDevice(
-          id: 'node-den',
-          name: 'Den',
-          protocol: CastProtocolKind.mydia,
-          metadata: {'nodeId': 'node-den'},
-        )),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)
-            .having((e) => e.message, 'message', kMydiaNotReadyMessage)),
+        manager.connectTo(
+          const CastDevice(
+            id: 'node-den',
+            name: 'Den',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-den'},
+          ),
+        ),
+        throwsA(
+          isA<CastBackendException>()
+              .having((e) => e.kind, 'kind', CastFailureKind.unreachable)
+              .having((e) => e.message, 'message', kMydiaNotReadyMessage),
+        ),
       );
       expect(chromecast.connectAttempts, isEmpty);
-      expect(manager.currentSession, isNull,
-          reason: 'a refused connect must not leave a connecting row behind');
+      expect(
+        manager.currentSession,
+        isNull,
+        reason: 'a refused connect must not leave a connecting row behind',
+      );
     });
   });
 
@@ -2539,11 +2754,16 @@ void main() {
 
       await manager.connectTo(idleDevice);
 
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connected,
+      );
       expect(manager.currentSession?.playbackState, CastPlaybackState.idle);
-      expect(manager.currentSession?.mediaInfo, isNull,
-          reason: 'the existing media-less connect publishes no mediaInfo');
+      expect(
+        manager.currentSession?.mediaInfo,
+        isNull,
+        reason: 'the existing media-less connect publishes no mediaInfo',
+      );
       expect(mydia.loadedRequests, isEmpty);
     });
 
@@ -2556,12 +2776,14 @@ void main() {
       );
       addTearDown(manager.dispose);
 
-      await manager.connectTo(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
-      ));
+      await manager.connectTo(
+        const CastDevice(
+          id: 'node-tv',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
+        ),
+      );
       expect(manager.currentSession?.isSyncing, isFalse);
 
       mydia.emitSyncing(true);
@@ -2578,52 +2800,59 @@ void main() {
       expect(manager.currentSession?.isSyncing, isFalse);
     });
 
-    test('a playing Mydia target is adopted without sending LoadContent',
-        () async {
-      final chromecast = FakeBackend(devices: const []);
-      final mydia = FakeCastBackend();
-      final manager = buildManagerWithBackends(
-        chromecast: chromecast,
-        mydia: mydia,
-        sessions: FakeStreamingSessionService(),
-      );
-      addTearDown(manager.dispose);
-
-      const playingDevice = CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {
-          'nodeId': 'node-tv',
-          'nowPlayingTitle': 'Blade Runner',
-        },
-      );
-
-      await manager.connectTo(playingDevice);
-
-      // The receiver's own numbers, arriving after connect — not anything
-      // this controller chose, since `connectTo` never took a
-      // `CastLaunchRequest` to choose from in the first place.
-      mydia.emitDuration(const Duration(hours: 2, minutes: 3));
-      mydia.emitPosition(const Duration(minutes: 41));
-      mydia.emitState(CastPlaybackState.playing);
-      await Future<void>.delayed(Duration.zero);
-
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
-      expect(manager.currentSession?.mediaInfo?.title, 'Blade Runner');
-      expect(manager.currentSession?.mediaInfo?.duration,
-          const Duration(hours: 2, minutes: 3));
-      expect(manager.currentSession?.mediaInfo?.position,
-          const Duration(minutes: 41));
-      expect(manager.currentSession?.playbackState, CastPlaybackState.playing);
-
-      // The point of the whole feature: adopting must not restart playback.
-      expect(mydia.loadedRequests, isEmpty);
-    });
-
     test(
-        'adopting clears what an earlier, unrelated cast on this manager '
+      'a playing Mydia target is adopted without sending LoadContent',
+      () async {
+        final chromecast = FakeBackend(devices: const []);
+        final mydia = FakeCastBackend();
+        final manager = buildManagerWithBackends(
+          chromecast: chromecast,
+          mydia: mydia,
+          sessions: FakeStreamingSessionService(),
+        );
+        addTearDown(manager.dispose);
+
+        const playingDevice = CastDevice(
+          id: 'node-tv',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Blade Runner'},
+        );
+
+        await manager.connectTo(playingDevice);
+
+        // The receiver's own numbers, arriving after connect — not anything
+        // this controller chose, since `connectTo` never took a
+        // `CastLaunchRequest` to choose from in the first place.
+        mydia.emitDuration(const Duration(hours: 2, minutes: 3));
+        mydia.emitPosition(const Duration(minutes: 41));
+        mydia.emitState(CastPlaybackState.playing);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          manager.currentSession?.connectionState,
+          CastConnectionState.connected,
+        );
+        expect(manager.currentSession?.mediaInfo?.title, 'Blade Runner');
+        expect(
+          manager.currentSession?.mediaInfo?.duration,
+          const Duration(hours: 2, minutes: 3),
+        );
+        expect(
+          manager.currentSession?.mediaInfo?.position,
+          const Duration(minutes: 41),
+        );
+        expect(
+          manager.currentSession?.playbackState,
+          CastPlaybackState.playing,
+        );
+
+        // The point of the whole feature: adopting must not restart playback.
+        expect(mydia.loadedRequests, isEmpty);
+      },
+    );
+
+    test('adopting clears what an earlier, unrelated cast on this manager '
         'chose', () async {
       // `_lastRequest`/`_persisted` from a real prior session — not merely
       // an idle connect, which never sets either — must not leak into an
@@ -2653,23 +2882,23 @@ void main() {
         id: 'node-tv',
         name: 'Living Room',
         protocol: CastProtocolKind.mydia,
-        metadata: {
-          'nodeId': 'node-tv',
-          'nowPlayingTitle': 'Arrival',
-        },
+        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Arrival'},
       );
       await manager.connectTo(playingDevice);
 
-      expect(manager.canRetarget, isFalse,
-          reason: 'an adopted session was never chosen through this '
-              'manager, so there is nothing to retarget');
+      expect(
+        manager.canRetarget,
+        isFalse,
+        reason:
+            'an adopted session was never chosen through this '
+            'manager, so there is nothing to retarget',
+      );
       expect(manager.persistedSession, isNull);
     });
   });
 
   group('startCast rollback across two backends', () {
-    test(
-        'a failing startCast on one backend must not disconnect or clobber '
+    test('a failing startCast on one backend must not disconnect or clobber '
         'a connectTo that already won on a different backend', () async {
       // The reviewer's live repro, reduced to a test: a `startCast` to a
       // chromecast device whose loads all fail, racing a `connectTo` to a
@@ -2725,8 +2954,10 @@ void main() {
       // connected session outright.
       await manager.connectTo(mydiaDevice);
       expect(manager.currentSession?.device.id, mydiaDevice.id);
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connected,
+      );
 
       // Let the stale startCast's held connect proceed. It connects to the
       // chromecast backend, notices it has been superseded, disconnects that
@@ -2737,24 +2968,38 @@ void main() {
 
       await started;
 
-      expect(manager.currentSession?.device.id, mydiaDevice.id,
-          reason: 'the older, unrelated, failing startCast must not clobber '
-              'the newer, already-published connectTo session');
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected,
-          reason: 'the mydia session must still read as connected, not '
-              'nulled out by the stale rollback');
-      expect(mydiaBackend.disconnectCallCount, 0,
-          reason: 'the failing startCast must disconnect only the backend '
-              'it itself resolved and connected, never the unrelated '
-              'backend a concurrent connectTo committed to `_backend`');
-      expect(chromecastBackend.disconnectCallCount, 1,
-          reason: 'the stale startCast still tears down its own, actually '
-              'failed connection');
+      expect(
+        manager.currentSession?.device.id,
+        mydiaDevice.id,
+        reason:
+            'the older, unrelated, failing startCast must not clobber '
+            'the newer, already-published connectTo session',
+      );
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connected,
+        reason:
+            'the mydia session must still read as connected, not '
+            'nulled out by the stale rollback',
+      );
+      expect(
+        mydiaBackend.disconnectCallCount,
+        0,
+        reason:
+            'the failing startCast must disconnect only the backend '
+            'it itself resolved and connected, never the unrelated '
+            'backend a concurrent connectTo committed to `_backend`',
+      );
+      expect(
+        chromecastBackend.disconnectCallCount,
+        1,
+        reason:
+            'the stale startCast still tears down its own, actually '
+            'failed connection',
+      );
     });
 
-    test(
-        'a stale startCast must not kill the winning connectTo\'s '
+    test('a stale startCast must not kill the winning connectTo\'s '
         'connectionLost listener', () async {
       // Same race as above, but this one is about the success path right
       // after `backend.connect()` resolves, not the failure-rollback catch
@@ -2809,8 +3054,10 @@ void main() {
       // and installs its own connectionLost listener on mydiaBackend.
       await manager.connectTo(mydiaDevice);
       expect(manager.currentSession?.device.id, mydiaDevice.id);
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.connected,
+      );
 
       // Let the stale startCast's held connect proceed and run to
       // completion. With the fix, it notices it has been superseded right
@@ -2825,10 +3072,14 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(manager.currentSession?.device.id, mydiaDevice.id);
-      expect(manager.currentSession?.connectionState, CastConnectionState.lost,
-          reason: 'the winning connectTo\'s connectionLost listener must '
-              'survive a stale startCast that loses the generation race '
-              'after its own connect() resolves');
+      expect(
+        manager.currentSession?.connectionState,
+        CastConnectionState.lost,
+        reason:
+            'the winning connectTo\'s connectionLost listener must '
+            'survive a stale startCast that loses the generation race '
+            'after its own connect() resolves',
+      );
     });
   });
 
@@ -2837,14 +3088,10 @@ void main() {
       id: 'node-tv',
       name: 'Living Room',
       protocol: CastProtocolKind.mydia,
-      metadata: {
-        'nodeId': 'node-tv',
-        'nowPlayingTitle': 'Blade Runner',
-      },
+      metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Blade Runner'},
     );
 
-    test(
-        'fills in artwork and subtitle tracks once the target reports '
+    test('fills in artwork and subtitle tracks once the target reports '
         'them, closing the gap 17b left', () async {
       final chromecast = FakeBackend(devices: const []);
       final mydia = FakeMydiaCastBackend();
@@ -2879,17 +3126,22 @@ void main() {
       mydia.emitDuration(const Duration(hours: 2));
       await Future<void>.delayed(Duration.zero);
 
-      expect(manager.currentSession?.mediaInfo?.imageUrl,
-          'https://mydia.test/poster.jpg');
       expect(
-          manager.currentSession?.subtitles.map((t) => t.trackId), ['0', '1']);
-      expect(manager.currentSession?.subtitles.map((t) => t.label),
-          ['English', 'French']);
+        manager.currentSession?.mediaInfo?.imageUrl,
+        'https://mydia.test/poster.jpg',
+      );
+      expect(manager.currentSession?.subtitles.map((t) => t.trackId), [
+        '0',
+        '1',
+      ]);
+      expect(manager.currentSession?.subtitles.map((t) => t.label), [
+        'English',
+        'French',
+      ]);
       expect(manager.currentSession?.selectedSubtitle?.trackId, '1');
     });
 
-    test(
-        'stays a no-op for a session adopted on a backend with no snapshot '
+    test('stays a no-op for a session adopted on a backend with no snapshot '
         'bridge', () async {
       // A Mydia backend that is not a `MydiaSnapshotSource`: the snapshot
       // bridge must degrade gracefully rather than crash.
@@ -2912,8 +3164,7 @@ void main() {
   });
 
   group("an adopted session's seek", () {
-    test(
-        'is not mistranslated by a stream offset an earlier, unrelated '
+    test('is not mistranslated by a stream offset an earlier, unrelated '
         'cast on this manager left behind', () async {
       // Fast-follow left open by 17b: `_listenToBackendForAdoption` resets
       // `_timeline` to `StreamTimeline.zero`, but nothing proved that
@@ -2958,19 +3209,20 @@ void main() {
         id: 'node-tv',
         name: 'Living Room',
         protocol: CastProtocolKind.mydia,
-        metadata: {
-          'nodeId': 'node-tv',
-          'nowPlayingTitle': 'Blade Runner',
-        },
+        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Blade Runner'},
       );
       await manager.connectTo(playingDevice);
 
       await manager.seek(const Duration(minutes: 41));
 
-      expect(mydia.seeks, [const Duration(minutes: 41)],
-          reason: 'the adopted receiver\'s own position already is the '
-              'real one; a stale offset from the earlier chromecast cast '
-              'must not still be applied');
+      expect(
+        mydia.seeks,
+        [const Duration(minutes: 41)],
+        reason:
+            'the adopted receiver\'s own position already is the '
+            'real one; a stale offset from the earlier chromecast cast '
+            'must not still be applied',
+      );
     });
   });
 
@@ -2979,14 +3231,10 @@ void main() {
       id: 'node-tv',
       name: 'Living Room',
       protocol: CastProtocolKind.mydia,
-      metadata: {
-        'nodeId': 'node-tv',
-        'nowPlayingTitle': 'Blade Runner',
-      },
+      metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Blade Runner'},
     );
 
-    test(
-        'reads the exact position (and tracks) from the snapshot before '
+    test('reads the exact position (and tracks) from the snapshot before '
         'pausing or stopping the target', () async {
       final chromecast = FakeBackend(devices: const []);
       final mydia = FakeMydiaCastBackend();
@@ -3020,9 +3268,13 @@ void main() {
 
       expect(pulled?.mediaItemId, 'movie-42');
       expect(pulled?.episodeId, 'ep-7');
-      expect(pulled?.position, const Duration(minutes: 41),
-          reason: 'read before either command, not the zeroed-out position '
-              'the target reports once actually paused');
+      expect(
+        pulled?.position,
+        const Duration(minutes: 41),
+        reason:
+            'read before either command, not the zeroed-out position '
+            'the target reports once actually paused',
+      );
       expect(pulled?.selectedSubtitleTrackId, 'sub-1');
     });
 
@@ -3044,14 +3296,15 @@ void main() {
 
       await manager.pullToLocal();
 
-      expect(states, [CastPlaybackState.paused, CastPlaybackState.idle],
-          reason: 'pause is sent before the stop stopCast issues');
+      expect(states, [
+        CastPlaybackState.paused,
+        CastPlaybackState.idle,
+      ], reason: 'pause is sent before the stop stopCast issues');
       expect(mydia.disconnectCallCount, 1);
       expect(manager.currentSession, isNull);
     });
 
-    test(
-        'returns null and touches nothing for a backend with no snapshot '
+    test('returns null and touches nothing for a backend with no snapshot '
         'bridge', () async {
       final chromecast = FakeCastBackend();
       final manager = buildManagerWithBackends(
@@ -3064,31 +3317,35 @@ void main() {
       expect(chromecast.disconnectCallCount, 0);
     });
 
-    test('returns null when nothing has ever been polled from the target',
-        () async {
-      final chromecast = FakeBackend(devices: const []);
-      final mydia = FakeMydiaCastBackend();
-      final manager = buildManagerWithBackends(
-        chromecast: chromecast,
-        mydia: mydia,
-        sessions: FakeStreamingSessionService(),
-      );
-      addTearDown(manager.dispose);
+    test(
+      'returns null when nothing has ever been polled from the target',
+      () async {
+        final chromecast = FakeBackend(devices: const []);
+        final mydia = FakeMydiaCastBackend();
+        final manager = buildManagerWithBackends(
+          chromecast: chromecast,
+          mydia: mydia,
+          sessions: FakeStreamingSessionService(),
+        );
+        addTearDown(manager.dispose);
 
-      await manager.connectTo(playingDevice);
+        await manager.connectTo(playingDevice);
 
-      expect(await manager.pullToLocal(), isNull);
-      expect(mydia.disconnectCallCount, 0,
-          reason: 'nothing to pull means nothing should be touched');
-    });
+        expect(await manager.pullToLocal(), isNull);
+        expect(
+          mydia.disconnectCallCount,
+          0,
+          reason: 'nothing to pull means nothing should be touched',
+        );
+      },
+    );
 
     // `buildManagerWithBackends` fixes the manager's clock at
     // `DateTime.utc(2026, 7, 28, 12)`; these place `lastSnapshotAt` an exact,
     // known distance behind that instead of needing a mutable clock.
     final fixedNow = DateTime.utc(2026, 7, 28, 12);
 
-    test(
-        'projects a playing snapshot forward by the time elapsed since it '
+    test('projects a playing snapshot forward by the time elapsed since it '
         'was captured', () async {
       final chromecast = FakeBackend(devices: const []);
       final mydia = FakeMydiaCastBackend();
@@ -3114,9 +3371,13 @@ void main() {
 
       final pulled = await manager.pullToLocal();
 
-      expect(pulled?.position, const Duration(minutes: 41, seconds: 4),
-          reason: 'the position must be projected forward to match what '
-              'the target is actually at now, not what it last reported');
+      expect(
+        pulled?.position,
+        const Duration(minutes: 41, seconds: 4),
+        reason:
+            'the position must be projected forward to match what '
+            'the target is actually at now, not what it last reported',
+      );
     });
 
     test('does not project a paused snapshot forward', () async {
@@ -3140,12 +3401,14 @@ void main() {
 
       final pulled = await manager.pullToLocal();
 
-      expect(pulled?.position, const Duration(minutes: 41),
-          reason: 'nothing is advancing behind a paused snapshot');
+      expect(
+        pulled?.position,
+        const Duration(minutes: 41),
+        reason: 'nothing is advancing behind a paused snapshot',
+      );
     });
 
-    test(
-        'clamps the projected position at duration rather than running '
+    test('clamps the projected position at duration rather than running '
         'past it', () async {
       final chromecast = FakeBackend(devices: const []);
       final mydia = FakeMydiaCastBackend();
@@ -3161,8 +3424,9 @@ void main() {
       mydia.lastSnapshot = _snapshot(
         state: FlutterPlaybackState.playing,
         mediaItemId: 'movie-42',
-        positionMs:
-            BigInt.from(const Duration(minutes: 1, seconds: 58).inMilliseconds),
+        positionMs: BigInt.from(
+          const Duration(minutes: 1, seconds: 58).inMilliseconds,
+        ),
         durationMs: BigInt.from(const Duration(minutes: 2).inMilliseconds),
       );
       // Comfortably longer than the 2 seconds left in the snapshot's own
@@ -3174,8 +3438,7 @@ void main() {
       expect(pulled?.position, const Duration(minutes: 2));
     });
 
-    test(
-        'falls back to the raw position when the backend reports no '
+    test('falls back to the raw position when the backend reports no '
         'capture time', () async {
       final chromecast = FakeBackend(devices: const []);
       final mydia = FakeMydiaCastBackend();
@@ -3202,99 +3465,104 @@ void main() {
   });
 
   group('startCast on Mydia target', () {
-    test('loads media with MydiaContentRef and does not require LAN route',
-        () async {
-      final chromecast = FakeCastBackend();
-      final mydia = FakeCastBackend();
-      final sessions = FakeStreamingSessionService();
-      final manager = buildManagerWithBackends(
-        chromecast: chromecast,
-        mydia: mydia,
-        sessions: sessions,
-      );
-      addTearDown(manager.dispose);
+    test(
+      'loads media with MydiaContentRef and does not require LAN route',
+      () async {
+        final chromecast = FakeCastBackend();
+        final mydia = FakeCastBackend();
+        final sessions = FakeStreamingSessionService();
+        final manager = buildManagerWithBackends(
+          chromecast: chromecast,
+          mydia: mydia,
+          sessions: sessions,
+        );
+        addTearDown(manager.dispose);
 
-      const device = CastDevice(
-        id: 'node-remote',
-        name: "Alexandre's MacBook Air",
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-remote'},
-      );
+        const device = CastDevice(
+          id: 'node-remote',
+          name: "Alexandre's MacBook Air",
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-remote'},
+        );
 
-      final request = CastLaunchRequest(
-        sourceId: _src,
-        fileId: 'file-123',
-        mediaId: 'ep-456',
-        mediaType: 'episode',
-        showId: 'show-789',
-        title: 'Severance - S01E01',
-        startPosition: const Duration(seconds: 42),
-        duration: const Duration(minutes: 50),
-        selectedSubtitleTrackId: 'sub-1',
-      );
+        final request = CastLaunchRequest(
+          sourceId: _src,
+          fileId: 'file-123',
+          mediaId: 'ep-456',
+          mediaType: 'episode',
+          showId: 'show-789',
+          title: 'Severance - S01E01',
+          startPosition: const Duration(seconds: 42),
+          duration: const Duration(minutes: 50),
+          selectedSubtitleTrackId: 'sub-1',
+        );
 
-      await manager.startCast(device: device, request: request);
+        await manager.startCast(device: device, request: request);
 
-      expect(mydia.loadedRequests, hasLength(1));
-      final loaded = mydia.loadedRequests.first;
-      expect(loaded.title, 'Severance - S01E01');
-      expect(loaded.contentRef, isNotNull);
-      expect(loaded.contentRef?.mediaItemId, 'show-789');
-      expect(loaded.contentRef?.episodeId, 'ep-456');
-      expect(loaded.contentRef?.subtitleTrack, 'sub-1');
-      // The cast names the instance it belongs to, so a target signed into
-      // several servers resolves it on the right one.
-      expect(loaded.contentRef?.serverInstanceId, 'acct');
-      expect(loaded.startPosition, const Duration(seconds: 42));
-      expect(manager.currentSession?.connectionState,
-          CastConnectionState.connected);
-      expect(manager.currentSession?.mediaInfo?.title, 'Severance - S01E01');
-      expect(
-        (manager.persistedSession?.content as MydiaCastContent?)?.showId,
-        'show-789',
-      );
-      expect(manager.persistedSession?.mediaUrl, 'show-789:ep-456');
-    });
+        expect(mydia.loadedRequests, hasLength(1));
+        final loaded = mydia.loadedRequests.first;
+        expect(loaded.title, 'Severance - S01E01');
+        expect(loaded.contentRef, isNotNull);
+        expect(loaded.contentRef?.mediaItemId, 'show-789');
+        expect(loaded.contentRef?.episodeId, 'ep-456');
+        expect(loaded.contentRef?.subtitleTrack, 'sub-1');
+        // The cast names the instance it belongs to, so a target signed into
+        // several servers resolves it on the right one.
+        expect(loaded.contentRef?.serverInstanceId, 'acct');
+        expect(loaded.startPosition, const Duration(seconds: 42));
+        expect(
+          manager.currentSession?.connectionState,
+          CastConnectionState.connected,
+        );
+        expect(manager.currentSession?.mediaInfo?.title, 'Severance - S01E01');
+        expect(
+          (manager.persistedSession?.content as MydiaCastContent?)?.showId,
+          'show-789',
+        );
+        expect(manager.persistedSession?.mediaUrl, 'show-789:ep-456');
+      },
+    );
 
     test(
-        'movie startCast sets mediaItemId and null episodeId in MydiaContentRef',
-        () async {
-      final chromecast = FakeCastBackend();
-      final mydia = FakeCastBackend();
-      final sessions = FakeStreamingSessionService();
-      final manager = buildManagerWithBackends(
-        chromecast: chromecast,
-        mydia: mydia,
-        sessions: sessions,
-      );
-      addTearDown(manager.dispose);
+      'movie startCast sets mediaItemId and null episodeId in MydiaContentRef',
+      () async {
+        final chromecast = FakeCastBackend();
+        final mydia = FakeCastBackend();
+        final sessions = FakeStreamingSessionService();
+        final manager = buildManagerWithBackends(
+          chromecast: chromecast,
+          mydia: mydia,
+          sessions: sessions,
+        );
+        addTearDown(manager.dispose);
 
-      const device = CastDevice(
-        id: 'node-remote',
-        name: "Alexandre's MacBook Air",
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-remote'},
-      );
+        const device = CastDevice(
+          id: 'node-remote',
+          name: "Alexandre's MacBook Air",
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-remote'},
+        );
 
-      final request = CastLaunchRequest(
-        sourceId: _src,
-        fileId: 'file-999',
-        mediaId: 'movie-111',
-        mediaType: 'movie',
-        title: 'Inception',
-        duration: const Duration(minutes: 148),
-      );
+        final request = CastLaunchRequest(
+          sourceId: _src,
+          fileId: 'file-999',
+          mediaId: 'movie-111',
+          mediaType: 'movie',
+          title: 'Inception',
+          duration: const Duration(minutes: 148),
+        );
 
-      await manager.startCast(device: device, request: request);
+        await manager.startCast(device: device, request: request);
 
-      expect(mydia.loadedRequests, hasLength(1));
-      final loaded = mydia.loadedRequests.first;
-      expect(loaded.title, 'Inception');
-      expect(loaded.contentRef, isNotNull);
-      expect(loaded.contentRef?.mediaItemId, 'movie-111');
-      expect(loaded.contentRef?.episodeId, isNull);
-      expect(manager.persistedSession?.mediaUrl, 'movie-111');
-    });
+        expect(mydia.loadedRequests, hasLength(1));
+        final loaded = mydia.loadedRequests.first;
+        expect(loaded.title, 'Inception');
+        expect(loaded.contentRef, isNotNull);
+        expect(loaded.contentRef?.mediaItemId, 'movie-111');
+        expect(loaded.contentRef?.episodeId, isNull);
+        expect(manager.persistedSession?.mediaUrl, 'movie-111');
+      },
+    );
   });
 
   group('per-instance deps', () {
@@ -3307,37 +3575,37 @@ void main() {
     /// A manager whose deps come from the instance a cast names, one fake
     /// server per instance. An id missing from [servers] is a removed one.
     CastSessionManager buildPerInstance() => CastSessionManager(
-          backend: backend,
-          mydiaBackend: backend,
-          store: store,
-          mydiaDeps: (id) async {
-            asked.add(id);
-            final transport = servers[id];
-            if (transport == null) return null;
-            return MydiaCastDeps(
-              progress: ProgressService(fakeMydiaClient(transport)),
-              streamingSessions: sessions,
-              release: () async => released[id] = (released[id] ?? 0) + 1,
-              resolver: () => CastRouteResolver(
-                isP2pMode: false,
-                serverUrl: 'https://mydia.test',
-                mediaToken: () async => 'tok',
-                lanBaseUrl: () => null,
-                streamingSessions: sessions,
-              ),
-            );
-          },
-          setLanAccess: (_) async {},
-          clock: () => DateTime.utc(2026, 7, 28, 12),
+      backend: backend,
+      mydiaBackend: backend,
+      store: store,
+      mydiaDeps: (id) async {
+        asked.add(id);
+        final transport = servers[id];
+        if (transport == null) return null;
+        return MydiaCastDeps(
+          progress: ProgressService(fakeMydiaClient(transport)),
+          streamingSessions: sessions,
+          release: () async => released[id] = (released[id] ?? 0) + 1,
+          resolver: () => CastRouteResolver(
+            isP2pMode: false,
+            serverUrl: 'https://mydia.test',
+            mediaToken: () async => 'tok',
+            lanBaseUrl: () => null,
+            streamingSessions: sessions,
+          ),
         );
+      },
+      setLanAccess: (_) async {},
+      clock: () => DateTime.utc(2026, 7, 28, 12),
+    );
 
     CastLaunchRequest launchFrom(SourceId id) => CastLaunchRequest(
-          sourceId: id,
-          fileId: 'file-1',
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          title: 'Arrival',
-        );
+      sourceId: id,
+      fileId: 'file-1',
+      mediaId: 'movie-1',
+      mediaType: 'movie',
+      title: 'Arrival',
+    );
 
     setUp(() {
       servers = {_src: _progressServer(), instanceB: _progressServer()};
@@ -3359,21 +3627,30 @@ void main() {
       expect(_progressCalls(servers[_src]!), isEmpty);
     });
 
-    test('a cast from a removed instance fails like an unreachable route',
-        () async {
-      final manager = buildPerInstance();
-      addTearDown(manager.dispose);
+    test(
+      'a cast from a removed instance fails like an unreachable route',
+      () async {
+        final manager = buildPerInstance();
+        addTearDown(manager.dispose);
 
-      await expectLater(
-        manager.startCast(
-            device: device, request: launchFrom(const SourceId('gone'))),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)),
-      );
+        await expectLater(
+          manager.startCast(
+            device: device,
+            request: launchFrom(const SourceId('gone')),
+          ),
+          throwsA(
+            isA<CastBackendException>().having(
+              (e) => e.kind,
+              'kind',
+              CastFailureKind.unreachable,
+            ),
+          ),
+        );
 
-      expect(backend.connectedDevice, isNull);
-      expect(manager.currentSession, isNull);
-    });
+        expect(backend.connectedDevice, isNull);
+        expect(manager.currentSession, isNull);
+      },
+    );
 
     test('the deps are held until the cast ends, then released once', () async {
       final manager = buildPerInstance();
@@ -3397,24 +3674,28 @@ void main() {
       expect(released, {_src: 1});
     });
 
-    test('adopting a receiver session releases the previous cast deps',
-        () async {
-      final manager = buildPerInstance();
-      addTearDown(manager.dispose);
+    test(
+      'adopting a receiver session releases the previous cast deps',
+      () async {
+        final manager = buildPerInstance();
+        addTearDown(manager.dispose);
 
-      await manager.startCast(device: device, request: launchFrom(_src));
-      expect(released, isEmpty);
+        await manager.startCast(device: device, request: launchFrom(_src));
+        expect(released, isEmpty);
 
-      await manager.connectTo(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
-      ));
-      await Future<void>.delayed(Duration.zero);
+        await manager.connectTo(
+          const CastDevice(
+            id: 'node-tv',
+            name: 'Living Room',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      expect(released, {_src: 1});
-    });
+        expect(released, {_src: 1});
+      },
+    );
 
     test('a tick that began for one cast syncs through that cast', () async {
       final gated = _GatedSaveStore();
@@ -3459,18 +3740,20 @@ void main() {
     });
 
     test('restoring a record whose instance is gone clears it', () async {
-      await store.save(PersistedCastSession(
-        sourceId: const SourceId('gone'),
-        device: device,
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: 'file-1',
-        title: 'Arrival',
-        position: const Duration(minutes: 5),
-        routeKind: CastRouteKind.directServer,
-        savedAt: DateTime.utc(2026, 7, 28, 11),
-        mediaUrl: 'https://mydia.test/api/v1/stream/file/file-1',
-      ));
+      await store.save(
+        PersistedCastSession(
+          sourceId: const SourceId('gone'),
+          device: device,
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          fileId: 'file-1',
+          title: 'Arrival',
+          position: const Duration(minutes: 5),
+          routeKind: CastRouteKind.directServer,
+          savedAt: DateTime.utc(2026, 7, 28, 11),
+          mediaUrl: 'https://mydia.test/api/v1/stream/file/file-1',
+        ),
+      );
       backend.receiverContentUrl =
           'https://mydia.test/api/v1/stream/file/file-1';
       final manager = buildPerInstance();
@@ -3481,35 +3764,39 @@ void main() {
       expect(await store.load(), isNull);
     });
 
-    test('a restored cast syncs through its own instance and holds it',
-        () async {
-      await store.save(PersistedCastSession(
-        sourceId: instanceB,
-        device: device,
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: 'file-1',
-        title: 'Arrival',
-        position: const Duration(minutes: 5),
-        duration: const Duration(minutes: 100),
-        routeKind: CastRouteKind.directServer,
-        savedAt: DateTime.utc(2026, 7, 28, 11),
-        mediaUrl: 'https://mydia.test/api/v1/stream/file/file-1',
-      ));
-      backend.receiverContentUrl =
-          'https://mydia.test/api/v1/stream/file/file-1';
-      final manager = buildPerInstance();
-      addTearDown(manager.dispose);
+    test(
+      'a restored cast syncs through its own instance and holds it',
+      () async {
+        await store.save(
+          PersistedCastSession(
+            sourceId: instanceB,
+            device: device,
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            fileId: 'file-1',
+            title: 'Arrival',
+            position: const Duration(minutes: 5),
+            duration: const Duration(minutes: 100),
+            routeKind: CastRouteKind.directServer,
+            savedAt: DateTime.utc(2026, 7, 28, 11),
+            mediaUrl: 'https://mydia.test/api/v1/stream/file/file-1',
+          ),
+        );
+        backend.receiverContentUrl =
+            'https://mydia.test/api/v1/stream/file/file-1';
+        final manager = buildPerInstance();
+        addTearDown(manager.dispose);
 
-      expect(await manager.restoreSession(), isTrue);
-      backend.emitPosition(const Duration(minutes: 6));
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(await manager.restoreSession(), isTrue);
+        backend.emitPosition(const Duration(minutes: 6));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(_progressCalls(servers[instanceB]!), hasLength(1));
-      expect(released, isEmpty);
+        expect(_progressCalls(servers[instanceB]!), hasLength(1));
+        expect(released, isEmpty);
 
-      await manager.stopCast();
-      expect(released, {instanceB: 1});
-    });
+        await manager.stopCast();
+        expect(released, {instanceB: 1});
+      },
+    );
   });
 }

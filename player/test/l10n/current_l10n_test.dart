@@ -11,7 +11,8 @@ void main() {
     expect(currentAppLocalizations().navHome, 'Inicio');
 
     rememberInterfaceLocale(
-        const Locale.fromSubtags(languageCode: 'pt', countryCode: 'BR'));
+      const Locale.fromSubtags(languageCode: 'pt', countryCode: 'BR'),
+    );
     expect(currentAppLocalizations().navHome, 'Início');
   });
 

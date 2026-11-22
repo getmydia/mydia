@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/p2p/media_proxy.dart';
@@ -105,9 +106,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   LocalProxyService(
     this._p2p, {
     RangeSpoolSettings spool = const RangeSpoolSettings.platform(),
-    ServerBinder bind = _bindHttpServer,
-  })  : _spoolSettings = spool,
-        _bind = bind;
+    this._bind = _bindHttpServer,
+  }) : _spoolSettings = spool;
 
   final ServerBinder _bind;
 
@@ -292,10 +292,14 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
         // still current here.
         if (!identical(_server, server)) return;
         debugPrint('[LocalProxy] Listener closed underneath the proxy');
-        unawaited(_healListener(knownClosed: true).then<void>((_) {},
+        unawaited(
+          _healListener(knownClosed: true).then<void>(
+            (_) {},
             onError: (Object e) {
-          debugPrint('[LocalProxy] Heal failed: $e');
-        }));
+              debugPrint('[LocalProxy] Heal failed: $e');
+            },
+          ),
+        );
       },
     );
   }
@@ -369,10 +373,13 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       return ProxyHeal.healthy;
     }
     _adopt(fresh);
-    final result =
-        samePort ? ProxyHeal.reboundSamePort : ProxyHeal.reboundNewPort;
-    debugPrint('[LocalProxy] Listener lost; rebound on port ${fresh.port} '
-        '(${samePort ? 'same' : 'new'})');
+    final result = samePort
+        ? ProxyHeal.reboundSamePort
+        : ProxyHeal.reboundNewPort;
+    debugPrint(
+      '[LocalProxy] Listener lost; rebound on port ${fresh.port} '
+      '(${samePort ? 'same' : 'new'})',
+    );
     _heals.add(result);
     return result;
   }
@@ -632,9 +639,9 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     if (status.statusCode != HttpStatus.ok) {
       request.response.statusCode = status.statusCode;
       _setCorsHeaders(request.response);
-      request.response.write(status.statusCode == HttpStatus.forbidden
-          ? 'Forbidden'
-          : 'Not Found');
+      request.response.write(
+        status.statusCode == HttpStatus.forbidden ? 'Forbidden' : 'Not Found',
+      );
       await request.response.close();
       return;
     }
@@ -666,7 +673,10 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
       case final MediaRouteMatch route:
         await _forwardRangeRequest(
-            request: request, route: route, target: target);
+          request: request,
+          route: route,
+          target: target,
+        );
     }
   }
 
@@ -691,7 +701,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
     return (
       statusCode: HttpStatus.ok,
-      path: rawPath.substring(expected.length)
+      path: rawPath.substring(expected.length),
     );
   }
 
@@ -734,7 +744,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       final proxySetupMs = sw.elapsedMilliseconds;
 
       debugPrint(
-          '[LocalProxy] HLS request: session=$sessionId, path=$hlsPath, range=$rangeStart-$rangeEnd');
+        '[LocalProxy] HLS request: session=$sessionId, path=$hlsPath, range=$rangeStart-$rangeEnd',
+      );
 
       // Forward to P2P
       final response = await _p2p.sendHlsRequest(
@@ -751,20 +762,26 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       request.response.statusCode = response.header.status;
 
       // Set response headers
-      request.response.headers.contentType =
-          ContentType.parse(response.header.contentType);
+      request.response.headers.contentType = ContentType.parse(
+        response.header.contentType,
+      );
       final payloadLength = response.data.length;
       final headerLength = response.header.contentLength.toInt();
-      request.response.headers.contentLength =
-          headerLength == payloadLength ? headerLength : payloadLength;
+      request.response.headers.contentLength = headerLength == payloadLength
+          ? headerLength
+          : payloadLength;
 
       if (response.header.contentRange != null) {
-        request.response.headers
-            .set('Content-Range', response.header.contentRange!);
+        request.response.headers.set(
+          'Content-Range',
+          response.header.contentRange!,
+        );
       }
       if (response.header.cacheControl != null) {
-        request.response.headers
-            .set('Cache-Control', response.header.cacheControl!);
+        request.response.headers.set(
+          'Cache-Control',
+          response.header.cacheControl!,
+        );
       }
 
       // Allow CORS for local playback
@@ -776,7 +793,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
       final totalMs = sw.elapsedMilliseconds;
       debugPrint(
-          '[p2p_metrics_dart] hls_request proxy_setup_ms=$proxySetupMs p2p_request_ms=$p2pRequestMs total_ms=$totalMs bytes=$payloadLength session=$sessionId path=$hlsPath');
+        '[p2p_metrics_dart] hls_request proxy_setup_ms=$proxySetupMs p2p_request_ms=$p2pRequestMs total_ms=$totalMs bytes=$payloadLength session=$sessionId path=$hlsPath',
+      );
     } catch (e, stack) {
       debugPrint('[LocalProxy] Error handling HLS request: $e');
       debugPrint('[LocalProxy] Stack: $stack');
@@ -830,7 +848,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
       final (rangeStart, rangeEnd) = _requestedRange(request);
       debugPrint(
-          '[LocalProxy] P2P stream $sessionId range=$rangeStart-$rangeEnd');
+        '[LocalProxy] P2P stream $sessionId range=$rangeStart-$rangeEnd',
+      );
 
       final P2pRangeStream upstream;
       try {
@@ -905,7 +924,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
           ? (bytesServed * 8.0 / (totalMs * 1000.0)).toStringAsFixed(2)
           : '0.00';
       debugPrint(
-          '[p2p_metrics_dart] range_stream first_header_ms=$firstHeaderMs first_chunk_ms=$firstChunkMs total_ms=$totalMs bytes=$bytesServed chunks=$chunkCount throughput_mbps=$throughputMbps spooled=${finished?.spooledBytes ?? 0} truncations=${finished?.truncations ?? 0} session=$sessionId path=$path');
+        '[p2p_metrics_dart] range_stream first_header_ms=$firstHeaderMs first_chunk_ms=$firstChunkMs total_ms=$totalMs bytes=$bytesServed chunks=$chunkCount throughput_mbps=$throughputMbps spooled=${finished?.spooledBytes ?? 0} truncations=${finished?.truncations ?? 0} session=$sessionId path=$path',
+      );
     }
   }
 
@@ -934,7 +954,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     if (spool != null) return spool;
 
     debugPrint(
-        '[LocalProxy] No room to spool $sessionId, streaming without read-ahead');
+      '[LocalProxy] No room to spool $sessionId, streaming without read-ahead',
+    );
     return PassThroughSource(upstream);
   }
 
@@ -997,8 +1018,9 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
     final start = int.tryParse(match.group(1) ?? '');
     final endStr = match.group(2);
-    final end =
-        endStr != null && endStr.isNotEmpty ? int.tryParse(endStr) : null;
+    final end = endStr != null && endStr.isNotEmpty
+        ? int.tryParse(endStr)
+        : null;
 
     return (start, end);
   }
@@ -1011,6 +1033,8 @@ class _ProxyTarget {
   String? authToken;
 
   /// Identity-keyed, for the same reason as `MediaProxyLeases._owners`.
-  final Set<Object> owners =
-      LinkedHashSet<Object>(equals: identical, hashCode: identityHashCode);
+  final Set<Object> owners = LinkedHashSet<Object>(
+    equals: identical,
+    hashCode: identityHashCode,
+  );
 }

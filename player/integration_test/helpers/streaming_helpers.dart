@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:http/http.dart' as http;
+
 import 'e2e_api_client.dart';
 
 /// Helper class for streaming integration tests.
@@ -20,21 +22,14 @@ class StreamingTestHelper {
   String? _testMediaItemId;
   String? _testMediaFileId;
 
-  StreamingTestHelper({
-    required E2eApiClient api,
-    required String mydiaUrl,
-  })  : _api = api,
-        _mydiaUrl = mydiaUrl;
+  StreamingTestHelper({required this._api, required this._mydiaUrl});
 
   /// Creates a StreamingTestHelper from environment variables.
   factory StreamingTestHelper.fromEnvironment() {
     final api = E2eApiClient.fromEnvironment();
     final mydiaUrl = Platform.environment['MYDIA_URL'] ?? 'http://mydia:4000';
 
-    return StreamingTestHelper(
-      api: api,
-      mydiaUrl: mydiaUrl,
-    );
+    return StreamingTestHelper(api: api, mydiaUrl: mydiaUrl);
   }
 
   /// Login and initialize the helper.
@@ -155,7 +150,8 @@ class StreamingTestHelper {
     if (response.field<Object?>('errors') != null) {
       final errors = response.list('errors');
       throw Exception(
-          'Failed to start streaming: ${errors.first.field<Object?>('message')}');
+        'Failed to start streaming: ${errors.first.field<Object?>('message')}',
+      );
     }
 
     final data = response.object('data').object('startStreamingSession');
@@ -194,8 +190,10 @@ class StreamingTestHelper {
   }) async {
     for (var i = 0; i < maxRetries; i++) {
       try {
-        final response =
-            await http.get(Uri.parse(playlistUrl), headers: _authHeaders);
+        final response = await http.get(
+          Uri.parse(playlistUrl),
+          headers: _authHeaders,
+        );
 
         if (response.statusCode == 200) {
           final playlistText = response.body;
@@ -224,20 +222,23 @@ class StreamingTestHelper {
     Duration retryDelay = const Duration(seconds: 1),
   }) async {
     // First get the playlist
-    final playlistUrl =
-        baseUrl.endsWith('.m3u8') ? baseUrl : '$baseUrl/index.m3u8';
+    final playlistUrl = baseUrl.endsWith('.m3u8')
+        ? baseUrl
+        : '$baseUrl/index.m3u8';
 
     for (var i = 0; i < maxRetries; i++) {
       try {
-        final response =
-            await http.get(Uri.parse(playlistUrl), headers: _authHeaders);
+        final response = await http.get(
+          Uri.parse(playlistUrl),
+          headers: _authHeaders,
+        );
 
         if (response.statusCode == 200) {
           final playlistText = response.body;
 
           // Extract first segment URL
-          final segmentMatch =
-              RegExp(r'segment_\d+\.ts').firstMatch(playlistText);
+          final segmentMatch = RegExp(r'segment_\d+\.ts')
+              .firstMatch(playlistText);
           if (segmentMatch != null) {
             final segmentName = segmentMatch.group(0);
             final segmentUrl = baseUrl.endsWith('.m3u8')
@@ -245,8 +246,10 @@ class StreamingTestHelper {
                 : '$baseUrl/$segmentName';
 
             // Try to fetch the segment
-            final segmentResponse =
-                await http.get(Uri.parse(segmentUrl), headers: _authHeaders);
+            final segmentResponse = await http.get(
+              Uri.parse(segmentUrl),
+              headers: _authHeaders,
+            );
             if (segmentResponse.statusCode == 200 &&
                 segmentResponse.bodyBytes.isNotEmpty) {
               return true;
@@ -405,7 +408,8 @@ class StreamingTestHelper {
       if (response.field<Object?>('errors') != null) {
         final errors = response.list('errors');
         throw Exception(
-            'Streaming candidates query failed: ${errors.first.field<Object?>('message')}');
+          'Streaming candidates query failed: ${errors.first.field<Object?>('message')}',
+        );
       }
 
       final responseData = response.object('data');
@@ -416,13 +420,15 @@ class StreamingTestHelper {
 
       final candidates = data
           .list('candidates')
-          .map((c) => StreamingCandidate(
-                strategy: c.field<String>('strategy'),
-                mime: c.field<String>('mime'),
-                container: c.field<String>('container'),
-                videoCodec: c.field<String?>('videoCodec'),
-                audioCodec: c.field<String?>('audioCodec'),
-              ))
+          .map(
+            (c) => StreamingCandidate(
+              strategy: c.field<String>('strategy'),
+              mime: c.field<String>('mime'),
+              container: c.field<String>('container'),
+              videoCodec: c.field<String?>('videoCodec'),
+              audioCodec: c.field<String?>('audioCodec'),
+            ),
+          )
           .toList();
 
       final metadata = data.field<Object?>('metadata') == null
@@ -545,11 +551,7 @@ class StreamingMetadata {
   final int? width;
   final int? height;
 
-  StreamingMetadata({
-    this.duration,
-    this.width,
-    this.height,
-  });
+  StreamingMetadata({this.duration, this.width, this.height});
 
   @override
   String toString() {

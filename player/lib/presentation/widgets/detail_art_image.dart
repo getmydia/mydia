@@ -41,11 +41,11 @@ class DetailArtImage extends ConsumerWidget {
   final WidgetBuilder? errorWidget;
 
   BaseCacheManager? get _cache => switch (slot) {
-        ArtSlot.backdrop => BackdropCacheManager(),
-        ArtSlot.still => EpisodeThumbnailCacheManager(),
-        ArtSlot.poster => PosterCacheManager(),
-        ArtSlot.person => null,
-      };
+    ArtSlot.backdrop => BackdropCacheManager(),
+    ArtSlot.still => EpisodeThumbnailCacheManager(),
+    ArtSlot.poster => PosterCacheManager(),
+    ArtSlot.person => null,
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,26 +57,26 @@ class DetailArtImage extends ConsumerWidget {
     return switch (art) {
       null => missing(context),
       UrlArt(:final url) => ArtworkImage(
-          imageUrl: url,
-          fit: fit,
-          cacheManager: _cache,
-          decodeWidth: decodeWidth,
-          placeholder: loading,
-          errorWidget: errorWidget ?? missing,
-        ),
+        imageUrl: url,
+        fit: fit,
+        cacheManager: _cache,
+        decodeWidth: decodeWidth,
+        placeholder: loading,
+        errorWidget: errorWidget ?? missing,
+      ),
       SourceArt(:final sourceId, :final ref) => _SourceArtImage(
-          sourceId: sourceId,
-          art: ref,
-          width: switch (slot) {
-            ArtSlot.backdrop || ArtSlot.still => SourceBackdrop.artworkWidth,
-            ArtSlot.poster || ArtSlot.person => SourcePoster.artworkWidth,
-          },
-          fit: fit,
-          cache: _cache,
-          loading: loading,
-          missing: missing,
-          error: errorWidget ?? missing,
-        ),
+        sourceId: sourceId,
+        art: ref,
+        width: switch (slot) {
+          ArtSlot.backdrop || ArtSlot.still => SourceBackdrop.artworkWidth,
+          ArtSlot.poster || ArtSlot.person => SourcePoster.artworkWidth,
+        },
+        fit: fit,
+        cache: _cache,
+        loading: loading,
+        missing: missing,
+        error: errorWidget ?? missing,
+      ),
     };
   }
 }
@@ -107,17 +107,18 @@ class _SourceArtImage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final resolved = ref.watch(
-        sourceArtworkProvider((sourceId: sourceId, art: art, width: width)));
+      sourceArtworkProvider((sourceId: sourceId, art: art, width: width)),
+    );
     return switch (resolved) {
       AsyncData(value: final request?) => ArtworkImage(
-          imageUrl: request.url,
-          headers: request.headers,
-          cacheKey: request.cacheKey,
-          cacheManager: cache,
-          fit: fit,
-          placeholder: loading,
-          errorWidget: error,
-        ),
+        imageUrl: request.url,
+        headers: request.headers,
+        cacheKey: request.cacheKey,
+        cacheManager: cache,
+        fit: fit,
+        placeholder: loading,
+        errorWidget: error,
+      ),
       AsyncData() || AsyncError() => missing(context),
       _ => loading(context),
     };

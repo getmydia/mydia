@@ -43,12 +43,12 @@ class SourceCollection {
       );
 
   Map<String, Object?> toJson() => {
-        'sourceId': sourceId.value,
-        'id': id,
-        'name': name,
-        'description': description,
-        'smart': smart,
-        'itemCount': itemCount,
-        'posters': [for (final p in posters) p.path],
-      };
+    'sourceId': sourceId.value,
+    'id': id,
+    'name': name,
+    'description': description,
+    'smart': smart,
+    'itemCount': itemCount,
+    'posters': [for (final p in posters) p.path],
+  };
 }

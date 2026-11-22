@@ -24,20 +24,19 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   @override
   Future<void> requestUpdate({
     void Function(double progress)? onProgress,
-  }) async =>
-      requestCount++;
+  }) async => requestCount++;
 
   @override
   UpdateState build() => _state;
 }
 
 AppUpdate _update() => AppUpdate(
-      version: '0.15.0',
-      downloadUrl: 'https://example.invalid/mydia-0.15.0.AppImage',
-      releaseNotesUrl: 'https://example.invalid/releases/0.15.0',
-      releaseTitle: 'Faster library scans',
-      publishedAt: DateTime.utc(2026, 8, 1),
-    );
+  version: '0.15.0',
+  downloadUrl: 'https://example.invalid/mydia-0.15.0.AppImage',
+  releaseNotesUrl: 'https://example.invalid/releases/0.15.0',
+  releaseTitle: 'Faster library scans',
+  publishedAt: DateTime.utc(2026, 8, 1),
+);
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -104,35 +103,34 @@ Future<void> _pumpInColumn(
 
 void main() {
   testWidgets('renders nothing when no update is available', (tester) async {
-    await _pump(
-      tester,
-      state: const UpdateState(currentVersion: '0.14.2'),
-    );
+    await _pump(tester, state: const UpdateState(currentVersion: '0.14.2'));
 
     expect(find.text('Update Now'), findsNothing);
   });
 
-  testWidgets('offers the update when one is available on a supported platform',
-      (tester) async {
-    await _pump(
-      tester,
-      state: UpdateState(
-        currentVersion: '0.14.2',
-        availableUpdate: _update(),
-      ),
-    );
-
-    expect(find.text('Update Now'), findsOneWidget);
-    expect(find.text('Release Notes'), findsOneWidget);
-    expect(find.text('Update available: v0.15.0'), findsOneWidget);
-    expect(find.text('Faster library scans'), findsOneWidget);
-  });
-
   testWidgets(
-      'Update Now requests the update directly when the backend cannot '
+    'offers the update when one is available on a supported platform',
+    (tester) async {
+      await _pump(
+        tester,
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
+      );
+
+      expect(find.text('Update Now'), findsOneWidget);
+      expect(find.text('Release Notes'), findsOneWidget);
+      expect(find.text('Update available: v0.15.0'), findsOneWidget);
+      expect(find.text('Faster library scans'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Update Now requests the update directly when the backend cannot '
       'update in place', (tester) async {
-    final notifier =
-        _FakeUpdateNotifier(UpdateState(availableUpdate: _update()));
+    final notifier = _FakeUpdateNotifier(
+      UpdateState(availableUpdate: _update()),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [updateProvider.overrideWith(() => notifier)],
@@ -159,22 +157,27 @@ void main() {
   });
 
   testWidgets(
-      'Update Now on an in-place install shows the shared confirm dialog',
-      (tester) async {
-    await _pump(
-      tester,
-      state: UpdateState(availableUpdate: _update()),
-      canUpdateInPlace: true,
-    );
+    'Update Now on an in-place install shows the shared confirm dialog',
+    (tester) async {
+      await _pump(
+        tester,
+        state: UpdateState(availableUpdate: _update()),
+        canUpdateInPlace: true,
+      );
 
-    await tester.tap(find.text('Update Now'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Update Now'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Mydia will close and update'), findsOneWidget);
-  });
+      expect(
+        find.textContaining('Mydia will close and update'),
+        findsOneWidget,
+      );
+    },
+  );
 
-  testWidgets('shows progress instead of buttons while applying',
-      (tester) async {
+  testWidgets('shows progress instead of buttons while applying', (
+    tester,
+  ) async {
     await _pump(
       tester,
       state: UpdateState(
@@ -190,8 +193,9 @@ void main() {
     expect(find.text('Update Now'), findsNothing);
   });
 
-  testWidgets('at zero progress the label drops the misleading percentage',
-      (tester) async {
+  testWidgets('at zero progress the label drops the misleading percentage', (
+    tester,
+  ) async {
     // The bar is indeterminate at zero, so a "0%" label would claim a
     // precision the bar itself is not showing.
     await _pump(
@@ -207,9 +211,7 @@ void main() {
     expect(find.text('Downloading 0%'), findsNothing);
     expect(
       tester
-          .widget<LinearProgressIndicator>(
-            find.byType(LinearProgressIndicator),
-          )
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
           .value,
       isNull,
     );
@@ -226,15 +228,11 @@ void main() {
     expect(tester.getSize(find.byType(UpdateCard)).height, 0);
   });
 
-  testWidgets(
-      'a visible card carries the space that separates it from the '
+  testWidgets('a visible card carries the space that separates it from the '
       'section below', (tester) async {
     await _pumpInColumn(
       tester,
-      state: UpdateState(
-        currentVersion: '0.14.2',
-        availableUpdate: _update(),
-      ),
+      state: UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
     );
 
     final outer = tester.getSize(find.byType(UpdateCard)).height;
@@ -243,8 +241,7 @@ void main() {
     expect(outer - card, 18);
   });
 
-  testWidgets(
-      'a Flatpak update, which names no version, never renders the '
+  testWidgets('a Flatpak update, which names no version, never renders the '
       'literal word null', (tester) async {
     // FlatpakRemoteUpdate.version is null by construction: the portal knows
     // only that the remote carries a newer commit. Interpolating that
@@ -261,34 +258,37 @@ void main() {
     );
 
     expect(find.textContaining('null'), findsNothing);
-    expect(find.text('A new version of Mydia Player is available'),
-        findsOneWidget);
+    expect(
+      find.text('A new version of Mydia Player is available'),
+      findsOneWidget,
+    );
   });
 
   group('Flatpak', () {
-    testWidgets('a version-less update offers an update button and no version',
-        (tester) async {
-      await _pump(
-        tester,
-        state: const UpdateState(
-          availableUpdate: FlatpakRemoteUpdate(
-            releaseNotesUrl: 'https://example.invalid/releases',
-          ),
-          manualCheck: ManualCheckBehaviour.checksAndInstalls,
-        ),
-      );
-
-      expect(
-        find.text('A new version of Mydia Player is available'),
-        findsOneWidget,
-      );
-      expect(find.text('Update Now'), findsOneWidget);
-      // Nothing may claim a version the portal never reported.
-      expect(find.textContaining(RegExp(r'v\d')), findsNothing);
-    });
-
     testWidgets(
-        'Update Now on a version-less update opens no dialog and never '
+      'a version-less update offers an update button and no version',
+      (tester) async {
+        await _pump(
+          tester,
+          state: const UpdateState(
+            availableUpdate: FlatpakRemoteUpdate(
+              releaseNotesUrl: 'https://example.invalid/releases',
+            ),
+            manualCheck: ManualCheckBehaviour.checksAndInstalls,
+          ),
+        );
+
+        expect(
+          find.text('A new version of Mydia Player is available'),
+          findsOneWidget,
+        );
+        expect(find.text('Update Now'), findsOneWidget);
+        // Nothing may claim a version the portal never reported.
+        expect(find.textContaining(RegExp(r'v\d')), findsNothing);
+      },
+    );
+
+    testWidgets('Update Now on a version-less update opens no dialog and never '
         'renders the literal word null', (tester) async {
       // The card's own confirm dialog is gone; Update Now goes through
       // startUpdate, whose Flatpak branch requests the update with no
@@ -328,8 +328,9 @@ void main() {
       expect(find.textContaining('null'), findsNothing);
     });
 
-    testWidgets('an already-installed update offers only a restart',
-        (tester) async {
+    testWidgets('an already-installed update offers only a restart', (
+      tester,
+    ) async {
       await _pump(
         tester,
         state: const UpdateState(
@@ -346,8 +347,9 @@ void main() {
       expect(find.text('Update Now'), findsNothing);
     });
 
-    testWidgets('a restart-required state shows the restart action',
-        (tester) async {
+    testWidgets('a restart-required state shows the restart action', (
+      tester,
+    ) async {
       await _pump(
         tester,
         state: const UpdateState(
@@ -359,8 +361,9 @@ void main() {
       expect(find.text('Restart'), findsOneWidget);
     });
 
-    testWidgets('a notice is shown when there was nothing to install',
-        (tester) async {
+    testWidgets('a notice is shown when there was nothing to install', (
+      tester,
+    ) async {
       await _pump(
         tester,
         state: const UpdateState(
@@ -373,51 +376,57 @@ void main() {
     });
 
     testWidgets(
-        'a deferred install leaves a notice instead of the same Update Now '
-        'row', (tester) async {
-      // This is the state UpdateNotifier.requestUpdate leaves behind for
-      // UpdateDeferred: availableUpdate cleared, a notice set. Before that
-      // mapping existed, the card fell back to `update != null`, which was
-      // still true, and redrew the same button while Android's confirmation
-      // dialog was already open, inviting a second download.
-      await _pump(
-        tester,
-        state: const UpdateState(
-          notice: UpdateNotice.handedOff,
-          manualCheck: ManualCheckBehaviour.checksOnly,
-        ),
-      );
+      'a deferred install leaves a notice instead of the same Update Now '
+      'row',
+      (tester) async {
+        // This is the state UpdateNotifier.requestUpdate leaves behind for
+        // UpdateDeferred: availableUpdate cleared, a notice set. Before that
+        // mapping existed, the card fell back to `update != null`, which was
+        // still true, and redrew the same button while Android's confirmation
+        // dialog was already open, inviting a second download.
+        await _pump(
+          tester,
+          state: const UpdateState(
+            notice: UpdateNotice.handedOff,
+            manualCheck: ManualCheckBehaviour.checksOnly,
+          ),
+        );
 
-      expect(
-        find.text('Handed off outside Mydia. Confirm there to finish '
-            'installing.'),
-        findsOneWidget,
-      );
-      expect(find.text('Update Now'), findsNothing);
-    });
+        expect(
+          find.text(
+            'Handed off outside Mydia. Confirm there to finish '
+            'installing.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Update Now'), findsNothing);
+      },
+    );
 
-    testWidgets('an error alone renders, with no update ever having been held',
-        (tester) async {
-      // The ordinary shape of "the portal is unreachable": the very first
-      // press ever, so availableUpdate has never been anything but null.
-      // Gating the card on availableUpdate/notice alone rendered nothing at
-      // all here, which is indistinguishable from a healthy install.
-      await _pump(
-        tester,
-        state: const UpdateState(
-          error: UpdateProblem(UpdateIssue.portalUnreachable),
-          manualCheck: ManualCheckBehaviour.checksAndInstalls,
-        ),
-      );
+    testWidgets(
+      'an error alone renders, with no update ever having been held',
+      (tester) async {
+        // The ordinary shape of "the portal is unreachable": the very first
+        // press ever, so availableUpdate has never been anything but null.
+        // Gating the card on availableUpdate/notice alone rendered nothing at
+        // all here, which is indistinguishable from a healthy install.
+        await _pump(
+          tester,
+          state: const UpdateState(
+            error: UpdateProblem(UpdateIssue.portalUnreachable),
+            manualCheck: ManualCheckBehaviour.checksAndInstalls,
+          ),
+        );
 
-      expect(
-        find.text(
-          'Could not reach the Flatpak portal. Update from your software '
-          'centre.',
-        ),
-        findsOneWidget,
-      );
-    });
+        expect(
+          find.text(
+            'Could not reach the Flatpak portal. Update from your software '
+            'centre.',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
   });
 
   group('updateCheckSubtitle', () {

@@ -17,7 +17,9 @@ void main() {
       seen.add(auth);
       if (auth != basic('quill', 'new')) return http.Response('', 401);
       return http.Response(
-          '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"/>', 207);
+        '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"/>',
+        207,
+      );
     });
     var stored = const WebDavCredentials(user: 'quill', password: 'old');
     var reads = 0;
@@ -75,8 +77,12 @@ void main() {
     final backend = LazyWebDavBackend(
       base: Uri.parse('https://nas.example.test'),
       credentials: () async => stored,
-      client: MockClient((_) async => http.Response(
-          '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"/>', 207)),
+      client: MockClient(
+        (_) async => http.Response(
+          '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"/>',
+          207,
+        ),
+      ),
     );
     await expectLater(backend.probe(), throwsA(isA<BackendUnauthorized>()));
     stored = const WebDavCredentials(user: 'u', password: 'p').toJson();

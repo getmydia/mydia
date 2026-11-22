@@ -33,42 +33,42 @@ const Key _heroKey = Key('detail-hero');
 Widget _detailScreenLike({
   required WindowChromeInsets insets,
   double statusBar = 0,
-}) =>
-    ProviderScope(
-      overrides: castCapableOverrides(),
-      child: MediaQuery(
-        data: MediaQueryData(
-          size: const Size(1300, 800),
-          padding: EdgeInsets.only(top: statusBar + insets.height),
-        ),
-        child: WindowChromeInsets.scope(
-          insets: insets,
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: WindowChromeInsets.removeBand(
-              child: Builder(
-                builder: (context) => Scaffold(
-                  body: CustomScrollView(
-                    slivers: [
-                      detailHeroAppBar(
-                        context: context,
-                        expandedHeight: 380,
-                        back:
-                            const Icon(Icons.arrow_back_rounded, key: _backKey),
-                        background:
-                            const ColoredBox(color: Colors.blue, key: _heroKey),
-                      ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 2000)),
-                    ],
+}) => ProviderScope(
+  overrides: castCapableOverrides(),
+  child: MediaQuery(
+    data: MediaQueryData(
+      size: const Size(1300, 800),
+      padding: EdgeInsets.only(top: statusBar + insets.height),
+    ),
+    child: WindowChromeInsets.scope(
+      insets: insets,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: WindowChromeInsets.removeBand(
+          child: Builder(
+            builder: (context) => Scaffold(
+              body: CustomScrollView(
+                slivers: [
+                  detailHeroAppBar(
+                    context: context,
+                    expandedHeight: 380,
+                    back: const Icon(Icons.arrow_back_rounded, key: _backKey),
+                    background: const ColoredBox(
+                      color: Colors.blue,
+                      key: _heroKey,
+                    ),
                   ),
-                ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 2000)),
+                ],
               ),
             ),
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
 
 const _mac = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
 
@@ -99,22 +99,25 @@ Future<void> _pump(
 void main() {
   group('detailHeroAppBar under the macOS traffic lights', () {
     testWidgets(
-        'the hero runs to the window top edge and the back button centers '
-        'in the band, clear of the lights', (tester) async {
-      await _pump(tester, insets: _mac);
+      'the hero runs to the window top edge and the back button centers '
+      'in the band, clear of the lights',
+      (tester) async {
+        await _pump(tester, insets: _mac);
 
-      // Full-bleed: the hero paints from the window's true top, behind the
-      // band, not below a reserved strip.
-      expect(tester.getRect(find.byKey(_heroKey)).top, 0);
+        // Full-bleed: the hero paints from the window's true top, behind the
+        // band, not below a reserved strip.
+        expect(tester.getRect(find.byKey(_heroKey)).top, 0);
 
-      final backRect = tester.getRect(find.byKey(_backKey));
-      expect(backRect.left, greaterThanOrEqualTo(80));
-      // Vertically centered in the 40pt band (center at y=20).
-      expect((backRect.center.dy - 20).abs(), lessThan(1));
-    });
+        final backRect = tester.getRect(find.byKey(_backKey));
+        expect(backRect.left, greaterThanOrEqualTo(80));
+        // Vertically centered in the 40pt band (center at y=20).
+        expect((backRect.center.dy - 20).abs(), lessThan(1));
+      },
+    );
 
-    testWidgets('the cast button lands at the shared trailing gutter',
-        (tester) async {
+    testWidgets('the cast button lands at the shared trailing gutter', (
+      tester,
+    ) async {
       await _pump(tester, insets: _mac);
 
       final cast = tester.getRect(find.byKey(WindowTitleRow.castKey));
@@ -122,24 +125,26 @@ void main() {
     });
 
     testWidgets(
-        'the pinned title row keeps the back button clear of the lights '
-        'once the hero collapses under scroll', (tester) async {
-      await _pump(tester, insets: _mac);
+      'the pinned title row keeps the back button clear of the lights '
+      'once the hero collapses under scroll',
+      (tester) async {
+        await _pump(tester, insets: _mac);
 
-      // The scroll view fills the viewport; its center sits well below the
-      // 40pt band, so this drag never touches the drag band underneath the
-      // title row.
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
-      await tester.pumpAndSettle();
-      // Drains the drag band's double-tap recognizer in case the drag's
-      // start or end point ever lands inside the band; harmless when it
-      // didn't.
-      await tester.pump(kDoubleTapTimeout);
+        // The scroll view fills the viewport; its center sits well below the
+        // 40pt band, so this drag never touches the drag band underneath the
+        // title row.
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+        await tester.pumpAndSettle();
+        // Drains the drag band's double-tap recognizer in case the drag's
+        // start or end point ever lands inside the band; harmless when it
+        // didn't.
+        await tester.pump(kDoubleTapTimeout);
 
-      final backRect = tester.getRect(find.byKey(_backKey));
-      expect(backRect.left, greaterThanOrEqualTo(80));
-      expect(backRect.top, inInclusiveRange(0, 40));
-    });
+        final backRect = tester.getRect(find.byKey(_backKey));
+        expect(backRect.left, greaterThanOrEqualTo(80));
+        expect(backRect.top, inInclusiveRange(0, 40));
+      },
+    );
   });
 
   group('detailHeroAppBar in the shell, art under the rail, on macOS', () {
@@ -176,13 +181,18 @@ void main() {
                             detailHeroAppBar(
                               context: context,
                               expandedHeight: 380,
-                              back: const Icon(Icons.arrow_back_rounded,
-                                  key: _backKey),
+                              back: const Icon(
+                                Icons.arrow_back_rounded,
+                                key: _backKey,
+                              ),
                               background: const ColoredBox(
-                                  color: Colors.blue, key: _heroKey),
+                                color: Colors.blue,
+                                key: _heroKey,
+                              ),
                             ),
                             const SliverToBoxAdapter(
-                                child: SizedBox(height: 2000)),
+                              child: SizedBox(height: 2000),
+                            ),
                           ],
                         ),
                       ),
@@ -197,35 +207,40 @@ void main() {
     }
 
     testWidgets(
-        'the hero runs to the window top and left edges, under the rail',
-        (tester) async {
-      await pumpInShell(tester);
+      'the hero runs to the window top and left edges, under the rail',
+      (tester) async {
+        await pumpInShell(tester);
 
-      final hero = tester.getRect(find.byKey(_heroKey));
-      expect(hero.top, 0);
-      expect(hero.left, 0);
-      expect(hero.width, 1300);
-    });
+        final hero = tester.getRect(find.byKey(_heroKey));
+        expect(hero.top, 0);
+        expect(hero.left, 0);
+        expect(hero.width, 1300);
+      },
+    );
 
     testWidgets(
-        'the back button stays in the band without reserving the lights twice',
-        (tester) async {
-      await pumpInShell(tester);
+      'the back button stays in the band without reserving the lights twice',
+      (tester) async {
+        await pumpInShell(tester);
 
-      final back = tester.getRect(find.byKey(_backKey));
-      // Past the rail, but not pushed a further 80 for the traffic lights the
-      // rail already covers.
-      expect(back.left, greaterThanOrEqualTo(88));
-      expect(back.left, lessThan(88 + 80));
-      expect((back.center.dy - 20).abs(), lessThan(1));
-    });
+        final back = tester.getRect(find.byKey(_backKey));
+        // Past the rail, but not pushed a further 80 for the traffic lights the
+        // rail already covers.
+        expect(back.left, greaterThanOrEqualTo(88));
+        expect(back.left, lessThan(88 + 80));
+        expect((back.center.dy - 20).abs(), lessThan(1));
+      },
+    );
 
-    testWidgets('the cast button keeps the shared trailing gutter',
-        (tester) async {
+    testWidgets('the cast button keeps the shared trailing gutter', (
+      tester,
+    ) async {
       await pumpInShell(tester);
 
       expect(
-          tester.getRect(find.byKey(WindowTitleRow.castKey)).right, 1300 - 24);
+        tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
+        1300 - 24,
+      );
     });
   });
 
@@ -234,7 +249,9 @@ void main() {
       await _pump(tester, insets: WindowChromeInsets.zero, statusBar: 24);
 
       expect(
-          tester.getRect(find.byKey(_backKey)).top, greaterThanOrEqualTo(24));
+        tester.getRect(find.byKey(_backKey)).top,
+        greaterThanOrEqualTo(24),
+      );
     });
   });
 
@@ -256,10 +273,10 @@ void main() {
     final cases = <String, WidgetBuilder>{
       'DetailLoadingState': (context) => const DetailLoadingState(),
       'DetailErrorState': (context) => DetailErrorState(
-            noun: DetailNoun.movie,
-            error: 'boom',
-            onRetry: () {},
-          ),
+        noun: DetailNoun.movie,
+        error: 'boom',
+        onRetry: () {},
+      ),
     };
 
     for (final MapEntry(key: name, value: builder) in cases.entries) {

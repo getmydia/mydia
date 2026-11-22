@@ -34,8 +34,9 @@ class LocaleSetting extends Notifier<Locale?> {
 
   Future<void> _load() async {
     try {
-      final stored =
-          await ref.read(coreSettingsServiceProvider).getLocaleCode();
+      final stored = await ref
+          .read(coreSettingsServiceProvider)
+          .getLocaleCode();
       if (!ref.mounted || _chosen || stored == null) return;
       state = _supported(stored);
       rememberInterfaceLocale(state);
@@ -65,10 +66,9 @@ class LocaleSetting extends Notifier<Locale?> {
     final tag = code.replaceAll('_', '-');
     final exact = _supported(tag);
     if (exact != null) return exact;
-    return resolveLocaleList(
-      [Locale(tag.split('-').first)],
-      AppLocalizations.supportedLocales,
-    );
+    return resolveLocaleList([
+      Locale(tag.split('-').first),
+    ], AppLocalizations.supportedLocales);
   }
 
   /// Applies at once; a failed write keeps the choice for this session and
@@ -93,10 +93,12 @@ class LocaleSetting extends Notifier<Locale?> {
 /// the `window.mydiaConfig` the instance injects. Null on native, on the
 /// public web build, and from an instance too old to send it.
 final hostLocaleProvider = Provider<Locale?>(
-    (ref) => LocaleSetting.fromHostCode(getWebConfig()?.locale));
+  (ref) => LocaleSetting.fromHostCode(getWebConfig()?.locale),
+);
 
 /// Hand-written rather than `@Riverpod`: riverpod_generator cannot print
 /// `dart:ui`'s `Locale` under build_runner (InvalidTypeException). A plain
 /// [NotifierProvider] is kept alive for the app's lifetime.
-final localeSettingProvider =
-    NotifierProvider<LocaleSetting, Locale?>(LocaleSetting.new);
+final localeSettingProvider = NotifierProvider<LocaleSetting, Locale?>(
+  LocaleSetting.new,
+);

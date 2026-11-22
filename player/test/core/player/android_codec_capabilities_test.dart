@@ -11,9 +11,9 @@ void main() {
   void stub(Object? Function() respond) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'videoDecoderCapabilities');
-      return respond();
-    });
+          expect(call.method, 'videoDecoderCapabilities');
+          return respond();
+        });
   }
 
   tearDown(() {
@@ -23,14 +23,16 @@ void main() {
 
   group('probeAndroidCodecProfiles', () {
     test('turns an 8-bit-only HEVC decoder into a bit-depth ceiling', () async {
-      stub(() => [
-            {
-              'codec': 'hevc',
-              'maxBitDepth': 8,
-              'maxWidth': 1920,
-              'maxHeight': 1088,
-            },
-          ]);
+      stub(
+        () => [
+          {
+            'codec': 'hevc',
+            'maxBitDepth': 8,
+            'maxWidth': 1920,
+            'maxHeight': 1088,
+          },
+        ],
+      );
 
       final profiles = await probeAndroidCodecProfiles(channel: channel);
 
@@ -48,17 +50,17 @@ void main() {
       expect(depth.isRequired, isTrue);
     });
 
-    test(
-        'marks resolution ceilings optional so an unknown size does not transcode',
-        () async {
-      stub(() => [
-            {
-              'codec': 'hevc',
-              'maxBitDepth': 10,
-              'maxWidth': 3840,
-              'maxHeight': 2160
-            },
-          ]);
+    test('marks resolution ceilings optional so an unknown size does not transcode', () async {
+      stub(
+        () => [
+          {
+            'codec': 'hevc',
+            'maxBitDepth': 10,
+            'maxWidth': 3840,
+            'maxHeight': 2160,
+          },
+        ],
+      );
 
       final profiles = await probeAndroidCodecProfiles(channel: channel);
       final width = profiles.single.conditions.firstWhere(
@@ -81,18 +83,22 @@ void main() {
       expect(await probeAndroidCodecProfiles(channel: channel), isEmpty);
     });
 
-    test('skips malformed entries instead of emitting a codec with no name',
-        () async {
-      stub(() => [
+    test(
+      'skips malformed entries instead of emitting a codec with no name',
+      () async {
+        stub(
+          () => [
             {'maxBitDepth': 8},
             {'codec': '', 'maxBitDepth': 8},
             {'codec': 'h264', 'maxBitDepth': 8},
-          ]);
+          ],
+        );
 
-      final profiles = await probeAndroidCodecProfiles(channel: channel);
+        final profiles = await probeAndroidCodecProfiles(channel: channel);
 
-      expect(profiles.map((p) => p.codec), ['h264']);
-    });
+        expect(profiles.map((p) => p.codec), ['h264']);
+      },
+    );
   });
 
   group('DeviceProfile wire format', () {

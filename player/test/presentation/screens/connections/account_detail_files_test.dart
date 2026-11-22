@@ -41,68 +41,89 @@ class _FixedScan extends FilesScanController {
 }
 
 Future<(InMemorySourceStore, Box<Map<dynamic, dynamic>>)> _pump(
-    WidgetTester tester,
-    {ScanState? scan,
-    String? accountId}) async {
-  final box = (await tester.runAsync(() => Hive.openBox<Map<dynamic, dynamic>>(
+  WidgetTester tester, {
+  ScanState? scan,
+  String? accountId,
+}) async {
+  final box = (await tester.runAsync(
+    () => Hive.openBox<Map<dynamic, dynamic>>(
       'manage_files_${_boxes++}',
-      bytes: Uint8List(0))))!;
+      bytes: Uint8List(0),
+    ),
+  ))!;
   final index = FileLibraryIndex(box, accountId: kFilesLocalAccountId);
   await tester.runAsync(() async {
-    await index.putRoot(const LibraryRoot(
+    await index.putRoot(
+      const LibraryRoot(
         id: 'rfilms',
         path: '/media/films',
         kind: FilesLibraryKind.movies,
-        title: 'films'));
-    await index.putRoot(const LibraryRoot(
+        title: 'films',
+      ),
+    );
+    await index.putRoot(
+      const LibraryRoot(
         id: 'rshows',
         path: '/media/shows',
         kind: FilesLibraryKind.series,
-        title: 'shows'));
+        title: 'shows',
+      ),
+    );
   });
   final store = InMemorySourceStore();
   await store.putAccount(filesLocalRecord);
   await tester.binding.setSurfaceSize(const Size(900, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-      filesIndexBoxProvider.overrideWithValue(box),
-      filesProgressStoreProvider
-          .overrideWithValue(InMemoryPlaybackProgressStore()),
-      mediaNamesProvider.overrideWithValue(FakeMediaNames()),
-      relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-      filesBackendBuilderProvider
-          .overrideWithValue((ref, source) => FakeBackend({})),
-      if (scan != null)
-        filesScanProvider(filesLocalSource.id)
-            .overrideWith(() => _FixedScan(filesLocalSource.id, scan)),
-    ],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      routerConfig: GoRouter(
-        initialLocation: '/sources/manage',
-        routes: [
-          GoRoute(
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(
+          SourceSecrets(MockAuthStorage()),
+        ),
+        filesIndexBoxProvider.overrideWithValue(box),
+        filesProgressStoreProvider.overrideWithValue(
+          InMemoryPlaybackProgressStore(),
+        ),
+        mediaNamesProvider.overrideWithValue(FakeMediaNames()),
+        relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
+        filesBackendBuilderProvider.overrideWithValue(
+          (ref, source) => FakeBackend({}),
+        ),
+        if (scan != null)
+          filesScanProvider(filesLocalSource.id)
+              .overrideWith(() => _FixedScan(filesLocalSource.id, scan)),
+      ],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        routerConfig: GoRouter(
+          initialLocation: '/sources/manage',
+          routes: [
+            GoRoute(
               path: '/sources/manage',
-              builder: (_, __) => Scaffold(
-                  body: AccountDetailBody(
-                      accountId: accountId ?? filesLocalRecord.account.id))),
-          GoRoute(
+              builder: (_, _) => Scaffold(
+                body: AccountDetailBody(
+                  accountId: accountId ?? filesLocalRecord.account.id,
+                ),
+              ),
+            ),
+            GoRoute(
               path: '/sources/add/files',
               redirect: (_, s) =>
-                  filesReauthLocation(s.uri.queryParameters['account'])),
-          GoRoute(
+                  filesReauthLocation(s.uri.queryParameters['account']),
+            ),
+            GoRoute(
               path: '/sources/add/folder',
-              builder: (_, __) => const Text('add folder screen')),
-        ],
+              builder: (_, _) => const Text('add folder screen'),
+            ),
+          ],
+        ),
       ),
     ),
-  ));
+  );
   if (scan?.running ?? false) {
     // A running scan's spinner never settles.
     for (var i = 0; i < 10; i++) {
@@ -119,13 +140,14 @@ Future<void> _pumpShare(WidgetTester tester, Uri url) async {
   final smb = url.scheme == 'smb';
   final id = smb ? smbAccountId(url) : webDavAccountId(url);
   await _pump(tester, accountId: id);
-  final accounts =
-      ProviderScope.containerOf(tester.element(find.byType(AccountDetailBody)))
-          .read(filesAccountsProvider);
+  final accounts = ProviderScope.containerOf(
+    tester.element(find.byType(AccountDetailBody)),
+  ).read(filesAccountsProvider);
   if (smb) {
     await accounts.addSmbAccount(
-        url: url,
-        credentials: const SmbCredentials(user: 'viewer', password: 'pw'));
+      url: url,
+      credentials: const SmbCredentials(user: 'viewer', password: 'pw'),
+    );
   } else {
     await accounts.addWebDavAccount(url: url, user: 'viewer', password: 'pw');
   }
@@ -151,10 +173,14 @@ void main() {
 
   testWidgets('the device account has no change address', (tester) async {
     await _pump(tester);
-    expect(find.byKey(const Key('manage-remove-$kFilesLocalAccountId')),
-        findsOneWidget);
-    expect(find.byKey(const Key('manage-change-address-$kFilesLocalAccountId')),
-        findsNothing);
+    expect(
+      find.byKey(const Key('manage-remove-$kFilesLocalAccountId')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('manage-change-address-$kFilesLocalAccountId')),
+      findsNothing,
+    );
   });
 
   testWidgets('an S3 bucket offers a bucket label', (tester) async {
@@ -168,79 +194,102 @@ void main() {
     final id = s3AccountId(location.toConnectionUri());
     await _pump(tester, accountId: id);
     await ProviderScope.containerOf(
-            tester.element(find.byType(AccountDetailBody)))
+          tester.element(find.byType(AccountDetailBody)),
+        )
         .read(filesAccountsProvider)
         .addS3Account(
-            location: location,
-            credentials:
-                const S3Credentials(accessKeyId: 'AK', secretAccessKey: 'sk'));
+          location: location,
+          credentials: const S3Credentials(
+            accessKeyId: 'AK',
+            secretAccessKey: 'sk',
+          ),
+        );
     await tester.pumpAndSettle();
     expect(
-        find.descendant(
-            of: find.byKey(Key('manage-reauth-$id')),
-            matching: find.text(_l10n.filesManageEditBucket)),
-        findsOneWidget);
+      find.descendant(
+        of: find.byKey(Key('manage-reauth-$id')),
+        matching: find.text(_l10n.filesManageEditBucket),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a webdav share keeps its share label', (tester) async {
     final davUrl = Uri.parse('https://dav.example.test/media');
     await _pumpShare(tester, davUrl);
     expect(
-        find.descendant(
-            of: find.byKey(Key('manage-reauth-${webDavAccountId(davUrl)}')),
-            matching: find.text(_l10n.filesManageEditShare)),
-        findsOneWidget);
+      find.descendant(
+        of: find.byKey(Key('manage-reauth-${webDavAccountId(davUrl)}')),
+        matching: find.text(_l10n.filesManageEditShare),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('lists the folders and removes one', (tester) async {
     final (_, box) = await _pump(tester);
     expect(find.byKey(const ValueKey('manage-root-rfilms')), findsOneWidget);
     expect(find.byKey(const ValueKey('manage-root-rshows')), findsOneWidget);
-    expect(find.byKey(const ValueKey('manage-rescan-$kFilesLocalAccountId')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('manage-rescan-$kFilesLocalAccountId')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const ValueKey('manage-remove-root-rfilms')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('manage-root-rfilms')), findsNothing);
     expect(
-        FileLibraryIndex(box, accountId: kFilesLocalAccountId)
-            .roots()
-            .map((r) => r.id),
-        ['rshows']);
+      FileLibraryIndex(
+        box,
+        accountId: kFilesLocalAccountId,
+      ).roots().map((r) => r.id),
+      ['rshows'],
+    );
   });
 
-  testWidgets('a running scan shows its progress in place of Rescan',
-      (tester) async {
-    await _pump(tester,
-        scan: const ScanState(running: true, walking: true, foldersRead: 12));
-    final rescan =
-        find.byKey(const ValueKey('manage-rescan-$kFilesLocalAccountId'));
+  testWidgets('a running scan shows its progress in place of Rescan', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      scan: const ScanState(running: true, walking: true, foldersRead: 12),
+    );
+    final rescan = find.byKey(
+      const ValueKey('manage-rescan-$kFilesLocalAccountId'),
+    );
     expect(
-        find.descendant(of: rescan, matching: find.text('Reading folders: 12')),
-        findsOneWidget);
+      find.descendant(of: rescan, matching: find.text('Reading folders: 12')),
+      findsOneWidget,
+    );
     expect(find.text('Rescan'), findsNothing);
   });
 
   testWidgets('removing the account clears its index', (tester) async {
     final (store, box) = await _pump(tester);
-    await tester
-        .tap(find.byKey(const Key('manage-remove-$kFilesLocalAccountId')));
+    await tester.tap(
+      find.byKey(const Key('manage-remove-$kFilesLocalAccountId')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('manage-remove-confirm')));
     await tester.pumpAndSettle();
 
     expect((await store.load()).accounts, isEmpty);
-    expect(FileLibraryIndex(box, accountId: kFilesLocalAccountId).roots(),
-        isEmpty);
+    expect(
+      FileLibraryIndex(box, accountId: kFilesLocalAccountId).roots(),
+      isEmpty,
+    );
   });
 
-  testWidgets('the device account offers Add folder, which picks a folder',
-      (tester) async {
+  testWidgets('the device account offers Add folder, which picks a folder', (
+    tester,
+  ) async {
     await _pump(tester);
     final button = find.byKey(const Key('manage-reauth-$kFilesLocalAccountId'));
-    expect(find.descendant(of: button, matching: find.text('Add folder')),
-        findsOneWidget);
+    expect(
+      find.descendant(of: button, matching: find.text('Add folder')),
+      findsOneWidget,
+    );
     await tester.tap(button);
     await tester.pumpAndSettle();
     expect(find.text('add folder screen'), findsOneWidget);

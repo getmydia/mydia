@@ -22,14 +22,11 @@ class PeerFilesBackend implements FileSystemBackend {
   PeerFilesBackend({
     required this.nodeId,
     required this.hostAccountId,
-    required MediaProxy proxy,
-    required PeerFilesTransport transport,
-    required bool Function(String nodeId) isConnected,
-    String? Function(String nodeId)? addressOf,
-  })  : _proxy = proxy,
-        _transport = transport,
-        _isConnected = isConnected,
-        _addressOf = addressOf;
+    required this._proxy,
+    required this._transport,
+    required this._isConnected,
+    this._addressOf,
+  });
 
   final String nodeId;
 
@@ -63,7 +60,9 @@ class PeerFilesBackend implements FileSystemBackend {
   /// withdrawn), so targets do not pile up for the life of the process.
   /// [proxy] is read only when there is something to release.
   static Future<void> releaseHost(
-      String nodeId, MediaProxy Function() proxy) async {
+    String nodeId,
+    MediaProxy Function() proxy,
+  ) async {
     final target = targetFor(nodeId);
     final owner = _owners.remove(target);
     if (owner == null) return;
@@ -123,7 +122,10 @@ class PeerFilesBackend implements FileSystemBackend {
     }
     return PlayableFile(
       url: MediaRoutes.peerFile(
-          _proxy.targetBaseUrl(target), hostAccountId, path),
+        _proxy.targetBaseUrl(target),
+        hostAccountId,
+        path,
+      ),
     );
   }
 
@@ -133,7 +135,8 @@ class PeerFilesBackend implements FileSystemBackend {
   /// connection nothing started. Never throws: a dial that fails leaves the
   /// probe after it to fail, as unreachable.
   Future<void> _dial() async {
-    final address = _addressOf?.call(nodeId) ??
+    final address =
+        _addressOf?.call(nodeId) ??
         jsonEncode({'id': nodeId, 'addrs': <Object>[]});
     try {
       await _transport.dial(address);

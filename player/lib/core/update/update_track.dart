@@ -12,10 +12,10 @@ enum UpdateTrack {
 
   /// The key this track has in releases.json and in stored settings.
   String get wireName => switch (this) {
-        UpdateTrack.stable => 'stable',
-        UpdateTrack.beta => 'beta',
-        UpdateTrack.dev => 'dev',
-      };
+    UpdateTrack.stable => 'stable',
+    UpdateTrack.beta => 'beta',
+    UpdateTrack.dev => 'dev',
+  };
 
   /// Null for an unknown name rather than a throw, so a preference written by
   /// a newer build cannot stop an older one from starting.

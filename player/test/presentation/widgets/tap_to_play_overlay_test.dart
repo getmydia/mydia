@@ -78,13 +78,15 @@ void main() {
     expect(
       plays,
       1,
-      reason: 'the whole picture is the target — asking a viewer to find a '
+      reason:
+          'the whole picture is the target — asking a viewer to find a '
           'glyph is the friction this overlay exists to remove',
     );
     expect(
       underlayTaps,
       0,
-      reason: 'a tap that reaches the gesture controls underneath would seek '
+      reason:
+          'a tap that reaches the gesture controls underneath would seek '
           'a video that has not started',
     );
   });
@@ -96,7 +98,8 @@ void main() {
     expect(
       find.textContaining('browser'),
       findsOneWidget,
-      reason: 'naming the browser as the thing holding playback up is what '
+      reason:
+          'naming the browser as the thing holding playback up is what '
           'keeps this from reading as another failure',
     );
   });

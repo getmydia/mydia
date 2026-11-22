@@ -26,11 +26,8 @@ class CollectionAutoSync {
   AppLifecycleListener? _lifecycleListener;
   void Function(int queued)? onQueued;
 
-  CollectionAutoSync._({
-    required ProviderReader read,
-    NowFn? now,
-  })  : _read = read,
-        now = now ?? DateTime.now;
+  CollectionAutoSync._({required this._read, NowFn? now})
+    : now = now ?? DateTime.now;
 
   factory CollectionAutoSync(WidgetRef ref, {NowFn? now}) {
     return CollectionAutoSync._(read: ref.read, now: now);
@@ -47,10 +44,7 @@ class CollectionAutoSync {
   static const _debounce = Duration(minutes: 5);
 
   /// Wires resume and first-frame triggers when [enabled] is true.
-  void install({
-    required bool enabled,
-    void Function(int queued)? onQueued,
-  }) {
+  void install({required bool enabled, void Function(int queued)? onQueued}) {
     this.onQueued = onQueued;
     if (!enabled || kIsWeb) return;
 
@@ -84,8 +78,9 @@ class CollectionAutoSync {
     _lastRunTime = current;
 
     try {
-      final Map<String, Map<String, String>> syncConfigs =
-          await _read(allSyncedCollectionsProvider.future);
+      final Map<String, Map<String, String>> syncConfigs = await _read(
+        allSyncedCollectionsProvider.future,
+      );
       if (syncConfigs.isEmpty) return 0;
 
       debugPrint(
@@ -106,8 +101,9 @@ class CollectionAutoSync {
           final sourceId = configSourceId == null
               ? _read(legacyMydiaSourceIdProvider)
               : SourceId(configSourceId);
-          final source =
-              sourceId == null ? null : _read(mediaSourceProvider(sourceId));
+          final source = sourceId == null
+              ? null
+              : _read(mediaSourceProvider(sourceId));
           if (source == null) continue;
 
           final items = await allCollectionItems(source, collectionId);
@@ -149,5 +145,5 @@ class CollectionAutoSync {
 /// Factory for creating a [CollectionAutoSync] bound to a [WidgetRef].
 final collectionAutoSyncProvider =
     Provider<CollectionAutoSync Function(WidgetRef)>(
-  (ref) => CollectionAutoSync.new,
-);
+      (ref) => CollectionAutoSync.new,
+    );

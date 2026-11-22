@@ -21,10 +21,10 @@ WEBVTT
 ''';
 
 ThumbnailService _service(MockClientHandler handler) => ThumbnailService(
-      serverUrl: 'https://media.example',
-      authToken: 'tok',
-      client: MockClient(handler),
-    );
+  serverUrl: 'https://media.example',
+  authToken: 'tok',
+  client: MockClient(handler),
+);
 
 void main() {
   group('ThumbnailService.parseVtt', () {
@@ -45,7 +45,9 @@ void main() {
   group('ThumbnailService', () {
     test('asks for the sheet at the endpoint the server serves', () {
       final service = ThumbnailService(
-          serverUrl: 'https://media.example', authToken: 'tok');
+        serverUrl: 'https://media.example',
+        authToken: 'tok',
+      );
 
       expect(
         service.spriteUrl('file-1'),
@@ -96,8 +98,9 @@ void main() {
     });
 
     test('a network failure yields no thumbnails', () async {
-      final service =
-          _service((_) async => throw http.ClientException('offline'));
+      final service = _service(
+        (_) async => throw http.ClientException('offline'),
+      );
 
       expect(await service.fetchThumbnails('file-1'), isEmpty);
     });
@@ -111,7 +114,9 @@ void main() {
       // same isolate has initialised the binding.
       setUp(() {
         service = ThumbnailService(
-            serverUrl: 'https://media.example', authToken: 't');
+          serverUrl: 'https://media.example',
+          authToken: 't',
+        );
       });
 
       test('the cue covering the time', () {

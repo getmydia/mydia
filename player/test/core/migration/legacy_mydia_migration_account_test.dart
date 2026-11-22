@@ -44,9 +44,9 @@ void main() {
       MockAuthStorage()..seedData(data);
 
   Future<SourceAccountRecord> recordOf(String accountId) async =>
-      (await store.load())
-          .accounts
-          .singleWhere((r) => r.account.id == accountId);
+      (await store.load()).accounts.singleWhere(
+        (r) => r.account.id == accountId,
+      );
 
   Future<MydiaCredentials> credsFor(String accountId) async {
     final record = await recordOf(accountId);
@@ -54,8 +54,11 @@ void main() {
   }
 
   Future<void> seedAccount(String accountId, MydiaCredentials c) async {
-    final record = buildMydiaAccountRecord(c,
-        instanceId: c.instanceId, now: DateTime.utc(2026, 1, 1));
+    final record = buildMydiaAccountRecord(
+      c,
+      instanceId: c.instanceId,
+      now: DateTime.utc(2026, 1, 1),
+    );
     await writeMydiaCredentials(secrets, record.account, c);
     await store.putAccount(record);
   }
@@ -109,18 +112,22 @@ void main() {
         'server_url': 'p2p://mydia',
         'server_node_addr': '{"id":"node1"}',
       });
-      expect(await migrateLegacyMydia(deps(legacy)),
-          'm${nodeInstanceId('node1')}');
+      expect(
+        await migrateLegacyMydia(deps(legacy)),
+        'm${nodeInstanceId('node1')}',
+      );
     });
 
     test('merges into an existing guest of the same server by URL', () async {
       await seedAccount(
-          'mserverid',
-          const MydiaCredentials(
-              instanceId: 'serverid',
-              accessToken: 'old',
-              instanceName: 'Guest Name',
-              serverUrl: 'https://media.example.test'));
+        'mserverid',
+        const MydiaCredentials(
+          instanceId: 'serverid',
+          accessToken: 'old',
+          instanceName: 'Guest Name',
+          serverUrl: 'https://media.example.test',
+        ),
+      );
       final before = await recordOf('mserverid');
       final legacy = legacyWith({
         'auth_token': 'new',
@@ -138,11 +145,13 @@ void main() {
 
     test('merges by node id', () async {
       await seedAccount(
-          'mserverid',
-          const MydiaCredentials(
-              instanceId: 'serverid',
-              accessToken: 'old',
-              nodeAddr: '{"id":"node1"}'));
+        'mserverid',
+        const MydiaCredentials(
+          instanceId: 'serverid',
+          accessToken: 'old',
+          nodeAddr: '{"id":"node1"}',
+        ),
+      );
       final legacy = legacyWith({
         'auth_token': 'new',
         'server_url': 'p2p://mydia',
@@ -157,11 +166,13 @@ void main() {
 
     test('merges by instance id', () async {
       await seedAccount(
-          'minst9',
-          const MydiaCredentials(
-              instanceId: 'inst9',
-              accessToken: 'old',
-              serverUrl: 'https://other.example.test'));
+        'minst9',
+        const MydiaCredentials(
+          instanceId: 'inst9',
+          accessToken: 'old',
+          serverUrl: 'https://other.example.test',
+        ),
+      );
       final legacy = legacyWith({
         'auth_token': 'new',
         'server_url': 'https://media.example.test',
@@ -174,14 +185,16 @@ void main() {
 
     test('merging keeps the guest tokens the legacy install lacks', () async {
       await seedAccount(
-          'mserverid',
-          MydiaCredentials(
-              instanceId: 'serverid',
-              accessToken: 'old',
-              deviceToken: 'guest-device',
-              mediaToken: 'guest-media',
-              mediaTokenExpiry: DateTime.utc(2026, 11, 1),
-              serverUrl: 'https://media.example.test'));
+        'mserverid',
+        MydiaCredentials(
+          instanceId: 'serverid',
+          accessToken: 'old',
+          deviceToken: 'guest-device',
+          mediaToken: 'guest-media',
+          mediaTokenExpiry: DateTime.utc(2026, 11, 1),
+          serverUrl: 'https://media.example.test',
+        ),
+      );
       final legacy = legacyWith({
         'auth_token': 'new',
         'server_url': 'https://media.example.test',
@@ -206,14 +219,20 @@ void main() {
     });
 
     test('a corrupt stored account URL does not abort the migration', () async {
-      await seedAccount('mother',
-          const MydiaCredentials(instanceId: 'other', accessToken: 'old'));
+      await seedAccount(
+        'mother',
+        const MydiaCredentials(instanceId: 'other', accessToken: 'old'),
+      );
       final other = await recordOf('mother');
       await writeMydiaCredentials(
-          secrets,
-          other.account,
-          const MydiaCredentials(
-              instanceId: 'other', accessToken: 'old', serverUrl: 'http://['));
+        secrets,
+        other.account,
+        const MydiaCredentials(
+          instanceId: 'other',
+          accessToken: 'old',
+          serverUrl: 'http://[',
+        ),
+      );
       final legacy = legacyWith({
         'auth_token': 'tok',
         'server_url': 'https://media.example.test',
@@ -232,31 +251,36 @@ void main() {
     });
 
     test('a token without a server url is not a sign-in', () async {
-      expect(await migrateLegacyMydia(deps(legacyWith({'auth_token': 'tok'}))),
-          isNull);
+      expect(
+        await migrateLegacyMydia(deps(legacyWith({'auth_token': 'tok'}))),
+        isNull,
+      );
     });
 
     test('already migrated: returns the stored id, writes nothing', () async {
       await store.setLegacyInstanceId('mx');
-      final id = await migrateLegacyMydia(deps(legacyWith({
-        'auth_token': 't',
-        'server_url': 'https://a.test',
-      })));
+      final id = await migrateLegacyMydia(
+        deps(legacyWith({'auth_token': 't', 'server_url': 'https://a.test'})),
+      );
       expect(id, 'mx');
       expect((await store.load()).accounts, isEmpty);
       expect(rewriter.calls, isEmpty);
     });
 
-    test('already migrated: reruns the rewrite for an account that exists',
-        () async {
-      await seedAccount(
-          'mx', const MydiaCredentials(instanceId: 'x', accessToken: 'a'));
-      await store.setLegacyInstanceId('mx');
-      final id = await migrateLegacyMydia(deps(MockAuthStorage()));
-      expect(id, 'mx');
-      expect(rewriter.calls.single.$1, preAccountSourceId);
-      expect(rewriter.calls.single.$2, mydiaSourceIdOf(await recordOf('mx')));
-    });
+    test(
+      'already migrated: reruns the rewrite for an account that exists',
+      () async {
+        await seedAccount(
+          'mx',
+          const MydiaCredentials(instanceId: 'x', accessToken: 'a'),
+        );
+        await store.setLegacyInstanceId('mx');
+        final id = await migrateLegacyMydia(deps(MockAuthStorage()));
+        expect(id, 'mx');
+        expect(rewriter.calls.single.$1, preAccountSourceId);
+        expect(rewriter.calls.single.$2, mydiaSourceIdOf(await recordOf('mx')));
+      },
+    );
 
     test('never deletes or changes a legacy key', () async {
       final legacy = legacyWith({

@@ -18,11 +18,11 @@ import 'all_servers_cards.dart';
 import 'all_servers_providers.dart';
 
 String _sectionTitle(AppLocalizations l10n, MergedSection s) => switch (s) {
-      MergedSection.movies => l10n.navMovies,
-      MergedSection.shows => l10n.navShowsShort,
-      MergedSection.episodes => l10n.sourcesSearchKindEpisodes,
-      MergedSection.videos => l10n.libraryTitleVideos,
-    };
+  MergedSection.movies => l10n.navMovies,
+  MergedSection.shows => l10n.navShowsShort,
+  MergedSection.episodes => l10n.sourcesSearchKindEpisodes,
+  MergedSection.videos => l10n.libraryTitleVideos,
+};
 
 class AllServersSearchScreen extends ConsumerWidget {
   const AllServersSearchScreen({super.key});
@@ -67,36 +67,40 @@ class AllServersSearchScreen extends ConsumerWidget {
       body: (context, scrollTopPadding) => switch (results) {
         null => const SizedBox.shrink(),
         AsyncData(:final value) when value.value.isEmpty => Padding(
-            padding: EdgeInsets.only(top: scrollTopPadding),
-            child: Center(child: Text(context.l10n.sourcesSearchNothingFound)),
-          ),
+          padding: EdgeInsets.only(top: scrollTopPadding),
+          child: Center(child: Text(context.l10n.sourcesSearchNothingFound)),
+        ),
         AsyncData(:final value) => ListView(
-            padding: EdgeInsets.only(
-                top: scrollTopPadding, bottom: DockInsets.bottomOf(context)),
-            children: [
-              AllServersBanner(
-                  unavailable: value.unavailable, onRetry: notifier.retry),
-              for (final entry in value.value.sections.entries)
-                SourcePosterRow(
-                  key: Key('all-search-section-${entry.key.name}'),
-                  title: _sectionTitle(context.l10n, entry.key),
-                  railId: 'all-search-${entry.key.name}',
-                  items: entry.value,
-                  posterFor: (context, item) => AllServersPoster(
-                    item: item,
-                    extraCopies: value.extraCopies[item.ref] ?? 0,
-                  ),
+          padding: EdgeInsets.only(
+            top: scrollTopPadding,
+            bottom: DockInsets.bottomOf(context),
+          ),
+          children: [
+            AllServersBanner(
+              unavailable: value.unavailable,
+              onRetry: notifier.retry,
+            ),
+            for (final entry in value.value.sections.entries)
+              SourcePosterRow(
+                key: Key('all-search-section-${entry.key.name}'),
+                title: _sectionTitle(context.l10n, entry.key),
+                railId: 'all-search-${entry.key.name}',
+                items: entry.value,
+                posterFor: (context, item) => AllServersPoster(
+                  item: item,
+                  extraCopies: value.extraCopies[item.ref] ?? 0,
                 ),
-            ],
-          ),
+              ),
+          ],
+        ),
         AsyncError(:final error) => Padding(
-            padding: EdgeInsets.only(top: scrollTopPadding),
-            child: SourceErrorView(error: error, onRetry: notifier.retry),
-          ),
+          padding: EdgeInsets.only(top: scrollTopPadding),
+          child: SourceErrorView(error: error, onRetry: notifier.retry),
+        ),
         _ => Padding(
-            padding: EdgeInsets.only(top: scrollTopPadding),
-            child: const Center(child: CircularProgressIndicator()),
-          ),
+          padding: EdgeInsets.only(top: scrollTopPadding),
+          child: const Center(child: CircularProgressIndicator()),
+        ),
       },
     );
   }

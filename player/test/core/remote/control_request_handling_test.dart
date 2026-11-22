@@ -18,12 +18,11 @@ FlutterInboundControlRequest _request(
   String requestId, {
   FlutterRemoteControlRequest request =
       const FlutterRemoteControlRequest.play(),
-}) =>
-    FlutterInboundControlRequest(
-      peer: 'peer-node-id',
-      requestId: requestId,
-      request: request,
-    );
+}) => FlutterInboundControlRequest(
+  peer: 'peer-node-id',
+  requestId: requestId,
+  request: request,
+);
 
 void main() {
   late Box<dynamic> box;
@@ -71,12 +70,18 @@ void main() {
 
       await run(_request('req-2'));
 
-      expect(handled, isEmpty,
-          reason: 'the roster check inside the receiver is a different gate; '
-              'an opted-out device must not run it at all');
+      expect(
+        handled,
+        isEmpty,
+        reason:
+            'the roster check inside the receiver is a different gate; '
+            'an opted-out device must not run it at all',
+      );
       expect(sent, hasLength(1));
-      expect(sent.single.response,
-          isA<FlutterRemoteControlResponse_NotAuthorized>());
+      expect(
+        sent.single.response,
+        isA<FlutterRemoteControlResponse_NotAuthorized>(),
+      );
     });
 
     test('the refusal answers the id that asked', () async {
@@ -99,11 +104,14 @@ void main() {
       await settings.setControllable(false);
       await run(_request('after'));
 
-      expect(handled.map((r) => r.requestId), ['before'],
-          reason: 'the request after the opt-out must not reach the receiver');
+      expect(handled.map((r) => r.requestId), [
+        'before',
+      ], reason: 'the request after the opt-out must not reach the receiver');
       expect(sent.single.requestId, 'after');
-      expect(sent.single.response,
-          isA<FlutterRemoteControlResponse_NotAuthorized>());
+      expect(
+        sent.single.response,
+        isA<FlutterRemoteControlResponse_NotAuthorized>(),
+      );
     });
 
     test('opting back in mid-session is served again', () async {
@@ -121,39 +129,50 @@ void main() {
       // has to cover them too, not just the transport commands.
       await settings.setControllable(false);
 
-      await run(_request('hello',
+      await run(
+        _request(
+          'hello',
           request: const FlutterRemoteControlRequest.hello(
             controllerName: 'phone',
             protocolVersion: 1,
-          )));
-      await run(_request('get-state',
-          request: const FlutterRemoteControlRequest.getState()));
+          ),
+        ),
+      );
+      await run(
+        _request(
+          'get-state',
+          request: const FlutterRemoteControlRequest.getState(),
+        ),
+      );
 
       expect(handled, isEmpty);
       expect(sent.map((s) => s.requestId), ['hello', 'get-state']);
       expect(
         sent.every(
-            (s) => s.response is FlutterRemoteControlResponse_NotAuthorized),
+          (s) => s.response is FlutterRemoteControlResponse_NotAuthorized,
+        ),
         isTrue,
       );
     });
 
-    test('a throwing receiver does not escape into the stream listener',
-        () async {
-      // The caller is a `.listen` callback with no error path, so anything
-      // escaping here becomes an unhandled async error and takes down the
-      // zone rather than dropping one request.
-      await expectLater(
-        handleControlRequest(
-          request: _request('boom'),
-          controllableEnabled: settings.controllableEnabled,
-          respond: (id, response) async =>
-              sent.add(_SentResponse(id, response)),
-          handle: (_) async => throw Exception('receiver blew up'),
-        ),
-        completes,
-      );
-    });
+    test(
+      'a throwing receiver does not escape into the stream listener',
+      () async {
+        // The caller is a `.listen` callback with no error path, so anything
+        // escaping here becomes an unhandled async error and takes down the
+        // zone rather than dropping one request.
+        await expectLater(
+          handleControlRequest(
+            request: _request('boom'),
+            controllableEnabled: settings.controllableEnabled,
+            respond: (id, response) async =>
+                sent.add(_SentResponse(id, response)),
+            handle: (_) async => throw Exception('receiver blew up'),
+          ),
+          completes,
+        );
+      },
+    );
 
     test('a throwing settings read does not escape either', () async {
       await expectLater(
@@ -178,7 +197,7 @@ void main() {
         handleControlRequest(
           request: _request('boom'),
           controllableEnabled: settings.controllableEnabled,
-          respond: (_, __) async => throw Exception('host is gone'),
+          respond: (_, _) async => throw Exception('host is gone'),
           handle: (r) async => handled.add(r),
         ),
         completes,

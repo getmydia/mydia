@@ -221,8 +221,10 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
       // default while a poster is visibly hovered — the same class of
       // staleness bug, polarity reversed. clearHoverIf only clears when the
       // override still equals what this instance published.
-      final source =
-          BackdropSource(imageUrl: widget.imageUrl, id: widget.imageUrl);
+      final source = BackdropSource(
+        imageUrl: widget.imageUrl,
+        id: widget.imageUrl,
+      );
       SchedulerBinding.instance.addPostFrameCallback((_) {
         _backdropController.clearHoverIf(source);
       });
@@ -249,8 +251,9 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
         curve: DepthTokens.curveStandard,
         decoration: BoxDecoration(
           borderRadius: radius,
-          boxShadow:
-              deepened ? DepthTokens.posterHover : DepthTokens.posterResting,
+          boxShadow: deepened
+              ? DepthTokens.posterHover
+              : DepthTokens.posterResting,
         ),
         child: ClipRRect(
           borderRadius: radius,

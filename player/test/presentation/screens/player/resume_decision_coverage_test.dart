@@ -61,7 +61,8 @@ void main() {
     'streaming, direct play': (tester) async {
       final container = buildPlayerScreenContainer(
         server: serverFor(
-            streamingCandidatesResponse(duration: 5400, directPlay: true)),
+          streamingCandidatesResponse(duration: 5400, directPlay: true),
+        ),
         connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
@@ -85,8 +86,9 @@ void main() {
     'downloaded, offline': (tester) async {
       // The instance under test reports `unreachable`, which is what the player
       // reads as offline.
-      final tempDir =
-          Directory.systemTemp.createTempSync('mydia_resume_coverage_test_');
+      final tempDir = Directory.systemTemp.createTempSync(
+        'mydia_resume_coverage_test_',
+      );
       addTearDown(() => tempDir.deleteSync(recursive: true));
       final tempFile = File('${tempDir.path}/arrival.mkv')
         ..writeAsBytesSync(const [0]);
@@ -94,8 +96,10 @@ void main() {
       final store = InMemoryPlaybackProgressStore();
       final container = buildPlayerScreenContainer(
         // Offline mode issues no GraphQL at all.
-        server: ScriptedMydiaTransport((request, callIndex) =>
-            throw StateError('offline mode must not issue GraphQL requests')),
+        server: ScriptedMydiaTransport(
+          (request, callIndex) =>
+              throw StateError('offline mode must not issue GraphQL requests'),
+        ),
         connectionState: HarnessLink.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
@@ -123,8 +127,11 @@ void main() {
     testWidgets('$name asks about resuming', (tester) async {
       await setUpCase(tester);
 
-      expect(find.text('Resume'), findsOneWidget,
-          reason: '$name must reach the single resume decision');
+      expect(
+        find.text('Resume'),
+        findsOneWidget,
+        reason: '$name must reach the single resume decision',
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

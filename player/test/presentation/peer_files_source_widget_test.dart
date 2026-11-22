@@ -21,8 +21,9 @@ import '../core/sources/files/peer_files_harness.dart';
 import '../test_utils/toast_harness.dart';
 
 void main() {
-  testWidgets('peer_source_renders_home_and_detail_from_replicated_index',
-      (tester) async {
+  testWidgets('peer_source_renders_home_and_detail_from_replicated_index', (
+    tester,
+  ) async {
     late PeerHarness h;
     await tester.runAsync(() async {
       h = PeerHarness(await FilesFixture.create(seed: false, inMemory: true));
@@ -31,34 +32,42 @@ void main() {
     h.client.list.value = [lentFlocal()];
     final peerId = peerFilesSource(lentFlocal()).id;
 
-    final router = GoRouter(routes: [
-      GoRoute(
-          path: '/', builder: (_, __) => HomeScreen(scope: OneServer(peerId))),
-      sourceItemRoute(),
-      ...sourceDetailRoutes(),
-    ]);
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => HomeScreen(scope: OneServer(peerId)),
+        ),
+        sourceItemRoute(),
+        ...sourceDetailRoutes(),
+      ],
+    );
     addTearDown(router.dispose);
     await tester.binding.setSurfaceSize(const Size(1280, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ...h.overrides(InMemorySourceStore()),
-        // No artwork requests: a URL keeps a spinner running and
-        // pumpAndSettle never settles.
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
-      child: MaterialApp.router(
-        routerConfig: router,
-        builder: toastLayerBuilder,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...h.overrides(InMemorySourceStore()),
+          // No artwork requests: a URL keeps a spinner running and
+          // pumpAndSettle never settles.
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ],
+        child: MaterialApp.router(
+          routerConfig: router,
+          builder: toastLayerBuilder,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     final card = find.descendant(
-        of: find.byType(MediaPoster), matching: find.text('Quiet Meridian'));
+      of: find.byType(MediaPoster),
+      matching: find.text('Quiet Meridian'),
+    );
     expect(card, findsWidgets);
     expect(find.byType(MovieDetailScreen), findsNothing);
     await tester.tap(card.first);
@@ -66,13 +75,17 @@ void main() {
 
     expect(router.state.uri.path, startsWith('/s/${peerId.value}/movie/'));
     expect(
-        find.descendant(
-            of: find.byType(MovieDetailScreen),
-            matching: find.text('Quiet Meridian')),
-        findsWidgets);
+      find.descendant(
+        of: find.byType(MovieDetailScreen),
+        matching: find.text('Quiet Meridian'),
+      ),
+      findsWidgets,
+    );
 
-    final peerBackend =
-        h.backends.entries.where((e) => e.key.id == peerId).single.value;
+    final peerBackend = h.backends.entries
+        .where((e) => e.key.id == peerId)
+        .single
+        .value;
     expect(peerBackend.listed, isEmpty);
     expect(h.backends.keys.every((s) => s.id == peerId), isTrue);
   });

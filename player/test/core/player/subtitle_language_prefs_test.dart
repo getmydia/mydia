@@ -19,8 +19,9 @@ void main() {
     late Box<List<dynamic>> box;
 
     setUp(() async {
-      tempDir =
-          await Directory.systemTemp.createTemp('subtitle_language_prefs');
+      tempDir = await Directory.systemTemp.createTemp(
+        'subtitle_language_prefs',
+      );
       Hive.init(tempDir.path);
       box = await Hive.openBox<List<dynamic>>(SubtitleLanguagePrefs.boxName);
     });
@@ -33,7 +34,9 @@ void main() {
 
     test('load returns the defaults when nothing has been saved', () async {
       expect(
-          await SubtitleLanguagePrefs.load(), SubtitleLanguagePrefs.defaults);
+        await SubtitleLanguagePrefs.load(),
+        SubtitleLanguagePrefs.defaults,
+      );
     });
 
     test('save then load round-trips the language list', () async {
@@ -59,7 +62,9 @@ void main() {
       await SubtitleLanguagePrefs.save([]);
 
       expect(
-          await SubtitleLanguagePrefs.load(), SubtitleLanguagePrefs.defaults);
+        await SubtitleLanguagePrefs.load(),
+        SubtitleLanguagePrefs.defaults,
+      );
     });
 
     test('discards an unreadable record instead of throwing', () async {
@@ -68,7 +73,9 @@ void main() {
       await box.put('languages', [1, 2, 3]);
 
       expect(
-          await SubtitleLanguagePrefs.load(), SubtitleLanguagePrefs.defaults);
+        await SubtitleLanguagePrefs.load(),
+        SubtitleLanguagePrefs.defaults,
+      );
     });
 
     test('a fresh read sees what an earlier save wrote', () async {

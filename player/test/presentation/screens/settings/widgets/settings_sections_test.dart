@@ -34,10 +34,10 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 class _FakeSettingsController extends SettingsController {
   @override
   Future<UserSettings> build() async => const UserSettings(
-        serverUrl: 'mydia.local:4000',
-        username: 'admin',
-        defaultQuality: '1080p',
-      );
+    serverUrl: 'mydia.local:4000',
+    username: 'admin',
+    defaultQuality: '1080p',
+  );
 }
 
 /// Publishes a fixed registration status without a p2p host or a server.
@@ -47,8 +47,9 @@ class _StubRegistration extends NodeRegistrations {
   final RegistrationStatus _status;
 
   @override
-  Map<SourceId, RegistrationStatus> build() =>
-      {const SourceId('acct:owner:inst'): _status};
+  Map<SourceId, RegistrationStatus> build() => {
+    const SourceId('acct:owner:inst'): _status,
+  };
 
   @override
   void retryAll() {}
@@ -122,11 +123,14 @@ void main() {
     await _remoteControlBox.close();
   });
 
-  testWidgets('Playback carries the remote-control rows only when asked',
-      (tester) async {
+  testWidgets('Playback carries the remote-control rows only when asked', (
+    tester,
+  ) async {
     await _pumpSection(tester, const _PlaybackHost(includeRemote: false));
     expect(
-        find.byKey(const Key('remote-control-enabled-switch')), findsNothing);
+      find.byKey(const Key('remote-control-enabled-switch')),
+      findsNothing,
+    );
 
     await _pumpSection(tester, const _PlaybackHost(includeRemote: true));
     expect(
@@ -136,8 +140,9 @@ void main() {
     expect(find.byKey(const Key('default-quality-row')), findsOneWidget);
   });
 
-  testWidgets('Playback shows the registration retry after a failure',
-      (tester) async {
+  testWidgets('Playback shows the registration retry after a failure', (
+    tester,
+  ) async {
     await _pumpSection(
       tester,
       const _PlaybackHost(includeRemote: true),
@@ -146,8 +151,9 @@ void main() {
     expect(find.byKey(const Key('remote-control-retry-row')), findsOneWidget);
   });
 
-  testWidgets('About names the app and offers the update check',
-      (tester) async {
+  testWidgets('About names the app and offers the update check', (
+    tester,
+  ) async {
     await _pumpSection(tester, const AboutSettingsSection(), version: '1.2.3');
     expect(find.byKey(const Key('about-app-name')), findsOneWidget);
     expect(find.textContaining('1.2.3'), findsOneWidget);

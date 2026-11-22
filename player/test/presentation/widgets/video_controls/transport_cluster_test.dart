@@ -6,17 +6,17 @@ import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
 Widget _host(Widget child) => MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(body: Center(child: child)));
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: Center(child: child)),
+);
 
 void main() {
   group('TransportSurface', () {
-    testWidgets('omits episode buttons when no callbacks are given',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(const TransportSurface(isPlaying: false)),
-      );
+    testWidgets('omits episode buttons when no callbacks are given', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const TransportSurface(isPlaying: false)));
 
       expect(find.byKey(TransportSurface.previousEpisodeKey), findsNothing);
       expect(find.byKey(TransportSurface.nextEpisodeKey), findsNothing);
@@ -24,41 +24,44 @@ void main() {
     });
 
     testWidgets(
-        'compact renders only play/pause, ignoring seek and episode-nav '
-        'callbacks entirely — used below the mobile breakpoint (see '
-        "compact's own dartdoc)", (tester) async {
-      await tester.pumpWidget(
-        _host(
-          TransportSurface(
-            isPlaying: false,
-            onBack10: () {},
-            onForward10: () {},
-            onPreviousEpisode: () {},
-            onNextEpisode: () {},
-            compact: true,
+      'compact renders only play/pause, ignoring seek and episode-nav '
+      'callbacks entirely — used below the mobile breakpoint (see '
+      "compact's own dartdoc)",
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            TransportSurface(
+              isPlaying: false,
+              onBack10: () {},
+              onForward10: () {},
+              onPreviousEpisode: () {},
+              onNextEpisode: () {},
+              compact: true,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(find.byKey(TransportSurface.playPauseKey), findsOneWidget);
-      expect(find.byKey(TransportSurface.back10Key), findsNothing);
-      expect(find.byKey(TransportSurface.forward10Key), findsNothing);
-      expect(find.byKey(TransportSurface.previousEpisodeKey), findsNothing);
-      expect(find.byKey(TransportSurface.nextEpisodeKey), findsNothing);
+        expect(find.byKey(TransportSurface.playPauseKey), findsOneWidget);
+        expect(find.byKey(TransportSurface.back10Key), findsNothing);
+        expect(find.byKey(TransportSurface.forward10Key), findsNothing);
+        expect(find.byKey(TransportSurface.previousEpisodeKey), findsNothing);
+        expect(find.byKey(TransportSurface.nextEpisodeKey), findsNothing);
 
-      // Still the same 40px play/pause button, not some other size.
-      //
-      // 40, not the original 48: the transport cluster was compacted so a
-      // 4th secondary button fits below the desktop tier. See
-      // transport_cluster.dart's `gap` dartdoc.
-      final button = tester.widget<ControlButton>(
-        find.byKey(TransportSurface.playPauseKey),
-      );
-      expect(button.size, 40);
-    });
+        // Still the same 40px play/pause button, not some other size.
+        //
+        // 40, not the original 48: the transport cluster was compacted so a
+        // 4th secondary button fits below the desktop tier. See
+        // transport_cluster.dart's `gap` dartdoc.
+        final button = tester.widget<ControlButton>(
+          find.byKey(TransportSurface.playPauseKey),
+        );
+        expect(button.size, 40);
+      },
+    );
 
-    testWidgets('shows episode buttons when callbacks are given',
-        (tester) async {
+    testWidgets('shows episode buttons when callbacks are given', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           TransportSurface(
@@ -79,9 +82,7 @@ void main() {
       // proportion between them is deliberately preserved at roughly the
       // same ratio as before (1.25x -> 1.2x), not left at the old absolute
       // sizes. See transport_cluster.dart's `gap` dartdoc.
-      await tester.pumpWidget(
-        _host(const TransportSurface(isPlaying: false)),
-      );
+      await tester.pumpWidget(_host(const TransportSurface(isPlaying: false)));
 
       final play = tester.widget<ControlButton>(
         find.byKey(TransportSurface.playPauseKey),
@@ -122,9 +123,7 @@ void main() {
     });
 
     testWidgets('swaps glyph between play and pause', (tester) async {
-      await tester.pumpWidget(
-        _host(const TransportSurface(isPlaying: false)),
-      );
+      await tester.pumpWidget(_host(const TransportSurface(isPlaying: false)));
       expect(
         tester
             .widget<ControlButton>(find.byKey(TransportSurface.playPauseKey))
@@ -132,9 +131,7 @@ void main() {
         Icons.play_arrow_rounded,
       );
 
-      await tester.pumpWidget(
-        _host(const TransportSurface(isPlaying: true)),
-      );
+      await tester.pumpWidget(_host(const TransportSurface(isPlaying: true)));
       await tester.pumpAndSettle();
       expect(
         tester
@@ -144,8 +141,7 @@ void main() {
       );
     });
 
-    testWidgets(
-        'the play/pause button stays one ControlButton across the cross-fade, '
+    testWidgets('the play/pause button stays one ControlButton across the cross-fade, '
         'and the supplied node keeps primary focus throughout', (tester) async {
       final playPauseFocusNode = FocusNode(debugLabel: 'play-pause');
       addTearDown(playPauseFocusNode.dispose);
@@ -184,7 +180,8 @@ void main() {
       expect(
         find.byKey(TransportSurface.playPauseKey),
         findsOneWidget,
-        reason: 'the cross-fade animates the glyph inside the button, so this '
+        reason:
+            'the cross-fade animates the glyph inside the button, so this '
             'key resolves to exactly one ControlButton at every point in the '
             'transition — there is no window with two live buttons, and so no '
             'window with two owners of the caller-supplied focus node',
@@ -215,7 +212,8 @@ void main() {
       expect(
         FocusManager.instance.primaryFocus,
         same(playPauseFocusNode),
-        reason: 'the supplied node must hold primary focus across the toggle; '
+        reason:
+            'the supplied node must hold primary focus across the toggle; '
             'asserting identity, not hasFocus, because hasFocus is also true '
             'for an ancestor',
       );
@@ -261,8 +259,7 @@ void main() {
       expect(toggled, isTrue);
     });
 
-    testWidgets(
-        'targets stay left-to-right ordered with uniform 2px gaps, '
+    testWidgets('targets stay left-to-right ordered with uniform 2px gaps, '
         'with or without episode buttons', (tester) async {
       // 2, not the original 8: the transport cluster was compacted so a 4th
       // secondary button fits below the desktop tier. See
@@ -270,15 +267,15 @@ void main() {
       //
       // Without episode buttons: back10, play, forward10 in order with 2px
       // gaps between each hit-target edge.
-      await tester.pumpWidget(
-        _host(const TransportSurface(isPlaying: false)),
-      );
+      await tester.pumpWidget(_host(const TransportSurface(isPlaying: false)));
 
       final backRect = tester.getRect(find.byKey(TransportSurface.back10Key));
-      final playRect =
-          tester.getRect(find.byKey(TransportSurface.playPauseKey));
-      final forwardRect =
-          tester.getRect(find.byKey(TransportSurface.forward10Key));
+      final playRect = tester.getRect(
+        find.byKey(TransportSurface.playPauseKey),
+      );
+      final forwardRect = tester.getRect(
+        find.byKey(TransportSurface.forward10Key),
+      );
 
       expect(backRect.right, lessThan(playRect.left));
       expect(playRect.right, lessThan(forwardRect.left));
@@ -299,15 +296,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final prevRect =
-          tester.getRect(find.byKey(TransportSurface.previousEpisodeKey));
+      final prevRect = tester.getRect(
+        find.byKey(TransportSurface.previousEpisodeKey),
+      );
       final backRect2 = tester.getRect(find.byKey(TransportSurface.back10Key));
-      final playRect2 =
-          tester.getRect(find.byKey(TransportSurface.playPauseKey));
-      final forwardRect2 =
-          tester.getRect(find.byKey(TransportSurface.forward10Key));
-      final nextRect =
-          tester.getRect(find.byKey(TransportSurface.nextEpisodeKey));
+      final playRect2 = tester.getRect(
+        find.byKey(TransportSurface.playPauseKey),
+      );
+      final forwardRect2 = tester.getRect(
+        find.byKey(TransportSurface.forward10Key),
+      );
+      final nextRect = tester.getRect(
+        find.byKey(TransportSurface.nextEpisodeKey),
+      );
 
       expect(prevRect.right, lessThan(backRect2.left));
       expect(backRect2.right, lessThan(playRect2.left));

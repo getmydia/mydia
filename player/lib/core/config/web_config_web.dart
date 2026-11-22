@@ -3,6 +3,7 @@ library;
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+
 import 'package:web/web.dart' as web;
 
 import 'web_config.dart';
@@ -29,12 +30,16 @@ MydiaWebConfig? getWebConfig() {
         : false;
 
     final localeVal = config['locale'];
-    final locale =
-        !localeVal.isUndefinedOrNull ? (localeVal as JSString).toDart : null;
+    final locale = !localeVal.isUndefinedOrNull
+        ? (localeVal as JSString).toDart
+        : null;
 
     if (!authenticated) {
       return MydiaWebConfig(
-          authenticated: false, embedMode: embedMode, locale: locale);
+        authenticated: false,
+        embedMode: embedMode,
+        locale: locale,
+      );
     }
 
     final tokenVal = config['token'];
@@ -44,8 +49,9 @@ MydiaWebConfig? getWebConfig() {
     return MydiaWebConfig(
       authenticated: true,
       token: !tokenVal.isUndefinedOrNull ? (tokenVal as JSString).toDart : null,
-      userId:
-          !userIdVal.isUndefinedOrNull ? userIdVal.dartify()?.toString() : null,
+      userId: !userIdVal.isUndefinedOrNull
+          ? userIdVal.dartify()?.toString()
+          : null,
       username: !usernameVal.isUndefinedOrNull
           ? (usernameVal as JSString).toDart
           : null,

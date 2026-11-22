@@ -147,8 +147,9 @@ class _StubRegistration extends NodeRegistrations {
   final RegistrationStatus _status;
 
   @override
-  Map<SourceId, RegistrationStatus> build() =>
-      {const SourceId('acct:owner:inst'): _status};
+  Map<SourceId, RegistrationStatus> build() => {
+    const SourceId('acct:owner:inst'): _status,
+  };
 
   @override
   void retryAll() {}
@@ -170,14 +171,17 @@ class _ThrowingRemoteControlSettings extends RemoteControlSettings {
 
 /// Two stored Mydia servers, `ma` added first and so bound.
 Future<({InMemorySourceStore store, SourceSecrets secrets})>
-    _twoMydiaServers() async {
+_twoMydiaServers() async {
   final store = InMemorySourceStore();
   final secrets = SourceSecrets(MockAuthStorage());
   for (final (i, id) in ['a', 'b'].indexed) {
     final record = mydiaRecord(id, addedAtMs: i);
     await store.putAccount(record);
-    await writeMydiaCredentials(secrets, record.account,
-        MydiaCredentials(instanceId: id, accessToken: 'access-$id'));
+    await writeMydiaCredentials(
+      secrets,
+      record.account,
+      MydiaCredentials(instanceId: id, accessToken: 'access-$id'),
+    );
   }
   return (store: store, secrets: secrets);
 }
@@ -236,7 +240,8 @@ Future<void> _pump(
         noCollectionSyncOverride,
         isWebProvider.overrideWithValue(isWeb),
         backupSyncServiceProvider.overrideWithValue(
-            backupController?.relay ?? FakeBackupSyncService()),
+          backupController?.relay ?? FakeBackupSyncService(),
+        ),
         if (backupController != null)
           backupControllerProvider.overrideWithValue(backupController),
         sourceStoreProvider.overrideWith((ref) async => sources),
@@ -306,14 +311,18 @@ void main() {
     await _remoteControlBox.close();
   });
 
-  testWidgets('renders the identity band with the account and server',
-      (tester) async {
+  testWidgets('renders the identity band with the account and server', (
+    tester,
+  ) async {
     final store = InMemorySourceStore();
     final secrets = SourceSecrets(MockAuthStorage());
     final record = mydiaRecord('a', addedAtMs: 0);
     await store.putAccount(record);
-    await writeMydiaCredentials(secrets, record.account,
-        const MydiaCredentials(instanceId: 'a', accessToken: 'access-a'));
+    await writeMydiaCredentials(
+      secrets,
+      record.account,
+      const MydiaCredentials(instanceId: 'a', accessToken: 'access-a'),
+    );
     await _pump(tester, mydia: (store: store, secrets: secrets));
 
     expect(find.byType(SettingsIdentity), findsOneWidget);
@@ -321,16 +330,16 @@ void main() {
     expect(find.text('mydia.local:4000'), findsOneWidget);
   });
 
-  testWidgets(
-      'with several Mydia accounts the identity band is left to the '
+  testWidgets('with several Mydia accounts the identity band is left to the '
       'instance screens', (tester) async {
     await _pump(tester);
 
     expect(find.byType(SettingsIdentity), findsNothing);
   });
 
-  testWidgets('connection state reads as the subtitle of the details row',
-      (tester) async {
+  testWidgets('connection state reads as the subtitle of the details row', (
+    tester,
+  ) async {
     await _pump(tester);
 
     expect(find.text('Connected to server'), findsOneWidget);
@@ -346,14 +355,16 @@ void main() {
     expect(
       tester.getTopLeft(card).dy,
       lessThan(
-          tester.getTopLeft(find.byKey(const Key('default-quality-row'))).dy),
+        tester.getTopLeft(find.byKey(const Key('default-quality-row'))).dy,
+      ),
     );
     expect(find.byKey(const Key('paired-devices-row')), findsNothing);
     expect(find.byKey(const Key('manage-sources-row')), findsNothing);
   });
 
-  testWidgets('Backup & sync sits between the connections card and playback',
-      (tester) async {
+  testWidgets('Backup & sync sits between the connections card and playback', (
+    tester,
+  ) async {
     await _pump(tester);
 
     final backup = find.byKey(const Key('settings-backup-section'));
@@ -361,49 +372,63 @@ void main() {
     expect(find.byKey(const Key('backup-switch')), findsOneWidget);
     final top = tester.getTopLeft(backup).dy;
     expect(
-        top,
-        greaterThan(
-            tester.getTopLeft(find.byKey(const Key('connections-card'))).dy));
+      top,
+      greaterThan(
+        tester.getTopLeft(find.byKey(const Key('connections-card'))).dy,
+      ),
+    );
     expect(
-        top,
-        lessThan(tester
-            .getTopLeft(find.byKey(const Key('default-quality-row')))
-            .dy));
+      top,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key('default-quality-row'))).dy,
+      ),
+    );
   });
 
   testWidgets(
-      'Backup & sync in Settings offers every store and turns the relay '
-      'on through the backup controller', (tester) async {
-    final relay = FakeBackupSyncService();
-    final controller = FakeBackupController(relay: relay, offered: const {
-      BackupStoreKind.relay,
-      BackupStoreKind.icloud,
-      BackupStoreKind.gdrive,
-    });
-    await _pump(tester, backupController: controller);
+    'Backup & sync in Settings offers every store and turns the relay '
+    'on through the backup controller',
+    (tester) async {
+      final relay = FakeBackupSyncService();
+      final controller = FakeBackupController(
+        relay: relay,
+        offered: const {
+          BackupStoreKind.relay,
+          BackupStoreKind.icloud,
+          BackupStoreKind.gdrive,
+        },
+      );
+      await _pump(tester, backupController: controller);
 
-    final section = find.byKey(const Key('settings-backup-section'));
-    for (final store in ['relay', 'icloud', 'gdrive']) {
-      expect(
+      final section = find.byKey(const Key('settings-backup-section'));
+      for (final store in ['relay', 'icloud', 'gdrive']) {
+        expect(
           find.descendant(
-              of: section, matching: find.byKey(Key('backup-store-$store'))),
-          findsOneWidget);
-    }
+            of: section,
+            matching: find.byKey(Key('backup-store-$store')),
+          ),
+          findsOneWidget,
+        );
+      }
 
-    await tester.ensureVisible(find.byKey(const Key('backup-store-relay')));
-    await tester.tap(find.byKey(const Key('backup-store-relay')));
-    await tester.pumpAndSettle();
-    final confirm = find.byKey(const Key('recovery-key-confirm-button'));
-    expect(tester.widget<FilledButton>(confirm).onPressed, isNull,
-        reason: 'disabled until the key is ticked as saved');
-    await tester.tap(find.byKey(const Key('recovery-key-saved-checkbox')));
-    await tester.pump();
-    await tester.tap(confirm);
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('backup-store-relay')));
+      await tester.tap(find.byKey(const Key('backup-store-relay')));
+      await tester.pumpAndSettle();
+      final confirm = find.byKey(const Key('recovery-key-confirm-button'));
+      expect(
+        tester.widget<FilledButton>(confirm).onPressed,
+        isNull,
+        reason: 'disabled until the key is ticked as saved',
+      );
+      await tester.tap(find.byKey(const Key('recovery-key-saved-checkbox')));
+      await tester.pump();
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
 
-    expect(controller.calls, ['switchTo relay deleteOld=false key']);
-    expect(relay.calls.last, startsWith('confirmEnable'));
-  });
+      expect(controller.calls, ['switchTo relay deleteOld=false key']);
+      expect(relay.calls.last, startsWith('confirmEnable'));
+    },
+  );
 
   testWidgets('Backup & sync is absent on web', (tester) async {
     await _pump(tester, isWeb: true);
@@ -415,16 +440,20 @@ void main() {
     const size = Size(400, 400);
     await _pump(tester, size: size);
     final backup = find.byKey(const Key('settings-backup-section'));
-    expect(tester.getTopLeft(backup).dy, greaterThan(size.height),
-        reason: 'below the fold without the request');
+    expect(
+      tester.getTopLeft(backup).dy,
+      greaterThan(size.height),
+      reason: 'below the fold without the request',
+    );
 
     await _pump(tester, size: size, initialLocation: settingsBackupLocation);
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(backup).dy, lessThan(size.height));
   });
 
-  testWidgets('asking for Backup & sync again scrolls back to it',
-      (tester) async {
+  testWidgets('asking for Backup & sync again scrolls back to it', (
+    tester,
+  ) async {
     const size = Size(400, 400);
     await _pump(tester, size: size, initialLocation: backupRequestLocation());
     await tester.pumpAndSettle();
@@ -455,14 +484,16 @@ void main() {
     expect(find.text('${BuildChannel.current.appName} 0.14.2'), findsOneWidget);
   });
 
-  testWidgets('an unknown version renders no footer rather than a placeholder',
-      (tester) async {
-    // The hero showed an en dash here. A footer stating an unknown version is
-    // worth less than no footer.
-    await _pump(tester);
+  testWidgets(
+    'an unknown version renders no footer rather than a placeholder',
+    (tester) async {
+      // The hero showed an en dash here. A footer stating an unknown version is
+      // worth less than no footer.
+      await _pump(tester);
 
-    expect(find.textContaining(BuildChannel.current.appName), findsNothing);
-  });
+      expect(find.textContaining(BuildChannel.current.appName), findsNothing);
+    },
+  );
 
   testWidgets('shows the current quality rung label', (tester) async {
     await _pump(tester);
@@ -471,19 +502,22 @@ void main() {
     expect(find.text('1080p'), findsOneWidget);
   });
 
-  testWidgets('the default quality picker offers Auto with a neutral subtitle',
-      (tester) async {
-    await _pump(tester);
+  testWidgets(
+    'the default quality picker offers Auto with a neutral subtitle',
+    (tester) async {
+      await _pump(tester);
 
-    await tester.tap(find.byKey(const Key('default-quality-row')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('default-quality-row')));
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('quality-rung-Auto')), findsOneWidget);
-    expect(find.text('Adapts to your connection'), findsOneWidget);
-  });
+      expect(find.byKey(const Key('quality-rung-Auto')), findsOneWidget);
+      expect(find.text('Adapts to your connection'), findsOneWidget);
+    },
+  );
 
-  testWidgets('picking Auto stores auto and picking Original stores original',
-      (tester) async {
+  testWidgets('picking Auto stores auto and picking Original stores original', (
+    tester,
+  ) async {
     await _pump(tester);
 
     await tester.tap(find.byKey(const Key('default-quality-row')));
@@ -501,8 +535,9 @@ void main() {
     expect(_FakeSettingsController.qualityCalls, ['auto', 'original']);
   });
 
-  testWidgets('the commercials toggle starts on and reports its change',
-      (tester) async {
+  testWidgets('the commercials toggle starts on and reports its change', (
+    tester,
+  ) async {
     await _pump(tester);
 
     final toggle = find.descendant(
@@ -517,14 +552,17 @@ void main() {
     expect(_FakeSettingsController.commercialCalls, [false]);
   });
 
-  testWidgets('the skip toggle reports its change to the controller',
-      (tester) async {
+  testWidgets('the skip toggle reports its change to the controller', (
+    tester,
+  ) async {
     await _pump(tester);
 
-    await tester.tap(find.descendant(
-      of: find.byKey(const Key('auto-skip-segments-switch')),
-      matching: find.byType(Switch),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('auto-skip-segments-switch')),
+        matching: find.byType(Switch),
+      ),
+    );
     await tester.pump();
 
     expect(_FakeSettingsController.skipCalls, [true]);
@@ -539,21 +577,20 @@ void main() {
   // reachable on the remote tier, where the panel has no focusable controls
   // of its own — a silently-missing row here would strand a television
   // viewer with no way to turn the panel off.
-  testWidgets('the stats overlay row is present in the mounted screen',
-      (tester) async {
+  testWidgets('the stats overlay row is present in the mounted screen', (
+    tester,
+  ) async {
     await _pump(tester);
 
     expect(find.byKey(const Key('stats-overlay-switch')), findsOneWidget);
   });
 
-  testWidgets('the stats overlay row reflects the stored value',
-      (tester) async {
+  testWidgets('the stats overlay row reflects the stored value', (
+    tester,
+  ) async {
     final storage = MockAuthStorage()
       ..seedData({'stats_overlay_enabled': 'true'});
-    await _pump(
-      tester,
-      coreSettingsService: SettingsService(storage: storage),
-    );
+    await _pump(tester, coreSettingsService: SettingsService(storage: storage));
     await tester.pumpAndSettle();
 
     final toggle = find.descendant(
@@ -563,8 +600,7 @@ void main() {
     expect(tester.widget<Switch>(toggle).value, isTrue);
   });
 
-  testWidgets(
-      'the remote control toggle is interactive and writes through '
+  testWidgets('the remote control toggle is interactive and writes through '
       'RemoteControlSettings', (tester) async {
     await _pump(tester);
     await tester.pumpAndSettle();
@@ -624,8 +660,7 @@ void main() {
     expect(tester.widget<Switch>(toggle).value, isTrue);
   });
 
-  testWidgets(
-      'a failed write does not escape as an unhandled error and the '
+  testWidgets('a failed write does not escape as an unhandled error and the '
       'switch is not left stuck', (tester) async {
     await _pump(tester, failRemoteControlWrite: true);
     await tester.pumpAndSettle();
@@ -652,9 +687,13 @@ void main() {
     // `remoteControlEnabledProvider` is still invalidated after the
     // failure, so it re-resolves off the (unchanged) stored value.
     expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
-    expect(tester.widget<Switch>(toggle).value, isTrue,
-        reason: 'the write never reached storage, so the true, persisted '
-            'value is still the original one');
+    expect(
+      tester.widget<Switch>(toggle).value,
+      isTrue,
+      reason:
+          'the write never reached storage, so the true, persisted '
+          'value is still the original one',
+    );
   });
 
   testWidgets('connection details navigates to diagnostics', (tester) async {
@@ -666,8 +705,9 @@ void main() {
     expect(find.text('diagnostics stub'), findsOneWidget);
   });
 
-  testWidgets('the check-for-updates row is present on a supported platform',
-      (tester) async {
+  testWidgets('the check-for-updates row is present on a supported platform', (
+    tester,
+  ) async {
     // A `flutter test` host on Linux always reports a supported platform, so
     // only this branch is reachable here. The absent branch is covered at the
     // gate itself by test/core/update/update_host_test.dart, which exercises
@@ -677,8 +717,7 @@ void main() {
     expect(find.byKey(const Key('check-for-updates-row')), findsOneWidget);
   });
 
-  testWidgets(
-      'the check-for-updates row shows a spinner and disables while a '
+  testWidgets('the check-for-updates row shows a spinner and disables while a '
       'Flatpak check-and-install is in flight', (tester) async {
     // The row's spinner used to key off isChecking alone, which only the
     // checksOnly path (_refresh) ever sets. A Flatpak press goes straight to
@@ -695,41 +734,48 @@ void main() {
     final row = find.byKey(const Key('check-for-updates-row'));
     expect(
       find.descendant(
-          of: row, matching: find.byType(CircularProgressIndicator)),
+        of: row,
+        matching: find.byType(CircularProgressIndicator),
+      ),
       findsOneWidget,
     );
     expect(tester.widget<SettingsRow>(row).onTap, isNull);
   });
 
   testWidgets(
-      'an install-without-asking row (Android) installs on the first press, '
-      'with no dialog', (tester) async {
-    _FakeUpdateNotifier.checks = 0;
-    await _pump(
-      tester,
-      updateState: const UpdateState(
-        manualCheck: ManualCheckBehaviour.installsWithoutAsking,
-      ),
-    );
+    'an install-without-asking row (Android) installs on the first press, '
+    'with no dialog',
+    (tester) async {
+      _FakeUpdateNotifier.checks = 0;
+      await _pump(
+        tester,
+        updateState: const UpdateState(
+          manualCheck: ManualCheckBehaviour.installsWithoutAsking,
+        ),
+      );
 
-    final row = find.byKey(const Key('check-for-updates-row'));
-    expect(
-      find.descendant(
-          of: row, matching: find.text('Check and install updates')),
-      findsOneWidget,
-    );
+      final row = find.byKey(const Key('check-for-updates-row'));
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.text('Check and install updates'),
+        ),
+        findsOneWidget,
+      );
 
-    await tester.ensureVisible(row);
-    await tester.pump();
-    await tester.tap(row);
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(row);
+      await tester.pump();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
 
-    expect(find.byType(GlassDialog), findsNothing);
-    expect(_FakeUpdateNotifier.checks, 1);
-  });
+      expect(find.byType(GlassDialog), findsNothing);
+      expect(_FakeUpdateNotifier.checks, 1);
+    },
+  );
 
-  testWidgets('a Flatpak check-and-install row still asks first',
-      (tester) async {
+  testWidgets('a Flatpak check-and-install row still asks first', (
+    tester,
+  ) async {
     _FakeUpdateNotifier.checks = 0;
     await _pump(
       tester,
@@ -767,24 +813,28 @@ void main() {
   });
 
   group('when preferences fail to load', () {
-    testWidgets('the screen is not replaced by a full-page error',
-        (tester) async {
+    testWidgets('the screen is not replaced by a full-page error', (
+      tester,
+    ) async {
       await _pump(tester, settings: null, fail: true);
 
       expect(find.byKey(const Key('settings-retry-row')), findsOneWidget);
       expect(find.text('Diagnostics'), findsOneWidget);
     });
 
-    testWidgets('playback controls are disabled and offer a retry',
-        (tester) async {
+    testWidgets('playback controls are disabled and offer a retry', (
+      tester,
+    ) async {
       await _pump(tester, settings: null, fail: true);
 
       expect(
         tester
-            .widget<Switch>(find.descendant(
-              of: find.byKey(const Key('auto-skip-segments-switch')),
-              matching: find.byType(Switch),
-            ))
+            .widget<Switch>(
+              find.descendant(
+                of: find.byKey(const Key('auto-skip-segments-switch')),
+                matching: find.byType(Switch),
+              ),
+            )
             .onChanged,
         isNull,
       );
@@ -796,21 +846,28 @@ void main() {
   // alongside the card that shares its Flatpak wording.
 
   group('remote control registration status', () {
-    testWidgets('shows the retry row only when registration has failed',
-        (tester) async {
+    testWidgets('shows the retry row only when registration has failed', (
+      tester,
+    ) async {
       await _pump(
         tester,
-        registration:
-            const RegistrationFailed('could not reach the server', 3, null),
+        registration: const RegistrationFailed(
+          'could not reach the server',
+          3,
+          null,
+        ),
       );
 
       expect(find.byKey(const Key('remote-control-retry-row')), findsOneWidget);
-      expect(find.text('Not discoverable: could not reach the server'),
-          findsOneWidget);
+      expect(
+        find.text('Not discoverable: could not reach the server'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('hides the retry row once registration succeeds',
-        (tester) async {
+    testWidgets('hides the retry row once registration succeeds', (
+      tester,
+    ) async {
       await _pump(
         tester,
         registration: RegistrationSucceeded('abc', DateTime(2026, 9, 1)),
@@ -821,8 +878,7 @@ void main() {
     });
   });
 
-  testWidgets(
-      'has no crash-reporting switch of its own, even when the '
+  testWidgets('has no crash-reporting switch of its own, even when the '
       'reporter can send', (tester) async {
     // The choice lives on the Diagnostics screen now.
     await _pump(
@@ -861,6 +917,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expectClearsDock(
-        tester, find.text('${BuildChannel.current.appName} 1.2.3'));
+      tester,
+      find.text('${BuildChannel.current.appName} 1.2.3'),
+    );
   });
 }

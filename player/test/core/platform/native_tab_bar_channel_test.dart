@@ -9,7 +9,11 @@ const _channel = MethodChannel(_name);
 
 const _home = NativeTab(id: 'home', title: 'Home', symbol: 'house.fill');
 const _settings = NativeTab(
-    id: 'settings', title: 'Settings', symbol: 'gearshape.fill', badge: '1');
+  id: 'settings',
+  title: 'Settings',
+  symbol: 'gearshape.fill',
+  badge: '1',
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,8 +40,9 @@ void main() {
   Future<void> fromNative(String method, [Object? arguments]) =>
       messenger.handlePlatformMessage(
         _name,
-        const StandardMethodCodec()
-            .encodeMethodCall(MethodCall(method, arguments)),
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall(method, arguments),
+        ),
         (_) {},
       );
 
@@ -175,34 +180,43 @@ void main() {
     test('insetsChanged reads chromeLeading when present', () async {
       final events = <NativeTabBarEvent>[];
       bar.events.listen(events.add);
-      await fromNative('insetsChanged',
-          {'top': 0.0, 'leading': 0.0, 'bottom': 0.0, 'chromeLeading': 124.0});
+      await fromNative('insetsChanged', {
+        'top': 0.0,
+        'leading': 0.0,
+        'bottom': 0.0,
+        'chromeLeading': 124.0,
+      });
       await Future<void>.delayed(Duration.zero);
-      expect((events.single as NativeInsetsChanged).insets,
-          const NativeInsets(chromeLeading: 124, reportsChrome: true));
+      expect(
+        (events.single as NativeInsetsChanged).insets,
+        const NativeInsets(chromeLeading: 124, reportsChrome: true),
+      );
     });
 
     test('chromeLeading defaults to 0 and does not make insets non-zero', () {
       expect(
-          NativeInsets.fromChannel({'top': 0.0, 'leading': 0.0, 'bottom': 0.0})
-              ?.chromeLeading,
-          0);
+        NativeInsets.fromChannel({'top': 0.0, 'leading': 0.0, 'bottom': 0.0})
+            ?.chromeLeading,
+        0,
+      );
       expect(const NativeInsets(chromeLeading: 80).isZero, isTrue);
     });
 
     test('reportsChrome is set only when the key is present', () {
       expect(
-          NativeInsets.fromChannel({'top': 0.0, 'leading': 0.0, 'bottom': 0.0})
-              ?.reportsChrome,
-          isFalse);
+        NativeInsets.fromChannel({'top': 0.0, 'leading': 0.0, 'bottom': 0.0})
+            ?.reportsChrome,
+        isFalse,
+      );
       expect(
-          NativeInsets.fromChannel({
-            'top': 0.0,
-            'leading': 0.0,
-            'bottom': 0.0,
-            'chromeLeading': 0.0
-          })?.reportsChrome,
-          isTrue);
+        NativeInsets.fromChannel({
+          'top': 0.0,
+          'leading': 0.0,
+          'bottom': 0.0,
+          'chromeLeading': 0.0,
+        })?.reportsChrome,
+        isTrue,
+      );
     });
 
     test('setSidebar sends once for equal payloads', () async {
@@ -216,8 +230,12 @@ void main() {
       await bar.setTabs(const [_home]);
       await bar.setSidebar(payload);
       await bar.setTabs(const [_home]);
-      expect(calls.map((c) => c.method),
-          ['setSidebar', 'setTabs', 'setSidebar', 'setTabs']);
+      expect(calls.map((c) => c.method), [
+        'setSidebar',
+        'setTabs',
+        'setSidebar',
+        'setTabs',
+      ]);
     });
 
     test('clearSelection sends a null select once, until a select', () async {
@@ -234,25 +252,27 @@ void main() {
       ]);
     });
 
-    test('new sidebar or tabs payloads make the selection sendable again',
-        () async {
-      await bar.setSidebar(const {'a': 1});
-      await bar.clearSelection();
-      await bar.setSidebar(const {'a': 2});
-      await bar.clearSelection();
-      await bar.select('home');
-      await bar.setTabs(const [_home]);
-      await bar.select('home');
-      expect(calls.map((c) => '${c.method}:${c.arguments}'), [
-        'setSidebar:{a: 1}',
-        'select:null',
-        'setSidebar:{a: 2}',
-        'select:null',
-        'select:home',
-        'setTabs:[{id: home, title: Home, symbol: house.fill, badge: null, enabled: true}]',
-        'select:home',
-      ]);
-    });
+    test(
+      'new sidebar or tabs payloads make the selection sendable again',
+      () async {
+        await bar.setSidebar(const {'a': 1});
+        await bar.clearSelection();
+        await bar.setSidebar(const {'a': 2});
+        await bar.clearSelection();
+        await bar.select('home');
+        await bar.setTabs(const [_home]);
+        await bar.select('home');
+        expect(calls.map((c) => '${c.method}:${c.arguments}'), [
+          'setSidebar:{a: 1}',
+          'select:null',
+          'setSidebar:{a: 2}',
+          'select:null',
+          'select:home',
+          'setTabs:[{id: home, title: Home, symbol: house.fill, badge: null, enabled: true}]',
+          'select:home',
+        ]);
+      },
+    );
 
     test('a failed clearSelection is sent again', () async {
       messenger.setMockMethodCallHandler(_channel, (call) async {
@@ -261,19 +281,26 @@ void main() {
       });
       await bar.clearSelection();
       await bar.clearSelection();
-      expect(calls.map((c) => '${c.method}:${c.arguments}'),
-          ['select:null', 'select:null']);
+      expect(calls.map((c) => '${c.method}:${c.arguments}'), [
+        'select:null',
+        'select:null',
+      ]);
     });
 
     test('insetsChanged reads a map', () async {
       final events = <NativeTabBarEvent>[];
       bar.events.listen(events.add);
-      await fromNative(
-          'insetsChanged', {'top': 50.0, 'leading': 320.0, 'bottom': 20.0});
+      await fromNative('insetsChanged', {
+        'top': 50.0,
+        'leading': 320.0,
+        'bottom': 20.0,
+      });
       await Future<void>.delayed(Duration.zero);
       final event = events.single as NativeInsetsChanged;
       expect(
-          event.insets, const NativeInsets(top: 50, leading: 320, bottom: 20));
+        event.insets,
+        const NativeInsets(top: 50, leading: 320, bottom: 20),
+      );
       expect(event.bottom, 20);
     });
 
@@ -282,8 +309,10 @@ void main() {
       bar.events.listen(events.add);
       await fromNative('insetsChanged', 83.0);
       await Future<void>.delayed(Duration.zero);
-      expect((events.single as NativeInsetsChanged).insets,
-          const NativeInsets(bottom: 83));
+      expect(
+        (events.single as NativeInsetsChanged).insets,
+        const NativeInsets(bottom: 83),
+      );
     });
 
     test('layoutChanged becomes an event', () async {
@@ -295,11 +324,15 @@ void main() {
     });
 
     test('queryLayout answers the native value, null on failure', () async {
-      messenger.setMockMethodCallHandler(_channel,
-          (call) async => call.method == 'layout' ? {'sidebar': true} : null);
+      messenger.setMockMethodCallHandler(
+        _channel,
+        (call) async => call.method == 'layout' ? {'sidebar': true} : null,
+      );
       expect(await bar.queryLayout(), isTrue);
       messenger.setMockMethodCallHandler(
-          _channel, (call) async => throw PlatformException(code: 'x'));
+        _channel,
+        (call) async => throw PlatformException(code: 'x'),
+      );
       expect(await bar.queryLayout(), isNull);
     });
   });
@@ -312,8 +345,10 @@ void main() {
       await fromNative('systemAccentChanged', 0xFFBF5AF2);
       await Future<void>.delayed(Duration.zero);
       expect(events.single, isA<NativeSystemAccentChanged>());
-      expect((events.single as NativeSystemAccentChanged).color,
-          const Color(0xFFBF5AF2));
+      expect(
+        (events.single as NativeSystemAccentChanged).color,
+        const Color(0xFFBF5AF2),
+      );
     });
 
     test('a malformed systemAccentChanged is ignored', () async {

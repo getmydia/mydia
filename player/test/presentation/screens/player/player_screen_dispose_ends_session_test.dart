@@ -18,8 +18,7 @@ import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
-  testWidgets(
-      'dispose() ends the HLS session on the server, with no ref-safety '
+  testWidgets('dispose() ends the HLS session on the server, with no ref-safety '
       'error', (tester) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
@@ -55,34 +54,40 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    await mockHttpResponse(
-      () async {
-        await pumpPlayerScreen(tester, container);
-        await tester.pumpAndSettle();
+    await mockHttpResponse(() async {
+      await pumpPlayerScreen(tester, container);
+      await tester.pumpAndSettle();
 
-        expect(
-          server.of('EndStreamingSession'),
-          isEmpty,
-          reason: 'sanity check: the session must not already be ended before '
-              'dispose, or this test proves nothing about dispose() specifically',
-        );
+      expect(
+        server.of('EndStreamingSession'),
+        isEmpty,
+        reason:
+            'sanity check: the session must not already be ended before '
+            'dispose, or this test proves nothing about dispose() specifically',
+      );
 
-        // Unmount. Before the fix, this throws `StateError` on the very first
-        // line of `_terminateHlsSession` (see `player_screen_dispose_cleanup_
-        // test.dart`'s header for why); the exception is asserted null
-        // explicitly for the same reason it is there.
-        await tester.pumpWidget(const SizedBox());
-        expect(tester.takeException(), isNull);
+      // Unmount. Before the fix, this throws `StateError` on the very first
+      // line of `_terminateHlsSession` (see `player_screen_dispose_cleanup_
+      // test.dart`'s header for why); the exception is asserted null
+      // explicitly for the same reason it is there.
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
 
-        final endSessionRequests = server.of('EndStreamingSession');
-        expect(endSessionRequests, hasLength(1),
-            reason: '_terminateHlsSession must have sent the '
-                'EndStreamingSession mutation during dispose()');
-        expect(endSessionRequests.single.variables['sessionId'], 'sess-42',
-            reason: 'must end the session this screen actually started, using '
-                'the sessionId captured from the startStreamingSession response');
-      },
-      responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
-    );
+      final endSessionRequests = server.of('EndStreamingSession');
+      expect(
+        endSessionRequests,
+        hasLength(1),
+        reason:
+            '_terminateHlsSession must have sent the '
+            'EndStreamingSession mutation during dispose()',
+      );
+      expect(
+        endSessionRequests.single.variables['sessionId'],
+        'sess-42',
+        reason:
+            'must end the session this screen actually started, using '
+            'the sessionId captured from the startStreamingSession response',
+      );
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 }

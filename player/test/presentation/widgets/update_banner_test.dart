@@ -66,12 +66,12 @@ class _ErrorCompatibilityNotifier extends CompatibilityNotifier {
 }
 
 AppUpdate _update({String version = '0.15.0'}) => AppUpdate(
-      version: version,
-      downloadUrl: 'https://example.invalid/player-linux-v$version.tar.gz',
-      releaseNotesUrl: 'https://example.invalid/releases/$version',
-      releaseTitle: 'Faster library scans',
-      publishedAt: DateTime.utc(2026, 8, 1),
-    );
+  version: version,
+  downloadUrl: 'https://example.invalid/player-linux-v$version.tar.gz',
+  releaseNotesUrl: 'https://example.invalid/releases/$version',
+  releaseTitle: 'Faster library scans',
+  publishedAt: DateTime.utc(2026, 8, 1),
+);
 
 const _compatible = CompatibilityState(
   verdict: CompatibilityVerdict.compatible,
@@ -135,16 +135,15 @@ void main() {
       bool compatibilityBannerShowing = false,
       bool compatibilityUnresolved = false,
       bool isOffline = false,
-    }) =>
-        shouldShowUpdateBanner(
-          supported: supported,
-          isMacOS: isMacOS,
-          availableVersion: availableVersion,
-          dismissedVersions: dismissedVersions,
-          compatibilityBannerShowing: compatibilityBannerShowing,
-          compatibilityUnresolved: compatibilityUnresolved,
-          isOffline: isOffline,
-        );
+    }) => shouldShowUpdateBanner(
+      supported: supported,
+      isMacOS: isMacOS,
+      availableVersion: availableVersion,
+      dismissedVersions: dismissedVersions,
+      compatibilityBannerShowing: compatibilityBannerShowing,
+      compatibilityUnresolved: compatibilityUnresolved,
+      isOffline: isOffline,
+    );
 
     test('an available update on a supported desktop shows', () {
       expect(show(), isTrue);
@@ -201,8 +200,10 @@ void main() {
     testWidgets('announces an available update', (tester) async {
       await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
       );
 
       expect(find.textContaining('0.15.0'), findsOneWidget);
@@ -219,8 +220,9 @@ void main() {
       expect(find.byType(Icon), findsNothing);
     });
 
-    testWidgets('renders nothing for a versionless Flatpak update',
-        (tester) async {
+    testWidgets('renders nothing for a versionless Flatpak update', (
+      tester,
+    ) async {
       // shouldShowUpdateBanner's null-version guard exists to keep a
       // FlatpakRemoteUpdate, which never has one, from ever reaching the
       // "Mydia Player $version is available" text below and rendering the
@@ -245,8 +247,10 @@ void main() {
     testWidgets('renders nothing for a dismissed version', (tester) async {
       await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
         dismissed: {'0.15.0'},
       );
 
@@ -255,40 +259,47 @@ void main() {
     });
 
     testWidgets(
-        'renders nothing while a player-behind compatibility banner shows',
-        (tester) async {
-      await _pump(
-        tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
-        compatibility: const CompatibilityState(
-          verdict: CompatibilityVerdict.playerUpdateRequired,
-          playerVersion: '0.14.2',
-          serverVersion: '0.15.0',
-          requiredVersion: '0.15.0',
-        ),
-      );
+      'renders nothing while a player-behind compatibility banner shows',
+      (tester) async {
+        await _pump(
+          tester,
+          state: UpdateState(
+            currentVersion: '0.14.2',
+            availableUpdate: _update(),
+          ),
+          compatibility: const CompatibilityState(
+            verdict: CompatibilityVerdict.playerUpdateRequired,
+            playerVersion: '0.14.2',
+            serverVersion: '0.15.0',
+            requiredVersion: '0.15.0',
+          ),
+        );
 
-      expect(find.byType(Text), findsNothing);
-      expect(find.byType(Icon), findsNothing);
-    });
+        expect(find.byType(Text), findsNothing);
+        expect(find.byType(Icon), findsNothing);
+      },
+    );
 
     testWidgets(
-        'renders nothing while the compatibility check is still loading',
-        (tester) async {
-      await _pump(
-        tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
-        compatibilityOverride: () => _UnresolvedCompatibilityNotifier(),
-      );
+      'renders nothing while the compatibility check is still loading',
+      (tester) async {
+        await _pump(
+          tester,
+          state: UpdateState(
+            currentVersion: '0.14.2',
+            availableUpdate: _update(),
+          ),
+          compatibilityOverride: () => _UnresolvedCompatibilityNotifier(),
+        );
 
-      expect(find.byType(Text), findsNothing);
-      expect(find.byType(Icon), findsNothing);
-    });
+        expect(find.byType(Text), findsNothing);
+        expect(find.byType(Icon), findsNothing);
+      },
+    );
 
-    testWidgets('shows the update when the compatibility check itself fails',
-        (tester) async {
+    testWidgets('shows the update when the compatibility check itself fails', (
+      tester,
+    ) async {
       // Regression guard: treating a null compatibility value as "hide"
       // regardless of why would silently kill the update banner every time
       // the server is unreachable, which is a normal condition for a
@@ -296,22 +307,27 @@ void main() {
       // updates.
       await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
         compatibilityOverride: () => _ErrorCompatibilityNotifier(),
       );
 
       expect(find.textContaining('0.15.0'), findsOneWidget);
     });
 
-    testWidgets('shows when a player-behind nudge was already dismissed',
-        (tester) async {
+    testWidgets('shows when a player-behind nudge was already dismissed', (
+      tester,
+    ) async {
       // CompatibilityState.showBanner folds in its own dismissal box. Gating
       // on the verdict alone would leave this user with no banner at all.
       await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
         compatibility: const CompatibilityState(
           verdict: CompatibilityVerdict.playerUpdateRecommended,
           playerVersion: '0.14.2',
@@ -327,8 +343,10 @@ void main() {
     testWidgets('renders nothing in offline mode', (tester) async {
       await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
         status: SourceConnectionStatus.unreachable,
       );
 
@@ -336,12 +354,15 @@ void main() {
       expect(find.byType(Icon), findsNothing);
     });
 
-    testWidgets('renders nothing on a platform that cannot self-update',
-        (tester) async {
+    testWidgets('renders nothing on a platform that cannot self-update', (
+      tester,
+    ) async {
       await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
         supported: false,
       );
 
@@ -352,8 +373,10 @@ void main() {
     testWidgets('dismissing records the version', (tester) async {
       final dismissal = await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
       );
 
       await tester.tap(find.byIcon(Icons.close));
@@ -366,8 +389,10 @@ void main() {
       final launched = <Uri>[];
       await _pump(
         tester,
-        state:
-            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        state: UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: _update(),
+        ),
         launched: launched,
       );
 
@@ -392,8 +417,9 @@ void main() {
       expect(find.text('Update'), findsNothing);
     });
 
-    testWidgets('while applying the action spins instead of inviting a retap',
-        (tester) async {
+    testWidgets('while applying the action spins instead of inviting a retap', (
+      tester,
+    ) async {
       await _pump(
         tester,
         state: UpdateState(

@@ -29,7 +29,7 @@ Future<T> readDetailKeepingAlive<T>(
   required ProviderListenable<AsyncValue<T>> provider,
   required ProviderListenable<Future<T>> future,
 }) async {
-  final subscription = ref.listenManual(provider, (_, __) {});
+  final subscription = ref.listenManual(provider, (_, _) {});
   try {
     return await ref.read(future);
   } finally {
@@ -48,7 +48,10 @@ ItemRef? loadContentItemRef(LoadContentIntent intent) {
   return episodeId != null
       ? ItemRef(sourceId: via, kind: ItemKind.episode, externalId: episodeId)
       : ItemRef(
-          sourceId: via, kind: ItemKind.movie, externalId: intent.mediaItemId);
+          sourceId: via,
+          kind: ItemKind.movie,
+          externalId: intent.mediaItemId,
+        );
 }
 
 /// The source player route a `LoadContentIntent` should land on, or null when
@@ -76,7 +79,8 @@ Future<String?> resolveLoadContentRoute(
 
   try {
     final detail = await fetch(ref);
-    final fileId = await pickBestVersionId(detail.versions, screenWidth) ??
+    final fileId =
+        await pickBestVersionId(detail.versions, screenWidth) ??
         detail.summary.defaultVersionId;
     if (fileId == null) return null;
 
@@ -90,7 +94,7 @@ Future<String?> resolveLoadContentRoute(
       title: detail.summary.title,
       extra: {
         'resume': intent.startAt.inSeconds.toString(),
-        if (showId != null) 'showId': showId,
+        'showId': ?showId,
         if (seasonNumber != null) 'seasonNumber': '$seasonNumber',
         if (intent.audioTrack != null) 'audioTrack': intent.audioTrack!,
         if (intent.subtitleTrack != null)
@@ -155,20 +159,24 @@ Future<void> routeRemoteIntent(
   final named = wanted == null
       ? null
       : candidates
-          .where((id) => mydiaInstanceIdOfSource(id) == wanted)
-          .firstOrNull;
+            .where((id) => mydiaInstanceIdOfSource(id) == wanted)
+            .firstOrNull;
   // The id can take a different form on each device (a real instance id on
   // one, `n<nodeId>` or a URL hash on another), so a name nobody matches
   // falls back to the first instance that lists the sender.
   final via = named ?? candidates.firstOrNull;
   if (via == null) {
-    debugPrint('[LoadContentNavigation] No instance lists $peerNodeId, '
-        'dropping LoadContent');
+    debugPrint(
+      '[LoadContentNavigation] No instance lists $peerNodeId, '
+      'dropping LoadContent',
+    );
     return;
   }
   if (wanted != null && named == null) {
-    debugPrint('[LoadContentNavigation] No local instance matches the named '
-        'server $wanted, using $via');
+    debugPrint(
+      '[LoadContentNavigation] No local instance matches the named '
+      'server $wanted, using $via',
+    );
   }
   submit(intent.withVia(via));
 }

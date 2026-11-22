@@ -16,21 +16,28 @@ class _Unlocked extends SourceLockController {
 }
 
 List<Source> _plexSources(ProviderContainer c) => [
-      for (final s in c.read(thirdPartySourcesProvider))
-        if (s.kind == SourceKind.plex) s,
-    ];
+  for (final s in c.read(thirdPartySourcesProvider))
+    if (s.kind == SourceKind.plex) s,
+];
 
-Future<ProviderContainer> _container(SourceLock lock,
-    {bool unlocked = false}) async {
+Future<ProviderContainer> _container(
+  SourceLock lock, {
+  bool unlocked = false,
+}) async {
   final store = InMemorySourceStore();
   await store.putAccount(testMydiaRecord());
-  await store.putAccount(plexRecord().copyWith(
-      serverLocks: lock == SourceLock.none ? const {} : {'abc123': lock}));
-  final c = ProviderContainer(overrides: [
-    sourceStoreProvider.overrideWith((ref) async => store),
-    sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-    if (unlocked) sourceLockProvider.overrideWith(_Unlocked.new),
-  ]);
+  await store.putAccount(
+    plexRecord().copyWith(
+      serverLocks: lock == SourceLock.none ? const {} : {'abc123': lock},
+    ),
+  );
+  final c = ProviderContainer(
+    overrides: [
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
+      if (unlocked) sourceLockProvider.overrideWith(_Unlocked.new),
+    ],
+  );
   addTearDown(c.dispose);
   await c.read(sourceRecordsProvider.future);
   return c;

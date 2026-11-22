@@ -43,20 +43,21 @@ enum SubtitleSize {
 
   /// Reads a stored [name]. Anything unrecognised is [medium], so a value
   /// written by a newer build degrades to the default instead of failing.
-  static SubtitleSize fromStorageKey(String? key) => values.firstWhere(
-        (size) => size.name == key,
-        orElse: () => medium,
-      );
+  static SubtitleSize fromStorageKey(String? key) =>
+      values.firstWhere((size) => size.name == key, orElse: () => medium);
 }
 
 /// The text scaler `SubtitleView` should use for [viewport] at [size].
 TextScaler subtitleTextScaler(Size viewport, SubtitleSize size) {
   final areaScale = viewport.isFinite
       ? math.sqrt(
-          (viewport.width * viewport.height / _referenceArea).clamp(0.0, 1.0))
+          (viewport.width * viewport.height / _referenceArea).clamp(0.0, 1.0),
+        )
       : 1.0;
-  final base =
-      math.max(kSubtitleBaseFontSize * areaScale, kSubtitleMinFontSize);
+  final base = math.max(
+    kSubtitleBaseFontSize * areaScale,
+    kSubtitleMinFontSize,
+  );
   return TextScaler.linear(base * size.multiplier / kSubtitleBaseFontSize);
 }
 
@@ -66,5 +67,4 @@ TextScaler subtitleTextScaler(Size viewport, SubtitleSize size) {
 SubtitleViewConfiguration subtitleViewConfigurationFor(
   Size viewport,
   SubtitleSize size,
-) =>
-    SubtitleViewConfiguration(textScaler: subtitleTextScaler(viewport, size));
+) => SubtitleViewConfiguration(textScaler: subtitleTextScaler(viewport, size));

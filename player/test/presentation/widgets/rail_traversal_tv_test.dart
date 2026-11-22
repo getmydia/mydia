@@ -26,82 +26,87 @@ import 'package:player/presentation/widgets/horizontal_rail.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 
 Widget _host(Widget child) => ProviderScope(
-      child: MaterialApp(
-        home: Scaffold(body: child),
-      ),
-    );
+  child: MaterialApp(home: Scaffold(body: child)),
+);
 
 /// A rail of focusable poster cards, built the way the source rows build one.
 Widget _cardRail(int n) => SizedBox(
-      height: 250,
-      child: HorizontalRail(
-        itemCount: n,
-        height: 250,
-        leftFadeKey: const ValueKey('rail-traversal-tv-cards-left-fade'),
-        rightFadeKey: const ValueKey('rail-traversal-tv-cards-right-fade'),
-        itemBuilder: (context, index) => SizedBox(
-          width: 140,
-          child: MediaCard(
-            title: 'Title $index',
-            action: MediaCardAction.open,
-            width: 130,
-            height: 195,
-            onTap: () {},
-          ),
-        ),
+  height: 250,
+  child: HorizontalRail(
+    itemCount: n,
+    height: 250,
+    leftFadeKey: const ValueKey('rail-traversal-tv-cards-left-fade'),
+    rightFadeKey: const ValueKey('rail-traversal-tv-cards-right-fade'),
+    itemBuilder: (context, index) => SizedBox(
+      width: 140,
+      child: MediaCard(
+        title: 'Title $index',
+        action: MediaCardAction.open,
+        width: 130,
+        height: 195,
+        onTap: () {},
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
-          'flag (bool.fromEnvironment), so this file is a deliberate no-op '
-          'unless the whole test process is compiled with that define. CI '
-          'runs it explicitly in the "Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
+            'flag (bool.fromEnvironment), so this file is a deliberate no-op '
+            'unless the whole test process is compiled with that define. CI '
+            'runs it explicitly in the "Run television-tier tests" step.';
 
   group('Directional tier (requires MYDIA_FORCE_TV=true)', () {
     testWidgets(
-        'HorizontalRail carries the gated cacheExtent in the directional '
-        'tier', (tester) async {
-      await tester.pumpWidget(
-        _host(HorizontalRail(
-          itemCount: 20,
-          height: 200,
-          leftFadeKey: const ValueKey('rail-traversal-tv-left-fade'),
-          rightFadeKey: const ValueKey('rail-traversal-tv-right-fade'),
-          itemBuilder: (context, index) => SizedBox(
-            key: ValueKey('rail-traversal-tv-item-$index'),
-            width: 150,
-            child: Text('Item $index'),
+      'HorizontalRail carries the gated cacheExtent in the directional '
+      'tier',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            HorizontalRail(
+              itemCount: 20,
+              height: 200,
+              leftFadeKey: const ValueKey('rail-traversal-tv-left-fade'),
+              rightFadeKey: const ValueKey('rail-traversal-tv-right-fade'),
+              itemBuilder: (context, index) => SizedBox(
+                key: ValueKey('rail-traversal-tv-item-$index'),
+                width: 150,
+                child: Text('Item $index'),
+              ),
+            ),
           ),
-        )),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      final list = tester.widget<ListView>(find.byType(ListView));
-      expect(list.scrollCacheExtent, isNotNull);
-    });
+        final list = tester.widget<ListView>(find.byType(ListView));
+        expect(list.scrollCacheExtent, isNotNull);
+      },
+    );
 
     testWidgets(
-        'BrowseGrid carries the gated cacheExtent in the directional tier',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(BrowseGrid(
-          itemCount: 40,
-          scrollTopPadding: 100,
-          itemBuilder: (context, index) => SizedBox(
-            key: ValueKey('grid-traversal-tv-item-$index'),
-            child: Text('Item $index'),
+      'BrowseGrid carries the gated cacheExtent in the directional tier',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            BrowseGrid(
+              itemCount: 40,
+              scrollTopPadding: 100,
+              itemBuilder: (context, index) => SizedBox(
+                key: ValueKey('grid-traversal-tv-item-$index'),
+                child: Text('Item $index'),
+              ),
+            ),
           ),
-        )),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      final grid = tester.widget<GridView>(find.byType(GridView));
-      expect(grid.scrollCacheExtent, isNotNull);
-    });
+        final grid = tester.widget<GridView>(find.byType(GridView));
+        expect(grid.scrollCacheExtent, isNotNull);
+      },
+    );
 
     group('HorizontalRail directional traversal', () {
       setUp(() {
@@ -114,8 +119,7 @@ void main() {
             FocusHighlightStrategy.automatic;
       });
 
-      testWidgets(
-          'focus walks past the viewport edge and scrolls the real rail '
+      testWidgets('focus walks past the viewport edge and scrolls the real rail '
           'with it', (tester) async {
         tester.view.physicalSize = const Size(800, 600);
         tester.view.devicePixelRatio = 1.0;
@@ -124,8 +128,9 @@ void main() {
         await tester.pumpWidget(_host(_cardRail(40)));
         await tester.pump();
 
-        final scope =
-            FocusScope.of(tester.element(find.byType(MediaCard).first));
+        final scope = FocusScope.of(
+          tester.element(find.byType(MediaCard).first),
+        );
 
         // 800px viewport at roughly 146px per card holds about 5 cards.
         // Walking 12 stops takes focus well past the edge and forces the

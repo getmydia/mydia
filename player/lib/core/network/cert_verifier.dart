@@ -25,8 +25,10 @@ class CertVerificationResult {
     this.error,
   });
 
-  factory CertVerificationResult.verified(String fingerprint,
-      {bool firstTime = false}) {
+  factory CertVerificationResult.verified(
+    String fingerprint, {
+    bool firstTime = false,
+  }) {
     return CertVerificationResult(
       verified: true,
       fingerprint: fingerprint,
@@ -89,10 +91,7 @@ class CertVerifier {
 
     if (storedFingerprint == null) {
       // First-time connection - caller should show TOFU dialog
-      return CertVerificationResult.verified(
-        fingerprint,
-        firstTime: true,
-      );
+      return CertVerificationResult.verified(fingerprint, firstTime: true);
     }
 
     if (fingerprint == storedFingerprint) {
@@ -110,10 +109,7 @@ class CertVerifier {
   /// Trusts a certificate by storing its fingerprint.
   ///
   /// This should be called after the user confirms trust in a TOFU dialog.
-  Future<void> trustCertificate(
-    X509Certificate cert,
-    String instanceId,
-  ) async {
+  Future<void> trustCertificate(X509Certificate cert, String instanceId) async {
     final fingerprint = computeFingerprint(cert);
     await _certStorage.storeFingerprint(instanceId, fingerprint);
   }
@@ -162,8 +158,9 @@ class CertVerifier {
     final lines = <String>[];
 
     for (var i = 0; i < parts.length; i += bytesPerLine) {
-      final end =
-          i + bytesPerLine < parts.length ? i + bytesPerLine : parts.length;
+      final end = i + bytesPerLine < parts.length
+          ? i + bytesPerLine
+          : parts.length;
       lines.add(parts.sublist(i, end).join(':'));
     }
 

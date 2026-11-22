@@ -54,50 +54,62 @@ void main() {
   /// The router has only `/`, so a body that reached for it instead of the
   /// scope would throw "no routes for location".
   Future<void> pumpBody(
-      WidgetTester tester, _RecordingNav nav, Widget body) async {
+    WidgetTester tester,
+    _RecordingNav nav,
+    Widget body,
+  ) async {
     final store = InMemorySourceStore();
     final secrets = SourceSecrets(MockAuthStorage());
     await store.putAccount(recordA);
     await writeMydiaCredentials(
-        secrets,
-        recordA.account,
-        MydiaCredentials(
-          instanceId: recordA.servers.single.id,
-          accessToken: 'tok',
-          serverUrl: 'https://a.example.test',
-        ));
+      secrets,
+      recordA.account,
+      MydiaCredentials(
+        instanceId: recordA.servers.single.id,
+        accessToken: 'tok',
+        serverUrl: 'https://a.example.test',
+      ),
+    );
     await tester.binding.setSurfaceSize(const Size(900, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ...noHiveOverrides,
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(secrets),
-        mediaSourceProvider.overrideWith((ref, id) => null),
-        serverCompatibilityProvider.overrideWith((ref, id) async =>
-            const ServerCompatibility(
-                info: null, verdict: CompatibilityVerdict.unknown)),
-      ],
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        routerConfig: GoRouter(routes: [
-          GoRoute(
-            path: '/',
-            builder: (_, __) => SettingsNavScope(
-              nav: nav,
-              child: Scaffold(body: body),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...noHiveOverrides,
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(secrets),
+          mediaSourceProvider.overrideWith((ref, id) => null),
+          serverCompatibilityProvider.overrideWith(
+            (ref, id) async => const ServerCompatibility(
+              info: null,
+              verdict: CompatibilityVerdict.unknown,
             ),
           ),
-        ]),
+        ],
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          routerConfig: GoRouter(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (_, _) => SettingsNavScope(
+                  nav: nav,
+                  child: Scaffold(body: body),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the instance body tells the nav when it removed the server',
-      (tester) async {
+  testWidgets('the instance body tells the nav when it removed the server', (
+    tester,
+  ) async {
     final nav = _RecordingNav();
     await pumpBody(tester, nav, MydiaInstanceBody(sourceId: idA));
 

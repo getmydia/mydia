@@ -25,10 +25,10 @@ class DisplayInfo {
   final String screenName;
 
   static DisplayInfo fromMap(Map<Object?, Object?> map) => DisplayInfo(
-        edrHeadroom: (map['edrHeadroom'] as num?)?.toDouble() ?? 1,
-        potentialHeadroom: (map['potentialHeadroom'] as num?)?.toDouble() ?? 1,
-        screenName: map['screenName'] as String? ?? '',
-      );
+    edrHeadroom: (map['edrHeadroom'] as num?)?.toDouble() ?? 1,
+    potentialHeadroom: (map['potentialHeadroom'] as num?)?.toDouble() ?? 1,
+    screenName: map['screenName'] as String? ?? '',
+  );
 }
 
 /// What [MpvSurface.awaitVideoOutput] found.
@@ -95,7 +95,9 @@ class MpvSurfaceChannel implements MpvSurface {
   @override
   Future<VideoOutputStart> awaitVideoOutput(int handle) async {
     final result = await _methods.invokeMapMethod<String, Object?>(
-        'awaitVideoOutput', {'handle': handle});
+      'awaitVideoOutput',
+      {'handle': handle},
+    );
     if (result?['started'] == true) return VideoOutputStart.started;
     if (result?['failed'] == true) return VideoOutputStart.failed;
     return VideoOutputStart.timedOut;
@@ -103,15 +105,18 @@ class MpvSurfaceChannel implements MpvSurface {
 
   @override
   Future<void> setOption(int handle, String name, String value) =>
-      _methods.invokeMethod<void>(
-          'setOption', {'handle': handle, 'name': name, 'value': value});
+      _methods.invokeMethod<void>('setOption', {
+        'handle': handle,
+        'name': name,
+        'value': value,
+      });
 
   @override
   Future<void> detach(int handle) =>
       _methods.invokeMethod<void>('detach', {'handle': handle});
 
   @override
-  Stream<DisplayInfo> get display => _display
-      .receiveBroadcastStream()
-      .map((event) => DisplayInfo.fromMap(event as Map<Object?, Object?>));
+  Stream<DisplayInfo> get display => _display.receiveBroadcastStream().map(
+    (event) => DisplayInfo.fromMap(event as Map<Object?, Object?>),
+  );
 }

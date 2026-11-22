@@ -57,8 +57,9 @@ void main() {
     expect(find.text('Done'), findsOneWidget);
   });
 
-  testWidgets('the reset control keeps an accessible tap target',
-      (tester) async {
+  testWidgets('the reset control keeps an accessible tap target', (
+    tester,
+  ) async {
     await _pumpBar(tester, onDone: () {}, onReset: () {});
 
     final tapTargetSize = tester.getSize(find.byTooltip('Reset sidebar'));

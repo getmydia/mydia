@@ -30,9 +30,7 @@ class BannerButton extends StatelessWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         backgroundColor: color.withValues(alpha: 0.2),
         foregroundColor: color,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       child: isLoading
           ? SizedBox(
@@ -42,10 +40,7 @@ class BannerButton extends StatelessWidget {
             )
           : Text(
               label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
     );
   }

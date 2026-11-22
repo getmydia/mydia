@@ -20,14 +20,14 @@ const _device = CastDevice(
 );
 
 CastSession _playingSession() => const CastSession(
-      device: _device,
-      playbackState: CastPlaybackState.playing,
-      mediaInfo: CastMediaInfo(
-        title: 'Silo - S02E01',
-        duration: Duration(minutes: 44),
-        position: Duration(seconds: 29),
-      ),
-    );
+  device: _device,
+  playbackState: CastPlaybackState.playing,
+  mediaInfo: CastMediaInfo(
+    title: 'Silo - S02E01',
+    duration: Duration(minutes: 44),
+    position: Duration(seconds: 29),
+  ),
+);
 
 /// `app.dart` mounts the cast bar above the router, so the bar's own subtree
 /// gets whatever `MaterialApp.router`'s `builder` provides — not the
@@ -42,27 +42,32 @@ void main() {
     WidgetTester tester, {
     CastSession? session,
   }) async {
-    final container = ProviderContainer(overrides: [
-      noProgressFlushOverride,
-      sourcesLoadingProvider.overrideWithValue(false),
-      hasMydiaProvider.overrideWithValue(true),
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      castSessionProvider.overrideWith((ref) => Stream.value(session)),
-      castSessionManagerProvider
-          .overrideWith((ref) => Completer<CastSessionManager>().future),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        noProgressFlushOverride,
+        sourcesLoadingProvider.overrideWithValue(false),
+        hasMydiaProvider.overrideWithValue(true),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        castSessionProvider.overrideWith((ref) => Stream.value(session)),
+        castSessionManagerProvider.overrideWith(
+          (ref) => Completer<CastSessionManager>().future,
+        ),
+      ],
+    );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MyApp(),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const MyApp()),
+    );
     await tester.pump();
     return container;
   }
 
-  testWidgets('the offline bar renders where app.dart mounts it',
-      (tester) async {
+  testWidgets('the offline bar renders where app.dart mounts it', (
+    tester,
+  ) async {
     final container = await pumpApp(tester);
 
     // No session at all — a target with nothing behind it renders the
@@ -71,14 +76,19 @@ void main() {
     container.read(castTargetProvider.notifier).set(_device);
     await tester.pump();
 
-    expect(tester.takeException(), isNull,
-        reason: 'the cast bar must build in its real mounting point, not '
-            'only under a Scaffold in a widget test');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason:
+          'the cast bar must build in its real mounting point, not '
+          'only under a Scaffold in a widget test',
+    );
     expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
   });
 
-  testWidgets('stopping a cast can open its confirmation dialog',
-      (tester) async {
+  testWidgets('stopping a cast can open its confirmation dialog', (
+    tester,
+  ) async {
     await pumpApp(tester, session: _playingSession());
     await tester.pump();
 
@@ -90,8 +100,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Stop playback?'), findsOneWidget,
-        reason: 'the confirm dialog needs a Navigator reachable from the '
-            'cast bar');
+    expect(
+      find.text('Stop playback?'),
+      findsOneWidget,
+      reason:
+          'the confirm dialog needs a Navigator reachable from the '
+          'cast bar',
+    );
   });
 }

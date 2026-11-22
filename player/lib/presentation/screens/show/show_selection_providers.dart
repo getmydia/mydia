@@ -16,10 +16,8 @@ class SelectedSeason extends Notifier<int> {
   }
 }
 
-final selectedSeasonProvider =
-    NotifierProvider.autoDispose.family<SelectedSeason, int, ItemRef>(
-  SelectedSeason.new,
-);
+final selectedSeasonProvider = NotifierProvider.autoDispose
+    .family<SelectedSeason, int, ItemRef>(SelectedSeason.new);
 
 /// The episode the hero currently describes on a show's detail page.
 /// Deliberately starts at `null` rather than deriving a default from the show
@@ -42,7 +40,5 @@ class SelectedEpisode extends Notifier<String?> {
   }
 }
 
-final selectedEpisodeProvider =
-    NotifierProvider.autoDispose.family<SelectedEpisode, String?, ItemRef>(
-  SelectedEpisode.new,
-);
+final selectedEpisodeProvider = NotifierProvider.autoDispose
+    .family<SelectedEpisode, String?, ItemRef>(SelectedEpisode.new);

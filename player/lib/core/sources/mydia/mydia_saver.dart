@@ -83,7 +83,10 @@ Future<SourceId> saveMydiaServer(
   final account = record.account;
   // Credentials first: a stored server without them would fail every request.
   await writeMydiaCredentials(
-      ref.read(sourceSecretsProvider), account, credentials);
+    ref.read(sourceSecretsProvider),
+    account,
+    credentials,
+  );
   await ref.read(sourceRecordsProvider.notifier).putAccount(record);
   final id = record.sources.single.id;
   ref.invalidate(mediaSourceProvider(id));

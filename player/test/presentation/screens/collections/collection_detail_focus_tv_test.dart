@@ -32,7 +32,9 @@ void main() {
       await TvShell().pump(
         tester,
         const CollectionDetailScreen(
-            sourceId: fakeSourceId, collectionId: 'c1'),
+          sourceId: fakeSourceId,
+          collectionId: 'c1',
+        ),
         overrides: [
           mediaSourceProvider(source.id).overrideWithValue(source),
           sourceArtworkProvider.overrideWith((ref, key) async => null),
@@ -41,50 +43,55 @@ void main() {
     }
 
     ScrollPosition gridPosition(WidgetTester tester) => tester
-        .state<ScrollableState>(find
-            .ancestor(
-              of: find.byKey(poster(1), skipOffstage: false),
-              matching: find.byType(Scrollable),
-            )
-            .first)
+        .state<ScrollableState>(
+          find
+              .ancestor(
+                of: find.byKey(poster(1), skipOffstage: false),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
         .position;
 
-    testWidgets('the grid entered for the first time lands on its first poster',
-        (tester) async {
-      await pumpCollection(tester);
-      // A television has no cast button, so the back button is the header
-      // control the viewer comes down from.
-      await focusIn(tester, CollectionDetailScreen.backKey);
+    testWidgets(
+      'the grid entered for the first time lands on its first poster',
+      (tester) async {
+        await pumpCollection(tester);
+        // A television has no cast button, so the back button is the header
+        // control the viewer comes down from.
+        await focusIn(tester, CollectionDetailScreen.backKey);
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
+        await press(tester, LogicalKeyboardKey.arrowDown);
 
-      expectFocusIn(poster(1));
-    });
+        expectFocusIn(poster(1));
+      },
+    );
 
     testWidgets(
-        'the grid is re-entered on the poster that left it, after scrolling',
-        (tester) async {
-      await pumpCollection(tester);
-      await focusIn(tester, CollectionDetailScreen.backKey);
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      for (var i = 0; i < 3; i++) {
-        await press(tester, LogicalKeyboardKey.arrowRight);
-      }
-      expectFocusIn(poster(4));
+      'the grid is re-entered on the poster that left it, after scrolling',
+      (tester) async {
+        await pumpCollection(tester);
+        await focusIn(tester, CollectionDetailScreen.backKey);
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        for (var i = 0; i < 3; i++) {
+          await press(tester, LogicalKeyboardKey.arrowRight);
+        }
+        expectFocusIn(poster(4));
 
-      // Back up to the header, then onto the back button by hand, so the
-      // next DOWN is not a replay of Flutter's own up/down history. The back
-      // button sits above the first poster, so geometry alone would pick
-      // poster 1: landing on poster 4 is the memory at work.
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      await focusIn(tester, CollectionDetailScreen.backKey);
+        // Back up to the header, then onto the back button by hand, so the
+        // next DOWN is not a replay of Flutter's own up/down history. The back
+        // button sits above the first poster, so geometry alone would pick
+        // poster 1: landing on poster 4 is the memory at work.
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        await focusIn(tester, CollectionDetailScreen.backKey);
 
-      final grid = gridPosition(tester);
-      grid.jumpTo(grid.pixels + 150);
-      await tester.pumpAndSettle();
+        final grid = gridPosition(tester);
+        grid.jumpTo(grid.pixels + 150);
+        await tester.pumpAndSettle();
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(poster(4));
-    });
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(poster(4));
+      },
+    );
   }, skip: tvSkipReason);
 }

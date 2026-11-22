@@ -12,14 +12,13 @@ Future<SidecarFetch> fetchImageSidecar({
   required Uri url,
   required Map<String, String> headers,
   required bool Function() cancelled,
-}) =>
-    pollImageSidecar(
-      url: url,
-      headers: headers,
-      cancelled: cancelled,
-      get: _get,
-      save: _save,
-    );
+}) => pollImageSidecar(
+  url: url,
+  headers: headers,
+  cancelled: cancelled,
+  get: _get,
+  save: _save,
+);
 
 Future<SidecarResponse> _get(Uri url, Map<String, String> headers) async {
   final response = await http.get(url, headers: headers);

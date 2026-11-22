@@ -25,8 +25,8 @@ class FakeBackupController implements BackupController {
     BackupSyncService? relay,
     Set<BackupStoreKind> offered = const {BackupStoreKind.relay},
     BackupStoreKind? active,
-  })  : _relay = relay ?? FakeBackupSyncService(),
-        offeredNotifier = ValueNotifier(offered) {
+  }) : _relay = relay ?? FakeBackupSyncService(),
+       offeredNotifier = ValueNotifier(offered) {
     activeNotifier.value =
         active ?? (_relay.enabled ? BackupStoreKind.relay : null);
     for (final kind in offered) {
@@ -84,10 +84,15 @@ class FakeBackupController implements BackupController {
   }
 
   @override
-  Future<void> switchTo(BackupStoreKind to,
-      {required bool deleteOld, RecoveryKey? relayKey}) async {
-    calls.add('switchTo ${to.name} deleteOld=$deleteOld'
-        '${relayKey == null ? '' : ' key'}');
+  Future<void> switchTo(
+    BackupStoreKind to, {
+    required bool deleteOld,
+    RecoveryKey? relayKey,
+  }) async {
+    calls.add(
+      'switchTo ${to.name} deleteOld=$deleteOld'
+      '${relayKey == null ? '' : ' key'}',
+    );
     if (to == BackupStoreKind.relay && relayKey != null) {
       await _relay.confirmEnable(relayKey);
     }
@@ -107,7 +112,8 @@ class FakeBackupController implements BackupController {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
-      'FakeBackupController: ${invocation.memberName}');
+    'FakeBackupController: ${invocation.memberName}',
+  );
 }
 
 /// A [CloudBackupService] with listenables to drive and the calls the UI
@@ -176,11 +182,12 @@ class FakeCloudBackupService implements CloudBackupService {
     isEnabled = true;
     statusNotifier.value = const BackupIdle(null);
     return const ApplyResult(
-        watchChanged: 0,
-        pinsChanged: 0,
-        accountsAdded: 0,
-        settingsApplied: 0,
-        newOffers: []);
+      watchChanged: 0,
+      pinsChanged: 0,
+      accountsAdded: 0,
+      settingsApplied: 0,
+      newOffers: [],
+    );
   }
 
   @override
@@ -227,25 +234,27 @@ class FakeCloudBackupService implements CloudBackupService {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
-      'FakeCloudBackupService: ${invocation.memberName}');
+    'FakeCloudBackupService: ${invocation.memberName}',
+  );
 }
 
 /// A cloud restore preview of one device holding [records].
-CloudRestorePreview fakeCloudPreview(List<BackupRecord> records,
-        {String device = 'Living Room TV',
-        Set<String> unreadable = const {}}) =>
-    CloudRestorePreview(
-      payloads: {
-        if (records.isNotEmpty)
-          'tv': BackupPayload(
-            deviceName: device,
-            platform: 'android',
-            createdAt: 1000,
-            records: records,
-          ),
-      },
-      unreadableSlots: unreadable,
-    );
+CloudRestorePreview fakeCloudPreview(
+  List<BackupRecord> records, {
+  String device = 'Living Room TV',
+  Set<String> unreadable = const {},
+}) => CloudRestorePreview(
+  payloads: {
+    if (records.isNotEmpty)
+      'tv': BackupPayload(
+        deviceName: device,
+        platform: 'android',
+        createdAt: 1000,
+        records: records,
+      ),
+  },
+  unreadableSlots: unreadable,
+);
 
 /// A Google sign-in the tests script: signed in as [email] (null when
 /// out), signing in records a call and signs in as [signInAs]; with
@@ -268,27 +277,27 @@ class FakeGoogleSignIn {
   StreamController<DeviceCodeState>? deviceCode;
 
   GoogleSignInMethod get method => GoogleSignInMethod(
-        currentEmail: () async => email,
-        signIn: deviceCode == null
-            ? () async {
-                calls.add('signIn');
-                final waiter = signInWaiter;
-                if (waiter != null && !waiter.isCompleted) {
-                  await waiter.future;
-                }
-                final error = signInError;
-                if (error != null) {
-                  signInError = null;
-                  throw error;
-                }
-                email = signInAs;
-              }
-            : null,
-        deviceCode: deviceCode == null
-            ? null
-            : () {
-                calls.add('deviceCode');
-                return deviceCode!.stream;
-              },
-      );
+    currentEmail: () async => email,
+    signIn: deviceCode == null
+        ? () async {
+            calls.add('signIn');
+            final waiter = signInWaiter;
+            if (waiter != null && !waiter.isCompleted) {
+              await waiter.future;
+            }
+            final error = signInError;
+            if (error != null) {
+              signInError = null;
+              throw error;
+            }
+            email = signInAs;
+          }
+        : null,
+    deviceCode: deviceCode == null
+        ? null
+        : () {
+            calls.add('deviceCode');
+            return deviceCode!.stream;
+          },
+  );
 }

@@ -36,24 +36,27 @@ Future<void> pumpFilter(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final store = InMemorySidebarLayoutStore();
   await store.save(SidebarLayout.defaults.withFilter(_lateShows));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-      sidebarLayoutStoreProvider.overrideWithValue(store),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: FilterScreen(sourceId: fakeSourceId, filterId: filterId),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        sidebarLayoutStoreProvider.overrideWithValue(store),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: FilterScreen(sourceId: fakeSourceId, filterId: filterId),
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('titles the screen with the filter and browses its query',
-      (tester) async {
+  testWidgets('titles the screen with the filter and browses its query', (
+    tester,
+  ) async {
     final source = FakeCapableSource()
       ..filterQueryResult = (
         library: FakeMediaSource.shows,
@@ -66,8 +69,9 @@ void main() {
     expect(find.byKey(const ValueKey('source-poster-s1')), findsOneWidget);
   });
 
-  testWidgets('a source with no library for the filter shows not found',
-      (tester) async {
+  testWidgets('a source with no library for the filter shows not found', (
+    tester,
+  ) async {
     final source = FakeCapableSource()..filterQueryResult = null;
     await pumpFilter(tester, source);
 

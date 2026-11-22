@@ -12,10 +12,9 @@ import 'window_maximized.dart';
 /// a Flutter binding may exist, so tests that touch it assert-fail.
 class WindowMaximizedController with WindowListener {
   WindowMaximizedController({
-    required WindowController window,
+    required this._window,
     ValueNotifier<bool>? signal,
-  })  : _window = window,
-        _signal = signal ?? windowMaximizedSignal;
+  }) : _signal = signal ?? windowMaximizedSignal;
 
   final WindowController _window;
   final ValueNotifier<bool> _signal;

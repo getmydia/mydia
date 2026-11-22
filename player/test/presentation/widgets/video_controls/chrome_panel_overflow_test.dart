@@ -237,9 +237,7 @@ Future<void> _expectFitsAtFullSize(
     quality ? findsOneWidget : findsNothing,
   );
   if (quality) {
-    final qualityRect = tester.getRect(
-      find.byKey(SecondaryCluster.qualityKey),
-    );
+    final qualityRect = tester.getRect(find.byKey(SecondaryCluster.qualityKey));
     expect(qualityRect.width, greaterThanOrEqualTo(32));
     expect(qualityRect.height, greaterThanOrEqualTo(32));
   }
@@ -266,30 +264,28 @@ void main() {
   );
 
   for (final width in _knownBrokenWidths) {
-    testWidgets(
-      'ChromePanel at ${width}px (quality: true): out of budget by '
-      'construction, not pending — see this file\'s header',
-      (tester) async {
-        tester.view.physicalSize = Size(width, 600);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
+    testWidgets('ChromePanel at ${width}px (quality: true): out of budget by '
+        'construction, not pending — see this file\'s header', (tester) async {
+      tester.view.physicalSize = Size(width, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-        await tester.pumpWidget(_panel(width, quality: true));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(_panel(width, quality: true));
+      await tester.pumpAndSettle();
 
-        final exceptions = _takeAllExceptions(tester);
-        expect(
-          exceptions,
-          isNotEmpty,
-          reason: 'this width was expected to still overflow; if it no '
-              'longer does, move ${width}px from _knownBrokenWidths to '
-              '_passingWidths above instead of loosening this assertion',
-        );
-        for (final exception in exceptions) {
-          expect(exception.toString(), contains('RenderFlex'));
-        }
-      },
-    );
+      final exceptions = _takeAllExceptions(tester);
+      expect(
+        exceptions,
+        isNotEmpty,
+        reason:
+            'this width was expected to still overflow; if it no '
+            'longer does, move ${width}px from _knownBrokenWidths to '
+            '_passingWidths above instead of loosening this assertion',
+      );
+      for (final exception in exceptions) {
+        expect(exception.toString(), contains('RenderFlex'));
+      }
+    });
   }
 
   // Five-button case: subtitles, audio, quality, fullscreen, and
@@ -307,27 +303,25 @@ void main() {
   const fiveButtonWidths = <double>[900, 920, 1600];
 
   for (final width in fiveButtonWidths) {
-    testWidgets(
-      'ChromePanel at ${width}px with always-on-top: no RenderFlex '
-      'overflow with all five SecondaryCluster buttons showing',
-      (tester) async {
-        tester.view.physicalSize = Size(width, 600);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
+    testWidgets('ChromePanel at ${width}px with always-on-top: no RenderFlex '
+        'overflow with all five SecondaryCluster buttons showing', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-        await tester
-            .pumpWidget(_panel(width, quality: true, alwaysOnTop: true));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(_panel(width, quality: true, alwaysOnTop: true));
+      await tester.pumpAndSettle();
 
-        expect(_takeAllExceptions(tester), isEmpty);
+      expect(_takeAllExceptions(tester), isEmpty);
 
-        final alwaysOnTopRect = tester.getRect(
-          find.byKey(SecondaryCluster.alwaysOnTopKey),
-        );
-        expect(alwaysOnTopRect.width, greaterThanOrEqualTo(32));
-        expect(alwaysOnTopRect.height, greaterThanOrEqualTo(32));
-      },
-    );
+      final alwaysOnTopRect = tester.getRect(
+        find.byKey(SecondaryCluster.alwaysOnTopKey),
+      );
+      expect(alwaysOnTopRect.width, greaterThanOrEqualTo(32));
+      expect(alwaysOnTopRect.height, greaterThanOrEqualTo(32));
+    });
   }
 
   group('TV tier: scaling in place of fullscreen', () {

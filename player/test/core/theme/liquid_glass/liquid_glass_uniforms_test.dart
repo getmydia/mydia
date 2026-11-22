@@ -35,7 +35,10 @@ void main() {
   test('edge band is capped at half the short side', () {
     expect(
       LiquidGlassUniforms.edgeBandFor(
-          LiquidGlassProfile.panel, 1000, const Size(300, 40)),
+        LiquidGlassProfile.panel,
+        1000,
+        const Size(300, 40),
+      ),
       20,
     );
   });
@@ -43,7 +46,11 @@ void main() {
   test('appends the kit lighting terms after the existing uniforms', () {
     const p = LiquidGlassProfile.panel;
     const u = LiquidGlassUniforms(
-        devicePixelRatio: 1, radius: 34, tint: Color(0x80000000), profile: p);
+      devicePixelRatio: 1,
+      radius: 34,
+      tint: Color(0x80000000),
+      profile: p,
+    );
     final floats = u.toFloats(const Size(300, 200));
     expect(floats.sublist(25), [
       p.sideLight,
@@ -89,16 +96,27 @@ void main() {
 
   test('equality covers adaptiveMax and glow', () {
     const base = LiquidGlassUniforms(
-        devicePixelRatio: 2, radius: 8, tint: Color(0xFF000000));
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+    );
     const same = LiquidGlassUniforms(
-        devicePixelRatio: 2, radius: 8, tint: Color(0xFF000000));
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+    );
     const adapt = LiquidGlassUniforms(
-        devicePixelRatio: 2,
-        radius: 8,
-        tint: Color(0xFF000000),
-        adaptiveMax: 0.5);
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+      adaptiveMax: 0.5,
+    );
     const glow = LiquidGlassUniforms(
-        devicePixelRatio: 2, radius: 8, tint: Color(0xFF000000), glow: 0.2);
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+      glow: 0.2,
+    );
     expect(base, same);
     expect(base.hashCode, same.hashCode);
     expect(base, isNot(adapt));
@@ -113,11 +131,20 @@ void main() {
 
   test('value equality drives repaint decisions', () {
     const a = LiquidGlassUniforms(
-        devicePixelRatio: 2, radius: 8, tint: Color(0xFF000000));
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+    );
     const b = LiquidGlassUniforms(
-        devicePixelRatio: 2, radius: 8, tint: Color(0xFF000000));
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+    );
     const c = LiquidGlassUniforms(
-        devicePixelRatio: 3, radius: 8, tint: Color(0xFF000000));
+      devicePixelRatio: 3,
+      radius: 8,
+      tint: Color(0xFF000000),
+    );
     expect(a, b);
     expect(a.hashCode, b.hashCode);
     expect(a, isNot(c));
@@ -157,18 +184,25 @@ void main() {
 
   test('the lens profile is the default', () {
     const u = LiquidGlassUniforms(
-        devicePixelRatio: 1, radius: 8, tint: Color(0xFF000000));
+      devicePixelRatio: 1,
+      radius: 8,
+      tint: Color(0xFF000000),
+    );
     expect(u.profile, same(LiquidGlassProfile.lens));
   });
 
   test('equality covers the profile', () {
     const lens = LiquidGlassUniforms(
-        devicePixelRatio: 2, radius: 8, tint: Color(0xFF000000));
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+    );
     const panel = LiquidGlassUniforms(
-        devicePixelRatio: 2,
-        radius: 8,
-        tint: Color(0xFF000000),
-        profile: LiquidGlassProfile.panel);
+      devicePixelRatio: 2,
+      radius: 8,
+      tint: Color(0xFF000000),
+      profile: LiquidGlassProfile.panel,
+    );
     expect(lens, isNot(panel));
     expect(lens.hashCode, isNot(panel.hashCode));
   });

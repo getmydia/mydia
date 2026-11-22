@@ -28,25 +28,29 @@ import '../../test_utils/mac_accents.dart';
 const double _textFloor = 4.5;
 
 Map<String, MydiaPalette> _palettes() => {
-      for (final preset in ThemePreset.values)
-        if (preset != ThemePreset.macos) preset.name: preset.palette(),
-      for (final accent in macAccents.entries)
-        'macos/${accent.key}':
-            ThemePreset.macos.palette(systemAccent: accent.value),
-      for (final desktop in LinuxDesktop.values) ...{
-        'linux/${desktop.name}/stock': Palettes.linux(desktop, null),
-        for (final accent in linuxAccents.entries)
-          'linux/${desktop.name}/${accent.key}':
-              Palettes.linux(desktop, accent.value),
-      },
-    };
+  for (final preset in ThemePreset.values)
+    if (preset != ThemePreset.macos) preset.name: preset.palette(),
+  for (final accent in macAccents.entries)
+    'macos/${accent.key}': ThemePreset.macos.palette(
+      systemAccent: accent.value,
+    ),
+  for (final desktop in LinuxDesktop.values) ...{
+    'linux/${desktop.name}/stock': Palettes.linux(desktop, null),
+    for (final accent in linuxAccents.entries)
+      'linux/${desktop.name}/${accent.key}': Palettes.linux(
+        desktop,
+        accent.value,
+      ),
+  },
+};
 
 void _floor(Color fg, Color bg, String what) {
   final ratio = contrastRatio(fg, bg);
   expect(
     ratio,
     greaterThanOrEqualTo(_textFloor),
-    reason: '$what measured ${ratio.toStringAsFixed(2)}:1. '
+    reason:
+        '$what measured ${ratio.toStringAsFixed(2)}:1. '
         'Adjust the token, never this floor.',
   );
 }
@@ -79,14 +83,19 @@ void main() {
       });
 
       test('secondary button label clears $_textFloor:1 on its fill', () {
-        final fill =
-            Color.alphaBlend(AppTheme.secondaryButtonFill, p.background);
+        final fill = Color.alphaBlend(
+          AppTheme.secondaryButtonFill,
+          p.background,
+        );
         _floor(p.textPrimary, fill, 'textPrimary on secondary fill');
       });
 
       test('input placeholder text clears $_textFloor:1 on the field fill', () {
-        _floor(p.textSecondary, p.surfaceVariant,
-            'hintStyle (textSecondary) on surfaceVariant');
+        _floor(
+          p.textSecondary,
+          p.surfaceVariant,
+          'hintStyle (textSecondary) on surfaceVariant',
+        );
       });
 
       // Known gap this suite deliberately does not close: AppColors.onError

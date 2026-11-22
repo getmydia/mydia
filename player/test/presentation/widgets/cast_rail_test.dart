@@ -7,12 +7,12 @@ import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 
 Widget _host(Widget child) => ProviderScope(
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: child),
-      ),
-    );
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: child),
+  ),
+);
 
 void main() {
   testWidgets('renders nothing when there is no cast', (tester) async {
@@ -22,14 +22,19 @@ void main() {
     expect(find.text('Cast'), findsNothing);
   });
 
-  testWidgets('renders a card per cast member with name and character',
-      (tester) async {
-    await tester.pumpWidget(_host(const CastRail(
-      members: [
-        CastView(name: 'Ana Bergström', character: 'Kira Solt'),
-        CastView(name: 'Marcus Ijeoma', character: 'Deck Chief Reyes'),
-      ],
-    )));
+  testWidgets('renders a card per cast member with name and character', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        const CastRail(
+          members: [
+            CastView(name: 'Ana Bergström', character: 'Kira Solt'),
+            CastView(name: 'Marcus Ijeoma', character: 'Deck Chief Reyes'),
+          ],
+        ),
+      ),
+    );
 
     expect(find.text('Cast'), findsOneWidget);
     expect(find.text('Ana Bergström'), findsOneWidget);
@@ -37,22 +42,27 @@ void main() {
     expect(find.text('Marcus Ijeoma'), findsOneWidget);
   });
 
-  testWidgets('falls back to a person icon when there is no profile photo',
-      (tester) async {
-    await tester.pumpWidget(_host(const CastRail(
-      members: [CastView(name: 'Ana Bergström')],
-    )));
+  testWidgets('falls back to a person icon when there is no profile photo', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(const CastRail(members: [CastView(name: 'Ana Bergström')])),
+    );
 
     expect(find.byIcon(Icons.person_rounded), findsOneWidget);
   });
 
   testWidgets('a vertical wheel scrolls the cast rail', (tester) async {
-    await tester.pumpWidget(_host(CastRail(
-      members: List.generate(
-        20,
-        (i) => CastView(name: 'Actor $i', character: 'Role $i'),
+    await tester.pumpWidget(
+      _host(
+        CastRail(
+          members: List.generate(
+            20,
+            (i) => CastView(name: 'Actor $i', character: 'Role $i'),
+          ),
+        ),
       ),
-    )));
+    );
 
     final position = tester
         .stateList<ScrollableState>(find.byType(Scrollable))

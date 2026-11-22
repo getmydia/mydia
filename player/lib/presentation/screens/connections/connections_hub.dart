@@ -120,15 +120,15 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(
-      connectionsOverviewProvider.select((o) => o.serversLoading),
-      (was, loading) {
-        if (was == true && !loading && _rescrollWhenLoaded) {
-          _rescrollWhenLoaded = false;
-          _scrollToDevicesAfterFrame();
-        }
-      },
-    );
+    ref.listen(connectionsOverviewProvider.select((o) => o.serversLoading), (
+      was,
+      loading,
+    ) {
+      if (was == true && !loading && _rescrollWhenLoaded) {
+        _rescrollWhenLoaded = false;
+        _scrollToDevicesAfterFrame();
+      }
+    });
     final overview = ref.watch(connectionsOverviewProvider);
     final nav = SettingsNavScope.of(context);
     final showServers = !kIsWeb;
@@ -146,7 +146,9 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
               if (widget.wideHeader && !overview.serversFailed)
                 // Already on the hub: the card only draws, it opens nothing.
                 const ConnectionsConstellationCard(
-                    wide: true, interactive: false)
+                  wide: true,
+                  interactive: false,
+                )
               else
                 _ThisDeviceCard(overview: overview, showServers: showServers),
               if (showServers) ...[
@@ -177,11 +179,16 @@ class _ConnectionsHubBodyState extends ConsumerState<ConnectionsHubBody> {
                   ],
                   HubPairCta(
                     key: const Key('connections-pair-cta'),
-                    onShowCode: () => showPairDeviceSheet(context,
-                        mode: PairSheetMode.show, onOpenBackup: nav.openBackup),
-                    onEnterCode: () => showPairDeviceSheet(context,
-                        mode: PairSheetMode.enter,
-                        onOpenBackup: nav.openBackup),
+                    onShowCode: () => showPairDeviceSheet(
+                      context,
+                      mode: PairSheetMode.show,
+                      onOpenBackup: nav.openBackup,
+                    ),
+                    onEnterCode: () => showPairDeviceSheet(
+                      context,
+                      mode: PairSheetMode.enter,
+                      onOpenBackup: nav.openBackup,
+                    ),
                   ),
                 ],
               ),
@@ -205,9 +212,9 @@ class ConnectionsHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ConnectionsRouteScaffold(
-        title: context.l10n.connectionsTitle,
-        body: ConnectionsHubBody(initialSection: initialSection),
-      );
+    title: context.l10n.connectionsTitle,
+    body: ConnectionsHubBody(initialSection: initialSection),
+  );
 }
 
 /// This device: its glyph in the primary ring, its name, and how it is doing.
@@ -225,13 +232,18 @@ class _ThisDeviceCard extends StatelessWidget {
     final lastSync = overview.devices
         .map((d) => d.lastSyncedAt)
         .whereType<DateTime>()
-        .fold<DateTime?>(null,
-            (latest, t) => latest == null || t.isAfter(latest) ? t : latest);
+        .fold<DateTime?>(
+          null,
+          (latest, t) => latest == null || t.isAfter(latest) ? t : latest,
+        );
     final reach = showServers && !overview.serversLoading && total > 0;
     final ago = lastSync == null ? null : l10n.relativeTime(lastSync);
     final status = switch ((reach, ago)) {
-      (true, final String ago) =>
-        l10n.connectionsThisDeviceStatus(overview.onlineCount, total, ago),
+      (true, final String ago) => l10n.connectionsThisDeviceStatus(
+        overview.onlineCount,
+        total,
+        ago,
+      ),
       (true, null) => l10n.connectionsReaching(overview.onlineCount, total),
       (false, final String ago) => l10n.connectionsThisDeviceSynced(ago),
       (false, null) => '',
@@ -278,8 +290,10 @@ class _ThisDeviceCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     status,
-                    style:
-                        TextStyle(fontSize: 12.5, color: palette.textSecondary),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: palette.textSecondary,
+                    ),
                   ),
                 ],
               ],
@@ -313,23 +327,24 @@ class _ServersSection extends ConsumerWidget {
     final direct = ref.watch(connectionsDirectSourceProvider);
 
     Widget cards(Iterable<ConnectionServer> servers) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final (i, server) in servers.indexed) ...[
-              if (i > 0) const SizedBox(height: _cardGap),
-              HubServerCard(
-                key: Key('connections-server-${server.account.id}'),
-                server: server,
-                // Any profile of the account may be the one reached
-                // directly, not only the owner's.
-                direct: server.kind == SourceKind.mydia &&
-                    direct != null &&
-                    server.record.sources.any((s) => s.id == direct),
-                onTap: () => onOpen(server),
-              ),
-            ],
-          ],
-        );
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, server) in servers.indexed) ...[
+          if (i > 0) const SizedBox(height: _cardGap),
+          HubServerCard(
+            key: Key('connections-server-${server.account.id}'),
+            server: server,
+            // Any profile of the account may be the one reached
+            // directly, not only the owner's.
+            direct:
+                server.kind == SourceKind.mydia &&
+                direct != null &&
+                server.record.sources.any((s) => s.id == direct),
+            onTap: () => onOpen(server),
+          ),
+        ],
+      ],
+    );
 
     final List<Widget> sections;
     if (overview.serversLoading || overview.serversFailed) {
@@ -341,10 +356,12 @@ class _ServersSection extends ConsumerWidget {
         _unknownBody(context),
       ];
     } else {
-      final mydia =
-          overview.servers.where((s) => s.kind == SourceKind.mydia).toList();
-      final others =
-          overview.servers.where((s) => s.kind != SourceKind.mydia).toList();
+      final mydia = overview.servers
+          .where((s) => s.kind == SourceKind.mydia)
+          .toList();
+      final others = overview.servers
+          .where((s) => s.kind != SourceKind.mydia)
+          .toList();
       // One Add button: on Other servers when that section shows, otherwise
       // on the Mydia header so a Plex or Jellyfin add stays reachable.
       final addButton = AddServerButton(onPressed: onAdd);
@@ -443,21 +460,26 @@ class _DevicesSection extends StatelessWidget {
           title: l10n.pairedDevicesListSection,
           hint: l10n.connectionsDevicesHint,
         ),
-        LayoutBuilder(builder: (context, constraints) {
-          final width = (constraints.maxWidth - _cardGap) / 2;
-          return Wrap(
-            spacing: _cardGap,
-            runSpacing: _cardGap,
-            children: [
-              for (final d in devices)
-                SizedBox(
-                  key: Key('connections-device-${d.nodeId}'),
-                  width: width,
-                  child: HubDeviceCard(device: d, onRemove: () => onRemove(d)),
-                ),
-            ],
-          );
-        }),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = (constraints.maxWidth - _cardGap) / 2;
+            return Wrap(
+              spacing: _cardGap,
+              runSpacing: _cardGap,
+              children: [
+                for (final d in devices)
+                  SizedBox(
+                    key: Key('connections-device-${d.nodeId}'),
+                    width: width,
+                    child: HubDeviceCard(
+                      device: d,
+                      onRemove: () => onRemove(d),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }

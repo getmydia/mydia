@@ -10,36 +10,39 @@ import '../sources/fake_media_source.dart';
 import '../sources/listing_harness.dart';
 
 void main() {
-  testWidgets('lists the source unwatched titles and opens one on that source',
-      (tester) async {
+  testWidgets(
+    'lists the source unwatched titles and opens one on that source',
+    (tester) async {
+      final a = FakeCapableSource()
+        ..unwatchedPages = [
+          Page(items: [fakeMovie(1)]),
+        ];
+      final pushed = await pumpListing(
+        tester,
+        const UnwatchedScreen(sourceId: fakeSourceId),
+        sources: [a],
+      );
+
+      expect(find.text('Unwatched'), findsOneWidget);
+      expect(find.byType(BrowseGrid), findsOneWidget);
+      expect(find.byType(MediaPoster), findsOneWidget);
+
+      await tester.tap(find.text('Invented Film 1'));
+      await tester.pumpAndSettle();
+      expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
+    },
+  );
+
+  testWidgets('shows the listing of the source it is scoped to', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..unwatchedPages = [
-        Page(items: [fakeMovie(1)])
-      ];
-    final pushed = await pumpListing(
-      tester,
-      const UnwatchedScreen(sourceId: fakeSourceId),
-      sources: [a],
-    );
-
-    expect(find.text('Unwatched'), findsOneWidget);
-    expect(find.byType(BrowseGrid), findsOneWidget);
-    expect(find.byType(MediaPoster), findsOneWidget);
-
-    await tester.tap(find.text('Invented Film 1'));
-    await tester.pumpAndSettle();
-    expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
-  });
-
-  testWidgets('shows the listing of the source it is scoped to',
-      (tester) async {
-    final a = FakeCapableSource()
-      ..unwatchedPages = [
-        Page(items: [fakeMovie(1)])
+        Page(items: [fakeMovie(1)]),
       ];
     final b = FakeCapableSource(id: otherSourceId)
       ..unwatchedPages = [
-        Page(items: [listingMovie(otherSourceId, 'b1', 'Other Unseen Film')])
+        Page(items: [listingMovie(otherSourceId, 'b1', 'Other Unseen Film')]),
       ];
     await pumpListing(
       tester,
@@ -86,9 +89,9 @@ void main() {
   testWidgets('draws an unwatched count on a show', (tester) async {
     final a = FakeCapableSource()
       ..unwatchedPages = [
-        Page(items: [
-          listingShow(fakeSourceId, 's9', 'Unseen Show', unwatched: 6)
-        ])
+        Page(
+          items: [listingShow(fakeSourceId, 's9', 'Unseen Show', unwatched: 6)],
+        ),
       ];
     await pumpListing(
       tester,

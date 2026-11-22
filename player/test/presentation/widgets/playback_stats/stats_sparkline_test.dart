@@ -4,9 +4,9 @@ import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_sparkline.dart';
 
 List<StatsPoint> points(int count) => List.generate(
-      count,
-      (i) => StatsPoint(bufferedMs: 9000 + i * 100, throughputKbps: 5000 + i),
-    );
+  count,
+  (i) => StatsPoint(bufferedMs: 9000 + i * 100, throughputKbps: 5000 + i),
+);
 
 Future<void> pump(WidgetTester tester, List<StatsPoint> history) {
   return tester.pumpWidget(

@@ -10,12 +10,11 @@ ConnectionSummary _summary({
   bool isP2P = true,
   P2pConnectionType type = P2pConnectionType.none,
   bool isInitialized = false,
-}) =>
-    ConnectionSummary.from(
-      isP2P: isP2P,
-      type: type,
-      isInitialized: isInitialized,
-    );
+}) => ConnectionSummary.from(
+  isP2P: isP2P,
+  type: type,
+  isInitialized: isInitialized,
+);
 
 void main() {
   group('ConnectionSummary.from', () {
@@ -24,8 +23,10 @@ void main() {
 
       expect(summary.kind, ConnectionKind.server);
       expect(_en.connectionLabel(summary), 'Connected to server');
-      expect(_en.connectionDetail(summary),
-          'Direct connection, no relay involved');
+      expect(
+        _en.connectionDetail(summary),
+        'Direct connection, no relay involved',
+      );
       expect(summary.tone, ConnectionTone.good);
     });
 
@@ -44,8 +45,10 @@ void main() {
       final summary = _summary(type: P2pConnectionType.direct);
 
       expect(_en.connectionLabel(summary), 'Connected directly');
-      expect(_en.connectionDetail(summary),
-          'Peer-to-peer link with no relay in the path');
+      expect(
+        _en.connectionDetail(summary),
+        'Peer-to-peer link with no relay in the path',
+      );
       expect(summary.tone, ConnectionTone.good);
     });
 
@@ -53,8 +56,10 @@ void main() {
       final summary = _summary(type: P2pConnectionType.relay);
 
       expect(_en.connectionLabel(summary), 'Connected through a relay');
-      expect(_en.connectionDetail(summary),
-          'Traffic is passing through a relay server');
+      expect(
+        _en.connectionDetail(summary),
+        'Traffic is passing through a relay server',
+      );
       expect(summary.tone, ConnectionTone.caution);
     });
 
@@ -62,8 +67,10 @@ void main() {
       final summary = _summary(type: P2pConnectionType.mixed);
 
       expect(_en.connectionLabel(summary), 'Partly relayed');
-      expect(_en.connectionDetail(summary),
-          'Some paths are direct and some go through a relay');
+      expect(
+        _en.connectionDetail(summary),
+        'Some paths are direct and some go through a relay',
+      );
       expect(summary.tone, ConnectionTone.caution);
     });
 

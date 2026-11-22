@@ -48,7 +48,10 @@ class CollectionsScreen extends ConsumerWidget {
   }
 
   Widget _buildErrorView(
-      BuildContext context, Object error, VoidCallback onRetry) {
+    BuildContext context,
+    Object error,
+    VoidCallback onRetry,
+  ) {
     final palette = context.palette;
     return Center(
       child: Padding(
@@ -71,17 +74,15 @@ class CollectionsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             Text(
               context.l10n.collectionsLoadFailed,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               error.toString(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -90,8 +91,10 @@ class CollectionsScreen extends ConsumerWidget {
               icon: const Icon(Icons.refresh_rounded),
               label: Text(context.l10n.commonTryAgain),
               style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
               ),
             ),
           ],
@@ -123,17 +126,15 @@ class CollectionsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             Text(
               context.l10n.collectionsEmptyTitle,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               context.l10n.collectionsEmptySubtitle,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],

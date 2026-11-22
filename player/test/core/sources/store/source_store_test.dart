@@ -33,7 +33,9 @@ void contract(String name, Future<SourceStore> Function() open) {
       final store = await open();
       await store.setActive(const SourceId('acc1:owner:abc123'));
       expect(
-          (await store.load()).activeId, const SourceId('acc1:owner:abc123'));
+        (await store.load()).activeId,
+        const SourceId('acc1:owner:abc123'),
+      );
       await store.setActive(null);
       expect((await store.load()).activeId, isNull);
     });
@@ -54,8 +56,10 @@ void contract(String name, Future<SourceStore> Function() open) {
       );
       await store.putAccount(later);
       await store.putAccount(plexRecord());
-      expect([for (final a in (await store.load()).accounts) a.account.id],
-          ['acc1', 'acc0']);
+      expect(
+        [for (final a in (await store.load()).accounts) a.account.id],
+        ['acc1', 'acc0'],
+      );
     });
 
     test('keeps the All servers choices', () async {

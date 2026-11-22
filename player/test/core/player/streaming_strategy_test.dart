@@ -6,8 +6,9 @@ void main() {
     test('getOptimalStrategy returns hlsCopy for web', () {
       // Note: In tests, kIsWeb is false by default
       // This test verifies the logic when forceHls is true
-      final strategy =
-          StreamingStrategyService.getOptimalStrategy(forceHls: true);
+      final strategy = StreamingStrategyService.getOptimalStrategy(
+        forceHls: true,
+      );
 
       expect(strategy, equals(StreamingStrategy.hlsCopy));
     });
@@ -31,9 +32,11 @@ void main() {
       );
 
       expect(
-          url,
-          equals(
-              'https://example.com/api/v1/stream/file/test-file-123?strategy=HLS_COPY'));
+        url,
+        equals(
+          'https://example.com/api/v1/stream/file/test-file-123?strategy=HLS_COPY',
+        ),
+      );
     });
 
     test('buildStreamUrl handles directPlay strategy', () {
@@ -47,9 +50,11 @@ void main() {
       );
 
       expect(
-          url,
-          equals(
-              'https://example.com/api/v1/stream/file/test-file-123?strategy=DIRECT_PLAY'));
+        url,
+        equals(
+          'https://example.com/api/v1/stream/file/test-file-123?strategy=DIRECT_PLAY',
+        ),
+      );
     });
 
     test('buildStreamUrl handles transcode strategy', () {
@@ -63,9 +68,11 @@ void main() {
       );
 
       expect(
-          url,
-          equals(
-              'https://example.com/api/v1/stream/file/test-file-123?strategy=TRANSCODE'));
+        url,
+        equals(
+          'https://example.com/api/v1/stream/file/test-file-123?strategy=TRANSCODE',
+        ),
+      );
     });
 
     test('isHlsSupported returns true', () {
@@ -89,20 +96,30 @@ void main() {
       );
 
       expect(
-          url,
-          equals(
-              'https://example.com/api/v1/stream/file/test-file-123?strategy=REMUX'));
+        url,
+        equals(
+          'https://example.com/api/v1/stream/file/test-file-123?strategy=REMUX',
+        ),
+      );
     });
 
     test('fromValue parses strategy strings correctly', () {
-      expect(StreamingStrategy.fromValue('DIRECT_PLAY'),
-          equals(StreamingStrategy.directPlay));
-      expect(StreamingStrategy.fromValue('REMUX'),
-          equals(StreamingStrategy.remux));
-      expect(StreamingStrategy.fromValue('HLS_COPY'),
-          equals(StreamingStrategy.hlsCopy));
-      expect(StreamingStrategy.fromValue('TRANSCODE'),
-          equals(StreamingStrategy.transcode));
+      expect(
+        StreamingStrategy.fromValue('DIRECT_PLAY'),
+        equals(StreamingStrategy.directPlay),
+      );
+      expect(
+        StreamingStrategy.fromValue('REMUX'),
+        equals(StreamingStrategy.remux),
+      );
+      expect(
+        StreamingStrategy.fromValue('HLS_COPY'),
+        equals(StreamingStrategy.hlsCopy),
+      );
+      expect(
+        StreamingStrategy.fromValue('TRANSCODE'),
+        equals(StreamingStrategy.transcode),
+      );
       expect(StreamingStrategy.fromValue('INVALID'), isNull);
     });
   });

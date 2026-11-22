@@ -72,7 +72,7 @@ class SubtitleActionException implements Exception {
 
   const SubtitleActionException(String this.message) : issue = null;
   const SubtitleActionException.issue(SubtitleIssue this.issue)
-      : message = null;
+    : message = null;
 
   @override
   String toString() => 'SubtitleActionException: ${message ?? issue}';

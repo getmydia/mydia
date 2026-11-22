@@ -39,31 +39,42 @@ class ScriptedProbe {
 void main() {
   test('ranks local, then remote, then relay, HTTPS before HTTP', () {
     expect(
-      rankPlexConnections([relay, httpRemote, remote, httpLocal, local],
-          allowInsecureLocal: true),
+      rankPlexConnections([
+        relay,
+        httpRemote,
+        remote,
+        httpLocal,
+        local,
+      ], allowInsecureLocal: true),
       [local, httpLocal, remote, relay],
       reason: 'plain HTTP is only ever tried on the LAN',
     );
     expect(
-      rankPlexConnections([relay, remote, httpLocal, local],
-          allowInsecureLocal: false),
+      rankPlexConnections([
+        relay,
+        remote,
+        httpLocal,
+        local,
+      ], allowInsecureLocal: false),
       [local, remote, relay],
     );
   });
 
-  test('base after dispose fails cleanly and does not touch the notifier',
-      () async {
-    final probe = ScriptedProbe()..answers[local.uri] = (Duration.zero, 'm1');
-    final manager = RacingConnection(
-      rank: plexRank,
-      expectedId: 'm1',
-      candidates: [local],
-      probe: probe.call,
-    );
-    manager.dispose();
-    await expectLater(manager.base(), throwsA(isA<SourceException>()));
-    expect(probe.calls, isEmpty);
-  });
+  test(
+    'base after dispose fails cleanly and does not touch the notifier',
+    () async {
+      final probe = ScriptedProbe()..answers[local.uri] = (Duration.zero, 'm1');
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
+        candidates: [local],
+        probe: probe.call,
+      );
+      manager.dispose();
+      await expectLater(manager.base(), throwsA(isA<SourceException>()));
+      expect(probe.calls, isEmpty);
+    },
+  );
 
   test('the first answer is used at once, a better one replaces it', () {
     fakeAsync((async) {
@@ -146,9 +157,13 @@ void main() {
       });
       async.elapse(const Duration(seconds: 1));
       expect(
-          error,
-          isA<SourceException>()
-              .having((e) => e.kind, 'kind', SourceErrorKind.unreachable));
+        error,
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unreachable,
+        ),
+      );
       expect(manager.status.value, SourceConnectionStatus.unreachable);
 
       probe.answers[local.uri] = (const Duration(milliseconds: 10), 'm1');
@@ -252,8 +267,11 @@ void main() {
       manager.base();
       async.elapse(const Duration(minutes: 15, seconds: 5));
       expect(fetches, 1);
-      expect(manager.currentBase, remote.uri,
-          reason: 'the old LAN address is no longer advertised');
+      expect(
+        manager.currentBase,
+        remote.uri,
+        reason: 'the old LAN address is no longer advertised',
+      );
 
       manager.dispose();
       async.elapse(const Duration(minutes: 30));
@@ -281,8 +299,9 @@ void main() {
         expectedId: 's1',
         candidates: [wan, lan],
         // Plain HTTP on the LAN first, the way Jellyfin ranks.
-        rank: (all) => [...all]
-          ..sort((a, b) => connectionRank(a).compareTo(connectionRank(b))),
+        rank: (all) =>
+            [...all]
+              ..sort((a, b) => connectionRank(a).compareTo(connectionRank(b))),
         probe: probe.call,
       );
       Uri? first;
@@ -290,8 +309,11 @@ void main() {
       async.elapse(const Duration(milliseconds: 10));
       expect(first, wan.uri, reason: 'the first answer is used at once');
       async.elapse(const Duration(milliseconds: 100));
-      expect(manager.currentBase, lan.uri,
-          reason: 'the better-ranked LAN address takes over');
+      expect(
+        manager.currentBase,
+        lan.uri,
+        reason: 'the better-ranked LAN address takes over',
+      );
       manager.dispose();
     });
   });

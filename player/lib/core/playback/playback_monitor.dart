@@ -21,13 +21,13 @@ class PlayerSignals {
   });
 
   factory PlayerSignals.of(Player player) => PlayerSignals(
-        position: player.stream.position,
-        buffer: player.stream.buffer,
-        buffering: player.stream.buffering,
-        playing: player.stream.playing,
-        error: player.stream.error.where((m) => !audioOutputUnavailable(m)),
-        track: player.stream.track,
-      );
+    position: player.stream.position,
+    buffer: player.stream.buffer,
+    buffering: player.stream.buffering,
+    playing: player.stream.playing,
+    error: player.stream.error.where((m) => !audioOutputUnavailable(m)),
+    track: player.stream.track,
+  );
 
   final Stream<Duration> position;
 
@@ -45,11 +45,10 @@ class PlayerSignals {
 
 class PlaybackMonitor {
   PlaybackMonitor({
-    required PlayerSignals signals,
-    required FrameStatsSampler sampler,
+    required this._signals,
+    required this._sampler,
     this.interval = const Duration(seconds: 1),
-  })  : _signals = signals,
-        _sampler = sampler;
+  });
 
   final PlayerSignals _signals;
   final FrameStatsSampler _sampler;

@@ -61,9 +61,7 @@ final Provider<WatcherRegistry> watcherRegistryProvider =
 ///   fetch-log entry, so the next mount is treated as cold and does
 ///   `networkOnly` plus shimmer.
 class Invalidator {
-  Invalidator({required WatcherRegistry registry, required FetchLog fetchLog})
-      : _registry = registry,
-        _fetchLog = fetchLog;
+  Invalidator({required this._registry, required this._fetchLog});
 
   final WatcherRegistry _registry;
   final FetchLog _fetchLog;

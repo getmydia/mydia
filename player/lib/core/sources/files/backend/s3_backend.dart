@@ -46,12 +46,12 @@ class S3Location {
   /// Built from path segments, so a literal `%` in a key is sent as `%25`
   /// and a prefix such as `a%20b/` reads back as itself, not as `a b/`.
   Uri toConnectionUri() => Uri(
-        scheme: 's3+${endpoint.scheme}',
-        host: endpoint.host,
-        port: endpoint.hasPort ? endpoint.port : null,
-        pathSegments: [...bucket.split('/'), ...prefix.split('/')],
-        queryParameters: {'region': region, 'style': style.name},
-      );
+    scheme: 's3+${endpoint.scheme}',
+    host: endpoint.host,
+    port: endpoint.hasPort ? endpoint.port : null,
+    pathSegments: [...bucket.split('/'), ...prefix.split('/')],
+    queryParameters: {'region': region, 'style': style.name},
+  );
 
   /// The location [u] names, or null when [u] is not a complete S3
   /// connection URI.
@@ -97,10 +97,10 @@ class S3Location {
       style == S3Style.vhost ? '$bucket.${endpoint.host}' : endpoint.host;
 
   String get _origin => Uri(
-        scheme: endpoint.scheme,
-        host: _host,
-        port: endpoint.hasPort ? endpoint.port : null,
-      ).toString();
+    scheme: endpoint.scheme,
+    host: _host,
+    port: endpoint.hasPort ? endpoint.port : null,
+  ).toString();
 
   String get _bucketPath =>
       style == S3Style.path ? '/${s3UriEncode(bucket, encodeSlash: true)}' : '';
@@ -116,8 +116,11 @@ class S3Location {
   Uri bucketUri([Map<String, String> query = const {}]) {
     final path = _bucketPath.isEmpty ? '/' : _bucketPath;
     final q = query.entries
-        .map((e) => '${s3UriEncode(e.key, encodeSlash: true)}='
-            '${s3UriEncode(e.value, encodeSlash: true)}')
+        .map(
+          (e) =>
+              '${s3UriEncode(e.key, encodeSlash: true)}='
+              '${s3UriEncode(e.value, encodeSlash: true)}',
+        )
         .join('&');
     return Uri.parse('$_origin$path${q.isEmpty ? '' : '?$q'}');
   }
@@ -140,17 +143,16 @@ class S3Backend implements FileSystemBackend {
     required String secretAccessKey,
     http.Client? client,
     DateTime Function()? clock,
-    Duration timeout = kS3Timeout,
-  })  : _location = location,
-        _client = client ?? http.Client(),
-        _ownsClient = client == null,
-        _timeout = timeout,
-        _signer = S3Signer(
-          accessKeyId: accessKeyId,
-          secretAccessKey: secretAccessKey,
-          region: location.region,
-          clock: clock,
-        );
+    this._timeout = kS3Timeout,
+  }) : _location = location,
+       _client = client ?? http.Client(),
+       _ownsClient = client == null,
+       _signer = S3Signer(
+         accessKeyId: accessKeyId,
+         secretAccessKey: secretAccessKey,
+         region: location.region,
+         clock: clock,
+       );
 
   final S3Location _location;
   final http.Client _client;
@@ -174,7 +176,7 @@ class S3Backend implements FileSystemBackend {
         'delimiter': '/',
         'prefix': listed,
         'max-keys': '1000',
-        if (token != null) 'continuation-token': token,
+        'continuation-token': ?token,
       });
       for (final p in page.prefixes) {
         // A folder's key ends in exactly one `/` of its own: `media/a//`
@@ -189,14 +191,16 @@ class S3Backend implements FileSystemBackend {
         // The zero-byte marker web consoles create for a folder.
         if (o.key == listed) continue;
         final path = _pathOf(o.key);
-        entries.add(FileEntry(
-          path: path,
-          name: _nameOf(path),
-          isDir: false,
-          size: o.size,
-          modified: o.modified,
-          unreadable: _archivedClasses.contains(o.storageClass),
-        ));
+        entries.add(
+          FileEntry(
+            path: path,
+            name: _nameOf(path),
+            isDir: false,
+            size: o.size,
+            modified: o.modified,
+            unreadable: _archivedClasses.contains(o.storageClass),
+          ),
+        );
       }
       if (!page.truncated) break;
       // A truncated page that cannot be continued (no token, as a V1-style
@@ -205,7 +209,8 @@ class S3Backend implements FileSystemBackend {
       final next = page.nextToken;
       if (next == null || next == token) {
         throw BackendUnreachable(
-            'S3 at ${_location.displayHost} sent an incomplete listing');
+          'S3 at ${_location.displayHost} sent an incomplete listing',
+        );
       }
       token = next;
     } while (true);
@@ -260,14 +265,14 @@ class S3Backend implements FileSystemBackend {
 
   @override
   Future<PlayableFile> playable(String path) async => PlayableFile(
-        url: _signer
-            .presign(
-              method: 'GET',
-              uri: _location.objectUri(_keyOf(path)),
-              expires: kS3PresignExpiry,
-            )
-            .toString(),
-      );
+    url: _signer
+        .presign(
+          method: 'GET',
+          uri: _location.objectUri(_keyOf(path)),
+          expires: kS3PresignExpiry,
+        )
+        .toString(),
+  );
 
   @override
   Future<void> probe() async {
@@ -349,13 +354,15 @@ class S3Backend implements FileSystemBackend {
       root = XmlDocument.parse(body).childElements.firstOrNull;
     } on XmlException {
       throw BackendUnreachable(
-          'S3 at ${_location.displayHost} sent a malformed listing');
+        'S3 at ${_location.displayHost} sent a malformed listing',
+      );
     }
     // A proxy's or login page's XML read as an empty folder would drop
     // every indexed file under it.
     if (root == null || root.name.local != 'ListBucketResult') {
       throw BackendUnreachable(
-          'S3 at ${_location.displayHost} did not send a bucket listing');
+        'S3 at ${_location.displayHost} did not send a bucket listing',
+      );
     }
     // Keys are not trimmed: a key may end in a space.
     String? child(XmlElement e, String local) => e.childElements
@@ -370,14 +377,17 @@ class S3Backend implements FileSystemBackend {
         case 'Contents':
           final key = child(e, 'Key');
           if (key == null || key.isEmpty) continue;
-          objects.add(_S3Object(
-            key: key,
-            size: int.tryParse(child(e, 'Size')?.trim() ?? '') ?? 0,
-            modified: DateTime.tryParse(child(e, 'LastModified')?.trim() ?? '')
-                    ?.toUtc() ??
-                _epoch,
-            storageClass: child(e, 'StorageClass')?.trim(),
-          ));
+          objects.add(
+            _S3Object(
+              key: key,
+              size: int.tryParse(child(e, 'Size')?.trim() ?? '') ?? 0,
+              modified:
+                  DateTime.tryParse(child(e, 'LastModified')?.trim() ?? '')
+                      ?.toUtc() ??
+                  _epoch,
+              storageClass: child(e, 'StorageClass')?.trim(),
+            ),
+          );
         case 'CommonPrefixes':
           final p = child(e, 'Prefix');
           if (p != null && p.isNotEmpty) prefixes.add(p);

@@ -41,10 +41,8 @@ Widget _host({
                   scrollDirection: Axis.horizontal,
                   physics: railPhysics,
                   itemCount: cards,
-                  itemBuilder: (context, i) => SizedBox(
-                    width: _cardWidth,
-                    child: Text('card $i'),
-                  ),
+                  itemBuilder: (context, i) =>
+                      SizedBox(width: _cardWidth, child: Text('card $i')),
                 ),
               ),
             ),
@@ -99,8 +97,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_rail(tester).pixels, greaterThan(0));
-    expect(_page(tester).pixels, 0,
-        reason: 'the rail claimed the event, so the page must not move');
+    expect(
+      _page(tester).pixels,
+      0,
+      reason: 'the rail claimed the event, so the page must not move',
+    );
   });
 
   testWidgets('the rail glides rather than jumping', (tester) async {
@@ -121,8 +122,9 @@ void main() {
     expect(midway, lessThan(_rail(tester).pixels));
   });
 
-  testWidgets('consecutive ticks accumulate instead of restarting',
-      (tester) async {
+  testWidgets('consecutive ticks accumulate instead of restarting', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
@@ -133,13 +135,18 @@ void main() {
     await _wheelOverRail(tester, 120);
     await tester.pumpAndSettle();
 
-    expect(_rail(tester).pixels, 240,
-        reason: 'the second tick must build on the first target, not on '
-            'wherever the animation happened to be');
+    expect(
+      _rail(tester).pixels,
+      240,
+      reason:
+          'the second tick must build on the first target, not on '
+          'wherever the animation happened to be',
+    );
   });
 
-  testWidgets('the wrapper owns a controller when none is given',
-      (tester) async {
+  testWidgets('the wrapper owns a controller when none is given', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
@@ -157,9 +164,7 @@ void main() {
     addTearDown(page.dispose);
     addTearDown(rail.dispose);
 
-    await tester.pumpWidget(
-      _host(pageController: page, railController: rail),
-    );
+    await tester.pumpWidget(_host(pageController: page, railController: rail));
 
     await _wheelOverRail(tester, 120);
     await tester.pumpAndSettle();
@@ -168,8 +173,9 @@ void main() {
     expect(rail.offset, _rail(tester).pixels);
   });
 
-  testWidgets('a rail that fits on screen leaves the wheel to the page',
-      (tester) async {
+  testWidgets('a rail that fits on screen leaves the wheel to the page', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
@@ -204,8 +210,9 @@ void main() {
     expect(_page(tester).pixels, greaterThan(0));
   });
 
-  testWidgets('a rail at its end still scrolls back the other way',
-      (tester) async {
+  testWidgets('a rail at its end still scrolls back the other way', (
+    tester,
+  ) async {
     final page = ScrollController();
     final rail = ScrollController();
     addTearDown(page.dispose);
@@ -224,15 +231,18 @@ void main() {
     expect(_page(tester).pixels, 0);
   });
 
-  testWidgets('an unscrollable rail leaves the wheel to the page',
-      (tester) async {
+  testWidgets('an unscrollable rail leaves the wheel to the page', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
-    await tester.pumpWidget(_host(
-      pageController: page,
-      railPhysics: const NeverScrollableScrollPhysics(),
-    ));
+    await tester.pumpWidget(
+      _host(
+        pageController: page,
+        railPhysics: const NeverScrollableScrollPhysics(),
+      ),
+    );
 
     await _wheelOverRail(tester, 120);
     await tester.pumpAndSettle();
@@ -265,8 +275,9 @@ void main() {
   // over, and it is why this widget carries no momentum lock of its own. If
   // Flutter ever changes it, these fail and the widget needs the clause back.
 
-  testWidgets('a moving page keeps the wheel from reaching the rail',
-      (tester) async {
+  testWidgets('a moving page keeps the wheel from reaching the rail', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
@@ -274,39 +285,51 @@ void main() {
 
     // Short travel over a long duration on purpose: sampled early, the page has
     // moved only a few pixels, so the rail is still under the pointer.
-    unawaited(page.animateTo(
-      40,
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.linear,
-    ));
+    unawaited(
+      page.animateTo(
+        40,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.linear,
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
 
-    expect(_page(tester).isScrollingNotifier.value, isTrue,
-        reason: 'premise guard: the page must actually be in motion');
+    expect(
+      _page(tester).isScrollingNotifier.value,
+      isTrue,
+      reason: 'premise guard: the page must actually be in motion',
+    );
 
     await _wheelOverRail(tester, 120);
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(_rail(tester).pixels, 0,
-        reason: 'a flick down the page must not be snagged by a rail it '
-            'passes over');
+    expect(
+      _rail(tester).pixels,
+      0,
+      reason:
+          'a flick down the page must not be snagged by a rail it '
+          'passes over',
+    );
 
     await tester.pumpAndSettle();
   });
 
-  testWidgets('the wheel reaches the rail again once the page settles',
-      (tester) async {
+  testWidgets('the wheel reaches the rail again once the page settles', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
     await tester.pumpWidget(_host(pageController: page));
 
-    unawaited(page.animateTo(
-      40,
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.linear,
-    ));
+    unawaited(
+      page.animateTo(
+        40,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.linear,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(_page(tester).isScrollingNotifier.value, isFalse);
@@ -314,13 +337,18 @@ void main() {
     await _wheelOverRail(tester, 120);
     await tester.pumpAndSettle();
 
-    expect(_rail(tester).pixels, greaterThan(0),
-        reason: 'the IgnorePointer is transient; a settled page must hand the '
-            'rail back its wheel');
+    expect(
+      _rail(tester).pixels,
+      greaterThan(0),
+      reason:
+          'the IgnorePointer is transient; a settled page must hand the '
+          'rail back its wheel',
+    );
   });
 
-  testWidgets('a page bouncing back from overscroll keeps the wheel',
-      (tester) async {
+  testWidgets('a page bouncing back from overscroll keeps the wheel', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
@@ -328,10 +356,9 @@ void main() {
     // macOS and iOS but not on the Android default the test binding uses. Under
     // ClampingScrollPhysics the page can never go out of range, and this test
     // would pass whether or not the momentum lock exists.
-    await tester.pumpWidget(_host(
-      pageController: page,
-      pagePhysics: const BouncingScrollPhysics(),
-    ));
+    await tester.pumpWidget(
+      _host(pageController: page, pagePhysics: const BouncingScrollPhysics()),
+    );
 
     // Drag the page past its top edge and release into the bounce-back. This
     // is the one window where Flutter reports the page as scrolling while
@@ -345,17 +372,27 @@ void main() {
     await drag.up();
     await tester.pump();
 
-    expect(_page(tester).outOfRange, isTrue,
-        reason: 'premise guard: the page must actually be overscrolled');
-    expect(_page(tester).isScrollingNotifier.value, isTrue,
-        reason: 'premise guard: the bounce-back must be running');
+    expect(
+      _page(tester).outOfRange,
+      isTrue,
+      reason: 'premise guard: the page must actually be overscrolled',
+    );
+    expect(
+      _page(tester).isScrollingNotifier.value,
+      isTrue,
+      reason: 'premise guard: the bounce-back must be running',
+    );
 
     await _wheelOverRail(tester, 120);
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(_rail(tester).pixels, 0,
-        reason: 'a bouncing page still delivers pointers to its children, so '
-            'only the momentum lock stops the rail claiming this wheel');
+    expect(
+      _rail(tester).pixels,
+      0,
+      reason:
+          'a bouncing page still delivers pointers to its children, so '
+          'only the momentum lock stops the rail claiming this wheel',
+    );
 
     await tester.pumpAndSettle();
   });
@@ -385,14 +422,19 @@ void main() {
     await gesture.panZoomEnd();
     await tester.pumpAndSettle();
 
-    expect(_rail(tester).pixels, 0,
-        reason: 'a trackpad already scrolls both axes; intercepting its pan '
-            'would fight the framework');
+    expect(
+      _rail(tester).pixels,
+      0,
+      reason:
+          'a trackpad already scrolls both axes; intercepting its pan '
+          'would fight the framework',
+    );
     expect(_page(tester).pixels, greaterThan(0));
   });
 
-  testWidgets('an RTL rail advances on wheel-down, same as LTR',
-      (tester) async {
+  testWidgets('an RTL rail advances on wheel-down, same as LTR', (
+    tester,
+  ) async {
     final page = ScrollController();
     addTearDown(page.dispose);
 
@@ -400,15 +442,22 @@ void main() {
       _host(pageController: page, textDirection: TextDirection.rtl),
     );
 
-    expect(_rail(tester).axisDirection, AxisDirection.left,
-        reason: 'guards the premise: RTL really does reverse the axis');
+    expect(
+      _rail(tester).axisDirection,
+      AxisDirection.left,
+      reason: 'guards the premise: RTL really does reverse the axis',
+    );
 
     await _wheelOverRail(tester, 120);
     await tester.pumpAndSettle();
 
-    expect(_rail(tester).pixels, greaterThan(0),
-        reason: 'pixels are direction-normalised, so down means further '
-            'through the list in both directions');
+    expect(
+      _rail(tester).pixels,
+      greaterThan(0),
+      reason:
+          'pixels are direction-normalised, so down means further '
+          'through the list in both directions',
+    );
   });
 
   testWidgets('the rail shows a grab cursor', (tester) async {

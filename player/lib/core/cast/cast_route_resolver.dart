@@ -119,8 +119,8 @@ class CastRouteResolver {
   /// never restart a progressive route — has to reach the same answer.
   static CastMediaKind mediaKindFor(CastProtocolKind protocol) =>
       protocol == CastProtocolKind.chromecast
-          ? CastMediaKind.hls
-          : CastMediaKind.progressive;
+      ? CastMediaKind.hls
+      : CastMediaKind.progressive;
 
   /// Whether [resolve] with these flags would produce a bridge route.
   ///
@@ -255,12 +255,13 @@ class CastRouteResolver {
     List<CastSubtitleTrack> tracks, {
     required String base,
     required String? token,
-  }) =>
-      tracks
-          .map((track) => track.copyWith(
-                url: _withToken('$base/subs_${track.trackId}.vtt', token),
-              ))
-          .toList();
+  }) => tracks
+      .map(
+        (track) => track.copyWith(
+          url: _withToken('$base/subs_${track.trackId}.vtt', token),
+        ),
+      )
+      .toList();
 
   /// Rewrites the media-file subtitle URLs the progressive (DLNA) route keeps
   /// using, since it has no streaming session to address subtitles by.
@@ -274,18 +275,19 @@ class CastRouteResolver {
     List<CastSubtitleTrack> tracks, {
     required String server,
     required String? token,
-  }) =>
-      tracks
-          .where((track) => track.url.isNotEmpty)
-          .map((track) => track.copyWith(
-                url: _withToken(_absoluteUrl(server, track.url), token),
-              ))
-          .toList();
+  }) => tracks
+      .where((track) => track.url.isNotEmpty)
+      .map(
+        (track) => track.copyWith(
+          url: _withToken(_absoluteUrl(server, track.url), token),
+        ),
+      )
+      .toList();
 
   static String _absoluteUrl(String server, String urlOrPath) =>
       urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')
-          ? urlOrPath
-          : '$server$urlOrPath';
+      ? urlOrPath
+      : '$server$urlOrPath';
 
   static String _withToken(String url, String? token) {
     if (token == null || url.contains('token=')) return url;

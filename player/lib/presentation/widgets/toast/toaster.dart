@@ -82,14 +82,8 @@ ToastHandle showToast(
   IconData? icon,
   ToastAction? action,
   Duration? duration,
-}) =>
-    Toaster.of(context).show(
-      message,
-      kind: kind,
-      icon: icon,
-      action: action,
-      duration: duration,
-    );
+}) => Toaster.of(context)
+    .show(message, kind: kind, icon: icon, action: action, duration: duration);
 
 /// Publishes a `ToastLayer`'s controller to its subtree.
 class ToasterScope extends InheritedWidget {

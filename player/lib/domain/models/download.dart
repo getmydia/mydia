@@ -28,16 +28,14 @@ enum DownloadStatus {
   stalled,
 }
 
-enum MediaType {
-  movie,
-  episode,
-}
+enum MediaType { movie, episode }
 
 /// The item kind a record stands for. Records written before third-party
 /// downloads have no kind and are a Mydia movie or episode.
 ItemKind downloadItemKind(String? itemKind, String mediaType) {
-  final stored =
-      itemKind == null ? null : ItemKind.values.asNameMap()[itemKind];
+  final stored = itemKind == null
+      ? null
+      : ItemKind.values.asNameMap()[itemKind];
   return stored ?? (mediaType == 'episode' ? ItemKind.episode : ItemKind.movie);
 }
 
@@ -235,10 +233,10 @@ class DownloadTask {
       sourceId == null ? preAccountSourceId : SourceId(sourceId!);
 
   ItemRef get itemRef => ItemRef(
-        sourceId: source,
-        kind: downloadItemKind(itemKind, mediaType),
-        externalId: mediaId,
-      );
+    sourceId: source,
+    kind: downloadItemKind(itemKind, mediaType),
+    externalId: mediaId,
+  );
 
   /// Kind is left out: a caller holding only a Mydia id knows movie or
   /// episode, and the id is unique within its source either way.
@@ -346,8 +344,9 @@ class DownloadTask {
       error: clearError ? null : (error ?? this.error),
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
-      transcodeJobId:
-          clearTranscodeJobId ? null : (transcodeJobId ?? this.transcodeJobId),
+      transcodeJobId: clearTranscodeJobId
+          ? null
+          : (transcodeJobId ?? this.transcodeJobId),
       transcodeProgress: transcodeProgress ?? this.transcodeProgress,
       downloadProgress: downloadProgress ?? this.downloadProgress,
       isProgressive: isProgressive ?? this.isProgressive,
@@ -401,7 +400,8 @@ class DownloadTask {
   /// Returns e.g. "245.0 MB / 1.2 GB" or null if data is unavailable.
   /// Falls back to estimating bytes from progress * fileSize.
   String? get progressBytesDisplay {
-    final bytes = downloadedBytes ??
+    final bytes =
+        downloadedBytes ??
         (fileSize != null && fileSize! > 0 && progress > 0
             ? (progress * fileSize!).round()
             : null);
@@ -544,72 +544,71 @@ class DownloadedMedia {
 
   /// This record under another source; nothing else changes.
   DownloadedMedia copyWith({String? sourceId}) => DownloadedMedia(
-        id: id,
-        mediaId: mediaId,
-        title: title,
-        quality: quality,
-        filePath: filePath,
-        fileSize: fileSize,
-        mediaType: mediaType,
-        posterUrl: posterUrl,
-        downloadedAt: downloadedAt,
-        overview: overview,
-        runtime: runtime,
-        genres: genres,
-        rating: rating,
-        backdropUrl: backdropUrl,
-        year: year,
-        contentRating: contentRating,
-        seasonNumber: seasonNumber,
-        episodeNumber: episodeNumber,
-        showId: showId,
-        showTitle: showTitle,
-        showPosterUrl: showPosterUrl,
-        thumbnailUrl: thumbnailUrl,
-        airDate: airDate,
-        sourceId: sourceId ?? this.sourceId,
-        itemKind: itemKind,
-        posterPath: posterPath,
-        backdropPath: backdropPath,
-        thumbnailPath: thumbnailPath,
-      );
+    id: id,
+    mediaId: mediaId,
+    title: title,
+    quality: quality,
+    filePath: filePath,
+    fileSize: fileSize,
+    mediaType: mediaType,
+    posterUrl: posterUrl,
+    downloadedAt: downloadedAt,
+    overview: overview,
+    runtime: runtime,
+    genres: genres,
+    rating: rating,
+    backdropUrl: backdropUrl,
+    year: year,
+    contentRating: contentRating,
+    seasonNumber: seasonNumber,
+    episodeNumber: episodeNumber,
+    showId: showId,
+    showTitle: showTitle,
+    showPosterUrl: showPosterUrl,
+    thumbnailUrl: thumbnailUrl,
+    airDate: airDate,
+    sourceId: sourceId ?? this.sourceId,
+    itemKind: itemKind,
+    posterPath: posterPath,
+    backdropPath: backdropPath,
+    thumbnailPath: thumbnailPath,
+  );
 
   /// This record with its saved artwork paths replaced; nothing else changes.
   DownloadedMedia withArtwork({
     String? posterPath,
     String? backdropPath,
     String? thumbnailPath,
-  }) =>
-      DownloadedMedia(
-        id: id,
-        mediaId: mediaId,
-        title: title,
-        quality: quality,
-        filePath: filePath,
-        fileSize: fileSize,
-        mediaType: mediaType,
-        posterUrl: posterUrl,
-        downloadedAt: downloadedAt,
-        overview: overview,
-        runtime: runtime,
-        genres: genres,
-        rating: rating,
-        backdropUrl: backdropUrl,
-        year: year,
-        contentRating: contentRating,
-        seasonNumber: seasonNumber,
-        episodeNumber: episodeNumber,
-        showId: showId,
-        showTitle: showTitle,
-        showPosterUrl: showPosterUrl,
-        thumbnailUrl: thumbnailUrl,
-        airDate: airDate,
-        sourceId: sourceId,
-        itemKind: itemKind,
-        posterPath: posterPath,
-        backdropPath: backdropPath,
-        thumbnailPath: thumbnailPath,
-      );
+  }) => DownloadedMedia(
+    id: id,
+    mediaId: mediaId,
+    title: title,
+    quality: quality,
+    filePath: filePath,
+    fileSize: fileSize,
+    mediaType: mediaType,
+    posterUrl: posterUrl,
+    downloadedAt: downloadedAt,
+    overview: overview,
+    runtime: runtime,
+    genres: genres,
+    rating: rating,
+    backdropUrl: backdropUrl,
+    year: year,
+    contentRating: contentRating,
+    seasonNumber: seasonNumber,
+    episodeNumber: episodeNumber,
+    showId: showId,
+    showTitle: showTitle,
+    showPosterUrl: showPosterUrl,
+    thumbnailUrl: thumbnailUrl,
+    airDate: airDate,
+    sourceId: sourceId,
+    itemKind: itemKind,
+    posterPath: posterPath,
+    backdropPath: backdropPath,
+    thumbnailPath: thumbnailPath,
+  );
 
   /// Every writer sets [sourceId]. A record without one predates accounts, so
   /// it reads as [preAccountSourceId]: listed under no account, and moved by
@@ -618,10 +617,10 @@ class DownloadedMedia {
       sourceId == null ? preAccountSourceId : SourceId(sourceId!);
 
   ItemRef get itemRef => ItemRef(
-        sourceId: source,
-        kind: downloadItemKind(itemKind, mediaType),
-        externalId: mediaId,
-      );
+    sourceId: source,
+    kind: downloadItemKind(itemKind, mediaType),
+    externalId: mediaId,
+  );
 
   /// Kind is left out: a caller holding only a Mydia id knows movie or
   /// episode, and the id is unique within its source either way.

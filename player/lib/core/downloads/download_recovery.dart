@@ -96,16 +96,19 @@ RecoveryPlan planRecovery({
   final plan = <RecoveryDecision>[];
 
   var slotsUsed = tasks
-      .where((t) =>
-          liveTaskIds.contains(t.id) &&
-          DownloadStatusSets.running.contains(t.status))
+      .where(
+        (t) =>
+            liveTaskIds.contains(t.id) &&
+            DownloadStatusSets.running.contains(t.status),
+      )
       .length;
 
-  final candidates = tasks
-      .where((t) => !liveTaskIds.contains(t.id))
-      .where((t) => DownloadStatusSets.recoverable.contains(t.status))
-      .toList()
-    ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  final candidates =
+      tasks
+          .where((t) => !liveTaskIds.contains(t.id))
+          .where((t) => DownloadStatusSets.recoverable.contains(t.status))
+          .toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
   for (final task in candidates) {
     // The attempts ceiling takes precedence over every other rule.

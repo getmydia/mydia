@@ -23,8 +23,11 @@ void main() {
 
     test('an unknown argument is an unknown-field error', () {
       expect(
-        isUnknownFieldError(const SourceException.server(
-            'Unknown argument "maxHeight" on field "startStreamingSession".')),
+        isUnknownFieldError(
+          const SourceException.server(
+            'Unknown argument "maxHeight" on field "startStreamingSession".',
+          ),
+        ),
         isTrue,
       );
     });

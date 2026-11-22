@@ -24,7 +24,11 @@ SourceAccountRecord mydiaRecord(String instanceId, {int addedAtMs = 0}) {
     ),
     profiles: [
       SourceProfile(
-          id: 'owner', accountId: accountId, name: 'Owner', isOwner: true),
+        id: 'owner',
+        accountId: accountId,
+        name: 'Owner',
+        isOwner: true,
+      ),
     ],
     servers: [
       SourceServer(
@@ -41,11 +45,13 @@ SourceAccountRecord mydiaRecord(String instanceId, {int addedAtMs = 0}) {
 /// Store, secrets and a container over them. [accounts] maps an instance id to
 /// the credentials stored for it, in the order they are added.
 Future<
-    ({
-      ProviderContainer container,
-      InMemorySourceStore store,
-      MockAuthStorage storage,
-    })> mydiaAccountHarness(
+  ({
+    ProviderContainer container,
+    InMemorySourceStore store,
+    MockAuthStorage storage,
+  })
+>
+mydiaAccountHarness(
   Map<String, MydiaCredentials> accounts, {
   List<Override> overrides = const [],
 }) async {
@@ -58,11 +64,13 @@ Future<
     await store.putAccount(record);
     await writeMydiaCredentials(secrets, record.account, creds);
   }
-  final container = ProviderContainer(overrides: [
-    ...noHiveOverrides,
-    sourceStoreProvider.overrideWith((ref) async => store),
-    sourceSecretsProvider.overrideWithValue(secrets),
-    ...overrides,
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      ...noHiveOverrides,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(secrets),
+      ...overrides,
+    ],
+  );
   return (container: container, store: store, storage: storage);
 }

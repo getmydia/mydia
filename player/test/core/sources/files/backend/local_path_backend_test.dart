@@ -26,33 +26,40 @@ void main() {
     expect(entries[1].size, 0);
   });
 
-  test('directory_links_list_as_directories_with_their_resolved_identity',
-      () async {
-    File('${tmp.path}/a.mkv').writeAsBytesSync([1]);
-    Directory('${tmp.path}/sub').createSync();
-    Link('${tmp.path}/sub/loop').createSync(tmp.path);
-    Link('${tmp.path}/alias.mkv').createSync('${tmp.path}/a.mkv');
-    Link('${tmp.path}/broken').createSync('${tmp.path}/gone');
+  test(
+    'directory_links_list_as_directories_with_their_resolved_identity',
+    () async {
+      File('${tmp.path}/a.mkv').writeAsBytesSync([1]);
+      Directory('${tmp.path}/sub').createSync();
+      Link('${tmp.path}/sub/loop').createSync(tmp.path);
+      Link('${tmp.path}/alias.mkv').createSync('${tmp.path}/a.mkv');
+      Link('${tmp.path}/broken').createSync('${tmp.path}/gone');
 
-    final sub = await LocalPathBackend().list('${tmp.path}/sub');
-    expect(sub.single.name, 'loop');
-    expect(sub.single.isDir, isTrue);
-    expect(sub.single.path, '${tmp.path}/sub/loop');
-    expect(sub.single.identity, tmp.resolveSymbolicLinksSync());
-    final top = await LocalPathBackend().list(tmp.path);
-    expect(top.map((e) => e.name).toSet(), {'a.mkv', 'sub', 'alias.mkv'});
-    expect(top.firstWhere((e) => e.name == 'alias.mkv').identity, isNull);
-  });
+      final sub = await LocalPathBackend().list('${tmp.path}/sub');
+      expect(sub.single.name, 'loop');
+      expect(sub.single.isDir, isTrue);
+      expect(sub.single.path, '${tmp.path}/sub/loop');
+      expect(sub.single.identity, tmp.resolveSymbolicLinksSync());
+      final top = await LocalPathBackend().list(tmp.path);
+      expect(top.map((e) => e.name).toSet(), {'a.mkv', 'sub', 'alias.mkv'});
+      expect(top.firstWhere((e) => e.name == 'alias.mkv').identity, isNull);
+    },
+  );
 
   test('windows_paths_use_forward_slashes', () {
     expect(
-        portableLocalPath(r'C:\Media\Films\Copper Valley.mkv', windows: true),
-        'C:/Media/Films/Copper Valley.mkv');
-    expect(portableLocalPath(r'\\nas\share\Films', windows: true),
-        '//nas/share/Films');
+      portableLocalPath(r'C:\Media\Films\Copper Valley.mkv', windows: true),
+      'C:/Media/Films/Copper Valley.mkv',
+    );
+    expect(
+      portableLocalPath(r'\\nas\share\Films', windows: true),
+      '//nas/share/Films',
+    );
     // Elsewhere a backslash is part of a file name.
-    expect(portableLocalPath(r'/media/odd\name.mkv', windows: false),
-        r'/media/odd\name.mkv');
+    expect(
+      portableLocalPath(r'/media/odd\name.mkv', windows: false),
+      r'/media/odd\name.mkv',
+    );
   });
 
   test('os_errors_map_by_platform', () {
@@ -70,8 +77,13 @@ void main() {
     // EIO is not a refusal.
     expect(posix(5), isA<BackendUnreachable>());
     expect(
-      mapLocalFailure(3, 'failed', 'C:/x',
-          windows: true, missing: const BackendUnreachable()),
+      mapLocalFailure(
+        3,
+        'failed',
+        'C:/x',
+        windows: true,
+        missing: const BackendUnreachable(),
+      ),
       isA<BackendUnreachable>(),
     );
   });

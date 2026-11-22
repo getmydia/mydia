@@ -48,183 +48,186 @@ String? _skipReason() {
 
 void main() {
   final skip = _skipReason();
-  group(
-    'S3Backend against a real S3 server',
-    skip: skip ?? false,
-    () {
-      final accessKey = _env['MYDIA_TEST_S3_ACCESS_KEY_ID'] ?? '';
-      final secretKey = _env['MYDIA_TEST_S3_SECRET_ACCESS_KEY'] ?? '';
-      final bucket = 'player-s3-${_randomSuffix()}';
+  group('S3Backend against a real S3 server', skip: skip ?? false, () {
+    final accessKey = _env['MYDIA_TEST_S3_ACCESS_KEY_ID'] ?? '';
+    final secretKey = _env['MYDIA_TEST_S3_SECRET_ACCESS_KEY'] ?? '';
+    final bucket = 'player-s3-${_randomSuffix()}';
 
-      late S3Location location;
-      late S3Signer signer;
-      late http.Client client;
-      late S3Backend backend;
-      HttpOverrides? savedOverrides;
-      final uploaded = <String>[];
-      var bucketCreated = false;
+    late S3Location location;
+    late S3Signer signer;
+    late http.Client client;
+    late S3Backend backend;
+    HttpOverrides? savedOverrides;
+    final uploaded = <String>[];
+    var bucketCreated = false;
 
-      Future<http.Response> signed(
-        String method,
-        Uri uri, [
-        List<int> body = const [],
-      ]) async {
-        final request = http.Request(method, uri)
-          ..followRedirects = false
-          ..bodyBytes = body
-          ..headers.addAll(signer.sign(
+    Future<http.Response> signed(
+      String method,
+      Uri uri, [
+      List<int> body = const [],
+    ]) async {
+      final request = http.Request(method, uri)
+        ..followRedirects = false
+        ..bodyBytes = body
+        ..headers.addAll(
+          signer.sign(
             method: method,
             uri: uri,
             payloadSha256: sha256.convert(body).toString(),
-          ));
-        return http.Response.fromStream(await client.send(request));
-      }
-
-      Future<void> put(String key, List<int> body) async {
-        final r = await signed('PUT', location.objectUri(key), body);
-        expect(r.statusCode, 200, reason: 'PUT $key: ${r.body}');
-        uploaded.add(key);
-      }
-
-      setUpAll(() async {
-        // An earlier widget test in the CI bundle leaves a mock in
-        // HttpOverrides.global that answers every request 400.
-        savedOverrides = HttpOverrides.current;
-        HttpOverrides.global = null;
-
-        location = S3Location(
-          endpoint: Uri.parse(_endpoint!),
-          bucket: bucket,
-          prefix: 'lib/',
-          region: _region,
-          style: S3Style.path,
+          ),
         );
-        signer = S3Signer(
-          accessKeyId: accessKey,
-          secretAccessKey: secretKey,
-          region: _region,
-        );
-        client = http.Client();
-        backend = S3Backend(
-          location: location,
-          accessKeyId: accessKey,
-          secretAccessKey: secretKey,
-          client: client,
-        );
+      return http.Response.fromStream(await client.send(request));
+    }
 
-        final created = await signed('PUT', location.bucketUri());
-        expect(created.statusCode, 200,
-            reason: 'create bucket: ${created.body}');
-        bucketCreated = true;
+    Future<void> put(String key, List<int> body) async {
+      final r = await signed('PUT', location.objectUri(key), body);
+      expect(r.statusCode, 200, reason: 'PUT $key: ${r.body}');
+      uploaded.add(key);
+    }
 
-        await put(_filmKey, _filmBytes);
-        await put(_oddKey, _oddBody.codeUnits);
-        await put(_markerKey, const []);
-      });
+    setUpAll(() async {
+      // An earlier widget test in the CI bundle leaves a mock in
+      // HttpOverrides.global that answers every request 400.
+      savedOverrides = HttpOverrides.current;
+      HttpOverrides.global = null;
 
-      tearDownAll(() async {
-        try {
-          for (final key in uploaded) {
-            await signed('DELETE', location.objectUri(key));
-          }
-          if (bucketCreated) {
-            final r = await signed('DELETE', location.bucketUri());
-            expect(r.statusCode, 204, reason: 'delete bucket: ${r.body}');
-          }
-          client.close();
-        } finally {
-          HttpOverrides.global = savedOverrides;
+      location = S3Location(
+        endpoint: Uri.parse(_endpoint!),
+        bucket: bucket,
+        prefix: 'lib/',
+        region: _region,
+        style: S3Style.path,
+      );
+      signer = S3Signer(
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+        region: _region,
+      );
+      client = http.Client();
+      backend = S3Backend(
+        location: location,
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+        client: client,
+      );
+
+      final created = await signed('PUT', location.bucketUri());
+      expect(created.statusCode, 200, reason: 'create bucket: ${created.body}');
+      bucketCreated = true;
+
+      await put(_filmKey, _filmBytes);
+      await put(_oddKey, _oddBody.codeUnits);
+      await put(_markerKey, const []);
+    });
+
+    tearDownAll(() async {
+      try {
+        for (final key in uploaded) {
+          await signed('DELETE', location.objectUri(key));
         }
-      });
+        if (bucketCreated) {
+          final r = await signed('DELETE', location.bucketUri());
+          expect(r.statusCode, 204, reason: 'delete bucket: ${r.body}');
+        }
+        client.close();
+      } finally {
+        HttpOverrides.global = savedOverrides;
+      }
+    });
 
-      test('probe completes', () async {
-        await backend.probe();
-      });
+    test('probe completes', () async {
+      await backend.probe();
+    });
 
-      test('list of the root holds the two folders and no marker', () async {
-        final entries = await backend.list('/');
-        expect(
-          entries.map((e) => (e.path, e.isDir)),
-          unorderedEquals([('/Films', true), ('/Odd', true)]),
-        );
-      });
+    test('list of the root holds the two folders and no marker', () async {
+      final entries = await backend.list('/');
+      expect(
+        entries.map((e) => (e.path, e.isDir)),
+        unorderedEquals([('/Films', true), ('/Odd', true)]),
+      );
+    });
 
-      test('stat of a file gives its size', () async {
-        final entry = await backend.stat('/Films/Fictional Title (2020)/a.mkv');
-        expect(entry, isNotNull);
-        expect(entry!.isDir, isFalse);
-        expect(entry.size, 65536);
-      });
+    test('stat of a file gives its size', () async {
+      final entry = await backend.stat('/Films/Fictional Title (2020)/a.mkv');
+      expect(entry, isNotNull);
+      expect(entry!.isDir, isFalse);
+      expect(entry.size, 65536);
+    });
 
-      test('stat of a folder gives a folder', () async {
-        final entry = await backend.stat('/Films');
-        expect(entry, isNotNull);
-        expect(entry!.isDir, isTrue);
-      });
+    test('stat of a folder gives a folder', () async {
+      final entry = await backend.stat('/Films');
+      expect(entry, isNotNull);
+      expect(entry!.isDir, isTrue);
+    });
 
-      test('stat of a missing key gives null', () async {
-        expect(await backend.stat('/nope.mkv'), isNull);
-      });
+    test('stat of a missing key gives null', () async {
+      expect(await backend.stat('/nope.mkv'), isNull);
+    });
 
-      test('a presigned URL serves a byte range', () async {
-        final playable =
-            await backend.playable('/Films/Fictional Title (2020)/a.mkv');
-        final r = await client.get(
-          Uri.parse(playable.url),
-          headers: {'Range': 'bytes=10-19'},
-        );
-        expect(r.statusCode, 206);
-        expect(r.bodyBytes, _filmBytes.sublist(10, 20));
-      });
+    test('a presigned URL serves a byte range', () async {
+      final playable = await backend.playable(
+        '/Films/Fictional Title (2020)/a.mkv',
+      );
+      final r = await client.get(
+        Uri.parse(playable.url),
+        headers: {'Range': 'bytes=10-19'},
+      );
+      expect(r.statusCode, 206);
+      expect(r.bodyBytes, _filmBytes.sublist(10, 20));
+    });
 
-      test('an odd key survives list, stat, playable and GET', () async {
-        final odd = await backend.list('/Odd');
-        expect(odd.map((e) => (e.path, e.isDir)), [('/Odd/$_oddDir', true)]);
+    test('an odd key survives list, stat, playable and GET', () async {
+      final odd = await backend.list('/Odd');
+      expect(odd.map((e) => (e.path, e.isDir)), [('/Odd/$_oddDir', true)]);
 
-        final inner = await backend.list(odd.single.path);
-        final file = inner.single;
-        expect(file.path, '/Odd/$_oddDir/b.mkv');
-        expect(file.isDir, isFalse);
+      final inner = await backend.list(odd.single.path);
+      final file = inner.single;
+      expect(file.path, '/Odd/$_oddDir/b.mkv');
+      expect(file.isDir, isFalse);
 
-        final entry = await backend.stat(file.path);
-        expect(entry?.size, _oddBody.length);
+      final entry = await backend.stat(file.path);
+      expect(entry?.size, _oddBody.length);
 
-        final playable = await backend.playable(file.path);
-        final r = await client.get(Uri.parse(playable.url));
-        expect(r.statusCode, 200);
-        expect(r.body, _oddBody);
-      });
+      final playable = await backend.playable(file.path);
+      final r = await client.get(Uri.parse(playable.url));
+      expect(r.statusCode, 200);
+      expect(r.body, _oddBody);
+    });
 
-      test('a URL presigned 13 hours ago is refused', () async {
-        final stale = S3Backend(
-          location: location,
-          accessKeyId: accessKey,
-          secretAccessKey: secretKey,
-          client: client,
-          clock: () =>
-              DateTime.now().toUtc().subtract(const Duration(hours: 13)),
-        );
-        final playable =
-            await stale.playable('/Films/Fictional Title (2020)/a.mkv');
-        final r = await client.get(Uri.parse(playable.url));
-        expect(r.statusCode, 403);
-      });
+    test('a URL presigned 13 hours ago is refused', () async {
+      final stale = S3Backend(
+        location: location,
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+        client: client,
+        clock: () => DateTime.now().toUtc().subtract(const Duration(hours: 13)),
+      );
+      final playable = await stale.playable(
+        '/Films/Fictional Title (2020)/a.mkv',
+      );
+      final r = await client.get(Uri.parse(playable.url));
+      expect(r.statusCode, 403);
+    });
 
-      test('a wrong secret fails the probe as bad keys', () async {
-        final wrong = S3Backend(
-          location: location,
-          accessKeyId: accessKey,
-          secretAccessKey: '$secretKey-wrong',
-          client: client,
-        );
-        await expectLater(
-          wrong.probe(),
-          throwsA(isA<BackendUnauthorized>()
-              .having((e) => e.code, 'code', kS3CodeBadKeys)),
-        );
-      });
-    },
-  );
+    test('a wrong secret fails the probe as bad keys', () async {
+      final wrong = S3Backend(
+        location: location,
+        accessKeyId: accessKey,
+        secretAccessKey: '$secretKey-wrong',
+        client: client,
+      );
+      await expectLater(
+        wrong.probe(),
+        throwsA(
+          isA<BackendUnauthorized>().having(
+            (e) => e.code,
+            'code',
+            kS3CodeBadKeys,
+          ),
+        ),
+      );
+    });
+  });
 }
 
 String _randomSuffix() {

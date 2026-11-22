@@ -84,8 +84,9 @@ void runWatchIndicatorContract({
       expect(find.byType(ProgressOverlay), findsNothing);
     });
 
-    testWidgets('lets a watched status override the legacy progress prop',
-        (tester) async {
+    testWidgets('lets a watched status override the legacy progress prop', (
+      tester,
+    ) async {
       await pump(
         tester,
         const WatchStatus(watched: true, percentage: 100),
@@ -95,19 +96,17 @@ void runWatchIndicatorContract({
       expect(find.byType(ProgressOverlay), findsNothing);
     });
 
-    testWidgets('draws one bar, not two, when both sources are supplied',
-        (tester) async {
-      await pump(
-        tester,
-        const WatchStatus(watched: false, percentage: 40),
-        40,
-      );
+    testWidgets('draws one bar, not two, when both sources are supplied', (
+      tester,
+    ) async {
+      await pump(tester, const WatchStatus(watched: false, percentage: 40), 40);
 
       expect(find.byType(ProgressOverlay), findsOneWidget);
     });
 
-    testWidgets('still honours the legacy prop when there is no status',
-        (tester) async {
+    testWidgets('still honours the legacy prop when there is no status', (
+      tester,
+    ) async {
       // Surfaces that have not migrated keep working unchanged.
       await pump(tester, null, 40);
 

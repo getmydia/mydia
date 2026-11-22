@@ -46,7 +46,8 @@ void expectNoDebugTextDecorations(WidgetTester tester) {
   expect(
     offenders,
     isEmpty,
-    reason: 'Text rendered with a decoration. This usually means the subtree '
+    reason:
+        'Text rendered with a decoration. This usually means the subtree '
         'has no Material ancestor and is inheriting Flutter\'s fallback debug '
         'style:\n${offenders.join('\n')}',
   );

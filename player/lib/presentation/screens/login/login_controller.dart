@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Provider;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
 import '../../../core/channels/pairing_service.dart';
 import '../../../core/auth/device_info_service.dart';
 import '../../../core/auth/auth_service.dart';
@@ -75,8 +77,9 @@ final pairingServiceProvider = Provider<PairingService>(
 
 /// Names this device to the server it pairs with. A provider so tests need
 /// no platform plugin.
-final loginDeviceInfoProvider =
-    Provider<DeviceInfoService>((ref) => DeviceInfoService());
+final loginDeviceInfoProvider = Provider<DeviceInfoService>(
+  (ref) => DeviceInfoService(),
+);
 
 /// The viewer-facing failure of the save, or null for any other error.
 LoginFailure? _saveFailure(Object e) =>
@@ -94,10 +97,12 @@ LoginFailure _loginFailure(Object e) {
   if (e is! SourceException) return _loginFailureFromText(e.toString());
   return switch (e.kind) {
     SourceErrorKind.unreachable => _cannotConnect,
-    SourceErrorKind.notFound =>
-      const LoginFailureOfKind(LoginFailureKind.serverNotFound),
-    SourceErrorKind.unauthorized =>
-      const LoginFailureOfKind(LoginFailureKind.invalidCredentials),
+    SourceErrorKind.notFound => const LoginFailureOfKind(
+      LoginFailureKind.serverNotFound,
+    ),
+    SourceErrorKind.unauthorized => const LoginFailureOfKind(
+      LoginFailureKind.invalidCredentials,
+    ),
     _ when e is MydiaGraphqlError => _loginFailureFromText(e.logText),
     _ => LoginFailureOfSource(e),
   };
@@ -107,7 +112,8 @@ LoginFailure _loginFailureFromText(String text) {
   if (text.contains('Invalid username or password') ||
       text.contains('Local authentication is disabled')) {
     return LoginFailureFromServer(
-        text.replaceFirst('Exception: Login error: ', ''));
+      text.replaceFirst('Exception: Login error: ', ''),
+    );
   }
   if (text.contains('invalid')) {
     return const LoginFailureOfKind(LoginFailureKind.invalidCredentials);
@@ -142,21 +148,20 @@ LoginFailure _totpFailure(Object e) {
 
 /// What the claim code status is while the service is at [step].
 ClaimCodeStatus _claimStatusFor(PairingStep step) => switch (step) {
-      PairingStep.lookingUpCode ||
-      PairingStep.validatingQr =>
-        ClaimCodeStatus.lookingUp,
-      PairingStep.resolvingCode => ClaimCodeStatus.resolving,
-      PairingStep.connecting => ClaimCodeStatus.connecting,
-      PairingStep.initializing ||
-      PairingStep.submitting ||
-      PairingStep.succeeded =>
-        ClaimCodeStatus.handshaking,
-      PairingStep.paired => ClaimCodeStatus.paired,
-    };
+  PairingStep.lookingUpCode ||
+  PairingStep.validatingQr => ClaimCodeStatus.lookingUp,
+  PairingStep.resolvingCode => ClaimCodeStatus.resolving,
+  PairingStep.connecting => ClaimCodeStatus.connecting,
+  PairingStep.initializing ||
+  PairingStep.submitting ||
+  PairingStep.succeeded => ClaimCodeStatus.handshaking,
+  PairingStep.paired => ClaimCodeStatus.paired,
+};
 
 /// The error line for a pairing that stopped.
 LoginFailure _pairingFailure(PairingFailure? failure) => LoginFailureOfPairing(
-    failure ?? const PairingFailure(PairingFailureKind.other));
+  failure ?? const PairingFailure(PairingFailureKind.other),
+);
 
 /// State for the login screen.
 class LoginState {
@@ -214,8 +219,9 @@ class LoginState {
       pairingStep: pairingStep,
       credentialsNotPersisted:
           credentialsNotPersisted ?? this.credentialsNotPersisted,
-      totpChallenge:
-          clearTotpChallenge ? null : (totpChallenge ?? this.totpChallenge),
+      totpChallenge: clearTotpChallenge
+          ? null
+          : (totpChallenge ?? this.totpChallenge),
       addedSource: addedSource ?? this.addedSource,
     );
   }
@@ -249,8 +255,9 @@ class LoginController extends _$LoginController {
   ///
   /// With [reauthAccountId] the server must be that account's own.
   Future<void> pairWithClaimCode(String claimCode, {String? reauthAccountId}) =>
-      _keepingAlive(() =>
-          _pairWithClaimCode(claimCode, reauthAccountId: reauthAccountId));
+      _keepingAlive(
+        () => _pairWithClaimCode(claimCode, reauthAccountId: reauthAccountId),
+      );
 
   /// An add holds this autoDispose controller open until its save is done.
   /// The server has already used up the one-time claim code or login by then,
@@ -264,8 +271,10 @@ class LoginController extends _$LoginController {
     }
   }
 
-  Future<void> _pairWithClaimCode(String claimCode,
-      {String? reauthAccountId}) async {
+  Future<void> _pairWithClaimCode(
+    String claimCode, {
+    String? reauthAccountId,
+  }) async {
     state = state.copyWith(
       isLoading: true,
       error: null,
@@ -311,9 +320,10 @@ class LoginController extends _$LoginController {
     String username,
     String password, {
     String? reauthAccountId,
-  }) =>
-      _keepingAlive(() => _login(serverUrl, username, password,
-          reauthAccountId: reauthAccountId));
+  }) => _keepingAlive(
+    () =>
+        _login(serverUrl, username, password, reauthAccountId: reauthAccountId),
+  );
 
   Future<void> _login(
     String serverUrl,
@@ -325,7 +335,9 @@ class LoginController extends _$LoginController {
 
     final LoginOutcome outcome;
     try {
-      outcome = await ref.read(authServiceProvider).requestLogin(
+      outcome = await ref
+          .read(authServiceProvider)
+          .requestLogin(
             serverUrl: serverUrl,
             username: username,
             password: password,
@@ -364,7 +376,8 @@ class LoginController extends _$LoginController {
   /// Submits the code for a pending [LoginState.totpChallenge].
   Future<void> submitTotpCode(String code, {String? reauthAccountId}) =>
       _keepingAlive(
-          () => _submitTotpCode(code, reauthAccountId: reauthAccountId));
+        () => _submitTotpCode(code, reauthAccountId: reauthAccountId),
+      );
 
   Future<void> _submitTotpCode(String code, {String? reauthAccountId}) async {
     final challenge = state.totpChallenge;
@@ -422,14 +435,14 @@ class LoginController extends _$LoginController {
       );
 
   Future<void> _saveLogin(LoginGranted g, String? reauthAccountId) => _save(
-        MydiaCredentials(
-          instanceId: '',
-          accessToken: g.token,
-          serverUrl: normalizeMydiaUrl(g.serverUrl),
-          username: g.username,
-        ),
-        reauthAccountId,
-      );
+    MydiaCredentials(
+      instanceId: '',
+      accessToken: g.token,
+      serverUrl: normalizeMydiaUrl(g.serverUrl),
+      username: g.username,
+    ),
+    reauthAccountId,
+  );
 
   Future<void> _save(
     MydiaCredentials credentials,
@@ -458,8 +471,10 @@ class LoginController extends _$LoginController {
     );
   }
 
-  void _failPairing(Object e) => _failPairingWith(_saveFailure(e) ??
-      LoginFailureFromServer(e.toString().replaceFirst('Exception: ', '')));
+  void _failPairing(Object e) => _failPairingWith(
+    _saveFailure(e) ??
+        LoginFailureFromServer(e.toString().replaceFirst('Exception: ', '')),
+  );
 
   void _failPairingWith(LoginFailure failure) {
     if (!ref.mounted) return;
@@ -474,13 +489,17 @@ class LoginController extends _$LoginController {
   ///
   /// Uses the PairingService to pair using data scanned from a QR code.
   /// The QR code contains the relay URL, instance ID, public key, and claim code.
-  Future<void> pairWithQrCode(QrPairingData qrData,
-          {String? reauthAccountId}) =>
-      _keepingAlive(
-          () => _pairWithQrCode(qrData, reauthAccountId: reauthAccountId));
+  Future<void> pairWithQrCode(
+    QrPairingData qrData, {
+    String? reauthAccountId,
+  }) => _keepingAlive(
+    () => _pairWithQrCode(qrData, reauthAccountId: reauthAccountId),
+  );
 
-  Future<void> _pairWithQrCode(QrPairingData qrData,
-      {String? reauthAccountId}) async {
+  Future<void> _pairWithQrCode(
+    QrPairingData qrData, {
+    String? reauthAccountId,
+  }) async {
     state = state.copyWith(
       isLoading: true,
       error: null,

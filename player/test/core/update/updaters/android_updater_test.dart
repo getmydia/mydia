@@ -10,14 +10,14 @@ import 'package:player/core/update/update_problem.dart';
 import 'package:player/domain/models/available_update.dart';
 
 AppUpdate _update({String? sha256}) => AppUpdate(
-      version: '0.16.0-dev.7',
-      downloadUrl: 'https://example.invalid/mydia.apk',
-      downloadSize: 4,
-      sha256: sha256,
-      releaseNotesUrl: 'https://example.invalid/commits',
-      releaseTitle: '0.16.0-dev.7',
-      publishedAt: DateTime.utc(2026, 9, 15),
-    );
+  version: '0.16.0-dev.7',
+  downloadUrl: 'https://example.invalid/mydia.apk',
+  downloadSize: 4,
+  sha256: sha256,
+  releaseNotesUrl: 'https://example.invalid/commits',
+  releaseTitle: '0.16.0-dev.7',
+  publishedAt: DateTime.utc(2026, 9, 15),
+);
 
 /// Answers any `download` call with [bytes], mirroring `_StubAdapter` in
 /// update_feed_client_test.dart but returning raw bytes instead of JSON, so
@@ -87,8 +87,13 @@ void main() {
 
     await expectLater(
       updater.applyUpdate(_update(sha256: 'not-the-digest')),
-      throwsA(isA<UpdateStepFailed>().having(
-          (e) => e.problem.issue, 'issue', UpdateIssue.checksumMismatch)),
+      throwsA(
+        isA<UpdateStepFailed>().having(
+          (e) => e.problem.issue,
+          'issue',
+          UpdateIssue.checksumMismatch,
+        ),
+      ),
     );
     expect(installer.installed, isNull);
     expect(cache.listSync(), isEmpty);

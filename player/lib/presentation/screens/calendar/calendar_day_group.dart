@@ -127,10 +127,9 @@ class CalendarDayGroup extends StatelessWidget {
     ItemSummary entry,
     int index,
     Widget child,
-  ) =>
-      directional
-          ? FocusMemoryItem(id: entry.ref, index: index, child: child)
-          : child;
+  ) => directional
+      ? FocusMemoryItem(id: entry.ref, index: index, child: child)
+      : child;
 }
 
 class _Gutter extends StatelessWidget {

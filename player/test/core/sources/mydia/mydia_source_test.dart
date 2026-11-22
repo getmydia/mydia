@@ -33,11 +33,17 @@ void main() {
     return ContractFixture(
       source: b.source,
       library: const LibraryRef(sourceId: sid, id: 'movies'),
-      playable:
-          const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-2'),
+      playable: const ItemRef(
+        sourceId: sid,
+        kind: ItemKind.movie,
+        externalId: 'm-2',
+      ),
       libraryItemCount: 5,
-      show:
-          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'),
+      show: const ItemRef(
+        sourceId: sid,
+        kind: ItemKind.show,
+        externalId: 's-1',
+      ),
     );
   });
 
@@ -51,23 +57,24 @@ void main() {
 
   group('trending', () {
     Map<String, dynamic> row(String id, String type, int? rank) => {
-          ...fx.recentlyAdded(id, type: type, addedAt: '2024-05-01T00:00:00Z'),
-          'trendingRank': rank,
-        };
+      ...fx.recentlyAdded(id, type: type, addedAt: '2024-05-01T00:00:00Z'),
+      'trendingRank': rank,
+    };
 
     test('trending maps rows with trendingRank', () async {
       final b = build();
       b.t.handlers['TrendingInLibrary'] = (_) => {
-            'trendingInLibrary': [
-              row('m-4', 'MOVIE', 1),
-              row('m-1', 'MOVIE', 2),
-            ]
-          };
+        'trendingInLibrary': [row('m-4', 'MOVIE', 1), row('m-1', 'MOVIE', 2)],
+      };
       final items = await (b.source as Trending).trending(ItemKind.movie);
-      expect(
-          items.map((i) => i.item.ref.kind), [ItemKind.movie, ItemKind.movie]);
-      expect(items.map((i) => i.item.title),
-          ['Invented Arrival m-4', 'Invented Arrival m-1']);
+      expect(items.map((i) => i.item.ref.kind), [
+        ItemKind.movie,
+        ItemKind.movie,
+      ]);
+      expect(items.map((i) => i.item.title), [
+        'Invented Arrival m-4',
+        'Invented Arrival m-1',
+      ]);
       expect(items.map((i) => i.rank), [1, 2]);
       expect(b.t.calls.last.operation, 'TrendingInLibrary');
       expect(b.t.calls.last.vars['type'], 'MOVIE');
@@ -77,8 +84,8 @@ void main() {
     test('shows ask for TV_SHOW', () async {
       final b = build();
       b.t.handlers['TrendingInLibrary'] = (_) => {
-            'trendingInLibrary': [row('s-1', 'TV_SHOW', 1)]
-          };
+        'trendingInLibrary': [row('s-1', 'TV_SHOW', 1)],
+      };
       final items = await (b.source as Trending).trending(ItemKind.show);
       expect(items.single.item.ref.kind, ItemKind.show);
       expect(b.t.calls.last.vars['type'], 'TV_SHOW');
@@ -87,27 +94,28 @@ void main() {
     test('rows without trendingRank are dropped', () async {
       final b = build();
       b.t.handlers['TrendingInLibrary'] = (_) => {
-            'trendingInLibrary': [
-              row('m-4', 'MOVIE', null),
-              row('m-1', 'MOVIE', 3)
-            ]
-          };
+        'trendingInLibrary': [
+          row('m-4', 'MOVIE', null),
+          row('m-1', 'MOVIE', 3),
+        ],
+      };
       final items = await (b.source as Trending).trending(ItemKind.movie);
       expect(items.map((i) => i.item.ref.externalId), ['m-1']);
     });
 
     test('old server answers an empty list', () async {
       final b = build();
-      b.t.handlers['TrendingInLibrary'] = (_) => throw const SourceException
-          .server(
-          'Cannot query field "trendingInLibrary" on type "RootQueryType".');
+      b.t.handlers['TrendingInLibrary'] = (_) =>
+          throw const SourceException.server(
+            'Cannot query field "trendingInLibrary" on type "RootQueryType".',
+          );
       expect(await (b.source as Trending).trending(ItemKind.movie), isEmpty);
     });
 
     test('other GraphQL errors still throw', () async {
       final b = build();
-      b.t.handlers['TrendingInLibrary'] =
-          (_) => throw const SourceException.server('boom');
+      b.t.handlers['TrendingInLibrary'] = (_) =>
+          throw const SourceException.server('boom');
       await expectLater(
         (b.source as Trending).trending(ItemKind.movie),
         throwsA(isA<SourceException>()),
@@ -115,63 +123,86 @@ void main() {
     });
   });
 
-  test('browse offers every sort but random, tagging the shared three',
-      () async {
-    final libs = await build().source.libraries();
-    final shared = {
-      for (final o in libs.first.sortOptions)
-        if (o.shared != null) o.id: o.shared
-    };
-    expect(libs.first.sortOptions.map((o) => o.id), isNot(contains('RANDOM')));
-    expect(libs.first.sortOptions.length, SortField.values.length - 1);
-    expect(shared, {
-      'TITLE': SharedSort.title,
-      'ADDED_AT': SharedSort.added,
-      'RELEASE_DATE': SharedSort.released,
-    });
-    expect(
-        libs.first.filterOptions.map((o) => o.id), contains('watch:unwatched'));
-  });
+  test(
+    'browse offers every sort but random, tagging the shared three',
+    () async {
+      final libs = await build().source.libraries();
+      final shared = {
+        for (final o in libs.first.sortOptions)
+          if (o.shared != null) o.id: o.shared,
+      };
+      expect(
+        libs.first.sortOptions.map((o) => o.id),
+        isNot(contains('RANDOM')),
+      );
+      expect(libs.first.sortOptions.length, SortField.values.length - 1);
+      expect(shared, {
+        'TITLE': SharedSort.title,
+        'ADDED_AT': SharedSort.added,
+        'RELEASE_DATE': SharedSort.released,
+      });
+      expect(
+        libs.first.filterOptions.map((o) => o.id),
+        contains('watch:unwatched'),
+      );
+    },
+  );
 
   test('browse sends the sort the viewer picked', () async {
     final b = build();
-    await b.source.browse(const LibraryRef(sourceId: sid, id: 'movies'),
-        const BrowseQuery(pageSize: 2, sortId: 'YEAR'));
+    await b.source.browse(
+      const LibraryRef(sourceId: sid, id: 'movies'),
+      const BrowseQuery(pageSize: 2, sortId: 'YEAR'),
+    );
     expect(b.t.calls.last.vars['sort'], {'field': 'YEAR', 'direction': 'DESC'});
   });
 
-  test('a season is the show detail seasons; its children are the episodes',
-      () async {
-    final b = build();
-    final seasons = await b.source.children(
-        const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'));
-    expect(seasons.items.map((s) => s.ref.externalId), ['s-1.s1', 's-1.s2']);
-    final episodes = await b.source.children(seasons.items.last.ref);
-    expect(b.t.calls.last.vars, {'showId': 's-1', 'seasonNumber': 2});
-    expect(episodes.items.map((e) => e.index), [1, 2]);
-  });
-
-  test('marking a season sends one mutation; a show marks each season',
-      () async {
-    final b = build();
-    await b.source.setWatched(
-        const ItemRef(
-            sourceId: sid, kind: ItemKind.season, externalId: 's-1.s2'),
-        true);
-    expect(b.t.calls.last.operation, 'MarkSeasonWatched');
-    b.t.calls.clear();
-    await b.source.setWatched(
+  test(
+    'a season is the show detail seasons; its children are the episodes',
+    () async {
+      final b = build();
+      final seasons = await b.source.children(
         const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'),
-        false);
-    expect(b.t.calls.where((c) => c.operation == 'MarkSeasonUnwatched'),
-        hasLength(2));
-  });
+      );
+      expect(seasons.items.map((s) => s.ref.externalId), ['s-1.s1', 's-1.s2']);
+      final episodes = await b.source.children(seasons.items.last.ref);
+      expect(b.t.calls.last.vars, {'showId': 's-1', 'seasonNumber': 2});
+      expect(episodes.items.map((e) => e.index), [1, 2]);
+    },
+  );
+
+  test(
+    'marking a season sends one mutation; a show marks each season',
+    () async {
+      final b = build();
+      await b.source.setWatched(
+        const ItemRef(
+          sourceId: sid,
+          kind: ItemKind.season,
+          externalId: 's-1.s2',
+        ),
+        true,
+      );
+      expect(b.t.calls.last.operation, 'MarkSeasonWatched');
+      b.t.calls.clear();
+      await b.source.setWatched(
+        const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'),
+        false,
+      );
+      expect(
+        b.t.calls.where((c) => c.operation == 'MarkSeasonUnwatched'),
+        hasLength(2),
+      );
+    },
+  );
 
   test('favorite toggles only when the state differs', () async {
     final b = build();
     const ref = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1');
-    await b.source
-        .setFavorite(ref, true); // fixture movie is already a favorite
+    await b.source.setFavorite(
+      ref,
+      true,
+    ); // fixture movie is already a favorite
     expect(b.t.calls.where((c) => c.operation == 'ToggleFavorite'), isEmpty);
     await b.source.setFavorite(ref, false);
     final toggles = b.t.calls.where((c) => c.operation == 'ToggleFavorite');
@@ -183,8 +214,9 @@ void main() {
     final b = build();
     const ref = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1');
     var favorite = true;
-    b.t.handlers['MovieDetail'] = (v) =>
-        {'movie': fx.movie(v['id'] as String)..['isFavorite'] = favorite};
+    b.t.handlers['MovieDetail'] = (v) => {
+      'movie': fx.movie(v['id'] as String)..['isFavorite'] = favorite,
+    };
     b.t.handlers['ToggleFavorite'] = (_) {
       favorite = !favorite;
       return <String, dynamic>{};
@@ -194,7 +226,9 @@ void main() {
       b.source.setFavorite(ref, false),
     ]);
     expect(
-        b.t.calls.where((c) => c.operation == 'ToggleFavorite'), hasLength(1));
+      b.t.calls.where((c) => c.operation == 'ToggleFavorite'),
+      hasLength(1),
+    );
   });
 
   test('search drops episode results it cannot place', () async {
@@ -202,18 +236,23 @@ void main() {
     expect(results.map((r) => r.ref.externalId), ['m-1']);
   });
 
-  test('artwork from the server is fetched as is, with no credential',
-      () async {
-    final b = build();
-    final req = await b.source
-        .artwork(const ArtworkRef('https://img.example/p.jpg'), width: 300);
-    expect(req!.url, 'https://img.example/p.jpg');
-    expect(req.headers, isEmpty);
-    expect(req.cacheKey, '${sid.value}|https://img.example/p.jpg|300');
-    expect(
+  test(
+    'artwork from the server is fetched as is, with no credential',
+    () async {
+      final b = build();
+      final req = await b.source.artwork(
+        const ArtworkRef('https://img.example/p.jpg'),
+        width: 300,
+      );
+      expect(req!.url, 'https://img.example/p.jpg');
+      expect(req.headers, isEmpty);
+      expect(req.cacheKey, '${sid.value}|https://img.example/p.jpg|300');
+      expect(
         await b.source.artwork(const ArtworkRef('/relative.jpg'), width: 300),
-        isNull);
-  });
+        isNull,
+      );
+    },
+  );
 
   test('declares the capabilities it implements', () {
     final s = build().source;
@@ -234,7 +273,7 @@ void main() {
           'type': 'TV_SHOW',
           'title': 'Self',
           'year': 2019,
-          'artwork': null
+          'artwork': null,
         },
         for (var i = 0; i < 24; i++)
           {
@@ -242,7 +281,7 @@ void main() {
             'type': 'TV_SHOW',
             'title': 'Other $i',
             'year': 2018,
-            'artwork': null
+            'artwork': null,
           },
       ];
       return {'tvShow': s};
@@ -251,7 +290,8 @@ void main() {
     expect(items, hasLength(20));
     expect(items.map((i) => i.ref), isNot(contains(show)));
     final movies = await b.source.similar(
-        const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'));
+      const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'),
+    );
     expect(movies, isEmpty);
   });
 
@@ -264,85 +304,99 @@ void main() {
     expect(next.showTitle, 'Lantern Street s-1');
   });
 
-  test('continue watching maps movies and episodes; remove sends the id',
-      () async {
-    final b = build();
-    b.t.handlers['MydiaContinueWatching'] = (_) => {
-          'continueWatching': [
-            {
-              'id': 'm-1',
-              'type': 'MOVIE',
-              'title': 'A',
-              'progress': null,
-              'files': <Object>[]
-            },
-            {
-              'id': 'e-1',
-              'type': 'EPISODE',
-              'title': 'B',
-              'showId': 's-9',
-              'showTitle': 'S',
-              'seasonNumber': 1,
-              'episodeNumber': 3,
-              'progress': null,
-              'files': <Object>[]
-            },
-          ]
-        };
-    final rows = await b.source.continueWatching();
-    expect(rows.map((r) => r.ref.kind), [ItemKind.movie, ItemKind.episode]);
-    expect(b.source.canRemoveFromContinueWatching(rows.first), isTrue);
-    expect(b.source.canRemoveFromContinueWatching(rows.last), isTrue);
-    await b.source.removeFromContinueWatching(rows.first.ref);
-    expect(b.t.calls.last.operation, 'RemoveFromContinueWatching');
-    expect(b.t.calls.last.vars, {'mediaItemId': 'm-1'});
-  });
+  test(
+    'continue watching maps movies and episodes; remove sends the id',
+    () async {
+      final b = build();
+      b.t.handlers['MydiaContinueWatching'] = (_) => {
+        'continueWatching': [
+          {
+            'id': 'm-1',
+            'type': 'MOVIE',
+            'title': 'A',
+            'progress': null,
+            'files': <Object>[],
+          },
+          {
+            'id': 'e-1',
+            'type': 'EPISODE',
+            'title': 'B',
+            'showId': 's-9',
+            'showTitle': 'S',
+            'seasonNumber': 1,
+            'episodeNumber': 3,
+            'progress': null,
+            'files': <Object>[],
+          },
+        ],
+      };
+      final rows = await b.source.continueWatching();
+      expect(rows.map((r) => r.ref.kind), [ItemKind.movie, ItemKind.episode]);
+      expect(b.source.canRemoveFromContinueWatching(rows.first), isTrue);
+      expect(b.source.canRemoveFromContinueWatching(rows.last), isTrue);
+      await b.source.removeFromContinueWatching(rows.first.ref);
+      expect(b.t.calls.last.operation, 'RemoveFromContinueWatching');
+      expect(b.t.calls.last.vars, {'mediaItemId': 'm-1'});
+    },
+  );
 
-  test('removing an episode from continue watching sends its show id',
-      () async {
-    final b = build();
-    b.t.handlers['MydiaContinueWatching'] = (_) => {
-          'continueWatching': [
-            {
-              'id': 'e-1',
-              'type': 'EPISODE',
-              'title': 'B',
-              'showId': 's-9',
-              'progress': null,
-              'files': <Object>[]
-            },
-            {
-              'id': 'e-2',
-              'type': 'EPISODE',
-              'title': 'C',
-              'progress': null,
-              'files': <Object>[]
-            },
-          ]
-        };
-    final rows = await b.source.continueWatching();
+  test(
+    'removing an episode from continue watching sends its show id',
+    () async {
+      final b = build();
+      b.t.handlers['MydiaContinueWatching'] = (_) => {
+        'continueWatching': [
+          {
+            'id': 'e-1',
+            'type': 'EPISODE',
+            'title': 'B',
+            'showId': 's-9',
+            'progress': null,
+            'files': <Object>[],
+          },
+          {
+            'id': 'e-2',
+            'type': 'EPISODE',
+            'title': 'C',
+            'progress': null,
+            'files': <Object>[],
+          },
+        ],
+      };
+      final rows = await b.source.continueWatching();
 
-    expect(b.source.canRemoveFromContinueWatching(rows.first), isTrue);
-    expect(b.source.canRemoveFromContinueWatching(rows.last), isFalse,
-        reason: 'no show id, nothing the server would accept');
+      expect(b.source.canRemoveFromContinueWatching(rows.first), isTrue);
+      expect(
+        b.source.canRemoveFromContinueWatching(rows.last),
+        isFalse,
+        reason: 'no show id, nothing the server would accept',
+      );
 
-    await b.source.removeFromContinueWatching(rows.first.dismissRef);
-    expect(b.t.calls.last.operation, 'RemoveFromContinueWatching');
-    expect(b.t.calls.last.vars, {'mediaItemId': 's-9'});
+      await b.source.removeFromContinueWatching(rows.first.dismissRef);
+      expect(b.t.calls.last.operation, 'RemoveFromContinueWatching');
+      expect(b.t.calls.last.vars, {'mediaItemId': 's-9'});
 
-    expect(
-      b.source.removeFromContinueWatching(rows.first.ref),
-      throwsA(isA<SourceException>()),
-      reason: 'an episode id is refused before it reaches the server',
-    );
-  });
+      expect(
+        b.source.removeFromContinueWatching(rows.first.ref),
+        throwsA(isA<SourceException>()),
+        reason: 'an episode id is refused before it reaches the server',
+      );
+    },
+  );
 
   test('browsing an unknown library is not found', () async {
     expect(
       build().source.browse(
-          const LibraryRef(sourceId: sid, id: 'nope'), const BrowseQuery()),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.notFound)),
+        const LibraryRef(sourceId: sid, id: 'nope'),
+        const BrowseQuery(),
+      ),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.notFound,
+        ),
+      ),
     );
   });
 
@@ -363,38 +417,44 @@ void main() {
       return {'tvShow': s};
     };
     await b.source.setWatched(show, true);
-    expect(b.t.calls.where((c) => c.operation == 'MarkSeasonWatched'),
-        hasLength(2));
+    expect(
+      b.t.calls.where((c) => c.operation == 'MarkSeasonWatched'),
+      hasLength(2),
+    );
   });
 
   group('skip segments', () {
     Map<String, dynamic> files(String root) => {
-          root: {
-            'id': 'x',
-            'files': [
-              {
-                'id': 'f-1',
-                'segments': [
-                  {'type': 'INTRO', 'startMs': 1000, 'endMs': 61000},
-                ],
-              },
-              {
-                'id': 'f-2',
-                'segments': [
-                  {'type': 'CREDITS', 'startMs': 1700000, 'endMs': 1800000},
-                ],
-              },
+      root: {
+        'id': 'x',
+        'files': [
+          {
+            'id': 'f-1',
+            'segments': [
+              {'type': 'INTRO', 'startMs': 1000, 'endMs': 61000},
             ],
           },
-        };
+          {
+            'id': 'f-2',
+            'segments': [
+              {'type': 'CREDITS', 'startMs': 1700000, 'endMs': 1800000},
+            ],
+          },
+        ],
+      },
+    };
 
     test('picks the playing file', () async {
       final b = build();
       b.t.handlers['EpisodeSegments'] = (_) => files('episode');
       final segments = await b.source.as<SkipSegments>()!.skipSegments(
-          const ItemRef(
-              sourceId: sid, kind: ItemKind.episode, externalId: 'ep-1'),
-          versionId: 'f-2');
+        const ItemRef(
+          sourceId: sid,
+          kind: ItemKind.episode,
+          externalId: 'ep-1',
+        ),
+        versionId: 'f-2',
+      );
       expect(segments.single.type, SegmentType.credits);
       expect(b.t.calls.last.vars['id'], 'ep-1');
     });
@@ -403,16 +463,16 @@ void main() {
       final b = build();
       b.t.handlers['MovieSegments'] = (_) => files('movie');
       final segments = await b.source.as<SkipSegments>()!.skipSegments(
-          const ItemRef(
-              sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'));
+        const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'),
+      );
       expect(segments.single.type, SegmentType.intro);
     });
 
     test('an older guest server has no segments', () async {
       final b = build();
       final segments = await b.source.as<SkipSegments>()!.skipSegments(
-          const ItemRef(
-              sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'));
+        const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'),
+      );
       expect(segments, isEmpty);
     });
 
@@ -420,7 +480,8 @@ void main() {
       final b = build();
       final before = b.t.calls.length;
       final segments = await b.source.as<SkipSegments>()!.skipSegments(
-          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'));
+        const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'),
+      );
       expect(segments, isEmpty);
       expect(b.t.calls.length, before);
     });

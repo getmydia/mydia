@@ -46,12 +46,11 @@ void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
-          'flag (bool.fromEnvironment), so this file is a deliberate no-op '
-          'unless the whole test process is compiled with that define.';
+            'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
+            'flag (bool.fromEnvironment), so this file is a deliberate no-op '
+            'unless the whole test process is compiled with that define.';
 
-  group(
-      'PlaybackChrome scrubbing on the remote tier '
+  group('PlaybackChrome scrubbing on the remote tier '
       '(requires MYDIA_FORCE_TV=true)', () {
     late _FakePlatformPlayer platform;
     late Player player;
@@ -129,7 +128,7 @@ void main() {
 
       for (final key in [
         PlaybackChrome.elapsedKey,
-        PlaybackChrome.remainingKey
+        PlaybackChrome.remainingKey,
       ]) {
         expect(
           tester.widget<Text>(find.byKey(key)).style!.fontSize,
@@ -139,8 +138,9 @@ void main() {
       await finish(tester);
     });
 
-    testWidgets('a scrub holds the OSD up and shows the bubble until OK',
-        (tester) async {
+    testWidgets('a scrub holds the OSD up and shows the bubble until OK', (
+      tester,
+    ) async {
       await pumpChrome(tester);
       scrubberFocus.requestFocus();
       await tester.pump();
@@ -183,10 +183,10 @@ void main() {
     // control, and not on the lowest-indexed button: OK there would switch
     // episode or seek back instead of resuming.
     for (final episodeNavigation in [false, true]) {
-      testWidgets(
-          'UP after a scrub that bypassed the control bar lands on '
-          'play/pause (episode navigation: $episodeNavigation)',
-          (tester) async {
+      testWidgets('UP after a scrub that bypassed the control bar lands on '
+          'play/pause (episode navigation: $episodeNavigation)', (
+        tester,
+      ) async {
         await pumpChrome(tester, episodeNavigation: episodeNavigation);
         expect(
           find.byKey(TransportSurface.previousEpisodeKey),
@@ -204,8 +204,9 @@ void main() {
       });
     }
 
-    testWidgets('Play/Pause on the bar commits, then toggles playback',
-        (tester) async {
+    testWidgets('Play/Pause on the bar commits, then toggles playback', (
+      tester,
+    ) async {
       await pumpChrome(tester);
       scrubberFocus.requestFocus();
       await tester.pump();

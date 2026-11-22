@@ -18,62 +18,72 @@ void main() {
 
   tearDown(() async => harness.dispose());
 
-  test('a plain download runs to completion through the real service',
-      () async {
-    final task = await harness.service.start(DownloadRequest(
-      ref: testMydiaRef(ItemKind.movie, 'm1'),
-      optionId: '1080p',
-      metadata: const DownloadMetadata(
-          title: 'Test Movie', mediaType: MediaType.movie),
-    ));
+  test(
+    'a plain download runs to completion through the real service',
+    () async {
+      final task = await harness.service.start(
+        DownloadRequest(
+          ref: testMydiaRef(ItemKind.movie, 'm1'),
+          optionId: '1080p',
+          metadata: const DownloadMetadata(
+            title: 'Test Movie',
+            mediaType: MediaType.movie,
+          ),
+        ),
+      );
 
-    await harness.waitForStatus(task.id, 'completed');
+      await harness.waitForStatus(task.id, 'completed');
 
-    final stored = harness.database.getTask(task.id)!;
-    expect(stored.status, 'completed');
-    expect(await File(stored.filePath!).length(), 10);
-  });
+      final stored = harness.database.getTask(task.id)!;
+      expect(stored.status, 'completed');
+      expect(await File(stored.filePath!).length(), 10);
+    },
+  );
 
   group('resuming a partial file', () {
-    test('reuses the recorded file path rather than minting a new one',
-        () async {
-      final partialPath = '${harness.downloadDir.path}/partial.mp4';
-      await File(partialPath).writeAsBytes(Uint8List.fromList([7, 7, 7, 7]));
+    test(
+      'reuses the recorded file path rather than minting a new one',
+      () async {
+        final partialPath = '${harness.downloadDir.path}/partial.mp4';
+        await File(partialPath).writeAsBytes(Uint8List.fromList([7, 7, 7, 7]));
 
-      final seeded = DownloadTask(
-        id: 'seeded',
-        mediaId: 'm1',
-        title: 'Seeded',
-        quality: '1080p',
-        status: 'paused',
-        downloadUrl: 'https://test.invalid/file.mp4',
-        filePath: partialPath,
-        createdAt: DateTime(2026, 1, 1),
-      );
-      await harness.database.saveTask(seeded);
+        final seeded = DownloadTask(
+          id: 'seeded',
+          mediaId: 'm1',
+          title: 'Seeded',
+          quality: '1080p',
+          status: 'paused',
+          downloadUrl: 'https://test.invalid/file.mp4',
+          filePath: partialPath,
+          createdAt: DateTime(2026, 1, 1),
+        );
+        await harness.database.saveTask(seeded);
 
-      await harness.service.resumeDownload('seeded');
-      await harness.waitForStatus('seeded', 'completed');
+        await harness.service.resumeDownload('seeded');
+        await harness.waitForStatus('seeded', 'completed');
 
-      expect(harness.database.getTask('seeded')!.filePath, partialPath);
-    });
+        expect(harness.database.getTask('seeded')!.filePath, partialPath);
+      },
+    );
 
     test('requests the range starting at the on-disk length', () async {
       final partialPath = '${harness.downloadDir.path}/partial.mp4';
       await File(partialPath).writeAsBytes(Uint8List.fromList([7, 7, 7, 7]));
 
-      await harness.database.saveTask(DownloadTask(
-        id: 'seeded',
-        mediaId: 'm1',
-        title: 'Seeded',
-        quality: '1080p',
-        status: 'paused',
-        downloadUrl: 'https://test.invalid/file.mp4',
-        filePath: partialPath,
-        // Deliberately disagrees with the file on disk. Disk wins.
-        downloadedBytes: 999,
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'seeded',
+          mediaId: 'm1',
+          title: 'Seeded',
+          quality: '1080p',
+          status: 'paused',
+          downloadUrl: 'https://test.invalid/file.mp4',
+          filePath: partialPath,
+          // Deliberately disagrees with the file on disk. Disk wins.
+          downloadedBytes: 999,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       await harness.service.resumeDownload('seeded');
       await harness.waitForStatus('seeded', 'completed');
@@ -85,16 +95,18 @@ void main() {
       final partialPath = '${harness.downloadDir.path}/partial.mp4';
       await File(partialPath).writeAsBytes(Uint8List.fromList([7, 7, 7, 7]));
 
-      await harness.database.saveTask(DownloadTask(
-        id: 'seeded',
-        mediaId: 'm1',
-        title: 'Seeded',
-        quality: '1080p',
-        status: 'paused',
-        downloadUrl: 'https://test.invalid/file.mp4',
-        filePath: partialPath,
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'seeded',
+          mediaId: 'm1',
+          title: 'Seeded',
+          quality: '1080p',
+          status: 'paused',
+          downloadUrl: 'https://test.invalid/file.mp4',
+          filePath: partialPath,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       await harness.service.resumeDownload('seeded');
       await harness.waitForStatus('seeded', 'completed');

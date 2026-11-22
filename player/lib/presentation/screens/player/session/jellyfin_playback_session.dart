@@ -28,37 +28,35 @@ import 'source_playback_session.dart';
 List<CandidateStrategy> jellyfinCandidates(
   MediaVersion v,
   JellyfinSourceSupport? support,
-) =>
-    [
-      if (support?.directPlay ?? true)
-        CandidateStrategy(
-          strategy: 'DIRECT_PLAY',
-          mime: containerMime(v.container),
-          videoCodec: v.videoCodec,
-        ),
-      if (support?.directStream ?? true)
-        CandidateStrategy(
-          strategy: 'HLS_COPY',
-          mime: 'application/x-mpegURL',
-          videoCodec: v.videoCodec,
-        ),
-      if (support?.transcoding ?? true)
-        const CandidateStrategy(
-          strategy: 'TRANSCODE',
-          mime: 'application/x-mpegURL',
-          videoCodec: 'h264',
-        ),
-    ];
+) => [
+  if (support?.directPlay ?? true)
+    CandidateStrategy(
+      strategy: 'DIRECT_PLAY',
+      mime: containerMime(v.container),
+      videoCodec: v.videoCodec,
+    ),
+  if (support?.directStream ?? true)
+    CandidateStrategy(
+      strategy: 'HLS_COPY',
+      mime: 'application/x-mpegURL',
+      videoCodec: v.videoCodec,
+    ),
+  if (support?.transcoding ?? true)
+    const CandidateStrategy(
+      strategy: 'TRANSCODE',
+      mime: 'application/x-mpegURL',
+      videoCodec: 'h264',
+    ),
+];
 
 class JellyfinPlaybackSession extends SourcePlaybackSession {
   JellyfinPlaybackSession({
     required JellyfinMediaSource source,
     required super.item,
     required super.fileId,
-    DeviceProfile? profile,
-  })  : _jellyfin = source,
-        _profile = profile,
-        super(source: source);
+    this._profile,
+  }) : _jellyfin = source,
+       super(source: source);
 
   final JellyfinMediaSource _jellyfin;
 
@@ -82,19 +80,24 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
       final detail = await loadDetail();
       final version =
           detail.versions.where((v) => v.id == fileId).firstOrNull ??
-              detail.versions.firstOrNull;
+          detail.versions.firstOrNull;
       if (version == null) throw const SourceException.notFound();
       _mediaSourceId = version.id;
-      final info = await _jellyfin.playbackInfo(item.externalId,
-          mediaSourceId: version.id,
-          deviceProfile: jellyfinDeviceProfile(_profile));
+      final info = await _jellyfin.playbackInfo(
+        item.externalId,
+        mediaSourceId: version.id,
+        deviceProfile: jellyfinDeviceProfile(_profile),
+      );
       _loaded = info;
       return info;
     }();
     _info = fresh;
-    fresh.then<void>((_) {}, onError: (Object _) {
-      if (identical(_info, fresh)) _info = null;
-    });
+    fresh.then<void>(
+      (_) {},
+      onError: (Object _) {
+        if (identical(_info, fresh)) _info = null;
+      },
+    );
     return fresh;
   }
 
@@ -125,7 +128,10 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
       return StreamingUnavailable(PlaybackProblem.fromError(e));
     }
     return super.prepareStreaming(
-        owner: owner, onProgress: onProgress, isCurrent: isCurrent);
+      owner: owner,
+      onProgress: onProgress,
+      isCurrent: isCurrent,
+    );
   }
 
   @override
@@ -137,12 +143,12 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
 
   @override
   ProgressReporter createProgress() => JellyfinProgressReporter(
-        client: _jellyfin.client,
-        itemId: item.externalId,
-        mediaSourceId: _mediaSourceId ?? fileId,
-        playSessionId: _loaded?.playSessionId ?? '',
-        playMethod: () => _playMethod,
-      );
+    client: _jellyfin.client,
+    itemId: item.externalId,
+    mediaSourceId: _mediaSourceId ?? fileId,
+    playSessionId: _loaded?.playSessionId ?? '',
+    playMethod: () => _playMethod,
+  );
 
   @override
   StreamResolver createResolver(ItemDetail detail, MediaVersion version) =>
@@ -160,21 +166,21 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
     ItemDetail detail,
     MediaVersion version, {
     String? burnSubtitleStreamId,
-  }) =>
-      JellyfinStreamResolver(
-        client: _jellyfin.client,
-        itemId: item.externalId,
-        version: version,
-        playSessionId: _loaded?.playSessionId ?? '',
-        codecs: transcodeCodecs(receiverDeviceProfile),
-        onPlayMethod: (method) => _playMethod = method,
-        forReceiver: true,
-      );
+  }) => JellyfinStreamResolver(
+    client: _jellyfin.client,
+    itemId: item.externalId,
+    version: version,
+    playSessionId: _loaded?.playSessionId ?? '',
+    codecs: transcodeCodecs(receiverDeviceProfile),
+    onPlayMethod: (method) => _playMethod = method,
+    forReceiver: true,
+  );
 
   /// Jellyfin converts any text track, embedded or sidecar, to WebVTT.
   @override
   Future<List<CastSubtitleTrack>> receiverSubtitles(
-      MediaVersion version) async {
+    MediaVersion version,
+  ) async {
     final credential = await _jellyfin.client.receiverQuery();
     return [
       for (final s in version.streams)
@@ -183,10 +189,11 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
           CastSubtitleTrack(
             trackId: s.id,
             url: (await _jellyfin.client.url(
-                    '/Videos/${item.externalId}/${version.id}/Subtitles/${s.id}/Stream.vtt',
-                    credential))
-                .toString(),
-            label: s.title ??
+              '/Videos/${item.externalId}/${version.id}/Subtitles/${s.id}/Stream.vtt',
+              credential,
+            )).toString(),
+            label:
+                s.title ??
                 s.language ??
                 currentAppLocalizations().commonSubtitles,
             language: s.language ?? 'und',
@@ -223,10 +230,12 @@ class JellyfinStreamResolver implements StreamResolver {
     required String fileId,
     required Duration startAt,
   }) async {
-    final headers =
-        forReceiver ? const <String, String>{} : await client.headers();
-    final credential =
-        forReceiver ? await client.receiverQuery() : const <String, String>{};
+    final headers = forReceiver
+        ? const <String, String>{}
+        : await client.headers();
+    final credential = forReceiver
+        ? await client.receiverQuery()
+        : const <String, String>{};
     switch (plan) {
       case DirectPlayPlan():
         onPlayMethod('DirectPlay');
@@ -236,8 +245,7 @@ class JellyfinStreamResolver implements StreamResolver {
             'mediaSourceId': version.id,
             'playSessionId': playSessionId,
             ...credential,
-          }))
-              .toString(),
+          })).toString(),
           headers: headers,
         );
       case HlsPlan(:final strategy, :final rung):
@@ -271,8 +279,7 @@ class JellyfinStreamResolver implements StreamResolver {
               'MaxStreamingBitrate': '${kbps * 1000}',
             if (rung.height case final height?) 'MaxHeight': '$height',
             ...credential,
-          }))
-              .toString(),
+          })).toString(),
           headers: headers,
           sessionId: session,
         );
@@ -281,13 +288,13 @@ class JellyfinStreamResolver implements StreamResolver {
 
   @override
   Future<void> end(String sessionId) async => client.send(
-        'DELETE',
-        '/Videos/ActiveEncodings',
-        query: {
-          'deviceId': (await client.identity()).deviceId,
-          'playSessionId': sessionId,
-        },
-      );
+    'DELETE',
+    '/Videos/ActiveEncodings',
+    query: {
+      'deviceId': (await client.identity()).deviceId,
+      'playSessionId': sessionId,
+    },
+  );
 }
 
 class JellyfinProgressReporter extends PeriodicProgressReporter {
@@ -307,14 +314,14 @@ class JellyfinProgressReporter extends PeriodicProgressReporter {
   bool _started = false;
 
   Map<String, dynamic> _body(int positionSeconds, {bool? paused}) => {
-        'ItemId': itemId,
-        'MediaSourceId': mediaSourceId,
-        'PlaySessionId': playSessionId,
-        'PositionTicks': positionSeconds * jellyfinTicksPerSecond,
-        'PlayMethod': playMethod(),
-        'CanSeek': true,
-        if (paused != null) 'IsPaused': paused,
-      };
+    'ItemId': itemId,
+    'MediaSourceId': mediaSourceId,
+    'PlaySessionId': playSessionId,
+    'PositionTicks': positionSeconds * jellyfinTicksPerSecond,
+    'PlayMethod': playMethod(),
+    'CanSeek': true,
+    'IsPaused': ?paused,
+  };
 
   @override
   Future<void> sendProgress({
@@ -325,19 +332,27 @@ class JellyfinProgressReporter extends PeriodicProgressReporter {
     // The first report opens the session in Jellyfin's dashboard.
     final path = _started ? '/Sessions/Playing/Progress' : '/Sessions/Playing';
     _started = true;
-    return client.send('POST', path,
-        body: _body(positionSeconds, paused: paused));
+    return client.send(
+      'POST',
+      path,
+      body: _body(positionSeconds, paused: paused),
+    );
   }
 
   @override
-  Future<void> sendWatched() => client.send('POST', '/UserPlayedItems/$itemId',
-      query: {'userId': client.userId});
+  Future<void> sendWatched() => client.send(
+    'POST',
+    '/UserPlayedItems/$itemId',
+    query: {'userId': client.userId},
+  );
 
   @override
   Future<void> sendStopped({
     required int positionSeconds,
     required int durationSeconds,
-  }) =>
-      client.send('POST', '/Sessions/Playing/Stopped',
-          body: _body(positionSeconds));
+  }) => client.send(
+    'POST',
+    '/Sessions/Playing/Stopped',
+    body: _body(positionSeconds),
+  );
 }

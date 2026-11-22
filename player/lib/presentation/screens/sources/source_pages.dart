@@ -118,13 +118,12 @@ class PagedItems {
     Cursor? nextCursor,
     bool clearCursor = false,
     bool? loadingMore,
-  }) =>
-      PagedItems(
-        items: items ?? this.items,
-        nextCursor: clearCursor ? null : (nextCursor ?? this.nextCursor),
-        total: total,
-        loadingMore: loadingMore ?? this.loadingMore,
-      );
+  }) => PagedItems(
+    items: items ?? this.items,
+    nextCursor: clearCursor ? null : (nextCursor ?? this.nextCursor),
+    total: total,
+    loadingMore: loadingMore ?? this.loadingMore,
+  );
 }
 
 class SourcePagesNotifier extends StreamNotifier<PagedItems> {
@@ -156,7 +155,9 @@ class SourcePagesNotifier extends StreamNotifier<PagedItems> {
       decode: decodeSummaryPage,
       canRefetch: () => !_paged,
     );
-    return watcher.stream.where((_) => !_paged).map(
+    return watcher.stream
+        .where((_) => !_paged)
+        .map(
           (page) => PagedItems(
             items: page.items,
             nextCursor: page.nextCursor,
@@ -176,15 +177,19 @@ class SourcePagesNotifier extends StreamNotifier<PagedItems> {
     _paged = true;
     state = AsyncData(current.copyWith(loadingMore: true));
     try {
-      final page =
-          await pages.fetch(requireSource(ref, pages.sourceId), cursor);
+      final page = await pages.fetch(
+        requireSource(ref, pages.sourceId),
+        cursor,
+      );
       if (!ref.mounted || generation != _generation) return;
-      state = AsyncData(current.copyWith(
-        items: [...current.items, ...page.items],
-        nextCursor: page.nextCursor,
-        clearCursor: page.nextCursor == null,
-        loadingMore: false,
-      ));
+      state = AsyncData(
+        current.copyWith(
+          items: [...current.items, ...page.items],
+          nextCursor: page.nextCursor,
+          clearCursor: page.nextCursor == null,
+          loadingMore: false,
+        ),
+      );
     } catch (_) {
       // Any failure, not just a SourceException: loadingMore must not stick.
       if (ref.mounted && generation == _generation) {
@@ -199,12 +204,14 @@ class SourcePagesNotifier extends StreamNotifier<PagedItems> {
 
 final sourcePagesProvider = StreamNotifierProvider.autoDispose
     .family<SourcePagesNotifier, PagedItems, SourcePages>(
-        SourcePagesNotifier.new);
+      SourcePagesNotifier.new,
+    );
 
 /// The query a library screen shows, remembered while the screen lives.
 final libraryQueryProvider = NotifierProvider.autoDispose
     .family<LibraryQueryNotifier, BrowseQuery, LibraryRef>(
-        LibraryQueryNotifier.new);
+      LibraryQueryNotifier.new,
+    );
 
 class LibraryQueryNotifier extends Notifier<BrowseQuery> {
   LibraryQueryNotifier(this.library);

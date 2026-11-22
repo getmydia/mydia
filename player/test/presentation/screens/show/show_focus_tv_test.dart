@@ -20,21 +20,24 @@ import '../../../test_utils/tv_shell_harness.dart';
 import '../detail/detail_harness.dart';
 import '../sources/fake_media_source.dart';
 
-const _show =
-    ItemRef(sourceId: fakeSourceId, kind: ItemKind.show, externalId: 'sh-1');
+const _show = ItemRef(
+  sourceId: fakeSourceId,
+  kind: ItemKind.show,
+  externalId: 'sh-1',
+);
 
 ItemSummary _episode(int season, int number) => ItemSummary(
-      ref: ItemRef(
-        sourceId: fakeSourceId,
-        kind: ItemKind.episode,
-        externalId: 'ep-$season-$number',
-      ),
-      title: 'Episode $number',
-      index: number,
-      parentIndex: season,
-      durationSeconds: 2580,
-      defaultVersionId: 'file-$season-$number',
-    );
+  ref: ItemRef(
+    sourceId: fakeSourceId,
+    kind: ItemKind.episode,
+    externalId: 'ep-$season-$number',
+  ),
+  title: 'Episode $number',
+  index: number,
+  parentIndex: season,
+  durationSeconds: 2580,
+  defaultVersionId: 'file-$season-$number',
+);
 
 Key _season(int n) => ValueKey('season-chip-$n');
 Key _episodeCard(int season, int n) => ValueKey('ep-$season-$n');
@@ -50,17 +53,23 @@ void _expectOnEpisode(int season, int n) {
     inMenu = e.widget is PopupMenuButton;
     return !inMenu;
   });
-  expect(inMenu, isFalse,
-      reason: 'expected the card of episode $season-$n, '
-          'but focus is on its watched menu');
+  expect(
+    inMenu,
+    isFalse,
+    reason:
+        'expected the card of episode $season-$n, '
+        'but focus is on its watched menu',
+  );
 }
 
 void main() {
   group('show detail focus memory (TV)', () {
     /// Without [similar] the similar row is empty, so neither its
     /// disclosure nor its rail is a section.
-    Future<TvShell> pumpShow(WidgetTester tester,
-        {bool similar = false}) async {
+    Future<TvShell> pumpShow(
+      WidgetTester tester, {
+      bool similar = false,
+    }) async {
       final source = ScriptedDetailSource(
         detailOf: (ref) => ref.kind == ItemKind.episode
             ? ItemDetail(
@@ -90,69 +99,75 @@ void main() {
               ],
       );
       final shell = TvShell();
-      await mockNetworkImages(() => shell.pump(
-            tester,
-            const ShowDetailScreen.target(target: SourceTarget(_show)),
-            overrides: [
-              mediaSourceProvider(source.id).overrideWithValue(source),
-              sourceArtworkProvider.overrideWith((ref, key) async => null),
-              sourceSimilarProvider(_show).overrideWith((_) => Stream.value([
-                    if (similar)
-                      for (var n = 2; n < 12; n++) fakeMovie(n),
-                  ])),
-            ],
-          ));
+      await mockNetworkImages(
+        () => shell.pump(
+          tester,
+          const ShowDetailScreen.target(target: SourceTarget(_show)),
+          overrides: [
+            mediaSourceProvider(source.id).overrideWithValue(source),
+            sourceArtworkProvider.overrideWith((ref, key) async => null),
+            sourceSimilarProvider(_show).overrideWith(
+              (_) => Stream.value([
+                if (similar)
+                  for (var n = 2; n < 12; n++) fakeMovie(n),
+              ]),
+            ),
+          ],
+        ),
+      );
       return shell;
     }
 
     testWidgets(
-        'from Play, DOWN steps through every section in page order, each '
-        'entered on its first item, and UP climbs back', (tester) async {
-      await pumpShow(tester, similar: true);
-      await focusIn(tester, HeroPlayControl.sectionKey);
+      'from Play, DOWN steps through every section in page order, each '
+      'entered on its first item, and UP climbs back',
+      (tester) async {
+        await pumpShow(tester, similar: true);
+        await focusIn(tester, HeroPlayControl.sectionKey);
 
-      // Play sits at the hero's right, the button bar under it at the left:
-      // the page's section order, not the geometric search, links the two.
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(_action('watched'));
-      // The cast rail has no focus stops. The similar row starts collapsed,
-      // so its disclosure is the next section; opening it adds the rail.
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(DetailSimilarRail.headerSectionKey);
-      await press(tester, LogicalKeyboardKey.enter);
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(const ValueKey('source-poster-m2'));
-      // The "Episodes" heading's buttons, then the season chips.
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(_heading);
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(_season(1));
-      // Season 3 sits above the second episode card, which is where the
-      // geometric search alone would land.
-      await press(tester, LogicalKeyboardKey.arrowRight);
-      await press(tester, LogicalKeyboardKey.arrowRight);
-      expectFocusIn(_season(3));
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      _expectOnEpisode(1, 1);
+        // Play sits at the hero's right, the button bar under it at the left:
+        // the page's section order, not the geometric search, links the two.
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(_action('watched'));
+        // The cast rail has no focus stops. The similar row starts collapsed,
+        // so its disclosure is the next section; opening it adds the rail.
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(DetailSimilarRail.headerSectionKey);
+        await press(tester, LogicalKeyboardKey.enter);
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(const ValueKey('source-poster-m2'));
+        // The "Episodes" heading's buttons, then the season chips.
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(_heading);
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(_season(1));
+        // Season 3 sits above the second episode card, which is where the
+        // geometric search alone would land.
+        await press(tester, LogicalKeyboardKey.arrowRight);
+        await press(tester, LogicalKeyboardKey.arrowRight);
+        expectFocusIn(_season(3));
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        _expectOnEpisode(1, 1);
 
-      for (final section in [
-        _season(3),
-        _heading,
-        const ValueKey('source-poster-m2'),
-        DetailSimilarRail.headerSectionKey,
-        _action('watched'),
-        HeroPlayControl.sectionKey,
-      ]) {
+        for (final section in [
+          _season(3),
+          _heading,
+          const ValueKey('source-poster-m2'),
+          DetailSimilarRail.headerSectionKey,
+          _action('watched'),
+          HeroPlayControl.sectionKey,
+        ]) {
+          await press(tester, LogicalKeyboardKey.arrowUp);
+          expectFocusIn(section);
+        }
+        // Above the first section the column steps aside, and UP is the
+        // geometric search's again. A television has no cast button, so the
+        // nearest stop above Play is the button bar, which on this layout sits
+        // wholly above it at the hero's left.
         await press(tester, LogicalKeyboardKey.arrowUp);
-        expectFocusIn(section);
-      }
-      // Above the first section the column steps aside, and UP is the
-      // geometric search's again. A television has no cast button, so the
-      // nearest stop above Play is the button bar, which on this layout sits
-      // wholly above it at the hero's left.
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expectFocusIn(_action('watched'));
-    });
+        expectFocusIn(_action('watched'));
+      },
+    );
 
     testWidgets('the page opens with focus on Play', (tester) async {
       await pumpShow(tester);
@@ -171,8 +186,9 @@ void main() {
       expectFocusIn(HeroPlayControl.sectionKey);
     });
 
-    testWidgets('UP from the episodes returns to the season that left',
-        (tester) async {
+    testWidgets('UP from the episodes returns to the season that left', (
+      tester,
+    ) async {
       await pumpShow(tester);
       await focusIn(tester, _season(3));
 
@@ -213,30 +229,32 @@ void main() {
     // the rail is back with data at once, and only the per-season rail
     // keeps the old season's position from carrying over.
     testWidgets(
-        'a season whose episodes are still loaded is entered on its first '
-        'episode', (tester) async {
-      final shell = await pumpShow(tester);
-      final seasonOne = shell.container.listen(
-        sourceSeasonProvider((show: _show, seasonNumber: 1)),
-        (_, __) {},
-      );
-      addTearDown(seasonOne.close);
-      await focusIn(tester, _season(2));
-      await press(tester, LogicalKeyboardKey.enter);
-      await focusIn(tester, _episodeCard(2, 1));
-      for (var i = 0; i < 4; i++) {
-        await press(tester, LogicalKeyboardKey.arrowRight);
-      }
-      _expectOnEpisode(2, 5);
+      'a season whose episodes are still loaded is entered on its first '
+      'episode',
+      (tester) async {
+        final shell = await pumpShow(tester);
+        final seasonOne = shell.container.listen(
+          sourceSeasonProvider((show: _show, seasonNumber: 1)),
+          (_, _) {},
+        );
+        addTearDown(seasonOne.close);
+        await focusIn(tester, _season(2));
+        await press(tester, LogicalKeyboardKey.enter);
+        await focusIn(tester, _episodeCard(2, 1));
+        for (var i = 0; i < 4; i++) {
+          await press(tester, LogicalKeyboardKey.arrowRight);
+        }
+        _expectOnEpisode(2, 5);
 
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expectFocusIn(_season(2));
-      await press(tester, LogicalKeyboardKey.arrowLeft);
-      expectFocusIn(_season(1));
-      await press(tester, LogicalKeyboardKey.enter);
-      await press(tester, LogicalKeyboardKey.arrowDown);
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expectFocusIn(_season(2));
+        await press(tester, LogicalKeyboardKey.arrowLeft);
+        expectFocusIn(_season(1));
+        await press(tester, LogicalKeyboardKey.enter);
+        await press(tester, LogicalKeyboardKey.arrowDown);
 
-      _expectOnEpisode(1, 1);
-    });
+        _expectOnEpisode(1, 1);
+      },
+    );
   }, skip: tvSkipReason);
 }

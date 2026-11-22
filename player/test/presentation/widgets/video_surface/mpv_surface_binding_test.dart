@@ -85,27 +85,34 @@ Future<MpvSurfaceBinding> _mount(
     SystemChannels.platform_views,
     (call) async => null,
   );
-  addTearDown(() => tester.binding.defaultBinaryMessenger
-      .setMockMethodCallHandler(SystemChannels.platform_views, null));
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform_views,
+      null,
+    ),
+  );
   final binding = MpvSurfaceBinding(
     player: Player(platformPlayer: _Player(handle: handle)),
     surface: surface,
   );
-  await tester.pumpWidget(Directionality(
-    textDirection: TextDirection.ltr,
-    child: PlayerVideoSurface(
-      binding: binding,
-      scaling: VideoScaling.fit,
-      subtitleSize: SubtitleSize.medium,
+  await tester.pumpWidget(
+    Directionality(
+      textDirection: TextDirection.ltr,
+      child: PlayerVideoSurface(
+        binding: binding,
+        scaling: VideoScaling.fit,
+        subtitleSize: SubtitleSize.medium,
+      ),
     ),
-  ));
+  );
   await tester.pump();
   return binding;
 }
 
 void main() {
-  testWidgets('detach cancels an attach still waiting for the player handle',
-      (tester) async {
+  testWidgets('detach cancels an attach still waiting for the player handle', (
+    tester,
+  ) async {
     final surface = _Surface();
     final binding = await _mount(tester, surface: surface);
 
@@ -113,8 +120,11 @@ void main() {
     unawaited(binding.attach().then((v) => attached = v));
     await tester.pump();
     expect(attached, isNull, reason: 'the handle has not resolved');
-    expect((binding.player.platform! as _Player).handleRequested, isTrue,
-        reason: 'attach is past the view and waiting on the handle');
+    expect(
+      (binding.player.platform! as _Player).handleRequested,
+      isTrue,
+      reason: 'attach is past the view and waiting on the handle',
+    );
 
     await binding.detach();
     await tester.pump();
@@ -123,8 +133,9 @@ void main() {
     expect(surface.detached, isEmpty, reason: 'nothing was attached');
   });
 
-  testWidgets('a detach during the native attach sends no panscan',
-      (tester) async {
+  testWidgets('a detach during the native attach sends no panscan', (
+    tester,
+  ) async {
     final surface = _Surface()..attachGate = Completer<void>();
     final binding = await _mount(tester, surface: surface, handle: 5);
 
@@ -139,12 +150,16 @@ void main() {
 
     expect(attached, isFalse);
     expect(surface.detached, [5]);
-    expect(surface.setOptions, isEmpty,
-        reason: 'panscan must not follow a detach to a handle on its way out');
+    expect(
+      surface.setOptions,
+      isEmpty,
+      reason: 'panscan must not follow a detach to a handle on its way out',
+    );
   });
 
-  testWidgets('an attach that completes sends the initial panscan',
-      (tester) async {
+  testWidgets('an attach that completes sends the initial panscan', (
+    tester,
+  ) async {
     final surface = _Surface();
     final binding = await _mount(tester, surface: surface, handle: 6);
 
@@ -154,8 +169,9 @@ void main() {
     expect(surface.setOptions, [(6, 'panscan', '0.0')]);
   });
 
-  testWidgets('detach completes when the native reply never arrives',
-      (tester) async {
+  testWidgets('detach completes when the native reply never arrives', (
+    tester,
+  ) async {
     final surface = _Surface()..detachGate = Completer<void>();
     final binding = await _mount(tester, surface: surface, handle: 7);
     expect(await binding.attach(), isTrue);
@@ -171,7 +187,8 @@ void main() {
 
   group('target-colorspace-hint follows the source gamma', () {
     Future<(MpvSurfaceBinding, _Surface, _Player)> attached(
-        WidgetTester tester) async {
+      WidgetTester tester,
+    ) async {
       final surface = _Surface();
       final binding = await _mount(tester, surface: surface, handle: 9);
       expect(await binding.attach(), isTrue);
@@ -191,8 +208,9 @@ void main() {
       expect(surface.setOptions, isEmpty);
     });
 
-    testWidgets('PQ turns it on once, and SDR after it turns it off',
-        (tester) async {
+    testWidgets('PQ turns it on once, and SDR after it turns it off', (
+      tester,
+    ) async {
       final (_, surface, p) = await attached(tester);
       await report(tester, p, 'pq');
       await report(tester, p, 'pq');
@@ -217,8 +235,7 @@ void main() {
     });
   });
 
-  testWidgets(
-      'an attach with no native reply gives up, so playback can fall '
+  testWidgets('an attach with no native reply gives up, so playback can fall '
       'back', (tester) async {
     final surface = _Surface()..attachGate = Completer<void>();
     final binding = await _mount(tester, surface: surface, handle: 8);

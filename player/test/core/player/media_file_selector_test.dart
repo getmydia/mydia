@@ -150,8 +150,11 @@ void main() {
       final file1080 = _makeFile(id: '1080', resolution: '1080p');
       final file4k = _makeFile(id: '4k', resolution: '4K');
 
-      final result =
-          MediaFileSelector.selectBest([file720, file1080, file4k], context);
+      final result = MediaFileSelector.selectBest([
+        file720,
+        file1080,
+        file4k,
+      ], context);
       expect(result?.id, equals('4k'));
     });
 
@@ -187,10 +190,7 @@ void main() {
         resolution: '1080p',
         hdrFormat: 'HDR10',
       );
-      final fileSdr = _makeFile(
-        id: 'sdr',
-        resolution: '1080p',
-      );
+      final fileSdr = _makeFile(id: 'sdr', resolution: '1080p');
 
       final result = MediaFileSelector.selectBest([fileHdr, fileSdr], context);
       expect(result?.id, equals('sdr'));
@@ -286,26 +286,30 @@ void main() {
       isWeb: false,
     );
 
-    test('prefers the direct-playable file when resolution and bitrate tie',
-        () {
-      final direct = _makeFile(
-        id: 'direct',
-        resolution: '1080p',
-        bitrate: 5000000,
-        directPlaySupported: true,
-      );
-      final transcode = _makeFile(
-        id: 'transcode',
-        resolution: '1080p',
-        bitrate: 5000000,
-        directPlaySupported: false,
-      );
+    test(
+      'prefers the direct-playable file when resolution and bitrate tie',
+      () {
+        final direct = _makeFile(
+          id: 'direct',
+          resolution: '1080p',
+          bitrate: 5000000,
+          directPlaySupported: true,
+        );
+        final transcode = _makeFile(
+          id: 'transcode',
+          resolution: '1080p',
+          bitrate: 5000000,
+          directPlaySupported: false,
+        );
 
-      final best =
-          MediaFileSelector.selectBest([transcode, direct], wifiDesktop);
+        final best = MediaFileSelector.selectBest([
+          transcode,
+          direct,
+        ], wifiDesktop);
 
-      expect(best!.id, 'direct');
-    });
+        expect(best!.id, 'direct');
+      },
+    );
 
     test('a higher resolution still wins over a direct-playable lower one', () {
       // Desktop/widescreen are uncapped: _maxTargetResolution returns 0,
@@ -329,12 +333,13 @@ void main() {
         directPlaySupported: false,
       );
 
-      expect(MediaFileSelector.selectBest([direct, bigger], context)!.id,
-          'bigger');
+      expect(
+        MediaFileSelector.selectBest([direct, bigger], context)!.id,
+        'bigger',
+      );
     });
 
-    test(
-        'desktop: non-direct-playable 4K outranks direct-playable 480p '
+    test('desktop: non-direct-playable 4K outranks direct-playable 480p '
         'despite the bonus', () {
       // Regression test for the fix: before it, desktop's uncapped
       // resolution branch was unreachable because _maxTargetResolution
@@ -362,10 +367,10 @@ void main() {
         directPlaySupported: true,
       );
 
-      final result = MediaFileSelector.selectBest(
-        [lowResDirect, highRes],
-        context,
-      );
+      final result = MediaFileSelector.selectBest([
+        lowResDirect,
+        highRes,
+      ], context);
       expect(result?.id, equals('4k-transcode'));
     });
   });

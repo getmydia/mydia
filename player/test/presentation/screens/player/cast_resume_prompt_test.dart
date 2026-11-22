@@ -30,8 +30,9 @@ void main() {
     });
   }
 
-  testWidgets('asks before casting, and carries the answer to the receiver',
-      (tester) async {
+  testWidgets('asks before casting, and carries the answer to the receiver', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
@@ -85,7 +86,9 @@ void main() {
 
     await pumpPlayerScreen(tester, container);
     await pumpUntil(
-        tester, () => find.text('Start Over').evaluate().isNotEmpty);
+      tester,
+      () => find.text('Start Over').evaluate().isNotEmpty,
+    );
     await tester.tap(find.text('Start Over'));
     await pumpUntil(tester, () => castManager.capturedRequest != null);
 

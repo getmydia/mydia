@@ -19,8 +19,7 @@ import 'fullscreen_web_platform.dart';
 FullscreenBackend createFullscreenBackend({
   required ValueChanged<bool> onChange,
   required FullscreenFailureSink onFailure,
-}) =>
-    WebFullscreenBackend(onChange: onChange, onFailure: onFailure);
+}) => WebFullscreenBackend(onChange: onChange, onFailure: onFailure);
 
 /// Browser fullscreen, over whichever route the browser actually offers.
 ///
@@ -87,10 +86,12 @@ class WebFullscreenBackend implements FullscreenBackend, WebFullscreenPlatform {
     try {
       return web.document.fullscreenEnabled;
     } catch (e) {
-      _probeFailures.add(FullscreenFailure(
-        FullscreenFailureCause.documentEnabledProbeFailed,
-        detail: '$e',
-      ));
+      _probeFailures.add(
+        FullscreenFailure(
+          FullscreenFailureCause.documentEnabledProbeFailed,
+          detail: '$e',
+        ),
+      );
       return false;
     }
   }
@@ -107,10 +108,12 @@ class WebFullscreenBackend implements FullscreenBackend, WebFullscreenPlatform {
       if (proto.isUndefinedOrNull) return false;
       return (proto as JSObject).has('webkitEnterFullscreen');
     } catch (e) {
-      _probeFailures.add(FullscreenFailure(
-        FullscreenFailureCause.videoSupportProbeFailed,
-        detail: '$e',
-      ));
+      _probeFailures.add(
+        FullscreenFailure(
+          FullscreenFailureCause.videoSupportProbeFailed,
+          detail: '$e',
+        ),
+      );
       return false;
     }
   }

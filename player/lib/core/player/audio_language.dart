@@ -1,7 +1,8 @@
 import 'package:media_kit/media_kit.dart';
 
 import 'audio_language_stub.dart'
-    if (dart.library.io) 'audio_language_native.dart' as platform;
+    if (dart.library.io) 'audio_language_native.dart'
+    as platform;
 
 /// Tells the underlying player which audio language to open a file on.
 ///

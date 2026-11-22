@@ -27,8 +27,8 @@ class DecorationLayoutSource {
 
   final ValueNotifier<DecorationLayout> _layout =
       ValueNotifier<DecorationLayout>(
-    parseDecorationLayout(kFallbackDecorationLayout),
-  );
+        parseDecorationLayout(kFallbackDecorationLayout),
+      );
 
   /// The current layout. Starts on the fallback and never becomes null, so
   /// callers can read it before [load] has been awaited.

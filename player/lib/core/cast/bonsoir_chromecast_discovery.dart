@@ -18,8 +18,8 @@ const chromecastServiceType = '_googlecast._tcp';
 /// `BonsoirService.toJson()` uses — see
 /// `bonsoir_platform_interface/src/service/service.dart`.
 dc.CastDevice? chromecastDeviceFromBonsoir(Map<String, dynamic> serviceJson) {
-  final addresses = (serviceJson['service.hostAddresses'] as List?)
-          ?.cast<String>() ??
+  final addresses =
+      (serviceJson['service.hostAddresses'] as List?)?.cast<String>() ??
       const <String>[];
   final port = serviceJson['service.port'] as int?;
 
@@ -31,7 +31,8 @@ dc.CastDevice? chromecastDeviceFromBonsoir(Map<String, dynamic> serviceJson) {
 
   // Chromecast advertises a human-friendly name in the `fn` TXT record; the
   // service name is often the far less useful "Chromecast-<hex>".
-  final name = attributes['fn'] ??
+  final name =
+      attributes['fn'] ??
       serviceJson['service.name'] as String? ??
       'Chromecast';
 
@@ -131,7 +132,10 @@ class BonsoirChromecastDiscovery implements dc.DeviceDiscoveryProvider {
       }
     } catch (e) {
       debugPrint('[BonsoirChromecastDiscovery] Discovery failed: $e');
-      final error = dc.DiscoveryException('Chromecast discovery was refused', e);
+      final error = dc.DiscoveryException(
+        'Chromecast discovery was refused',
+        e,
+      );
       if (!controller.isClosed) controller.addError(error);
       // dispose() (e.g. via DartCastBackend.dispose -> CastService.dispose
       // -> DiscoveryManager.dispose -> provider.dispose()) can close
@@ -184,11 +188,13 @@ class BonsoirChromecastDiscovery implements dc.DeviceDiscoveryProvider {
   }
 
   void _stopOrphan(BonsoirDiscovery discovery) {
-    unawaited(discovery.stop().catchError((Object e) {
-      debugPrint(
-        '[BonsoirChromecastDiscovery] Ignoring stop error for orphaned discovery: $e',
-      );
-    }));
+    unawaited(
+      discovery.stop().catchError((Object e) {
+        debugPrint(
+          '[BonsoirChromecastDiscovery] Ignoring stop error for orphaned discovery: $e',
+        );
+      }),
+    );
   }
 
   @override
@@ -198,9 +204,11 @@ class BonsoirChromecastDiscovery implements dc.DeviceDiscoveryProvider {
     // initialize() may still be in flight when this runs (e.g. the app is
     // backgrounded right after starting discovery) — stopping before it
     // resolves throws an unhandled PlatformException from native code.
-    unawaited(_discovery?.stop().catchError((Object e) {
-      debugPrint('[BonsoirChromecastDiscovery] Ignoring stop error: $e');
-    }));
+    unawaited(
+      _discovery?.stop().catchError((Object e) {
+        debugPrint('[BonsoirChromecastDiscovery] Ignoring stop error: $e');
+      }),
+    );
     _discovery = null;
     _found.clear();
     _idsByServiceName.clear();

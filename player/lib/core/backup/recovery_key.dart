@@ -81,16 +81,12 @@ class RecoveryKey {
     }
     if (bits > 0) sb.write(_alphabet[(acc << (5 - bits)) & 31]);
     final text = sb.toString();
-    return [
-      for (var i = 0; i < text.length; i += 4) text.substring(i, i + 4),
-    ].join(' ');
+    return [for (var i = 0; i < text.length; i += 4) text.substring(i, i + 4)]
+        .join(' ');
   }
 
   Future<Uint8List> _derive(String info) async {
-    final key = await Hkdf(
-      hmac: Hmac.sha256(),
-      outputLength: 32,
-    ).deriveKey(
+    final key = await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
       secretKey: SecretKey(bytes),
       nonce: const <int>[],
       info: utf8.encode(info),
@@ -99,12 +95,12 @@ class RecoveryKey {
   }
 
   Future<SimpleKeyPair> signer() async => Ed25519().newKeyPairFromSeed(
-        await _derive('mydia/backup/recovery-signer/v1'),
-      );
+    await _derive('mydia/backup/recovery-signer/v1'),
+  );
 
   Future<SimpleKeyPair> boxKey() async => X25519().newKeyPairFromSeed(
-        await _derive('mydia/backup/recovery-box/v1'),
-      );
+    await _derive('mydia/backup/recovery-box/v1'),
+  );
 
   Future<Uint8List> lookupHandle() => _derive('mydia/backup/lookup/v1');
 }

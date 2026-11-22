@@ -13,20 +13,25 @@ Future<void> _open(
   // A dialog still loading animates forever, so it cannot settle.
   bool settle = true,
 }) async {
-  await tester.pumpWidget(MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Builder(
-      builder: (context) => TextButton(
-        onPressed: () async {
-          final picked = await pickDownloadOption(context,
-              title: 'Quill Harbor', options: options);
-          onPicked?.call(picked);
-        },
-        child: const Text('go'),
+  await tester.pumpWidget(
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async {
+            final picked = await pickDownloadOption(
+              context,
+              title: 'Quill Harbor',
+              options: options,
+            );
+            onPicked?.call(picked);
+          },
+          child: const Text('go'),
+        ),
       ),
     ),
-  ));
+  );
   await tester.tap(find.text('go'));
   if (settle) {
     await tester.pumpAndSettle();
@@ -38,13 +43,15 @@ Future<void> _open(
 
 void main() {
   const original = DownloadOption(
-      resolution: 'original',
-      label: 'Original',
-      estimatedSize: 41019000000,
-      container: 'mkv');
+    resolution: 'original',
+    label: 'Original',
+    estimatedSize: 41019000000,
+    container: 'mkv',
+  );
 
-  testWidgets('a lone original asks for confirmation with size and container',
-      (tester) async {
+  testWidgets('a lone original asks for confirmation with size and container', (
+    tester,
+  ) async {
     await _open(tester, Future.value([original]));
     expect(find.byKey(const Key('download-confirm-original')), findsOneWidget);
     expect(find.textContaining('38.20 GB'), findsOneWidget);
@@ -69,12 +76,16 @@ void main() {
 
   testWidgets('several options show the picker', (tester) async {
     await _open(
-        tester,
-        Future.value([
-          original,
-          const DownloadOption(
-              resolution: '720p', label: '720p', estimatedSize: 1000),
-        ]));
+      tester,
+      Future.value([
+        original,
+        const DownloadOption(
+          resolution: '720p',
+          label: '720p',
+          estimatedSize: 1000,
+        ),
+      ]),
+    );
     expect(find.byKey(const Key('download-option-720p')), findsOneWidget);
     expect(find.byKey(const Key('download-confirm-original')), findsNothing);
   });

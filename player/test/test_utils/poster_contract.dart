@@ -154,8 +154,7 @@ void runPosterDepthContract({
       expect(find.byType(BackdropFilter), findsNothing);
     });
 
-    testWidgets(
-        'under reduced motion the hover accent collapses and the '
+    testWidgets('under reduced motion the hover accent collapses and the '
         'resting shadow stays', (tester) async {
       await tester.pumpWidget(
         posterHost(build(), reduceMotion: true, size: size),

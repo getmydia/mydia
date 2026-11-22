@@ -86,8 +86,9 @@ class _BackToMydiaButtonState extends State<BackToMydiaButton> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color:
-                      _isHovered ? palette.textPrimary : palette.textSecondary,
+                  color: _isHovered
+                      ? palette.textPrimary
+                      : palette.textSecondary,
                 ),
               ),
             ],

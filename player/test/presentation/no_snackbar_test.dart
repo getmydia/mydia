@@ -36,7 +36,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'Use Toaster.of(context).show(...) or showToast(...):\n'
+      reason:
+          'Use Toaster.of(context).show(...) or showToast(...):\n'
           '${offenders.join('\n')}',
     );
   });

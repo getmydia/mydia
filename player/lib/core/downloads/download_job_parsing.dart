@@ -28,8 +28,10 @@ DownloadOptionsResponse parseDownloadOptions(Map<String, dynamic> data) {
 DownloadJobStatus parsePrepareDownload(Map<String, dynamic> data) {
   final prepareData = data['prepareDownload'] as Map<String, dynamic>?;
   if (prepareData == null) {
-    throw DownloadServiceException('Failed to prepare download',
-        statusCode: 500);
+    throw DownloadServiceException(
+      'Failed to prepare download',
+      statusCode: 500,
+    );
   }
 
   return DownloadJobStatus(

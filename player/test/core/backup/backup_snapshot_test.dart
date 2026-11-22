@@ -92,71 +92,82 @@ SourceAccountRecord _plex({Map<String, SourceLock> locks = const {}}) =>
       ),
       profiles: const [
         SourceProfile(
-            id: kOwnerProfileId, accountId: 'p1', name: 'Ana', isOwner: true),
+          id: kOwnerProfileId,
+          accountId: 'p1',
+          name: 'Ana',
+          isOwner: true,
+        ),
       ],
       servers: const [
         SourceServer(
-            id: 'srv1',
-            accountId: 'p1',
-            profileId: kOwnerProfileId,
-            name: 'Night Harbor'),
+          id: 'srv1',
+          accountId: 'p1',
+          profileId: kOwnerProfileId,
+          name: 'Night Harbor',
+        ),
       ],
       addedAtMs: 1000,
       serverLocks: locks,
     );
 
 SourceAccountRecord _mydia() => SourceAccountRecord(
-      account: const ProviderAccount(
-        id: 'minst1',
-        kind: SourceKind.mydia,
-        displayName: 'Home server',
-        storageNamespace: 'source/minst1',
-        activeProfileId: kOwnerProfileId,
-      ),
-      profiles: const [
-        SourceProfile(
-            id: kOwnerProfileId,
-            accountId: 'minst1',
-            name: 'Owner',
-            isOwner: true),
-      ],
-      servers: const [
-        SourceServer(
-            id: 'inst1',
-            accountId: 'minst1',
-            profileId: kOwnerProfileId,
-            name: 'Home server'),
-      ],
-      addedAtMs: 2000,
-    );
+  account: const ProviderAccount(
+    id: 'minst1',
+    kind: SourceKind.mydia,
+    displayName: 'Home server',
+    storageNamespace: 'source/minst1',
+    activeProfileId: kOwnerProfileId,
+  ),
+  profiles: const [
+    SourceProfile(
+      id: kOwnerProfileId,
+      accountId: 'minst1',
+      name: 'Owner',
+      isOwner: true,
+    ),
+  ],
+  servers: const [
+    SourceServer(
+      id: 'inst1',
+      accountId: 'minst1',
+      profileId: kOwnerProfileId,
+      name: 'Home server',
+    ),
+  ],
+  addedAtMs: 2000,
+);
 
 SourceAccountRecord _localFolders() => SourceAccountRecord(
-      account: const ProviderAccount(
-        id: kFilesLocalAccountId,
-        kind: SourceKind.files,
-        displayName: 'Folders',
-        storageNamespace: 'source/$kFilesLocalAccountId',
-        activeProfileId: kOwnerProfileId,
-      ),
-      profiles: const [
-        SourceProfile(
-            id: kOwnerProfileId,
-            accountId: kFilesLocalAccountId,
-            name: 'Owner',
-            isOwner: true),
-      ],
-      servers: const [
-        SourceServer(
-            id: kFilesLocalServerId,
-            accountId: kFilesLocalAccountId,
-            profileId: kOwnerProfileId,
-            name: 'Folders'),
-      ],
-      addedAtMs: 3000,
-    );
+  account: const ProviderAccount(
+    id: kFilesLocalAccountId,
+    kind: SourceKind.files,
+    displayName: 'Folders',
+    storageNamespace: 'source/$kFilesLocalAccountId',
+    activeProfileId: kOwnerProfileId,
+  ),
+  profiles: const [
+    SourceProfile(
+      id: kOwnerProfileId,
+      accountId: kFilesLocalAccountId,
+      name: 'Owner',
+      isOwner: true,
+    ),
+  ],
+  servers: const [
+    SourceServer(
+      id: kFilesLocalServerId,
+      accountId: kFilesLocalAccountId,
+      profileId: kOwnerProfileId,
+      name: 'Folders',
+    ),
+  ],
+  addedAtMs: 3000,
+);
 
-Future<void> _addPlex(_Device d,
-    {Map<String, SourceLock> locks = const {}}) async {
+Future<void> _addPlex(
+  _Device d, {
+  Map<String, SourceLock> locks = const {},
+}) async {
   await d.auth.write('source/p1/account_token', 'plex-admin-token');
   await d.auth.write('source/p1/owner/srv1/token', 'plex-server-token');
   await d.sources.putAccount(_plex(locks: locks));
@@ -167,10 +178,9 @@ Future<void> _addMydia(_Device d) async {
   await d.sources.putAccount(_mydia());
 }
 
-AccountBackupRecord _account(List<BackupRecord> records, String id) =>
-    records.whereType<AccountBackupRecord>().singleWhere(
-          (r) => r.accountId == id,
-        );
+AccountBackupRecord _account(List<BackupRecord> records, String id) => records
+    .whereType<AccountBackupRecord>()
+    .singleWhere((r) => r.accountId == id);
 
 SettingBackupRecord? _setting(List<BackupRecord> records, String key) {
   for (final r in records.whereType<SettingBackupRecord>()) {
@@ -181,61 +191,76 @@ SettingBackupRecord? _setting(List<BackupRecord> records, String key) {
 
 /// Wire round trip, so tests exercise what a real slot carries.
 List<BackupRecord> _viaWire(List<BackupRecord> records) => [
-      for (final r in records)
-        BackupRecord.fromJson(
-            jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>)!,
-    ];
+  for (final r in records)
+    BackupRecord.fromJson(
+      jsonDecode(jsonEncode(r.toJson())) as Map<String, dynamic>,
+    )!,
+];
 
 const _now = 1700000000000;
 
 void main() {
   group('collect then restore', () {
-    test('reproduces the Plex account with its server token and the settings',
-        () async {
-      final a = _Device();
-      await _addPlex(a);
-      await a.settings.setDefaultQuality('1080p');
-      await a.settings.setAutoSkipSegments(true);
-      await a.settings.setSubtitleSize(SubtitleSize.large);
-      await a.settings.setThemePreset(ThemePreset.values.last);
-      await a.settings.setLocaleCode('pt-BR');
-      await a.settings.setUpdateTrack('beta');
-      await a.settings.setLibrarySort('p1:owner:srv1/lib1', 'title:asc');
-      a.subtitleLanguages = ['pt', 'en'];
+    test(
+      'reproduces the Plex account with its server token and the settings',
+      () async {
+        final a = _Device();
+        await _addPlex(a);
+        await a.settings.setDefaultQuality('1080p');
+        await a.settings.setAutoSkipSegments(true);
+        await a.settings.setSubtitleSize(SubtitleSize.large);
+        await a.settings.setThemePreset(ThemePreset.values.last);
+        await a.settings.setLocaleCode('pt-BR');
+        await a.settings.setUpdateTrack('beta');
+        await a.settings.setLibrarySort('p1:owner:srv1/lib1', 'title:asc');
+        a.subtitleLanguages = ['pt', 'en'];
 
-      final records = _viaWire(await a.snapshot.collect(nowMs: _now));
+        final records = _viaWire(await a.snapshot.collect(nowMs: _now));
 
-      final b = _Device();
-      final result = await b.snapshot.apply(records,
+        final b = _Device();
+        final result = await b.snapshot.apply(
+          records,
           mode: BackupApplyMode.restore,
           fromDevice: 'Living Room TV',
-          nowMs: _now + 1);
+          nowMs: _now + 1,
+        );
 
-      expect(result.accountsAdded, 1);
-      final restored = (await b.sources.load()).accounts.single;
-      expect(restored.account.id, 'p1');
-      expect(restored.account.needsReauth, isFalse);
-      expect(restored.servers.single.id, 'srv1');
-      expect(
-          await b.auth.read('source/p1/owner/srv1/token'), 'plex-server-token');
-      expect(await b.auth.read('source/p1/account_token'), 'plex-admin-token');
-      expect(
+        expect(result.accountsAdded, 1);
+        final restored = (await b.sources.load()).accounts.single;
+        expect(restored.account.id, 'p1');
+        expect(restored.account.needsReauth, isFalse);
+        expect(restored.servers.single.id, 'srv1');
+        expect(
+          await b.auth.read('source/p1/owner/srv1/token'),
+          'plex-server-token',
+        );
+        expect(
+          await b.auth.read('source/p1/account_token'),
+          'plex-admin-token',
+        );
+        expect(
           b.tokensAtPut['p1'],
-          containsAll(
-              ['source/p1/account_token', 'source/p1/owner/srv1/token']),
-          reason: 'secrets are written before the record');
+          containsAll([
+            'source/p1/account_token',
+            'source/p1/owner/srv1/token',
+          ]),
+          reason: 'secrets are written before the record',
+        );
 
-      expect(await b.settings.getDefaultQuality(), '1080p');
-      expect(await b.settings.getAutoSkipSegments(), isTrue);
-      expect(await b.settings.getSubtitleSize(), SubtitleSize.large);
-      expect(await b.settings.getThemePreset(), ThemePreset.values.last.name);
-      expect(await b.settings.getLocaleCode(), 'pt-BR');
-      expect(await b.settings.getUpdateTrack(), 'beta');
-      expect(
-          await b.settings.getLibrarySort('p1:owner:srv1/lib1'), 'title:asc');
-      expect(b.subtitleLanguages, ['pt', 'en']);
-      expect(result.settingsApplied, greaterThanOrEqualTo(8));
-    });
+        expect(await b.settings.getDefaultQuality(), '1080p');
+        expect(await b.settings.getAutoSkipSegments(), isTrue);
+        expect(await b.settings.getSubtitleSize(), SubtitleSize.large);
+        expect(await b.settings.getThemePreset(), ThemePreset.values.last.name);
+        expect(await b.settings.getLocaleCode(), 'pt-BR');
+        expect(await b.settings.getUpdateTrack(), 'beta');
+        expect(
+          await b.settings.getLibrarySort('p1:owner:srv1/lib1'),
+          'title:asc',
+        );
+        expect(b.subtitleLanguages, ['pt', 'en']);
+        expect(result.settingsApplied, greaterThanOrEqualTo(8));
+      },
+    );
 
     test('a restored device collects the same updatedAt it restored', () async {
       final a = _Device();
@@ -244,12 +269,18 @@ void main() {
       final records = await a.snapshot.collect(nowMs: _now);
 
       final b = _Device();
-      await b.snapshot.apply(_viaWire(records),
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 5);
+      await b.snapshot.apply(
+        _viaWire(records),
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now + 5,
+      );
       final again = await b.snapshot.collect(nowMs: _now + 10);
 
       expect(
-          _account(again, 'p1').updatedAt, _account(records, 'p1').updatedAt);
+        _account(again, 'p1').updatedAt,
+        _account(records, 'p1').updatedAt,
+      );
       expect(_setting(again, 'default_quality')!.updatedAt, _now);
     });
 
@@ -257,17 +288,22 @@ void main() {
       final a = _Device();
       await a.sync.setWatched('tmdb:movie:42', true, nowMs: _now - 10);
       await a.sync.setPin(
-          groupKey: 'g1',
-          isShow: true,
-          tmdbId: 7,
-          pinned: true,
-          nowMs: _now - 5);
+        groupKey: 'g1',
+        isShow: true,
+        tmdbId: 7,
+        pinned: true,
+        nowMs: _now - 5,
+      );
       final records = _viaWire(await a.snapshot.collect(nowMs: _now));
 
       for (final mode in BackupApplyMode.values) {
         final b = _Device();
-        final result = await b.snapshot
-            .apply(records, mode: mode, fromDevice: 'A', nowMs: _now + 1);
+        final result = await b.snapshot.apply(
+          records,
+          mode: mode,
+          fromDevice: 'A',
+          nowMs: _now + 1,
+        );
         expect(result.watchChanged, 1);
         expect(result.pinsChanged, 1);
         expect(b.sync.watchRecord('tmdb:movie:42')!.watched, isTrue);
@@ -276,15 +312,20 @@ void main() {
         expect(pin.pinned, isTrue);
         expect(pin.tmdbId, 7);
         expect(b.remoteChanges.single.$1, {'tmdb:movie:42'});
-        expect(b.remoteChanges.single.$2,
-            {pinSyncKey(isShow: true, groupKey: 'g1')});
+        expect(b.remoteChanges.single.$2, {
+          pinSyncKey(isShow: true, groupKey: 'g1'),
+        });
       }
     });
 
     test('no watch or pin change does not call the files callback', () async {
       final b = _Device();
-      await b.snapshot.apply(const [],
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        const [],
+        mode: BackupApplyMode.live,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(b.remoteChanges, isEmpty);
     });
   });
@@ -324,31 +365,43 @@ void main() {
             r,
       ];
       final b = _Device();
-      await b.snapshot.apply(tampered,
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        tampered,
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect((await b.sources.load()).accounts.single.serverLocks, isEmpty);
     });
 
-    test('a Mydia account is collected without secrets, restored needsReauth',
-        () async {
-      final a = _Device();
-      await _addMydia(a);
-      final records = await a.snapshot.collect(nowMs: _now);
-      final rec = _account(records, 'minst1');
-      expect(rec.secrets, isEmpty);
-      expect((rec.recordJson['account'] as Map)['needsReauth'], isTrue);
-      expect(jsonEncode([for (final r in records) r.toJson()]),
-          isNot(contains('accessToken')));
+    test(
+      'a Mydia account is collected without secrets, restored needsReauth',
+      () async {
+        final a = _Device();
+        await _addMydia(a);
+        final records = await a.snapshot.collect(nowMs: _now);
+        final rec = _account(records, 'minst1');
+        expect(rec.secrets, isEmpty);
+        expect((rec.recordJson['account'] as Map)['needsReauth'], isTrue);
+        expect(
+          jsonEncode([for (final r in records) r.toJson()]),
+          isNot(contains('accessToken')),
+        );
 
-      final b = _Device();
-      final result = await b.snapshot.apply(_viaWire(records),
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
-      expect(result.accountsAdded, 1);
-      final restored = (await b.sources.load()).accounts.single;
-      expect(restored.account.kind, SourceKind.mydia);
-      expect(restored.account.needsReauth, isTrue);
-      expect(await b.auth.read('source/minst1/account_token'), isNull);
-    });
+        final b = _Device();
+        final result = await b.snapshot.apply(
+          _viaWire(records),
+          mode: BackupApplyMode.restore,
+          fromDevice: 'A',
+          nowMs: _now,
+        );
+        expect(result.accountsAdded, 1);
+        final restored = (await b.sources.load()).accounts.single;
+        expect(restored.account.kind, SourceKind.mydia);
+        expect(restored.account.needsReauth, isTrue);
+        expect(await b.auth.read('source/minst1/account_token'), isNull);
+      },
+    );
 
     test('a Mydia record carrying secrets still restores none', () async {
       final b = _Device();
@@ -358,37 +411,52 @@ void main() {
         secrets: const {'account_token': '{"accessToken":"x"}'},
         updatedAt: _now,
       );
-      await b.snapshot.apply([rec],
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        [rec],
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(b.dataKeys, isEmpty);
       expect(
-          (await b.sources.load()).accounts.single.account.needsReauth, isTrue);
+        (await b.sources.load()).accounts.single.account.needsReauth,
+        isTrue,
+      );
     });
 
     test('the Jellyfin device id is never collected', () async {
       final a = _Device();
       await a.auth.write(JellyfinIdentity.deviceIdKey, 'device-abc');
       await a.auth.write('source/j1/account_token', 'jf-token');
-      await a.sources.putAccount(SourceAccountRecord(
-        account: const ProviderAccount(
-          id: 'j1',
-          kind: SourceKind.jellyfin,
-          displayName: 'Jellyfin',
-          storageNamespace: 'source/j1',
-          activeProfileId: 'u1',
+      await a.sources.putAccount(
+        SourceAccountRecord(
+          account: const ProviderAccount(
+            id: 'j1',
+            kind: SourceKind.jellyfin,
+            displayName: 'Jellyfin',
+            storageNamespace: 'source/j1',
+            activeProfileId: 'u1',
+          ),
+          profiles: const [
+            SourceProfile(
+              id: 'u1',
+              accountId: 'j1',
+              name: 'Ana',
+              isOwner: true,
+            ),
+          ],
+          servers: const [
+            SourceServer(id: 's1', accountId: 'j1', profileId: 'u1', name: 'J'),
+          ],
+          addedAtMs: 1,
         ),
-        profiles: const [
-          SourceProfile(id: 'u1', accountId: 'j1', name: 'Ana', isOwner: true),
-        ],
-        servers: const [
-          SourceServer(id: 's1', accountId: 'j1', profileId: 'u1', name: 'J'),
-        ],
-        addedAtMs: 1,
-      ));
+      );
       final records = await a.snapshot.collect(nowMs: _now);
       expect(_account(records, 'j1').secrets, {'account_token': 'jf-token'});
-      expect(jsonEncode([for (final r in records) r.toJson()]),
-          isNot(contains('device-abc')));
+      expect(
+        jsonEncode([for (final r in records) r.toJson()]),
+        isNot(contains('device-abc')),
+      );
     });
 
     test('Plex Home user tokens are collected per profile', () async {
@@ -396,24 +464,40 @@ void main() {
       await a.auth.write('source/p2/account_token', 'admin');
       await a.auth.write('source/p2/kid/user_token', 'kid-user');
       await a.auth.write('source/p2/kid/srvA/token', 'kid-server');
-      await a.sources.putAccount(SourceAccountRecord(
-        account: const ProviderAccount(
-          id: 'p2',
-          kind: SourceKind.plex,
-          displayName: 'Plex',
-          storageNamespace: 'source/p2',
-          activeProfileId: 'kid',
+      await a.sources.putAccount(
+        SourceAccountRecord(
+          account: const ProviderAccount(
+            id: 'p2',
+            kind: SourceKind.plex,
+            displayName: 'Plex',
+            storageNamespace: 'source/p2',
+            activeProfileId: 'kid',
+          ),
+          profiles: const [
+            SourceProfile(
+              id: 'owner',
+              accountId: 'p2',
+              name: 'A',
+              isOwner: true,
+            ),
+            SourceProfile(
+              id: 'kid',
+              accountId: 'p2',
+              name: 'K',
+              isOwner: false,
+            ),
+          ],
+          servers: const [
+            SourceServer(
+              id: 'srvA',
+              accountId: 'p2',
+              profileId: 'kid',
+              name: 'S',
+            ),
+          ],
+          addedAtMs: 1,
         ),
-        profiles: const [
-          SourceProfile(id: 'owner', accountId: 'p2', name: 'A', isOwner: true),
-          SourceProfile(id: 'kid', accountId: 'p2', name: 'K', isOwner: false),
-        ],
-        servers: const [
-          SourceServer(
-              id: 'srvA', accountId: 'p2', profileId: 'kid', name: 'S'),
-        ],
-        addedAtMs: 1,
-      ));
+      );
       final records = await a.snapshot.collect(nowMs: _now);
       expect(_account(records, 'p2').secrets, {
         'account_token': 'admin',
@@ -422,22 +506,25 @@ void main() {
       });
     });
 
-    test('the local folders account is device-bound and not collected',
-        () async {
-      final a = _Device();
-      await a.sources.putAccount(_localFolders());
-      final records = await a.snapshot.collect(nowMs: _now);
-      expect(records.whereType<AccountBackupRecord>(), isEmpty);
-    });
+    test(
+      'the local folders account is device-bound and not collected',
+      () async {
+        final a = _Device();
+        await a.sources.putAccount(_localFolders());
+        final records = await a.snapshot.collect(nowMs: _now);
+        expect(records.whereType<AccountBackupRecord>(), isEmpty);
+      },
+    );
 
     test('collecting twice with no change keeps updatedAt', () async {
       final a = _Device();
       await _addPlex(a);
       await a.settings.setDefaultQuality('1080p');
       await a.auth.write(
-          PeerGroupSecret.storageKey,
-          PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 3)))
-              .toBase64Url());
+        PeerGroupSecret.storageKey,
+        PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 3)))
+            .toBase64Url(),
+      );
 
       final first = await a.snapshot.collect(nowMs: _now);
       final second = await a.snapshot.collect(nowMs: _now + 60000);
@@ -468,32 +555,38 @@ void main() {
       await a.settings.setStatsOverlayEnabled(true);
       final records = await a.snapshot.collect(nowMs: _now);
       final keys = [
-        for (final r in records.whereType<SettingBackupRecord>()) r.settingKey
+        for (final r in records.whereType<SettingBackupRecord>()) r.settingKey,
       ];
       expect(keys, isNot(contains('glass_material')));
       expect(keys, isNot(contains('stats_overlay_enabled')));
     });
 
-    test('an unset setting is skipped; a cleared one is collected as null',
-        () async {
-      final a = _Device();
-      var records = await a.snapshot.collect(nowMs: _now);
-      expect(_setting(records, 'interface_locale'), isNull);
+    test(
+      'an unset setting is skipped; a cleared one is collected as null',
+      () async {
+        final a = _Device();
+        var records = await a.snapshot.collect(nowMs: _now);
+        expect(_setting(records, 'interface_locale'), isNull);
 
-      await a.settings.setLocaleCode('fr');
-      await a.snapshot.collect(nowMs: _now + 1);
-      await a.settings.setLocaleCode(null);
-      records = await a.snapshot.collect(nowMs: _now + 2);
-      final cleared = _setting(records, 'interface_locale')!;
-      expect(cleared.value, isNull);
-      expect(cleared.updatedAt, _now + 2);
+        await a.settings.setLocaleCode('fr');
+        await a.snapshot.collect(nowMs: _now + 1);
+        await a.settings.setLocaleCode(null);
+        records = await a.snapshot.collect(nowMs: _now + 2);
+        final cleared = _setting(records, 'interface_locale')!;
+        expect(cleared.value, isNull);
+        expect(cleared.updatedAt, _now + 2);
 
-      final b = _Device();
-      await b.settings.setLocaleCode('de');
-      await b.snapshot.apply(_viaWire(records),
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 3);
-      expect(await b.settings.getLocaleCode(), isNull);
-    });
+        final b = _Device();
+        await b.settings.setLocaleCode('de');
+        await b.snapshot.apply(
+          _viaWire(records),
+          mode: BackupApplyMode.restore,
+          fromDevice: 'A',
+          nowMs: _now + 3,
+        );
+        expect(await b.settings.getLocaleCode(), isNull);
+      },
+    );
 
     test('a removed account becomes one stable tombstone', () async {
       final a = _Device();
@@ -513,13 +606,20 @@ void main() {
 
     test('watch and pin records carry their own updatedAt', () async {
       final a = _Device();
-      await a.sync.recordProgress('tmdb:ep:1:1:2',
-          positionSeconds: 30,
-          durationSeconds: 100,
-          watchedFraction: 0.9,
-          nowMs: 111);
+      await a.sync.recordProgress(
+        'tmdb:ep:1:1:2',
+        positionSeconds: 30,
+        durationSeconds: 100,
+        watchedFraction: 0.9,
+        nowMs: 111,
+      );
       await a.sync.setPin(
-          groupKey: 'g', isShow: false, tmdbId: null, pinned: true, nowMs: 222);
+        groupKey: 'g',
+        isShow: false,
+        tmdbId: null,
+        pinned: true,
+        nowMs: 222,
+      );
       final records = await a.snapshot.collect(nowMs: _now);
       final w = records.whereType<WatchBackupRecord>().single;
       expect(w.key, 'tmdb:ep:1:1:2');
@@ -532,8 +632,9 @@ void main() {
 
     test('the group record carries the secret and the node map', () async {
       final a = _Device();
-      final secret =
-          PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 9)));
+      final secret = PeerGroupSecret.fromBytes(
+        Uint8List.fromList(List.filled(32, 9)),
+      );
       await a.auth.write(PeerGroupSecret.storageKey, secret.toBase64Url());
       await a.meta.setNodeToSlot('node1', 'slotaaaa');
       final g = (await a.snapshot.collect(nowMs: _now))
@@ -551,60 +652,82 @@ void main() {
   });
 
   group('live apply', () {
-    test('adds no account and changes no setting, offers the account',
-        () async {
-      final a = _Device();
-      await _addPlex(a);
-      await a.settings.setDefaultQuality('1080p');
-      final records = _viaWire(await a.snapshot.collect(nowMs: _now));
+    test(
+      'adds no account and changes no setting, offers the account',
+      () async {
+        final a = _Device();
+        await _addPlex(a);
+        await a.settings.setDefaultQuality('1080p');
+        final records = _viaWire(await a.snapshot.collect(nowMs: _now));
 
-      final b = _Device();
-      final result = await b.snapshot.apply(records,
+        final b = _Device();
+        final result = await b.snapshot.apply(
+          records,
           mode: BackupApplyMode.live,
           fromDevice: 'Living Room TV',
-          nowMs: _now + 1);
+          nowMs: _now + 1,
+        );
 
-      expect(result.accountsAdded, 0);
-      expect(result.settingsApplied, 0);
-      expect((await b.sources.load()).accounts, isEmpty);
-      expect(b.dataKeys, isEmpty);
-      expect(await b.settings.getDefaultQuality(), 'auto');
-      final offer = result.newOffers.single;
-      expect(offer.accountId, 'p1');
-      expect(offer.fromDevice, 'Living Room TV');
-      expect(offer.displayName, 'Night Harbor Plex');
-      expect(offer.kind, 'plex');
-      expect(offer.updatedAt, _now);
-      expect(b.meta.pendingAccounts().single.accountId, 'p1');
-    });
+        expect(result.accountsAdded, 0);
+        expect(result.settingsApplied, 0);
+        expect((await b.sources.load()).accounts, isEmpty);
+        expect(b.dataKeys, isEmpty);
+        expect(await b.settings.getDefaultQuality(), 'auto');
+        final offer = result.newOffers.single;
+        expect(offer.accountId, 'p1');
+        expect(offer.fromDevice, 'Living Room TV');
+        expect(offer.displayName, 'Night Harbor Plex');
+        expect(offer.kind, 'plex');
+        expect(offer.updatedAt, _now);
+        expect(b.meta.pendingAccounts().single.accountId, 'p1');
+      },
+    );
 
-    test('an offer is new once; a dismissed version is not offered again',
-        () async {
-      final a = _Device();
-      await _addPlex(a);
-      final records = _viaWire(await a.snapshot.collect(nowMs: _now));
-      final b = _Device();
+    test(
+      'an offer is new once; a dismissed version is not offered again',
+      () async {
+        final a = _Device();
+        await _addPlex(a);
+        final records = _viaWire(await a.snapshot.collect(nowMs: _now));
+        final b = _Device();
 
-      await b.snapshot.apply(records,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now);
-      final again = await b.snapshot.apply(records,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now);
-      expect(again.newOffers, isEmpty);
+        await b.snapshot.apply(
+          records,
+          mode: BackupApplyMode.live,
+          fromDevice: 'A',
+          nowMs: _now,
+        );
+        final again = await b.snapshot.apply(
+          records,
+          mode: BackupApplyMode.live,
+          fromDevice: 'A',
+          nowMs: _now,
+        );
+        expect(again.newOffers, isEmpty);
 
-      await b.meta.dismiss('p1', _now);
-      expect(b.meta.pendingAccounts(), isEmpty);
-      final afterDismiss = await b.snapshot.apply(records,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now);
-      expect(afterDismiss.newOffers, isEmpty);
-      expect(b.meta.pendingAccounts(), isEmpty);
+        await b.meta.dismiss('p1', _now);
+        expect(b.meta.pendingAccounts(), isEmpty);
+        final afterDismiss = await b.snapshot.apply(
+          records,
+          mode: BackupApplyMode.live,
+          fromDevice: 'A',
+          nowMs: _now,
+        );
+        expect(afterDismiss.newOffers, isEmpty);
+        expect(b.meta.pendingAccounts(), isEmpty);
 
-      // A newer version of the account is offered again.
-      await a.auth.write('source/p1/owner/srv1/token', 'rotated');
-      final newer = _viaWire(await a.snapshot.collect(nowMs: _now + 9));
-      final reoffer = await b.snapshot.apply(newer,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now + 10);
-      expect(reoffer.newOffers.single.updatedAt, _now + 9);
-    });
+        // A newer version of the account is offered again.
+        await a.auth.write('source/p1/owner/srv1/token', 'rotated');
+        final newer = _viaWire(await a.snapshot.collect(nowMs: _now + 9));
+        final reoffer = await b.snapshot.apply(
+          newer,
+          mode: BackupApplyMode.live,
+          fromDevice: 'A',
+          nowMs: _now + 10,
+        );
+        expect(reoffer.newOffers.single.updatedAt, _now + 9);
+      },
+    );
 
     test('an account already stored is not offered', () async {
       final a = _Device();
@@ -612,21 +735,30 @@ void main() {
       final records = _viaWire(await a.snapshot.collect(nowMs: _now));
       final b = _Device();
       await _addPlex(b);
-      final result = await b.snapshot.apply(records,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now);
+      final result = await b.snapshot.apply(
+        records,
+        mode: BackupApplyMode.live,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(result.newOffers, isEmpty);
     });
 
     test('the group secret is not written live', () async {
       final a = _Device();
       await a.auth.write(
-          PeerGroupSecret.storageKey,
-          PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 1)))
-              .toBase64Url());
+        PeerGroupSecret.storageKey,
+        PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 1)))
+            .toBase64Url(),
+      );
       final records = _viaWire(await a.snapshot.collect(nowMs: _now));
       final b = _Device();
-      await b.snapshot.apply(records,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        records,
+        mode: BackupApplyMode.live,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(await b.auth.read(PeerGroupSecret.storageKey), isNull);
     });
   });
@@ -642,8 +774,12 @@ void main() {
       await b.auth.write('source/p1/owner/srv1/token', 'local-server');
       await b.sources.putAccount(_plex());
 
-      final result = await b.snapshot.apply(records,
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      final result = await b.snapshot.apply(
+        records,
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(result.accountsAdded, 0);
       expect(b.putAccountCalls, isEmpty);
       expect(await b.auth.read('source/p1/owner/srv1/token'), 'local-server');
@@ -653,53 +789,70 @@ void main() {
     test('account tombstones are never applied', () async {
       final b = _Device();
       await _addPlex(b);
-      await b.snapshot.apply(const [
-        AccountBackupRecord(
-          key: 'account:p1',
-          recordJson: {},
-          secrets: {},
-          updatedAt: _now,
-          deleted: true,
-        ),
-      ], mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        const [
+          AccountBackupRecord(
+            key: 'account:p1',
+            recordJson: {},
+            secrets: {},
+            updatedAt: _now,
+            deleted: true,
+          ),
+        ],
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect((await b.sources.load()).accounts, hasLength(1));
       expect(await b.auth.read('source/p1/account_token'), 'plex-admin-token');
     });
 
     test('a secret key outside the account layout is not written', () async {
       final b = _Device();
-      await b.snapshot.apply([
-        AccountBackupRecord(
-          key: 'account:p1',
-          recordJson: _plex().toJson(),
-          secrets: const {
-            'account_token': 'ok',
-            '../../peer_group/secret': 'evil',
-            'owner/srv1/token': 'srv',
-          },
-          updatedAt: _now,
-        ),
-      ], mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
-      expect(b.dataKeys.toSet(),
-          {'source/p1/account_token', 'source/p1/owner/srv1/token'});
+      await b.snapshot.apply(
+        [
+          AccountBackupRecord(
+            key: 'account:p1',
+            recordJson: _plex().toJson(),
+            secrets: const {
+              'account_token': 'ok',
+              '../../peer_group/secret': 'evil',
+              'owner/srv1/token': 'srv',
+            },
+            updatedAt: _now,
+          ),
+        ],
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
+      expect(b.dataKeys.toSet(), {
+        'source/p1/account_token',
+        'source/p1/owner/srv1/token',
+      });
     });
 
     test('a record whose JSON names another account is skipped', () async {
       final b = _Device();
-      final result = await b.snapshot.apply([
-        AccountBackupRecord(
-          key: 'account:other',
-          recordJson: _plex().toJson(),
-          secrets: const {'account_token': 'x'},
-          updatedAt: _now,
-        ),
-        const AccountBackupRecord(
-          key: 'account:broken',
-          recordJson: {'account': 'nope'},
-          secrets: {},
-          updatedAt: _now,
-        ),
-      ], mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      final result = await b.snapshot.apply(
+        [
+          AccountBackupRecord(
+            key: 'account:other',
+            recordJson: _plex().toJson(),
+            secrets: const {'account_token': 'x'},
+            updatedAt: _now,
+          ),
+          const AccountBackupRecord(
+            key: 'account:broken',
+            recordJson: {'account': 'nope'},
+            secrets: {},
+            updatedAt: _now,
+          ),
+        ],
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(result.accountsAdded, 0);
       expect(b.dataKeys, isEmpty);
       expect((await b.sources.load()).accounts, isEmpty);
@@ -707,26 +860,34 @@ void main() {
 
     test('settings outside the allowlist are ignored', () async {
       final b = _Device();
-      final result = await b.snapshot.apply(const [
-        SettingBackupRecord(
+      final result = await b.snapshot.apply(
+        const [
+          SettingBackupRecord(
             key: 'setting:glass_material',
             settingKey: 'glass_material',
             value: 'clear',
-            updatedAt: _now),
-        SettingBackupRecord(
+            updatedAt: _now,
+          ),
+          SettingBackupRecord(
             key: 'setting:peer_group/secret',
             settingKey: 'peer_group/secret',
             value: 'x',
-            updatedAt: _now),
-      ], mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+            updatedAt: _now,
+          ),
+        ],
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(result.settingsApplied, 0);
       expect(b.dataKeys, isEmpty);
     });
 
     test('never writes the group secret', () async {
       final a = _Device();
-      final secret =
-          PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 5)));
+      final secret = PeerGroupSecret.fromBytes(
+        Uint8List.fromList(List.filled(32, 5)),
+      );
       await a.auth.write(PeerGroupSecret.storageKey, secret.toBase64Url());
       await a.meta.setNodeToSlot('nodeA', 'slotA');
       final records = _viaWire(await a.snapshot.collect(nowMs: _now));
@@ -734,17 +895,28 @@ void main() {
       // A secret without the roster would leave the device in a group whose
       // members reject it: restore does not rejoin, pairing again does.
       final b = _Device();
-      await b.snapshot.apply(records,
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        records,
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(await b.auth.read(PeerGroupSecret.storageKey), isNull);
-      expect(b.meta.nodeToSlot(), isEmpty,
-          reason: 'node claims are taken per slot by BackupSyncService');
+      expect(
+        b.meta.nodeToSlot(),
+        isEmpty,
+        reason: 'node claims are taken per slot by BackupSyncService',
+      );
 
       final c = _Device();
       const local = 'local-secret-kept';
       await c.auth.write(PeerGroupSecret.storageKey, local);
-      await c.snapshot.apply(records,
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      await c.snapshot.apply(
+        records,
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(await c.auth.read(PeerGroupSecret.storageKey), local);
     });
 
@@ -753,11 +925,19 @@ void main() {
       await _addPlex(a);
       final records = _viaWire(await a.snapshot.collect(nowMs: _now));
       final b = _Device();
-      await b.snapshot.apply(records,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        records,
+        mode: BackupApplyMode.live,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(b.meta.pendingAccounts(), hasLength(1));
-      await b.snapshot.apply(records,
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now);
+      await b.snapshot.apply(
+        records,
+        mode: BackupApplyMode.restore,
+        fromDevice: 'A',
+        nowMs: _now,
+      );
       expect(b.meta.pendingAccounts(), isEmpty);
     });
   });
@@ -765,34 +945,42 @@ void main() {
   group('share roots', () {
     const smbId = 's0123456789abcdef';
     const root = LibraryRoot(
-        id: 'r0123456789ab',
-        path: 'Movies',
-        kind: FilesLibraryKind.movies,
-        title: 'Movies');
+      id: 'r0123456789ab',
+      path: 'Movies',
+      kind: FilesLibraryKind.movies,
+      title: 'Movies',
+    );
 
     Future<void> addSmb(_Device d) async {
       await d.auth.write('source/$smbId/account_token', '{"password":"pw"}');
-      await d.sources.putAccount(SourceAccountRecord(
-        account: const ProviderAccount(
-          id: smbId,
-          kind: SourceKind.files,
-          displayName: 'nas',
-          storageNamespace: 'source/$smbId',
-          activeProfileId: kOwnerProfileId,
-        ),
-        profiles: const [
-          SourceProfile(
-              id: kOwnerProfileId, accountId: smbId, name: 'O', isOwner: true),
-        ],
-        servers: const [
-          SourceServer(
+      await d.sources.putAccount(
+        SourceAccountRecord(
+          account: const ProviderAccount(
+            id: smbId,
+            kind: SourceKind.files,
+            displayName: 'nas',
+            storageNamespace: 'source/$smbId',
+            activeProfileId: kOwnerProfileId,
+          ),
+          profiles: const [
+            SourceProfile(
+              id: kOwnerProfileId,
+              accountId: smbId,
+              name: 'O',
+              isOwner: true,
+            ),
+          ],
+          servers: const [
+            SourceServer(
               id: smbId,
               accountId: smbId,
               profileId: kOwnerProfileId,
-              name: 'nas'),
-        ],
-        addedAtMs: 5,
-      ));
+              name: 'nas',
+            ),
+          ],
+          addedAtMs: 5,
+        ),
+      );
       d.roots[smbId] = [root];
     }
 
@@ -803,84 +991,121 @@ void main() {
       expect(rec.recordJson['roots'], [root.toMap()]);
     });
 
-    test('restore calls putRoots after the record, then collects stably',
-        () async {
-      final a = _Device();
-      await addSmb(a);
-      final records = _viaWire(await a.snapshot.collect(nowMs: _now));
+    test(
+      'restore calls putRoots after the record, then collects stably',
+      () async {
+        final a = _Device();
+        await addSmb(a);
+        final records = _viaWire(await a.snapshot.collect(nowMs: _now));
 
-      final b = _Device();
-      final result = await b.snapshot.apply(records,
-          mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 1);
-      expect(result.accountsAdded, 1);
-      expect(b.putRootsCalls[smbId]!.single.toMap(), root.toMap());
-      expect(await b.auth.read('source/$smbId/account_token'),
-          '{"password":"pw"}');
-      final again = await b.snapshot.collect(nowMs: _now + 9);
-      expect(_account(again, smbId).updatedAt, _now);
-    });
+        final b = _Device();
+        final result = await b.snapshot.apply(
+          records,
+          mode: BackupApplyMode.restore,
+          fromDevice: 'A',
+          nowMs: _now + 1,
+        );
+        expect(result.accountsAdded, 1);
+        expect(b.putRootsCalls[smbId]!.single.toMap(), root.toMap());
+        expect(
+          await b.auth.read('source/$smbId/account_token'),
+          '{"password":"pw"}',
+        );
+        final again = await b.snapshot.collect(nowMs: _now + 9);
+        expect(_account(again, smbId).updatedAt, _now);
+      },
+    );
 
-    test('an account whose roots failed is finished by the next apply',
-        () async {
-      final a = _Device();
-      await addSmb(a);
-      final records = _viaWire(await a.snapshot.collect(nowMs: _now));
+    test(
+      'an account whose roots failed is finished by the next apply',
+      () async {
+        final a = _Device();
+        await addSmb(a);
+        final records = _viaWire(await a.snapshot.collect(nowMs: _now));
 
-      final b = _Device();
-      b.failNextPutRoots = true;
-      await expectLater(
-          b.snapshot.apply(records,
-              mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 1),
-          throwsStateError);
-      expect(
-          (await b.sources.load()).accounts.map((r) => r.account.id), [smbId]);
-      // Not uploaded without its folders, where it would outrank A's.
-      expect(
+        final b = _Device();
+        b.failNextPutRoots = true;
+        await expectLater(
+          b.snapshot.apply(
+            records,
+            mode: BackupApplyMode.restore,
+            fromDevice: 'A',
+            nowMs: _now + 1,
+          ),
+          throwsStateError,
+        );
+        expect((await b.sources.load()).accounts.map((r) => r.account.id), [
+          smbId,
+        ]);
+        // Not uploaded without its folders, where it would outrank A's.
+        expect(
           (await b.snapshot.collect(nowMs: _now + 2))
               .whereType<AccountBackupRecord>(),
-          isEmpty);
+          isEmpty,
+        );
 
-      // A live poll, not only a restore, finishes it.
-      await b.snapshot.apply(records,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now + 3);
-      expect(b.putRootsCalls[smbId]!.single.toMap(), root.toMap());
-      expect(b.meta.pendingAccounts(), isEmpty);
-      final again = await b.snapshot.collect(nowMs: _now + 9);
-      expect(_account(again, smbId).recordJson['roots'], [root.toMap()]);
-      expect(_account(again, smbId).updatedAt, _now);
-    });
+        // A live poll, not only a restore, finishes it.
+        await b.snapshot.apply(
+          records,
+          mode: BackupApplyMode.live,
+          fromDevice: 'A',
+          nowMs: _now + 3,
+        );
+        expect(b.putRootsCalls[smbId]!.single.toMap(), root.toMap());
+        expect(b.meta.pendingAccounts(), isEmpty);
+        final again = await b.snapshot.collect(nowMs: _now + 9);
+        expect(_account(again, smbId).recordJson['roots'], [root.toMap()]);
+        expect(_account(again, smbId).updatedAt, _now);
+      },
+    );
 
-    test('an unfinished account is never finished with an older version',
-        () async {
-      final a = _Device();
-      await addSmb(a);
-      final older = _viaWire(await a.snapshot.collect(nowMs: _now));
-      const shows = LibraryRoot(
+    test(
+      'an unfinished account is never finished with an older version',
+      () async {
+        final a = _Device();
+        await addSmb(a);
+        final older = _viaWire(await a.snapshot.collect(nowMs: _now));
+        const shows = LibraryRoot(
           id: 'rfedcba987654',
           path: 'Shows',
           kind: FilesLibraryKind.series,
-          title: 'Shows');
-      a.roots[smbId] = [root, shows];
-      final newer = _viaWire(await a.snapshot.collect(nowMs: _now + 5));
+          title: 'Shows',
+        );
+        a.roots[smbId] = [root, shows];
+        final newer = _viaWire(await a.snapshot.collect(nowMs: _now + 5));
 
-      final b = _Device();
-      b.failNextPutRoots = true;
-      await expectLater(
-          b.snapshot.apply(newer,
-              mode: BackupApplyMode.restore, fromDevice: 'A', nowMs: _now + 6),
-          throwsStateError);
+        final b = _Device();
+        b.failNextPutRoots = true;
+        await expectLater(
+          b.snapshot.apply(
+            newer,
+            mode: BackupApplyMode.restore,
+            fromDevice: 'A',
+            nowMs: _now + 6,
+          ),
+          throwsStateError,
+        );
 
-      // A poll that brings only an older copy leaves it unfinished.
-      await b.snapshot.apply(older,
-          mode: BackupApplyMode.live, fromDevice: 'B', nowMs: _now + 7);
-      expect(b.putRootsCalls[smbId], isNull);
-      expect(b.meta.isUnfinished(smbId), isTrue);
+        // A poll that brings only an older copy leaves it unfinished.
+        await b.snapshot.apply(
+          older,
+          mode: BackupApplyMode.live,
+          fromDevice: 'B',
+          nowMs: _now + 7,
+        );
+        expect(b.putRootsCalls[smbId], isNull);
+        expect(b.meta.isUnfinished(smbId), isTrue);
 
-      await b.snapshot.apply(newer,
-          mode: BackupApplyMode.live, fromDevice: 'A', nowMs: _now + 8);
-      expect(b.putRootsCalls[smbId]!.map((r) => r.id), [root.id, shows.id]);
-      expect(b.meta.isUnfinished(smbId), isFalse);
-    });
+        await b.snapshot.apply(
+          newer,
+          mode: BackupApplyMode.live,
+          fromDevice: 'A',
+          nowMs: _now + 8,
+        );
+        expect(b.putRootsCalls[smbId]!.map((r) => r.id), [root.id, shows.id]);
+        expect(b.meta.isUnfinished(smbId), isFalse);
+      },
+    );
 
     test('a root change re-stamps the account', () async {
       final a = _Device();
@@ -889,10 +1114,11 @@ void main() {
       a.roots[smbId] = [
         root,
         const LibraryRoot(
-            id: 'rfedcba987654',
-            path: 'Shows',
-            kind: FilesLibraryKind.series,
-            title: 'Shows'),
+          id: 'rfedcba987654',
+          path: 'Shows',
+          kind: FilesLibraryKind.series,
+          title: 'Shows',
+        ),
       ];
       final again = await a.snapshot.collect(nowMs: _now + 1);
       expect(_account(again, smbId).updatedAt, _now + 1);
@@ -926,7 +1152,8 @@ void main() {
 
       String stored() =>
           (jsonDecode(a.metaStorage.get('stamp:setting:default_quality')!)
-              as Map)['fp'] as String;
+                  as Map)['fp']
+              as String;
       final first = stored();
       final bare = sha256
           .convert(utf8.encode(jsonEncode({'value': '1080p'})))
@@ -948,7 +1175,8 @@ void main() {
       }
       String fp(_Device d) =>
           (jsonDecode(d.metaStorage.get('stamp:setting:default_quality')!)
-              as Map)['fp'] as String;
+                  as Map)['fp']
+              as String;
       expect(fp(a), isNot(fp(b)));
     });
   });
@@ -980,17 +1208,22 @@ void main() {
         await m.stamp('setting:x', 'fp', 5);
         await m.setMergedSeq('slot', 3);
         await m.setNodeToSlot('n', 's');
-        await m.putPending(const PendingAccountOffer(
-          accountId: 'p1',
-          kind: 'plex',
-          displayName: 'Plex',
-          fromDevice: 'Living Room TV',
-          updatedAt: 9,
-        ));
+        await m.putPending(
+          const PendingAccountOffer(
+            accountId: 'p1',
+            kind: 'plex',
+            displayName: 'Plex',
+            fromDevice: 'Living Room TV',
+            updatedAt: 9,
+          ),
+        );
         await box.close();
 
-        final reopened = BackupMetaStore(HiveBackupMetaStorage(
-            await Hive.openBox<String>(BackupMetaStore.boxName)));
+        final reopened = BackupMetaStore(
+          HiveBackupMetaStorage(
+            await Hive.openBox<String>(BackupMetaStore.boxName),
+          ),
+        );
         expect(await reopened.stamp('setting:x', 'fp', 99), 5);
         expect(reopened.mergedSeq('slot'), 3);
         expect(reopened.nodeToSlot(), {'n': 's'});

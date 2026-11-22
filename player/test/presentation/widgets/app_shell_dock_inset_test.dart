@@ -20,8 +20,9 @@ import '../../test_utils/dock_harness.dart' show kDockNavEntries;
 const double kHomeIndicator = 34;
 
 void main() {
-  testWidgets('extendBody publishes the dock height as padding.bottom',
-      (tester) async {
+  testWidgets('extendBody publishes the dock height as padding.bottom', (
+    tester,
+  ) async {
     const dockContentHeight = 60.0;
     double? observedBottom;
     final navKey = GlobalKey();
@@ -61,8 +62,9 @@ void main() {
     expect(observedBottom, navHeight);
   });
 
-  testWidgets('the inset survives the nested Scaffold every screen uses',
-      (tester) async {
+  testWidgets('the inset survives the nested Scaffold every screen uses', (
+    tester,
+  ) async {
     const dockContentHeight = 60.0;
     double? innerBottom;
 
@@ -112,8 +114,9 @@ void main() {
   });
 
   group('the real BottomNav', () {
-    testWidgets('is taller than the 100.0 the screens used to hardcode',
-        (tester) async {
+    testWidgets('is taller than the 100.0 the screens used to hardcode', (
+      tester,
+    ) async {
       final navKey = GlobalKey();
 
       await tester.pumpWidget(
@@ -132,9 +135,10 @@ void main() {
                 bottomNavigationBar: KeyedSubtree(
                   key: navKey,
                   child: BottomNav(
-                      location: '/',
-                      onNavigate: (_) {},
-                      entries: kDockNavEntries),
+                    location: '/',
+                    onNavigate: (_) {},
+                    entries: kDockNavEntries,
+                  ),
                 ),
                 body: const SizedBox.expand(),
               ),
@@ -164,9 +168,10 @@ void main() {
                 bottomNavigationBar: KeyedSubtree(
                   key: navKey,
                   child: BottomNav(
-                      location: '/',
-                      onNavigate: (_) {},
-                      entries: kDockNavEntries),
+                    location: '/',
+                    onNavigate: (_) {},
+                    entries: kDockNavEntries,
+                  ),
                 ),
                 body: const SizedBox.expand(),
               ),

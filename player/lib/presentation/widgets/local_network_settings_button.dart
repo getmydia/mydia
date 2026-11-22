@@ -22,11 +22,11 @@ bool localNetworkSettingsAvailable() =>
 /// there is no way to ask whether a scheme will resolve before trying it,
 /// which is why [openLocalNetworkSettings] always checks the result.
 Uri localNetworkSettingsUri({required bool isIOS}) => Uri.parse(
-      isIOS
-          ? 'app-settings:'
-          : 'x-apple.systempreferences:com.apple.preference.security'
-              '?Privacy_LocalNetwork',
-    );
+  isIOS
+      ? 'app-settings:'
+      : 'x-apple.systempreferences:com.apple.preference.security'
+            '?Privacy_LocalNetwork',
+);
 
 /// What to tell the user when the deep link will not open.
 ///
@@ -36,7 +36,7 @@ Uri localNetworkSettingsUri({required bool isIOS}) => Uri.parse(
 String localNetworkSettingsFallback({required bool isIOS}) => isIOS
     ? 'Open Settings > Mydia > Local Network and enable it.'
     : 'Open System Settings > Privacy & Security > Local Network and '
-        'enable Mydia.';
+          'enable Mydia.';
 
 /// Opens the local-network permission pane, or explains how to reach it.
 ///

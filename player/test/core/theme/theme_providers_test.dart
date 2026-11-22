@@ -38,13 +38,16 @@ void main() {
     LinuxDesktop linuxDesktop = LinuxDesktop.gnome,
     Color? linuxAccent,
   }) {
-    final c = ProviderContainer(overrides: [
-      coreSettingsServiceProvider
-          .overrideWithValue(SettingsService(storage: storage)),
-      systemAccentProvider.overrideWith(() => _FixedAccent(accent)),
-      linuxDesktopProvider.overrideWithValue(linuxDesktop),
-      linuxAccentProvider.overrideWith(() => _FixedLinuxAccent(linuxAccent)),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: storage),
+        ),
+        systemAccentProvider.overrideWith(() => _FixedAccent(accent)),
+        linuxDesktopProvider.overrideWithValue(linuxDesktop),
+        linuxAccentProvider.overrideWith(() => _FixedLinuxAccent(linuxAccent)),
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
@@ -95,7 +98,8 @@ void main() {
     final c = containerWith(storage);
     c.read(themePresetSettingProvider);
     unawaited(
-        c.read(themePresetSettingProvider.notifier).set(ThemePreset.oledBlack));
+      c.read(themePresetSettingProvider.notifier).set(ThemePreset.oledBlack),
+    );
     await settle();
     expect(c.read(themePresetSettingProvider), ThemePreset.oledBlack);
   });
@@ -138,8 +142,10 @@ void main() {
       accent: const Color(0xFF30D158),
       linuxDesktop: LinuxDesktop.elementary,
     );
-    expect(c.read(presetPaletteProvider(ThemePreset.macos)).primary,
-        const Color(0xFF30D158));
+    expect(
+      c.read(presetPaletteProvider(ThemePreset.macos)).primary,
+      const Color(0xFF30D158),
+    );
     final elementary = Palettes.linux(LinuxDesktop.elementary, null);
     final linux = c.read(presetPaletteProvider(ThemePreset.linux));
     expect(linux.surfaceTones, elementary.surfaceTones);

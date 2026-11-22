@@ -52,24 +52,23 @@ void main() {
 
     group('combinedProgress getter', () {
       test('returns progress for non-progressive downloads', () {
-        final task = _createTask(
-          progress: 0.75,
-          isProgressive: false,
-        );
+        final task = _createTask(progress: 0.75, isProgressive: false);
         expect(task.combinedProgress, equals(0.75));
       });
 
-      test('weights transcode and download progress for progressive downloads',
-          () {
-        // 30% transcode + 70% download
-        final task = _createTask(
-          isProgressive: true,
-          transcodeProgress: 1.0, // 1.0 * 0.3 = 0.3
-          downloadProgress: 0.5, // 0.5 * 0.7 = 0.35
-        );
-        // Total: 0.3 + 0.35 = 0.65
-        expect(task.combinedProgress, closeTo(0.65, 0.001));
-      });
+      test(
+        'weights transcode and download progress for progressive downloads',
+        () {
+          // 30% transcode + 70% download
+          final task = _createTask(
+            isProgressive: true,
+            transcodeProgress: 1.0, // 1.0 * 0.3 = 0.3
+            downloadProgress: 0.5, // 0.5 * 0.7 = 0.35
+          );
+          // Total: 0.3 + 0.35 = 0.65
+          expect(task.combinedProgress, closeTo(0.65, 0.001));
+        },
+      );
 
       test('returns 0.0 when both progress values are 0', () {
         final task = _createTask(
@@ -264,15 +263,9 @@ void main() {
       });
 
       test('updates specified fields', () {
-        final task = _createTask(
-          status: 'pending',
-          progress: 0.0,
-        );
+        final task = _createTask(status: 'pending', progress: 0.0);
 
-        final updated = task.copyWith(
-          status: 'downloading',
-          progress: 0.5,
-        );
+        final updated = task.copyWith(status: 'downloading', progress: 0.5);
 
         expect(updated.status, equals('downloading'));
         expect(updated.progress, equals(0.5));
@@ -324,12 +317,12 @@ void main() {
 
     group('recovery state', () {
       DownloadTask base() => DownloadTask(
-            id: 't1',
-            mediaId: 'm1',
-            title: 'Test Movie',
-            quality: '1080p',
-            createdAt: DateTime(2026, 1, 1),
-          );
+        id: 't1',
+        mediaId: 'm1',
+        title: 'Test Movie',
+        quality: '1080p',
+        createdAt: DateTime(2026, 1, 1),
+      );
 
       test('defaults recoveryAttempts to 0 and lastProgressAt to null', () {
         final task = base();
@@ -346,19 +339,22 @@ void main() {
 
       test('copyWith preserves recovery fields when they are not passed', () {
         final at = DateTime(2026, 1, 1, 12, 30);
-        final task =
-            base().copyWith(lastProgressAt: at, recoveryAttempts: 2).copyWith(
-                  status: 'downloading',
-                );
+        final task = base()
+            .copyWith(lastProgressAt: at, recoveryAttempts: 2)
+            .copyWith(status: 'downloading');
         expect(task.lastProgressAt, at);
         expect(task.recoveryAttempts, 2);
       });
 
       test('maps the interrupted and stalled status strings', () {
-        expect(base().copyWith(status: 'interrupted').downloadStatus,
-            DownloadStatus.interrupted);
-        expect(base().copyWith(status: 'stalled').downloadStatus,
-            DownloadStatus.stalled);
+        expect(
+          base().copyWith(status: 'interrupted').downloadStatus,
+          DownloadStatus.interrupted,
+        );
+        expect(
+          base().copyWith(status: 'stalled').downloadStatus,
+          DownloadStatus.stalled,
+        );
       });
     });
   });

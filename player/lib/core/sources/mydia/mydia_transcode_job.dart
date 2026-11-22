@@ -11,12 +11,12 @@ String mydiaContentType(ItemKind kind) =>
     kind == ItemKind.episode ? 'episode' : 'movie';
 
 JobSnapshot _snapshot(DownloadJobStatus status) => JobSnapshot(
-      jobId: status.jobId,
-      ready: status.status == DownloadJobStatusType.ready,
-      progress: status.progress,
-      fileSize: status.currentFileSize,
-      error: status.error,
-    );
+  jobId: status.jobId,
+  ready: status.status == DownloadJobStatusType.ready,
+  progress: status.progress,
+  fileSize: status.currentFileSize,
+  error: status.error,
+);
 
 class MydiaTranscodeJob extends TranscodeJob {
   MydiaTranscodeJob({
@@ -36,8 +36,13 @@ class MydiaTranscodeJob extends TranscodeJob {
   final Future<DirectFile> Function(String jobId) fileFor;
 
   @override
-  Future<JobSnapshot> prepare() async => _snapshot(await jobs.prepareDownload(
-      contentType: contentType, id: id, resolution: resolution));
+  Future<JobSnapshot> prepare() async => _snapshot(
+    await jobs.prepareDownload(
+      contentType: contentType,
+      id: id,
+      resolution: resolution,
+    ),
+  );
 
   @override
   Future<JobSnapshot> status(String jobId) async {

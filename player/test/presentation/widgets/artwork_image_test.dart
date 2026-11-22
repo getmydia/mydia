@@ -9,13 +9,14 @@ import '../../test_utils/mock_network_images.dart';
 const _url = 'https://image.example/poster.png';
 
 Widget _host(Widget child) => Directionality(
-      textDirection: TextDirection.ltr,
-      child: Center(child: SizedBox(width: 100, height: 150, child: child)),
-    );
+  textDirection: TextDirection.ltr,
+  child: Center(child: SizedBox(width: 100, height: 150, child: child)),
+);
 
 void main() {
-  testWidgets('resolves the shared artwork provider at the decode width',
-      (tester) async {
+  testWidgets('resolves the shared artwork provider at the decode width', (
+    tester,
+  ) async {
     await mockNetworkImages(() async {
       await tester.pumpWidget(
         _host(const ArtworkImage(imageUrl: _url, decodeWidth: 128)),
@@ -27,8 +28,9 @@ void main() {
     });
   });
 
-  testWidgets('without a decode width the provider is not resized',
-      (tester) async {
+  testWidgets('without a decode width the provider is not resized', (
+    tester,
+  ) async {
     await mockNetworkImages(() async {
       await tester.pumpWidget(_host(const ArtworkImage(imageUrl: _url)));
 
@@ -72,16 +74,19 @@ void main() {
       expect(octo.fadeOutDuration, const Duration(milliseconds: 1000));
       expect(octo.errorBuilder, isNotNull);
       expect(
-        (octo.errorBuilder!(tester.element(find.byType(OctoImage)), 'e', null)
-                as Text)
-            .data,
+        (octo.errorBuilder!(
+          tester.element(find.byType(OctoImage)),
+          'e',
+          null,
+        ) as Text).data,
         'failed',
       );
     });
   });
 
-  testWidgets('always supplies a placeholder so OctoImage still fades',
-      (tester) async {
+  testWidgets('always supplies a placeholder so OctoImage still fades', (
+    tester,
+  ) async {
     await mockNetworkImages(() async {
       await tester.pumpWidget(_host(const ArtworkImage(imageUrl: _url)));
 

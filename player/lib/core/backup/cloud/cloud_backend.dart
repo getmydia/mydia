@@ -53,8 +53,12 @@ abstract class CloudBackend {
 
   Future<List<int>> readBytes(String slotId);
 
-  Future<void> writeBytes(String slotId, List<int> bytes,
-      {required String deviceName, required String platform});
+  Future<void> writeBytes(
+    String slotId,
+    List<int> bytes, {
+    required String deviceName,
+    required String platform,
+  });
 
   Future<void> delete(String slotId);
 

@@ -112,7 +112,8 @@ class MobileDrawer extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               child: GlassSurface.sidebar(
                 borderRadius: const BorderRadius.all(
-                    Radius.circular(AppTheme.radiusRail)),
+                  Radius.circular(AppTheme.radiusRail),
+                ),
                 border: Border.all(
                   color: DepthTokens.rimColor,
                   width: DepthTokens.rimWidth,

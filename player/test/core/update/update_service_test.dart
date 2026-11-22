@@ -32,14 +32,14 @@ class _FakeFeedClient implements UpdateFeedClient {
 }
 
 FeedEntry _entry(String version) => FeedEntry(
-      version: version,
-      build: 1,
-      url: 'https://example.invalid/build',
-      size: 1000,
-      sha256: null,
-      notesUrl: 'https://example.invalid/notes',
-      publishedAt: DateTime.utc(2026, 9, 1),
-    );
+  version: version,
+  build: 1,
+  url: 'https://example.invalid/build',
+  size: 1000,
+  sha256: null,
+  notesUrl: 'https://example.invalid/notes',
+  publishedAt: DateTime.utc(2026, 9, 1),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -105,17 +105,19 @@ void main() {
     expect(client.calls, 1);
   });
 
-  test('the requested track is passed through to the client, not ignored',
-      () async {
-    final client = _FakeFeedClient(_entry('0.16.0'));
-    final service = UpdateService(client: client);
+  test(
+    'the requested track is passed through to the client, not ignored',
+    () async {
+      final client = _FakeFeedClient(_entry('0.16.0'));
+      final service = UpdateService(client: client);
 
-    await service.checkForUpdate(
-      currentVersion: '0.15.0',
-      track: UpdateTrack.beta,
-      force: true,
-    );
+      await service.checkForUpdate(
+        currentVersion: '0.15.0',
+        track: UpdateTrack.beta,
+        force: true,
+      );
 
-    expect(client.lastTrack, UpdateTrack.beta);
-  });
+      expect(client.lastTrack, UpdateTrack.beta);
+    },
+  );
 }

@@ -65,12 +65,14 @@ Future<void> _pump(
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          downloadedMediaProvider
-              .overrideWith((ref) => Stream.value(downloaded)),
+          downloadedMediaProvider.overrideWith(
+            (ref) => Stream.value(downloaded),
+          ),
           downloadQueueProvider.overrideWith((ref) => Stream.value(queue)),
           downloadSpeedInfoProvider.overrideWith((ref) => Stream.value({})),
-          playbackProgressStoreProvider
-              .overrideWith((ref) async => InMemoryPlaybackProgressStore()),
+          playbackProgressStoreProvider.overrideWith(
+            (ref) async => InMemoryPlaybackProgressStore(),
+          ),
         ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -88,8 +90,9 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('lists only its own source when show ids collide',
-      (tester) async {
+  testWidgets('lists only its own source when show ids collide', (
+    tester,
+  ) async {
     const other = SourceId('acc1:owner:aa11');
     await _pump(
       tester,
@@ -104,11 +107,10 @@ void main() {
   });
 
   testWidgets('renders one rail per season', (tester) async {
-    await _pump(tester, downloaded: [
-      _downloaded(1, 1),
-      _downloaded(1, 2),
-      _downloaded(2, 1),
-    ]);
+    await _pump(
+      tester,
+      downloaded: [_downloaded(1, 1), _downloaded(1, 2), _downloaded(2, 1)],
+    );
 
     expect(find.byType(DownloadedEpisodeRail), findsNWidgets(2));
   });
@@ -120,8 +122,9 @@ void main() {
     expect(find.text('(2 episodes)'), findsOneWidget);
   });
 
-  testWidgets('renders a season header even for a single season',
-      (tester) async {
+  testWidgets('renders a season header even for a single season', (
+    tester,
+  ) async {
     await _pump(tester, downloaded: [_downloaded(1, 1)]);
 
     expect(find.text('Season 1'), findsOneWidget);

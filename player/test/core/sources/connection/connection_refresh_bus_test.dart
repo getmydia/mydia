@@ -11,9 +11,11 @@ void main() {
         Timer.run(() => throw StateError('no bus'));
       },
     );
-    final container = ProviderContainer(overrides: [
-      connectivityChangesProvider.overrideWithValue(controller.stream),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        connectivityChangesProvider.overrideWithValue(controller.stream),
+      ],
+    );
     addTearDown(() async {
       container.dispose();
       await controller.close();
@@ -26,9 +28,11 @@ void main() {
 
   test('network events ping the bus', () async {
     final controller = StreamController<Object?>.broadcast();
-    final container = ProviderContainer(overrides: [
-      connectivityChangesProvider.overrideWithValue(controller.stream),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        connectivityChangesProvider.overrideWithValue(controller.stream),
+      ],
+    );
     addTearDown(() async {
       container.dispose();
       await controller.close();

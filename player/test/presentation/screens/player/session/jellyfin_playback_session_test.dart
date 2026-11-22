@@ -14,31 +14,40 @@ import '../../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
     show build, jellyfinSid;
 
 void main() {
-  const movie =
-      ItemRef(sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm2');
+  const movie = ItemRef(
+    sourceId: jellyfinSid,
+    kind: ItemKind.movie,
+    externalId: 'm2',
+  );
 
   ({JellyfinPlaybackSession session, FakeJellyfinServer server}) open() {
     final b = build();
     return (
-      session:
-          JellyfinPlaybackSession(source: b.source, item: movie, fileId: 'm2'),
+      session: JellyfinPlaybackSession(
+        source: b.source,
+        item: movie,
+        fileId: 'm2',
+      ),
       server: b.server,
     );
   }
 
   Future<StreamingSetup> setupOf(JellyfinPlaybackSession s) async =>
       ((await s.prepareStreaming(
-              owner: Object(),
-              onProgress: (_) {},
-              isCurrent: () => true)) as StreamingReady)
-          .setup;
+        owner: Object(),
+        onProgress: (_) {},
+        isCurrent: () => true,
+      )) as StreamingReady).setup;
 
   test('offers what the server allows, in order', () async {
     final o = open();
     final offer = (await o.session.candidates(CandidateScope.file)).offer!;
     expect(offer.fileId, 'm2');
-    expect(offer.candidates.map((c) => c.strategy),
-        ['DIRECT_PLAY', 'HLS_COPY', 'TRANSCODE']);
+    expect(offer.candidates.map((c) => c.strategy), [
+      'DIRECT_PLAY',
+      'HLS_COPY',
+      'TRANSCODE',
+    ]);
     expect(offer.candidates.first.mime, 'video/x-matroska');
     expect(offer.durationSeconds, 5400);
     expect(offer.height, 1080);
@@ -56,7 +65,10 @@ void main() {
     final o = open();
     o.server.playbackErrorCode = 'NotAllowed';
     final prep = await o.session.prepareStreaming(
-        owner: Object(), onProgress: (_) {}, isCurrent: () => true);
+      owner: Object(),
+      onProgress: (_) {},
+      isCurrent: () => true,
+    );
     final error = (prep as StreamingUnavailable).problem.error;
     expect(error, isA<SourceException>());
     expect((error as SourceException).fault, SourceFault.jellyfinNotAllowed);
@@ -74,7 +86,9 @@ void main() {
     final o = open();
     final setup = await setupOf(o.session);
     expect(setup.memoryKey, 'source:$jellyfinSid');
-    final source = await setup.createTransport(relayed: false).open(
+    final source = await setup
+        .createTransport(relayed: false)
+        .open(
           const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
           fileId: 'm2',
           startAt: Duration.zero,
@@ -85,8 +99,10 @@ void main() {
     expect(url.queryParameters['mediaSourceId'], 'm2');
     expect(url.queryParameters['playSessionId'], 'ps1');
     expect(source.url, isNot(contains(FakeJellyfinServer.token)));
-    expect(source.headers['Authorization'],
-        contains('Token="${FakeJellyfinServer.token}"'));
+    expect(
+      source.headers['Authorization'],
+      contains('Token="${FakeJellyfinServer.token}"'),
+    );
   });
 
   test('transcode builds the HLS master and ends the encode after', () async {
@@ -134,17 +150,18 @@ void main() {
         hdrFormats: const [],
       ),
     );
-    final source =
-        await (await setupOf(session)).createTransport(relayed: false).open(
-              const HlsPlan(
-                strategy: HlsStrategy.copy,
-                rung: QualityRung.original,
-                adaptive: false,
-                reason: PlanReason.fallbackFromFailure,
-              ),
-              fileId: 'm2',
-              startAt: Duration.zero,
-            );
+    final source = await (await setupOf(session))
+        .createTransport(relayed: false)
+        .open(
+          const HlsPlan(
+            strategy: HlsStrategy.copy,
+            rung: QualityRung.original,
+            adaptive: false,
+            reason: PlanReason.fallbackFromFailure,
+          ),
+          fileId: 'm2',
+          startAt: Duration.zero,
+        );
     return Uri.parse(source.url).queryParameters;
   }
 
@@ -165,9 +182,15 @@ void main() {
     final setup = await setupOf(o.session);
     final reporter = setup.progress as JellyfinProgressReporter;
     await reporter.sendProgress(
-        positionSeconds: 10, durationSeconds: 5400, paused: false);
+      positionSeconds: 10,
+      durationSeconds: 5400,
+      paused: false,
+    );
     await reporter.sendProgress(
-        positionSeconds: 20, durationSeconds: 5400, paused: true);
+      positionSeconds: 20,
+      durationSeconds: 5400,
+      paused: true,
+    );
     await reporter.sendWatched();
     await reporter.sendStopped(positionSeconds: 30, durationSeconds: 5400);
     final calls = o.server.requests
@@ -191,36 +214,38 @@ void main() {
     expect(progress['MediaSourceId'], 'm2');
   });
 
-  test('receiver mode puts api_key in the HLS URL and asks for H.264',
-      () async {
-    final o = open();
-    await o.session.candidates(CandidateScope.file);
-    final version = (await o.session.loadDetail()).versions.first;
-    final resolver = JellyfinStreamResolver(
-      client: o.session.jellyfinClient,
-      itemId: 'm2',
-      version: version,
-      playSessionId: 'ps',
-      codecs: transcodeCodecs(receiverDeviceProfile),
-      onPlayMethod: (_) {},
-      forReceiver: true,
-    );
+  test(
+    'receiver mode puts api_key in the HLS URL and asks for H.264',
+    () async {
+      final o = open();
+      await o.session.candidates(CandidateScope.file);
+      final version = (await o.session.loadDetail()).versions.first;
+      final resolver = JellyfinStreamResolver(
+        client: o.session.jellyfinClient,
+        itemId: 'm2',
+        version: version,
+        playSessionId: 'ps',
+        codecs: transcodeCodecs(receiverDeviceProfile),
+        onPlayMethod: (_) {},
+        forReceiver: true,
+      );
 
-    final stream = await resolver.resolve(
-      const HlsPlan(
-        strategy: HlsStrategy.transcode,
-        rung: QualityRung.original,
-        adaptive: false,
-        reason: PlanReason.fallbackFromFailure,
-      ),
-      fileId: 'm2',
-      startAt: Duration.zero,
-    );
+      final stream = await resolver.resolve(
+        const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: QualityRung.original,
+          adaptive: false,
+          reason: PlanReason.fallbackFromFailure,
+        ),
+        fileId: 'm2',
+        startAt: Duration.zero,
+      );
 
-    final url = Uri.parse(stream.url);
-    expect(url.queryParameters['api_key'], FakeJellyfinServer.token);
-    expect(url.queryParameters['VideoCodec'], 'h264');
-    expect(url.queryParameters['AudioCodec'], 'aac,mp3');
-    expect(stream.headers, isEmpty);
-  });
+      final url = Uri.parse(stream.url);
+      expect(url.queryParameters['api_key'], FakeJellyfinServer.token);
+      expect(url.queryParameters['VideoCodec'], 'h264');
+      expect(url.queryParameters['AudioCodec'], 'aac,mp3');
+      expect(stream.headers, isEmpty);
+    },
+  );
 }

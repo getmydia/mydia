@@ -65,7 +65,8 @@ Future<_Built> _build({
   final probe = FakeMediaProbe(result);
   final cache = throwingCache
       ? _ThrowingCache(
-          await Hive.openBox<Map<dynamic, dynamic>>('files_media_info_throw'))
+          await Hive.openBox<Map<dynamic, dynamic>>('files_media_info_throw'),
+        )
       : await f.mediaInfoCache();
   final source = FilesMediaSource(
     source: filesLocalSource,
@@ -88,8 +89,10 @@ Future<_Built> _build({
   return _Built(f, source, probe, cache);
 }
 
-final _hdKey =
-    fileKeyFor(FilesFixture.rootId, 'Copper Valley (2018) 1080p.mkv');
+final _hdKey = fileKeyFor(
+  FilesFixture.rootId,
+  'Copper Valley (2018) 1080p.mkv',
+);
 
 /// A backend whose play fails the way the test says.
 class _FailingPlayBackend extends FakeBackend {
@@ -115,9 +118,9 @@ void main() {
     expect(info, isNotNull);
 
     final ref = b.fixture.ref(
-        ItemKind.video,
-        unmatchedFileId(
-            fileKeyFor(FilesFixture.rootId, 'loose/home video.mkv')));
+      ItemKind.video,
+      unmatchedFileId(fileKeyFor(FilesFixture.rootId, 'loose/home video.mkv')),
+    );
     final files = await info?.mediaInfo(ref) ?? const [];
     expect(files, hasLength(1));
     final file = files.single;
@@ -148,8 +151,10 @@ void main() {
     final hdFile = b.fixture.index.files()[_hdKey];
     expect(hdFile, isNotNull);
     if (hdFile != null) {
-      expect(b.cache.get(filesLocalSource.account.id, hdFile)?.container,
-          'matroska');
+      expect(
+        b.cache.get(filesLocalSource.account.id, hdFile)?.container,
+        'matroska',
+      );
     }
 
     final again = await b.source.mediaInfo(ref);
@@ -159,8 +164,9 @@ void main() {
 
   test('a cache write failure still returns the probe result', () async {
     final b = await _build(result: _probed, throwingCache: true);
-    final files =
-        await b.source.mediaInfo(b.fixture.ref(ItemKind.movie, '101'));
+    final files = await b.source.mediaInfo(
+      b.fixture.ref(ItemKind.movie, '101'),
+    );
     final hd = files.firstWhere((m) => m.id == _hdKey);
     expect(hd.streams, hasLength(2));
     expect(hd.codec, 'hevc');
@@ -177,25 +183,34 @@ void main() {
     expect(b.probe.probed, hasLength(2));
   });
 
-  test('a movie with two versions gives two entries in version order',
-      () async {
-    final b = await _build();
-    final ref = b.fixture.ref(ItemKind.movie, '101');
-    final detail = await b.source.item(ref);
-    final files = await b.source.mediaInfo(ref);
-    expect(files.map((m) => m.id), detail.versions.map((v) => v.id));
-    expect(files, hasLength(2));
-  });
+  test(
+    'a movie with two versions gives two entries in version order',
+    () async {
+      final b = await _build();
+      final ref = b.fixture.ref(ItemKind.movie, '101');
+      final detail = await b.source.item(ref);
+      final files = await b.source.mediaInfo(ref);
+      expect(files.map((m) => m.id), detail.versions.map((v) => v.id));
+      expect(files, hasLength(2));
+    },
+  );
 
   test('a show gives an empty list; an unknown ref throws notFound', () async {
     final b = await _build(result: _probed);
     expect(
-        await b.source.mediaInfo(b.fixture.ref(ItemKind.show, '201')), isEmpty);
+      await b.source.mediaInfo(b.fixture.ref(ItemKind.show, '201')),
+      isEmpty,
+    );
     expect(b.probe.probed, isEmpty);
     await expectLater(
       b.source.mediaInfo(b.fixture.ref(ItemKind.movie, '999')),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.notFound)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.notFound,
+        ),
+      ),
     );
   });
 
@@ -214,82 +229,104 @@ void main() {
     expect(results.every((r) => r.single.codec == 'hevc'), isTrue);
   });
 
-  test('a lent library whose host is unreachable throws the peer fault',
-      () async {
-    final h = PeerHarness(await FilesFixture.create());
-    await h.seed();
-    final lent = lentFlocal();
-    h.backends[peerFilesSource(lent)] =
-        _FailingPlayBackend(const BackendUnreachable('gone'));
-    h.client.list.value = [lent];
-    final c = await h.container();
-    addTearDown(c.dispose);
-    final id = c.read(sourcesProvider).last.id;
-    final media = c.read(mediaSourceProvider(id));
-    expect(media, isA<FilesMediaSource>());
-    if (media is! FilesMediaSource) return;
-    await _settle();
+  test(
+    'a lent library whose host is unreachable throws the peer fault',
+    () async {
+      final h = PeerHarness(await FilesFixture.create());
+      await h.seed();
+      final lent = lentFlocal();
+      h.backends[peerFilesSource(lent)] = _FailingPlayBackend(
+        const BackendUnreachable('gone'),
+      );
+      h.client.list.value = [lent];
+      final c = await h.container();
+      addTearDown(c.dispose);
+      final id = c.read(sourcesProvider).last.id;
+      final media = c.read(mediaSourceProvider(id));
+      expect(media, isA<FilesMediaSource>());
+      if (media is! FilesMediaSource) return;
+      await _settle();
 
-    final ref = ItemRef(sourceId: id, kind: ItemKind.movie, externalId: '301');
-    await expectLater(
-      media.mediaInfo(ref),
-      throwsA(isA<SourceException>().having(
-          (e) => e.fault, 'fault', SourceFault.peerFilesHostUnreachable)),
-    );
-  });
+      final ref = ItemRef(
+        sourceId: id,
+        kind: ItemKind.movie,
+        externalId: '301',
+      );
+      await expectLater(
+        media.mediaInfo(ref),
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.fault,
+            'fault',
+            SourceFault.peerFilesHostUnreachable,
+          ),
+        ),
+      );
+    },
+  );
 
-  test('a file replaced while it is read is not cached under the new record',
-      () async {
-    final b = await _build(result: _probed);
-    final gate = Completer<void>();
-    b.probe.gate = gate;
+  test(
+    'a file replaced while it is read is not cached under the new record',
+    () async {
+      final b = await _build(result: _probed);
+      final gate = Completer<void>();
+      b.probe.gate = gate;
 
-    final running = b.source.probeFileKey(_hdKey);
-    await _settle();
-    final old = b.fixture.index.files()[_hdKey];
-    expect(old, isNotNull);
-    if (old == null) return;
-    // A scan lands while the probe runs and records a different file.
-    await b.fixture.index.putFiles([
-      IndexedFile(
-        key: old.key,
-        rootId: old.rootId,
-        path: old.path,
-        size: old.size + 1,
-        modified: old.modified,
-        firstSeen: old.firstSeen,
-        parsed: old.parsed,
-        sidecars: old.sidecars,
-        parsedAs: old.parsedAs,
-      ),
-    ]);
-    gate.complete();
-    await running;
+      final running = b.source.probeFileKey(_hdKey);
+      await _settle();
+      final old = b.fixture.index.files()[_hdKey];
+      expect(old, isNotNull);
+      if (old == null) return;
+      // A scan lands while the probe runs and records a different file.
+      await b.fixture.index.putFiles([
+        IndexedFile(
+          key: old.key,
+          rootId: old.rootId,
+          path: old.path,
+          size: old.size + 1,
+          modified: old.modified,
+          firstSeen: old.firstSeen,
+          parsed: old.parsed,
+          sidecars: old.sidecars,
+          parsedAs: old.parsedAs,
+        ),
+      ]);
+      gate.complete();
+      await running;
 
-    final now = b.fixture.index.files()[_hdKey];
-    expect(now, isNotNull);
-    if (now == null) return;
-    expect(b.cache.get(b.source.source.account.id, now), isNull);
-  });
+      final now = b.fixture.index.files()[_hdKey];
+      expect(now, isNotNull);
+      if (now == null) return;
+      expect(b.cache.get(b.source.source.account.id, now), isNull);
+    },
+  );
 
-  test('a local backend failure becomes a SourceException and is reported',
-      () async {
-    final backend = _FailingPlayBackend(const BackendUnreachable('gone'));
-    final b = await _build(result: _probed, backend: backend);
-    final ref = b.fixture.ref(ItemKind.movie, '101');
+  test(
+    'a local backend failure becomes a SourceException and is reported',
+    () async {
+      final backend = _FailingPlayBackend(const BackendUnreachable('gone'));
+      final b = await _build(result: _probed, backend: backend);
+      final ref = b.fixture.ref(ItemKind.movie, '101');
 
-    await expectLater(
-      b.source.mediaInfo(ref),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)),
-    );
-    expect(b.source.connection, SourceConnectionStatus.unreachable);
-  });
+      await expectLater(
+        b.source.mediaInfo(ref),
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.unreachable,
+          ),
+        ),
+      );
+      expect(b.source.connection, SourceConnectionStatus.unreachable);
+    },
+  );
 
   test('external subtitles come from sidecars', () async {
     final b = await _build();
-    final files =
-        await b.source.mediaInfo(b.fixture.ref(ItemKind.movie, '101'));
+    final files = await b.source.mediaInfo(
+      b.fixture.ref(ItemKind.movie, '101'),
+    );
     final hd = files.firstWhere((m) => m.id == _hdKey);
     final sub = hd.externalSubtitles.single;
     expect(sub.language, 'en');

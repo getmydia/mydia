@@ -24,7 +24,8 @@ class NextEpisode {
       episodeNumber: json['episodeNumber'] as int,
       title: json['title'] as String?,
       airDate: json['airDate'] as String?,
-      files: (json['files'] as List<dynamic>?)
+      files:
+          (json['files'] as List<dynamic>?)
               ?.map((e) => MediaFile.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],

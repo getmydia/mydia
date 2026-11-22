@@ -104,7 +104,9 @@ class RemoteTargetController {
   }
 
   Future<void> _dispatch(
-      RemotePlayerBinding binding, RemoteControlIntent intent) async {
+    RemotePlayerBinding binding,
+    RemoteControlIntent intent,
+  ) async {
     try {
       switch (intent) {
         case TransportIntent(:final action, :final position):

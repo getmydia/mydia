@@ -30,19 +30,28 @@ void main() {
         offenders.add(path);
       }
     }
-    expect(offenders, isEmpty,
-        reason: 'Use showGlassSheet (lib/presentation/widgets/glass/).');
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'Use showGlassSheet (lib/presentation/widgets/glass/).',
+    );
   });
 
   test('the matcher catches typed and untyped calls, not comments', () {
     expect(callsShowModalBottomSheet('showModalBottomSheet<int>('), isTrue);
     expect(
-        callsShowModalBottomSheet('  await showModalBottomSheet(\n'), isTrue);
+      callsShowModalBottomSheet('  await showModalBottomSheet(\n'),
+      isTrue,
+    );
     expect(callsShowModalBottomSheet('showModalBottomSheet (context:'), isTrue);
     expect(callsShowModalBottomSheet('// showModalBottomSheet(x)'), isFalse);
     expect(
-        callsShowModalBottomSheet('/// see showModalBottomSheet<T>'), isFalse);
-    expect(callsShowModalBottomSheet('final x = 1; // showModalBottomSheet('),
-        isFalse);
+      callsShowModalBottomSheet('/// see showModalBottomSheet<T>'),
+      isFalse,
+    );
+    expect(
+      callsShowModalBottomSheet('final x = 1; // showModalBottomSheet('),
+      isFalse,
+    );
   });
 }

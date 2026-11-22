@@ -32,12 +32,11 @@ void main() {
   NodeRegistrationService serviceWith(
     RegisterNode register, {
     FakeDelay? delay,
-  }) =>
-      NodeRegistrationService(
-        register: register,
-        now: () => clock,
-        delay: (delay ?? FakeDelay()).call,
-      );
+  }) => NodeRegistrationService(
+    register: register,
+    now: () => clock,
+    delay: (delay ?? FakeDelay()).call,
+  );
 
   group('NodeRegistrationService', () {
     test('waits rather than failing when the node id is missing', () async {
@@ -48,8 +47,10 @@ void main() {
       await pumpEventQueue();
 
       expect(service.status, isA<RegistrationWaiting>());
-      expect((service.status as RegistrationWaiting).dependency,
-          RegistrationDependency.deviceOnline);
+      expect(
+        (service.status as RegistrationWaiting).dependency,
+        RegistrationDependency.deviceOnline,
+      );
     });
 
     test('waits rather than failing when the client is not ready', () async {
@@ -60,8 +61,10 @@ void main() {
       await pumpEventQueue();
 
       expect(service.status, isA<RegistrationWaiting>());
-      expect((service.status as RegistrationWaiting).dependency,
-          RegistrationDependency.serverConnection);
+      expect(
+        (service.status as RegistrationWaiting).dependency,
+        RegistrationDependency.serverConnection,
+      );
     });
 
     test('registers once every input has arrived', () async {
@@ -100,56 +103,61 @@ void main() {
     test('retries with growing backoff until it succeeds', () async {
       final delay = FakeDelay();
       var calls = 0;
-      final service = serviceWith(
-        (_) async {
-          calls += 1;
-          return calls >= 3;
-        },
-        delay: delay,
-      );
+      final service = serviceWith((_) async {
+        calls += 1;
+        return calls >= 3;
+      }, delay: delay);
       addTearDown(service.dispose);
 
       service.update(controllable: true, nodeId: 'abc', clientReady: true);
       await pumpEventQueue();
 
       expect(calls, 3);
-      expect(delay.waits,
-          [const Duration(seconds: 2), const Duration(seconds: 4)]);
+      expect(delay.waits, [
+        const Duration(seconds: 2),
+        const Duration(seconds: 4),
+      ]);
       expect(service.status, isA<RegistrationSucceeded>());
     });
 
-    test('retryNow interrupts a pending backoff wait instead of waiting it out',
-        () async {
-      var calls = 0;
-      final delay = ControllableDelay();
-      final service = NodeRegistrationService(
-        register: (_) async {
-          calls += 1;
-          // Fails once, then succeeds on the retry retryNow() triggers.
-          return calls >= 2;
-        },
-        now: () => clock,
-        delay: delay.call,
-      );
-      addTearDown(service.dispose);
+    test(
+      'retryNow interrupts a pending backoff wait instead of waiting it out',
+      () async {
+        var calls = 0;
+        final delay = ControllableDelay();
+        final service = NodeRegistrationService(
+          register: (_) async {
+            calls += 1;
+            // Fails once, then succeeds on the retry retryNow() triggers.
+            return calls >= 2;
+          },
+          now: () => clock,
+          delay: delay.call,
+        );
+        addTearDown(service.dispose);
 
-      service.update(controllable: true, nodeId: 'abc', clientReady: true);
-      await pumpEventQueue();
+        service.update(controllable: true, nodeId: 'abc', clientReady: true);
+        await pumpEventQueue();
 
-      // The first attempt failed and is now asleep in a backoff wait that
-      // this test's ControllableDelay never resolves on its own.
-      expect(calls, 1);
-      expect(service.status, isA<RegistrationFailed>());
-      expect(delay.waits, [const Duration(seconds: 2)]);
+        // The first attempt failed and is now asleep in a backoff wait that
+        // this test's ControllableDelay never resolves on its own.
+        expect(calls, 1);
+        expect(service.status, isA<RegistrationFailed>());
+        expect(delay.waits, [const Duration(seconds: 2)]);
 
-      service.retryNow();
-      await pumpEventQueue();
+        service.retryNow();
+        await pumpEventQueue();
 
-      expect(calls, 2,
-          reason: 'retryNow must interrupt the backoff wait promptly, not '
-              'leave the retry pending until the full delay elapses');
-      expect(service.status, isA<RegistrationSucceeded>());
-    });
+        expect(
+          calls,
+          2,
+          reason:
+              'retryNow must interrupt the backoff wait promptly, not '
+              'leave the retry pending until the full delay elapses',
+        );
+        expect(service.status, isA<RegistrationSucceeded>());
+      },
+    );
 
     test('treats a throwing register as a retryable failure', () async {
       var calls = 0;
@@ -167,38 +175,44 @@ void main() {
       expect(service.status, isA<RegistrationSucceeded>());
     });
 
-    test('re-registers the same node id when the client scope changes',
-        () async {
-      final sent = <String>[];
-      final service = serviceWith((nodeId) async {
-        sent.add(nodeId);
-        return true;
-      });
-      addTearDown(service.dispose);
+    test(
+      're-registers the same node id when the client scope changes',
+      () async {
+        final sent = <String>[];
+        final service = serviceWith((nodeId) async {
+          sent.add(nodeId);
+          return true;
+        });
+        addTearDown(service.dispose);
 
-      final clientA = Object();
-      final clientB = Object();
+        final clientA = Object();
+        final clientB = Object();
 
-      service.update(
-        controllable: true,
-        nodeId: 'abc',
-        clientReady: true,
-        clientScope: clientA,
-      );
-      await pumpEventQueue();
-      service.update(
-        controllable: true,
-        nodeId: 'abc',
-        clientReady: true,
-        clientScope: clientB,
-      );
-      await pumpEventQueue();
+        service.update(
+          controllable: true,
+          nodeId: 'abc',
+          clientReady: true,
+          clientScope: clientA,
+        );
+        await pumpEventQueue();
+        service.update(
+          controllable: true,
+          nodeId: 'abc',
+          clientReady: true,
+          clientScope: clientB,
+        );
+        await pumpEventQueue();
 
-      expect(sent, ['abc', 'abc'],
-          reason: 'a different client scope must re-register the same node '
+        expect(
+          sent,
+          ['abc', 'abc'],
+          reason:
+              'a different client scope must re-register the same node '
               'id, because a cached confirmation only speaks for the '
-              'client that produced it');
-    });
+              'client that produced it',
+        );
+      },
+    );
 
     test('re-registers when the node id changes', () async {
       final sent = <String>[];
@@ -216,24 +230,26 @@ void main() {
       expect(sent, ['abc', 'def']);
     });
 
-    test('goes idle when the device opts out, and resumes when it opts in',
-        () async {
-      final sent = <String>[];
-      final service = serviceWith((nodeId) async {
-        sent.add(nodeId);
-        return true;
-      });
-      addTearDown(service.dispose);
+    test(
+      'goes idle when the device opts out, and resumes when it opts in',
+      () async {
+        final sent = <String>[];
+        final service = serviceWith((nodeId) async {
+          sent.add(nodeId);
+          return true;
+        });
+        addTearDown(service.dispose);
 
-      service.update(controllable: false, nodeId: 'abc', clientReady: true);
-      await pumpEventQueue();
-      expect(service.status, isA<RegistrationIdle>());
-      expect(sent, isEmpty);
+        service.update(controllable: false, nodeId: 'abc', clientReady: true);
+        await pumpEventQueue();
+        expect(service.status, isA<RegistrationIdle>());
+        expect(sent, isEmpty);
 
-      service.update(controllable: true, nodeId: 'abc', clientReady: true);
-      await pumpEventQueue();
-      expect(sent, ['abc']);
-    });
+        service.update(controllable: true, nodeId: 'abc', clientReady: true);
+        await pumpEventQueue();
+        expect(sent, ['abc']);
+      },
+    );
 
     test('replays the current status to a new listener', () async {
       final service = serviceWith((_) async => true);
@@ -274,8 +290,11 @@ void main() {
       await pumpEventQueue();
       await pumpEventQueue();
 
-      expect(calls, callsAtDispose,
-          reason: 'a disposed service must not keep calling register');
+      expect(
+        calls,
+        callsAtDispose,
+        reason: 'a disposed service must not keep calling register',
+      );
 
       // Disposing twice must be harmless.
       service.dispose();
@@ -292,8 +311,11 @@ void main() {
       service.update(controllable: true, nodeId: 'abc', clientReady: true);
       await pumpEventQueue();
 
-      expect(seen.last, isA<RegistrationSucceeded>(),
-          reason: 'a listener attached before update must see the outcome');
+      expect(
+        seen.last,
+        isA<RegistrationSucceeded>(),
+        reason: 'a listener attached before update must see the outcome',
+      );
     });
 
     group('while a registration is in flight', () {
@@ -314,18 +336,20 @@ void main() {
       test('an identical update does not register twice', () async {
         final scope = Object();
         service.update(
-            controllable: true,
-            nodeId: 'abc',
-            clientReady: true,
-            clientScope: scope);
+          controllable: true,
+          nodeId: 'abc',
+          clientReady: true,
+          clientScope: scope,
+        );
         await pumpEventQueue();
         expect(pending, hasLength(1));
 
         service.update(
-            controllable: true,
-            nodeId: 'abc',
-            clientReady: true,
-            clientScope: scope);
+          controllable: true,
+          nodeId: 'abc',
+          clientReady: true,
+          clientScope: scope,
+        );
         pending.single.complete(true);
         await pumpEventQueue();
 
@@ -333,67 +357,76 @@ void main() {
         expect(service.status, isA<RegistrationSucceeded>());
       });
 
-      test('retryNow does not throw away a confirmation that is still wanted',
-          () async {
-        service.update(controllable: true, nodeId: 'abc', clientReady: true);
-        await pumpEventQueue();
+      test(
+        'retryNow does not throw away a confirmation that is still wanted',
+        () async {
+          service.update(controllable: true, nodeId: 'abc', clientReady: true);
+          await pumpEventQueue();
 
-        service.retryNow();
-        pending.single.complete(true);
-        await pumpEventQueue();
+          service.retryNow();
+          pending.single.complete(true);
+          await pumpEventQueue();
 
-        expect(pending, hasLength(1));
-        expect(service.status, isA<RegistrationSucceeded>());
-      });
+          expect(pending, hasLength(1));
+          expect(service.status, isA<RegistrationSucceeded>());
+        },
+      );
 
       test('equal but non-identical scopes count as the same scope', () async {
-        String scope() => (StringBuffer()
-              ..write('a')
-              ..write(':')
-              ..write('false'))
-            .toString();
+        String scope() =>
+            (StringBuffer()
+                  ..write('a')
+                  ..write(':')
+                  ..write('false'))
+                .toString();
         service.update(
-            controllable: true,
-            nodeId: 'abc',
-            clientReady: true,
-            clientScope: scope());
+          controllable: true,
+          nodeId: 'abc',
+          clientReady: true,
+          clientScope: scope(),
+        );
         await pumpEventQueue();
         pending.single.complete(true);
         await pumpEventQueue();
 
         service.update(
-            controllable: true,
-            nodeId: 'abc',
-            clientReady: true,
-            clientScope: scope());
+          controllable: true,
+          nodeId: 'abc',
+          clientReady: true,
+          clientScope: scope(),
+        );
         await pumpEventQueue();
 
         expect(pending, hasLength(1));
         expect(service.status, isA<RegistrationSucceeded>());
       });
 
-      test('a client scope change still registers against the new scope',
-          () async {
-        service.update(
+      test(
+        'a client scope change still registers against the new scope',
+        () async {
+          service.update(
             controllable: true,
             nodeId: 'abc',
             clientReady: true,
-            clientScope: Object());
-        await pumpEventQueue();
+            clientScope: Object(),
+          );
+          await pumpEventQueue();
 
-        service.update(
+          service.update(
             controllable: true,
             nodeId: 'abc',
             clientReady: true,
-            clientScope: Object());
-        pending.first.complete(true);
-        await pumpEventQueue();
+            clientScope: Object(),
+          );
+          pending.first.complete(true);
+          await pumpEventQueue();
 
-        expect(pending, hasLength(2));
-        pending.last.complete(true);
-        await pumpEventQueue();
-        expect(service.status, isA<RegistrationSucceeded>());
-      });
+          expect(pending, hasLength(2));
+          pending.last.complete(true);
+          await pumpEventQueue();
+          expect(service.status, isA<RegistrationSucceeded>());
+        },
+      );
 
       test('opting out mid-attempt ends idle, not succeeded', () async {
         final seen = <RegistrationStatus>[];
@@ -412,14 +445,15 @@ void main() {
         pending.single.complete(true);
         await pumpEventQueue();
 
-        expect(seen.skip(inFlightCount),
-            isNot(contains(isA<RegistrationSucceeded>())));
+        expect(
+          seen.skip(inFlightCount),
+          isNot(contains(isA<RegistrationSucceeded>())),
+        );
         expect(seen.last, isA<RegistrationIdle>());
         expect(service.status, isA<RegistrationIdle>());
       });
 
-      test(
-          'opting back in after a mid-attempt opt-out registers again and '
+      test('opting back in after a mid-attempt opt-out registers again and '
           'reports success', () async {
         service.update(controllable: true, nodeId: 'abc', clientReady: true);
         await pumpEventQueue();
@@ -433,10 +467,14 @@ void main() {
         service.update(controllable: true, nodeId: 'abc', clientReady: true);
         await pumpEventQueue();
 
-        expect(pending, hasLength(2),
-            reason: 'a confirmation that arrived while opted out must not '
-                'be treated as already registered, or opting back in would '
-                'never re-register');
+        expect(
+          pending,
+          hasLength(2),
+          reason:
+              'a confirmation that arrived while opted out must not '
+              'be treated as already registered, or opting back in would '
+              'never re-register',
+        );
 
         pending.last.complete(true);
         await pumpEventQueue();

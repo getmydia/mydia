@@ -61,8 +61,9 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('editing renders editingTrailing instead of the menu',
-      (tester) async {
+  testWidgets('editing renders editingTrailing instead of the menu', (
+    tester,
+  ) async {
     await _pumpRow(
       tester,
       isEditing: true,
@@ -73,8 +74,9 @@ void main() {
     expect(find.byType(PopupMenuButton<String>), findsNothing);
   });
 
-  testWidgets('a normal customizable row keeps its overflow menu',
-      (tester) async {
+  testWidgets('a normal customizable row keeps its overflow menu', (
+    tester,
+  ) async {
     await _pumpRow(tester, isEditing: false);
 
     expect(find.byType(PopupMenuButton<String>), findsOneWidget);
@@ -106,8 +108,7 @@ void main() {
     expect(find.text('Hide'), findsNothing);
   });
 
-  testWidgets(
-      'editing reserves the trailing slot even when editingTrailing is '
+  testWidgets('editing reserves the trailing slot even when editingTrailing is '
       'omitted', (tester) async {
     await _pumpRow(tester, isEditing: true);
 
@@ -122,21 +123,24 @@ void main() {
   });
 
   testWidgets(
-      'a non-customisable row still shows a supplied editingTrailing while '
-      'editing', (tester) async {
-    await _pumpRow(
-      tester,
-      isEditing: true,
-      canCustomise: false,
-      editingTrailing: const Icon(Icons.drag_indicator, key: Key('grip')),
-    );
+    'a non-customisable row still shows a supplied editingTrailing while '
+    'editing',
+    (tester) async {
+      await _pumpRow(
+        tester,
+        isEditing: true,
+        canCustomise: false,
+        editingTrailing: const Icon(Icons.drag_indicator, key: Key('grip')),
+      );
 
-    expect(find.byKey(const Key('grip')), findsOneWidget);
-    expect(find.byType(PopupMenuButton<String>), findsNothing);
-  });
+      expect(find.byKey(const Key('grip')), findsOneWidget);
+      expect(find.byType(PopupMenuButton<String>), findsNothing);
+    },
+  );
 
-  testWidgets('an anchor dims its icon and label while editing',
-      (tester) async {
+  testWidgets('an anchor dims its icon and label while editing', (
+    tester,
+  ) async {
     await _pumpRow(tester, isEditing: true, canCustomise: false);
 
     final text = tester.widget<Text>(find.text('Movies'));

@@ -10,10 +10,10 @@ void main() {
   Future<VideoOutputStart> answer(Object? reply) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'awaitVideoOutput');
-      expect(call.arguments, {'handle': 5});
-      return reply;
-    });
+          expect(call.method, 'awaitVideoOutput');
+          expect(call.arguments, {'handle': 5});
+          return reply;
+        });
     return const MpvSurfaceChannel().awaitVideoOutput(5);
   }
 
@@ -24,18 +24,24 @@ void main() {
 
   group('MpvSurfaceChannel.awaitVideoOutput', () {
     test('started', () async {
-      expect(await answer({'started': true, 'failed': false}),
-          VideoOutputStart.started);
+      expect(
+        await answer({'started': true, 'failed': false}),
+        VideoOutputStart.started,
+      );
     });
 
     test('failed when mpv rejected the video output', () async {
-      expect(await answer({'started': false, 'failed': true}),
-          VideoOutputStart.failed);
+      expect(
+        await answer({'started': false, 'failed': true}),
+        VideoOutputStart.failed,
+      );
     });
 
     test('timed out when the output is neither up nor rejected', () async {
-      expect(await answer({'started': false, 'failed': false}),
-          VideoOutputStart.timedOut);
+      expect(
+        await answer({'started': false, 'failed': false}),
+        VideoOutputStart.timedOut,
+      );
     });
 
     test('timed out on an empty reply', () async {

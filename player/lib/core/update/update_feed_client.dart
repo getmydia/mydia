@@ -34,14 +34,14 @@ class FeedEntry {
   });
 
   AppUpdate toAppUpdate() => AppUpdate(
-        version: version,
-        downloadUrl: url,
-        downloadSize: size,
-        sha256: sha256,
-        releaseNotesUrl: notesUrl,
-        releaseTitle: version,
-        publishedAt: publishedAt,
-      );
+    version: version,
+    downloadUrl: url,
+    downloadSize: size,
+    sha256: sha256,
+    releaseNotesUrl: notesUrl,
+    releaseTitle: version,
+    publishedAt: publishedAt,
+  );
 
   static FeedEntry? fromJson(Object? value) {
     if (value is! Map) return null;
@@ -58,7 +58,8 @@ class FeedEntry {
       size: value['size'] is int ? value['size'] as int : null,
       sha256: value['sha256'] is String ? value['sha256'] as String : null,
       notesUrl: notesUrl is String ? notesUrl : url,
-      publishedAt: DateTime.tryParse(value['published_at']?.toString() ?? '') ??
+      publishedAt:
+          DateTime.tryParse(value['published_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }
@@ -76,26 +77,29 @@ class UpdateFeedClient {
   final Dio _dio;
   final String _feedUrl;
 
-  UpdateFeedClient({Dio? dio, String feedUrl = defaultFeedUrl})
-      : _dio = dio ??
-            Dio(BaseOptions(
+  UpdateFeedClient({Dio? dio, this._feedUrl = defaultFeedUrl})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-            )),
-        _feedUrl = feedUrl;
+            ),
+          );
 
   /// The feed key for the running platform, or null where the player does not
   /// update itself (web, iOS).
   static String? platformSlug() => resolveSlug(
-        isWeb: kIsWeb,
-        isAndroid: !kIsWeb && Platform.isAndroid,
-        isWindows: !kIsWeb && Platform.isWindows,
-        isLinux: !kIsWeb && Platform.isLinux,
-        isMacOS: !kIsWeb && Platform.isMacOS,
-        isAppImage: !kIsWeb &&
-            Platform.isLinux &&
-            AppImageUpdater.runningAppImagePath() != null,
-      );
+    isWeb: kIsWeb,
+    isAndroid: !kIsWeb && Platform.isAndroid,
+    isWindows: !kIsWeb && Platform.isWindows,
+    isLinux: !kIsWeb && Platform.isLinux,
+    isMacOS: !kIsWeb && Platform.isMacOS,
+    isAppImage:
+        !kIsWeb &&
+        Platform.isLinux &&
+        AppImageUpdater.runningAppImagePath() != null,
+  );
 
   /// The mapping itself, separated from the platform lookups so every branch
   /// is reachable from one test host. Mirrors the split UpdateHost.from and

@@ -45,10 +45,7 @@ class MpvMediaProbe implements MediaProbe {
       Object? loadError;
       final errorSub = player.stream.error.listen((e) => loadError = e);
       await player
-          .open(
-            Media(playable.url, httpHeaders: playable.headers),
-            play: false,
-          )
+          .open(Media(playable.url, httpHeaders: playable.headers), play: false)
           .timeout(remaining());
 
       // media_kit's `Tracks` always carries the `auto` and `no` pseudo-tracks,

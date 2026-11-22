@@ -10,27 +10,31 @@ import 'package:player/presentation/widgets/glass/glass_interaction.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 Widget _host(Widget child, {bool? liquid}) => ProviderScope(
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: liquid == null
-            ? null
-            : AppTheme.build(Palettes.projectionBooth, liquid: liquid),
-        home: Scaffold(body: child),
-      ),
-    );
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: liquid == null
+        ? null
+        : AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+    home: Scaffold(body: child),
+  ),
+);
 
 void main() {
   testWidgets('tapping watched calls onToggleWatched', (tester) async {
     var tapped = false;
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () => tapped = true,
-      isFavorite: false,
-      onToggleFavorite: () {},
-      onDownload: () {},
-      trailerUrl: null,
-    )));
+    await tester.pumpWidget(
+      _host(
+        DetailActionRow(
+          watched: false,
+          onToggleWatched: () => tapped = true,
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: null,
+        ),
+      ),
+    );
 
     await tester.tap(find.byIcon(Icons.check_circle_outline_rounded));
     expect(tapped, isTrue);
@@ -38,125 +42,163 @@ void main() {
 
   testWidgets('tapping favorite calls onToggleFavorite', (tester) async {
     var tapped = false;
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () {},
-      isFavorite: false,
-      onToggleFavorite: () => tapped = true,
-      onDownload: () {},
-      trailerUrl: null,
-    )));
+    await tester.pumpWidget(
+      _host(
+        DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () => tapped = true,
+          onDownload: () {},
+          trailerUrl: null,
+        ),
+      ),
+    );
 
     await tester.tap(find.byIcon(Icons.favorite_border_rounded));
     expect(tapped, isTrue);
   });
 
-  testWidgets('trailer button is absent when trailerUrl is null',
-      (tester) async {
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () {},
-      isFavorite: false,
-      onToggleFavorite: () {},
-      onDownload: () {},
-      trailerUrl: null,
-    )));
+  testWidgets('trailer button is absent when trailerUrl is null', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: null,
+        ),
+      ),
+    );
 
     expect(find.text('Trailer'), findsNothing);
   });
 
-  testWidgets('trailer button is present when trailerUrl is set',
-      (tester) async {
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () {},
-      isFavorite: false,
-      onToggleFavorite: () {},
-      onDownload: () {},
-      trailerUrl: 'https://www.youtube.com/watch?v=abc123',
-    )));
+  testWidgets('trailer button is present when trailerUrl is set', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: 'https://www.youtube.com/watch?v=abc123',
+        ),
+      ),
+    );
 
     expect(find.text('Trailer'), findsOneWidget);
   });
 
   testWidgets('download button is present by default', (tester) async {
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () {},
-      isFavorite: false,
-      onToggleFavorite: () {},
-      onDownload: () {},
-      trailerUrl: null,
-    )));
+    await tester.pumpWidget(
+      _host(
+        DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: null,
+        ),
+      ),
+    );
 
     expect(find.text('Download'), findsOneWidget);
   });
 
-  testWidgets('download button is absent when showDownload is false',
-      (tester) async {
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () {},
-      isFavorite: false,
-      onToggleFavorite: () {},
-      onDownload: () {},
-      trailerUrl: null,
-      showDownload: false,
-    )));
+  testWidgets('download button is absent when showDownload is false', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: null,
+          showDownload: false,
+        ),
+      ),
+    );
 
     expect(find.text('Download'), findsNothing);
   });
 
-  testWidgets('download button is plain when the title is not downloaded',
-      (tester) async {
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () {},
-      isFavorite: false,
-      onToggleFavorite: () {},
-      onDownload: () {},
-      trailerUrl: null,
-    )));
+  testWidgets('download button is plain when the title is not downloaded', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: null,
+        ),
+      ),
+    );
 
     expect(find.byIcon(Icons.download_done_rounded), findsNothing);
     final icon = tester.widget<Icon>(find.byIcon(Icons.download_rounded));
     expect(icon.color, Palettes.projectionBooth.textPrimary);
   });
 
-  testWidgets('download button shows the done icon in success when downloaded',
-      (tester) async {
-    await tester.pumpWidget(_host(DetailActionRow(
-      watched: false,
-      onToggleWatched: () {},
-      isFavorite: false,
-      onToggleFavorite: () {},
-      onDownload: () {},
-      trailerUrl: null,
-      isDownloaded: true,
-    )));
-
-    expect(find.byIcon(Icons.download_rounded), findsNothing);
-    final icon = tester.widget<Icon>(find.byIcon(Icons.download_done_rounded));
-    expect(icon.color, AppColors.success);
-  });
-
-  group('compact', () {
-    // Align keeps the row from being stretched by the Scaffold body's tight
-    // constraints, so its width is whatever it asks for.
-    Widget compactRow({required bool allActions}) => _host(Align(
-          alignment: Alignment.topLeft,
-          child: DetailActionRow(
+  testWidgets(
+    'download button shows the done icon in success when downloaded',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          DetailActionRow(
             watched: false,
             onToggleWatched: () {},
             isFavorite: false,
             onToggleFavorite: () {},
             onDownload: () {},
-            trailerUrl: allActions ? 'https://example.com/trailer' : null,
-            showDownload: allActions,
-            onShowMediaInfo: allActions ? () {} : null,
-            compact: true,
+            trailerUrl: null,
+            isDownloaded: true,
           ),
-        ));
+        ),
+      );
+
+      expect(find.byIcon(Icons.download_rounded), findsNothing);
+      final icon = tester.widget<Icon>(
+        find.byIcon(Icons.download_done_rounded),
+      );
+      expect(icon.color, AppColors.success);
+    },
+  );
+
+  group('compact', () {
+    // Align keeps the row from being stretched by the Scaffold body's tight
+    // constraints, so its width is whatever it asks for.
+    Widget compactRow({required bool allActions}) => _host(
+      Align(
+        alignment: Alignment.topLeft,
+        child: DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: allActions ? 'https://example.com/trailer' : null,
+          showDownload: allActions,
+          onShowMediaInfo: allActions ? () {} : null,
+          compact: true,
+        ),
+      ),
+    );
 
     testWidgets('five actions take five 64px slots', (tester) async {
       await tester.pumpWidget(compactRow(allActions: true));
@@ -167,7 +209,7 @@ void main() {
         'Favorite',
         'Download',
         'Trailer',
-        'Info'
+        'Info',
       ]) {
         final slot = find.ancestor(
           of: find.text(label),
@@ -183,8 +225,9 @@ void main() {
       expect(tester.getSize(find.byType(DetailActionRow)).width, 128);
     });
 
-    testWidgets('labels stay on one line and fade instead of clipping',
-        (tester) async {
+    testWidgets('labels stay on one line and fade instead of clipping', (
+      tester,
+    ) async {
       await tester.pumpWidget(compactRow(allActions: true));
 
       final label = tester.widget<Text>(find.text('Download'));
@@ -195,37 +238,42 @@ void main() {
   });
 
   testWidgets('non-compact row fills its parent width', (tester) async {
-    await tester.pumpWidget(_host(Align(
-      alignment: Alignment.topLeft,
-      child: SizedBox(
-        width: 500,
-        child: DetailActionRow(
-          watched: false,
-          onToggleWatched: () {},
-          isFavorite: false,
-          onToggleFavorite: () {},
-          onDownload: () {},
-          trailerUrl: null,
+    await tester.pumpWidget(
+      _host(
+        Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 500,
+            child: DetailActionRow(
+              watched: false,
+              onToggleWatched: () {},
+              isFavorite: false,
+              onToggleFavorite: () {},
+              onDownload: () {},
+              trailerUrl: null,
+            ),
+          ),
         ),
       ),
-    )));
+    );
 
     expect(tester.getSize(find.byType(DetailActionRow)).width, 500);
   });
 
   DetailActionRow glassRow({VoidCallback? onWatched}) => DetailActionRow(
-        watched: true,
-        onToggleWatched: onWatched ?? () {},
-        isFavorite: false,
-        onToggleFavorite: () {},
-        trailerUrl: null,
-      );
+    watched: true,
+    onToggleWatched: onWatched ?? () {},
+    isFavorite: false,
+    onToggleFavorite: () {},
+    trailerUrl: null,
+  );
 
   group('on Liquid Glass', () {
     testWidgets('every action circle is grouped control glass', (tester) async {
       await tester.pumpWidget(_host(glassRow(), liquid: true));
-      final surfaces =
-          tester.widgetList<GlassSurface>(find.byType(GlassSurface)).toList();
+      final surfaces = tester
+          .widgetList<GlassSurface>(find.byType(GlassSurface))
+          .toList();
       expect(surfaces, hasLength(2));
       expect(surfaces.every((s) => s.live && s.grouped), isTrue);
       expect(find.byType(BackdropGroup), findsOneWidget);
@@ -241,7 +289,8 @@ void main() {
     testWidgets('tapping a glass circle runs the action', (tester) async {
       var toggled = 0;
       await tester.pumpWidget(
-          _host(glassRow(onWatched: () => toggled++), liquid: true));
+        _host(glassRow(onWatched: () => toggled++), liquid: true),
+      );
       await tester.tap(find.byIcon(Icons.check_circle_rounded));
       expect(toggled, 1);
     });

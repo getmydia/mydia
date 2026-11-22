@@ -5,5 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'mac_video_output.dart';
 
-Future<void> applySdrTonemap(Player player,
-    {required VideoOutputPath path}) async {}
+Future<void> applySdrTonemap(
+  Player player, {
+  required VideoOutputPath path,
+}) async {}

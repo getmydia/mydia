@@ -14,26 +14,27 @@ import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/mydia_test_source.dart';
 
 SourceAccountRecord record(String id) => SourceAccountRecord(
-      account: ProviderAccount(
-        id: id,
-        kind: SourceKind.plex,
-        displayName: 'Server $id',
-        storageNamespace: 'source/$id',
-        activeProfileId: 'owner',
-      ),
-      profiles: [
-        SourceProfile(id: 'owner', accountId: id, name: 'Owner', isOwner: true),
-      ],
-      servers: [
-        SourceServer(
-            id: 's1',
-            accountId: id,
-            profileId: 'owner',
-            name: 'Server $id',
-            machineIdentifier: 's1'),
-      ],
-      addedAtMs: 1700000000000,
-    );
+  account: ProviderAccount(
+    id: id,
+    kind: SourceKind.plex,
+    displayName: 'Server $id',
+    storageNamespace: 'source/$id',
+    activeProfileId: 'owner',
+  ),
+  profiles: [
+    SourceProfile(id: 'owner', accountId: id, name: 'Owner', isOwner: true),
+  ],
+  servers: [
+    SourceServer(
+      id: 's1',
+      accountId: id,
+      profileId: 'owner',
+      name: 'Server $id',
+      machineIdentifier: 's1',
+    ),
+  ],
+  addedAtMs: 1700000000000,
+);
 
 SourceId idOf(String account) => SourceId('$account:owner:s1');
 
@@ -51,23 +52,29 @@ void main() {
     }
     home = FakeMergedSource(fakeServer('home', kind: SourceKind.mydia));
     fakes.clear();
-    container = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-      mediaSourceProvider.overrideWith((ref, id) => id == testMydiaSourceId
-          ? home
-          : fakes.putIfAbsent(id,
-              () => FakeMergedSource(fakeServer(id.value.split(':').first)))),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(
+          SourceSecrets(MockAuthStorage()),
+        ),
+        mediaSourceProvider.overrideWith(
+          (ref, id) => id == testMydiaSourceId
+              ? home
+              : fakes.putIfAbsent(
+                  id,
+                  () => FakeMergedSource(fakeServer(id.value.split(':').first)),
+                ),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     await container.read(sourceRecordsProvider.future);
   }
 
   List<MediaSource> included() => container.read(allServersSourcesProvider);
 
-  test(
-      'gating drops reauth, locked and switched off; the Mydia account stays first',
-      () async {
+  test('gating drops reauth, locked and switched off; the Mydia account stays first', () async {
     await start(['a', 'b', 'c', 'd']);
     final notifier = container.read(sourceRecordsProvider.notifier);
     expect(included().first, same(home));
@@ -83,20 +90,21 @@ void main() {
     expect(now.last, same(fakes[idOf('d')]));
     // The router counts allServersIncluded directly, so it must match.
     expect(
-        allServersIncluded(
-          container.read(sourcesProvider),
-          container.read(allServersChoicesProvider),
-          container.read(gatedSourceIdsProvider),
-        ),
-        hasLength(now.length));
+      allServersIncluded(
+        container.read(sourcesProvider),
+        container.read(allServersChoicesProvider),
+        container.read(gatedSourceIdsProvider),
+      ),
+      hasLength(now.length),
+    );
   });
 
   test('setActive does not rebuild the reader or refetch rows', () async {
     await start(['a', 'b']);
-    container.listen(allServersReaderProvider, (_, __) {});
+    container.listen(allServersReaderProvider, (_, _) {});
     final reader = container.read(allServersReaderProvider);
     var loads = 0;
-    container.listen(allServersContinueWatchingProvider, (_, __) => loads++);
+    container.listen(allServersContinueWatchingProvider, (_, _) => loads++);
     await container.read(allServersContinueWatchingProvider.future);
     final before = loads;
 
@@ -109,7 +117,7 @@ void main() {
 
   test('rewriting an unchanged record does not rebuild the reader', () async {
     await start(['a', 'b']);
-    container.listen(allServersReaderProvider, (_, __) {});
+    container.listen(allServersReaderProvider, (_, _) {});
     final reader = container.read(allServersReaderProvider);
     final notifier = container.read(sourceRecordsProvider.notifier);
 
@@ -122,7 +130,7 @@ void main() {
 
   test('switching a source off rebuilds the reader without it', () async {
     await start(['a', 'b']);
-    container.listen(allServersReaderProvider, (_, __) {});
+    container.listen(allServersReaderProvider, (_, _) {});
     final reader = container.read(allServersReaderProvider);
 
     await container
@@ -130,7 +138,9 @@ void main() {
         .setIncludedInAllServers(idOf('b'), false);
 
     expect(container.read(allServersReaderProvider), isNot(same(reader)));
-    expect(container.read(allServersNamesProvider).keys,
-        isNot(contains(idOf('b'))));
+    expect(
+      container.read(allServersNamesProvider).keys,
+      isNot(contains(idOf('b'))),
+    );
   });
 }

@@ -23,25 +23,23 @@ class ConnectionsRouteScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => WindowChromeInsets.removeBand(
-        child: Builder(
-          builder: (context) => Scaffold(
-            appBar: WindowTitleBar(
-              height: WindowTitleRow.heightOf(context),
-              leading: const BackButton(),
-              title: Text(
-                title,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              showCast: false,
-              // A flat fill in the app-bar colour, as the plain AppBar had.
-              decorate: (row) => ColoredBox(
-                color: Theme.of(context).appBarTheme.backgroundColor ??
-                    context.palette.background,
-                child: row,
-              ),
-            ),
-            body: body,
+    child: Builder(
+      builder: (context) => Scaffold(
+        appBar: WindowTitleBar(
+          height: WindowTitleRow.heightOf(context),
+          leading: const BackButton(),
+          title: Text(title, style: Theme.of(context).textTheme.titleLarge),
+          showCast: false,
+          // A flat fill in the app-bar colour, as the plain AppBar had.
+          decorate: (row) => ColoredBox(
+            color:
+                Theme.of(context).appBarTheme.backgroundColor ??
+                context.palette.background,
+            child: row,
           ),
         ),
-      );
+        body: body,
+      ),
+    ),
+  );
 }

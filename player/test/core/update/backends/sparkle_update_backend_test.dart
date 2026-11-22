@@ -15,16 +15,20 @@ void main() {
     expect(calls, 0);
   });
 
-  test('requestUpdate invokes the injected check exactly once and defers',
-      () async {
-    var calls = 0;
-    final backend = SparkleUpdateBackend(checkForUpdates: () async => calls++);
+  test(
+    'requestUpdate invokes the injected check exactly once and defers',
+    () async {
+      var calls = 0;
+      final backend = SparkleUpdateBackend(
+        checkForUpdates: () async => calls++,
+      );
 
-    final outcome = await backend.requestUpdate();
+      final outcome = await backend.requestUpdate();
 
-    expect(calls, 1);
-    expect(outcome, isA<UpdateDeferred>());
-  });
+      expect(calls, 1);
+      expect(outcome, isA<UpdateDeferred>());
+    },
+  );
 
   test('manualCheck delegates to Sparkle', () {
     final backend = SparkleUpdateBackend(checkForUpdates: () async {});

@@ -10,8 +10,11 @@ class _Resolver implements StreamResolver {
   var n = 0;
 
   @override
-  Future<ResolvedStream> resolve(PlaybackPlan plan,
-      {required String fileId, required Duration startAt}) async {
+  Future<ResolvedStream> resolve(
+    PlaybackPlan plan, {
+    required String fileId,
+    required Duration startAt,
+  }) async {
     n++;
     return ResolvedStream(
       url: 'https://fake.test/$n',
@@ -35,10 +38,12 @@ const _hls = HlsPlan(
 void main() {
   test('direct play seeks after opening; HLS is a full playlist', () async {
     final transport = SimplePlaybackTransport(resolver: _Resolver());
-    final direct = await transport.open(_direct,
-        fileId: 'f',
-        startAt: Duration.zero,
-        totalDuration: const Duration(minutes: 90));
+    final direct = await transport.open(
+      _direct,
+      fileId: 'f',
+      startAt: Duration.zero,
+      totalDuration: const Duration(minutes: 90),
+    );
     expect(direct.url, 'https://fake.test/1');
     expect(direct.headers, {'X-Plex-Token': 'tok'});
     expect(direct.seekOnOpen, isTrue);
@@ -103,9 +108,11 @@ class _GatedResolver implements StreamResolver {
   final ended = <String>[];
 
   @override
-  Future<ResolvedStream> resolve(PlaybackPlan plan,
-          {required String fileId, required Duration startAt}) =>
-      _result;
+  Future<ResolvedStream> resolve(
+    PlaybackPlan plan, {
+    required String fileId,
+    required Duration startAt,
+  }) => _result;
 
   @override
   Future<void> end(String sessionId) async => ended.add(sessionId);

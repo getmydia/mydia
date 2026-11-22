@@ -27,7 +27,8 @@ void main() {
     WindowGeometryController geometry,
     PlayerWindowSession session,
     ManualFrames frames,
-  }) build({
+  })
+  build({
     Rect bounds = const Rect.fromLTWH(100, 100, 1200, 900),
     void Function()? onDetached,
     FakeWindowController? windowOverride,
@@ -91,19 +92,21 @@ void main() {
       expect(t.geometry.isPaused, isTrue);
     });
 
-    test('detaching leaves the session, which restores after the frame',
-        () async {
-      final t = build(bounds: const Rect.fromLTWH(100, 100, 1200, 900));
-      addTearDown(t.geometry.dispose);
+    test(
+      'detaching leaves the session, which restores after the frame',
+      () async {
+        final t = build(bounds: const Rect.fromLTWH(100, 100, 1200, 900));
+        addTearDown(t.geometry.dispose);
 
-      await t.sizer.attach();
-      await t.window.setBounds(const Rect.fromLTWH(0, 0, 2000, 838));
-      await t.sizer.detach();
-      await t.frames.end();
+        await t.sizer.attach();
+        await t.window.setBounds(const Rect.fromLTWH(0, 0, 2000, 838));
+        await t.sizer.detach();
+        await t.frames.end();
 
-      expect(t.window.bounds, const Rect.fromLTWH(100, 100, 1200, 900));
-      expect(t.session.isLive, isFalse);
-    });
+        expect(t.window.bounds, const Rect.fromLTWH(100, 100, 1200, 900));
+        expect(t.session.isLive, isFalse);
+      },
+    );
 
     test('detaching without attaching does not throw', () async {
       final t = build();
@@ -126,39 +129,41 @@ void main() {
       expect(callCount, 1);
     });
 
-    test('the next episode inherits the window, then refits its aspect',
-        () async {
-      // Two sizers on one session, in the order go_router produces.
-      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
-      addTearDown(t.geometry.dispose);
-      final first = StreamController<VideoParams>();
-      final second = StreamController<VideoParams>();
-      addTearDown(first.close);
-      addTearDown(second.close);
+    test(
+      'the next episode inherits the window, then refits its aspect',
+      () async {
+        // Two sizers on one session, in the order go_router produces.
+        final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+        addTearDown(t.geometry.dispose);
+        final first = StreamController<VideoParams>();
+        final second = StreamController<VideoParams>();
+        addTearDown(first.close);
+        addTearDown(second.close);
 
-      await t.sizer.attach();
-      t.sizer.bindVideoParams(first.stream);
-      first.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
-      await settle();
-      // The user makes it bigger.
-      t.window.bounds = const Rect.fromLTWH(0, 0, 1600, 900);
+        await t.sizer.attach();
+        t.sizer.bindVideoParams(first.stream);
+        first.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+        await settle();
+        // The user makes it bigger.
+        t.window.bounds = const Rect.fromLTWH(0, 0, 1600, 900);
 
-      final next = NativePlayerWindowSizer(
-        window: t.window,
-        session: t.session,
-        readWorkAreas: oneDisplay,
-      );
-      await next.attach();
-      await t.sizer.detach();
-      await t.frames.end();
-      next.bindVideoParams(second.stream);
-      second.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
-      await settle();
+        final next = NativePlayerWindowSizer(
+          window: t.window,
+          session: t.session,
+          readWorkAreas: oneDisplay,
+        );
+        await next.attach();
+        await t.sizer.detach();
+        await t.frames.end();
+        next.bindVideoParams(second.stream);
+        second.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
+        await settle();
 
-      // Width kept at 1600; 1600 / 2.4 = 666.67.
-      expect(t.window.bounds.width, 1600);
-      expect(t.window.bounds.height, closeTo(666.67, 0.5));
-    });
+        // Width kept at 1600; 1600 / 2.4 = 666.67.
+        expect(t.window.bounds.width, 1600);
+        expect(t.window.bounds.height, closeTo(666.67, 0.5));
+      },
+    );
   });
 
   group('aspect snapping', () {
@@ -355,17 +360,23 @@ void main() {
 
   group('aspect lock', () {
     Future<
-        ({
-          NativePlayerWindowSizer sizer,
-          FakeWindowController window,
-          WindowGeometryController geometry,
-          PlayerWindowSession session,
-          ManualFrames frames,
-          StreamController<VideoParams> params,
-        })> playing({
+      ({
+        NativePlayerWindowSizer sizer,
+        FakeWindowController window,
+        WindowGeometryController geometry,
+        PlayerWindowSession session,
+        ManualFrames frames,
+        StreamController<VideoParams> params,
+      })
+    >
+    playing({
       Rect bounds = const Rect.fromLTWH(0, 0, 1200, 900),
-      VideoParams video =
-          const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080),
+      VideoParams video = const VideoParams(
+        w: 1920,
+        h: 1080,
+        dw: 1920,
+        dh: 1080,
+      ),
     }) async {
       final t = build(bounds: bounds);
       final params = StreamController<VideoParams>();
@@ -481,8 +492,7 @@ void main() {
       expect(t.window.bounds, const Rect.fromLTWH(0, 112.5, 1200, 675));
     });
 
-    test(
-        'a maximize that lands mid-fit leaves the window unlocked and '
+    test('a maximize that lands mid-fit leaves the window unlocked and '
         'untouched', () async {
       final window = _GatedBoundsWindowController(
         bounds: const Rect.fromLTWH(0, 0, 1200, 900),

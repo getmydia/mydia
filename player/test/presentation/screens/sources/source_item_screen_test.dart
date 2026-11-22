@@ -18,35 +18,45 @@ import '../detail/download_fakes.dart';
 import 'fake_media_source.dart';
 
 Future<List<String>> pumpItem(
-    WidgetTester tester, FakeMediaSource fake, ItemRef item) async {
+  WidgetTester tester,
+  FakeMediaSource fake,
+  ItemRef item,
+) async {
   final pushed = <String>[];
-  final router = GoRouter(routes: [
-    GoRoute(path: '/', builder: (_, __) => SourceItemScreen(item: item)),
-    for (final path in ['/s/:id/player/:item', '/s/:id/item/:kind/:item'])
+  final router = GoRouter(
+    routes: [
       GoRoute(
-        path: path,
-        builder: (_, s) {
-          pushed.add(s.uri.toString());
-          return const SizedBox();
-        },
+        path: '/',
+        builder: (_, _) => SourceItemScreen(item: item),
       ),
-  ]);
+      for (final path in ['/s/:id/player/:item', '/s/:id/item/:kind/:item'])
+        GoRoute(
+          path: path,
+          builder: (_, s) {
+            pushed.add(s.uri.toString());
+            return const SizedBox();
+          },
+        ),
+    ],
+  );
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
-      // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-      isItemDownloadedProvider(item).overrideWith((ref) => false),
-    ],
-    child: MaterialApp.router(
-      routerConfig: router,
-      builder: toastLayerBuilder,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
+        // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        isItemDownloadedProvider(item).overrideWith((ref) => false),
+      ],
+      child: MaterialApp.router(
+        routerConfig: router,
+        builder: toastLayerBuilder,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return pushed;
 }
@@ -79,71 +89,102 @@ class _FailingItemSource extends FakeMediaSource {
 void main() {
   testWidgets('no watched toggle without WatchedState', (tester) async {
     await pumpItem(
-        tester,
-        _NoWatchedSource(),
-        const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
+      tester,
+      _NoWatchedSource(),
+      const ItemRef(
+        sourceId: fakeSourceId,
+        kind: ItemKind.video,
+        externalId: 'm3',
+      ),
+    );
     expect(find.byKey(const Key('source-item-play')), findsOneWidget);
     expect(find.byKey(const Key('source-item-watched')), findsNothing);
   });
 
   testWidgets('a files folder offers no watched toggle', (tester) async {
     await pumpItem(
-        tester,
-        _FilesKindSource(),
-        const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.folder, externalId: 'm3'));
+      tester,
+      _FilesKindSource(),
+      const ItemRef(
+        sourceId: fakeSourceId,
+        kind: ItemKind.folder,
+        externalId: 'm3',
+      ),
+    );
     expect(find.text('Invented Film 3'), findsOneWidget);
     expect(find.byKey(const Key('source-item-watched')), findsNothing);
   });
 
   testWidgets('a files video keeps its watched toggle', (tester) async {
     await pumpItem(
-        tester,
-        _FilesKindSource(),
-        const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
+      tester,
+      _FilesKindSource(),
+      const ItemRef(
+        sourceId: fakeSourceId,
+        kind: ItemKind.video,
+        externalId: 'm3',
+      ),
+    );
     expect(find.byKey(const Key('source-item-watched')), findsOneWidget);
   });
 
   testWidgets('a failing setWatched shows a toast', (tester) async {
     await pumpItem(
-        tester,
-        _FailingWatchedSource(),
-        const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
+      tester,
+      _FailingWatchedSource(),
+      const ItemRef(
+        sourceId: fakeSourceId,
+        kind: ItemKind.video,
+        externalId: 'm3',
+      ),
+    );
     await tester.tap(find.byKey(const Key('source-item-watched')));
     await tester.pumpAndSettle();
     expect(
-        find.text('Could not reach this server. Check that it is running and '
-            'on the network.'),
-        findsOneWidget);
+      find.text(
+        'Could not reach this server. Check that it is running and '
+        'on the network.',
+      ),
+      findsOneWidget,
+    );
   });
 
-  const movie =
-      ItemRef(sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3');
+  const movie = ItemRef(
+    sourceId: fakeSourceId,
+    kind: ItemKind.video,
+    externalId: 'm3',
+  );
 
-  testWidgets('a video offers resume, focused, and opens the player',
-      (tester) async {
+  testWidgets('a video offers resume, focused, and opens the player', (
+    tester,
+  ) async {
     final pushed = await pumpItem(tester, FakeMediaSource(), movie);
     expect(find.text('Invented Film 3'), findsOneWidget);
     expect(find.text('Invented overview.'), findsOneWidget);
     final play = find.byKey(const Key('source-item-play'));
-    expect(find.descendant(of: play, matching: find.text('Resume')),
-        findsOneWidget);
     expect(
-        Focus.of(tester.element(
-                find.descendant(of: play, matching: find.text('Resume'))))
-            .hasFocus,
-        isTrue,
-        reason: 'on a TV the play button is where the remote starts');
+      find.descendant(of: play, matching: find.text('Resume')),
+      findsOneWidget,
+    );
+    expect(
+      Focus.of(
+        tester.element(
+          find.descendant(of: play, matching: find.text('Resume')),
+        ),
+      ).hasFocus,
+      isTrue,
+      reason: 'on a TV the play button is where the remote starts',
+    );
 
     await tester.tap(play);
     await tester.pumpAndSettle();
     final opened = Uri.parse(pushed.single);
     expect(opened.path, '/s/acc1:owner:aa11/player/m3');
-    expect(opened.queryParameters,
-        {'kind': 'movie', 'fileId': 'part-1', 'title': 'Invented Film 3'});
+    expect(opened.queryParameters, {
+      'kind': 'movie',
+      'fileId': 'part-1',
+      'title': 'Invented Film 3',
+    });
   });
 
   testWidgets('marks watched through the source', (tester) async {
@@ -154,38 +195,47 @@ void main() {
     expect(fake.watchedCalls.single, (movie, true));
   });
 
-  testWidgets('an item that fails to load keeps the cast button',
-      (tester) async {
+  testWidgets('an item that fails to load keeps the cast button', (
+    tester,
+  ) async {
     await pumpItem(tester, _FailingItemSource(), movie);
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
     expect(find.byType(BackButton), findsOneWidget);
   });
 
-  testWidgets('a loaded item keeps the cast button over its backdrop',
-      (tester) async {
+  testWidgets('a loaded item keeps the cast button over its backdrop', (
+    tester,
+  ) async {
     await pumpItem(tester, FakeMediaSource(), movie);
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
   });
 
-  testWidgets('a downloadable source shows the download button on a video',
-      (tester) async {
+  testWidgets('a downloadable source shows the download button on a video', (
+    tester,
+  ) async {
     await pumpItem(tester, DownloadableFakeSource(), movie);
     expect(find.byKey(const Key('source-item-download')), findsOneWidget);
   });
 
-  testWidgets('a non-downloadable source hides the download button',
-      (tester) async {
+  testWidgets('a non-downloadable source hides the download button', (
+    tester,
+  ) async {
     await pumpItem(tester, FakeMediaSource(), movie);
     expect(find.byKey(const Key('source-item-download')), findsNothing);
   });
 
-  testWidgets('a downloadable source hides the download button on a folder',
-      (tester) async {
+  testWidgets('a downloadable source hides the download button on a folder', (
+    tester,
+  ) async {
     await pumpItem(
-        tester,
-        DownloadableFakeSource(),
-        const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.folder, externalId: 'm3'));
+      tester,
+      DownloadableFakeSource(),
+      const ItemRef(
+        sourceId: fakeSourceId,
+        kind: ItemKind.folder,
+        externalId: 'm3',
+      ),
+    );
     expect(find.byKey(const Key('source-item-download')), findsNothing);
   });
 }

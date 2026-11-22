@@ -26,30 +26,32 @@ Future<void> _pumpInShell(
   tester.view.physicalSize = const Size(599, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      _settings,
-      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        key: AppShell.scaffoldKey,
-        drawer: const Drawer(child: Text('drawer-body')),
-        body: pushed
-            ? Builder(
-                builder: (context) => TextButton(
-                  onPressed: () => Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => screen)),
-                  child: const Text('open'),
-                ),
-              )
-            : screen,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        _settings,
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          key: AppShell.scaffoldKey,
+          drawer: const Drawer(child: Text('drawer-body')),
+          body: pushed
+              ? Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => Navigator.of(context)
+                        .push(MaterialPageRoute<void>(builder: (_) => screen)),
+                    child: const Text('open'),
+                  ),
+                )
+              : screen,
+        ),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   if (pushed) {
     await tester.tap(find.text('open'));
@@ -58,18 +60,22 @@ Future<void> _pumpInShell(
 }
 
 // A library reads its remembered sort first; real storage never answers here.
-final _settings = coreSettingsServiceProvider
-    .overrideWithValue(SettingsService(storage: MockAuthStorage()));
+final _settings = coreSettingsServiceProvider.overrideWithValue(
+  SettingsService(storage: MockAuthStorage()),
+);
 
 // The tooltip is the button's accessible name.
 final _menu = find.byTooltip('Menu');
 final _back = find.byTooltip('Back');
 
 void main() {
-  testWidgets('a library opened from the drawer offers the drawer',
-      (tester) async {
+  testWidgets('a library opened from the drawer offers the drawer', (
+    tester,
+  ) async {
     await _pumpInShell(
-        tester, const SourceLibraryScreen(library: FakeMediaSource.movies));
+      tester,
+      const SourceLibraryScreen(library: FakeMediaSource.movies),
+    );
     expect(_menu, findsOneWidget);
 
     await tester.tap(_menu);
@@ -77,10 +83,13 @@ void main() {
     expect(find.text('drawer-body'), findsOneWidget);
   });
 
-  testWidgets('search opened from the drawer offers the drawer',
-      (tester) async {
+  testWidgets('search opened from the drawer offers the drawer', (
+    tester,
+  ) async {
     await _pumpInShell(
-        tester, const SourceSearchScreen(sourceId: fakeSourceId));
+      tester,
+      const SourceSearchScreen(sourceId: fakeSourceId),
+    );
     expect(_menu, findsOneWidget);
   });
 
@@ -94,31 +103,35 @@ void main() {
     expect(_back, findsOneWidget);
   });
 
-  testWidgets('where the shell opens a menu page, the button opens that',
-      (tester) async {
+  testWidgets('where the shell opens a menu page, the button opens that', (
+    tester,
+  ) async {
     var opened = 0;
     tester.view.physicalSize = const Size(599, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        _settings,
-        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        // The iOS phone shell: its Scaffold has no drawer.
-        home: ShellMenuScope(
-          open: () => opened++,
-          child: Scaffold(
-            key: AppShell.scaffoldKey,
-            body: const SourceLibraryScreen(library: FakeMediaSource.movies),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          _settings,
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          // The iOS phone shell: its Scaffold has no drawer.
+          home: ShellMenuScope(
+            open: () => opened++,
+            child: Scaffold(
+              key: AppShell.scaffoldKey,
+              body: const SourceLibraryScreen(library: FakeMediaSource.movies),
+            ),
           ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     expect(_menu, findsOneWidget);
 
@@ -132,18 +145,21 @@ void main() {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        _settings,
-        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourceLibraryScreen(library: FakeMediaSource.movies),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          _settings,
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourceLibraryScreen(library: FakeMediaSource.movies),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     expect(_menu, findsNothing);
   });

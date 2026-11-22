@@ -9,45 +9,44 @@ import 'download_test_harness.dart';
 import '../../test_utils/mydia_test_source.dart';
 
 DownloadedMedia _media(String id, String? sourceId) => DownloadedMedia(
-      id: 'row-$id-${sourceId ?? 'none'}',
-      mediaId: id,
-      title: 'The Lantern Accord',
-      quality: 'original',
-      filePath: '/nowhere/$id',
-      fileSize: 1,
-      downloadedAt: DateTime(2026, 1, 1),
-      sourceId: sourceId,
-    );
+  id: 'row-$id-${sourceId ?? 'none'}',
+  mediaId: id,
+  title: 'The Lantern Accord',
+  quality: 'original',
+  filePath: '/nowhere/$id',
+  fileSize: 1,
+  downloadedAt: DateTime(2026, 1, 1),
+  sourceId: sourceId,
+);
 
 DownloadedMedia _episode(String id, String? sourceId) => DownloadedMedia(
-      id: 'row-$id-${sourceId ?? 'none'}',
-      mediaId: id,
-      title: 'Quill Harbor',
-      quality: 'original',
-      filePath: '/nowhere/$id-${sourceId ?? 'none'}',
-      fileSize: 1,
-      downloadedAt: DateTime(2026, 1, 1),
-      sourceId: sourceId,
-      showId: 'show1',
-      seasonNumber: 1,
-    );
+  id: 'row-$id-${sourceId ?? 'none'}',
+  mediaId: id,
+  title: 'Quill Harbor',
+  quality: 'original',
+  filePath: '/nowhere/$id-${sourceId ?? 'none'}',
+  fileSize: 1,
+  downloadedAt: DateTime(2026, 1, 1),
+  sourceId: sourceId,
+  showId: 'show1',
+  seasonNumber: 1,
+);
 
 DownloadTask _task(String id, String? sourceId) => DownloadTask(
-      id: 'task-$id-${sourceId ?? 'none'}',
-      mediaId: id,
-      title: 'Quill Harbor',
-      quality: 'original',
-      status: 'completed',
-      createdAt: DateTime(2026, 1, 1),
-      sourceId: sourceId,
-      showId: 'show1',
-      seasonNumber: 1,
-    );
+  id: 'task-$id-${sourceId ?? 'none'}',
+  mediaId: id,
+  title: 'Quill Harbor',
+  quality: 'original',
+  status: 'completed',
+  createdAt: DateTime(2026, 1, 1),
+  sourceId: sourceId,
+  showId: 'show1',
+  seasonNumber: 1,
+);
 
 void main() {
   for (final season in [false, true]) {
-    test(
-        'deleting a ${season ? 'season' : 'series'} leaves another source\'s '
+    test('deleting a ${season ? 'season' : 'series'} leaves another source\'s '
         'media and tasks with the same ids', () async {
       final h = await makeHarness(body: Uint8List(0));
       addTearDown(h.dispose);

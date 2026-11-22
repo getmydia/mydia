@@ -18,12 +18,16 @@ class _SegmentSource extends FakeMediaSource implements SkipSegments {
   final requests = <(ItemRef, String?)>[];
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.skipSegments};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.skipSegments,
+  };
 
   @override
-  Future<List<MediaSegment>> skipSegments(ItemRef ref,
-      {String? versionId}) async {
+  Future<List<MediaSegment>> skipSegments(
+    ItemRef ref, {
+    String? versionId,
+  }) async {
     requests.add((ref, versionId));
     final e = error;
     if (e != null) throw e;
@@ -35,7 +39,7 @@ class _SegmentSource extends FakeMediaSource implements SkipSegments {
 
 class _Session extends SourcePlaybackSession {
   _Session(FakeMediaSource source)
-      : super(source: source, item: fakeEpisode(1).ref, fileId: 'part-1');
+    : super(source: source, item: fakeEpisode(1).ref, fileId: 'part-1');
 
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) =>
@@ -52,8 +56,7 @@ class _Session extends SourcePlaybackSession {
     ItemDetail detail,
     MediaVersion version, {
     String? burnSubtitleStreamId,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 }
 
 void main() {

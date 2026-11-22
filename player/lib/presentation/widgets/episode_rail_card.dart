@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
@@ -79,10 +80,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
         child: MouseRegion(
           onEnter: (_) => setState(() => _isHovered = true),
           onExit: (_) => setState(() => _isHovered = false),
-          child: GestureDetector(
-            onTap: widget.onTap,
-            child: content,
-          ),
+          child: GestureDetector(onTap: widget.onTap, child: content),
         ),
       ),
     );
@@ -107,9 +105,8 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
         const SizedBox(height: 2),
         Text(
           _episode.title,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(fontWeight: FontWeight.w600),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -130,8 +127,8 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
     final watchStatus = !_episode.hasFile
         ? null
         : _episode.progress == null
-            ? const WatchStatus(watched: false)
-            : WatchStatus.fromProgress(_episode.progress!);
+        ? const WatchStatus(watched: false)
+        : WatchStatus.fromProgress(_episode.progress!);
 
     return Container(
       key: const ValueKey('episode-card-border'),
@@ -204,13 +201,13 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
                   right: 0,
                   child: Container(
                     height: 4,
-                    decoration: BoxDecoration(
-                      color: palette.surfaceVariant,
-                    ),
+                    decoration: BoxDecoration(color: palette.surfaceVariant),
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
-                      widthFactor:
-                          (_episode.progress!.percentage / 100).clamp(0.0, 1.0),
+                      widthFactor: (_episode.progress!.percentage / 100).clamp(
+                        0.0,
+                        1.0,
+                      ),
                       child: Container(
                         decoration: BoxDecoration(
                           color: palette.primary,
@@ -258,11 +255,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
 
               // Action overlay (top-right): download + watched-status menu, on a
               // dark scrim pill for contrast against the thumbnail.
-              Positioned(
-                top: 4,
-                right: 4,
-                child: _buildActions(context),
-              ),
+              Positioned(top: 4, right: 4, child: _buildActions(context)),
             ],
           ),
         ),
@@ -285,10 +278,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
         color: Colors.black.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: actions,
-      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: actions),
     );
   }
 
@@ -296,11 +286,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
     final watched = _episode.progress?.watched ?? false;
 
     return PopupMenuButton<String>(
-      icon: const Icon(
-        Icons.more_vert_rounded,
-        color: Colors.white,
-        size: 20,
-      ),
+      icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 20),
       tooltip: context.l10n.episodeActionsTooltip,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
@@ -309,9 +295,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
         visualDensity: VisualDensity.compact,
       ),
       color: context.palette.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: _handleWatchedAction,
       itemBuilder: (context) => [
         PopupMenuItem(
@@ -325,9 +309,11 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
                 size: 18,
               ),
               const SizedBox(width: 12),
-              Text(watched
-                  ? context.l10n.commonMarkUnwatched
-                  : context.l10n.commonMarkWatched),
+              Text(
+                watched
+                    ? context.l10n.commonMarkUnwatched
+                    : context.l10n.commonMarkWatched,
+              ),
             ],
           ),
         ),
@@ -372,11 +358,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
     return Container(
       color: palette.surfaceVariant,
       child: Center(
-        child: Icon(
-          Icons.tv_rounded,
-          size: 32,
-          color: palette.textSecondary,
-        ),
+        child: Icon(Icons.tv_rounded, size: 32, color: palette.textSecondary),
       ),
     );
   }

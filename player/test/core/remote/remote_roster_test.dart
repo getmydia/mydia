@@ -7,8 +7,8 @@ import '../sources/mydia/fake_mydia_client.dart';
 import '../sources/mydia/fake_mydia_transport.dart';
 
 Map<String, dynamic> devicesResponse(List<Map<String, dynamic>> devices) => {
-      'devices': devices,
-    };
+  'devices': devices,
+};
 
 Map<String, dynamic> device(
   String id,
@@ -16,25 +16,20 @@ Map<String, dynamic> device(
   String? nodeId, {
   bool isRevoked = false,
   bool? online,
-}) =>
-    {
-      '__typename': 'RemoteDevice',
-      'id': id,
-      'deviceName': name,
-      'platform': 'linux',
-      'nodeId': nodeId,
-      'isRevoked': isRevoked,
-      if (online != null) 'online': online,
-    };
+}) => {
+  '__typename': 'RemoteDevice',
+  'id': id,
+  'deviceName': name,
+  'platform': 'linux',
+  'nodeId': nodeId,
+  'isRevoked': isRevoked,
+  'online': ?online,
+};
 
 RemoteRoster rosterWith(
   ScriptedMydiaTransport server,
   DateTime Function() now,
-) =>
-    RemoteRoster(
-      client: fakeMydiaClient(server),
-      now: now,
-    );
+) => RemoteRoster(client: fakeMydiaClient(server), now: now);
 
 bool asksForOnline(ScriptedRequest request) =>
     request.operation == 'OnlineDevices';
@@ -63,7 +58,7 @@ void main() {
     test('allows a peer that is in the roster', () async {
       final roster = rosterWith(
         ScriptedMydiaTransport.responses([
-          devicesResponse([device('d1', 'Living Room', 'node-a')])
+          devicesResponse([device('d1', 'Living Room', 'node-a')]),
         ]),
         () => fixedClock,
       );
@@ -74,7 +69,7 @@ void main() {
     test('refuses a peer that is not in the roster', () async {
       final roster = rosterWith(
         ScriptedMydiaTransport.responses([
-          devicesResponse([device('d1', 'Living Room', 'node-a')])
+          devicesResponse([device('d1', 'Living Room', 'node-a')]),
         ]),
         () => fixedClock,
       );
@@ -94,18 +89,22 @@ void main() {
       var clock = fixedClock;
       final roster = rosterWith(server, () => clock);
 
-      expect(await roster.allows('node-b'), isFalse,
-          reason: 'the first fetch predates the pairing');
+      expect(
+        await roster.allows('node-b'),
+        isFalse,
+        reason: 'the first fetch predates the pairing',
+      );
 
       clock = clock.add(const Duration(minutes: 2));
 
-      expect(await roster.allows('node-b'), isTrue,
-          reason: 'a refetch picks it up');
+      expect(
+        await roster.allows('node-b'),
+        isTrue,
+        reason: 'a refetch picks it up',
+      );
     });
 
-    test(
-        'throttles the unknown-peer refetch so a stranger cannot hammer the server',
-        () async {
+    test('throttles the unknown-peer refetch so a stranger cannot hammer the server', () async {
       final server = ScriptedMydiaTransport.responses([
         devicesResponse([device('d1', 'Living Room', 'node-a')]),
       ]);
@@ -158,8 +157,13 @@ void main() {
             device('d1', 'Hall Screen', 'a' * 64, online: true),
             device('d2', 'Attic Tablet', 'b' * 64, online: false),
             device('d3', 'Spare Phone', null, online: true),
-            device('d4', 'Lent Laptop', 'c' * 64,
-                isRevoked: true, online: true),
+            device(
+              'd4',
+              'Lent Laptop',
+              'c' * 64,
+              isRevoked: true,
+              online: true,
+            ),
           ]),
         ]),
         () => fixedClock,
@@ -170,64 +174,78 @@ void main() {
       expect(entries.map((e) => e.id), ['d1']);
     });
 
-    test('asks the server on every call instead of reusing a cached list',
-        () async {
-      // A screen switched on a moment ago must be probed on the very next
-      // scan, not after the roster's 15 minute TTL.
-      final server = ScriptedMydiaTransport.responses([
-        devicesResponse([
-          device('d1', 'Hall Screen', 'a' * 64, online: false),
-        ]),
-        devicesResponse([
-          device('d1', 'Hall Screen', 'a' * 64, online: true),
-        ]),
-      ]);
-      final roster = rosterWith(server, () => fixedClock);
+    test(
+      'asks the server on every call instead of reusing a cached list',
+      () async {
+        // A screen switched on a moment ago must be probed on the very next
+        // scan, not after the roster's 15 minute TTL.
+        final server = ScriptedMydiaTransport.responses([
+          devicesResponse([
+            device('d1', 'Hall Screen', 'a' * 64, online: false),
+          ]),
+          devicesResponse([
+            device('d1', 'Hall Screen', 'a' * 64, online: true),
+          ]),
+        ]);
+        final roster = rosterWith(server, () => fixedClock);
 
-      expect(await roster.onlineEntries(), isEmpty);
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
-      expect(server.requests.length, 2);
-    });
+        expect(await roster.onlineEntries(), isEmpty);
+        expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+        expect(server.requests.length, 2);
+      },
+    );
 
-    test('falls back to every device when the server predates online',
-        () async {
-      final server = ScriptedMydiaTransport((request, _) => asksForOnline(
-              request)
-          ? graphqlError('Cannot query field "online" on type "RemoteDevice".')
-          : devicesResponse([
-              device('d1', 'Hall Screen', 'a' * 64),
-              device('d2', 'Attic Tablet', 'b' * 64),
-            ]));
-      final roster = rosterWith(server, () => fixedClock);
+    test(
+      'falls back to every device when the server predates online',
+      () async {
+        final server = ScriptedMydiaTransport(
+          (request, _) => asksForOnline(request)
+              ? graphqlError(
+                  'Cannot query field "online" on type "RemoteDevice".',
+                )
+              : devicesResponse([
+                  device('d1', 'Hall Screen', 'a' * 64),
+                  device('d2', 'Attic Tablet', 'b' * 64),
+                ]),
+        );
+        final roster = rosterWith(server, () => fixedClock);
 
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
+        expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
+        expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
 
-      expect(server.requests.where(asksForOnline).length, 1,
-          reason: 'an old server is detected once, not re-asked every scan');
-    });
+        expect(
+          server.requests.where(asksForOnline).length,
+          1,
+          reason: 'an old server is detected once, not re-asked every scan',
+        );
+      },
+    );
 
-    test('stops asking for OnlineDevices once the server refused the field',
-        () async {
-      final server = FakeMydiaTransport();
-      server.handlers['OnlineDevices'] = (_) =>
-          throw const SourceException.server(
-              'Cannot query field "online" on type "RemoteDevice".');
-      server.handlers['Devices'] = (_) => devicesResponse([
-            device('d1', 'Hall Screen', 'a' * 64),
-          ]);
-      final roster = RemoteRoster(
-        client: fakeMydiaClient(server),
-        now: () => fixedClock,
-      );
+    test(
+      'stops asking for OnlineDevices once the server refused the field',
+      () async {
+        final server = FakeMydiaTransport();
+        server.handlers['OnlineDevices'] = (_) =>
+            throw const SourceException.server(
+              'Cannot query field "online" on type "RemoteDevice".',
+            );
+        server.handlers['Devices'] = (_) =>
+            devicesResponse([device('d1', 'Hall Screen', 'a' * 64)]);
+        final roster = RemoteRoster(
+          client: fakeMydiaClient(server),
+          now: () => fixedClock,
+        );
 
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+        expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+        expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+        expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
 
-      expect(server.calls.where((c) => c.operation == 'OnlineDevices'),
-          hasLength(1));
-    });
+        expect(
+          server.calls.where((c) => c.operation == 'OnlineDevices'),
+          hasLength(1),
+        );
+      },
+    );
 
     test('an unreachable server is not mistaken for an old one', () async {
       final server = FakeMydiaTransport();
@@ -240,42 +258,49 @@ void main() {
       expect(await roster.onlineEntries(), isEmpty);
       expect(await roster.onlineEntries(), isEmpty);
 
-      expect(server.calls.where((c) => c.operation == 'OnlineDevices'),
-          hasLength(2),
-          reason: 'a transient failure keeps asking for OnlineDevices');
+      expect(
+        server.calls.where((c) => c.operation == 'OnlineDevices'),
+        hasLength(2),
+        reason: 'a transient failure keeps asking for OnlineDevices',
+      );
     });
 
-    test('recognises the unknown-field error when it arrives over p2p',
-        () async {
-      // The p2p transport can wrap the server's message in the text of an
-      // Exception, so the match is on the message, not the whole string.
-      final server =
-          ScriptedMydiaTransport((request, _) => asksForOnline(request)
-              ? graphqlError('Exception: Cannot query field "online" '
-                  'on type "RemoteDevice".')
-              : devicesResponse([device('d1', 'Hall Screen', 'a' * 64)]));
-      final roster = rosterWith(server, () => fixedClock);
+    test(
+      'recognises the unknown-field error when it arrives over p2p',
+      () async {
+        // The p2p transport can wrap the server's message in the text of an
+        // Exception, so the match is on the message, not the whole string.
+        final server = ScriptedMydiaTransport(
+          (request, _) => asksForOnline(request)
+              ? graphqlError(
+                  'Exception: Cannot query field "online" '
+                  'on type "RemoteDevice".',
+                )
+              : devicesResponse([device('d1', 'Hall Screen', 'a' * 64)]),
+        );
+        final roster = rosterWith(server, () => fixedClock);
 
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
-    });
+        expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+      },
+    );
 
     test('answers the last list it had when a fetch fails', () async {
       final server = ScriptedMydiaTransport.responses([
-        devicesResponse([
-          device('d1', 'Hall Screen', 'a' * 64, online: true),
-        ]),
+        devicesResponse([device('d1', 'Hall Screen', 'a' * 64, online: true)]),
         Exception('connection reset'),
-        devicesResponse([
-          device('d1', 'Hall Screen', 'a' * 64, online: false),
-        ]),
+        devicesResponse([device('d1', 'Hall Screen', 'a' * 64, online: false)]),
       ]);
       final roster = rosterWith(server, () => fixedClock);
 
       expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
-      expect((await roster.onlineEntries()).map((e) => e.id), ['d1'],
-          reason: 'a failed fetch keeps the previous answer');
-      expect(await roster.onlineEntries(), isEmpty,
-          reason: 'a transient failure must not switch to the fallback');
+      expect((await roster.onlineEntries()).map((e) => e.id), [
+        'd1',
+      ], reason: 'a failed fetch keeps the previous answer');
+      expect(
+        await roster.onlineEntries(),
+        isEmpty,
+        reason: 'a transient failure must not switch to the fallback',
+      );
     });
 
     test('answers an empty list when the very first fetch fails', () async {
@@ -291,10 +316,16 @@ void main() {
       // entries() also backs allows(). An offline device may still drive this
       // one the moment it wakes up.
       final roster = rosterWith(
-        ScriptedMydiaTransport((request, _) => devicesResponse([
-              device('d1', 'Hall Screen', 'a' * 64,
-                  online: asksForOnline(request) ? false : null),
-            ])),
+        ScriptedMydiaTransport(
+          (request, _) => devicesResponse([
+            device(
+              'd1',
+              'Hall Screen',
+              'a' * 64,
+              online: asksForOnline(request) ? false : null,
+            ),
+          ]),
+        ),
         () => fixedClock,
       );
 

@@ -15,56 +15,63 @@ import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(
-        body: Stack(
-          children: [
-            const Positioned.fill(child: ColoredBox(color: Colors.white)),
-            child,
-          ],
-        ),
-      ),
-    );
+  home: Scaffold(
+    body: Stack(
+      children: [
+        const Positioned.fill(child: ColoredBox(color: Colors.white)),
+        child,
+      ],
+    ),
+  ),
+);
 
 BackdropFilter _backdropOf(WidgetTester tester) =>
     tester.widget<BackdropFilter>(find.byType(BackdropFilter));
 
-BoxDecoration _fillOf(WidgetTester tester) => tester
-    .widget<DecoratedBox>(
-      find.descendant(
-        of: find.byType(BackdropFilter),
-        matching: find.byType(DecoratedBox),
-      ),
-    )
-    .decoration as BoxDecoration;
+BoxDecoration _fillOf(WidgetTester tester) =>
+    tester
+            .widget<DecoratedBox>(
+              find.descendant(
+                of: find.byType(BackdropFilter),
+                matching: find.byType(DecoratedBox),
+              ),
+            )
+            .decoration
+        as BoxDecoration;
 
 void main() {
   group('GlassSurface.appBar token glass (R4/R10)', () {
-    testWidgets('default bar: chrome sigma + fill clears the legibility floor',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(const GlassSurface.appBar(child: SizedBox(height: 56))),
-      );
+    testWidgets(
+      'default bar: chrome sigma + fill clears the legibility floor',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(const GlassSurface.appBar(child: SizedBox(height: 56))),
+        );
 
-      expect(
-        _backdropOf(tester).filter,
-        ImageFilter.blur(
-          sigmaX: DepthTokens.blurChrome,
-          sigmaY: DepthTokens.blurChrome,
-        ),
-      );
+        expect(
+          _backdropOf(tester).filter,
+          ImageFilter.blur(
+            sigmaX: DepthTokens.blurChrome,
+            sigmaY: DepthTokens.blurChrome,
+          ),
+        );
 
-      final fill = _fillOf(tester).color!;
-      expect(fill.a, greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor));
-      // Translucent so the ambient backdrop tints it (R5).
-      expect(fill.a, lessThan(1.0));
-      expect(
+        final fill = _fillOf(tester).color!;
+        expect(fill.a, greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor));
+        // Translucent so the ambient backdrop tints it (R5).
+        expect(fill.a, lessThan(1.0));
+        expect(
           fill,
-          Palettes.projectionBooth.background
-              .withValues(alpha: DepthTokens.chromeFillOpacity));
-    });
+          Palettes.projectionBooth.background.withValues(
+            alpha: DepthTokens.chromeFillOpacity,
+          ),
+        );
+      },
+    );
 
-    testWidgets('library/downloads bar (opacity 0.85) clears the floor',
-        (tester) async {
+    testWidgets('library/downloads bar (opacity 0.85) clears the floor', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const GlassSurface.appBar(opacity: 0.85, child: SizedBox())),
       );

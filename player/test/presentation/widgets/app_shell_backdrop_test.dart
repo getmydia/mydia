@@ -61,8 +61,9 @@ void main() {
     test('set updates the source; equal source is a no-op', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final notifier =
-          container.read(ambientBackdropControllerProvider.notifier);
+      final notifier = container.read(
+        ambientBackdropControllerProvider.notifier,
+      );
 
       const a = BackdropSource(imageUrl: 'u', id: 'a');
       notifier.set(a);
@@ -76,8 +77,9 @@ void main() {
     test('clear returns to the static fallback', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final notifier =
-          container.read(ambientBackdropControllerProvider.notifier);
+      final notifier = container.read(
+        ambientBackdropControllerProvider.notifier,
+      );
 
       notifier.set(const BackdropSource(imageUrl: 'u', id: 'a'));
       notifier.clear();
@@ -89,8 +91,9 @@ void main() {
   });
 
   group('shell backdrop integration', () {
-    testWidgets('a screen publishing artwork feeds the backdrop with the URL',
-        (tester) async {
+    testWidgets('a screen publishing artwork feeds the backdrop with the URL', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
           _shellHost(
@@ -111,8 +114,9 @@ void main() {
       });
     });
 
-    testWidgets('a screen publishing none renders the static fallback',
-        (tester) async {
+    testWidgets('a screen publishing none renders the static fallback', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _shellHost(const _PublishingScreen(BackdropSource.none)),
       );
@@ -129,8 +133,9 @@ void main() {
   });
 
   group('hover override feeds the shell backdrop (U8/R9)', () {
-    testWidgets('a hover override shows over a none default; clearing reverts',
-        (tester) async {
+    testWidgets('a hover override shows over a none default; clearing reverts', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         final container = ProviderContainer();
         addTearDown(container.dispose);
@@ -164,8 +169,9 @@ void main() {
         // A hovered poster publishes its artwork as an override (the WidgetRef
         // path is covered in ambient_backdrop_tint_test; here we drive the
         // notifier directly to assert it flows to the shell backdrop).
-        final notifier =
-            container.read(ambientBackdropControllerProvider.notifier);
+        final notifier = container.read(
+          ambientBackdropControllerProvider.notifier,
+        );
         notifier.setHover(
           const BackdropSource(imageUrl: 'https://example.com/h.jpg', id: 'h'),
         );

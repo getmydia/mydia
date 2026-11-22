@@ -35,27 +35,29 @@ void main() {
     expect(await store().check('0000'), isA<PinRejected>());
   });
 
-  test('blocks after five failures, doubling, and survives a restart',
-      () async {
-    await store().setPin('4821');
-    for (var i = 0; i < 4; i++) {
-      expect(await store().check('0000'), isA<PinRejected>());
-    }
-    final fifth = await store().check('0000');
-    expect(fifth, isA<PinBlocked>());
-    expect((fifth as PinBlocked).until, now.add(const Duration(seconds: 30)));
+  test(
+    'blocks after five failures, doubling, and survives a restart',
+    () async {
+      await store().setPin('4821');
+      for (var i = 0; i < 4; i++) {
+        expect(await store().check('0000'), isA<PinRejected>());
+      }
+      final fifth = await store().check('0000');
+      expect(fifth, isA<PinBlocked>());
+      expect((fifth as PinBlocked).until, now.add(const Duration(seconds: 30)));
 
-    // A fresh PinStore reads the persisted block, even for the right PIN.
-    expect(await store().check('4821'), isA<PinBlocked>());
+      // A fresh PinStore reads the persisted block, even for the right PIN.
+      expect(await store().check('4821'), isA<PinBlocked>());
 
-    now = now.add(const Duration(seconds: 31));
-    final sixth = await store().check('0000');
-    expect((sixth as PinBlocked).until, now.add(const Duration(seconds: 60)));
+      now = now.add(const Duration(seconds: 31));
+      final sixth = await store().check('0000');
+      expect((sixth as PinBlocked).until, now.add(const Duration(seconds: 60)));
 
-    now = now.add(const Duration(seconds: 61));
-    expect(await store().check('4821'), isA<PinAccepted>());
-    expect(await storage.read('app_lock/pin_failures'), isNull);
-  });
+      now = now.add(const Duration(seconds: 61));
+      expect(await store().check('4821'), isA<PinAccepted>());
+      expect(await storage.read('app_lock/pin_failures'), isNull);
+    },
+  );
 
   test('clear deletes the PIN and the backoff', () async {
     await store().setPin('4821');

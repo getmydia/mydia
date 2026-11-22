@@ -31,8 +31,7 @@ Future<void> showSidebarEditSheet({
   final desktop = switch (defaultTargetPlatform) {
     TargetPlatform.macOS ||
     TargetPlatform.linux ||
-    TargetPlatform.windows =>
-      true,
+    TargetPlatform.windows => true,
     _ => false,
   };
   if (desktop) {

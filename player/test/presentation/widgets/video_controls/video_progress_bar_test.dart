@@ -4,15 +4,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/video_controls/video_progress_bar.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(
-        body: Center(child: SizedBox(width: 400, child: child)),
-      ),
-    );
+  home: Scaffold(
+    body: Center(child: SizedBox(width: 400, child: child)),
+  ),
+);
 
 void main() {
   group('ProgressBarSurface', () {
-    testWidgets('renders a thumb at rest — the defect this fixes',
-        (tester) async {
+    testWidgets('renders a thumb at rest — the defect this fixes', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
       );
@@ -26,18 +27,17 @@ void main() {
       await tester.pumpWidget(
         // Seekable: the hover affordance only exists when a seek can
         // actually be committed.
-        _host(ProgressBarSurface(
-          progress: 0.4,
-          buffered: 0.6,
-          onSeekTo: (_) {},
-        )),
+        _host(
+          ProgressBarSurface(progress: 0.4, buffered: 0.6, onSeekTo: (_) {}),
+        ),
       );
 
       // Resting state, asserted before any pointer interaction: half the
       // original complaint was the 3px hairline track, so its height at
       // rest gets its own assertion, not just the thumb's.
-      final restingTrack =
-          tester.getSize(find.byKey(ProgressBarSurface.trackKey));
+      final restingTrack = tester.getSize(
+        find.byKey(ProgressBarSurface.trackKey),
+      );
       expect(restingTrack.height, 6.0);
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -49,13 +49,15 @@ void main() {
 
       final size = tester.getSize(find.byKey(ProgressBarSurface.thumbKey));
       expect(size.width, VideoProgressBar.activeThumbSize);
-      final activeTrack =
-          tester.getSize(find.byKey(ProgressBarSurface.trackKey));
+      final activeTrack = tester.getSize(
+        find.byKey(ProgressBarSurface.trackKey),
+      );
       expect(activeTrack.height, 8.0);
     });
 
-    testWidgets('renders played, buffered, and base track layers',
-        (tester) async {
+    testWidgets('renders played, buffered, and base track layers', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
       );
@@ -74,18 +76,19 @@ void main() {
       expect(played.widthFactor, 0.4);
     });
 
-    testWidgets(
-        'left-anchors the played and buffered fills to the track\'s '
-        'left edge — regression guard for the centered-fill defect',
-        (tester) async {
+    testWidgets('left-anchors the played and buffered fills to the track\'s '
+        'left edge — regression guard for the centered-fill defect', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
       );
 
       final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
       final played = tester.getRect(find.byKey(ProgressBarSurface.playedKey));
-      final buffered =
-          tester.getRect(find.byKey(ProgressBarSurface.bufferedKey));
+      final buffered = tester.getRect(
+        find.byKey(ProgressBarSurface.bufferedKey),
+      );
 
       expect(played.left, track.left);
       expect(played.width, closeTo(track.width * 0.4, 0.5));
@@ -115,19 +118,22 @@ void main() {
 
     testWidgets('hit area meets the 44px touch minimum', (tester) async {
       await tester.pumpWidget(
-        _host(const ProgressBarSurface(
-          progress: 0.4,
-          buffered: 0.6,
-          touchTarget: true,
-        )),
+        _host(
+          const ProgressBarSurface(
+            progress: 0.4,
+            buffered: 0.6,
+            touchTarget: true,
+          ),
+        ),
       );
 
       final size = tester.getSize(find.byType(ProgressBarSurface));
       expect(size.height, greaterThanOrEqualTo(44));
     });
 
-    testWidgets('hit area defaults to the 32px pointer minimum',
-        (tester) async {
+    testWidgets('hit area defaults to the 32px pointer minimum', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
       );
@@ -136,8 +142,7 @@ void main() {
       expect(size.height, 32);
     });
 
-    testWidgets(
-        'drag reports start, live updates, and commits the final '
+    testWidgets('drag reports start, live updates, and commits the final '
         'position on end', (tester) async {
       final updates = <double>[];
       double? committed;
@@ -173,8 +178,9 @@ void main() {
       // state — the same `_active` flag hover uses, exercised here via
       // the drag path instead.
       await tester.pumpAndSettle();
-      final activeSize =
-          tester.getSize(find.byKey(ProgressBarSurface.thumbKey));
+      final activeSize = tester.getSize(
+        find.byKey(ProgressBarSurface.thumbKey),
+      );
       expect(activeSize.width, VideoProgressBar.activeThumbSize);
 
       await gesture.moveBy(const Offset(160, 0));
@@ -191,37 +197,41 @@ void main() {
     });
 
     testWidgets(
-        'offers no interaction without onSeekTo — no hover affordance and '
-        'no gesture handlers', (tester) async {
-      await tester.pumpWidget(
-        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
-      );
+      'offers no interaction without onSeekTo — no hover affordance and '
+      'no gesture handlers',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+        );
 
-      expect(
-        find.descendant(
-          of: find.byType(ProgressBarSurface),
-          matching: find.byType(GestureDetector),
-        ),
-        findsNothing,
-      );
+        expect(
+          find.descendant(
+            of: find.byType(ProgressBarSurface),
+            matching: find.byType(GestureDetector),
+          ),
+          findsNothing,
+        );
 
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.byType(ProgressBarSurface)));
-      await tester.pumpAndSettle();
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.addPointer(location: Offset.zero);
+        addTearDown(gesture.removePointer);
+        await tester.pump();
+        await gesture.moveTo(tester.getCenter(find.byType(ProgressBarSurface)));
+        await tester.pumpAndSettle();
 
-      // Still at rest: hovering a read-only bar must not grow it.
-      expect(
-        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
-        VideoProgressBar.restingThumbSize,
-      );
-      expect(
-        tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
-        6.0,
-      );
-    });
+        // Still at rest: hovering a read-only bar must not grow it.
+        expect(
+          tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
+          VideoProgressBar.restingThumbSize,
+        );
+        expect(
+          tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
+          6.0,
+        );
+      },
+    );
 
     testWidgets('clamps out-of-range fractions', (tester) async {
       await tester.pumpWidget(
@@ -251,16 +261,19 @@ void main() {
 
     testWidgets('centres the cursor on the scrub fraction', (tester) async {
       await tester.pumpWidget(
-        _host(const ProgressBarSurface(
-          progress: 0.25,
-          buffered: 0.5,
-          scrubFraction: 0.75,
-        )),
+        _host(
+          const ProgressBarSurface(
+            progress: 0.25,
+            buffered: 0.5,
+            scrubFraction: 0.75,
+          ),
+        ),
       );
 
       final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
-      final cursor =
-          tester.getRect(find.byKey(ProgressBarSurface.scrubCursorKey));
+      final cursor = tester.getRect(
+        find.byKey(ProgressBarSurface.scrubCursorKey),
+      );
       expect(
         cursor.center.dx,
         moreOrLessEquals(track.left + track.width * 0.75, epsilon: 0.5),
@@ -270,44 +283,51 @@ void main() {
 
     testWidgets('spans from the played position to the cursor', (tester) async {
       await tester.pumpWidget(
-        _host(const ProgressBarSurface(
-          progress: 0.25,
-          buffered: 0.5,
-          scrubFraction: 0.75,
-        )),
+        _host(
+          const ProgressBarSurface(
+            progress: 0.25,
+            buffered: 0.5,
+            scrubFraction: 0.75,
+          ),
+        ),
       );
 
       final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
       final span = tester.getRect(find.byKey(ProgressBarSurface.scrubSpanKey));
-      expect(span.left,
-          moreOrLessEquals(track.left + track.width * 0.25, epsilon: 0.5));
+      expect(
+        span.left,
+        moreOrLessEquals(track.left + track.width * 0.25, epsilon: 0.5),
+      );
       expect(span.width, moreOrLessEquals(track.width * 0.5, epsilon: 0.5));
     });
 
-    testWidgets('spans backwards when the cursor is behind playback',
-        (tester) async {
+    testWidgets('spans backwards when the cursor is behind playback', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _host(const ProgressBarSurface(
-          progress: 0.6,
-          buffered: 0.8,
-          scrubFraction: 0.2,
-        )),
+        _host(
+          const ProgressBarSurface(
+            progress: 0.6,
+            buffered: 0.8,
+            scrubFraction: 0.2,
+          ),
+        ),
       );
 
       final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
       final span = tester.getRect(find.byKey(ProgressBarSurface.scrubSpanKey));
-      expect(span.left,
-          moreOrLessEquals(track.left + track.width * 0.2, epsilon: 0.5));
+      expect(
+        span.left,
+        moreOrLessEquals(track.left + track.width * 0.2, epsilon: 0.5),
+      );
       expect(span.width, moreOrLessEquals(track.width * 0.4, epsilon: 0.5));
     });
 
     testWidgets('focus thickens the track and grows the thumb', (tester) async {
       await tester.pumpWidget(
-        _host(const ProgressBarSurface(
-          progress: 0.4,
-          buffered: 0.6,
-          focused: true,
-        )),
+        _host(
+          const ProgressBarSurface(progress: 0.4, buffered: 0.6, focused: true),
+        ),
       );
       await tester.pumpAndSettle();
 

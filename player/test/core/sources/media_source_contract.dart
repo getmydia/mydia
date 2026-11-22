@@ -41,21 +41,27 @@ void runMediaSourceContract(
       final detail = (await f.source.item(f.playable)).toJson();
       expect(ItemDetail.fromJson(roundTrip(detail)).toJson(), detail);
 
-      final page = (await f.source.browse(f.library, const BrowseQuery()))
-          .toJson((i) => i.toJson());
+      final page = (await f.source.browse(
+        f.library,
+        const BrowseQuery(),
+      )).toJson((i) => i.toJson());
       expect(
-        Page.fromJson(roundTrip(page), ItemSummary.fromJson)
-            .toJson((i) => i.toJson()),
+        Page.fromJson(
+          roundTrip(page),
+          ItemSummary.fromJson,
+        ).toJson((i) => i.toJson()),
         page,
       );
 
       final show = f.show;
       if (show != null) {
-        final children =
-            (await f.source.children(show)).toJson((i) => i.toJson());
+        final children = (await f.source.children(show))
+            .toJson((i) => i.toJson());
         expect(
-          Page.fromJson(roundTrip(children), ItemSummary.fromJson)
-              .toJson((i) => i.toJson()),
+          Page.fromJson(
+            roundTrip(children),
+            ItemSummary.fromJson,
+          ).toJson((i) => i.toJson()),
           children,
         );
       }
@@ -65,8 +71,10 @@ void runMediaSourceContract(
       final f = await setUp();
       final libraries = await f.source.libraries();
       expect(libraries.map((l) => l.ref), contains(f.library));
-      expect(libraries.firstWhere((l) => l.ref == f.library).sortOptions,
-          isNotEmpty);
+      expect(
+        libraries.firstWhere((l) => l.ref == f.library).sortOptions,
+        isNotEmpty,
+      );
     });
 
     test('pages a library to the end without repeats', () async {
@@ -97,59 +105,89 @@ void runMediaSourceContract(
       expect(detail.versions.first.id, isNotEmpty);
     });
 
-    test('artwork keeps the credential out of the URL and the cache key',
-        () async {
-      final f = await setUp();
-      final detail = await f.source.item(f.playable);
-      final art = detail.summary.poster;
-      expect(art, isNotNull);
-      final request = await f.source.artwork(art!, width: 300);
-      expect(request, isNotNull);
-      expect(Uri.parse(request!.url).hasScheme, isTrue);
-      for (final secret in request.headers.values) {
-        expect(request.url, isNot(contains(secret)));
-        expect(request.cacheKey, isNot(contains(secret)));
-      }
-      final again = await f.source.artwork(art, width: 300);
-      expect(again!.cacheKey, request.cacheKey);
-    });
+    test(
+      'artwork keeps the credential out of the URL and the cache key',
+      () async {
+        final f = await setUp();
+        final detail = await f.source.item(f.playable);
+        final art = detail.summary.poster;
+        expect(art, isNotNull);
+        final request = await f.source.artwork(art!, width: 300);
+        expect(request, isNotNull);
+        expect(Uri.parse(request!.url).hasScheme, isTrue);
+        for (final secret in request.headers.values) {
+          expect(request.url, isNot(contains(secret)));
+          expect(request.cacheKey, isNot(contains(secret)));
+        }
+        final again = await f.source.artwork(art, width: 300);
+        expect(again!.cacheKey, request.cacheKey);
+      },
+    );
 
     test('declared capabilities resolve, undeclared ones do not', () async {
       final f = await setUp();
       final caps = f.source.capabilities;
-      expect(f.source.as<WatchedState>() != null,
-          caps.contains(SourceCapability.watchedState));
-      expect(f.source.as<Searchable>() != null,
-          caps.contains(SourceCapability.searchable));
-      expect(f.source.as<ContinueWatching>() != null,
-          caps.contains(SourceCapability.continueWatching));
+      expect(
+        f.source.as<WatchedState>() != null,
+        caps.contains(SourceCapability.watchedState),
+      );
+      expect(
+        f.source.as<Searchable>() != null,
+        caps.contains(SourceCapability.searchable),
+      );
+      expect(
+        f.source.as<ContinueWatching>() != null,
+        caps.contains(SourceCapability.continueWatching),
+      );
     });
 
     test('a source that lists a capability returns it', () async {
       final f = await setUp();
       final caps = f.source.capabilities;
-      expect(f.source.as<Similar>() != null,
-          caps.contains(SourceCapability.similar));
-      expect(f.source.as<Favorites>() != null,
-          caps.contains(SourceCapability.favorites));
-      expect(f.source.as<NextUp>() != null,
-          caps.contains(SourceCapability.nextUp));
-      expect(f.source.as<SkipSegments>() != null,
-          caps.contains(SourceCapability.skipSegments));
-      expect(f.source.as<Collections>() != null,
-          caps.contains(SourceCapability.collections));
-      expect(f.source.as<Calendar>() != null,
-          caps.contains(SourceCapability.calendar));
-      expect(f.source.as<SavedFilters>() != null,
-          caps.contains(SourceCapability.savedFilters));
-      expect(f.source.as<UnwatchedListing>() != null,
-          caps.contains(SourceCapability.unwatchedListing));
-      expect(f.source.as<FavoritesListing>() != null,
-          caps.contains(SourceCapability.favoritesListing));
-      expect(f.source.as<MediaInfo>() != null,
-          caps.contains(SourceCapability.mediaInfo));
-      expect(f.source.as<RemoteTargets>() != null,
-          caps.contains(SourceCapability.remoteTargets));
+      expect(
+        f.source.as<Similar>() != null,
+        caps.contains(SourceCapability.similar),
+      );
+      expect(
+        f.source.as<Favorites>() != null,
+        caps.contains(SourceCapability.favorites),
+      );
+      expect(
+        f.source.as<NextUp>() != null,
+        caps.contains(SourceCapability.nextUp),
+      );
+      expect(
+        f.source.as<SkipSegments>() != null,
+        caps.contains(SourceCapability.skipSegments),
+      );
+      expect(
+        f.source.as<Collections>() != null,
+        caps.contains(SourceCapability.collections),
+      );
+      expect(
+        f.source.as<Calendar>() != null,
+        caps.contains(SourceCapability.calendar),
+      );
+      expect(
+        f.source.as<SavedFilters>() != null,
+        caps.contains(SourceCapability.savedFilters),
+      );
+      expect(
+        f.source.as<UnwatchedListing>() != null,
+        caps.contains(SourceCapability.unwatchedListing),
+      );
+      expect(
+        f.source.as<FavoritesListing>() != null,
+        caps.contains(SourceCapability.favoritesListing),
+      );
+      expect(
+        f.source.as<MediaInfo>() != null,
+        caps.contains(SourceCapability.mediaInfo),
+      );
+      expect(
+        f.source.as<RemoteTargets>() != null,
+        caps.contains(SourceCapability.remoteTargets),
+      );
     });
 
     test('similar never answers the item itself', () async {
@@ -173,8 +211,10 @@ void runMediaSourceContract(
     test('recently added is listed, newest first and at most 20', () async {
       final f = await setUp();
       final recent = f.source.as<RecentlyAdded>();
-      expect(recent != null,
-          f.source.capabilities.contains(SourceCapability.recentlyAdded));
+      expect(
+        recent != null,
+        f.source.capabilities.contains(SourceCapability.recentlyAdded),
+      );
       if (recent == null) return;
       final items = await recent.recentlyAdded();
       expect(items, isNotEmpty);
@@ -182,20 +222,23 @@ void runMediaSourceContract(
       final dates = [for (final i in items) i.addedAt];
       expect(dates, everyElement(isNotNull));
       for (var i = 1; i < dates.length; i++) {
-        expect(dates[i]!.isAfter(dates[i - 1]!), isFalse,
-            reason: 'item $i is newer than item ${i - 1}');
+        expect(
+          dates[i]!.isAfter(dates[i - 1]!),
+          isFalse,
+          reason: 'item $i is newer than item ${i - 1}',
+        );
       }
     });
 
     test('no library tags a shared sort twice', () async {
       final f = await setUp();
       for (final library in await f.source.libraries()) {
-        final shared = [
-          for (final o in library.sortOptions)
-            if (o.shared case final s?) s,
-        ];
-        expect(shared.toSet(), hasLength(shared.length),
-            reason: '${library.title} tags a shared sort twice');
+        final shared = [for (final o in library.sortOptions) ?o.shared];
+        expect(
+          shared.toSet(),
+          hasLength(shared.length),
+          reason: '${library.title} tags a shared sort twice',
+        );
       }
     });
   });

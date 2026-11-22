@@ -14,5 +14,5 @@ import 'package:player/core/cast/cast_providers.dart';
 /// actually render (rather than specifically exercising its hidden state)
 /// pulls this in instead of repeating the override inline.
 List<Override> castCapableOverrides() => [
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    ];
+  castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+];

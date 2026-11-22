@@ -30,8 +30,7 @@ Future<void> writeMydiaCredentials(
   SourceSecrets secrets,
   ProviderAccount account,
   MydiaCredentials c,
-) =>
-    secrets.writeAccountToken(account, jsonEncode(c.toJson()));
+) => secrets.writeAccountToken(account, jsonEncode(c.toJson()));
 
 /// The stored Mydia account for the server named by any of [instanceId],
 /// [nodeId] or [url], or null. A stored URL that cannot be normalized counts
@@ -50,7 +49,8 @@ Future<ProviderAccount?> findMatchingMydiaAccount(
     final theirs = await readMydiaCredentials(secrets, account);
     if (theirs == null) continue;
     final theirUrl = theirs.serverUrl;
-    final sameUrl = wantedUrl != null &&
+    final sameUrl =
+        wantedUrl != null &&
         theirUrl != null &&
         _normalizedOrNull(theirUrl) == wantedUrl;
     if ((instanceId != null &&

@@ -28,11 +28,14 @@ void main() {
         overrides: [
           isItemDownloadedProvider(episode.target.ref)
               .overrideWith((ref) => downloaded),
-          downloadManagerProvider
-              .overrideWith((ref) async => EmptyDownloadService()),
+          downloadManagerProvider.overrideWith(
+            (ref) async => EmptyDownloadService(),
+          ),
           mediaSourceProvider(testMydiaSourceId).overrideWithValue(
-              DownloadableFakeSource(
-                  options: Completer<List<DownloadOption>>().future)),
+            DownloadableFakeSource(
+              options: Completer<List<DownloadOption>>().future,
+            ),
+          ),
         ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -44,16 +47,18 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('renders the download icon when not downloaded and has a file',
-      (tester) async {
+  testWidgets('renders the download icon when not downloaded and has a file', (
+    tester,
+  ) async {
     await pumpButton(tester, episode: testEpisodeView(), downloaded: false);
 
     expect(find.byIcon(Icons.download_rounded), findsOneWidget);
     expect(find.byIcon(Icons.download_done_rounded), findsNothing);
   });
 
-  testWidgets('renders the downloaded icon when the provider resolves true',
-      (tester) async {
+  testWidgets('renders the downloaded icon when the provider resolves true', (
+    tester,
+  ) async {
     await pumpButton(tester, episode: testEpisodeView(), downloaded: true);
 
     expect(find.byIcon(Icons.download_done_rounded), findsOneWidget);
@@ -71,8 +76,9 @@ void main() {
     expect(find.byIcon(Icons.download_done_rounded), findsNothing);
   });
 
-  testWidgets('tapping the button (not downloaded) opens the quality dialog',
-      (tester) async {
+  testWidgets('tapping the button (not downloaded) opens the quality dialog', (
+    tester,
+  ) async {
     await pumpButton(tester, episode: testEpisodeView(), downloaded: false);
 
     await tester.tap(find.byIcon(Icons.download_rounded));

@@ -96,10 +96,7 @@ class TrackPickerRow extends StatelessWidget {
           ],
           if (instructions != null) ...[
             const SizedBox(height: 12),
-            _DeferredInstructions(
-              instructions: instructions,
-              url: deferredUrl,
-            ),
+            _DeferredInstructions(instructions: instructions, url: deferredUrl),
           ],
         ],
       ),

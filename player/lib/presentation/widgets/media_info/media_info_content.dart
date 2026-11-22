@@ -84,8 +84,12 @@ class MediaInfoContent extends StatelessWidget {
           _streams(audio.length, (i) => _audioRow(l10n, audio[i])),
         ],
         if (subtitle.isNotEmpty || external.isNotEmpty) ...[
-          _header('subtitles', l10n.commonSubtitles,
-              subtitle.length + external.length, palette),
+          _header(
+            'subtitles',
+            l10n.commonSubtitles,
+            subtitle.length + external.length,
+            palette,
+          ),
           _streams(
             subtitle.length + external.length,
             (i) => i < subtitle.length
@@ -159,9 +163,9 @@ class MediaInfoContent extends StatelessWidget {
     final bitrate = formatBitrate(file.bitrate);
     final summary = <String>[
       if (file.container != null) file.container!.toUpperCase(),
-      if (size != null) size,
-      if (duration != null) duration,
-      if (bitrate != null) bitrate,
+      ?size,
+      ?duration,
+      ?bitrate,
     ];
 
     return Column(
@@ -199,8 +203,11 @@ class MediaInfoContent extends StatelessWidget {
       padding: const EdgeInsets.only(top: 16),
       child: Text(
         l10n.mediaInfoStreamsPending,
-        style:
-            TextStyle(color: palette.textDisabled, fontSize: 12, height: 1.5),
+        style: TextStyle(
+          color: palette.textDisabled,
+          fontSize: 12,
+          height: 1.5,
+        ),
       ),
     );
   }
@@ -251,7 +258,7 @@ class _VideoStreamTile extends StatelessWidget {
   List<String> _flags(AppLocalizations l10n) {
     final language = l10n.languageName(stream.language);
     return [
-      if (language != null) language,
+      ?language,
       if (stream.isDefault) l10n.commonDefault,
       if (stream.isForced) l10n.mediaInfoFlagForced,
     ];
@@ -262,7 +269,7 @@ class _VideoStreamTile extends StatelessWidget {
     final geometry = <String>[
       if (stream.width != null && stream.height != null)
         '${stream.width} × ${stream.height}',
-      if (frameRate != null) frameRate,
+      ?frameRate,
       if (stream.bitDepth != null) l10n.mediaInfoBitDepth(stream.bitDepth!),
     ];
 
@@ -279,7 +286,7 @@ class _VideoStreamTile extends StatelessWidget {
       if (stream.dolbyVisionProfile != null)
         l10n.mediaInfoDolbyVision('${stream.dolbyVisionProfile}'),
       if (colour.isNotEmpty) colour.join(' · '),
-      if (bitrate != null) bitrate,
+      ?bitrate,
     ];
   }
 }
@@ -314,26 +321,26 @@ class _StreamRow extends StatelessWidget {
   static const double _gap = 8;
 
   static TextStyle _codecStyle(MydiaPalette p) => TextStyle(
-        color: p.textPrimary,
-        fontSize: 11,
-        height: 1.5,
-        fontWeight: FontWeight.w600,
-        fontFamily: 'monospace',
-      );
+    color: p.textPrimary,
+    fontSize: 11,
+    height: 1.5,
+    fontWeight: FontWeight.w600,
+    fontFamily: 'monospace',
+  );
 
   static TextStyle _valueStyle(MydiaPalette p) => TextStyle(
-        color: p.textSecondary,
-        fontSize: 11,
-        height: 1.5,
-        fontFamily: 'monospace',
-      );
+    color: p.textSecondary,
+    fontSize: 11,
+    height: 1.5,
+    fontFamily: 'monospace',
+  );
 
   static TextStyle _mutedStyle(MydiaPalette p) => TextStyle(
-        color: p.textDisabled,
-        fontSize: 11,
-        height: 1.5,
-        fontFamily: 'monospace',
-      );
+    color: p.textDisabled,
+    fontSize: 11,
+    height: 1.5,
+    fontFamily: 'monospace',
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -408,11 +415,11 @@ class _StreamRow extends StatelessWidget {
 /// Playback-affecting flags. Language is deliberately absent: it has its own
 /// column in [_StreamRow], unlike the video tile where it stays a chip.
 List<String> _rowFlags(AppLocalizations l10n, MediaStream stream) => [
-      if (stream.isDefault) l10n.commonDefault,
-      if (stream.isForced) l10n.mediaInfoFlagForced,
-      if (stream.isHearingImpaired) l10n.mediaInfoFlagSdh,
-      if (stream.isCommentary) l10n.mediaInfoFlagCommentary,
-    ];
+  if (stream.isDefault) l10n.commonDefault,
+  if (stream.isForced) l10n.mediaInfoFlagForced,
+  if (stream.isHearingImpaired) l10n.mediaInfoFlagSdh,
+  if (stream.isCommentary) l10n.mediaInfoFlagCommentary,
+];
 
 _StreamRow _audioRow(AppLocalizations l10n, MediaStream stream) {
   final channels = formatChannels(stream.channels, stream.channelLayout);
@@ -424,14 +431,11 @@ _StreamRow _audioRow(AppLocalizations l10n, MediaStream stream) {
     index: stream.index?.toString(),
     codec: stream.codec ?? l10n.commonUnknown,
     language: l10n.languageName(stream.language),
-    detail: [
-      if (channels != null) channels,
-      if (sampleRate != null) sampleRate,
-    ].join(' · '),
+    detail: [?channels, ?sampleRate].join(' · '),
     flags: _rowFlags(l10n, stream),
     extra: [
       if (stream.title != null) stream.title!,
-      if (bitrate != null) bitrate,
+      ?bitrate,
       if (stream.bitDepth != null) l10n.mediaInfoBitDepth(stream.bitDepth!),
     ],
   );
@@ -439,8 +443,8 @@ _StreamRow _audioRow(AppLocalizations l10n, MediaStream stream) {
 
 String _subtitleKind(AppLocalizations l10n, String? format) =>
     isImageSubtitleFormat(format)
-        ? l10n.mediaInfoSubtitleImage
-        : l10n.mediaInfoSubtitleText;
+    ? l10n.mediaInfoSubtitleImage
+    : l10n.mediaInfoSubtitleText;
 
 _StreamRow _subtitleRow(AppLocalizations l10n, MediaStream stream) {
   return _StreamRow(

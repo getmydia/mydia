@@ -88,8 +88,9 @@ void main() {
     expect(metrics.data, isNot(contains('/s')));
   });
 
-  testWidgets('includes the speed segment when the rate is positive',
-      (tester) async {
+  testWidgets('includes the speed segment when the rate is positive', (
+    tester,
+  ) async {
     await _pump(tester, task: _task(), bytesPerSecond: 4718592);
 
     final metrics = tester.widget<Text>(

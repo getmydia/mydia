@@ -61,7 +61,7 @@ abstract class PeerSyncStore {
   List<PeerWatchRecord> watchRecordsSince(int landedAtExclusive);
   List<PeerPinRecord> pinRecordsSince(int landedAtExclusive);
   Future<({Set<String> changedWatchKeys, Set<String> changedPinKeys})>
-      mergeRemote({
+  mergeRemote({
     required Iterable<WireWatchRecord> watchRecords,
     required Iterable<WirePinRecord> pinRecords,
     required int nowMs,
@@ -335,7 +335,8 @@ class HivePeerSyncStore implements PeerSyncStore {
     if (current != null && current.updatedAt > nowMs) {
       return current;
     }
-    final isWatched = (current?.watched ?? false) ||
+    final isWatched =
+        (current?.watched ?? false) ||
         (durationSeconds > 0 &&
             (positionSeconds / durationSeconds) >= watchedFraction);
     final landed = _nextLandedAt(nowMs);
@@ -413,27 +414,27 @@ class HivePeerSyncStore implements PeerSyncStore {
 
   @override
   List<PeerWatchRecord> watchRecordsSince(int landedAtExclusive) {
-    final list = allWatchRecords()
-        .values
-        .where((r) => r.landedAt > landedAtExclusive)
-        .toList()
-      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    final list =
+        allWatchRecords().values
+            .where((r) => r.landedAt > landedAtExclusive)
+            .toList()
+          ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
     return list;
   }
 
   @override
   List<PeerPinRecord> pinRecordsSince(int landedAtExclusive) {
-    final list = allPinRecords()
-        .values
-        .where((r) => r.landedAt > landedAtExclusive)
-        .toList()
-      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    final list =
+        allPinRecords().values
+            .where((r) => r.landedAt > landedAtExclusive)
+            .toList()
+          ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
     return list;
   }
 
   @override
   Future<({Set<String> changedWatchKeys, Set<String> changedPinKeys})>
-      mergeRemote({
+  mergeRemote({
     required Iterable<WireWatchRecord> watchRecords,
     required Iterable<WirePinRecord> pinRecords,
     required int nowMs,
@@ -641,7 +642,8 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
     if (current != null && current.updatedAt > nowMs) {
       return current;
     }
-    final isWatched = (current?.watched ?? false) ||
+    final isWatched =
+        (current?.watched ?? false) ||
         (durationSeconds > 0 &&
             (positionSeconds / durationSeconds) >= watchedFraction);
     final landed = _nextLandedAt(nowMs);
@@ -695,25 +697,25 @@ class InMemoryPeerSyncStore implements PeerSyncStore {
 
   @override
   List<PeerWatchRecord> watchRecordsSince(int landedAtExclusive) {
-    final list = _watchRecords.values
-        .where((r) => r.landedAt > landedAtExclusive)
-        .toList()
-      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    final list =
+        _watchRecords.values
+            .where((r) => r.landedAt > landedAtExclusive)
+            .toList()
+          ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
     return list;
   }
 
   @override
   List<PeerPinRecord> pinRecordsSince(int landedAtExclusive) {
-    final list = _pinRecords.values
-        .where((r) => r.landedAt > landedAtExclusive)
-        .toList()
-      ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
+    final list =
+        _pinRecords.values.where((r) => r.landedAt > landedAtExclusive).toList()
+          ..sort((a, b) => a.landedAt.compareTo(b.landedAt));
     return list;
   }
 
   @override
   Future<({Set<String> changedWatchKeys, Set<String> changedPinKeys})>
-      mergeRemote({
+  mergeRemote({
     required Iterable<WireWatchRecord> watchRecords,
     required Iterable<WirePinRecord> pinRecords,
     required int nowMs,
@@ -801,9 +803,11 @@ Future<void> seedPeerSyncStoreIfNeeded({
   for (final p in progressStore.all()) {
     final parsed = parseFilesId(p.mediaId);
     if (parsed == null || parsed.isProvisional) continue;
-    final accountId =
-        p.sourceId.contains(':') ? p.sourceId.split(':').first : p.sourceId;
-    final isEpisode = p.mediaType == 'episode' ||
+    final accountId = p.sourceId.contains(':')
+        ? p.sourceId.split(':').first
+        : p.sourceId;
+    final isEpisode =
+        p.mediaType == 'episode' ||
         (parsed.season != null && parsed.episode != null);
     final syncKey = syncKeyForFilesItem(
       accountId: accountId,
@@ -861,7 +865,8 @@ Future<void> seedPeerSyncStoreIfNeeded({
           }
         } catch (e) {
           debugPrint(
-              '[seedPeerSyncStoreIfNeeded] Failed to parse group $key: $e');
+            '[seedPeerSyncStoreIfNeeded] Failed to parse group $key: $e',
+          );
         }
       }
     }

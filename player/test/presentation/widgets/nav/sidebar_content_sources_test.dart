@@ -39,34 +39,40 @@ Future<List<String>> _pump(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final navigations = <String>[];
-  final container = ProviderContainer(overrides: [
-    sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
-    thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
-    hasMydiaProvider.overrideWithValue(hasMydia),
-    mediaSourceProvider(fakeSourceId)
-        .overrideWithValue(source ?? FakeMediaSource()),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      sidebarLayoutStoreProvider.overrideWithValue(
+        InMemorySidebarLayoutStore(),
+      ),
+      thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+      hasMydiaProvider.overrideWithValue(hasMydia),
+      mediaSourceProvider(fakeSourceId)
+          .overrideWithValue(source ?? FakeMediaSource()),
+    ],
+  );
   addTearDown(container.dispose);
   if (editing) container.read(sidebarEditModeProvider.notifier).toggle();
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: SizedBox(
-          width: 260,
-          height: 1400,
-          child: SidebarContent(
-            location: location,
-            onNavigate: navigations.add,
-            isOffline: false,
-            selectedRowFocusNode: focusNode,
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SizedBox(
+            width: 260,
+            height: 1400,
+            child: SidebarContent(
+              location: location,
+              onNavigate: navigations.add,
+              isOffline: false,
+              selectedRowFocusNode: focusNode,
+            ),
           ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return navigations;
 }
@@ -74,23 +80,28 @@ Future<List<String>> _pump(
 void main() {
   const root = '/s/acc1:owner:aa11';
 
-  testWidgets('a source location keeps the edit pencil and bar',
-      (tester) async {
+  testWidgets('a source location keeps the edit pencil and bar', (
+    tester,
+  ) async {
     await _pump(tester, root);
     expect(find.byTooltip('Edit sidebar'), findsOneWidget);
     expect(find.byType(SidebarEditBar), findsOneWidget);
   });
 
-  testWidgets('no Search row for a source that is not searchable',
-      (tester) async {
+  testWidgets('no Search row for a source that is not searchable', (
+    tester,
+  ) async {
     await _pump(tester, root, editing: false, source: _NotSearchable());
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Search'), findsNothing);
   });
 
   testWidgets('lists home, search, each library and settings', (tester) async {
-    final navigations =
-        await _pump(tester, '$root/library/movies', editing: false);
+    final navigations = await _pump(
+      tester,
+      '$root/library/movies',
+      editing: false,
+    );
     expect(find.text('Movies'), findsOneWidget);
     expect(find.text('TV Shows'), findsOneWidget);
     await tester.tap(find.text('TV Shows'));
@@ -110,8 +121,9 @@ void main() {
     expect(find.text('Settings'), findsOneWidget);
   });
 
-  testWidgets('a source without Calendar or Collections shows neither',
-      (tester) async {
+  testWidgets('a source without Calendar or Collections shows neither', (
+    tester,
+  ) async {
     await _pump(tester, root, editing: false);
     expect(find.text('Calendar'), findsNothing);
     expect(find.text('Collections'), findsNothing);
@@ -139,14 +151,19 @@ void main() {
     testWidgets('sits on the row for the current location', (tester) async {
       final node = FocusNode();
       addTearDown(node.dispose);
-      await _pump(tester, '$root/library/shows',
-          editing: false, focusNode: node);
+      await _pump(
+        tester,
+        '$root/library/shows',
+        editing: false,
+        focusNode: node,
+      );
       expect(attachedTo(node, 'TV Shows'), isTrue);
       expect(attachedTo(node, 'Home'), isFalse);
     });
 
-    testWidgets('falls back to the first row when no row matches',
-        (tester) async {
+    testWidgets('falls back to the first row when no row matches', (
+      tester,
+    ) async {
       final node = FocusNode();
       addTearDown(node.dispose);
       await _pump(tester, '$root/item/x', editing: false, focusNode: node);

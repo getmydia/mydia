@@ -28,8 +28,8 @@ class StashMediaSource extends MediaSource
   StashMediaSource({
     required this.source,
     required this.client,
-    void Function()? onDispose,
-  }) : _onDispose = onDispose;
+    this._onDispose,
+  });
 
   @override
   final Source source;
@@ -38,14 +38,14 @@ class StashMediaSource extends MediaSource
 
   @override
   Set<SourceCapability> get capabilities => const {
-        SourceCapability.progressReporting,
-        SourceCapability.watchedState,
-        SourceCapability.searchable,
-        SourceCapability.continueWatching,
-        SourceCapability.recentlyAdded,
-        SourceCapability.downloadable,
-        SourceCapability.progressSync,
-      };
+    SourceCapability.progressReporting,
+    SourceCapability.watchedState,
+    SourceCapability.searchable,
+    SourceCapability.continueWatching,
+    SourceCapability.recentlyAdded,
+    SourceCapability.downloadable,
+    SourceCapability.progressSync,
+  };
 
   /// `query` throws on a transport failure, a non-2xx answer and a GraphQL
   /// `errors` body, so a refused push leaves the local record unsynced.
@@ -95,23 +95,22 @@ class StashMediaSource extends MediaSource
 
   @override
   Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
-        this,
-        ref,
-        url: (v) =>
-            client.url(v.streamPath ?? '/scene/${ref.externalId}/stream'),
-        headers: client.headers,
-      );
+    this,
+    ref,
+    url: (v) => client.url(v.streamPath ?? '/scene/${ref.externalId}/stream'),
+    headers: client.headers,
+  );
 
   @override
   Future<List<Library>> libraries() async => [
-        Library(
-          ref: LibraryRef(sourceId: id, id: stashScenesLibraryId),
-          kind: LibraryKind.videos,
-          scenes: true,
-          sortOptions: stashSortOptions,
-          filterOptions: stashFilterOptions,
-        ),
-      ];
+    Library(
+      ref: LibraryRef(sourceId: id, id: stashScenesLibraryId),
+      kind: LibraryKind.videos,
+      scenes: true,
+      sortOptions: stashSortOptions,
+      filterOptions: stashFilterOptions,
+    ),
+  ];
 
   @override
   Future<Page<ItemSummary>> browse(
@@ -121,7 +120,7 @@ class StashMediaSource extends MediaSource
   }) async {
     final sort =
         stashSortOptions.where((o) => o.id == query.sortId).firstOrNull ??
-            stashSortOptions.first;
+        stashSortOptions.first;
     final descending = query.descending ?? sort.descendingByDefault;
     final page = int.tryParse(cursor?.value ?? '') ?? 1;
     final data = await client.query(stashFindScenes, {
@@ -176,9 +175,9 @@ class StashMediaSource extends MediaSource
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) => client.query(
-        watched ? stashAddPlay : stashResetPlayCount,
-        {'id': ref.externalId},
-      );
+    watched ? stashAddPlay : stashResetPlayCount,
+    {'id': ref.externalId},
+  );
 
   @override
   Future<List<ItemSummary>> continueWatching() async {
@@ -215,10 +214,8 @@ class StashMediaSource extends MediaSource
   /// A zero resume point drops the scene from [continueWatching]. Works on
   /// every Stash the source supports; `sceneResetActivity` needs 0.27.
   @override
-  Future<void> removeFromContinueWatching(ItemRef ref) => client.query(
-        stashSaveActivity,
-        {'id': ref.externalId, 'resume_time': 0},
-      );
+  Future<void> removeFromContinueWatching(ItemRef ref) =>
+      client.query(stashSaveActivity, {'id': ref.externalId, 'resume_time': 0});
 
   @override
   Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async {

@@ -19,10 +19,7 @@ const normal = <DeviceOrientation>[
 
 const immersive = _SystemUiRequest(SystemUiMode.immersiveSticky, null);
 
-const restored = _SystemUiRequest(
-  SystemUiMode.manual,
-  SystemUiOverlay.values,
-);
+const restored = _SystemUiRequest(SystemUiMode.manual, SystemUiOverlay.values);
 
 /// A system UI request, compared by mode and overlays.
 class _SystemUiRequest {
@@ -52,29 +49,28 @@ void main() {
       harness.controller.acquire(Object(), lockLandscape: true);
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[
-        immersive,
-        landscape,
-      ]);
+      expect(harness.attempted, <Object>[immersive, landscape]);
     });
 
-    test('a tablet owner hides system UI without locking orientation',
-        () async {
-      final harness = _Harness();
-      final owner = Object();
+    test(
+      'a tablet owner hides system UI without locking orientation',
+      () async {
+        final harness = _Harness();
+        final owner = Object();
 
-      harness.controller.acquire(owner, lockLandscape: false);
-      await pumpEventQueue();
+        harness.controller.acquire(owner, lockLandscape: false);
+        await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[immersive]);
-      harness.attempted.clear();
+        expect(harness.attempted, <Object>[immersive]);
+        harness.attempted.clear();
 
-      harness.controller.release(owner);
-      harness.runDeferred();
-      await pumpEventQueue();
+        harness.controller.release(owner);
+        harness.runDeferred();
+        await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[restored, normal]);
-    });
+        expect(harness.attempted, <Object>[restored, normal]);
+      },
+    );
 
     test('incoming acquire before outgoing release never restores', () async {
       final harness = _Harness();
@@ -105,30 +101,29 @@ void main() {
       harness.runDeferred();
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[
-        immersive,
-        landscape,
-      ]);
+      expect(harness.attempted, <Object>[immersive, landscape]);
     });
 
-    test('final release restores system UI and orientations after deferral',
-        () async {
-      final harness = _Harness();
-      final owner = Object();
-      harness.controller.acquire(owner, lockLandscape: true);
-      await pumpEventQueue();
-      harness.attempted.clear();
+    test(
+      'final release restores system UI and orientations after deferral',
+      () async {
+        final harness = _Harness();
+        final owner = Object();
+        harness.controller.acquire(owner, lockLandscape: true);
+        await pumpEventQueue();
+        harness.attempted.clear();
 
-      harness.controller.release(owner);
+        harness.controller.release(owner);
 
-      expect(harness.attempted, isEmpty);
-      expect(harness.scheduled, hasLength(1));
+        expect(harness.attempted, isEmpty);
+        expect(harness.scheduled, hasLength(1));
 
-      harness.runDeferred();
-      await pumpEventQueue();
+        harness.runDeferred();
+        await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[restored, normal]);
-    });
+        expect(harness.attempted, <Object>[restored, normal]);
+      },
+    );
 
     test('duplicate owner operations cannot restore another owner', () async {
       final harness = _Harness();
@@ -140,10 +135,7 @@ void main() {
       harness.controller.acquire(second, lockLandscape: true);
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[
-        immersive,
-        landscape,
-      ]);
+      expect(harness.attempted, <Object>[immersive, landscape]);
       harness.attempted.clear();
 
       harness.controller.release(first);
@@ -233,12 +225,12 @@ class _Harness {
 
   late final PlayerPresentationLeaseController controller =
       PlayerPresentationLeaseController(
-    orientationApplier: (orientations) =>
-        _record(List<DeviceOrientation>.of(orientations)),
-    systemUiModeApplier: (mode, {overlays}) =>
-        _record(_SystemUiRequest(mode, overlays)),
-    deferredFrameScheduler: scheduled.add,
-  );
+        orientationApplier: (orientations) =>
+            _record(List<DeviceOrientation>.of(orientations)),
+        systemUiModeApplier: (mode, {overlays}) =>
+            _record(_SystemUiRequest(mode, overlays)),
+        deferredFrameScheduler: scheduled.add,
+      );
 
   void runDeferred() {
     final callbacks = List<VoidCallback>.of(scheduled);

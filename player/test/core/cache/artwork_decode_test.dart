@@ -19,9 +19,9 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => Directory.systemTemp.path,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async => Directory.systemTemp.path,
+        );
   });
 
   group('artworkDecodeWidth', () {
@@ -73,8 +73,10 @@ void main() {
     });
 
     test('returns the bare provider when there is no decode width', () {
-      final provider =
-          artworkImageProvider(url, cacheManager: PosterCacheManager());
+      final provider = artworkImageProvider(
+        url,
+        cacheManager: PosterCacheManager(),
+      );
 
       expect(provider, isA<ArtworkNetworkImageProvider>());
     });
@@ -108,20 +110,23 @@ void main() {
       );
     });
 
-    test('equal inputs give equal providers, so precache hits the same key',
-        () {
-      ImageProvider<Object> build() => artworkImageProvider(
-            url,
-            cacheManager: BackdropCacheManager(),
-            decodeWidth: 1280,
-          );
+    test(
+      'equal inputs give equal providers, so precache hits the same key',
+      () {
+        ImageProvider<Object> build() => artworkImageProvider(
+          url,
+          cacheManager: BackdropCacheManager(),
+          decodeWidth: 1280,
+        );
 
-      expect(build(), equals(build()));
-    });
+        expect(build(), equals(build()));
+      },
+    );
   });
 
-  testWidgets('viewportDecodeWidth reads MediaQuery size and ratio',
-      (tester) async {
+  testWidgets('viewportDecodeWidth reads MediaQuery size and ratio', (
+    tester,
+  ) async {
     int? width;
     await tester.pumpWidget(
       MediaQuery(

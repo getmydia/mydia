@@ -137,8 +137,10 @@ void main() {
     test('each break skips once on its own', () {
       skipper.maybeAutoSkip(const Duration(seconds: 601), seek);
       skipper.maybeAutoSkip(const Duration(seconds: 1201), seek);
-      expect(
-          seeks, [const Duration(seconds: 720), const Duration(seconds: 1260)]);
+      expect(seeks, [
+        const Duration(seconds: 720),
+        const Duration(seconds: 1260),
+      ]);
     });
   });
 }

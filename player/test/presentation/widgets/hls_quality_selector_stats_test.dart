@@ -64,32 +64,29 @@ void main() {
   testWidgets('the stats row reflects the flag', (tester) async {
     await openPicker(tester, statsEnabled: true, onStatsChanged: (_) {});
 
-    final toggle = tester.widget<SwitchListTile>(
-      find.byKey(statsToggleKey),
-    );
+    final toggle = tester.widget<SwitchListTile>(find.byKey(statsToggleKey));
     expect(toggle.value, isTrue);
   });
 
   // Flipping it must not close the sheet: a viewer comparing rungs wants
   // the numbers up while they keep choosing.
-  testWidgets('flipping the row reports and leaves the sheet open',
-      (tester) async {
+  testWidgets('flipping the row reports and leaves the sheet open', (
+    tester,
+  ) async {
     final flips = <bool>[];
-    await openPicker(
-      tester,
-      statsEnabled: false,
-      onStatsChanged: flips.add,
-    );
+    await openPicker(tester, statsEnabled: false, onStatsChanged: flips.add);
 
     await tester.tap(find.byKey(statsToggleKey));
     await tester.pumpAndSettle();
 
     expect(flips, [true]);
-    final toggle = tester.widget<SwitchListTile>(
-      find.byKey(statsToggleKey),
+    final toggle = tester.widget<SwitchListTile>(find.byKey(statsToggleKey));
+    expect(
+      toggle.value,
+      isTrue,
+      reason:
+          'the switch itself must move, not just report the change '
+          'and survive the tap',
     );
-    expect(toggle.value, isTrue,
-        reason: 'the switch itself must move, not just report the change '
-            'and survive the tap');
   });
 }

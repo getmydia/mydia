@@ -27,10 +27,11 @@ Color _over(Color base, double alpha) =>
     Color.alphaBlend(base.withValues(alpha: alpha), _white);
 
 Color _grey(double v, double lift) => Color.from(
-    alpha: 1,
-    red: (v + lift).clamp(0.0, 1.0),
-    green: (v + lift).clamp(0.0, 1.0),
-    blue: (v + lift).clamp(0.0, 1.0));
+  alpha: 1,
+  red: (v + lift).clamp(0.0, 1.0),
+  green: (v + lift).clamp(0.0, 1.0),
+  blue: (v + lift).clamp(0.0, 1.0),
+);
 
 Color _overGrey(Color base, double alpha, double v, double lift) =>
     Color.alphaBlend(base.withValues(alpha: alpha), _grey(v, lift));
@@ -38,31 +39,31 @@ Color _overGrey(Color base, double alpha, double v, double lift) =>
 void main() {
   final roles =
       <String, (Color Function(AmbientTintColors), double, double, double)>{
-    'chrome (ground)': (
-      (t) => t.ground,
-      DepthTokens.liquidChromeTintOpacity,
-      DepthTokens.liquidChromeAdaptiveMax,
-      LiquidGlassProfile.lens.brightness,
-    ),
-    'chrome (surface)': (
-      (t) => t.surface,
-      DepthTokens.liquidChromeTintOpacity,
-      DepthTokens.liquidChromeAdaptiveMax,
-      LiquidGlassProfile.lens.brightness,
-    ),
-    'sidebar': (
-      (t) => t.surface,
-      DepthTokens.liquidChromeTintOpacity,
-      DepthTokens.liquidChromeAdaptiveMax,
-      LiquidGlassProfile.panel.brightness,
-    ),
-    'modal': (
-      (t) => t.surface,
-      DepthTokens.liquidModalTintOpacity,
-      DepthTokens.liquidModalAdaptiveMax,
-      LiquidGlassProfile.panel.brightness,
-    ),
-  };
+        'chrome (ground)': (
+          (t) => t.ground,
+          DepthTokens.liquidChromeTintOpacity,
+          DepthTokens.liquidChromeAdaptiveMax,
+          LiquidGlassProfile.lens.brightness,
+        ),
+        'chrome (surface)': (
+          (t) => t.surface,
+          DepthTokens.liquidChromeTintOpacity,
+          DepthTokens.liquidChromeAdaptiveMax,
+          LiquidGlassProfile.lens.brightness,
+        ),
+        'sidebar': (
+          (t) => t.surface,
+          DepthTokens.liquidChromeTintOpacity,
+          DepthTokens.liquidChromeAdaptiveMax,
+          LiquidGlassProfile.panel.brightness,
+        ),
+        'modal': (
+          (t) => t.surface,
+          DepthTokens.liquidModalTintOpacity,
+          DepthTokens.liquidModalAdaptiveMax,
+          LiquidGlassProfile.panel.brightness,
+        ),
+      };
 
   for (final preset in ThemePreset.values) {
     final palette = preset.palette(systemAccent: Palettes.macosDefaultAccent);
@@ -71,39 +72,53 @@ void main() {
     group('${preset.name} over pure white', () {
       roles.forEach((name, role) {
         final (pick, base, max, lift) = role;
-        final alpha =
-            liquidAdaptiveAlpha(base: base, max: max, backdropLuma: 1.0);
+        final alpha = liquidAdaptiveAlpha(
+          base: base,
+          max: max,
+          backdropLuma: 1.0,
+        );
         final bg = _over(pick(tint), alpha);
         test('$name: text clears 4.5:1', () {
-          expect(contrastRatio(palette.textPrimary, bg),
-              greaterThanOrEqualTo(4.5));
+          expect(
+            contrastRatio(palette.textPrimary, bg),
+            greaterThanOrEqualTo(4.5),
+          );
         });
         test('$name: secondary clears 3:1', () {
-          expect(contrastRatio(palette.textSecondary, bg),
-              greaterThanOrEqualTo(3.0));
+          expect(
+            contrastRatio(palette.textSecondary, bg),
+            greaterThanOrEqualTo(3.0),
+          );
         });
       });
 
       test('control: icons clear 3:1', () {
         final alpha = liquidAdaptiveAlpha(
-            base: DepthTokens.liquidControlTintOpacity,
-            max: DepthTokens.liquidControlAdaptiveMax,
-            backdropLuma: 1.0);
+          base: DepthTokens.liquidControlTintOpacity,
+          max: DepthTokens.liquidControlAdaptiveMax,
+          backdropLuma: 1.0,
+        );
         final bg = _over(tint.surface, alpha);
         expect(
-            contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0));
+          contrastRatio(palette.textPrimary, bg),
+          greaterThanOrEqualTo(3.0),
+        );
       });
 
-      test('control: frosted fallback keeps white labels at 4.5:1 over white',
-          () {
-        final bg = _over(tint.surface, DepthTokens.liquidControlAdaptiveMax);
-        expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5));
-      });
+      test(
+        'control: frosted fallback keeps white labels at 4.5:1 over white',
+        () {
+          final bg = _over(tint.surface, DepthTokens.liquidControlAdaptiveMax);
+          expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5));
+        },
+      );
 
       test('scroll edge band top: title text clears 4.5:1', () {
         final bg = _over(tint.ground, DepthTokens.liquidScrollEdgeTopOpacity);
         expect(
-            contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(4.5));
+          contrastRatio(palette.textPrimary, bg),
+          greaterThanOrEqualTo(4.5),
+        );
       });
     });
   }
@@ -123,15 +138,22 @@ void main() {
         final (pick, base, max, lift) = role;
         test('$name: text 4.5:1 and secondary 3:1 at every grey', () {
           for (final v in greys) {
-            final alpha =
-                liquidAdaptiveAlpha(base: base, max: max, backdropLuma: v);
+            final alpha = liquidAdaptiveAlpha(
+              base: base,
+              max: max,
+              backdropLuma: v,
+            );
             final bg = _overGrey(pick(tint), alpha, v, lift);
-            expect(contrastRatio(palette.textPrimary, bg),
-                greaterThanOrEqualTo(4.5),
-                reason: 'text at grey $v');
-            expect(contrastRatio(palette.textSecondary, bg),
-                greaterThanOrEqualTo(3.0),
-                reason: 'secondary at grey $v');
+            expect(
+              contrastRatio(palette.textPrimary, bg),
+              greaterThanOrEqualTo(4.5),
+              reason: 'text at grey $v',
+            );
+            expect(
+              contrastRatio(palette.textSecondary, bg),
+              greaterThanOrEqualTo(3.0),
+              reason: 'secondary at grey $v',
+            );
           }
         });
       });
@@ -139,31 +161,47 @@ void main() {
       test('control: icons clear 3:1 at every grey', () {
         for (final v in greys) {
           final alpha = liquidAdaptiveAlpha(
-              base: DepthTokens.liquidControlTintOpacity,
-              max: DepthTokens.liquidControlAdaptiveMax,
-              backdropLuma: v);
+            base: DepthTokens.liquidControlTintOpacity,
+            max: DepthTokens.liquidControlAdaptiveMax,
+            backdropLuma: v,
+          );
           final bg = _overGrey(
-              tint.surface, alpha, v, LiquidGlassProfile.lens.brightness);
+            tint.surface,
+            alpha,
+            v,
+            LiquidGlassProfile.lens.brightness,
+          );
           expect(
-              contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0),
-              reason: 'icon at grey $v');
+            contrastRatio(palette.textPrimary, bg),
+            greaterThanOrEqualTo(3.0),
+            reason: 'icon at grey $v',
+          );
         }
       });
 
       test(
-          'control: white labels (Play, glass buttons) clear 4.5:1 at every grey',
-          () {
-        for (final v in greys) {
-          final alpha = liquidAdaptiveAlpha(
+        'control: white labels (Play, glass buttons) clear 4.5:1 at every grey',
+        () {
+          for (final v in greys) {
+            final alpha = liquidAdaptiveAlpha(
               base: DepthTokens.liquidControlTintOpacity,
               max: DepthTokens.liquidControlAdaptiveMax,
-              backdropLuma: v);
-          final bg = _overGrey(
-              tint.surface, alpha, v, LiquidGlassProfile.lens.brightness);
-          expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
-              reason: 'label at grey $v');
-        }
-      });
+              backdropLuma: v,
+            );
+            final bg = _overGrey(
+              tint.surface,
+              alpha,
+              v,
+              LiquidGlassProfile.lens.brightness,
+            );
+            expect(
+              contrastRatio(Colors.white, bg),
+              greaterThanOrEqualTo(4.5),
+              reason: 'label at grey $v',
+            );
+          }
+        },
+      );
     });
   }
 
@@ -174,8 +212,11 @@ void main() {
     );
     for (final preset in ThemePreset.values) {
       final palette = preset.palette(systemAccent: Palettes.macosDefaultAccent);
-      expect(contrastRatio(palette.background, bg), greaterThanOrEqualTo(4.5),
-          reason: preset.name);
+      expect(
+        contrastRatio(palette.background, bg),
+        greaterThanOrEqualTo(4.5),
+        reason: preset.name,
+      );
     }
   });
 

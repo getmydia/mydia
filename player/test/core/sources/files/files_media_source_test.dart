@@ -62,10 +62,14 @@ Future<_Built> _build({BackendFailure? probeFailure}) async {
 
 const _movie = '101';
 const _show = '201';
-final _root =
-    LibraryRef(sourceId: filesLocalSource.id, id: FilesFixture.rootId);
-final _folders =
-    LibraryRef(sourceId: filesLocalSource.id, id: kFilesFoldersLibraryId);
+final _root = LibraryRef(
+  sourceId: filesLocalSource.id,
+  id: FilesFixture.rootId,
+);
+final _folders = LibraryRef(
+  sourceId: filesLocalSource.id,
+  id: kFilesFoldersLibraryId,
+);
 
 void main() {
   runMediaSourceContract('Files', () async {
@@ -85,8 +89,10 @@ void main() {
     final detail = await b.source.item(b.fixture.ref(ItemKind.movie, _movie));
     expect(detail.versions, hasLength(2));
     final hd = detail.versions.firstWhere((v) => v.streams.isNotEmpty);
-    expect(hd.id,
-        fileKeyFor(FilesFixture.rootId, 'Copper Valley (2018) 1080p.mkv'));
+    expect(
+      hd.id,
+      fileKeyFor(FilesFixture.rootId, 'Copper Valley (2018) 1080p.mkv'),
+    );
     expect(hd.container, 'mkv');
     expect(hd.sizeBytes, 1000);
     expect(hd.durationSeconds, 6000);
@@ -100,24 +106,34 @@ void main() {
   test('mixed_library_lists_movies_and_shows', () async {
     final b = await _build();
     final page = await b.source.browse(_root, const BrowseQuery());
-    expect(page.items.map((i) => i.ref.kind).toSet(),
-        {ItemKind.movie, ItemKind.show});
+    expect(page.items.map((i) => i.ref.kind).toSet(), {
+      ItemKind.movie,
+      ItemKind.show,
+    });
     expect(page.total, 3);
-    final byTitle =
-        await b.source.browse(_root, const BrowseQuery(sortId: 'title'));
+    final byTitle = await b.source.browse(
+      _root,
+      const BrowseQuery(sortId: 'title'),
+    );
     // `The Harbor Lights` sorts under H.
-    expect(byTitle.items.map((i) => i.title),
-        ['Copper Valley', 'Glass Orchard', 'The Harbor Lights']);
-    final added =
-        await b.source.browse(_root, const BrowseQuery(sortId: 'added'));
+    expect(byTitle.items.map((i) => i.title), [
+      'Copper Valley',
+      'Glass Orchard',
+      'The Harbor Lights',
+    ]);
+    final added = await b.source.browse(
+      _root,
+      const BrowseQuery(sortId: 'added'),
+    );
     expect(added.items.first.title, 'The Harbor Lights');
   });
 
   test('folders_library_only_when_something_is_unmatched', () async {
     final b = await _build();
     var libraries = await b.source.libraries();
-    final folders =
-        libraries.firstWhere((l) => l.ref.id == kFilesFoldersLibraryId);
+    final folders = libraries.firstWhere(
+      (l) => l.ref.id == kFilesFoldersLibraryId,
+    );
     expect(folders.kind, LibraryKind.videos);
     expect(folders.title, 'Folders');
 
@@ -129,8 +145,9 @@ void main() {
     expect(loose.items.single.ref.kind, ItemKind.video);
     expect(loose.items.single.title, 'home video');
 
-    await b.fixture.index
-        .removeFiles([fileKeyFor(FilesFixture.rootId, 'loose/home video.mkv')]);
+    await b.fixture.index.removeFiles([
+      fileKeyFor(FilesFixture.rootId, 'loose/home video.mkv'),
+    ]);
     libraries = await b.source.libraries();
     expect(libraries.map((l) => l.ref.id), [FilesFixture.rootId]);
   });
@@ -140,7 +157,9 @@ void main() {
     await b.fixture.match('harborlights|2020', null);
     final page = await b.source.browse(_root, const BrowseQuery());
     expect(
-        page.items.map((i) => i.title), isNot(contains('The Harbor Lights')));
+      page.items.map((i) => i.title),
+      isNot(contains('The Harbor Lights')),
+    );
     final roots = await b.source.browse(_folders, const BrowseQuery());
     final top = await b.source.children(roots.items.single.ref);
     expect(top.items.map((i) => i.title), contains('Harbor Lights (2020)'));
@@ -168,20 +187,28 @@ void main() {
   // The episode rail reads an episode's still from `backdrop`, as Plex,
   // Jellyfin and Mydia send it. With the still in `poster`, every card fell
   // back to the show's backdrop and all episodes looked alike.
-  test('an_episode_still_is_its_backdrop_and_the_show_poster_its_poster',
-      () async {
-    final b = await _build();
-    final f = b.fixture;
-    final seasons = await b.source.children(f.ref(ItemKind.show, _show));
-    final eps = await b.source.children(seasons.items.first.ref);
-    expect(eps.items.map((e) => e.backdrop?.path),
-        ['/seedlings.jpg', '/orchard-back.jpg', '/orchard-back.jpg']);
-    expect(eps.items.map((e) => e.poster?.path),
-        ['/orchard.jpg', '/orchard.jpg', '/orchard.jpg']);
+  test(
+    'an_episode_still_is_its_backdrop_and_the_show_poster_its_poster',
+    () async {
+      final b = await _build();
+      final f = b.fixture;
+      final seasons = await b.source.children(f.ref(ItemKind.show, _show));
+      final eps = await b.source.children(seasons.items.first.ref);
+      expect(eps.items.map((e) => e.backdrop?.path), [
+        '/seedlings.jpg',
+        '/orchard-back.jpg',
+        '/orchard-back.jpg',
+      ]);
+      expect(eps.items.map((e) => e.poster?.path), [
+        '/orchard.jpg',
+        '/orchard.jpg',
+        '/orchard.jpg',
+      ]);
 
-    final detail = await b.source.item(eps.items.first.ref);
-    expect(detail.summary.backdrop?.path, '/seedlings.jpg');
-  });
+      final detail = await b.source.item(eps.items.first.ref);
+      expect(detail.summary.backdrop?.path, '/seedlings.jpg');
+    },
+  );
 
   test('watched_by_flag_or_ninety_percent', () async {
     final b = await _build();
@@ -253,22 +280,22 @@ void main() {
     final b = await _build();
     final f = b.fixture;
     IndexedFile file(String path, int first, int end) => IndexedFile(
-          key: fileKeyFor(FilesFixture.rootId, path),
-          rootId: FilesFixture.rootId,
-          path: path,
-          size: 10,
-          modified: filesT0,
-          firstSeen: filesT0,
-          parsed: ParsedName(
-            path: path,
-            isEpisode: true,
-            title: 'Glass Orchard',
-            groupKey: 'tv:glassorchard|',
-            season: 1,
-            episode: first,
-            episodeEnd: end,
-          ),
-        );
+      key: fileKeyFor(FilesFixture.rootId, path),
+      rootId: FilesFixture.rootId,
+      path: path,
+      size: 10,
+      modified: filesT0,
+      firstSeen: filesT0,
+      parsed: ParsedName(
+        path: path,
+        isEpisode: true,
+        title: 'Glass Orchard',
+        groupKey: 'tv:glassorchard|',
+        season: 1,
+        episode: first,
+        episodeEnd: end,
+      ),
+    );
     await f.index.putFiles([
       file('Glass Orchard/Glass Orchard S01E04-E05.mkv', 4, 5),
       file('Glass Orchard/Glass Orchard S01E05-E06.mkv', 5, 6),
@@ -292,17 +319,26 @@ void main() {
     final b = await _build();
     final f = b.fixture;
     await f.saveProgress(_movie, 20, 6000);
-    await f.saveProgress('201-1-2', 600, 1800,
-        at: filesT0.add(const Duration(hours: 1)));
-    await f.saveProgress('102', 300, 6000,
-        at: filesT0.add(const Duration(hours: 2)));
+    await f.saveProgress(
+      '201-1-2',
+      600,
+      1800,
+      at: filesT0.add(const Duration(hours: 1)),
+    );
+    await f.saveProgress(
+      '102',
+      300,
+      6000,
+      at: filesT0.add(const Duration(hours: 2)),
+    );
     final row = await b.source.continueWatching();
     expect(row.map((i) => i.ref.externalId), ['102', '201-1-2']);
     expect(row.last.showTitle, 'Glass Orchard');
 
     await b.source.removeFromContinueWatching(row.first.ref);
-    expect((await b.source.continueWatching()).map((i) => i.ref.externalId),
-        ['201-1-2']);
+    expect((await b.source.continueWatching()).map((i) => i.ref.externalId), [
+      '201-1-2',
+    ]);
   });
 
   test('artwork_bucket_rounds_up_and_caps_at_original', () async {
@@ -313,8 +349,10 @@ void main() {
     expect(r300.headers, isEmpty);
     expect(r300.cacheKey, '${filesLocalSource.id}|/copper.jpg|w342');
     expect((await b.source.artwork(art, width: 92))!.url, contains('/w92/'));
-    expect((await b.source.artwork(art, width: 781))!.url,
-        'https://image.tmdb.org/t/p/original/copper.jpg');
+    expect(
+      (await b.source.artwork(art, width: 781))!.url,
+      'https://image.tmdb.org/t/p/original/copper.jpg',
+    );
   });
 
   test('provisional_groups_show_their_parsed_title_without_artwork', () async {
@@ -340,7 +378,9 @@ void main() {
     await b.source.setWatched(f.ref(ItemKind.movie, _movie), true);
     final page = await b.source.unwatched();
     expect(
-        page.items.map((i) => i.ref.externalId), containsAll(['102', _show]));
+      page.items.map((i) => i.ref.externalId),
+      containsAll(['102', _show]),
+    );
     expect(page.items.map((i) => i.ref.externalId), isNot(contains(_movie)));
   });
 
@@ -348,20 +388,24 @@ void main() {
     final b = await _build();
     final f = b.fixture;
     b.relay.down = false;
-    await b.source.setMatch(f.ref(ItemKind.movie, '102'),
-        const TmdbCandidate(id: 900, title: 'Pinned 900'));
+    await b.source.setMatch(
+      f.ref(ItemKind.movie, '102'),
+      const TmdbCandidate(id: 900, title: 'Pinned 900'),
+    );
     final g = f.index.group('harborlights|2020')!;
     expect((g.tmdbId, g.pinned), (900, true));
-    expect((await b.source.item(f.ref(ItemKind.movie, '900'))).summary.title,
-        'Pinned 900');
+    expect(
+      (await b.source.item(f.ref(ItemKind.movie, '900'))).summary.title,
+      'Pinned 900',
+    );
 
     await b.source.setMatch(f.ref(ItemKind.movie, '900'), null);
     expect(f.index.group('harborlights|2020')!.tmdbId, isNull);
 
     final unreadable = f.ref(
-        ItemKind.video,
-        unmatchedFileId(
-            fileKeyFor(FilesFixture.rootId, 'loose/home video.mkv')));
+      ItemKind.video,
+      unmatchedFileId(fileKeyFor(FilesFixture.rootId, 'loose/home video.mkv')),
+    );
     expect(() => b.source.setMatch(unreadable, null), throwsArgumentError);
   });
 
@@ -382,8 +426,10 @@ void main() {
     final show = f.index.group('tv:glassorchard|')!;
     expect((show.tmdbId, show.isShow, show.pinned), (101, true, false));
 
-    await b.source.setMatch(f.ref(ItemKind.show, _movie),
-        const TmdbCandidate(id: 900, title: 'Pinned 900'));
+    await b.source.setMatch(
+      f.ref(ItemKind.show, _movie),
+      const TmdbCandidate(id: 900, title: 'Pinned 900'),
+    );
     expect(f.index.group('tv:glassorchard|')!.tmdbId, 900);
     expect(f.index.group('coppervalley|2018')!.isShow, isFalse);
   });
@@ -392,8 +438,10 @@ void main() {
     final b = await _build();
     b.relay.down = false;
     await b.source.searchMatches(b.fixture.ref(ItemKind.show, _show), 'Glass');
-    await b.source
-        .searchMatches(b.fixture.ref(ItemKind.movie, _movie), 'Copper');
+    await b.source.searchMatches(
+      b.fixture.ref(ItemKind.movie, _movie),
+      'Copper',
+    );
     expect(b.relay.searched, ['show:Glass', 'movie:Copper']);
   });
 
@@ -406,8 +454,9 @@ void main() {
     final page = await b.source.browse(_root, const BrowseQuery());
     expect(page.items, hasLength(3));
     expect(
-        (await b.source.item(b.fixture.ref(ItemKind.movie, _movie))).versions,
-        hasLength(2));
+      (await b.source.item(b.fixture.ref(ItemKind.movie, _movie))).versions,
+      hasLength(2),
+    );
   });
 
   test('unauthorized_flags_reauth', () async {

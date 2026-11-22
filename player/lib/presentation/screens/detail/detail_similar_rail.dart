@@ -69,9 +69,9 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.3,
-                      ),
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.3,
+                  ),
                 ),
               ),
               AnimatedRotation(
@@ -101,10 +101,11 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
           FocusMemoryRegion(
             debugLabel: 'similar-disclosure',
             child: FocusMemoryItem(
-                key: DetailSimilarRail.headerSectionKey,
-                id: 'disclosure',
-                index: 0,
-                child: header),
+              key: DetailSimilarRail.headerSectionKey,
+              id: 'disclosure',
+              index: 0,
+              child: header,
+            ),
           )
         else
           header,

@@ -20,74 +20,86 @@ import 'player_screen_test_harness.dart';
 
 void main() {
   testWidgets(
-      'a failed cast keeps the chosen device and falls through to local '
-      'playback', (tester) async {
-    final castManager = CapturingCastSessionManager()
-      ..startCastError = const CastBackendException(
-        'fake unreachable receiver',
-        CastFailureKind.unreachable,
+    'a failed cast keeps the chosen device and falls through to local '
+    'playback',
+    (tester) async {
+      final castManager = CapturingCastSessionManager()
+        ..startCastError = const CastBackendException(
+          'fake unreachable receiver',
+          CastFailureKind.unreachable,
+        );
+      final proxyService = TrackingLocalProxyService();
+
+      // Direct play, and 12s in — below `kMinResumeThresholdSeconds` — so no
+      // resume dialog to answer and no HLS session mutation to stub for the
+      // local fallback.
+      //
+      // The pre-play queries now fire concurrently (see `runIsolated`), so an
+      // ordered `ScriptedMydiaTransport.responses` list can no longer script them -- dispatch
+      // on the operation instead.
+      final server = ScriptedMydiaTransport((request, index) {
+        if (request.operation == 'MovieDetail') {
+          return movieDetailResponse(positionSeconds: 12);
+        }
+        if (request.operation == 'MovieSegments') {
+          return movieSegmentsResponse();
+        }
+        if (request.operation == 'SubtitleTrackSettings') {
+          return subtitleTrackSettingsResponse();
+        }
+        if (request.operation == 'MovieSubtitlePreference') {
+          return subtitlePreferenceResponse();
+        }
+        return streamingCandidatesResponse(duration: 5400, directPlay: true);
+      });
+
+      final container = buildPlayerScreenContainer(
+        server: server,
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
+        castManager: castManager,
+        proxyService: proxyService,
       );
-    final proxyService = TrackingLocalProxyService();
+      addTearDown(container.dispose);
 
-    // Direct play, and 12s in — below `kMinResumeThresholdSeconds` — so no
-    // resume dialog to answer and no HLS session mutation to stub for the
-    // local fallback.
-    //
-    // The pre-play queries now fire concurrently (see `runIsolated`), so an
-    // ordered `ScriptedMydiaTransport.responses` list can no longer script them -- dispatch
-    // on the operation instead.
-    final server = ScriptedMydiaTransport((request, index) {
-      if (request.operation == 'MovieDetail') {
-        return movieDetailResponse(positionSeconds: 12);
-      }
-      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
-      if (request.operation == 'SubtitleTrackSettings') {
-        return subtitleTrackSettingsResponse();
-      }
-      if (request.operation == 'MovieSubtitlePreference') {
-        return subtitlePreferenceResponse();
-      }
-      return streamingCandidatesResponse(duration: 5400, directPlay: true);
-    });
+      // Chosen before the screen mounts, exactly like `CastButton` on a detail
+      // screen.
+      container.read(castTargetProvider.notifier).set(testDevice);
 
-    final container = buildPlayerScreenContainer(
-      server: server,
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
-      castManager: castManager,
-      proxyService: proxyService,
-    );
-    addTearDown(container.dispose);
+      await pumpPlayerScreen(tester, container);
+      await pumpUntil(tester, () => castManager.capturedRequest != null);
 
-    // Chosen before the screen mounts, exactly like `CastButton` on a detail
-    // screen.
-    container.read(castTargetProvider.notifier).set(testDevice);
+      // Confirms the cast really was attempted (and therefore really failed),
+      // rather than this test passing because startCast was never reached.
+      expect(castManager.capturedRequest, isNotNull);
 
-    await pumpPlayerScreen(tester, container);
-    await pumpUntil(tester, () => castManager.capturedRequest != null);
+      // Local playback was attempted after the cast failed: it fails too,
+      // under `flutter test`, because building a real media_kit `Player`
+      // requires `MediaKit.ensureInitialized` (see
+      // `direct_play_resume_prompt_test.dart`'s header) — but that failure is
+      // caught and turned into this error state. Reaching it at all is the
+      // proof that `_castToTargetIfSet` returned false and execution fell
+      // through, rather than the screen going blank on the failed cast.
+      await pumpUntil(tester, () => castManager.capturedRequest != null);
+      await pumpUntil(
+        tester,
+        () => find.text('Failed to load video').evaluate().isNotEmpty,
+      );
+      expect(
+        find.text('Failed to load video'),
+        findsOneWidget,
+        reason:
+            'a failed cast must fall through to a local playback '
+            'attempt, not strand the user on a dead screen',
+      );
 
-    // Confirms the cast really was attempted (and therefore really failed),
-    // rather than this test passing because startCast was never reached.
-    expect(castManager.capturedRequest, isNotNull);
-
-    // Local playback was attempted after the cast failed: it fails too,
-    // under `flutter test`, because building a real media_kit `Player`
-    // requires `MediaKit.ensureInitialized` (see
-    // `direct_play_resume_prompt_test.dart`'s header) — but that failure is
-    // caught and turned into this error state. Reaching it at all is the
-    // proof that `_castToTargetIfSet` returned false and execution fell
-    // through, rather than the screen going blank on the failed cast.
-    await pumpUntil(tester, () => castManager.capturedRequest != null);
-    await pumpUntil(
-      tester,
-      () => find.text('Failed to load video').evaluate().isNotEmpty,
-    );
-    expect(find.text('Failed to load video'), findsOneWidget,
-        reason: 'a failed cast must fall through to a local playback '
-            'attempt, not strand the user on a dead screen');
-
-    expect(container.read(castTargetProvider), testDevice,
-        reason: 'the chosen device must survive a failed cast so the cast '
+      expect(
+        container.read(castTargetProvider),
+        testDevice,
+        reason:
+            'the chosen device must survive a failed cast so the cast '
             'bar can still offer a reconnect — clearing it here would be '
-            'the regression this test exists to catch');
-  });
+            'the regression this test exists to catch',
+      );
+    },
+  );
 }

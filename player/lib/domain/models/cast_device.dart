@@ -45,7 +45,8 @@ class CastDevice {
       model: json['model'] as String?,
       host: json['host'] as String?,
       port: json['port'] as int?,
-      metadata: (json['metadata'] as Map?)?.map(
+      metadata:
+          (json['metadata'] as Map?)?.map(
             (k, v) => MapEntry(k as String, v.toString()),
           ) ??
           const {},
@@ -53,14 +54,14 @@ class CastDevice {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'protocol': protocol.name,
-        'model': model,
-        'host': host,
-        'port': port,
-        'metadata': metadata,
-      };
+    'id': id,
+    'name': name,
+    'protocol': protocol.name,
+    'model': model,
+    'host': host,
+    'port': port,
+    'metadata': metadata,
+  };
 
   @override
   bool operator ==(Object other) {
@@ -77,12 +78,7 @@ class CastDevice {
 }
 
 /// Represents the current state of casting playback.
-enum CastPlaybackState {
-  idle,
-  buffering,
-  playing,
-  paused,
-}
+enum CastPlaybackState { idle, buffering, playing, paused }
 
 /// Information about the media being cast.
 class CastMediaInfo {
@@ -176,12 +172,12 @@ class CastSubtitleTrack {
   static bool isServableTrackId(String id) => _servableIdPattern.hasMatch(id);
 
   CastSubtitleTrack copyWith({String? url}) => CastSubtitleTrack(
-        trackId: trackId,
-        url: url ?? this.url,
-        label: label,
-        language: language,
-        burnedIn: burnedIn,
-      );
+    trackId: trackId,
+    url: url ?? this.url,
+    label: label,
+    language: language,
+    burnedIn: burnedIn,
+  );
 
   @override
   bool operator ==(Object other) =>

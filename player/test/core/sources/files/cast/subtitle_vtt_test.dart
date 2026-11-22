@@ -3,7 +3,8 @@ import 'package:player/core/sources/files/cast/subtitle_vtt.dart';
 
 void main() {
   test('converts SRT cues and timestamps to WebVTT', () {
-    const srt = '1\r\n'
+    const srt =
+        '1\r\n'
         '00:00:01,050 --> 00:00:04,200\r\n'
         'Welcome to Copper Valley.\r\n'
         '\r\n'
@@ -25,7 +26,8 @@ void main() {
   });
 
   test('strips UTF-8 BOM from SRT and does not touch commas in dialogue', () {
-    const srt = '\uFEFF1\n'
+    const srt =
+        '\uFEFF1\n'
         '00:00:05,000 --> 00:00:08,125\n'
         'Wait, wait, wait --> 00:00:09,000 is not a timing line.\n';
 
@@ -38,7 +40,8 @@ void main() {
   });
 
   test('normalizes existing WebVTT and ensures WEBVTT header', () {
-    const rawVtt = '\uFEFFWEBVTT - Harbor Lights\r\n\r\n'
+    const rawVtt =
+        '\uFEFFWEBVTT - Harbor Lights\r\n\r\n'
         '00:00:01.000 --> 00:00:02.000\r\n'
         'Hello.\r\n';
     expect(

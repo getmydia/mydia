@@ -12,12 +12,7 @@ void main() {
   UpNextCountdown build({
     required void Function() onElapsed,
     Duration total = const Duration(seconds: 10),
-  }) =>
-      UpNextCountdown(
-        total: total,
-        onElapsed: onElapsed,
-        clock: () => now,
-      );
+  }) => UpNextCountdown(total: total, onElapsed: onElapsed, clock: () => now);
 
   /// Advances both the fake timer queue and the fake clock together, so
   /// `raceGuard` sees the same passage of time the ticker does.

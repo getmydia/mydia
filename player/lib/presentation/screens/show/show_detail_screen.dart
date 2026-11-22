@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../widgets/detail_art_image.dart';
 import '../../widgets/glass/glass_badge.dart';
 import '../../../core/focus/focus_memory.dart';
@@ -148,9 +149,7 @@ class ShowDetailScreen extends ConsumerWidget {
 
     final selectedSeason = ref.watch(selectedSeasonProvider(key));
     final episodesAsync = ref.watch(
-      seasonEpisodesViewProvider(
-        (show: target, seasonNumber: selectedSeason),
-      ),
+      seasonEpisodesViewProvider((show: target, seasonNumber: selectedSeason)),
     );
     final episodes = episodesAsync.value ?? const <EpisodeView>[];
     final selectedEpisode = resolveSelectedEpisode(selectedEpisodeId, episodes);
@@ -174,9 +173,7 @@ class ShowDetailScreen extends ConsumerWidget {
               child: CastRail(members: show.cast),
             ),
           ),
-          SliverToBoxAdapter(
-            child: DetailSimilarRail(show: show),
-          ),
+          SliverToBoxAdapter(child: DetailSimilarRail(show: show)),
           SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,15 +181,17 @@ class ShowDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 20),
                 // Status chip only. Content rating and genres live in the
                 // hero's tag row; repeating them here rendered each twice.
-                DetailMetadataWrap(chips: [
-                  if (show.status case final status? when status.isNotEmpty)
-                    DetailMetadataChip(
-                      label: status,
-                      color: status == 'Ended'
-                          ? palette.textSecondary
-                          : AppColors.success,
-                    ),
-                ]),
+                DetailMetadataWrap(
+                  chips: [
+                    if (show.status case final status? when status.isNotEmpty)
+                      DetailMetadataChip(
+                        label: status,
+                        color: status == 'Ended'
+                            ? palette.textSecondary
+                            : AppColors.success,
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 24),
                 if (show.overview case final overview?) ...[
                   DetailOverview(overview: overview),
@@ -248,10 +247,14 @@ class ShowDetailScreen extends ConsumerWidget {
     final palette = context.palette;
     final isNextUp = show.nextUpEpisodeId == episode.id;
     final label = isNextUp
-        ? context.l10n
-            .showEpisodePillNextUp(episode.seasonNumber, episode.episodeNumber)
-        : context.l10n
-            .showEpisodePill(episode.seasonNumber, episode.episodeNumber);
+        ? context.l10n.showEpisodePillNextUp(
+            episode.seasonNumber,
+            episode.episodeNumber,
+          )
+        : context.l10n.showEpisodePill(
+            episode.seasonNumber,
+            episode.episodeNumber,
+          );
 
     return GlassBadge(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -331,7 +334,8 @@ class ShowDetailScreen extends ConsumerWidget {
   }) {
     final seasonKey = (show: target, seasonNumber: episode.seasonNumber);
     final item = episode.target.ref;
-    final canDownload = isDownloadSupported &&
+    final canDownload =
+        isDownloadSupported &&
         show.features.contains(DetailFeature.download) &&
         episode.files.isNotEmpty;
     return DetailActionRow(
@@ -339,7 +343,9 @@ class ShowDetailScreen extends ConsumerWidget {
       watched: episode.watched,
       showWatched: show.features.contains(DetailFeature.watched),
       // No failure toast, as before: the hero toggle never raised one.
-      onToggleWatched: () => ref.read(seasonActionsProvider(seasonKey)).episode(
+      onToggleWatched: () => ref
+          .read(seasonActionsProvider(seasonKey))
+          .episode(
             episode,
             episode.watched
                 ? EpisodeWatchedAction.unwatched
@@ -350,16 +356,22 @@ class ShowDetailScreen extends ConsumerWidget {
       onToggleFavorite: () =>
           ref.read(showActionsProvider(target)).toggleFavorite(),
       onDownload: canDownload
-          ? () => startItemDownload(context, ref,
-              item: item, metadata: episodeDownloadMetadata(episode))
+          ? () => startItemDownload(
+              context,
+              ref,
+              item: item,
+              metadata: episodeDownloadMetadata(episode),
+            )
           : null,
       trailerUrl: show.trailerUrl,
       showDownload: canDownload,
       // Per-episode, not per-show: the hero's Download action downloads
       // the selected episode.
-      isDownloaded: canDownload &&
+      isDownloaded:
+          canDownload &&
           (ref.watch(isItemDownloadedProvider(item)).value ?? false),
-      onShowMediaInfo: !show.features.contains(DetailFeature.mediaInfo) ||
+      onShowMediaInfo:
+          !show.features.contains(DetailFeature.mediaInfo) ||
               episode.files.isEmpty
           ? null
           : () => showMediaInfo(context: context, item: item),
@@ -368,14 +380,16 @@ class ShowDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildTagColumn(
-      BuildContext context, ShowView show, EpisodeView episode) {
+    BuildContext context,
+    ShowView show,
+    EpisodeView episode,
+  ) {
     return DetailTagColumn(
       tags: [
         if (episode.runtimeDuration case final runtime?)
           context.l10n.runtime(runtime),
-        if (episode.files.firstOrNull?.resolution case final resolution?)
-          resolution,
-        if (show.contentRating case final rating?) rating,
+        ?episode.files.firstOrNull?.resolution,
+        ?show.contentRating,
         ...show.genres,
       ],
       overview: episode.overview,

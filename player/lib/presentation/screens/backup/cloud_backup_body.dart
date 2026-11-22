@@ -23,8 +23,9 @@ import 'pending_sources_row.dart';
 import 'store_picker.dart';
 
 /// Where a Google account's access granted to apps is removed.
-final Uri googleConnectionsUrl =
-    Uri.parse('https://myaccount.google.com/connections');
+final Uri googleConnectionsUrl = Uri.parse(
+  'https://myaccount.google.com/connections',
+);
 
 /// Asks before a destructive backup action. True when confirmed. [extra]
 /// goes under [body].
@@ -67,15 +68,17 @@ Future<bool> showBackupConfirm(
 /// What a failed cloud store operation tells the viewer: how to fix an
 /// unusable iCloud, else that it did not work.
 String cloudFailureText(
-        AppLocalizations l10n, BackupStoreKind kind, Object error) =>
-    switch (error) {
-      BackupRelayException(
-        kind: BackupRelayError.cloudUnavailable || BackupRelayError.signedOut
-      )
-          when kind == BackupStoreKind.icloud =>
-        l10n.backupICloudUnavailable,
-      _ => l10n.backupActionFailed,
-    };
+  AppLocalizations l10n,
+  BackupStoreKind kind,
+  Object error,
+) => switch (error) {
+  BackupRelayException(
+    kind: BackupRelayError.cloudUnavailable || BackupRelayError.signedOut,
+  )
+      when kind == BackupStoreKind.icloud =>
+    l10n.backupICloudUnavailable,
+  _ => l10n.backupActionFailed,
+};
 
 /// The relative time of [ms] since the epoch, "3 minutes ago".
 String backupAgo(AppLocalizations l10n, int ms) =>
@@ -108,8 +111,10 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
       return true;
     } catch (e) {
       debugPrint('[Backup] Cloud action failed: ${e.runtimeType}');
-      toaster.show(cloudFailureText(l10n, widget.kind, e),
-          kind: ToastKind.error);
+      toaster.show(
+        cloudFailureText(l10n, widget.kind, e),
+        kind: ToastKind.error,
+      );
       return false;
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -152,8 +157,12 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
               key: const Key('backup-google-connections'),
               icon: const Icon(Icons.open_in_new_rounded, size: 18),
               label: Text(l10n.backupGoogleConnectionsLink),
-              onPressed: () => unawaited(launchUrl(googleConnectionsUrl,
-                  mode: LaunchMode.externalApplication)),
+              onPressed: () => unawaited(
+                launchUrl(
+                  googleConnectionsUrl,
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
             )
           : null,
     )) {
@@ -215,8 +224,9 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
               BackupLine(
                 key: Key('backup-unreadable-$slot'),
                 icon: Icons.error_outline_rounded,
-                text: l10n
-                    .backupUnreadable(names[slot] ?? l10n.backupUnknownDevice),
+                text: l10n.backupUnreadable(
+                  names[slot] ?? l10n.backupUnknownDevice,
+                ),
                 warning: true,
               ),
             for (final slot in _s.slots.value) _device(l10n, slot, names),
@@ -228,7 +238,8 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
                 TextButton.icon(
                   key: const Key('backup-delete'),
                   style: TextButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error),
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   label: Text(l10n.backupDelete),
                   onPressed: _busy ? null : _delete,
@@ -242,16 +253,21 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
   }
 
   Widget _device(
-      AppLocalizations l10n, SlotInfo slot, Map<String, String> names) {
+    AppLocalizations l10n,
+    SlotInfo slot,
+    Map<String, String> names,
+  ) {
     final own = slot.slotId == _s.ownSlotId;
-    final name = names[slot.slotId] ??
+    final name =
+        names[slot.slotId] ??
         slot.deviceName ??
         (own ? l10n.backupThisDevice : l10n.backupUnknownDevice);
     return ListTile(
       key: Key('backup-cloud-device-${slot.slotId}'),
       dense: true,
-      leading:
-          Icon(own ? Icons.smartphone_rounded : Icons.devices_other_rounded),
+      leading: Icon(
+        own ? Icons.smartphone_rounded : Icons.devices_other_rounded,
+      ),
       title: Text(name),
       subtitle: Text(switch (slot.updatedAtMs) {
         null => l10n.backupStatusNever,
@@ -284,22 +300,22 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
       BackupIdle(:final lastSuccessMs) => [where, last(lastSuccessMs)],
       BackupUploading() => [where, l10n.backupStatusUploading],
       BackupError(kind: BackupRelayError.signedOut) => [
-          l10n.backupSignedOut(_store)
-        ],
+        l10n.backupSignedOut(_store),
+      ],
       BackupError(kind: BackupRelayError.quotaFull) when !icloud => [
-          l10n.backupQuotaFull
-        ],
+        l10n.backupQuotaFull,
+      ],
       BackupError(kind: BackupRelayError.cloudUnavailable) when icloud => [
-          l10n.backupICloudUnavailable
-        ],
+        l10n.backupICloudUnavailable,
+      ],
       BackupError(:final kind, :final lastSuccessMs) => [
-          switch (kind) {
-            BackupRelayError.network => l10n.backupErrorNetwork,
-            BackupRelayError.rateLimited => l10n.backupErrorRateLimited,
-            _ => l10n.backupErrorGeneric,
-          },
-          last(lastSuccessMs),
-        ],
+        switch (kind) {
+          BackupRelayError.network => l10n.backupErrorNetwork,
+          BackupRelayError.rateLimited => l10n.backupErrorRateLimited,
+          _ => l10n.backupErrorGeneric,
+        },
+        last(lastSuccessMs),
+      ],
     };
     if (lines.isEmpty) return null;
     return Column(
@@ -338,10 +354,13 @@ class BackupNotice extends StatelessWidget {
           Icon(icon, size: 20, color: warning ? error : palette.primary),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(text,
-                style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: warning ? error : palette.textPrimary)),
+            child: Text(
+              text,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: warning ? error : palette.textPrimary,
+              ),
+            ),
           ),
           action,
         ],
@@ -375,7 +394,9 @@ class BackupLine extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: color),
           const SizedBox(width: 12),
-          Expanded(child: Text(text, style: TextStyle(color: color))),
+          Expanded(
+            child: Text(text, style: TextStyle(color: color)),
+          ),
         ],
       ),
     );

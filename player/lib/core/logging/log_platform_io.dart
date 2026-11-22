@@ -66,8 +66,10 @@ class FileLogStore implements LogStore {
     store._active = store._nextFile();
     await store._prune();
     if (flushInterval != null) {
-      store._timer =
-          Timer.periodic(flushInterval, (_) => unawaited(store.flush()));
+      store._timer = Timer.periodic(
+        flushInterval,
+        (_) => unawaited(store.flush()),
+      );
     }
     return store;
   }
@@ -149,12 +151,15 @@ class FileLogStore implements LogStore {
   }
 
   File _nextFile() {
-    final stamp =
-        _now().toUtc().millisecondsSinceEpoch.toString().padLeft(13, '0');
+    final stamp = _now().toUtc().millisecondsSinceEpoch.toString().padLeft(
+      13,
+      '0',
+    );
     final seq = (_seq++).toString().padLeft(4, '0');
     _activeBytes = 0;
     return File(
-        '${_dir.path}${Platform.pathSeparator}$stamp-$_sessionId-$seq.ndjson');
+      '${_dir.path}${Platform.pathSeparator}$stamp-$_sessionId-$seq.ndjson',
+    );
   }
 
   static String _nameOf(File file) => file.uri.pathSegments.last;
@@ -174,8 +179,9 @@ class FileLogStore implements LogStore {
 
   Future<void> _prune() async {
     try {
-      final others =
-          (await _files()).where((f) => f.path != _active.path).toList();
+      final others = (await _files())
+          .where((f) => f.path != _active.path)
+          .toList();
       final own = others.where(_isOwnFile).toList();
       final foreignCutoff = _now().toUtc().subtract(_foreignFileGrace);
       final staleForeign = <File>[];
@@ -245,15 +251,17 @@ class FileLogStore implements LogStore {
       files = await _files();
     } on FileSystemException {
       return LogBatch(
-          lines: const [],
-          next: from ?? LogCursor(_nameOf(_active), 0),
-          gap: false);
+        lines: const [],
+        next: from ?? LogCursor(_nameOf(_active), 0),
+        gap: false,
+      );
     }
     if (files.isEmpty) {
       return LogBatch(
-          lines: const [],
-          next: from ?? LogCursor(_nameOf(_active), 0),
-          gap: false);
+        lines: const [],
+        next: from ?? LogCursor(_nameOf(_active), 0),
+        gap: false,
+      );
     }
 
     var index = 0;
@@ -302,8 +310,10 @@ class FileLogStore implements LogStore {
         var start = 0;
         for (var i = 0; i < chunk.length; i++) {
           if (chunk[i] != _newline) continue;
-          final line =
-              utf8.decode(chunk.sublist(start, i), allowMalformed: true);
+          final line = utf8.decode(
+            chunk.sublist(start, i),
+            allowMalformed: true,
+          );
           if (untilMs != null && _timeOf(line) > untilMs) {
             offset += start;
             cursor = LogCursor(_nameOf(file), offset);

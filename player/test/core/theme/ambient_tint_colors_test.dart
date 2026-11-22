@@ -37,15 +37,19 @@ void main() {
 
   test('resolveAmbientTint', () {
     final tint = AmbientTintColors.fromSeed(const Color(0xFF3060C0));
-    expect(resolveAmbientTint(null, Palettes.slate),
-        AmbientTintColors.neutralFor(Palettes.slate));
-    expect(resolveAmbientTint(tint, Palettes.slate), tint);
-    expect(resolveAmbientTint(tint, Palettes.oledBlack),
-        AmbientTintColors.neutralFor(Palettes.oledBlack));
     expect(
-        resolveAmbientTint(tint, Palettes.macos(Palettes.macosDefaultAccent)),
-        AmbientTintColors.neutralFor(
-            Palettes.macos(Palettes.macosDefaultAccent)));
+      resolveAmbientTint(null, Palettes.slate),
+      AmbientTintColors.neutralFor(Palettes.slate),
+    );
+    expect(resolveAmbientTint(tint, Palettes.slate), tint);
+    expect(
+      resolveAmbientTint(tint, Palettes.oledBlack),
+      AmbientTintColors.neutralFor(Palettes.oledBlack),
+    );
+    expect(
+      resolveAmbientTint(tint, Palettes.macos(Palettes.macosDefaultAccent)),
+      AmbientTintColors.neutralFor(Palettes.macos(Palettes.macosDefaultAccent)),
+    );
   });
 
   test('fromSeed clamps tone into 14..20 and chroma to 24', () {

@@ -29,7 +29,10 @@ class _ChoicesFailStore extends InMemorySourceStore {
   Future<SourceSnapshot> load() async {
     final s = await super.load();
     return SourceSnapshot(
-        accounts: s.accounts, activeId: s.activeId, allServers: choices);
+      accounts: s.accounts,
+      activeId: s.activeId,
+      allServers: choices,
+    );
   }
 
   @override
@@ -57,20 +60,24 @@ void main() {
     store = InMemorySourceStore();
     storage = MockAuthStorage();
     cache = InMemorySourceCache();
-    container = ProviderContainer(overrides: [
-      sourceCacheProvider.overrideWithValue(cache),
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        sourceCacheProvider.overrideWithValue(cache),
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      ],
+    );
     addTearDown(container.dispose);
   });
 
   test('lists stored servers as third-party sources', () async {
     await store.putAccount(plexRecord());
     await container.read(sourceRecordsProvider.future);
-    expect(container.read(thirdPartySourcesProvider).single.id,
-        const SourceId('acc1:owner:abc123'));
+    expect(
+      container.read(thirdPartySourcesProvider).single.id,
+      const SourceId('acc1:owner:abc123'),
+    );
     expect(container.read(sourcesLoadingProvider), isFalse);
   });
 
@@ -85,8 +92,10 @@ void main() {
 
   test('removing an account drops its collection sync entries only', () async {
     Hive.init('./.dart_tool/source_records_sync_test');
-    final box = await Hive.openBox<Map<dynamic, dynamic>>('sync-removal-test',
-        bytes: Uint8List(0));
+    final box = await Hive.openBox<Map<dynamic, dynamic>>(
+      'sync-removal-test',
+      bytes: Uint8List(0),
+    );
     addTearDown(box.close);
     const mine = 'acc1:owner:abc123';
     const theirs = 'acc2:owner:zzz999';
@@ -98,13 +107,15 @@ void main() {
     await box.put('3', {'sourceId': theirs});
     await box.put('4', {'name': 'orphan'});
 
-    final c = ProviderContainer(overrides: [
-      sourceCacheProvider.overrideWithValue(cache),
-      noDownloadsOverride,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      collectionSyncBoxProvider.overrideWith((ref) async => box),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        sourceCacheProvider.overrideWithValue(cache),
+        noDownloadsOverride,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        collectionSyncBoxProvider.overrideWith((ref) async => box),
+      ],
+    );
     addTearDown(c.dispose);
     await store.putAccount(plexRecord());
     await c.read(sourceRecordsProvider.future);
@@ -115,20 +126,25 @@ void main() {
 
   group('legacy bare-id collection sync entries', () {
     Future<(ProviderContainer, Box<Map<dynamic, dynamic>>)> setUpMydia(
-        String boxName) async {
+      String boxName,
+    ) async {
       Hive.init('./.dart_tool/source_records_sync_test');
-      final box = await Hive.openBox<Map<dynamic, dynamic>>(boxName,
-          bytes: Uint8List(0));
+      final box = await Hive.openBox<Map<dynamic, dynamic>>(
+        boxName,
+        bytes: Uint8List(0),
+      );
       addTearDown(box.close);
       await box.put('1', {'name': 'legacy'});
       await box.put('2', {'sourceId': 'ma:owner:a'});
-      final c = ProviderContainer(overrides: [
-        sourceCacheProvider.overrideWithValue(cache),
-        noDownloadsOverride,
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-        collectionSyncBoxProvider.overrideWith((ref) async => box),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          sourceCacheProvider.overrideWithValue(cache),
+          noDownloadsOverride,
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+          collectionSyncBoxProvider.overrideWith((ref) async => box),
+        ],
+      );
       addTearDown(c.dispose);
       await store.putAccount(mydiaRecord('a', addedAtMs: 0));
       await store.putAccount(mydiaRecord('b', addedAtMs: 1));
@@ -187,13 +203,16 @@ void main() {
     final saved = downloadLookupTimeout;
     downloadLookupTimeout = const Duration(milliseconds: 50);
     addTearDown(() => downloadLookupTimeout = saved);
-    final stuck = ProviderContainer(overrides: [
-      downloadManagerProvider
-          .overrideWith((ref) => Completer<DownloadService>().future),
-      noCollectionSyncOverride,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-    ]);
+    final stuck = ProviderContainer(
+      overrides: [
+        downloadManagerProvider.overrideWith(
+          (ref) => Completer<DownloadService>().future,
+        ),
+        noCollectionSyncOverride,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      ],
+    );
     addTearDown(stuck.dispose);
     await store.putAccount(plexRecord());
     await stuck.read(sourceRecordsProvider.future);
@@ -203,15 +222,17 @@ void main() {
 
   group('download cleanup of a removed account', () {
     Future<(ProviderContainer, Completer<DownloadService>, _Recorder)>
-        heldManager() async {
+    heldManager() async {
       final gate = Completer<DownloadService>();
-      final c = ProviderContainer(overrides: [
-        sourceCacheProvider.overrideWithValue(cache),
-        downloadManagerProvider.overrideWith((ref) => gate.future),
-        noCollectionSyncOverride,
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          sourceCacheProvider.overrideWithValue(cache),
+          downloadManagerProvider.overrideWith((ref) => gate.future),
+          noCollectionSyncOverride,
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        ],
+      );
       addTearDown(c.dispose);
       await store.putAccount(plexRecord());
       await c.read(sourceRecordsProvider.future);
@@ -220,8 +241,9 @@ void main() {
 
     test('a normal removal deletes the account downloads', () async {
       final (c, gate, recorder) = await heldManager();
-      final removal =
-          c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+      final removal = c
+          .read(sourceRecordsProvider.notifier)
+          .removeAccount('acc1');
       gate.complete(recorder);
       await removal;
       expect(recorder.deleted, ['acc1']);
@@ -245,14 +267,17 @@ void main() {
       final saved = downloadLookupTimeout;
       downloadLookupTimeout = timeout;
       addTearDown(() => downloadLookupTimeout = saved);
-      final c = ProviderContainer(overrides: [
-        sourceCacheProvider.overrideWithValue(cache),
-        downloadManagerProvider
-            .overrideWith((ref) => Completer<DownloadService>().future),
-        noCollectionSyncOverride,
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          sourceCacheProvider.overrideWithValue(cache),
+          downloadManagerProvider.overrideWith(
+            (ref) => Completer<DownloadService>().future,
+          ),
+          noCollectionSyncOverride,
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        ],
+      );
       addTearDown(c.dispose);
       return c;
     }
@@ -273,7 +298,11 @@ void main() {
         ),
         profiles: const [
           SourceProfile(
-              id: 'owner', accountId: 'acc2', name: 'Wren', isOwner: true),
+            id: 'owner',
+            accountId: 'acc2',
+            name: 'Wren',
+            isOwner: true,
+          ),
         ],
         servers: [
           SourceServer(
@@ -291,20 +320,22 @@ void main() {
       );
     }
 
-    test('removeLockedAccounts waits for the manager once, not per account',
-        () async {
-      await store.putAccount(locked(plexRecord()));
-      await store.putAccount(locked(second()));
-      final c = stuckContainer();
-      await c.read(sourceRecordsProvider.future);
+    test(
+      'removeLockedAccounts waits for the manager once, not per account',
+      () async {
+        await store.putAccount(locked(plexRecord()));
+        await store.putAccount(locked(second()));
+        final c = stuckContainer();
+        await c.read(sourceRecordsProvider.future);
 
-      final watch = Stopwatch()..start();
-      await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
-      watch.stop();
+        final watch = Stopwatch()..start();
+        await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
+        watch.stop();
 
-      expect(watch.elapsed, lessThan(timeout * 2));
-      expect((await store.load()).accounts, isEmpty);
-    });
+        expect(watch.elapsed, lessThan(timeout * 2));
+        expect((await store.load()).accounts, isEmpty);
+      },
+    );
 
     test('a write queued during the download wait is not blocked', () async {
       await store.putAccount(plexRecord());
@@ -348,23 +379,27 @@ void main() {
     });
   });
 
-  test('a failed choices write still removes the account and its secrets',
-      () async {
-    final failing = _ChoicesFailStore();
-    final c = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => failing),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      ...noHiveOverrides,
-    ]);
-    addTearDown(c.dispose);
-    await failing.putAccount(plexRecord());
-    failing.choices = {const SourceId('acc1:owner:abc123'): true};
-    await storage.write('source/acc1/account_token', 't');
-    await c.read(sourceRecordsProvider.future);
-    await c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
-    expect(c.read(thirdPartySourcesProvider), isEmpty);
-    expect(await storage.read('source/acc1/account_token'), isNull);
-  });
+  test(
+    'a failed choices write still removes the account and its secrets',
+    () async {
+      final failing = _ChoicesFailStore();
+      final c = ProviderContainer(
+        overrides: [
+          sourceStoreProvider.overrideWith((ref) async => failing),
+          sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+          ...noHiveOverrides,
+        ],
+      );
+      addTearDown(c.dispose);
+      await failing.putAccount(plexRecord());
+      failing.choices = {const SourceId('acc1:owner:abc123'): true};
+      await storage.write('source/acc1/account_token', 't');
+      await c.read(sourceRecordsProvider.future);
+      await c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+      expect(c.read(thirdPartySourcesProvider), isEmpty);
+      expect(await storage.read('source/acc1/account_token'), isNull);
+    },
+  );
 
   test('the active source survives a restart', () async {
     await store.putAccount(plexRecord());
@@ -374,11 +409,13 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect((await store.load()).activeId, id);
 
-    final restarted = ProviderContainer(overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-    ]);
+    final restarted = ProviderContainer(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      ],
+    );
     addTearDown(restarted.dispose);
     await restarted.read(sourceRecordsProvider.future);
     expect(restarted.read(activeSourceIdProvider), id);
@@ -390,23 +427,33 @@ void main() {
     await container
         .read(sourceRecordsProvider.notifier)
         .markNeedsReauth('acc1', true);
-    expect(container.read(thirdPartySourcesProvider).single.account.needsReauth,
-        isTrue);
+    expect(
+      container.read(thirdPartySourcesProvider).single.account.needsReauth,
+      isTrue,
+    );
   });
 
-  test('a store that cannot open leaves no sources and does not throw',
-      () async {
-    final broken = ProviderContainer(overrides: [
-      sourceStoreProvider.overrideWith((ref) async => throw Exception('disk')),
-    ]);
-    addTearDown(broken.dispose);
-    broken.listen(sourceRecordsProvider, (_, __) {});
-    await Future<void>.delayed(Duration.zero);
-    expect(broken.read(thirdPartySourcesProvider), isEmpty);
-    expect(broken.read(sourcesLoadingProvider), isFalse);
-    broken.read(selectedSourceIdProvider.notifier).select(const SourceId('x'));
-    await Future<void>.delayed(Duration.zero);
-  });
+  test(
+    'a store that cannot open leaves no sources and does not throw',
+    () async {
+      final broken = ProviderContainer(
+        overrides: [
+          sourceStoreProvider.overrideWith(
+            (ref) async => throw Exception('disk'),
+          ),
+        ],
+      );
+      addTearDown(broken.dispose);
+      broken.listen(sourceRecordsProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+      expect(broken.read(thirdPartySourcesProvider), isEmpty);
+      expect(broken.read(sourcesLoadingProvider), isFalse);
+      broken
+          .read(selectedSourceIdProvider.notifier)
+          .select(const SourceId('x'));
+      await Future<void>.delayed(Duration.zero);
+    },
+  );
 
   test('concurrent read-modify-write calls all land', () async {
     await store.putAccount(plexRecord());
@@ -432,11 +479,14 @@ void main() {
     final updated = notifier.updateRecord('acc1', (current) async {
       await Future<void>.delayed(const Duration(milliseconds: 10));
       return current.copyWith(
-          account: current.account.copyWith(displayName: 'renamed'));
+        account: current.account.copyWith(displayName: 'renamed'),
+      );
     });
     // Queued behind updateRecord: must see its result, not the old record.
     final later = notifier.updateServers(
-        'acc1', (servers) => [for (final s in servers) s.copyWith(name: 'X')]);
+      'acc1',
+      (servers) => [for (final s in servers) s.copyWith(name: 'X')],
+    );
     expect((await updated)!.account.displayName, 'renamed');
     await later;
 
@@ -445,15 +495,17 @@ void main() {
     expect(record.servers.single.name, 'X');
   });
 
-  test('updateRecord writes nothing for an unknown account or a null',
-      () async {
-    await store.putAccount(plexRecord());
-    await container.read(sourceRecordsProvider.future);
-    final notifier = container.read(sourceRecordsProvider.notifier);
-    expect(await notifier.updateRecord('nope', (c) async => c), isNull);
-    expect(await notifier.updateRecord('acc1', (c) async => null), isNull);
-    expect((await store.load()).accounts.single.account.displayName, 'quill');
-  });
+  test(
+    'updateRecord writes nothing for an unknown account or a null',
+    () async {
+      await store.putAccount(plexRecord());
+      await container.read(sourceRecordsProvider.future);
+      final notifier = container.read(sourceRecordsProvider.notifier);
+      expect(await notifier.updateRecord('nope', (c) async => c), isNull);
+      expect(await notifier.updateRecord('acc1', (c) async => null), isNull);
+      expect((await store.load()).accounts.single.account.displayName, 'quill');
+    },
+  );
 
   test('accountProfilesProvider lists an account profiles', () async {
     await store.putAccount(plexRecord());

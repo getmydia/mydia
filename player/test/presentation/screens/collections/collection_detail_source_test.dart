@@ -14,11 +14,12 @@ import '../sources/fake_media_source.dart';
 import '../sources/listing_harness.dart';
 
 void main() {
-  testWidgets('lists the collection items and opens one on that source',
-      (tester) async {
+  testWidgets('lists the collection items and opens one on that source', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..collectionItemPages = [
-        Page(items: [fakeMovie(1), fakeMovie(2)])
+        Page(items: [fakeMovie(1), fakeMovie(2)]),
       ];
     final pushed = await pumpListing(
       tester,
@@ -34,15 +35,16 @@ void main() {
     expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
   });
 
-  testWidgets('shows the collection of the source it is scoped to',
-      (tester) async {
+  testWidgets('shows the collection of the source it is scoped to', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..collectionItemPages = [
-        Page(items: [fakeMovie(1)])
+        Page(items: [fakeMovie(1)]),
       ];
     final b = FakeCapableSource(id: otherSourceId)
       ..collectionItemPages = [
-        Page(items: [listingMovie(otherSourceId, 'b1', 'Other Saga Film')])
+        Page(items: [listingMovie(otherSourceId, 'b1', 'Other Saga Film')]),
       ];
     await pumpListing(
       tester,
@@ -86,15 +88,19 @@ void main() {
     expect(find.text('Collection is empty'), findsOneWidget);
   });
 
-  testWidgets('the download button asks which option when there are several',
-      (tester) async {
+  testWidgets('the download button asks which option when there are several', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..collectionItemPages = [
-        Page(items: [fakeMovie(1)])
+        Page(items: [fakeMovie(1)]),
       ]
       ..downloadOptionsResult = const [
         DownloadOption(
-            resolution: 'original', label: 'Original', estimatedSize: 1),
+          resolution: 'original',
+          label: 'Original',
+          estimatedSize: 1,
+        ),
         DownloadOption(resolution: '720p', label: '720p', estimatedSize: 1),
       ];
     await pumpListing(
@@ -102,10 +108,13 @@ void main() {
       const CollectionDetailScreen(sourceId: fakeSourceId, collectionId: 'c1'),
       sources: [a],
       overrides: [
-        downloadManagerProvider
-            .overrideWith((ref) async => EmptyDownloadService()),
-        isCollectionSyncedProvider(fakeSourceId.value, 'c1')
-            .overrideWith((ref) async => false),
+        downloadManagerProvider.overrideWith(
+          (ref) async => EmptyDownloadService(),
+        ),
+        isCollectionSyncedProvider(
+          fakeSourceId.value,
+          'c1',
+        ).overrideWith((ref) async => false),
       ],
     );
 

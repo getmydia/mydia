@@ -268,8 +268,7 @@ bool mpvMayStillListSubtitles({
   required bool nativeDirectPlay,
   required bool mpvListedSubtitles,
   required bool backstopExpired,
-}) =>
-    nativeDirectPlay && !mpvListedSubtitles && !backstopExpired;
+}) => nativeDirectPlay && !mpvListedSubtitles && !backstopExpired;
 
 /// The `preferredSubtitle` for [fileId] in either root's generated shape.
 ///

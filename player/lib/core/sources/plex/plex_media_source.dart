@@ -30,8 +30,8 @@ class PlexMediaSource extends MediaSource
   PlexMediaSource({
     required this.source,
     required this.client,
-    void Function()? onDispose,
-  }) : _onDispose = onDispose;
+    this._onDispose,
+  });
 
   @override
   final Source source;
@@ -40,17 +40,17 @@ class PlexMediaSource extends MediaSource
 
   @override
   Set<SourceCapability> get capabilities => const {
-        SourceCapability.progressReporting,
-        SourceCapability.watchedState,
-        SourceCapability.searchable,
-        SourceCapability.continueWatching,
-        SourceCapability.recentlyAdded,
-        SourceCapability.similar,
-        SourceCapability.nextUp,
-        SourceCapability.skipSegments,
-        SourceCapability.downloadable,
-        SourceCapability.progressSync,
-      };
+    SourceCapability.progressReporting,
+    SourceCapability.watchedState,
+    SourceCapability.searchable,
+    SourceCapability.continueWatching,
+    SourceCapability.recentlyAdded,
+    SourceCapability.similar,
+    SourceCapability.nextUp,
+    SourceCapability.skipSegments,
+    SourceCapability.downloadable,
+    SourceCapability.progressSync,
+  };
 
   /// `ping` throws a `SourceException` on a transport failure or any non-2xx
   /// answer, so a refused push leaves the local record unsynced.
@@ -92,13 +92,16 @@ class PlexMediaSource extends MediaSource
 
   @override
   Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
-        this,
-        ref,
-        url: (v) => client.url(v.streamPath ??
-            (throw const SourceException.unsupportedFault(
-                SourceFault.plexNoDirectFile))),
-        headers: client.headers,
-      );
+    this,
+    ref,
+    url: (v) => client.url(
+      v.streamPath ??
+          (throw const SourceException.unsupportedFault(
+            SourceFault.plexNoDirectFile,
+          )),
+    ),
+    headers: client.headers,
+  );
 
   @override
   Future<List<Library>> libraries() async {
@@ -125,7 +128,7 @@ class PlexMediaSource extends MediaSource
     final kind = _sectionKinds?[library.id];
     final sort =
         plexSortOptions.where((o) => o.id == query.sortId).firstOrNull ??
-            plexSortOptions.first;
+        plexSortOptions.first;
     final descending = query.descending ?? sort.descendingByDefault;
     final start = int.tryParse(cursor?.value ?? '') ?? 0;
     final body = await client.container('/library/sections/${library.id}/all', {
@@ -149,8 +152,9 @@ class PlexMediaSource extends MediaSource
     return Page(
       items: items,
       total: total,
-      nextCursor:
-          total != null && next < total && size > 0 ? Cursor('$next') : null,
+      nextCursor: total != null && next < total && size > 0
+          ? Cursor('$next')
+          : null,
     );
   }
 
@@ -169,10 +173,7 @@ class PlexMediaSource extends MediaSource
     final start = int.tryParse(cursor?.value ?? '') ?? 0;
     final body = await client.container(
       '/library/metadata/${parent.externalId}/children',
-      {
-        'X-Plex-Container-Start': '$start',
-        'X-Plex-Container-Size': '200',
-      },
+      {'X-Plex-Container-Start': '$start', 'X-Plex-Container-Size': '200'},
     );
     return _page(body, start);
   }
@@ -193,12 +194,9 @@ class PlexMediaSource extends MediaSource
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) => client.ping(
-        watched ? '/:/scrobble' : '/:/unscrobble',
-        {
-          'identifier': 'com.plexapp.plugins.library',
-          'key': ref.externalId,
-        },
-      );
+    watched ? '/:/scrobble' : '/:/unscrobble',
+    {'identifier': 'com.plexapp.plugins.library', 'key': ref.externalId},
+  );
 
   static const _rowLimit = 20;
 
@@ -231,16 +229,19 @@ class PlexMediaSource extends MediaSource
 
   @override
   Future<void> removeFromContinueWatching(ItemRef ref) => client.put(
-        '/actions/removeFromContinueWatching',
-        {'ratingKey': ref.externalId},
-      );
+    '/actions/removeFromContinueWatching',
+    {'ratingKey': ref.externalId},
+  );
 
   /// Its own request, so a marker failure never costs the detail screen.
   @override
-  Future<List<MediaSegment>> skipSegments(ItemRef ref,
-      {String? versionId}) async {
-    final body = await client.container(
-        '/library/metadata/${ref.externalId}', {'includeMarkers': '1'});
+  Future<List<MediaSegment>> skipSegments(
+    ItemRef ref, {
+    String? versionId,
+  }) async {
+    final body = await client.container('/library/metadata/${ref.externalId}', {
+      'includeMarkers': '1',
+    });
     final list = body['Metadata'] as List? ?? const [];
     if (list.isEmpty || list.first is! Map) return const [];
     return plexSegments((list.first as Map).cast<String, dynamic>());
@@ -268,7 +269,9 @@ class PlexMediaSource extends MediaSource
   @override
   Future<ItemSummary?> nextUp(ItemRef show) async {
     final body = await client.container(
-        '/library/metadata/${show.externalId}', {'includeOnDeck': '1'});
+      '/library/metadata/${show.externalId}',
+      {'includeOnDeck': '1'},
+    );
     final list = body['Metadata'] as List? ?? const [];
     if (list.isEmpty || list.first is! Map) return null;
     final onDeck = (list.first as Map)['OnDeck'];
@@ -291,9 +294,7 @@ class PlexMediaSource extends MediaSource
     final headers = await client.headers();
     return ArtworkRequest(
       url: url.toString(),
-      headers: {
-        if (headers['X-Plex-Token'] case final token?) 'X-Plex-Token': token,
-      },
+      headers: {'X-Plex-Token': ?headers['X-Plex-Token']},
       cacheKey: '$id|${art.path}|$width',
     );
   }

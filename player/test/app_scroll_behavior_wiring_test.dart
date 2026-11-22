@@ -22,20 +22,24 @@ void main() {
     WidgetTester tester, {
     required bool sourcesLoading,
   }) async {
-    final container = ProviderContainer(overrides: [
-      noProgressFlushOverride,
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      sourcesLoadingProvider.overrideWithValue(sourcesLoading),
-      castSessionProvider.overrideWith((ref) => Stream.value(null)),
-      castSessionManagerProvider
-          .overrideWith((ref) => Completer<CastSessionManager>().future),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        noProgressFlushOverride,
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        sourcesLoadingProvider.overrideWithValue(sourcesLoading),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        castSessionManagerProvider.overrideWith(
+          (ref) => Completer<CastSessionManager>().future,
+        ),
+      ],
+    );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MyApp(),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const MyApp()),
+    );
     await tester.pump();
   }
 

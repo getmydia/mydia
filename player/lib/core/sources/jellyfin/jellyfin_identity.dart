@@ -32,7 +32,8 @@ class JellyfinIdentity {
   String authorization([String? token]) {
     // A double quote would end the field early.
     String q(String v) => v.replaceAll('"', "'");
-    final base = 'MediaBrowser Client="${q(client)}", '
+    final base =
+        'MediaBrowser Client="${q(client)}", '
         'Device="${q(deviceName)}", DeviceId="${q(deviceId)}", '
         'Version="${q(version)}"';
     return token == null || token.isEmpty ? base : '$base, Token="$token"';

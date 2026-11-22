@@ -74,10 +74,7 @@ class PageCoverObserver extends _RouteStackObserver {
 
   /// The decision, pure for tests: any [PageRoute] after [shell] in [stack].
   /// A shell that is not in the stack (or null) is not covered.
-  static bool coveredByPage(
-    Route<dynamic>? shell,
-    List<Route<dynamic>> stack,
-  ) {
+  static bool coveredByPage(Route<dynamic>? shell, List<Route<dynamic>> stack) {
     if (shell == null) return false;
     final at = stack.indexOf(shell);
     if (at < 0) return false;

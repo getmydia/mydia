@@ -90,27 +90,26 @@ class ProviderAccount {
   final bool needsReauth;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'displayName': displayName,
-        'storageNamespace': storageNamespace,
-        'activeProfileId': activeProfileId,
-        'needsReauth': needsReauth,
-      };
+    'id': id,
+    'kind': kind.name,
+    'displayName': displayName,
+    'storageNamespace': storageNamespace,
+    'activeProfileId': activeProfileId,
+    'needsReauth': needsReauth,
+  };
 
   ProviderAccount copyWith({
     String? displayName,
     bool? needsReauth,
     String? activeProfileId,
-  }) =>
-      ProviderAccount(
-        id: id,
-        kind: kind,
-        displayName: displayName ?? this.displayName,
-        storageNamespace: storageNamespace,
-        activeProfileId: activeProfileId ?? this.activeProfileId,
-        needsReauth: needsReauth ?? this.needsReauth,
-      );
+  }) => ProviderAccount(
+    id: id,
+    kind: kind,
+    displayName: displayName ?? this.displayName,
+    storageNamespace: storageNamespace,
+    activeProfileId: activeProfileId ?? this.activeProfileId,
+    needsReauth: needsReauth ?? this.needsReauth,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -124,7 +123,13 @@ class ProviderAccount {
 
   @override
   int get hashCode => Object.hash(
-      id, kind, displayName, storageNamespace, activeProfileId, needsReauth);
+    id,
+    kind,
+    displayName,
+    storageNamespace,
+    activeProfileId,
+    needsReauth,
+  );
 }
 
 /// Who is acting. Mydia and Stash always have exactly one, the owner; a Plex
@@ -140,12 +145,12 @@ class SourceProfile {
   });
 
   factory SourceProfile.fromJson(Map<String, dynamic> json) => SourceProfile(
-        id: json['id'] as String,
-        accountId: json['accountId'] as String,
-        name: json['name'] as String,
-        isOwner: json['isOwner'] as bool,
-        protected: json['protected'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    accountId: json['accountId'] as String,
+    name: json['name'] as String,
+    isOwner: json['isOwner'] as bool,
+    protected: json['protected'] as bool? ?? false,
+  );
 
   final String id;
   final String accountId;
@@ -156,12 +161,12 @@ class SourceProfile {
   final bool protected;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'accountId': accountId,
-        'name': name,
-        'isOwner': isOwner,
-        'protected': protected,
-      };
+    'id': id,
+    'accountId': accountId,
+    'name': name,
+    'isOwner': isOwner,
+    'protected': protected,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -197,8 +202,11 @@ class ServerConnection {
   final bool local;
   final bool relay;
 
-  Map<String, dynamic> toJson() =>
-      {'uri': uri.toString(), 'local': local, 'relay': relay};
+  Map<String, dynamic> toJson() => {
+    'uri': uri.toString(),
+    'local': local,
+    'relay': relay,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -229,21 +237,21 @@ class SourceServer {
   });
 
   factory SourceServer.fromJson(Map<String, dynamic> json) => SourceServer(
-        id: json['id'] as String,
-        accountId: json['accountId'] as String,
-        profileId: json['profileId'] as String,
-        name: json['name'] as String,
-        machineIdentifier: json['machineIdentifier'] as String?,
-        owned: json['owned'] as bool? ?? true,
-        presence: json['presence'] as bool? ?? true,
-        gone: json['gone'] as bool? ?? false,
-        httpsRequired: json['httpsRequired'] as bool? ?? false,
-        connections: [
-          for (final c in (json['connections'] as List? ?? const []))
-            ServerConnection.fromJson((c as Map).cast<String, dynamic>()),
-        ],
-        serviceName: json['serviceName'] as String?,
-      );
+    id: json['id'] as String,
+    accountId: json['accountId'] as String,
+    profileId: json['profileId'] as String,
+    name: json['name'] as String,
+    machineIdentifier: json['machineIdentifier'] as String?,
+    owned: json['owned'] as bool? ?? true,
+    presence: json['presence'] as bool? ?? true,
+    gone: json['gone'] as bool? ?? false,
+    httpsRequired: json['httpsRequired'] as bool? ?? false,
+    connections: [
+      for (final c in (json['connections'] as List? ?? const []))
+        ServerConnection.fromJson((c as Map).cast<String, dynamic>()),
+    ],
+    serviceName: json['serviceName'] as String?,
+  );
 
   final String id;
   final String accountId;
@@ -272,18 +280,18 @@ class SourceServer {
   final List<ServerConnection> connections;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'accountId': accountId,
-        'profileId': profileId,
-        'name': name,
-        'machineIdentifier': machineIdentifier,
-        'owned': owned,
-        'presence': presence,
-        'gone': gone,
-        'httpsRequired': httpsRequired,
-        'connections': [for (final c in connections) c.toJson()],
-        if (serviceName != null) 'serviceName': serviceName,
-      };
+    'id': id,
+    'accountId': accountId,
+    'profileId': profileId,
+    'name': name,
+    'machineIdentifier': machineIdentifier,
+    'owned': owned,
+    'presence': presence,
+    'gone': gone,
+    'httpsRequired': httpsRequired,
+    'connections': [for (final c in connections) c.toJson()],
+    if (serviceName != null) 'serviceName': serviceName,
+  };
 
   SourceServer copyWith({
     String? name,
@@ -292,20 +300,19 @@ class SourceServer {
     List<ServerConnection>? connections,
     String? serviceName,
     bool clearServiceName = false,
-  }) =>
-      SourceServer(
-        id: id,
-        accountId: accountId,
-        profileId: profileId,
-        name: name ?? this.name,
-        machineIdentifier: machineIdentifier,
-        owned: owned,
-        presence: presence ?? this.presence,
-        gone: gone ?? this.gone,
-        httpsRequired: httpsRequired,
-        connections: connections ?? this.connections,
-        serviceName: clearServiceName ? null : serviceName ?? this.serviceName,
-      );
+  }) => SourceServer(
+    id: id,
+    accountId: accountId,
+    profileId: profileId,
+    name: name ?? this.name,
+    machineIdentifier: machineIdentifier,
+    owned: owned,
+    presence: presence ?? this.presence,
+    gone: gone ?? this.gone,
+    httpsRequired: httpsRequired,
+    connections: connections ?? this.connections,
+    serviceName: clearServiceName ? null : serviceName ?? this.serviceName,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -324,17 +331,18 @@ class SourceServer {
 
   @override
   int get hashCode => Object.hash(
-      id,
-      accountId,
-      profileId,
-      name,
-      machineIdentifier,
-      owned,
-      presence,
-      gone,
-      httpsRequired,
-      serviceName,
-      Object.hashAll(connections));
+    id,
+    accountId,
+    profileId,
+    name,
+    machineIdentifier,
+    owned,
+    presence,
+    gone,
+    httpsRequired,
+    serviceName,
+    Object.hashAll(connections),
+  );
 }
 
 @immutable

@@ -44,8 +44,7 @@ void main() {
       expect(backend.enterCalls, 1);
     });
 
-    test(
-        'a backend that accepts the request but never reports leaves the '
+    test('a backend that accepts the request but never reports leaves the '
         'notifier false — the iPhone Safari case', () {
       final controller = FullscreenController(
         backendFactory: (onChange, onFailure) => _SilentBackend(onChange),
@@ -72,8 +71,7 @@ void main() {
       expect(controller.isFullscreen.value, isFalse);
     });
 
-    test(
-        'toggle reads observed state, so a system-gesture exit that the '
+    test('toggle reads observed state, so a system-gesture exit that the '
         'backend reported means the next tap enters rather than exits', () {
       late _FakeBackend backend;
       final controller = FullscreenController(
@@ -136,17 +134,16 @@ void main() {
       final subscription = controller.failures.listen(seen.add);
       addTearDown(subscription.cancel);
 
-      backend.fail(const FullscreenFailure(
-        FullscreenFailureCause.documentRequestRejected,
-        requestInitiated: true,
-      ));
+      backend.fail(
+        const FullscreenFailure(
+          FullscreenFailureCause.documentRequestRejected,
+          requestInitiated: true,
+        ),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(seen, hasLength(1));
-      expect(
-        seen.single.cause,
-        FullscreenFailureCause.documentRequestRejected,
-      );
+      expect(seen.single.cause, FullscreenFailureCause.documentRequestRejected);
       expect(controller.isFullscreen.value, isFalse);
     });
 

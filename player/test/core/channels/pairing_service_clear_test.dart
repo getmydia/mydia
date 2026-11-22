@@ -82,8 +82,7 @@ void main() {
     expect(storage.contents, {'device_id': 'stable-id'});
   });
 
-  test(
-      'an early refused delete does not strand pairing_device_token '
+  test('an early refused delete does not strand pairing_device_token '
       '(the key that mints fresh access tokens)', () async {
     final storage = MockAuthStorage()
       ..seedData({
@@ -117,8 +116,7 @@ void main() {
     expect(storage.contents.keys.toSet(), {'pairing_server_url'});
   });
 
-  test(
-      'a synchronous throw building the delete list does not strand '
+  test('a synchronous throw building the delete list does not strand '
       'pairing_device_token either', () async {
     final storage = _SyncThrowingAuthStorage('pairing_server_url')
       ..seedData({

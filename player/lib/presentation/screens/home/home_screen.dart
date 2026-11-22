@@ -45,11 +45,12 @@ class HomeScreen extends ConsumerWidget {
     Widget? mobileTitle,
     Widget? desktopTitle,
     VoidCallback? onSearch,
-  }) =>
-      homeHeader(context,
-          mobileTitle: mobileTitle,
-          desktopTitle: desktopTitle,
-          onSearch: onSearch);
+  }) => homeHeader(
+    context,
+    mobileTitle: mobileTitle,
+    desktopTitle: desktopTitle,
+    onSearch: onSearch,
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,37 +74,42 @@ class HomeScreen extends ConsumerWidget {
   PreferredSizeWidget _bar(BuildContext context, WidgetRef ref) =>
       switch (scope) {
         AllServers() => header(
-            context,
-            mobileTitle: const HomeMydiaLockup(),
-            desktopTitle: HomeDesktopTitle(
-                icon: Icons.dns_rounded, label: context.l10n.navAllServers),
-            onSearch: () => context.go(allServersSearchLocation),
+          context,
+          mobileTitle: const HomeMydiaLockup(),
+          desktopTitle: HomeDesktopTitle(
+            icon: Icons.dns_rounded,
+            label: context.l10n.navAllServers,
           ),
+          onSearch: () => context.go(allServersSearchLocation),
+        ),
         OneServer(:final id) => () {
-            final source = ref.watch(mediaSourceProvider(id));
-            return header(
-              context,
-              mobileTitle: HomeServerTitle(
-                  source?.displayName ?? context.l10n.commonServer),
-              onSearch: source?.as<Searchable>() == null
-                  ? null
-                  : () => context.push(sourceSearchLocation(id)),
-            );
-          }(),
+          final source = ref.watch(mediaSourceProvider(id));
+          return header(
+            context,
+            mobileTitle: HomeServerTitle(
+              source?.displayName ?? context.l10n.commonServer,
+            ),
+            onSearch: source?.as<Searchable>() == null
+                ? null
+                : () => context.push(sourceSearchLocation(id)),
+          );
+        }(),
       };
 
   /// Where a shared row's title goes: the merged listing for All servers,
   /// the server's own listing for one server.
   String _listing(SourceListing listing, String allLocation) => switch (scope) {
-        AllServers() => allLocation,
-        OneServer(:final id) => sourceListingLocation(id, listing),
-      };
+    AllServers() => allLocation,
+    OneServer(:final id) => sourceListingLocation(id, listing),
+  };
 
   Widget _scaffold(BuildContext context, WidgetRef ref, HomeRows rows) {
     // Read above the Scaffold: inside `extendBodyBehindAppBar` Flutter
     // rewrites padding.top to the bar's bottom edge (see BrowseScaffold).
-    final chromeTop = freshnessTopInset(context,
-        appBarHeight: WindowTitleRow.heightOf(context));
+    final chromeTop = freshnessTopInset(
+      context,
+      appBarHeight: WindowTitleRow.heightOf(context),
+    );
     final bar = _bar(context, ref);
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -117,7 +123,11 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _body(
-      BuildContext context, WidgetRef ref, HomeRows rows, double chromeTop) {
+    BuildContext context,
+    WidgetRef ref,
+    HomeRows rows,
+    double chromeTop,
+  ) {
     // The page spans the window so the hero's backdrop can run under the
     // rail; everything else sits beside it.
     final inset = ShellRailInset.of(context);
@@ -152,12 +162,17 @@ class HomeScreen extends ConsumerWidget {
             key: const Key('home-list'),
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
-                inset, chromeTop + 16, 0, DockInsets.bottomOf(context)),
+              inset,
+              chromeTop + 16,
+              0,
+              DockInsets.bottomOf(context),
+            ),
             children: [
               if (scope is AllServers)
                 AllServersBanner(
-                    unavailable: rows.unavailable,
-                    onRetry: () => refreshHome(ref, ids)),
+                  unavailable: rows.unavailable,
+                  onRetry: () => refreshHome(ref, ids),
+                ),
               if (hero != null)
                 (InputCapabilities.directionalPrimary
                     ? _KeepAliveOnTv.new
@@ -165,7 +180,8 @@ class HomeScreen extends ConsumerWidget {
                   key: const Key('home-hero'),
                   child: SourceHomeHero(
                     key: ValueKey(
-                        'home-hero-${hero.ref.sourceId.value}-${hero.ref.externalId}'),
+                      'home-hero-${hero.ref.sourceId.value}-${hero.ref.externalId}',
+                    ),
                     sourceId: hero.ref.sourceId,
                     item: hero,
                     // Nothing sits above the hero but the list's own padding,
@@ -176,48 +192,74 @@ class HomeScreen extends ConsumerWidget {
                 ),
               HomeContinueWatchingRow(
                 rows: rows,
-                onTitleTap: () => context.push(_listing(
+                onTitleTap: () => context.push(
+                  _listing(
                     SourceListing.continueWatching,
-                    allServersContinueWatchingLocation)),
+                    allServersContinueWatchingLocation,
+                  ),
+                ),
               ),
               if (rows.recentMovies.isNotEmpty)
-                _rail(context, rows,
-                    key: 'home-recent-movies',
-                    title: context.l10n.homeRecentMovies,
-                    items: rows.recentMovies,
-                    location: _listing(SourceListing.recentlyAdded,
-                        '$allServersRecentlyAddedLocation?kind=movies')),
+                _rail(
+                  context,
+                  rows,
+                  key: 'home-recent-movies',
+                  title: context.l10n.homeRecentMovies,
+                  items: rows.recentMovies,
+                  location: _listing(
+                    SourceListing.recentlyAdded,
+                    '$allServersRecentlyAddedLocation?kind=movies',
+                  ),
+                ),
               if (rows.recentShows.isNotEmpty)
-                _rail(context, rows,
-                    key: 'home-recent-shows',
-                    title: context.l10n.homeRecentShows,
-                    items: rows.recentShows,
-                    location: _listing(SourceListing.recentlyAdded,
-                        '$allServersRecentlyAddedLocation?kind=shows')),
+                _rail(
+                  context,
+                  rows,
+                  key: 'home-recent-shows',
+                  title: context.l10n.homeRecentShows,
+                  items: rows.recentShows,
+                  location: _listing(
+                    SourceListing.recentlyAdded,
+                    '$allServersRecentlyAddedLocation?kind=shows',
+                  ),
+                ),
               if (rows.trendingMovies.isNotEmpty)
-                _rail(context, rows,
-                    key: 'home-trending-movies',
-                    title: context.l10n.homeTrendingMovies,
-                    items: rows.trendingMovies),
+                _rail(
+                  context,
+                  rows,
+                  key: 'home-trending-movies',
+                  title: context.l10n.homeTrendingMovies,
+                  items: rows.trendingMovies,
+                ),
               if (rows.trendingShows.isNotEmpty)
-                _rail(context, rows,
-                    key: 'home-trending-shows',
-                    title: context.l10n.homeTrendingShows,
-                    items: rows.trendingShows),
+                _rail(
+                  context,
+                  rows,
+                  key: 'home-trending-shows',
+                  title: context.l10n.homeTrendingShows,
+                  items: rows.trendingShows,
+                ),
               if (rows.favorites.isNotEmpty)
-                _rail(context, rows,
-                    key: 'home-favorites',
-                    title: context.l10n.navFavorites,
-                    items: rows.favorites,
-                    location: _listing(
-                        SourceListing.favorites, allServersFavoritesLocation)),
+                _rail(
+                  context,
+                  rows,
+                  key: 'home-favorites',
+                  title: context.l10n.navFavorites,
+                  items: rows.favorites,
+                  location: _listing(
+                    SourceListing.favorites,
+                    allServersFavoritesLocation,
+                  ),
+                ),
               for (final row in rows.libraries)
                 SourcePosterRow(
                   key: ValueKey(
-                      'home-library-${row.library.sourceId.value}-${row.library.id}'),
+                    'home-library-${row.library.sourceId.value}-${row.library.id}',
+                  ),
                   title: row.title(context.l10n),
                   titleKey: Key(
-                      'home-library-row-${row.library.sourceId.value}-${row.library.id}'),
+                    'home-library-row-${row.library.sourceId.value}-${row.library.id}',
+                  ),
                   railId:
                       'library-${row.library.sourceId.value}-${row.library.id}',
                   items: row.items,
@@ -256,20 +298,19 @@ class HomeScreen extends ConsumerWidget {
     required String title,
     required List<ItemSummary> items,
     String? location,
-  }) =>
-      SourcePosterRow(
-        key: Key(key),
-        title: title,
-        railId: key,
-        items: items,
-        onTitleTap: location == null ? null : () => context.push(location),
-        posterFor: rows.labelled
-            ? (context, item) => AllServersPoster(
-                  item: item,
-                  extraCopies: rows.extraCopies[item.ref] ?? 0,
-                )
-            : null,
-      );
+  }) => SourcePosterRow(
+    key: Key(key),
+    title: title,
+    railId: key,
+    items: items,
+    onTitleTap: location == null ? null : () => context.push(location),
+    posterFor: rows.labelled
+        ? (context, item) => AllServersPoster(
+            item: item,
+            extraCopies: rows.extraCopies[item.ref] ?? 0,
+          )
+        : null,
+  );
 }
 
 /// Keeps Home's hero built on the television tier while the list scrolls it

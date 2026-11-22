@@ -30,73 +30,75 @@ MediaSource requireSource(Ref ref, SourceId id) =>
     ref.watch(mediaSourceProvider(id)) ??
     (throw const SourceException.notFound());
 
-final sourceLibrariesProvider =
-    StreamProvider.autoDispose.family<List<Library>, SourceId>((ref, id) {
-  final source = requireSource(ref, id);
-  return createSourceWatcher(
-    ref,
-    key: SourceKeys.libraries(id),
-    fetch: source.libraries,
-    encode: encodeLibraries,
-    decode: decodeLibraries,
-  ).stream;
-});
+final sourceLibrariesProvider = StreamProvider.autoDispose
+    .family<List<Library>, SourceId>((ref, id) {
+      final source = requireSource(ref, id);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.libraries(id),
+        fetch: source.libraries,
+        encode: encodeLibraries,
+        decode: decodeLibraries,
+      ).stream;
+    });
 
 /// The home row for [library]: its "Recently added" sort when it has one.
 final sourceLibraryPreviewProvider = StreamProvider.autoDispose
     .family<List<ItemSummary>, LibraryRef>((ref, library) async* {
-  final source = requireSource(ref, library.sourceId);
-  // selectAsync: a fresh libraries answer with the same sort must not
-  // rebuild this row and fetch it twice.
-  final sortId = await ref.watch(
-    sourceLibrariesProvider(library.sourceId).selectAsync(
-      (libraries) => libraries
-          .where((l) => l.ref == library)
-          .firstOrNull
-          ?.sortOptions
-          .where((o) => o.name == SortName.recentlyAdded)
-          .firstOrNull
-          ?.id,
-    ),
-  );
-  if (!ref.mounted) return;
-  final query = BrowseQuery(sortId: sortId, pageSize: 20);
-  yield* createSourceWatcher(
-    ref,
-    key: SourceKeys.browse(library, query),
-    fetch: () => source.browse(library, query),
-    encode: encodeSummaryPage,
-    decode: decodeSummaryPage,
-  ).stream.map((page) => page.items);
-});
+      final source = requireSource(ref, library.sourceId);
+      // selectAsync: a fresh libraries answer with the same sort must not
+      // rebuild this row and fetch it twice.
+      final sortId = await ref.watch(
+        sourceLibrariesProvider(library.sourceId).selectAsync(
+          (libraries) => libraries
+              .where((l) => l.ref == library)
+              .firstOrNull
+              ?.sortOptions
+              .where((o) => o.name == SortName.recentlyAdded)
+              .firstOrNull
+              ?.id,
+        ),
+      );
+      if (!ref.mounted) return;
+      final query = BrowseQuery(sortId: sortId, pageSize: 20);
+      yield* createSourceWatcher(
+        ref,
+        key: SourceKeys.browse(library, query),
+        fetch: () => source.browse(library, query),
+        encode: encodeSummaryPage,
+        decode: decodeSummaryPage,
+      ).stream.map((page) => page.items);
+    });
 
-final sourceItemProvider =
-    StreamProvider.autoDispose.family<ItemDetail, ItemRef>((ref, item) {
-  final source = requireSource(ref, item.sourceId);
-  return createSourceWatcher(
-    ref,
-    key: SourceKeys.item(item),
-    fetch: () => source.item(item),
-    encode: encodeDetail,
-    decode: decodeDetail,
-  ).stream;
-});
+final sourceItemProvider = StreamProvider.autoDispose
+    .family<ItemDetail, ItemRef>((ref, item) {
+      final source = requireSource(ref, item.sourceId);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.item(item),
+        fetch: () => source.item(item),
+        encode: encodeDetail,
+        decode: decodeDetail,
+      ).stream;
+    });
 
 /// Every child of [parent], following pages up to a sane cap.
 final sourceChildrenProvider = StreamProvider.autoDispose
     .family<List<ItemSummary>, ItemRef>((ref, parent) {
-  final source = requireSource(ref, parent.sourceId);
-  return createSourceWatcher(
-    ref,
-    key: SourceKeys.children(parent),
-    fetch: () => _allChildren(source, parent),
-    encode: encodeSummaries,
-    decode: decodeSummaries,
-  ).stream;
-});
+      final source = requireSource(ref, parent.sourceId);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.children(parent),
+        fetch: () => _allChildren(source, parent),
+        encode: encodeSummaries,
+        decode: decodeSummaries,
+      ).stream;
+    });
 
 Future<List<ItemSummary>> _allChildren(
-    MediaSource source, ItemRef parent) async {
+  MediaSource source,
+  ItemRef parent,
+) async {
   final items = <ItemSummary>[];
   Cursor? cursor;
   for (var pages = 0; pages < 10; pages++) {
@@ -111,137 +113,119 @@ Future<List<ItemSummary>> _allChildren(
 /// Empty for a source without the capability. No automatic retry: a failed
 /// row stays hidden until the next refresh rather than polling a down
 /// server.
-final sourceContinueWatchingProvider =
-    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
-  (ref, id) {
-    final continueWatching = requireSource(ref, id).as<ContinueWatching>();
-    if (continueWatching == null) return Stream.value(const []);
-    return createSourceWatcher(
-      ref,
-      key: SourceKeys.continueWatching(id),
-      fetch: continueWatching.continueWatching,
-      encode: encodeSummaries,
-      decode: decodeSummaries,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
+final sourceContinueWatchingProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, SourceId>((ref, id) {
+      final continueWatching = requireSource(ref, id).as<ContinueWatching>();
+      if (continueWatching == null) return Stream.value(const []);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.continueWatching(id),
+        fetch: continueWatching.continueWatching,
+        encode: encodeSummaries,
+        decode: decodeSummaries,
+      ).stream;
+    }, retry: (_, _) => null);
 
 /// Empty for a source without collections. Same retry rule as Continue
 /// Watching.
-final sourceCollectionsProvider =
-    StreamProvider.autoDispose.family<List<SourceCollection>, SourceId>(
-  (ref, id) {
-    final collections = requireSource(ref, id).as<Collections>();
-    if (collections == null) return Stream.value(const []);
-    return createSourceWatcher(
-      ref,
-      key: SourceKeys.collections(id),
-      fetch: collections.collections,
-      encode: encodeCollections,
-      decode: decodeCollections,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
+final sourceCollectionsProvider = StreamProvider.autoDispose
+    .family<List<SourceCollection>, SourceId>((ref, id) {
+      final collections = requireSource(ref, id).as<Collections>();
+      if (collections == null) return Stream.value(const []);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.collections(id),
+        fetch: collections.collections,
+        encode: encodeCollections,
+        decode: decodeCollections,
+      ).stream;
+    }, retry: (_, _) => null);
 
 /// The calendar over `calendarWindow` of today, empty for a source without
 /// one.
-final sourceCalendarProvider =
-    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
-  (ref, id) {
-    final calendar = requireSource(ref, id).as<Calendar>();
-    if (calendar == null) return Stream.value(const []);
-    final window = calendarWindow(DateTime.now());
-    return createSourceWatcher(
-      ref,
-      key: SourceKeys.calendar(id, window.start, window.end),
-      fetch: () => calendar.calendar(window.start, window.end),
-      encode: encodeSummaries,
-      decode: decodeSummaries,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
+final sourceCalendarProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, SourceId>((ref, id) {
+      final calendar = requireSource(ref, id).as<Calendar>();
+      if (calendar == null) return Stream.value(const []);
+      final window = calendarWindow(DateTime.now());
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.calendar(id, window.start, window.end),
+        fetch: () => calendar.calendar(window.start, window.end),
+        encode: encodeSummaries,
+        decode: decodeSummaries,
+      ).stream;
+    }, retry: (_, _) => null);
 
 /// Empty for a source without the capability.
-final sourceRecentlyAddedProvider =
-    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
-  (ref, id) {
-    final recentlyAdded = requireSource(ref, id).as<RecentlyAdded>();
-    if (recentlyAdded == null) return Stream.value(const []);
-    return createSourceWatcher(
-      ref,
-      key: SourceKeys.recentlyAdded(id),
-      fetch: recentlyAdded.recentlyAdded,
-      encode: encodeSummaries,
-      decode: decodeSummaries,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
+final sourceRecentlyAddedProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, SourceId>((ref, id) {
+      final recentlyAdded = requireSource(ref, id).as<RecentlyAdded>();
+      if (recentlyAdded == null) return Stream.value(const []);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.recentlyAdded(id),
+        fetch: recentlyAdded.recentlyAdded,
+        encode: encodeSummaries,
+        decode: decodeSummaries,
+      ).stream;
+    }, retry: (_, _) => null);
 
 /// Empty for a source without the capability. A failure stays in the row's own
 /// state: Home hides the trending rows and shows the rest.
-final sourceTrendingProvider =
-    StreamProvider.autoDispose.family<List<RankedItem>, (SourceId, ItemKind)>(
-  (ref, args) {
-    final (id, kind) = args;
-    final trending = requireSource(ref, id).as<Trending>();
-    if (trending == null) return Stream.value(const []);
-    return createSourceWatcher(
-      ref,
-      key: SourceKeys.trending(id, kind),
-      fetch: () => trending.trending(kind),
-      encode: encodeRanked,
-      decode: decodeRanked,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
+final sourceTrendingProvider = StreamProvider.autoDispose
+    .family<List<RankedItem>, (SourceId, ItemKind)>((ref, args) {
+      final (id, kind) = args;
+      final trending = requireSource(ref, id).as<Trending>();
+      if (trending == null) return Stream.value(const []);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.trending(id, kind),
+        fetch: () => trending.trending(kind),
+        encode: encodeRanked,
+        decode: decodeRanked,
+      ).stream;
+    }, retry: (_, _) => null);
 
 /// The first page of the source's favorites, for the Home row. Empty for a
 /// source without the listing. Same retry rule as Continue Watching.
-final sourceFavoritesRowProvider =
-    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
-  (ref, id) {
-    final favorites = requireSource(ref, id).as<FavoritesListing>();
-    if (favorites == null) return Stream.value(const []);
-    return createSourceWatcher(
-      ref,
-      key: SourceKeys.favoritesRow(id),
-      fetch: () async => (await favorites.favorites()).items,
-      encode: encodeSummaries,
-      decode: decodeSummaries,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
+final sourceFavoritesRowProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, SourceId>((ref, id) {
+      final favorites = requireSource(ref, id).as<FavoritesListing>();
+      if (favorites == null) return Stream.value(const []);
+      return createSourceWatcher(
+        ref,
+        key: SourceKeys.favoritesRow(id),
+        fetch: () async => (await favorites.favorites()).items,
+        encode: encodeSummaries,
+        decode: decodeSummaries,
+      ).stream;
+    }, retry: (_, _) => null);
 
 /// The files of [item] for the Media Info panel. Not cached: it is read on
 /// demand, and a source without the capability is an error the panel shows.
-final sourceMediaInfoProvider =
-    FutureProvider.autoDispose.family<List<MediaFileInfo>, ItemRef>(
-  (ref, item) {
-    final info = requireSource(ref, item.sourceId).as<MediaInfo>();
-    if (info == null) throw const SourceException.unsupported();
-    return info.mediaInfo(item);
-  },
-  retry: (_, __) => null,
-);
+final sourceMediaInfoProvider = FutureProvider.autoDispose
+    .family<List<MediaFileInfo>, ItemRef>((ref, item) {
+      final info = requireSource(ref, item.sourceId).as<MediaInfo>();
+      if (info == null) throw const SourceException.unsupported();
+      return info.mediaInfo(item);
+    }, retry: (_, _) => null);
 
 /// Progress or watched state of [item] changed: every live watcher on its
 /// source that shows watch state refetches, the rest mount cold. See
 /// `SourceRules.watchedChanged`.
-void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) => unawaited(ref
-    .read(invalidatorProvider)
-    .invalidate(SourceRules.watchedChanged(item.sourceId)));
+void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) => unawaited(
+  ref
+      .read(invalidatorProvider)
+      .invalidate(SourceRules.watchedChanged(item.sourceId)),
+);
 
 /// [item] was favorited or unfavorited. See `SourceRules.favoriteChanged`.
-void invalidateSourceFavoriteWrites(WidgetRef ref, ItemRef item) =>
-    unawaited(ref
-        .read(invalidatorProvider)
-        .invalidate(SourceRules.favoriteChanged(item.sourceId)));
+void invalidateSourceFavoriteWrites(WidgetRef ref, ItemRef item) => unawaited(
+  ref
+      .read(invalidatorProvider)
+      .invalidate(SourceRules.favoriteChanged(item.sourceId)),
+);
 
 /// [invalidateSourceItemWrites] through a container, for a write that
 /// finishes after its notifier is disposed: a `Ref` throws then, a container
@@ -249,10 +233,11 @@ void invalidateSourceFavoriteWrites(WidgetRef ref, ItemRef item) =>
 void invalidateSourceContainerWrites(
   ProviderContainer container,
   ItemRef item,
-) =>
-    unawaited(container
-        .read(invalidatorProvider)
-        .invalidate(SourceRules.watchedChanged(item.sourceId)));
+) => unawaited(
+  container
+      .read(invalidatorProvider)
+      .invalidate(SourceRules.watchedChanged(item.sourceId)),
+);
 
 /// [item] was dismissed from Continue Watching; only the rail
 /// changes.
@@ -264,11 +249,14 @@ void invalidateSourceContinueWatchingWrites(WidgetRef ref, ItemRef item) =>
 void invalidateSourceContinueWatchingContainerWrites(
   ProviderContainer container,
   ItemRef item,
-) =>
-    _invalidateContinueWatchingRemoved(
-        container.read(invalidatorProvider), item);
+) => _invalidateContinueWatchingRemoved(
+  container.read(invalidatorProvider),
+  item,
+);
 
 void _invalidateContinueWatchingRemoved(
-        Invalidator invalidator, ItemRef item) =>
-    unawaited(invalidator
-        .invalidate(SourceRules.continueWatchingRemoved(item.sourceId)));
+  Invalidator invalidator,
+  ItemRef item,
+) => unawaited(
+  invalidator.invalidate(SourceRules.continueWatchingRemoved(item.sourceId)),
+);

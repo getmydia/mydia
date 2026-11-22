@@ -22,17 +22,16 @@ DownloadRequest _request(
   String quality, {
   String? posterUrl,
   int? fileSize,
-}) =>
-    DownloadRequest(
-      ref: _ref(mediaId),
-      optionId: quality,
-      expectedBytes: fileSize,
-      metadata: DownloadMetadata(
-        title: title,
-        mediaType: MediaType.movie,
-        posterUrl: posterUrl,
-      ),
-    );
+}) => DownloadRequest(
+  ref: _ref(mediaId),
+  optionId: quality,
+  expectedBytes: fileSize,
+  metadata: DownloadMetadata(
+    title: title,
+    mediaType: MediaType.movie,
+    posterUrl: posterUrl,
+  ),
+);
 
 void main() {
   late DownloadHarness harness;
@@ -52,16 +51,19 @@ void main() {
       const quality = '720p';
 
       final progressUpdates = <DownloadTask>[];
-      final subscription =
-          harness.service.progressStream.listen(progressUpdates.add);
+      final subscription = harness.service.progressStream.listen(
+        progressUpdates.add,
+      );
 
-      final task = await harness.service.start(_request(
-        mediaId,
-        title,
-        quality,
-        posterUrl: 'https://test.invalid/poster.jpg',
-        fileSize: 1024,
-      ));
+      final task = await harness.service.start(
+        _request(
+          mediaId,
+          title,
+          quality,
+          posterUrl: 'https://test.invalid/poster.jpg',
+          fileSize: 1024,
+        ),
+      );
 
       // Real service returns 'downloading' (or 'queued'); the old fake
       // returned 'pending'. Assert the post-completion state instead.
@@ -103,7 +105,8 @@ void main() {
       });
 
       final task = await harness.service.start(
-          _request(mediaId, 'Progress Test Movie', '720p', fileSize: 1024));
+        _request(mediaId, 'Progress Test Movie', '720p', fileSize: 1024),
+      );
 
       await harness.waitForStatus(task.id, 'completed');
       await subscription.cancel();
@@ -123,8 +126,9 @@ void main() {
     });
 
     test('file is created at expected path', () async {
-      final task = await harness.service
-          .start(_request('movie_file_test', 'File Path Test', '1080p'));
+      final task = await harness.service.start(
+        _request('movie_file_test', 'File Path Test', '1080p'),
+      );
 
       await harness.waitForStatus(task.id, 'completed');
 
@@ -139,15 +143,17 @@ void main() {
       // Occupy a live slot without racing the adapter: seed a downloading
       // orphan (no cancel token). pauseDownload is explicitly written to
       // handle this case after app suspension.
-      await harness.database.saveTask(DownloadTask(
-        id: 'pause_test',
-        mediaId: 'pause_test',
-        title: 'Pause Test Movie',
-        quality: '720p',
-        status: 'downloading',
-        downloadUrl: 'https://test.invalid/movie.mp4',
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'pause_test',
+          mediaId: 'pause_test',
+          title: 'Pause Test Movie',
+          quality: '720p',
+          status: 'downloading',
+          downloadUrl: 'https://test.invalid/movie.mp4',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       await harness.service.pauseDownload('pause_test');
 
@@ -160,18 +166,20 @@ void main() {
       final partialPath = '${harness.downloadDir.path}/resume_test.mp4';
       await File(partialPath).writeAsBytes(Uint8List.fromList([1, 2, 3, 4]));
 
-      await harness.database.saveTask(DownloadTask(
-        id: 'resume_test',
-        mediaId: 'resume_test',
-        title: 'Resume Test Movie',
-        quality: '720p',
-        status: 'paused',
-        downloadUrl: 'https://test.invalid/movie.mp4',
-        filePath: partialPath,
-        downloadedBytes: 4,
-        progress: 4 / 1024,
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'resume_test',
+          mediaId: 'resume_test',
+          title: 'Resume Test Movie',
+          quality: '720p',
+          status: 'paused',
+          downloadUrl: 'https://test.invalid/movie.mp4',
+          filePath: partialPath,
+          downloadedBytes: 4,
+          progress: 4 / 1024,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       await harness.service.resumeDownload('resume_test');
       await harness.waitForStatus('resume_test', 'completed');
@@ -184,23 +192,23 @@ void main() {
     test('preserves progress when pausing and resuming', () async {
       final partialPath = '${harness.downloadDir.path}/preserve_progress.mp4';
       // Half the harness body so resume appends the rest.
-      final half = Uint8List.fromList(
-        List.generate(512, (i) => i % 256),
-      );
+      final half = Uint8List.fromList(List.generate(512, (i) => i % 256));
       await File(partialPath).writeAsBytes(half);
 
-      await harness.database.saveTask(DownloadTask(
-        id: 'preserve_progress',
-        mediaId: 'preserve_progress',
-        title: 'Progress Preserve Test',
-        quality: '720p',
-        status: 'paused',
-        downloadUrl: 'https://test.invalid/movie.mp4',
-        filePath: partialPath,
-        downloadedBytes: 512,
-        progress: 0.5,
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'preserve_progress',
+          mediaId: 'preserve_progress',
+          title: 'Progress Preserve Test',
+          quality: '720p',
+          status: 'paused',
+          downloadUrl: 'https://test.invalid/movie.mp4',
+          filePath: partialPath,
+          downloadedBytes: 512,
+          progress: 0.5,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       const progressAtPause = 0.5;
 
@@ -230,27 +238,32 @@ void main() {
         Hive.registerAdapter(DownloadedMediaAdapter());
       }
       final suffix = DateTime.now().microsecondsSinceEpoch;
-      final tasksBox =
-          await Hive.openBox<DownloadTask>('live_pause_tasks_$suffix');
-      final mediaBox =
-          await Hive.openBox<DownloadedMedia>('live_pause_media_$suffix');
-      final database =
-          HiveDownloadDatabase(tasksBox: tasksBox, mediaBox: mediaBox);
-      final gated = _GatedHttpAdapter(
-        Uint8List.fromList(List.filled(1024, 1)),
+      final tasksBox = await Hive.openBox<DownloadTask>(
+        'live_pause_tasks_$suffix',
       );
+      final mediaBox = await Hive.openBox<DownloadedMedia>(
+        'live_pause_media_$suffix',
+      );
+      final database = HiveDownloadDatabase(
+        tasksBox: tasksBox,
+        mediaBox: mediaBox,
+      );
+      final gated = _GatedHttpAdapter(Uint8List.fromList(List.filled(1024, 1)));
       final service = createNativeDownloadService(
         httpAdapter: gated,
         downloadDirectory: () async => downloadDir.path,
       );
       service.setDatabase(database);
-      service.setPlanResolver(FakeResolver(
-        (_) => const DirectFile(url: testFileUrl, extension: 'mp4'),
-      ).call);
+      service.setPlanResolver(
+        FakeResolver(
+          (_) => const DirectFile(url: testFileUrl, extension: 'mp4'),
+        ).call,
+      );
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      final task =
-          await service.start(_request('live_pause', 'Live Pause', '720p'));
+      final task = await service.start(
+        _request('live_pause', 'Live Pause', '720p'),
+      );
 
       final deadline = DateTime.now().add(const Duration(seconds: 2));
       while (gated.requests.isEmpty && DateTime.now().isBefore(deadline)) {
@@ -273,15 +286,17 @@ void main() {
 
   group('Cancel and Cleanup', () {
     test('cancels an active download', () async {
-      await harness.database.saveTask(DownloadTask(
-        id: 'cancel_test',
-        mediaId: 'cancel_test',
-        title: 'Cancel Test Movie',
-        quality: '720p',
-        status: 'downloading',
-        downloadUrl: 'https://test.invalid/movie.mp4',
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'cancel_test',
+          mediaId: 'cancel_test',
+          title: 'Cancel Test Movie',
+          quality: '720p',
+          status: 'downloading',
+          downloadUrl: 'https://test.invalid/movie.mp4',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       await harness.service.cancelDownload('cancel_test');
 
@@ -295,16 +310,18 @@ void main() {
       final filePath = '${harness.downloadDir.path}/cleanup_partial.mp4';
       await File(filePath).writeAsBytes(Uint8List.fromList([1, 2, 3, 4]));
 
-      await harness.database.saveTask(DownloadTask(
-        id: 'cleanup_file_test',
-        mediaId: 'cleanup_file_test',
-        title: 'Cleanup Test Movie',
-        quality: '720p',
-        status: 'downloading',
-        downloadUrl: 'https://test.invalid/movie.mp4',
-        filePath: filePath,
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'cleanup_file_test',
+          mediaId: 'cleanup_file_test',
+          title: 'Cleanup Test Movie',
+          quality: '720p',
+          status: 'downloading',
+          downloadUrl: 'https://test.invalid/movie.mp4',
+          filePath: filePath,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       await harness.service.cancelDownload('cleanup_file_test');
 
@@ -313,8 +330,9 @@ void main() {
 
     test('deleteDownload removes file and database entries', () async {
       const mediaId = 'delete_test';
-      final task = await harness.service
-          .start(_request(mediaId, 'Delete Test Movie', '720p'));
+      final task = await harness.service.start(
+        _request(mediaId, 'Delete Test Movie', '720p'),
+      );
 
       await harness.waitForStatus(task.id, 'completed');
 
@@ -334,8 +352,9 @@ void main() {
     test('completed download is marked as downloaded', () async {
       const mediaId = 'offline_playback_test';
 
-      final task = await harness.service
-          .start(_request(mediaId, 'Offline Test Movie', '720p'));
+      final task = await harness.service.start(
+        _request(mediaId, 'Offline Test Movie', '720p'),
+      );
 
       await harness.waitForStatus(task.id, 'completed');
 
@@ -348,12 +367,14 @@ void main() {
       const title = 'Retrievable Movie';
       const quality = '1080p';
 
-      final task = await harness.service.start(_request(
-        mediaId,
-        title,
-        quality,
-        posterUrl: 'https://test.invalid/poster.jpg',
-      ));
+      final task = await harness.service.start(
+        _request(
+          mediaId,
+          title,
+          quality,
+          posterUrl: 'https://test.invalid/poster.jpg',
+        ),
+      );
 
       await harness.waitForStatus(task.id, 'completed');
 
@@ -372,8 +393,9 @@ void main() {
     test('downloaded file exists and is accessible', () async {
       const mediaId = 'file_access_test';
 
-      final task = await harness.service
-          .start(_request(mediaId, 'Accessible File Test', '720p'));
+      final task = await harness.service.start(
+        _request(mediaId, 'Accessible File Test', '720p'),
+      );
 
       await harness.waitForStatus(task.id, 'completed');
 
@@ -386,11 +408,13 @@ void main() {
     });
 
     test('getAllMedia returns all downloaded content', () async {
-      final task1 =
-          await harness.service.start(_request('multi_1', 'Movie One', '720p'));
+      final task1 = await harness.service.start(
+        _request('multi_1', 'Movie One', '720p'),
+      );
 
-      final task2 = await harness.service
-          .start(_request('multi_2', 'Movie Two', '1080p'));
+      final task2 = await harness.service.start(
+        _request('multi_2', 'Movie Two', '1080p'),
+      );
 
       await harness.waitForStatus(task1.id, 'completed');
       await harness.waitForStatus(task2.id, 'completed');
@@ -412,8 +436,9 @@ void main() {
         reason: 'unreachable host',
       );
 
-      final task = await harness.service
-          .start(_request('error_url_test', 'Error URL Test', '720p'));
+      final task = await harness.service.start(
+        _request('error_url_test', 'Error URL Test', '720p'),
+      );
 
       // A connection error says nothing about the download, so it parks.
       await harness.waitForStatus(task.id, 'interrupted');
@@ -430,8 +455,9 @@ void main() {
         reason: 'unreachable host',
       );
 
-      final task = await harness.service
-          .start(_request('retry_test', 'Retry Test Movie', '720p'));
+      final task = await harness.service.start(
+        _request('retry_test', 'Retry Test Movie', '720p'),
+      );
 
       await harness.waitForStatus(task.id, 'interrupted');
       expect(
@@ -456,8 +482,9 @@ void main() {
         message: 'Receive timeout',
       );
 
-      final task = await harness.service
-          .start(_request('timeout_test', 'Timeout Test Movie', '720p'));
+      final task = await harness.service.start(
+        _request('timeout_test', 'Timeout Test Movie', '720p'),
+      );
 
       await harness.waitForStatus(task.id, 'interrupted');
 
@@ -477,7 +504,8 @@ void main() {
       );
 
       final task = await harness.service.start(
-          _request('network_recovery_test', 'Network Recovery Test', '720p'));
+        _request('network_recovery_test', 'Network Recovery Test', '720p'),
+      );
 
       await harness.waitForStatus(task.id, 'interrupted');
       harness.adapter.failWith = null;
@@ -490,8 +518,9 @@ void main() {
     });
 
     test('failed download does not corrupt database', () async {
-      final successTask = await harness.service
-          .start(_request('success_before_fail', 'Success Movie', '720p'));
+      final successTask = await harness.service.start(
+        _request('success_before_fail', 'Success Movie', '720p'),
+      );
       await harness.waitForStatus(successTask.id, 'completed');
 
       harness.adapter.failWith = DioException.connectionError(
@@ -499,8 +528,9 @@ void main() {
         reason: 'unreachable host',
       );
 
-      final failTask = await harness.service
-          .start(_request('fail_after_success', 'Fail Movie', '720p'));
+      final failTask = await harness.service.start(
+        _request('fail_after_success', 'Fail Movie', '720p'),
+      );
       await harness.waitForStatus(failTask.id, 'interrupted');
 
       expect(
@@ -527,18 +557,21 @@ void main() {
 
       // Hold the single slot with a downloading orphan so the next start
       // must queue. Instant adapter responses make a live hold unreliable.
-      await harness.database.saveTask(DownloadTask(
-        id: 'queue_holder',
-        mediaId: 'queue_test_1',
-        title: 'Queue Test 1',
-        quality: '720p',
-        status: 'downloading',
-        downloadUrl: 'https://test.invalid/movie1.mp4',
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'queue_holder',
+          mediaId: 'queue_test_1',
+          title: 'Queue Test 1',
+          quality: '720p',
+          status: 'downloading',
+          downloadUrl: 'https://test.invalid/movie1.mp4',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
-      final task2 = await harness.service
-          .start(_request('queue_test_2', 'Queue Test 2', '720p'));
+      final task2 = await harness.service.start(
+        _request('queue_test_2', 'Queue Test 2', '720p'),
+      );
 
       final holder = harness.database.getTask('queue_holder');
       final task2Status = harness.database.getTask(task2.id);
@@ -558,18 +591,21 @@ void main() {
         autoStartQueued: true,
       );
 
-      await harness.database.saveTask(DownloadTask(
-        id: 'auto_start_holder',
-        mediaId: 'auto_start_1',
-        title: 'Auto Start 1',
-        quality: '720p',
-        status: 'downloading',
-        downloadUrl: 'https://test.invalid/movie1.mp4',
-        createdAt: DateTime(2026, 1, 1),
-      ));
+      await harness.database.saveTask(
+        DownloadTask(
+          id: 'auto_start_holder',
+          mediaId: 'auto_start_1',
+          title: 'Auto Start 1',
+          quality: '720p',
+          status: 'downloading',
+          downloadUrl: 'https://test.invalid/movie1.mp4',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
 
-      final task2 = await harness.service
-          .start(_request('auto_start_2', 'Auto Start 2', '720p'));
+      final task2 = await harness.service.start(
+        _request('auto_start_2', 'Auto Start 2', '720p'),
+      );
 
       expect(
         harness.database.getTask(task2.id)!.downloadStatus,
@@ -587,11 +623,13 @@ void main() {
 
   group('Storage Tracking', () {
     test('tracks total storage used', () async {
-      final task1 = await harness.service
-          .start(_request('storage_1', 'Storage Test 1', '720p'));
+      final task1 = await harness.service.start(
+        _request('storage_1', 'Storage Test 1', '720p'),
+      );
 
-      final task2 = await harness.service
-          .start(_request('storage_2', 'Storage Test 2', '720p'));
+      final task2 = await harness.service.start(
+        _request('storage_2', 'Storage Test 2', '720p'),
+      );
 
       await harness.waitForStatus(task1.id, 'completed');
       await harness.waitForStatus(task2.id, 'completed');
@@ -622,7 +660,7 @@ class _GatedHttpAdapter implements HttpClientAdapter {
     requests.add(options);
     await Future.any([
       gate.future,
-      if (cancelFuture != null) cancelFuture.then((_) {}, onError: (_, __) {}),
+      if (cancelFuture != null) cancelFuture.then((_) {}, onError: (_, _) {}),
     ]);
     return ResponseBody.fromBytes(
       body,

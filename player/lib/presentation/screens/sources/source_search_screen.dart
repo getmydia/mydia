@@ -56,8 +56,9 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
   }
 
   Future<void> _run(String text) async {
-    final searchable =
-        ref.read(mediaSourceProvider(sourceId))?.as<Searchable>();
+    final searchable = ref
+        .read(mediaSourceProvider(sourceId))
+        ?.as<Searchable>();
     if (searchable == null) return;
     final request = ++_request;
     state = const AsyncLoading();
@@ -72,7 +73,8 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
 
 final sourceSearchProvider = NotifierProvider.autoDispose
     .family<SourceSearchNotifier, AsyncValue<List<ItemSummary>>?, SourceId>(
-        SourceSearchNotifier.new);
+      SourceSearchNotifier.new,
+    );
 
 /// What the chips under the search box keep, by the result's own kind.
 enum _KindFilter {
@@ -87,11 +89,11 @@ enum _KindFilter {
   final ItemKind? kind;
 
   String label(AppLocalizations l10n) => switch (this) {
-        all => l10n.sourcesSearchKindAll,
-        movies => l10n.navMovies,
-        shows => l10n.navShowsShort,
-        episodes => l10n.sourcesSearchKindEpisodes,
-      };
+    all => l10n.sourcesSearchKindAll,
+    movies => l10n.navMovies,
+    shows => l10n.navShowsShort,
+    episodes => l10n.sourcesSearchKindEpisodes,
+  };
 
   List<ItemSummary> apply(List<ItemSummary> items) => kind == null
       ? items
@@ -197,8 +199,10 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
             child: switch (results) {
               null => const SizedBox.shrink(),
               AsyncData(:final value) => _results(_kind.apply(value)),
-              AsyncError(:final error) =>
-                SourceErrorView(error: error, onRetry: notifier.retry),
+              AsyncError(:final error) => SourceErrorView(
+                error: error,
+                onRetry: notifier.retry,
+              ),
               _ => const Center(child: CircularProgressIndicator()),
             },
           ),

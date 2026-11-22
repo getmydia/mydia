@@ -49,8 +49,10 @@ void main() {
         resolve([const Locale('de'), const Locale('pt', 'PT')]),
         const Locale('pt', 'BR'),
       );
-      expect(resolve([const Locale('de'), const Locale('es')]),
-          const Locale('es'));
+      expect(
+        resolve([const Locale('de'), const Locale('es')]),
+        const Locale('es'),
+      );
       expect(resolve([const Locale('en', 'GB')]), const Locale('en'));
       expect(resolveLocaleList(null, supported), const Locale('en'));
     });
@@ -95,10 +97,9 @@ void main() {
 
   test('the generated app resolves Portuguese to pt_BR', () {
     expect(
-      resolveLocaleList(
-        const [Locale('pt', 'PT')],
-        AppLocalizations.supportedLocales,
-      ),
+      resolveLocaleList(const [
+        Locale('pt', 'PT'),
+      ], AppLocalizations.supportedLocales),
       const Locale('pt', 'BR'),
     );
   });
@@ -127,8 +128,11 @@ void main() {
           unlisted.add(f.path);
         }
       }
-      expect(unlisted, isEmpty,
-          reason: 'add the language to stubLanguageCodes');
+      expect(
+        unlisted,
+        isEmpty,
+        reason: 'add the language to stubLanguageCodes',
+      );
     });
   });
 }

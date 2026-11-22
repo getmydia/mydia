@@ -78,10 +78,7 @@ class DetailTagColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (leading != null) ...[
-          leading,
-          const SizedBox(height: 18),
-        ],
+        if (leading != null) ...[leading, const SizedBox(height: 18)],
         if (tags.isNotEmpty) ...[
           Wrap(
             spacing: 8,
@@ -93,10 +90,8 @@ class DetailTagColumn extends StatelessWidget {
         if (overview case final overview?) ...[
           Text(
             overview,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: palette.textSecondary,
-                  height: 1.6,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: palette.textSecondary, height: 1.6),
           ),
           const SizedBox(height: 14),
         ],
@@ -254,8 +249,9 @@ class DetailOverview extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 context.l10n.detailOverview,
-                style: textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),

@@ -30,20 +30,20 @@ typedef ListingPosterBuilder = Widget Function(
 
 /// A search shortcut for the title bar on a layout without the rail.
 List<Widget> sourceSearchActions(BuildContext context, SourceId sourceId) => [
-      if (!Breakpoints.showsRail(context))
-        IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: context.palette.surfaceVariant.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.search_rounded, size: 20),
-          ),
-          onPressed: () => context.push(sourceSearchLocation(sourceId)),
-          tooltip: context.l10n.navSearch,
+  if (!Breakpoints.showsRail(context))
+    IconButton(
+      icon: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: context.palette.surfaceVariant.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
         ),
-    ];
+        child: const Icon(Icons.search_rounded, size: 20),
+      ),
+      onPressed: () => context.push(sourceSearchLocation(sourceId)),
+      tooltip: context.l10n.navSearch,
+    ),
+];
 
 class SourceListingScreen extends ConsumerWidget {
   const SourceListingScreen({
@@ -98,11 +98,8 @@ class SourceListingScreen extends ConsumerWidget {
           ref.read(invalidatorProvider).invalidate([queryKey.target]),
       body: (context, scrollTopPadding) => items.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ErrorView(
-          title: errorTitle,
-          error: error,
-          onRetry: onRetry,
-        ),
+        error: (error, _) =>
+            _ErrorView(title: errorTitle, error: error, onRetry: onRetry),
         data: (list) {
           if (list.isEmpty) {
             return SourceEmptyState(
@@ -174,17 +171,15 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               error.toString(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -194,8 +189,10 @@ class _ErrorView extends StatelessWidget {
               icon: const Icon(Icons.refresh_rounded),
               label: Text(context.l10n.commonTryAgain),
               style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
               ),
             ),
           ],
@@ -207,8 +204,12 @@ class _ErrorView extends StatelessWidget {
 
 /// The centred empty message shared by the per-server and All servers listings.
 class SourceEmptyState extends StatelessWidget {
-  const SourceEmptyState(
-      {super.key, required this.title, this.icon, this.subtitle});
+  const SourceEmptyState({
+    super.key,
+    required this.title,
+    this.icon,
+    this.subtitle,
+  });
 
   final String title;
   final IconData? icon;
@@ -238,18 +239,16 @@ class SourceEmptyState extends StatelessWidget {
             ],
             Text(
               title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 8),
               Text(
                 subtitle,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: palette.textSecondary,
-                    ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: palette.textSecondary),
                 textAlign: TextAlign.center,
               ),
             ],

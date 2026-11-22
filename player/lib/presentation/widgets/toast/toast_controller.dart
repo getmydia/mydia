@@ -88,7 +88,8 @@ class ToastController extends ChangeNotifier {
       kind: kind,
       icon: kind == ToastKind.info ? icon : null,
       action: action,
-      duration: duration ??
+      duration:
+          duration ??
           ToastMetrics.defaultDuration(kind, hasAction: action != null),
     );
     if (_disposed) return entry;

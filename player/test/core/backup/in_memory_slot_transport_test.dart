@@ -18,9 +18,15 @@ void main() {
       final t = InMemorySlotTransport(ownSlotId: 's', server: {});
       t.failNext(const BackupRelayException(BackupRelayError.network));
       await expectLater(
-          t.list(),
-          throwsA(isA<BackupRelayException>()
-              .having((e) => e.kind, 'kind', BackupRelayError.network)));
+        t.list(),
+        throwsA(
+          isA<BackupRelayException>().having(
+            (e) => e.kind,
+            'kind',
+            BackupRelayError.network,
+          ),
+        ),
+      );
       expect(await t.list(), isNotNull);
     });
 
@@ -33,7 +39,7 @@ void main() {
 
     test('undecodable slot read throws FormatException', () async {
       final server = <String, List<int>>{
-        'bad': [1, 2, 3]
+        'bad': [1, 2, 3],
       };
       final t = InMemorySlotTransport(ownSlotId: 's', server: server);
       final info = (await t.list())!.slots.single;

@@ -15,7 +15,8 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../domain/models/subtitle_format.dart';
 import 'subtitle_render_stub.dart'
-    if (dart.library.io) 'subtitle_render_native.dart' as platform;
+    if (dart.library.io) 'subtitle_render_native.dart'
+    as platform;
 
 /// Whether mpv, rather than the Flutter overlay, should draw a track whose
 /// codec mpv reports as [codec].

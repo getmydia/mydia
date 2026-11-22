@@ -30,8 +30,10 @@ void main() {
 
   /// Wait for the app to navigate away from the login screen after pairing.
   /// Uses a longer timeout (120s) to account for Flutter web startup time.
-  Future<bool> waitForPairingComplete(WidgetTester tester,
-      {int maxSeconds = 120}) async {
+  Future<bool> waitForPairingComplete(
+    WidgetTester tester, {
+    int maxSeconds = 120,
+  }) async {
     debugPrint('[Test] Waiting for pairing to complete...');
     bool sawError = false;
     for (var i = 0; i < maxSeconds; i++) {
@@ -46,7 +48,8 @@ void main() {
       final errorIcon = find.byIcon(Icons.error_outline_rounded);
       if (errorIcon.evaluate().isNotEmpty && !sawError) {
         debugPrint(
-            '[Test] Error message found after $i seconds - continuing to wait...');
+          '[Test] Error message found after $i seconds - continuing to wait...',
+        );
         sawError = true;
         // Print all text in the UI to see the error message
         final allText = tester.widgetList<Text>(find.byType(Text));
@@ -69,7 +72,8 @@ void main() {
       }
     }
     debugPrint(
-        '[Test] Still on login screen after $maxSeconds seconds (sawError: $sawError)');
+      '[Test] Still on login screen after $maxSeconds seconds (sawError: $sawError)',
+    );
     // Print final state
     final allText = tester.widgetList<Text>(find.byType(Text));
     for (final text in allText) {
@@ -81,11 +85,15 @@ void main() {
   }
 
   group('Device Pairing Flow', () {
-    testWidgets('Happy path: valid claim code leads to successful pairing',
-        (WidgetTester tester) async {
+    testWidgets('Happy path: valid claim code leads to successful pairing', (
+      WidgetTester tester,
+    ) async {
       // Verify we have a claim code
-      expect(claimCode.isNotEmpty, isTrue,
-          reason: 'E2E_CLAIM_CODE must be set via --dart-define');
+      expect(
+        claimCode.isNotEmpty,
+        isTrue,
+        reason: 'E2E_CLAIM_CODE must be set via --dart-define',
+      );
       debugPrint('Using pre-generated claim code: $claimCode');
 
       // Registered before the mount so a failure anywhere below still tears
@@ -103,8 +111,11 @@ void main() {
 
       // Find the claim code input field - it's the first TextFormField on the login screen
       final textField = find.byType(TextFormField).first;
-      expect(textField, findsOneWidget,
-          reason: 'Should find the claim code input field');
+      expect(
+        textField,
+        findsOneWidget,
+        reason: 'Should find the claim code input field',
+      );
 
       // Enter the claim code (remove any dashes if present)
       await tester.enterText(textField, claimCode.replaceAll('-', ''));
@@ -112,8 +123,11 @@ void main() {
 
       // Find and tap the Connect button
       final connectButton = find.widgetWithText(ElevatedButton, 'Connect');
-      expect(connectButton, findsOneWidget,
-          reason: 'Should find the Connect button');
+      expect(
+        connectButton,
+        findsOneWidget,
+        reason: 'Should find the Connect button',
+      );
 
       await tester.tap(connectButton);
       await tester.pump(const Duration(milliseconds: 100));
@@ -141,8 +155,9 @@ void main() {
     // Skip: Integration tests share app state, so after the first test
     // successfully pairs, the app remains authenticated. This test would
     // need its own isolated test run to work properly.
-    testWidgets('Invalid claim code shows error message',
-        (WidgetTester tester) async {
+    testWidgets('Invalid claim code shows error message', (
+      WidgetTester tester,
+    ) async {
       // Launch the app using pumpWidget with proper Riverpod scope
       await tester.pumpWidget(testApp());
 
@@ -198,8 +213,9 @@ void main() {
     // 1. Use a very short TTL if configurable
     // 2. Mock the time
     // 3. Run manually with extended timeout
-    testWidgets('Expired claim code shows expiration error',
-        (WidgetTester tester) async {
+    testWidgets('Expired claim code shows expiration error', (
+      WidgetTester tester,
+    ) async {
       // Generate a claim code and wait for it to expire
       // Note: In E2E environment, claim codes expire in 5 minutes
     }, skip: true);

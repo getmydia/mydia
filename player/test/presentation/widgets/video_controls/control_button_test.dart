@@ -5,8 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/video_controls/control_button.dart';
 
-Widget _host(Widget child) =>
-    MaterialApp(home: Scaffold(body: Center(child: child)));
+Widget _host(Widget child) => MaterialApp(
+  home: Scaffold(body: Center(child: child)),
+);
 
 Icon _iconOf(WidgetTester tester) =>
     tester.widget<Icon>(find.byType(Icon).first);
@@ -53,8 +54,9 @@ void main() {
   });
 
   group('ControlButton', () {
-    testWidgets('carries no per-glyph shadow (the glass backs it instead)',
-        (tester) async {
+    testWidgets('carries no per-glyph shadow (the glass backs it instead)', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const ControlButton(icon: Icons.play_arrow_rounded)),
       );
@@ -113,8 +115,7 @@ void main() {
       expect(size.height, greaterThanOrEqualTo(44));
     });
 
-    testWidgets(
-        'shows a hover backdrop on pointer enter, animating the glyph '
+    testWidgets('shows a hover backdrop on pointer enter, animating the glyph '
         'alongside it rather than snapping', (tester) async {
       await tester.pumpWidget(
         _host(ControlButton(icon: Icons.play_arrow_rounded, onTap: () {})),
@@ -140,21 +141,24 @@ void main() {
     });
 
     testWidgets(
-        'stays at rest opacity on hover when it has no onTap (not interactive)',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(const ControlButton(icon: Icons.play_arrow_rounded)),
-      );
+      'stays at rest opacity on hover when it has no onTap (not interactive)',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(const ControlButton(icon: Icons.play_arrow_rounded)),
+        );
 
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.byType(ControlButton)));
-      await tester.pumpAndSettle();
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.addPointer(location: Offset.zero);
+        addTearDown(gesture.removePointer);
+        await tester.pump();
+        await gesture.moveTo(tester.getCenter(find.byType(ControlButton)));
+        await tester.pumpAndSettle();
 
-      expect(_iconOf(tester).color?.a, closeTo(0.92, 0.001));
-    });
+        expect(_iconOf(tester).color?.a, closeTo(0.92, 0.001));
+      },
+    );
 
     testWidgets('reduced motion drops the press scale', (tester) async {
       await tester.pumpWidget(
@@ -186,8 +190,9 @@ void main() {
       await gesture.up();
     });
 
-    testWidgets('renders a 2px white@0.60 focus ring when focused',
-        (tester) async {
+    testWidgets('renders a 2px white@0.60 focus ring when focused', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(ControlButton(icon: Icons.play_arrow_rounded, onTap: () {})),
       );
@@ -203,8 +208,9 @@ void main() {
       expect(border.top.color.a, closeTo(0.60, 0.001));
     });
 
-    testWidgets('does not render a focus ring when not focused',
-        (tester) async {
+    testWidgets('does not render a focus ring when not focused', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(ControlButton(icon: Icons.play_arrow_rounded, onTap: () {})),
       );
@@ -256,8 +262,7 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets(
-        'a focused but non-interactive button ignores Enter/Space '
+    testWidgets('a focused but non-interactive button ignores Enter/Space '
         '(disabled)', (tester) async {
       var tapped = false;
       await tester.pumpWidget(

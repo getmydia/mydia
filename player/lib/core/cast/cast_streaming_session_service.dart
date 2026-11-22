@@ -62,8 +62,9 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
           strategy: transcode
               ? Enum$StreamingStrategy.TRANSCODE
               : Enum$StreamingStrategy.HLS_COPY,
-          startPosition:
-              startPosition > Duration.zero ? startPosition.inSeconds : null,
+          startPosition: startPosition > Duration.zero
+              ? startPosition.inSeconds
+              : null,
         ).toJson(),
       );
     } on SourceException catch (e) {
@@ -73,9 +74,8 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
       );
     }
 
-    final session = Mutation$StartStreamingSession.fromJson(
-      rootMutation(data),
-    ).startStreamingSession;
+    final session = Mutation$StartStreamingSession.fromJson(rootMutation(data))
+        .startStreamingSession;
 
     if (session == null) {
       throw const CastBackendException(
@@ -99,7 +99,8 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
       );
     } catch (e) {
       debugPrint(
-          '[CastStreamingSession] Ignoring end error for $sessionId: $e');
+        '[CastStreamingSession] Ignoring end error for $sessionId: $e',
+      );
     }
   }
 }

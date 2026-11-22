@@ -58,33 +58,32 @@ SourceAccountRecord _rec(
   SourceLock lock = SourceLock.none,
   SourceKind kind = SourceKind.mydia,
   String? url,
-}) =>
-    SourceAccountRecord(
-      account: ProviderAccount(
-        id: id,
-        kind: kind,
-        displayName: name,
-        storageNamespace: 'source/$id',
-        activeProfileId: 'owner',
-        needsReauth: needsReauth,
-      ),
-      profiles: [
-        SourceProfile(id: 'owner', accountId: id, name: 'o', isOwner: true),
-      ],
-      servers: [
-        SourceServer(
-          id: 'srv',
-          accountId: id,
-          profileId: 'owner',
-          name: name,
-          presence: presence,
-          gone: gone,
-          connections: [if (url != null) ServerConnection(uri: Uri.parse(url))],
-        ),
-      ],
-      addedAtMs: 0,
-      serverLocks: lock == SourceLock.none ? const {} : {'srv': lock},
-    );
+}) => SourceAccountRecord(
+  account: ProviderAccount(
+    id: id,
+    kind: kind,
+    displayName: name,
+    storageNamespace: 'source/$id',
+    activeProfileId: 'owner',
+    needsReauth: needsReauth,
+  ),
+  profiles: [
+    SourceProfile(id: 'owner', accountId: id, name: 'o', isOwner: true),
+  ],
+  servers: [
+    SourceServer(
+      id: 'srv',
+      accountId: id,
+      profileId: 'owner',
+      name: name,
+      presence: presence,
+      gone: gone,
+      connections: [if (url != null) ServerConnection(uri: Uri.parse(url))],
+    ),
+  ],
+  addedAtMs: 0,
+  serverLocks: lock == SourceLock.none ? const {} : {'srv': lock},
+);
 
 ProviderContainer _container({
   AsyncValue<SourceSnapshot>? records,
@@ -95,17 +94,24 @@ ProviderContainer _container({
   _Service? service,
 }) {
   final st = store ?? InMemoryPeerSyncStore();
-  final c = ProviderContainer(overrides: [
-    sourceRecordsProvider.overrideWith(() =>
-        _Records(records ?? AsyncData(SourceSnapshot(accounts: accounts)))),
-    sourceLockProvider.overrideWith(() => _Lock(unlocked)),
-    peerSyncStoreProvider.overrideWithValue(st),
-    peerGroupRosterProvider.overrideWithValue(PeerGroupRoster(
-        store: st,
-        localNodeId: () => localNodeId,
-        isPeerConnected: (_) => false)),
-    peerSyncServiceProvider.overrideWithValue(service ?? _Service()),
-  ]);
+  final c = ProviderContainer(
+    overrides: [
+      sourceRecordsProvider.overrideWith(
+        () =>
+            _Records(records ?? AsyncData(SourceSnapshot(accounts: accounts))),
+      ),
+      sourceLockProvider.overrideWith(() => _Lock(unlocked)),
+      peerSyncStoreProvider.overrideWithValue(st),
+      peerGroupRosterProvider.overrideWithValue(
+        PeerGroupRoster(
+          store: st,
+          localNodeId: () => localNodeId,
+          isPeerConnected: (_) => false,
+        ),
+      ),
+      peerSyncServiceProvider.overrideWithValue(service ?? _Service()),
+    ],
+  );
   addTearDown(c.dispose);
   return c;
 }
@@ -116,20 +122,25 @@ Future<ConnectionsOverview> _read(ProviderContainer c) async {
 }
 
 PeerMember _member(String id, {bool revoked = false}) => PeerMember(
-    nodeId: id,
-    deviceName: 'Pixel phone',
-    platform: 'android',
-    updatedAt: 1,
-    revoked: revoked);
+  nodeId: id,
+  deviceName: 'Pixel phone',
+  platform: 'android',
+  updatedAt: 1,
+  revoked: revoked,
+);
 
 void main() {
   test('status derivation', () async {
-    final o = await _read(_container(accounts: [
-      _rec('a'),
-      _rec('b', presence: false),
-      _rec('c', gone: true),
-      _rec('d', needsReauth: true, presence: false),
-    ]));
+    final o = await _read(
+      _container(
+        accounts: [
+          _rec('a'),
+          _rec('b', presence: false),
+          _rec('c', gone: true),
+          _rec('d', needsReauth: true, presence: false),
+        ],
+      ),
+    );
     expect(o.servers.map((s) => s.status), [
       ConnectionStatus.online,
       ConnectionStatus.offline,
@@ -143,14 +154,18 @@ void main() {
 
   test('an account with no servers reads offline', () async {
     final empty = _rec('e');
-    final o = await _read(_container(accounts: [
-      SourceAccountRecord(
-        account: empty.account,
-        profiles: empty.profiles,
-        servers: const [],
-        addedAtMs: 0,
+    final o = await _read(
+      _container(
+        accounts: [
+          SourceAccountRecord(
+            account: empty.account,
+            profiles: empty.profiles,
+            servers: const [],
+            addedAtMs: 0,
+          ),
+        ],
       ),
-    ]));
+    );
     expect(o.servers.single.status, ConnectionStatus.offline);
     expect(o.onlineCount, 0);
   });
@@ -169,10 +184,14 @@ void main() {
   });
 
   test('host comes from the stored connection, mydia only', () async {
-    final o = await _read(_container(accounts: [
-      _rec('a', url: 'https://Home.example.com:8443/x'),
-      _rec('b', kind: SourceKind.plex, url: 'https://plex.example.com'),
-    ]));
+    final o = await _read(
+      _container(
+        accounts: [
+          _rec('a', url: 'https://Home.example.com:8443/x'),
+          _rec('b', kind: SourceKind.plex, url: 'https://plex.example.com'),
+        ],
+      ),
+    );
     expect(o.servers.first.host, 'home.example.com');
     expect(o.servers.last.host, isNull);
     expect(o.servers.first.record.account.id, 'a');
@@ -194,15 +213,19 @@ void main() {
     await store.putMember(_member('peer-1'));
     await store.putMember(_member('peer-2'));
     await store.setWatermark(
-        'peer-1',
-        const PeerWatermark(
-            lastSentLandedAt: 0,
-            lastPeerNowMs: 0,
-            lastSyncedAt: 1700000000000));
+      'peer-1',
+      const PeerWatermark(
+        lastSentLandedAt: 0,
+        lastPeerNowMs: 0,
+        lastSyncedAt: 1700000000000,
+      ),
+    );
     final o = await _read(_container(store: store, localNodeId: 'x'));
     final byId = {for (final d in o.devices) d.nodeId: d};
-    expect(byId['peer-1']!.lastSyncedAt,
-        DateTime.fromMillisecondsSinceEpoch(1700000000000));
+    expect(
+      byId['peer-1']!.lastSyncedAt,
+      DateTime.fromMillisecondsSinceEpoch(1700000000000),
+    );
     expect(byId['peer-2']!.lastSyncedAt, isNull);
   });
 
@@ -211,23 +234,28 @@ void main() {
     final service = _Service();
     final c = _container(store: store, localNodeId: 'x', service: service);
     final seen = <List<String>>[];
-    c.listen<ConnectionsOverview>(connectionsOverviewProvider,
-        (_, next) => seen.add([for (final d in next.devices) d.nodeId]),
-        fireImmediately: true);
+    c.listen<ConnectionsOverview>(
+      connectionsOverviewProvider,
+      (_, next) => seen.add([for (final d in next.devices) d.nodeId]),
+      fireImmediately: true,
+    );
     await c.read(sourceRecordsProvider.future);
     await Future<void>.delayed(Duration.zero);
 
     await store.putMember(_member('peer-1'));
     service._c.add(null);
     await Future<void>.delayed(Duration.zero);
-    expect(c.read(connectionsOverviewProvider).devices.map((d) => d.nodeId),
-        ['peer-1']);
+    expect(c.read(connectionsOverviewProvider).devices.map((d) => d.nodeId), [
+      'peer-1',
+    ]);
 
     await store.putMember(_member('peer-2'));
     service._c.add(null);
     await Future<void>.delayed(Duration.zero);
-    expect(c.read(connectionsOverviewProvider).devices.map((d) => d.nodeId),
-        ['peer-1', 'peer-2']);
+    expect(c.read(connectionsOverviewProvider).devices.map((d) => d.nodeId), [
+      'peer-1',
+      'peer-2',
+    ]);
     expect(seen.last, ['peer-1', 'peer-2']);
   });
 
@@ -245,8 +273,11 @@ void main() {
   });
 
   test('records error sets serversFailed', () async {
-    final o = await _read(_container(
-        records: const AsyncError<SourceSnapshot>('boom', StackTrace.empty)));
+    final o = await _read(
+      _container(
+        records: const AsyncError<SourceSnapshot>('boom', StackTrace.empty),
+      ),
+    );
     expect(o.servers, isEmpty);
     expect(o.serversFailed, isTrue);
   });

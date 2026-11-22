@@ -13,9 +13,9 @@ void main() {
     calls = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      calls.add(call.method);
-      return null;
-    });
+          calls.add(call.method);
+          return null;
+        });
   });
 
   tearDown(() {
@@ -39,8 +39,8 @@ void main() {
     test('a host-side failure never propagates to the picker', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        throw PlatformException(code: 'boom');
-      });
+            throw PlatformException(code: 'boom');
+          });
 
       const lock = MulticastLock(channel: channel);
 

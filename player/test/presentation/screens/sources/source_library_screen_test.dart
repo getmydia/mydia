@@ -22,33 +22,41 @@ import '../../../test_utils/mock_auth_storage.dart';
 import 'fake_capable_source.dart';
 import 'fake_media_source.dart';
 
-Widget _libraryApp(FakeMediaSource fake,
-        {BrowseQuery? initialQuery, MockAuthStorage? storage}) =>
-    ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
-        coreSettingsServiceProvider.overrideWithValue(
-            SettingsService(storage: storage ?? MockAuthStorage())),
-        // No artwork requests: a poster with a URL spins until the blocked
-        // test HTTP client answers, which pumpAndSettle never outlasts.
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourceLibraryScreen(
-          library: FakeMediaSource.movies,
-          initialQuery: initialQuery,
-        ),
-      ),
-    );
+Widget _libraryApp(
+  FakeMediaSource fake, {
+  BrowseQuery? initialQuery,
+  MockAuthStorage? storage,
+}) => ProviderScope(
+  overrides: [
+    mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
+    coreSettingsServiceProvider.overrideWithValue(
+      SettingsService(storage: storage ?? MockAuthStorage()),
+    ),
+    // No artwork requests: a poster with a URL spins until the blocked
+    // test HTTP client answers, which pumpAndSettle never outlasts.
+    sourceArtworkProvider.overrideWith((ref, key) async => null),
+  ],
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: SourceLibraryScreen(
+      library: FakeMediaSource.movies,
+      initialQuery: initialQuery,
+    ),
+  ),
+);
 
-Future<void> pumpLibrary(WidgetTester tester, FakeMediaSource fake,
-    {BrowseQuery? initialQuery, MockAuthStorage? storage}) async {
+Future<void> pumpLibrary(
+  WidgetTester tester,
+  FakeMediaSource fake, {
+  BrowseQuery? initialQuery,
+  MockAuthStorage? storage,
+}) async {
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
-      _libraryApp(fake, initialQuery: initialQuery, storage: storage));
+    _libraryApp(fake, initialQuery: initialQuery, storage: storage),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -70,8 +78,8 @@ class _CountingStorage extends MockAuthStorage {
 class _UnnamedLibrariesSource extends FakeMediaSource {
   @override
   Future<List<Library>> libraries() async => const [
-        Library(ref: FakeMediaSource.movies, kind: LibraryKind.movies),
-      ];
+    Library(ref: FakeMediaSource.movies, kind: LibraryKind.movies),
+  ];
 }
 
 class _FilesSource extends FakeMediaSource {
@@ -98,28 +106,34 @@ class _ToggledScan extends FilesScanController {
 }
 
 void main() {
-  testWidgets('the list keeps its scroll when the scan banner comes and goes',
-      (tester) async {
+  testWidgets('the list keeps its scroll when the scan banner comes and goes', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final container = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId)
-          .overrideWithValue(_FilesSource(movieCount: 60)),
-      coreSettingsServiceProvider
-          .overrideWithValue(SettingsService(storage: MockAuthStorage())),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-      filesScanProvider(fakeSourceId)
-          .overrideWith(() => _ToggledScan(fakeSourceId)),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        mediaSourceProvider(fakeSourceId)
+            .overrideWithValue(_FilesSource(movieCount: 60)),
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: MockAuthStorage()),
+        ),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        filesScanProvider(fakeSourceId)
+            .overrideWith(() => _ToggledScan(fakeSourceId)),
+      ],
+    );
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourceLibraryScreen(library: FakeMediaSource.movies),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourceLibraryScreen(library: FakeMediaSource.movies),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     final scrollable = find.byType(Scrollable).first;
@@ -129,8 +143,9 @@ void main() {
     await tester.pump();
     expect(position().pixels, 400);
 
-    final scan = container.read(filesScanProvider(fakeSourceId).notifier)
-        as _ToggledScan;
+    final scan = container.read(
+      filesScanProvider(fakeSourceId).notifier,
+    ) as _ToggledScan;
     scan.set(const ScanState(running: true, done: 1, total: 4));
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -146,25 +161,29 @@ void main() {
     expect(position().pixels, 400);
   });
 
-  testWidgets('the scan banner sits above the first row, not over it',
-      (tester) async {
+  testWidgets('the scan banner sits above the first row, not over it', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(_FilesSource()),
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: MockAuthStorage())),
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-        filesScanProvider(fakeSourceId)
-            .overrideWith(() => _Scanning(fakeSourceId)),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourceLibraryScreen(library: FakeMediaSource.movies),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(fakeSourceId).overrideWithValue(_FilesSource()),
+          coreSettingsServiceProvider.overrideWithValue(
+            SettingsService(storage: MockAuthStorage()),
+          ),
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+          filesScanProvider(fakeSourceId)
+              .overrideWith(() => _Scanning(fakeSourceId)),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourceLibraryScreen(library: FakeMediaSource.movies),
+        ),
       ),
-    ));
+    );
     // The banner's spinner never settles.
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -174,20 +193,23 @@ void main() {
     expect(banner.bottom, lessThanOrEqualTo(firstPoster.top));
   });
 
-  testWidgets('a library its server did not name is titled by its kind',
-      (tester) async {
+  testWidgets('a library its server did not name is titled by its kind', (
+    tester,
+  ) async {
     await pumpLibrary(tester, _UnnamedLibrariesSource());
 
     expect(find.text('Movies'), findsOneWidget);
   });
 
-  testWidgets('a stalled storage read falls back to the default order',
-      (tester) async {
+  testWidgets('a stalled storage read falls back to the default order', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final fake = FakeMediaSource();
-    await tester
-        .pumpWidget(_libraryApp(fake, storage: _CountingStorage(stall: true)));
+    await tester.pumpWidget(
+      _libraryApp(fake, storage: _CountingStorage(stall: true)),
+    );
     await tester.pump(const Duration(milliseconds: 100));
     expect(fake.browseCalls, isEmpty, reason: 'still waiting on storage');
 
@@ -197,8 +219,9 @@ void main() {
     expect(find.byKey(const ValueKey('source-poster-m1')), findsOneWidget);
   });
 
-  testWidgets('a second visit in the session needs no storage read',
-      (tester) async {
+  testWidgets('a second visit in the session needs no storage read', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final storage = _CountingStorage();
@@ -206,21 +229,24 @@ void main() {
         .setLibrarySort('${fakeSourceId.value}/movies', 'added|asc');
     // The seed write reads too; count only what the screen does.
     storage.reads = 0;
-    final container = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-      coreSettingsServiceProvider
-          .overrideWithValue(SettingsService(storage: storage)),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: storage),
+        ),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+    );
     addTearDown(container.dispose);
     Widget app() => UncontrolledProviderScope(
-          container: container,
-          child: const MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: SourceLibraryScreen(library: FakeMediaSource.movies),
-          ),
-        );
+      container: container,
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SourceLibraryScreen(library: FakeMediaSource.movies),
+      ),
+    );
 
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
@@ -230,8 +256,9 @@ void main() {
     final fake = FakeMediaSource();
     container.updateOverrides([
       mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
-      coreSettingsServiceProvider
-          .overrideWithValue(SettingsService(storage: storage)),
+      coreSettingsServiceProvider.overrideWithValue(
+        SettingsService(storage: storage),
+      ),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ]);
     await tester.pumpWidget(app());
@@ -242,8 +269,9 @@ void main() {
     expect(fake.browseCalls.first.$1.descending, isFalse);
   });
 
-  testWidgets('the direction toggle flips descending in the query',
-      (tester) async {
+  testWidgets('the direction toggle flips descending in the query', (
+    tester,
+  ) async {
     final fake = FakeMediaSource();
     await pumpLibrary(tester, fake);
     // Title sorts ascending by default.
@@ -258,12 +286,19 @@ void main() {
     expect(fake.browseCalls.last.$1.descending, isFalse);
   });
 
-  testWidgets('changing the sort keeps the filters and resets direction',
-      (tester) async {
+  testWidgets('changing the sort keeps the filters and resets direction', (
+    tester,
+  ) async {
     final fake = FakeMediaSource();
-    await pumpLibrary(tester, fake,
-        initialQuery: const BrowseQuery(
-            sortId: 'title', descending: true, filterIds: {'unwatched'}));
+    await pumpLibrary(
+      tester,
+      fake,
+      initialQuery: const BrowseQuery(
+        sortId: 'title',
+        descending: true,
+        filterIds: {'unwatched'},
+      ),
+    );
     await tester.tap(find.byKey(const Key('source-sort-added')));
     await tester.pumpAndSettle();
     final query = fake.browseCalls.last.$1;
@@ -272,8 +307,9 @@ void main() {
     expect(query.filterIds, {'unwatched'});
   });
 
-  testWidgets('a plain library remembers its sort across visits',
-      (tester) async {
+  testWidgets('a plain library remembers its sort across visits', (
+    tester,
+  ) async {
     final storage = MockAuthStorage();
     var fake = FakeMediaSource();
     await pumpLibrary(tester, fake, storage: storage);
@@ -295,30 +331,42 @@ void main() {
     await SettingsService(storage: storage)
         .setLibrarySort('${fakeSourceId.value}/movies', 'added|desc');
     final fake = FakeMediaSource();
-    await pumpLibrary(tester, fake,
-        storage: storage, initialQuery: const BrowseQuery(sortId: 'title'));
+    await pumpLibrary(
+      tester,
+      fake,
+      storage: storage,
+      initialQuery: const BrowseQuery(sortId: 'title'),
+    );
     expect(fake.browseCalls.first.$1.sortId, 'title');
   });
 
-  testWidgets('save as filter opens the editor on the kind and sort',
-      (tester) async {
-    await pumpLibrary(tester, FakeCapableSource(),
-        initialQuery: const BrowseQuery(sortId: 'YEAR', descending: false));
+  testWidgets('save as filter opens the editor on the kind and sort', (
+    tester,
+  ) async {
+    await pumpLibrary(
+      tester,
+      FakeCapableSource(),
+      initialQuery: const BrowseQuery(sortId: 'YEAR', descending: false),
+    );
     await tester.tap(find.byKey(const Key('source-library-menu')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save this view as a filter'));
     await tester.pumpAndSettle();
 
-    final sheet =
-        tester.widget<FilterEditorSheet>(find.byType(FilterEditorSheet));
+    final sheet = tester.widget<FilterEditorSheet>(
+      find.byType(FilterEditorSheet),
+    );
     expect(sheet.initialFilter.kind, MediaKind.movies);
     expect(sheet.initialFilter.watch, WatchScope.all);
-    expect(sheet.initialFilter.sort,
-        const LibrarySort(field: SortField.year, direction: SortDirection.asc));
+    expect(
+      sheet.initialFilter.sort,
+      const LibrarySort(field: SortField.year, direction: SortDirection.asc),
+    );
   });
 
-  testWidgets('a source without saved filters has no save menu',
-      (tester) async {
+  testWidgets('a source without saved filters has no save menu', (
+    tester,
+  ) async {
     await pumpLibrary(tester, FakeMediaSource());
     expect(find.byKey(const Key('source-library-menu')), findsNothing);
   });
@@ -329,11 +377,11 @@ void main() {
     await pumpLibrary(tester, fake, initialQuery: initial);
     expect(fake.browseCalls.first.$1, initial);
     expect(
-        tester
-            .widget<FilterChip>(
-                find.byKey(const Key('source-filter-unwatched')))
-            .selected,
-        isTrue);
+      tester
+          .widget<FilterChip>(find.byKey(const Key('source-filter-unwatched')))
+          .selected,
+      isTrue,
+    );
 
     await tester.tap(find.byKey(const Key('source-sort-title')));
     await tester.pumpAndSettle();
@@ -366,7 +414,9 @@ void main() {
     // The sort and filter chip row is also a Scrollable, and comes first.
     await tester.drag(
       find.descendant(
-          of: find.byType(GridView), matching: find.byType(Scrollable)),
+        of: find.byType(GridView),
+        matching: find.byType(Scrollable),
+      ),
       const Offset(0, -20000),
     );
     await tester.pumpAndSettle();
@@ -390,17 +440,21 @@ void main() {
   testWidgets('directional keys move between posters', (tester) async {
     FocusManager.instance.highlightStrategy =
         FocusHighlightStrategy.alwaysTraditional;
-    addTearDown(() => FocusManager.instance.highlightStrategy =
-        FocusHighlightStrategy.automatic);
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
     await pumpLibrary(tester, FakeMediaSource());
 
     final first = find.byKey(const ValueKey('source-poster-m1'));
     final second = find.byKey(const ValueKey('source-poster-m2'));
     // The nearest Focus above the MediaPoster is SourcePoster's
     // FocusHighlight.
-    Focus.of(tester.element(
-            find.descendant(of: first, matching: find.byType(MediaPoster))))
-        .requestFocus();
+    Focus.of(
+      tester.element(
+        find.descendant(of: first, matching: find.byType(MediaPoster)),
+      ),
+    ).requestFocus();
     await tester.pump();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
@@ -408,7 +462,9 @@ void main() {
     final focused = FocusManager.instance.primaryFocus!.context!;
     expect(
       find.descendant(
-          of: second, matching: find.byElementPredicate((e) => e == focused)),
+        of: second,
+        matching: find.byElementPredicate((e) => e == focused),
+      ),
       findsOneWidget,
     );
   });

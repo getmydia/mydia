@@ -5,27 +5,28 @@ import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/osd_sheet.dart';
 
 Widget _host(ValueChanged<String?> onResult) => MaterialApp(
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => TextButton(
-            onPressed: () async => onResult(
-              await showOsdBottomSheet<String>(
-                context: context,
-                builder: (context) => TextButton(
-                  onPressed: () => Navigator.of(context).pop('picked'),
-                  child: const Text('sheet body'),
-                ),
-              ),
+  home: Scaffold(
+    body: Builder(
+      builder: (context) => TextButton(
+        onPressed: () async => onResult(
+          await showOsdBottomSheet<String>(
+            context: context,
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).pop('picked'),
+              child: const Text('sheet body'),
             ),
-            child: const Text('open'),
           ),
         ),
+        child: const Text('open'),
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
-  testWidgets('shows the builder on the OSD material with no shadow',
-      (tester) async {
+  testWidgets('shows the builder on the OSD material with no shadow', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host((_) {}));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();

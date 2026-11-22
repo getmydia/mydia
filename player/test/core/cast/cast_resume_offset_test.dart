@@ -31,53 +31,57 @@ void main() {
   CastRouteResolver resolver(
     RecordingSessionService sessions, {
     bool p2p = false,
-  }) =>
-      CastRouteResolver(
-        isP2pMode: p2p,
-        serverUrl: 'https://mydia.test',
-        mediaToken: () async => 'tok',
-        lanBaseUrl: () => 'http://192.168.1.5:9999',
-        streamingSessions: sessions,
+  }) => CastRouteResolver(
+    isP2pMode: p2p,
+    serverUrl: 'https://mydia.test',
+    mediaToken: () async => 'tok',
+    lanBaseUrl: () => 'http://192.168.1.5:9999',
+    streamingSessions: sessions,
+  );
+
+  test(
+    'a Chromecast route asks the server to start at the resume position',
+    () async {
+      final sessions = RecordingSessionService()
+        ..echoed = const Duration(seconds: 2394);
+
+      final route = await resolver(sessions).resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.chromecast,
+        startPosition: const Duration(seconds: 2400),
       );
 
-  test('a Chromecast route asks the server to start at the resume position',
-      () async {
-    final sessions = RecordingSessionService()
-      ..echoed = const Duration(seconds: 2394);
+      expect(sessions.requestedStart, const Duration(seconds: 2400));
+      expect(
+        route!.startOffset,
+        const Duration(seconds: 2394),
+        reason:
+            'the echoed offset is authoritative: the server clamps the '
+            'request and -ss snaps to the nearest keyframe',
+      );
+      expect(route.hlsSessionId, 'sess-1');
+    },
+  );
 
-    final route = await resolver(sessions).resolve(
-      fileId: 'file-1',
-      protocol: CastProtocolKind.chromecast,
-      startPosition: const Duration(seconds: 2400),
-    );
+  test(
+    'the bridged Chromecast route also carries the resume position',
+    () async {
+      // The bridge serves the same server-side HLS session over the p2p proxy,
+      // so the offset has to be baked in there too.
+      final sessions = RecordingSessionService()
+        ..echoed = const Duration(seconds: 2394);
 
-    expect(sessions.requestedStart, const Duration(seconds: 2400));
-    expect(
-      route!.startOffset,
-      const Duration(seconds: 2394),
-      reason: 'the echoed offset is authoritative: the server clamps the '
-          'request and -ss snaps to the nearest keyframe',
-    );
-    expect(route.hlsSessionId, 'sess-1');
-  });
+      final route = await resolver(sessions, p2p: true).resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.chromecast,
+        startPosition: const Duration(seconds: 2400),
+      );
 
-  test('the bridged Chromecast route also carries the resume position',
-      () async {
-    // The bridge serves the same server-side HLS session over the p2p proxy,
-    // so the offset has to be baked in there too.
-    final sessions = RecordingSessionService()
-      ..echoed = const Duration(seconds: 2394);
-
-    final route = await resolver(sessions, p2p: true).resolve(
-      fileId: 'file-1',
-      protocol: CastProtocolKind.chromecast,
-      startPosition: const Duration(seconds: 2400),
-    );
-
-    expect(sessions.requestedStart, const Duration(seconds: 2400));
-    expect(route!.kind, CastRouteKind.localBridge);
-    expect(route.startOffset, const Duration(seconds: 2394));
-  });
+      expect(sessions.requestedStart, const Duration(seconds: 2400));
+      expect(route!.kind, CastRouteKind.localBridge);
+      expect(route.startOffset, const Duration(seconds: 2394));
+    },
+  );
 
   test('the direct-server Chromecast route carries a session id', () async {
     // It used to redirect through /api/v1/stream/file/:id?strategy=HLS_COPY,
@@ -85,10 +89,8 @@ void main() {
     // session that route started.
     final sessions = RecordingSessionService();
 
-    final route = await resolver(sessions).resolve(
-      fileId: 'file-1',
-      protocol: CastProtocolKind.chromecast,
-    );
+    final route = await resolver(sessions)
+        .resolve(fileId: 'file-1', protocol: CastProtocolKind.chromecast);
 
     expect(route!.kind, CastRouteKind.directServer);
     expect(route.hlsSessionId, 'sess-1');
@@ -96,22 +98,27 @@ void main() {
     expect(route.mediaUrl, contains('token=tok'));
   });
 
-  test('a progressive route keeps offset zero and resumes with a seek',
-      () async {
-    // DLNA gets a byte-range stream, where a receiver seek is valid, so no
-    // server-side offset is needed or wanted.
-    final sessions = RecordingSessionService();
+  test(
+    'a progressive route keeps offset zero and resumes with a seek',
+    () async {
+      // DLNA gets a byte-range stream, where a receiver seek is valid, so no
+      // server-side offset is needed or wanted.
+      final sessions = RecordingSessionService();
 
-    final route = await resolver(sessions).resolve(
-      fileId: 'file-1',
-      protocol: CastProtocolKind.dlna,
-      startPosition: const Duration(seconds: 2400),
-    );
+      final route = await resolver(sessions).resolve(
+        fileId: 'file-1',
+        protocol: CastProtocolKind.dlna,
+        startPosition: const Duration(seconds: 2400),
+      );
 
-    expect(route!.startOffset, Duration.zero);
-    expect(sessions.requestedStart, isNull,
-        reason: 'a progressive route starts no HLS session at all');
-  });
+      expect(route!.startOffset, Duration.zero);
+      expect(
+        sessions.requestedStart,
+        isNull,
+        reason: 'a progressive route starts no HLS session at all',
+      );
+    },
+  );
 
   test('a progressive bridge route keeps offset zero as well', () async {
     // The proxy's /direct/{fileId}/stream honors Range, so a receiver seek is

@@ -94,7 +94,8 @@ void showCastErrorToast(
   bool isMydiaTarget = false,
 }) {
   // Both kinds are the same OS permission with the same fix.
-  final permissionDenied = e.kind == CastFailureKind.localNetworkDenied ||
+  final permissionDenied =
+      e.kind == CastFailureKind.localNetworkDenied ||
       e.kind == CastFailureKind.discoveryDenied;
 
   // `discoveryDenied` is not Apple-only — it also covers Android's multicast
@@ -160,8 +161,10 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     return;
   }
 
-  final persisted =
-      ref.read(castSessionManagerProvider).value?.persistedSession;
+  final persisted = ref
+      .read(castSessionManagerProvider)
+      .value
+      ?.persistedSession;
   if (persisted == null) {
     // A live media session with nothing persisted behind it cannot be moved;
     // fall back to recording the intent so the next play lands on the new
@@ -198,8 +201,12 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     );
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    showCastErrorToast(context, e,
-        ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
+    showCastErrorToast(
+      context,
+      e,
+      ref: ref,
+      isMydiaTarget: device.protocol == CastProtocolKind.mydia,
+    );
   } catch (e) {
     // Anything that isn't a CastBackendException: the session manager itself
     // resolving (Hive, GraphQL client), or a non-typed failure from
@@ -207,8 +214,11 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     // would close the picker with no toast and no log.
     debugPrint('[cast_actions] Unexpected error starting cast: $e');
     if (!context.mounted) return;
-    showToast(context, context.l10n.castStartFailed('$e'),
-        kind: ToastKind.error);
+    showToast(
+      context,
+      context.l10n.castStartFailed('$e'),
+      kind: ToastKind.error,
+    );
   }
 }
 
@@ -232,13 +242,20 @@ Future<void> _connectToDevice(
     // That matters most here: connecting on select is now the first moment
     // the denial can surface at all, since choosing a device no longer
     // defers contact until playback starts.
-    showCastErrorToast(context, e,
-        ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
+    showCastErrorToast(
+      context,
+      e,
+      ref: ref,
+      isMydiaTarget: device.protocol == CastProtocolKind.mydia,
+    );
   } catch (e) {
     debugPrint('[cast_actions] Unexpected error connecting to device: $e');
     if (!context.mounted) return;
-    showToast(context, context.l10n.castConnectFailed('$e'),
-        kind: ToastKind.error);
+    showToast(
+      context,
+      context.l10n.castConnectFailed('$e'),
+      kind: ToastKind.error,
+    );
   }
 }
 
@@ -282,7 +299,10 @@ Future<void> connectToAmbientTarget(
   } catch (e) {
     debugPrint('[cast_actions] Unexpected error opening $name: $e');
     if (!context.mounted) return;
-    showToast(context, context.l10n.castBarOpenFailed(name, '$e'),
-        kind: ToastKind.error);
+    showToast(
+      context,
+      context.l10n.castBarOpenFailed(name, '$e'),
+      kind: ToastKind.error,
+    );
   }
 }

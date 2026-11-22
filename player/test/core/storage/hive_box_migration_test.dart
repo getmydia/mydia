@@ -60,21 +60,24 @@ void main() {
       expect(_hive(from, 'cast_session').existsSync(), isTrue);
     });
 
-    test('removes an orphan lock left by a box that was never written',
-        () async {
-      await _lock(from, 'sidebar_layout').writeAsString('');
+    test(
+      'removes an orphan lock left by a box that was never written',
+      () async {
+        await _lock(from, 'sidebar_layout').writeAsString('');
 
-      await migrateHiveBoxes(from: from.path, to: to.path);
+        await migrateHiveBoxes(from: from.path, to: to.path);
 
-      expect(_lock(from, 'sidebar_layout').existsSync(), isFalse);
-    });
+        expect(_lock(from, 'sidebar_layout').existsSync(), isFalse);
+      },
+    );
 
     test('never touches files it was not asked to move', () async {
       final unrelated = File('${from.path}${Platform.pathSeparator}notes.txt');
       await unrelated.writeAsString('a real document');
       // Another Flutter app's box, sharing the same Documents folder.
-      final foreign =
-          File('${from.path}${Platform.pathSeparator}someotherapp.hive');
+      final foreign = File(
+        '${from.path}${Platform.pathSeparator}someotherapp.hive',
+      );
       await foreign.writeAsString('not ours');
 
       await migrateHiveBoxes(from: from.path, to: to.path);
@@ -112,15 +115,17 @@ void main() {
       expect(await _hive(to, 'mydia_fetch_log').readAsString(), 'log');
     });
 
-    test('runs on every launch without disturbing an already-moved box',
-        () async {
-      await _hive(from, 'download_tasks').writeAsString('tasks');
+    test(
+      'runs on every launch without disturbing an already-moved box',
+      () async {
+        await _hive(from, 'download_tasks').writeAsString('tasks');
 
-      await migrateHiveBoxes(from: from.path, to: to.path);
-      await migrateHiveBoxes(from: from.path, to: to.path);
+        await migrateHiveBoxes(from: from.path, to: to.path);
+        await migrateHiveBoxes(from: from.path, to: to.path);
 
-      expect(await _hive(to, 'download_tasks').readAsString(), 'tasks');
-    });
+        expect(await _hive(to, 'download_tasks').readAsString(), 'tasks');
+      },
+    );
 
     test('leaves an open box completely alone', () async {
       // Hive holds a box's lock file open for the life of the box and deletes
@@ -144,23 +149,25 @@ void main() {
       expect(await _hive(to, 'sidebar_layout').readAsString(), 'closed');
     });
 
-    test('asks about the declared box name, not the lowercased filename',
-        () async {
-      await _hive(from, 'graphqlClientStore').writeAsString('cache');
-      final asked = <String>[];
+    test(
+      'asks about the declared box name, not the lowercased filename',
+      () async {
+        await _hive(from, 'graphqlClientStore').writeAsString('cache');
+        final asked = <String>[];
 
-      await migrateHiveBoxes(
-        from: from.path,
-        to: to.path,
-        boxes: const ['graphqlClientStore'],
-        isBoxOpen: (name) {
-          asked.add(name);
-          return false;
-        },
-      );
+        await migrateHiveBoxes(
+          from: from.path,
+          to: to.path,
+          boxes: const ['graphqlClientStore'],
+          isBoxOpen: (name) {
+            asked.add(name);
+            return false;
+          },
+        );
 
-      expect(asked, ['graphqlClientStore']);
-    });
+        expect(asked, ['graphqlClientStore']);
+      },
+    );
 
     test('a failed cross-device copy leaves no partial box behind', () async {
       // The copy fallback runs when `rename` cannot cross a filesystem
@@ -227,7 +234,8 @@ void main() {
       expect(
         offenders,
         isEmpty,
-        reason: 'call initAppHive() from lib/core/storage/app_hive.dart '
+        reason:
+            'call initAppHive() from lib/core/storage/app_hive.dart '
             'instead, so boxes stay out of the user Documents folder',
       );
     });
@@ -258,7 +266,8 @@ void main() {
       expect(
         missing,
         isEmpty,
-        reason: 'add these to kMydiaHiveBoxes in '
+        reason:
+            'add these to kMydiaHiveBoxes in '
             'lib/core/storage/hive_box_migration.dart so an upgrading install '
             'carries them over',
       );

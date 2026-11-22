@@ -27,17 +27,16 @@ Future<T> waitForValue<T>(
   final completer = Completer<T>();
   AsyncValue<T>? lastValue;
 
-  final subscription = container.listen<AsyncValue<T>>(
-    provider,
-    (previous, next) {
-      lastValue = next;
-      final value = next.value;
-      if (value != null && predicate(value) && !completer.isCompleted) {
-        completer.complete(value);
-      }
-    },
-    fireImmediately: true,
-  );
+  final subscription = container.listen<AsyncValue<T>>(provider, (
+    previous,
+    next,
+  ) {
+    lastValue = next;
+    final value = next.value;
+    if (value != null && predicate(value) && !completer.isCompleted) {
+      completer.complete(value);
+    }
+  }, fireImmediately: true);
 
   try {
     return await completer.future.timeout(

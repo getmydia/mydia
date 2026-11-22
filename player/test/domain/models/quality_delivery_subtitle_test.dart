@@ -11,37 +11,25 @@ void main() {
   group('originalDelivery', () {
     test('prefers Direct Play when canDirectPlay is true', () {
       expect(
-        originalDelivery(
-          canDirectPlay: true,
-          hasLosslessDelivery: true,
-        ),
+        originalDelivery(canDirectPlay: true, hasLosslessDelivery: true),
         OriginalDelivery.directPlay,
       );
       expect(
-        originalDelivery(
-          canDirectPlay: true,
-          hasLosslessDelivery: false,
-        ),
+        originalDelivery(canDirectPlay: true, hasLosslessDelivery: false),
         OriginalDelivery.directPlay,
       );
     });
 
     test('uses lossless copy when direct play is unavailable', () {
       expect(
-        originalDelivery(
-          canDirectPlay: false,
-          hasLosslessDelivery: true,
-        ),
+        originalDelivery(canDirectPlay: false, hasLosslessDelivery: true),
         OriginalDelivery.lossless,
       );
     });
 
     test('falls back to re-encoding required', () {
       expect(
-        originalDelivery(
-          canDirectPlay: false,
-          hasLosslessDelivery: false,
-        ),
+        originalDelivery(canDirectPlay: false, hasLosslessDelivery: false),
         OriginalDelivery.transcode,
       );
     });
@@ -49,10 +37,7 @@ void main() {
 
   group('cappedRungDeliveryText', () {
     test('names the transcode and bitrate cap', () {
-      expect(
-        _en.cappedRungDeliveryText(4000),
-        'Transcodes · up to 4000 kbps',
-      );
+      expect(_en.cappedRungDeliveryText(4000), 'Transcodes · up to 4000 kbps');
     });
 
     test('falls back when bitrate is null', () {
@@ -69,21 +54,25 @@ void main() {
         OriginalDelivery.directPlay,
       );
       expect(
-        originalDeliveryForPlan(const HlsPlan(
-          strategy: HlsStrategy.copy,
-          rung: QualityRung.original,
-          adaptive: false,
-          reason: PlanReason.copyAccepted,
-        )),
+        originalDeliveryForPlan(
+          const HlsPlan(
+            strategy: HlsStrategy.copy,
+            rung: QualityRung.original,
+            adaptive: false,
+            reason: PlanReason.copyAccepted,
+          ),
+        ),
         OriginalDelivery.lossless,
       );
       expect(
-        originalDeliveryForPlan(const HlsPlan(
-          strategy: HlsStrategy.transcode,
-          rung: QualityRung.original,
-          adaptive: false,
-          reason: PlanReason.noCopyCandidate,
-        )),
+        originalDeliveryForPlan(
+          const HlsPlan(
+            strategy: HlsStrategy.transcode,
+            rung: QualityRung.original,
+            adaptive: false,
+            reason: PlanReason.noCopyCandidate,
+          ),
+        ),
         OriginalDelivery.transcode,
       );
     });
@@ -92,13 +81,21 @@ void main() {
   group('originalDeliveryText', () {
     test('words every delivery', () {
       expect(
-          _en.originalDeliveryText(OriginalDelivery.directPlay), 'Direct Play');
-      expect(_en.originalDeliveryText(OriginalDelivery.lossless),
-          'Original · no re-encoding');
-      expect(_en.originalDeliveryText(OriginalDelivery.transcode),
-          'Original · re-encoding required');
-      expect(_en.originalDeliveryText(OriginalDelivery.preference),
-          'Source quality');
+        _en.originalDeliveryText(OriginalDelivery.directPlay),
+        'Direct Play',
+      );
+      expect(
+        _en.originalDeliveryText(OriginalDelivery.lossless),
+        'Original · no re-encoding',
+      );
+      expect(
+        _en.originalDeliveryText(OriginalDelivery.transcode),
+        'Original · re-encoding required',
+      );
+      expect(
+        _en.originalDeliveryText(OriginalDelivery.preference),
+        'Source quality',
+      );
     });
   });
 }

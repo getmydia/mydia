@@ -94,10 +94,7 @@ void main() {
         final states = <String>[];
         final subscription = manager.stateChanges.listen(states.add);
 
-        await manager.connect(
-          directUrls: [],
-          instanceId: 'instance-123',
-        );
+        await manager.connect(directUrls: [], instanceId: 'instance-123');
 
         // Allow stream events to be processed
         await Future<void>.delayed(Duration.zero);
@@ -179,7 +176,9 @@ void main() {
         );
 
         expect(
-            customManager.directTimeout, equals(const Duration(seconds: 10)));
+          customManager.directTimeout,
+          equals(const Duration(seconds: 10)),
+        );
 
         customManager.dispose();
       });

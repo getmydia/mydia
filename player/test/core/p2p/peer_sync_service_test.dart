@@ -91,10 +91,7 @@ class FakePeerSyncNetwork {
 }
 
 class FakePeerSyncTransport implements PeerSyncTransport {
-  FakePeerSyncTransport({
-    required this.network,
-    required this.localNodeId,
-  }) {
+  FakePeerSyncTransport({required this.network, required this.localNodeId}) {
     network.register(this);
   }
 
@@ -177,7 +174,7 @@ class FakePeerSyncTransport implements PeerSyncTransport {
 
 class FakeRelayClient extends RelayApiClient {
   final Map<String, ({String nodeAddr, String instanceId, String lookupKey})>
-      _claimsByCode = {};
+  _claimsByCode = {};
   final Map<String, String> _codeByLookupKey = {};
   bool failPublish = false;
 
@@ -233,12 +230,9 @@ class TestNode {
     required this.network,
     required this.relayClient,
     required this.clock,
-  })  : store = InMemoryPeerSyncStore(),
-        authStorage = MockAuthStorage() {
-    transport = FakePeerSyncTransport(
-      network: network,
-      localNodeId: nodeId,
-    );
+  }) : store = InMemoryPeerSyncStore(),
+       authStorage = MockAuthStorage() {
+    transport = FakePeerSyncTransport(network: network, localNodeId: nodeId);
     service = PeerSyncService(
       store: store,
       authStorage: authStorage,
@@ -487,40 +481,52 @@ void main() {
     expect(nodeB.store.watchRecord(movieKey), isNull);
   });
 
-  test('authorizes_and_active_member_ids_follow_proof_roster_and_group',
-      () async {
-    expect(nodeB.service.activeMemberIds(), isEmpty);
-    expect(nodeB.service.authorizes('node-a', 'anything'), isFalse);
+  test(
+    'authorizes_and_active_member_ids_follow_proof_roster_and_group',
+    () async {
+      expect(nodeB.service.activeMemberIds(), isEmpty);
+      expect(nodeB.service.authorizes('node-a', 'anything'), isFalse);
 
-    final offerA = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offerA.code);
-    final offerB = await nodeB.service.startPairingOffer();
-    await nodeC.service.pairWithCode(offerB.code);
+      final offerA = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offerA.code);
+      final offerB = await nodeB.service.startPairingOffer();
+      await nodeC.service.pairWithCode(offerB.code);
 
-    final secret = PeerGroupSecret.fromBase64Url(
-      (await nodeB.authStorage.read(PeerGroupSecret.storageKey))!,
-    );
-    expect(nodeB.service.activeMemberIds(), ['node-a', 'node-c']);
-    expect(
-        nodeB.service.authorizes('node-a', secret.authProof('node-a')), isTrue);
-    // A proof is bound to its sender.
-    expect(nodeB.service.authorizes('node-a', secret.authProof('node-c')),
-        isFalse);
-    // The secret alone does not admit a node the roster never held.
-    expect(nodeB.service.authorizes('node-x', secret.authProof('node-x')),
-        isFalse);
+      final secret = PeerGroupSecret.fromBase64Url(
+        (await nodeB.authStorage.read(PeerGroupSecret.storageKey))!,
+      );
+      expect(nodeB.service.activeMemberIds(), ['node-a', 'node-c']);
+      expect(
+        nodeB.service.authorizes('node-a', secret.authProof('node-a')),
+        isTrue,
+      );
+      // A proof is bound to its sender.
+      expect(
+        nodeB.service.authorizes('node-a', secret.authProof('node-c')),
+        isFalse,
+      );
+      // The secret alone does not admit a node the roster never held.
+      expect(
+        nodeB.service.authorizes('node-x', secret.authProof('node-x')),
+        isFalse,
+      );
 
-    clock.setMs(2000);
-    await nodeB.service.revokePeer('node-a');
-    expect(nodeB.service.authorizes('node-a', secret.authProof('node-a')),
-        isFalse);
-    expect(nodeB.service.activeMemberIds(), ['node-c']);
+      clock.setMs(2000);
+      await nodeB.service.revokePeer('node-a');
+      expect(
+        nodeB.service.authorizes('node-a', secret.authProof('node-a')),
+        isFalse,
+      );
+      expect(nodeB.service.activeMemberIds(), ['node-c']);
 
-    await nodeB.service.leaveGroup();
-    expect(nodeB.service.activeMemberIds(), isEmpty);
-    expect(nodeB.service.authorizes('node-c', secret.authProof('node-c')),
-        isFalse);
-  });
+      await nodeB.service.leaveGroup();
+      expect(nodeB.service.activeMemberIds(), isEmpty);
+      expect(
+        nodeB.service.authorizes('node-c', secret.authProof('node-c')),
+        isFalse,
+      );
+    },
+  );
 
   test('auth_proof_for_self_is_the_proof_members_accept', () async {
     expect(nodeB.service.authProofForSelf(), isNull);
@@ -568,34 +574,36 @@ void main() {
     expect(network.dialCount('node-b'), 3);
   });
 
-  test('leave_group_revokes_self_clears_secret_and_keeps_local_watch_records',
-      () async {
-    const movieKey = 'tmdb:movie:99901';
-    await nodeA.store.setWatched(movieKey, true, nowMs: 1000);
+  test(
+    'leave_group_revokes_self_clears_secret_and_keeps_local_watch_records',
+    () async {
+      const movieKey = 'tmdb:movie:99901';
+      await nodeA.store.setWatched(movieKey, true, nowMs: 1000);
 
-    // Pair A <-> B
-    final offer = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offer.code);
+      // Pair A <-> B
+      final offer = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offer.code);
 
-    expect(nodeA.service.isPaired, isTrue);
+      expect(nodeA.service.isPaired, isTrue);
 
-    // A leaves group
-    await nodeA.service.leaveGroup();
+      // A leaves group
+      await nodeA.service.leaveGroup();
 
-    // B sees A as revoked: true
-    expect(nodeB.store.member('node-a')?.revoked, isTrue);
+      // B sees A as revoked: true
+      expect(nodeB.store.member('node-a')?.revoked, isTrue);
 
-    // Deletes peer_group/secret on A
-    expect(await nodeA.authStorage.read(PeerGroupSecret.storageKey), isNull);
-    expect(nodeA.service.isPaired, isFalse);
-    expect(nodeA.service.groupId, isNull);
+      // Deletes peer_group/secret on A
+      expect(await nodeA.authStorage.read(PeerGroupSecret.storageKey), isNull);
+      expect(nodeA.service.isPaired, isFalse);
+      expect(nodeA.service.groupId, isNull);
 
-    // Clears A's roster
-    expect(nodeA.store.members(), isEmpty);
+      // Clears A's roster
+      expect(nodeA.store.members(), isEmpty);
 
-    // Leaves A's watchRecords intact
-    expect(nodeA.store.watchRecord(movieKey)?.watched, isTrue);
-  });
+      // Leaves A's watchRecords intact
+      expect(nodeA.store.watchRecord(movieKey)?.watched, isTrue);
+    },
+  );
 
   test('pairs_two_devices_via_qr_code', () async {
     const movieKey = 'tmdb:movie:99901';
@@ -655,101 +663,107 @@ void main() {
     expect(nodeB.appliedPinKeys, contains(pinKey));
   });
 
-  test('revoked_peer_cannot_unrevoke_itself_and_inbound_request_is_rejected',
-      () async {
-    // Pair A <-> B
-    final offerA = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offerA.code);
+  test(
+    'revoked_peer_cannot_unrevoke_itself_and_inbound_request_is_rejected',
+    () async {
+      // Pair A <-> B
+      final offerA = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offerA.code);
 
-    // B revokes A
-    clock.setMs(2000);
-    await nodeB.service.revokePeer('node-a');
-    expect(nodeB.store.member('node-a')?.revoked, isTrue);
+      // B revokes A
+      clock.setMs(2000);
+      await nodeB.service.revokePeer('node-a');
+      expect(nodeB.store.member('node-a')?.revoked, isTrue);
 
-    // A tries to send a sync request with candidate roster claiming revoked: false with higher clock
-    clock.setMs(5000);
-    final secretA = PeerGroupSecret.fromBase64Url(
-      (await nodeA.authStorage.read(PeerGroupSecret.storageKey))!,
-    );
-    const unrevokeAttempt = PeerMember(
-      nodeId: 'node-a',
-      deviceName: 'Device A',
-      platform: 'linux',
-      updatedAt: 5000,
-      revoked: false,
-    );
-    final syncReq = FlutterPeerSyncRequest.sync_(
-      authProof: secretA.authProof('node-a'),
-      roster: [unrevokeAttempt.toWire()],
-      sinceLandedMs: PlatformInt64Util.from(0),
-      watchRecords: const [],
-      pinRecords: const [],
-    );
+      // A tries to send a sync request with candidate roster claiming revoked: false with higher clock
+      clock.setMs(5000);
+      final secretA = PeerGroupSecret.fromBase64Url(
+        (await nodeA.authStorage.read(PeerGroupSecret.storageKey))!,
+      );
+      const unrevokeAttempt = PeerMember(
+        nodeId: 'node-a',
+        deviceName: 'Device A',
+        platform: 'linux',
+        updatedAt: 5000,
+        revoked: false,
+      );
+      final syncReq = FlutterPeerSyncRequest.sync_(
+        authProof: secretA.authProof('node-a'),
+        roster: [unrevokeAttempt.toWire()],
+        sinceLandedMs: PlatformInt64Util.from(0),
+        watchRecords: const [],
+        pinRecords: const [],
+      );
 
-    final res = await nodeA.transport.sendPeerSync('node-b', syncReq);
-    expect(res, isA<FlutterPeerSyncResponse_NotAuthorized>());
+      final res = await nodeA.transport.sendPeerSync('node-b', syncReq);
+      expect(res, isA<FlutterPeerSyncResponse_NotAuthorized>());
 
-    // B still has A marked as revoked, not un-revoked
-    expect(nodeB.store.member('node-a')?.revoked, isTrue);
-  });
+      // B still has A marked as revoked, not un-revoked
+      expect(nodeB.store.member('node-a')?.revoked, isTrue);
+    },
+  );
 
-  test('handle_sync_request_does_not_advance_last_sent_landed_at_watermark',
-      () async {
-    const movieKey = 'tmdb:movie:99901';
+  test(
+    'handle_sync_request_does_not_advance_last_sent_landed_at_watermark',
+    () async {
+      const movieKey = 'tmdb:movie:99901';
 
-    // Pair A <-> B
-    final offer = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offer.code);
+      // Pair A <-> B
+      final offer = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offer.code);
 
-    // B sets a watch record
-    clock.setMs(2000);
-    await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
+      // B sets a watch record
+      clock.setMs(2000);
+      await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
 
-    // Initially B's watermark for A has lastSentLandedAt = 0
-    expect(nodeB.store.watermark('node-a')?.lastSentLandedAt ?? 0, 0);
+      // Initially B's watermark for A has lastSentLandedAt = 0
+      expect(nodeB.store.watermark('node-a')?.lastSentLandedAt ?? 0, 0);
 
-    // A sends a sync request to B with sinceLandedMs = 0
-    final secretA = PeerGroupSecret.fromBase64Url(
-      (await nodeA.authStorage.read(PeerGroupSecret.storageKey))!,
-    );
-    final syncReq = FlutterPeerSyncRequest.sync_(
-      authProof: secretA.authProof('node-a'),
-      roster: nodeA.store.members().values.map((m) => m.toWire()).toList(),
-      sinceLandedMs: PlatformInt64Util.from(0),
-      watchRecords: const [],
-      pinRecords: const [],
-    );
+      // A sends a sync request to B with sinceLandedMs = 0
+      final secretA = PeerGroupSecret.fromBase64Url(
+        (await nodeA.authStorage.read(PeerGroupSecret.storageKey))!,
+      );
+      final syncReq = FlutterPeerSyncRequest.sync_(
+        authProof: secretA.authProof('node-a'),
+        roster: nodeA.store.members().values.map((m) => m.toWire()).toList(),
+        sinceLandedMs: PlatformInt64Util.from(0),
+        watchRecords: const [],
+        pinRecords: const [],
+      );
 
-    final res = await nodeA.transport.sendPeerSync('node-b', syncReq);
-    expect(res, isA<FlutterPeerSyncResponse_SyncAck>());
-    final ack = res as FlutterPeerSyncResponse_SyncAck;
-    expect(ack.watchRecords.map((w) => w.key), contains(movieKey));
+      final res = await nodeA.transport.sendPeerSync('node-b', syncReq);
+      expect(res, isA<FlutterPeerSyncResponse_SyncAck>());
+      final ack = res as FlutterPeerSyncResponse_SyncAck;
+      expect(ack.watchRecords.map((w) => w.key), contains(movieKey));
 
-    // B does not know the reply arrived, so it does not mark the record sent:
-    // only B's own next request, answered by A, moves that cursor.
-    expect(nodeB.store.watermark('node-a')?.lastSentLandedAt ?? 0, 0);
-  });
+      // B does not know the reply arrived, so it does not mark the record sent:
+      // only B's own next request, answered by A, moves that cursor.
+      expect(nodeB.store.watermark('node-a')?.lastSentLandedAt ?? 0, 0);
+    },
+  );
 
-  test('lost_sync_reply_is_delivered_when_the_responder_next_initiates',
-      () async {
-    const movieKey = 'tmdb:movie:99901';
-    final offer = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offer.code);
+  test(
+    'lost_sync_reply_is_delivered_when_the_responder_next_initiates',
+    () async {
+      const movieKey = 'tmdb:movie:99901';
+      final offer = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offer.code);
 
-    clock.setMs(2000);
-    await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
+      clock.setMs(2000);
+      await nodeB.store.setWatched(movieKey, true, nowMs: 2000);
 
-    // A asks B for what is new, and B's reply never reaches A.
-    network.dropRepliesTo.add('node-a');
-    await nodeA.service.syncAll(ignoreCooldown: true);
-    expect(nodeA.store.watchRecord(movieKey), isNull);
-    network.dropRepliesTo.clear();
+      // A asks B for what is new, and B's reply never reaches A.
+      network.dropRepliesTo.add('node-a');
+      await nodeA.service.syncAll(ignoreCooldown: true);
+      expect(nodeA.store.watchRecord(movieKey), isNull);
+      network.dropRepliesTo.clear();
 
-    // B initiating next must still carry the record to A.
-    clock.setMs(3000);
-    await nodeB.service.syncAll(ignoreCooldown: true);
-    expect(nodeA.store.watchRecord(movieKey)?.watched, isTrue);
-  });
+      // B initiating next must still carry the record to A.
+      clock.setMs(3000);
+      await nodeB.service.syncAll(ignoreCooldown: true);
+      expect(nodeA.store.watchRecord(movieKey)?.watched, isTrue);
+    },
+  );
 
   Future<FlutterPeerSyncResponse> sendManualSync(
     TestNode from,
@@ -773,94 +787,102 @@ void main() {
     );
   }
 
-  test('revoked_device_cannot_enroll_a_new_node_id_with_the_group_secret',
-      () async {
-    final offer = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offer.code);
-    clock.setMs(2000);
-    await nodeA.service.revokePeer('node-b');
+  test(
+    'revoked_device_cannot_enroll_a_new_node_id_with_the_group_secret',
+    () async {
+      final offer = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offer.code);
+      clock.setMs(2000);
+      await nodeA.service.revokePeer('node-b');
 
-    // B keeps the group secret. It syncs again as a node A has never seen.
-    final newNode = FakePeerSyncTransport(
-      network: network,
-      localNodeId: 'node-b-new',
-    );
-    addTearDown(newNode.dispose);
-    final secret = PeerGroupSecret.fromBase64Url(
-      (await nodeB.authStorage.read(PeerGroupSecret.storageKey))!,
-    );
-    final res = await newNode.sendPeerSync(
-      'node-a',
-      FlutterPeerSyncRequest.sync_(
-        authProof: secret.authProof('node-b-new'),
-        roster: [
-          const PeerMember(
-            nodeId: 'node-b-new',
-            deviceName: 'Device B',
-            platform: 'linux',
-            updatedAt: 3000,
-          ).toWire(),
-        ],
-        sinceLandedMs: PlatformInt64Util.from(0),
-        watchRecords: const [],
-        pinRecords: const [],
-      ),
-    );
+      // B keeps the group secret. It syncs again as a node A has never seen.
+      final newNode = FakePeerSyncTransport(
+        network: network,
+        localNodeId: 'node-b-new',
+      );
+      addTearDown(newNode.dispose);
+      final secret = PeerGroupSecret.fromBase64Url(
+        (await nodeB.authStorage.read(PeerGroupSecret.storageKey))!,
+      );
+      final res = await newNode.sendPeerSync(
+        'node-a',
+        FlutterPeerSyncRequest.sync_(
+          authProof: secret.authProof('node-b-new'),
+          roster: [
+            const PeerMember(
+              nodeId: 'node-b-new',
+              deviceName: 'Device B',
+              platform: 'linux',
+              updatedAt: 3000,
+            ).toWire(),
+          ],
+          sinceLandedMs: PlatformInt64Util.from(0),
+          watchRecords: const [],
+          pinRecords: const [],
+        ),
+      );
 
-    expect(res, isA<FlutterPeerSyncResponse_NotAuthorized>());
-    expect(nodeA.store.member('node-b-new'), isNull);
-  });
+      expect(res, isA<FlutterPeerSyncResponse_NotAuthorized>());
+      expect(nodeA.store.member('node-b-new'), isNull);
+    },
+  );
 
-  test('re_enrolled_device_is_accepted_again_by_the_rest_of_the_group',
-      () async {
-    final offerA = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offerA.code);
-    final offerB = await nodeB.service.startPairingOffer();
-    await nodeC.service.pairWithCode(offerB.code);
+  test(
+    're_enrolled_device_is_accepted_again_by_the_rest_of_the_group',
+    () async {
+      final offerA = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offerA.code);
+      final offerB = await nodeB.service.startPairingOffer();
+      await nodeC.service.pairWithCode(offerB.code);
 
-    // C removes A, and B hears of it.
-    clock.setMs(2000);
-    await nodeC.service.revokePeer('node-a');
-    await nodeB.service.syncAll(ignoreCooldown: true);
-    expect(nodeB.store.member('node-a')?.revoked, isTrue);
+      // C removes A, and B hears of it.
+      clock.setMs(2000);
+      await nodeC.service.revokePeer('node-a');
+      await nodeB.service.syncAll(ignoreCooldown: true);
+      expect(nodeB.store.member('node-a')?.revoked, isTrue);
 
-    // A pairs with B again, on purpose.
-    clock.setMs(3000);
-    final again = await nodeB.service.startPairingOffer();
-    await nodeA.service.pairWithCode(again.code);
-    await pumpEventQueue();
+      // A pairs with B again, on purpose.
+      clock.setMs(3000);
+      final again = await nodeB.service.startPairingOffer();
+      await nodeA.service.pairWithCode(again.code);
+      await pumpEventQueue();
 
-    expect(nodeB.store.member('node-a')?.revoked, isFalse);
-    expect(nodeC.store.member('node-a')?.revoked, isFalse);
-  });
+      expect(nodeB.store.member('node-a')?.revoked, isFalse);
+      expect(nodeC.store.member('node-a')?.revoked, isFalse);
+    },
+  );
 
-  test('revocation_wins_over_a_member_record_stamped_ahead_of_the_clock',
-      () async {
-    final offer = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offer.code);
+  test(
+    'revocation_wins_over_a_member_record_stamped_ahead_of_the_clock',
+    () async {
+      final offer = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offer.code);
 
-    clock.setMs(2000);
-    final b = nodeA.store.member('node-b')!;
-    await nodeA.store.putMember(b.copyWith(updatedAt: 9000000));
-    await nodeA.service.revokePeer('node-b');
+      clock.setMs(2000);
+      final b = nodeA.store.member('node-b')!;
+      await nodeA.store.putMember(b.copyWith(updatedAt: 9000000));
+      await nodeA.service.revokePeer('node-b');
 
-    expect(nodeA.store.member('node-b')?.revoked, isTrue);
-  });
+      expect(nodeA.store.member('node-b')?.revoked, isTrue);
+    },
+  );
 
-  test('leaving_revokes_this_device_even_when_its_record_is_ahead_of_the_clock',
-      () async {
-    final offer = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offer.code);
+  test(
+    'leaving_revokes_this_device_even_when_its_record_is_ahead_of_the_clock',
+    () async {
+      final offer = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offer.code);
 
-    clock.setMs(2000);
-    final a = nodeA.store.member('node-a')!;
-    await nodeA.store.putMember(a.copyWith(updatedAt: 40000));
-    await nodeA.service.leaveGroup();
+      clock.setMs(2000);
+      final a = nodeA.store.member('node-a')!;
+      await nodeA.store.putMember(a.copyWith(updatedAt: 40000));
+      await nodeA.service.leaveGroup();
 
-    expect(nodeB.store.member('node-a')?.revoked, isTrue);
-    expect(nodeA.service.groupId, isNull);
-    expect(nodeA.store.members(), isEmpty);
-  });
+      expect(nodeB.store.member('node-a')?.revoked, isTrue);
+      expect(nodeA.service.groupId, isNull);
+      expect(nodeA.store.members(), isEmpty);
+    },
+  );
 
   test('late_sync_reply_does_not_restore_the_roster_after_leaving', () async {
     final offer = await nodeA.service.startPairingOffer();
@@ -906,37 +928,42 @@ void main() {
     expect(nodeC.store.watchRecord(movieKey)?.watched, isTrue);
   });
 
-  test('sync_returns_the_newer_local_record_when_the_incoming_one_is_older',
-      () async {
-    const movieKey = 'tmdb:movie:99921';
-    final offer = await nodeA.service.startPairingOffer();
-    await nodeB.service.pairWithCode(offer.code);
+  test(
+    'sync_returns_the_newer_local_record_when_the_incoming_one_is_older',
+    () async {
+      const movieKey = 'tmdb:movie:99921';
+      final offer = await nodeA.service.startPairingOffer();
+      await nodeB.service.pairWithCode(offer.code);
 
-    clock.setMs(5000);
-    await nodeB.store.setWatched(movieKey, true, nowMs: 5000);
-    const stale = 3000;
-    final older = FlutterWireWatchRecord(
-      key: movieKey,
-      watched: false,
-      updatedAtMs: PlatformInt64Util.from(stale),
-    );
+      clock.setMs(5000);
+      await nodeB.store.setWatched(movieKey, true, nowMs: 5000);
+      const stale = 3000;
+      final older = FlutterWireWatchRecord(
+        key: movieKey,
+        watched: false,
+        updatedAtMs: PlatformInt64Util.from(stale),
+      );
 
-    // The sender's cursor is past B's record, so only the winner rule can
-    // bring it back.
-    final res = await sendManualSync(
-      nodeA,
-      'node-b',
-      watch: [older],
-      since: 9000000,
-    ) as FlutterPeerSyncResponse_SyncAck;
+      // The sender's cursor is past B's record, so only the winner rule can
+      // bring it back.
+      final res = await sendManualSync(
+        nodeA,
+        'node-b',
+        watch: [older],
+        since: 9000000,
+      ) as FlutterPeerSyncResponse_SyncAck;
 
-    expect(res.watchRecords.map((w) => w.key), contains(movieKey));
-    expect(
-      res.watchRecords.firstWhere((w) => w.key == movieKey).updatedAtMs.toInt(),
-      5000,
-    );
-    expect(nodeB.store.watchRecord(movieKey)!.watched, isTrue);
-  });
+      expect(res.watchRecords.map((w) => w.key), contains(movieKey));
+      expect(
+        res.watchRecords
+            .firstWhere((w) => w.key == movieKey)
+            .updatedAtMs
+            .toInt(),
+        5000,
+      );
+      expect(nodeB.store.watchRecord(movieKey)!.watched, isTrue);
+    },
+  );
 
   test('qr_offer_is_active_without_relay_publication', () async {
     relayClient.failPublish = true;
@@ -1002,43 +1029,47 @@ void main() {
     expect(changes, greaterThan(0));
   });
 
-  test('resolves_device_name_asynchronously_and_updates_local_member',
-      () async {
-    final standaloneStore = InMemoryPeerSyncStore();
-    final standaloneAuth = MockAuthStorage();
-    final standaloneTransport = FakePeerSyncTransport(
-      network: network,
-      localNodeId: 'node-standalone',
-    );
+  test(
+    'resolves_device_name_asynchronously_and_updates_local_member',
+    () async {
+      final standaloneStore = InMemoryPeerSyncStore();
+      final standaloneAuth = MockAuthStorage();
+      final standaloneTransport = FakePeerSyncTransport(
+        network: network,
+        localNodeId: 'node-standalone',
+      );
 
-    // Seed existing local member with old device name
-    await standaloneStore.putMember(const PeerMember(
-      nodeId: 'node-standalone',
-      deviceName: 'Old Device Name',
-      platform: 'linux',
-      updatedAt: 1000,
-    ));
+      // Seed existing local member with old device name
+      await standaloneStore.putMember(
+        const PeerMember(
+          nodeId: 'node-standalone',
+          deviceName: 'Old Device Name',
+          platform: 'linux',
+          updatedAt: 1000,
+        ),
+      );
 
-    final service = PeerSyncService(
-      store: standaloneStore,
-      authStorage: standaloneAuth,
-      transport: standaloneTransport,
-      relayClient: relayClient,
-      deviceName: 'Mydia Player',
-      platform: 'linux',
-      resolveDeviceName: () async => 'Echo Deck Pro',
-      clock: clock.call,
-    );
+      final service = PeerSyncService(
+        store: standaloneStore,
+        authStorage: standaloneAuth,
+        transport: standaloneTransport,
+        relayClient: relayClient,
+        deviceName: 'Mydia Player',
+        platform: 'linux',
+        resolveDeviceName: () async => 'Echo Deck Pro',
+        clock: clock.call,
+      );
 
-    await service.start();
+      await service.start();
 
-    expect(service.deviceName, 'Echo Deck Pro');
-    expect(
-      standaloneStore.member('node-standalone')?.deviceName,
-      'Echo Deck Pro',
-    );
+      expect(service.deviceName, 'Echo Deck Pro');
+      expect(
+        standaloneStore.member('node-standalone')?.deviceName,
+        'Echo Deck Pro',
+      );
 
-    service.dispose();
-    standaloneTransport.dispose();
-  });
+      service.dispose();
+      standaloneTransport.dispose();
+    },
+  );
 }

@@ -20,8 +20,7 @@ import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 
 void main() {
-  test(
-      'the desktop content column does not reserve the lights the sidebar '
+  test('the desktop content column does not reserve the lights the sidebar '
       'covers', () {
     const mac = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
     expect(AppShell.contentInsets(mac).leading, 0);
@@ -72,46 +71,48 @@ void main() {
   });
 
   testWidgets(
-      'a banner that applies its own SafeArea(bottom: false) is not shifted '
-      'down by the band twice', (tester) async {
-    const contentKey = Key('safe-area-content');
+    'a banner that applies its own SafeArea(bottom: false) is not shifted '
+    'down by the band twice',
+    (tester) async {
+      const contentKey = Key('safe-area-content');
 
-    await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(
-          padding: EdgeInsets.only(top: kMacTitleBarOverlap),
-        ),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: WindowChromeInsets.scope(
-            insets: const WindowChromeInsets(
-              height: kMacTitleBarOverlap,
-              leading: 80,
-              trailing: 0,
-            ),
-            // Same reason as the test above: `_PadTopWhenNonEmpty` sizes
-            // itself to `child.height + top` rather than the incoming
-            // constraint, and needs room to do that.
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: AppShell.bannerArea(
-                // Mirrors how `CompatibilityBanner`/`UpdateBanner` wrap their
-                // own content: a `SafeArea(bottom: false)` that would apply
-                // `padding.top` a second time if `bannerArea` left it in the
-                // child's `MediaQuery`.
-                child: const SafeArea(
-                  bottom: false,
-                  child: SizedBox(height: 30, width: 100, key: contentKey),
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            padding: EdgeInsets.only(top: kMacTitleBarOverlap),
+          ),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: WindowChromeInsets.scope(
+              insets: const WindowChromeInsets(
+                height: kMacTitleBarOverlap,
+                leading: 80,
+                trailing: 0,
+              ),
+              // Same reason as the test above: `_PadTopWhenNonEmpty` sizes
+              // itself to `child.height + top` rather than the incoming
+              // constraint, and needs room to do that.
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: AppShell.bannerArea(
+                  // Mirrors how `CompatibilityBanner`/`UpdateBanner` wrap their
+                  // own content: a `SafeArea(bottom: false)` that would apply
+                  // `padding.top` a second time if `bannerArea` left it in the
+                  // child's `MediaQuery`.
+                  child: const SafeArea(
+                    bottom: false,
+                    child: SizedBox(height: 30, width: 100, key: contentKey),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(tester.getRect(find.byKey(contentKey)).top, kMacTitleBarOverlap);
-  });
+      expect(tester.getRect(find.byKey(contentKey)).top, kMacTitleBarOverlap);
+    },
+  );
 
   testWidgets('an empty banner area takes no space', (tester) async {
     const areaKey = Key('banner-area');

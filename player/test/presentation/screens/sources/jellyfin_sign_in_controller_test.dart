@@ -19,8 +19,9 @@ import '../../../test_utils/mock_auth_storage.dart';
   ProviderContainer container,
   FakeJellyfinServer server,
   InMemorySourceStore store,
-  MockAuthStorage storage
-}) setUpContainer({bool identityFails = false}) {
+  MockAuthStorage storage,
+})
+setUpContainer({bool identityFails = false}) {
   final server = FakeJellyfinServer();
   final store = InMemorySourceStore();
   final storage = MockAuthStorage();
@@ -66,7 +67,7 @@ void main() {
     storage = s.storage;
     await c.read(sourceRecordsProvider.future);
     // Keep the auto-dispose controller alive between reads.
-    sub = c.listen(jellyfinSignInProvider(null), (_, __) {});
+    sub = c.listen(jellyfinSignInProvider(null), (_, _) {});
     addTearDown(sub.close);
   });
 
@@ -156,83 +157,94 @@ void main() {
     expect(state(), isA<JellyfinSignedIn>());
   });
 
-  test('a storage failure while saving leaves the form, not a spinner',
-      () async {
-    server.quickConnectEnabled = false;
-    await ctl().submitAddress('https://media.example.test');
-    storage.failAllWrites = true;
-    await ctl().submitPassword(
-      FakeJellyfinServer.username,
-      FakeJellyfinServer.password,
-    );
-    expect(
-      (state() as JellyfinPassword).error,
-      const SignInProblem(SignInIssue.saveServerFailed),
-    );
-  });
+  test(
+    'a storage failure while saving leaves the form, not a spinner',
+    () async {
+      server.quickConnectEnabled = false;
+      await ctl().submitAddress('https://media.example.test');
+      storage.failAllWrites = true;
+      await ctl().submitPassword(
+        FakeJellyfinServer.username,
+        FakeJellyfinServer.password,
+      );
+      expect(
+        (state() as JellyfinPassword).error,
+        const SignInProblem(SignInIssue.saveServerFailed),
+      );
+    },
+  );
 
   test('an unexpected failure checking the address shows an error', () async {
     final s = setUpContainer(identityFails: true);
-    final sub2 = s.container.listen(jellyfinSignInProvider(null), (_, __) {});
+    final sub2 = s.container.listen(jellyfinSignInProvider(null), (_, _) {});
     addTearDown(sub2.close);
     await s.container
         .read(jellyfinSignInProvider(null).notifier)
         .submitAddress('https://media.example.test');
     expect(
-      (s.container.read(jellyfinSignInProvider(null)) as JellyfinEnterAddress)
-          .error,
+      (s.container.read(
+        jellyfinSignInProvider(null),
+      ) as JellyfinEnterAddress).error,
       const SignInProblem(SignInIssue.jellyfinUnreachable),
     );
   });
 
-  test('re-auth as another user keeps the account but follows the user',
-      () async {
-    const accountId = 'acct1';
-    const oldAccount = ProviderAccount(
-      id: accountId,
-      kind: SourceKind.jellyfin,
-      displayName: 'Old',
-      storageNamespace: 'ns-old',
-      activeProfileId: 'old-profile',
-      needsReauth: true,
-    );
-    await c.read(sourceRecordsProvider.notifier).putAccount(
-          SourceAccountRecord(
-            account: oldAccount,
-            profiles: const [
-              SourceProfile(
-                id: 'old-profile',
-                accountId: accountId,
-                name: 'Old',
-                isOwner: false,
-              ),
-            ],
-            servers: const [],
-            addedAtMs: 1234,
-          ),
-        );
-    final p = jellyfinSignInProvider(accountId);
-    final sub2 = c.listen(p, (_, __) {});
-    addTearDown(sub2.close);
-    server.quickConnectEnabled = false;
-    await c.read(p.notifier).submitAddress('https://media.example.test');
-    await c.read(p.notifier).submitPassword(
-          FakeJellyfinServer.username,
-          FakeJellyfinServer.password,
-        );
-    expect(c.read(p), isA<JellyfinSignedIn>());
-    final record = (await store.load()).accounts.single;
-    expect(record.account.id, accountId);
-    expect(record.account.storageNamespace, 'ns-old');
-    expect(record.account.activeProfileId, FakeJellyfinServer.userId);
-    expect(record.account.needsReauth, isFalse);
-    expect(record.addedAtMs, 1234);
-  });
+  test(
+    're-auth as another user keeps the account but follows the user',
+    () async {
+      const accountId = 'acct1';
+      const oldAccount = ProviderAccount(
+        id: accountId,
+        kind: SourceKind.jellyfin,
+        displayName: 'Old',
+        storageNamespace: 'ns-old',
+        activeProfileId: 'old-profile',
+        needsReauth: true,
+      );
+      await c
+          .read(sourceRecordsProvider.notifier)
+          .putAccount(
+            SourceAccountRecord(
+              account: oldAccount,
+              profiles: const [
+                SourceProfile(
+                  id: 'old-profile',
+                  accountId: accountId,
+                  name: 'Old',
+                  isOwner: false,
+                ),
+              ],
+              servers: const [],
+              addedAtMs: 1234,
+            ),
+          );
+      final p = jellyfinSignInProvider(accountId);
+      final sub2 = c.listen(p, (_, _) {});
+      addTearDown(sub2.close);
+      server.quickConnectEnabled = false;
+      await c.read(p.notifier).submitAddress('https://media.example.test');
+      await c
+          .read(p.notifier)
+          .submitPassword(
+            FakeJellyfinServer.username,
+            FakeJellyfinServer.password,
+          );
+      expect(c.read(p), isA<JellyfinSignedIn>());
+      final record = (await store.load()).accounts.single;
+      expect(record.account.id, accountId);
+      expect(record.account.storageNamespace, 'ns-old');
+      expect(record.account.activeProfileId, FakeJellyfinServer.userId);
+      expect(record.account.needsReauth, isFalse);
+      expect(record.addedAtMs, 1234);
+    },
+  );
 
   Future<void> seedJellyfin(String profileId) async {
     const accountId = 'jfold';
     await storage.write('ns-jfold/account_token', 'old-token');
-    await c.read(sourceRecordsProvider.notifier).putAccount(
+    await c
+        .read(sourceRecordsProvider.notifier)
+        .putAccount(
           SourceAccountRecord(
             account: ProviderAccount(
               id: accountId,

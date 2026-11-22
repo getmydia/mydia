@@ -44,25 +44,25 @@ class SourceItemScreen extends ConsumerWidget {
           extendBodyBehindAppBar: true,
           body: switch (detail) {
             AsyncData(:final value) => ListView(
-                padding: EdgeInsets.only(bottom: DockInsets.bottomOf(context)),
-                children: [
-                  SourceBackdrop(
-                    sourceId: item.sourceId,
-                    art: value.summary.backdrop ?? value.summary.poster,
-                    height: 280,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: _Body(detail: value, item: item),
-                  ),
-                  if (item.kind == ItemKind.folder) _Children(parent: item),
-                ],
-              ),
+              padding: EdgeInsets.only(bottom: DockInsets.bottomOf(context)),
+              children: [
+                SourceBackdrop(
+                  sourceId: item.sourceId,
+                  art: value.summary.backdrop ?? value.summary.poster,
+                  height: 280,
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: _Body(detail: value, item: item),
+                ),
+                if (item.kind == ItemKind.folder) _Children(parent: item),
+              ],
+            ),
             AsyncError(:final error) => SourceErrorView(
-                error: error,
-                account: source?.source.account,
-                onRetry: () => ref.invalidate(sourceItemProvider(item)),
-              ),
+              error: error,
+              account: source?.source.account,
+              onRetry: () => ref.invalidate(sourceItemProvider(item)),
+            ),
             _ => const Center(child: CircularProgressIndicator()),
           },
         ),
@@ -90,14 +90,16 @@ class _Body extends ConsumerWidget {
     final watched = folderOfFiles ? null : source?.as<WatchedState>();
     final version = detail.versions.firstOrNull;
     final isFolder = item.kind == ItemKind.folder;
-    final canDownload = isDownloadSupported &&
+    final canDownload =
+        isDownloadSupported &&
         !isFolder &&
         version != null &&
         (source?.capabilities.contains(SourceCapability.downloadable) ?? false);
     final fixMatch = item.kind == ItemKind.video
         ? fixMatchAction(context, ref, item, summary.title)
         : null;
-    final resume = (summary.userState.progressSeconds ?? 0) > 0 &&
+    final resume =
+        (summary.userState.progressSeconds ?? 0) > 0 &&
         !summary.userState.watched;
     final meta = [
       if (summary.subtitle != null) summary.subtitle!,
@@ -127,11 +129,13 @@ class _Body extends ConsumerWidget {
                 key: const Key('source-item-play'),
                 autofocus: true,
                 onPressed: () async {
-                  await context.push(sourcePlayerLocation(
-                    detail.summary.ref,
-                    fileId: version.id,
-                    title: detail.summary.title,
-                  ));
+                  await context.push(
+                    sourcePlayerLocation(
+                      detail.summary.ref,
+                      fileId: version.id,
+                      title: detail.summary.title,
+                    ),
+                  );
                   if (!context.mounted) return;
                   // Progress changed while playing.
                   invalidateSourceItemWrites(ref, item);
@@ -159,12 +163,16 @@ class _Body extends ConsumerWidget {
                   if (!context.mounted) return;
                   invalidateSourceItemWrites(ref, item);
                 },
-                icon: Icon(summary.userState.watched
-                    ? Icons.check_circle
-                    : Icons.check_circle_outline),
-                label: Text(summary.userState.watched
-                    ? l10n.commonWatched
-                    : l10n.commonMarkWatched),
+                icon: Icon(
+                  summary.userState.watched
+                      ? Icons.check_circle
+                      : Icons.check_circle_outline,
+                ),
+                label: Text(
+                  summary.userState.watched
+                      ? l10n.commonWatched
+                      : l10n.commonMarkWatched,
+                ),
               ),
             if (canDownload)
               _DownloadButton(
@@ -191,8 +199,10 @@ class _Body extends ConsumerWidget {
         ],
         if (detail.people.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text(detail.people.take(8).join(', '),
-              style: theme.textTheme.bodySmall),
+          Text(
+            detail.people.take(8).join(', '),
+            style: theme.textTheme.bodySmall,
+          ),
         ],
       ],
     );
@@ -209,37 +219,33 @@ class _Children extends ConsumerWidget {
     final children = ref.watch(sourceChildrenProvider(parent));
     return switch (children) {
       AsyncData(:final value) => Column(
-          children: [
-            for (final child in value)
-              ListTile(
-                key: ValueKey('source-child-${child.ref.externalId}'),
-                title: Text(child.title),
-                subtitle: child.subtitle == null ? null : Text(child.subtitle!),
-                trailing: child.userState.watched
-                    ? const Icon(Icons.check_circle, size: 18)
-                    : null,
-                onTap: () => context.push(sourceItemLocation(child.ref)),
-              ),
-          ],
-        ),
+        children: [
+          for (final child in value)
+            ListTile(
+              key: ValueKey('source-child-${child.ref.externalId}'),
+              title: Text(child.title),
+              subtitle: child.subtitle == null ? null : Text(child.subtitle!),
+              trailing: child.userState.watched
+                  ? const Icon(Icons.check_circle, size: 18)
+                  : null,
+              onTap: () => context.push(sourceItemLocation(child.ref)),
+            ),
+        ],
+      ),
       AsyncError(:final error) => SourceErrorView(
-          error: error,
-          onRetry: () => ref.invalidate(sourceChildrenProvider(parent)),
-        ),
+        error: error,
+        onRetry: () => ref.invalidate(sourceChildrenProvider(parent)),
+      ),
       _ => const Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: CircularProgressIndicator()),
-        ),
+        padding: EdgeInsets.all(24),
+        child: Center(child: CircularProgressIndicator()),
+      ),
     };
   }
 }
 
 class _DownloadButton extends ConsumerWidget {
-  const _DownloadButton({
-    super.key,
-    required this.item,
-    required this.detail,
-  });
+  const _DownloadButton({super.key, required this.item, required this.detail});
 
   final ItemRef item;
   final ItemDetail detail;
@@ -254,17 +260,13 @@ class _DownloadButton extends ConsumerWidget {
       onPressed: isDownloaded
           ? null
           : () => startItemDownload(
-                context,
-                ref,
-                item: item,
-                metadata: _itemDetailDownloadMetadata(detail),
-              ),
-      icon: Icon(
-        isDownloaded ? Icons.download_done : Icons.download_outlined,
-      ),
-      label: Text(
-        isDownloaded ? l10n.commonDownloaded : l10n.commonDownload,
-      ),
+              context,
+              ref,
+              item: item,
+              metadata: _itemDetailDownloadMetadata(detail),
+            ),
+      icon: Icon(isDownloaded ? Icons.download_done : Icons.download_outlined),
+      label: Text(isDownloaded ? l10n.commonDownloaded : l10n.commonDownload),
     );
   }
 }

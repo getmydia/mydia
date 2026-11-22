@@ -82,9 +82,9 @@ const _subtitleText = 'Mydia surface subtitle check';
 
 /// The fixtures that are not where the run looks for them.
 List<String> _missingFixtures() => [
-      for (final name in [_hdr10, _sdr, _subs])
-        if (!File(_clip(name)).existsSync()) _clip(name),
-    ];
+  for (final name in [_hdr10, _sdr, _subs])
+    if (!File(_clip(name)).existsSync()) _clip(name),
+];
 
 /// Why the file cannot run here, or null. Only for the default fixtures
 /// path: an explicit one with clips missing fails instead (see `main`).
@@ -118,12 +118,15 @@ class _RecordingSurface implements MpvSurface {
 
   @override
   Future<VideoOutputStart> awaitVideoOutput(int handle) => _traced(
-      'awaitVideoOutput $handle', () => _inner.awaitVideoOutput(handle));
+    'awaitVideoOutput $handle',
+    () => _inner.awaitVideoOutput(handle),
+  );
 
   @override
   Future<void> setOption(int handle, String name, String value) => _traced(
-      'setOption $handle $name=$value',
-      () => _inner.setOption(handle, name, value));
+    'setOption $handle $name=$value',
+    () => _inner.setOption(handle, name, value),
+  );
 
   @override
   Future<void> detach(int handle) =>
@@ -183,11 +186,13 @@ class _LocalTransport extends FakeTransport {
   final String path;
 
   @override
-  Future<PlaybackSource> open(PlaybackPlan plan,
-      {required String fileId,
-      required Duration startAt,
-      Duration? totalDuration,
-      void Function(LoadingStep step)? onProgress}) async {
+  Future<PlaybackSource> open(
+    PlaybackPlan plan, {
+    required String fileId,
+    required Duration startAt,
+    Duration? totalDuration,
+    void Function(LoadingStep step)? onProgress,
+  }) async {
     opened.add(plan);
     return PlaybackSource(
       url: path,
@@ -205,27 +210,28 @@ class _LocalSession extends FakePlaybackSession {
 
   @override
   Future<CandidatesFetch> candidates(CandidateScope scope) async => (
-        offer: const PlaybackOffer(
-          fileId: 'part-1',
-          candidates: [
-            CandidateStrategy(strategy: 'DIRECT_PLAY', mime: 'video/mp4'),
-          ],
-          durationSeconds: 12,
-        ),
-        serverRejected: false,
-      );
+    offer: const PlaybackOffer(
+      fileId: 'part-1',
+      candidates: [
+        CandidateStrategy(strategy: 'DIRECT_PLAY', mime: 'video/mp4'),
+      ],
+      durationSeconds: 12,
+    ),
+    serverRejected: false,
+  );
 
   @override
   Future<StreamingPreparation> prepareStreaming({
     required Object owner,
     required void Function(LoadingStep step) onProgress,
     required bool Function() isCurrent,
-  }) async =>
-      StreamingReady(StreamingSetup(
-        memoryKey: 'source:local',
-        progress: progress,
-        createTransport: ({required bool relayed}) => _transport,
-      ));
+  }) async => StreamingReady(
+    StreamingSetup(
+      memoryKey: 'source:local',
+      progress: progress,
+      createTransport: ({required bool relayed}) => _transport,
+    ),
+  );
 }
 
 class _Rig {
@@ -258,9 +264,11 @@ Future<_Rig> _rig() async {
   addTearDown(container.dispose);
   // The version a failure is recorded under, read before any playback.
   container.read(updateProvider);
-  for (var i = 0;
-      i < 50 && container.read(updateProvider).currentVersion.isEmpty;
-      i++) {
+  for (
+    var i = 0;
+    i < 50 && container.read(updateProvider).currentVersion.isEmpty;
+    i++
+  ) {
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
   await container.read(statsOverlayEnabledProvider.future);
@@ -268,25 +276,31 @@ Future<_Rig> _rig() async {
   return _Rig(container, settings);
 }
 
-Future<void> _mount(WidgetTester tester, _Rig rig, String clip,
-    {String fileId = 'file-1'}) async {
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: rig.container,
-    child: MaterialApp(
-      localizationsDelegates: appLocalizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: PlayerScreen(
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: fileId,
-        title: 'The Lantern Field',
-        session: _LocalSession(_clip(clip)),
-        createPlayer: rig.create,
-        surface: rig.surface,
+Future<void> _mount(
+  WidgetTester tester,
+  _Rig rig,
+  String clip, {
+  String fileId = 'file-1',
+}) async {
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: rig.container,
+      child: MaterialApp(
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: PlayerScreen(
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          fileId: fileId,
+          title: 'The Lantern Field',
+          session: _LocalSession(_clip(clip)),
+          createPlayer: rig.create,
+          surface: rig.surface,
+        ),
       ),
     ),
-  ));
+  );
   await tester.pump();
 }
 
@@ -319,8 +333,12 @@ bool _playing(_Rig rig) {
 /// Every text drawn in the stats panel's [id] row, or empty when it is
 /// absent.
 String _rowText(WidgetTester tester, StatsRowId id) => tester
-    .widgetList<Text>(find.descendant(
-        of: find.byKey(StatsPanel.rowKey(id)), matching: find.byType(Text)))
+    .widgetList<Text>(
+      find.descendant(
+        of: find.byKey(StatsPanel.rowKey(id)),
+        matching: find.byType(Text),
+      ),
+    )
     .map((t) => t.data ?? t.textSpan?.toPlainText() ?? '')
     .join(' ');
 
@@ -330,10 +348,16 @@ Future<String> _prop(_TracedPlayer p, String name) =>
 /// [name] once mpv reports it: `video-target-params` stays empty until the
 /// output has drawn a frame.
 Future<String> _settledProp(
-    WidgetTester tester, _TracedPlayer p, String name) async {
+  WidgetTester tester,
+  _TracedPlayer p,
+  String name,
+) async {
   await _waitFor(
-      tester, '$name to be set', () async => (await _prop(p, name)).isNotEmpty,
-      timeout: const Duration(seconds: 5));
+    tester,
+    '$name to be set',
+    () async => (await _prop(p, name)).isNotEmpty,
+    timeout: const Duration(seconds: 5),
+  );
   return _prop(p, name);
 }
 
@@ -343,8 +367,11 @@ Future<Duration> _close(WidgetTester tester, _Rig rig) async {
   final watch = Stopwatch()..start();
   await tester.pumpWidget(const SizedBox());
   await _waitFor(
-      tester, 'players disposed', () => rig.players.every((p) => p.disposed),
-      timeout: const Duration(seconds: 15));
+    tester,
+    'players disposed',
+    () => rig.players.every((p) => p.disposed),
+    timeout: const Duration(seconds: 15),
+  );
   return watch.elapsed;
 }
 
@@ -353,18 +380,23 @@ Future<Duration> _close(WidgetTester tester, _Rig rig) async {
 Future<String?> _moveToBuiltInDisplay() async {
   final displays = await screenRetriever.getAllDisplays();
   for (final d in displays) {
-    debugPrint('[mac_surface_test] display ${d.name} at '
-        '${d.visiblePosition} size ${d.size}');
+    debugPrint(
+      '[mac_surface_test] display ${d.name} at '
+      '${d.visiblePosition} size ${d.size}',
+    );
   }
   final builtIn = displays
-      .where((d) =>
-          (d.name ?? '').contains('Built-in') ||
-          (d.name ?? '').contains('Color LCD'))
+      .where(
+        (d) =>
+            (d.name ?? '').contains('Built-in') ||
+            (d.name ?? '').contains('Color LCD'),
+      )
       .firstOrNull;
   if (builtIn == null) return null;
   final origin = builtIn.visiblePosition ?? Offset.zero;
-  await windowManager
-      .setBounds(Rect.fromLTWH(origin.dx + 40, origin.dy + 40, 1280, 720));
+  await windowManager.setBounds(
+    Rect.fromLTWH(origin.dx + 40, origin.dy + 40, 1280, 720),
+  );
   return builtIn.name;
 }
 
@@ -374,8 +406,10 @@ void main() {
     final missing = _missingFixtures();
     if (missing.isNotEmpty) {
       test('macOS surface fixtures', () {
-        fail('MYDIA_HDR_FIXTURES is set but these are missing: '
-            '${missing.join(', ')}');
+        fail(
+          'MYDIA_HDR_FIXTURES is set but these are missing: '
+          '${missing.join(', ')}',
+        );
       });
       return;
     }
@@ -394,8 +428,9 @@ void main() {
     // follows `windowFullscreenSignal`, which only this listener updates:
     // without it the screen never learns it entered fullscreen, and the
     // second `f` asks to enter again instead of leaving.
-    final fullscreen =
-        WindowFullscreenController(window: const WindowManagerController());
+    final fullscreen = WindowFullscreenController(
+      window: const WindowManagerController(),
+    );
     await fullscreen.seed();
     windowManager.addListener(fullscreen);
   });
@@ -416,8 +451,10 @@ void main() {
     final gamma = await _settledProp(tester, p, 'video-target-params/gamma');
     final prim = await _prop(p, 'video-target-params/primaries');
     final hwdec = await _prop(p, 'hwdec-current');
-    debugPrint('[mac_surface_test] hdr10 current-vo=$vo gamma=$gamma '
-        'primaries=$prim hwdec-current=$hwdec');
+    debugPrint(
+      '[mac_surface_test] hdr10 current-vo=$vo gamma=$gamma '
+      'primaries=$prim hwdec-current=$hwdec',
+    );
     expect(vo, 'gpu-next');
     expect(gamma, 'pq');
 
@@ -433,8 +470,10 @@ void main() {
     // A locked Mac reports a valid headroom of 1.0: the lock screen hides
     // the window, and macOS raises no EDR for content nobody can see.
     final locked = await _consoleLocked();
-    debugPrint('[mac_surface_test] stats headroom=$headroom on $display '
-        '(locked $locked)');
+    debugPrint(
+      '[mac_surface_test] stats headroom=$headroom on $display '
+      '(locked $locked)',
+    );
     // Only that a reading arrived: the current headroom can be exactly 1.0
     // on an unlocked EDR panel at full brightness. Whether it rises is the
     // climb check below, on a screen where that is reliable.
@@ -452,15 +491,20 @@ void main() {
     final potential = _lastDisplay?.potentialHeadroom ?? 1;
     final assertClimb = potential > 2.0 && !locked;
     if (assertClimb) {
-      await _waitFor(tester, 'stats headroom above 1.5',
-          () => (statsHeadroom() ?? 1) > 1.5,
-          timeout: const Duration(seconds: 5));
+      await _waitFor(
+        tester,
+        'stats headroom above 1.5',
+        () => (statsHeadroom() ?? 1) > 1.5,
+        timeout: const Duration(seconds: 5),
+      );
     } else {
       await tester.pump(const Duration(seconds: 2));
     }
-    debugPrint('[mac_surface_test] stats headroom after the climb '
-        '${statsHeadroom()} (potential $potential, locked $locked, '
-        'climb asserted: $assertClimb)');
+    debugPrint(
+      '[mac_surface_test] stats headroom after the climb '
+      '${statsHeadroom()} (potential $potential, locked $locked, '
+      'climb asserted: $assertClimb)',
+    );
 
     // The panel's Color and Display rows, as the viewer reads them.
     await tester.pump(const Duration(seconds: 1));
@@ -475,8 +519,9 @@ void main() {
     debugPrint('[mac_surface_test] close took $took; log: $_log');
   });
 
-  testWidgets('SDR plays through gpu-next, and fill sets panscan',
-      (tester) async {
+  testWidgets('SDR plays through gpu-next, and fill sets panscan', (
+    tester,
+  ) async {
     final rig = await _rig();
     await _mount(tester, rig, _sdr);
     await _waitFor(tester, 'SDR tracks', () => _playing(rig));
@@ -486,13 +531,18 @@ void main() {
     // SDR stays on the sRGB swapchain: with the hint on, the BT.709 one
     // makes macOS decode it with a 2.4 power, much darker than the texture.
     expect(await _prop(p, 'target-colorspace-hint'), 'no');
-    expect(await _settledProp(tester, p, 'video-target-params/gamma'),
-        isNot(anyOf('pq', 'hlg')));
+    expect(
+      await _settledProp(tester, p, 'video-target-params/gamma'),
+      isNot(anyOf('pq', 'hlg')),
+    );
 
     final before = await _prop(p, 'panscan');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-    await _waitFor(tester, 'panscan to change',
-        () async => await _prop(p, 'panscan') != before);
+    await _waitFor(
+      tester,
+      'panscan to change',
+      () async => await _prop(p, 'panscan') != before,
+    );
     final after = await _prop(p, 'panscan');
     debugPrint('[mac_surface_test] panscan $before -> $after');
     // Fit is 0 and fill is 1, whichever one the stored preference started
@@ -500,8 +550,11 @@ void main() {
     expect({double.parse(before), double.parse(after)}, {0.0, 1.0});
     // Back to whatever it was, so the stored preference is unchanged.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-    await _waitFor(tester, 'panscan back',
-        () async => await _prop(p, 'panscan') == before);
+    await _waitFor(
+      tester,
+      'panscan back',
+      () async => await _prop(p, 'panscan') == before,
+    );
 
     await _close(tester, rig);
   });
@@ -511,8 +564,9 @@ void main() {
     await _mount(tester, rig, _subs);
     await _waitFor(tester, 'subtitle clip tracks', () => _playing(rig));
     final p = rig.last;
-    final track = p.state.tracks.subtitle
-        .firstWhere((t) => t.id != 'auto' && t.id != 'no');
+    final track = p.state.tracks.subtitle.firstWhere(
+      (t) => t.id != 'auto' && t.id != 'no',
+    );
     if (p.state.track.subtitle.id != track.id) {
       await p.setSubtitleTrack(track);
     }
@@ -521,8 +575,9 @@ void main() {
       'subtitle text',
       () => find
           .descendant(
-              of: find.byType(MydiaSubtitleView),
-              matching: find.textContaining(_subtitleText))
+            of: find.byType(MydiaSubtitleView),
+            matching: find.textContaining(_subtitleText),
+          )
           .evaluate()
           .isNotEmpty,
     );
@@ -541,12 +596,18 @@ void main() {
     // the 12 s clip from ending (and pausing) halfway through the test.
     await p.setPlaylistMode(PlaylistMode.single);
     final before = await windowManager.getBounds();
-    debugPrint('[mac_surface_test] bounds before fullscreen $before '
-        'osd ${await _prop(p, 'osd-dimensions')}');
+    debugPrint(
+      '[mac_surface_test] bounds before fullscreen $before '
+      'osd ${await _prop(p, 'osd-dimensions')}',
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
-    await _waitFor(tester, 'fullscreen', windowManager.isFullScreen,
-        timeout: const Duration(seconds: 10));
+    await _waitFor(
+      tester,
+      'fullscreen',
+      windowManager.isFullScreen,
+      timeout: const Duration(seconds: 10),
+    );
     // The transition animates; let it finish and draw.
     await tester.pump(const Duration(seconds: 2));
     expect(tester.takeException(), isNull);
@@ -556,8 +617,11 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
     await _waitFor(
-        tester, 'windowed', () async => !await windowManager.isFullScreen(),
-        timeout: const Duration(seconds: 10));
+      tester,
+      'windowed',
+      () async => !await windowManager.isFullScreen(),
+      timeout: const Duration(seconds: 10),
+    );
     await tester.pump(const Duration(seconds: 2));
     expect(tester.takeException(), isNull);
     expect(await _prop(p, 'current-vo'), 'gpu-next');
@@ -565,9 +629,11 @@ void main() {
     // transition, the frame never changes, and leaving fullscreen can put
     // the window back at a frame of its own choosing, on either output
     // path. Whether the picture follows the window is for a person to see.
-    debugPrint('[mac_surface_test] fullscreen osd width $fullscreenSize; '
-        'after: bounds ${await windowManager.getBounds()} '
-        'osd ${await _prop(p, 'osd-dimensions')}');
+    debugPrint(
+      '[mac_surface_test] fullscreen osd width $fullscreenSize; '
+      'after: bounds ${await windowManager.getBounds()} '
+      'osd ${await _prop(p, 'osd-dimensions')}',
+    );
     // No detach happened along the way: the view survived.
     expect(_log.where((e) => e.startsWith('detach $h')), isEmpty);
 
@@ -576,15 +642,16 @@ void main() {
     // the next test's loading view would overflow it. Wait for the restore.
     await windowManager.setBounds(before);
     await _waitFor(
-        tester,
-        'window bounds restored',
-        () async =>
-            (await windowManager.getBounds()).height >= before.height - 1,
-        timeout: const Duration(seconds: 5));
+      tester,
+      'window bounds restored',
+      () async => (await windowManager.getBounds()).height >= before.height - 1,
+      timeout: const Duration(seconds: 5),
+    );
   });
 
-  testWidgets('closing mid-playback detaches first and does not hang',
-      (tester) async {
+  testWidgets('closing mid-playback detaches first and does not hang', (
+    tester,
+  ) async {
     final rig = await _rig();
     await _mount(tester, rig, _hdr10);
     await _waitFor(tester, 'tracks', () => _playing(rig));
@@ -595,15 +662,23 @@ void main() {
     debugPrint('[mac_surface_test] close took $took; log: $_log');
     expect(took, lessThan(const Duration(seconds: 5)));
     expect(
-        _log,
-        containsAllInOrder(
-            ['detach $h start', 'detach $h end', 'dispose $h start']));
-    expect(_log, contains('dispose $h current-vo='),
-        reason: 'the output was gone before disposal, not just timed out');
+      _log,
+      containsAllInOrder([
+        'detach $h start',
+        'detach $h end',
+        'dispose $h start',
+      ]),
+    );
+    expect(
+      _log,
+      contains('dispose $h current-vo='),
+      reason: 'the output was gone before disposal, not just timed out',
+    );
   });
 
-  testWidgets('the next source detaches the old handle before attaching',
-      (tester) async {
+  testWidgets('the next source detaches the old handle before attaching', (
+    tester,
+  ) async {
     final rig = await _rig();
     await _mount(tester, rig, _sdr, fileId: 'file-a');
     await _waitFor(tester, 'first source', () => _playing(rig));
@@ -611,8 +686,11 @@ void main() {
     final h1 = first.handleValue;
 
     await _mount(tester, rig, _hdr10, fileId: 'file-b');
-    await _waitFor(tester, 'second source',
-        () => rig.players.length == 2 && _playing(rig));
+    await _waitFor(
+      tester,
+      'second source',
+      () => rig.players.length == 2 && _playing(rig),
+    );
     final second = rig.last;
     final h2 = second.handleValue;
     debugPrint('[mac_surface_test] next source log: $_log');
@@ -629,7 +707,9 @@ void main() {
     );
     expect(await _prop(second, 'current-vo'), 'gpu-next');
     expect(
-        await _settledProp(tester, second, 'video-target-params/gamma'), 'pq');
+      await _settledProp(tester, second, 'video-target-params/gamma'),
+      'pq',
+    );
 
     await _close(tester, rig);
   });
@@ -640,16 +720,20 @@ void main() {
       final rig = await _rig();
       await _mount(tester, rig, i.isEven ? _hdr10 : _sdr);
       await _waitFor(tester, 'cycle $i tracks', () => _playing(rig));
-      expect(await _prop(rig.last, 'current-vo'), 'gpu-next',
-          reason: 'cycle $i');
+      expect(
+        await _prop(rig.last, 'current-vo'),
+        'gpu-next',
+        reason: 'cycle $i',
+      );
       final took = await _close(tester, rig);
       debugPrint('[mac_surface_test] cycle $i closed in $took');
       expect(took, lessThan(const Duration(seconds: 5)), reason: 'cycle $i');
     }
   });
 
-  testWidgets('the escape hatch puts a new playback on the texture path',
-      (tester) async {
+  testWidgets('the escape hatch puts a new playback on the texture path', (
+    tester,
+  ) async {
     final rig = await _rig();
     await rig.settings.setLegacyMacVideoOutput(true);
     await _mount(tester, rig, _sdr);
@@ -658,15 +742,19 @@ void main() {
       'texture playback',
       () =>
           rig.players.isNotEmpty &&
-          rig.last.state.tracks.video
-              .any((t) => t.id != 'auto' && t.id != 'no') &&
+          rig.last.state.tracks.video.any(
+            (t) => t.id != 'auto' && t.id != 'no',
+          ) &&
           find.byType(Video).evaluate().isNotEmpty,
     );
     expect(find.byType(PlayerVideoSurface), findsNothing);
     expect(_log.where((e) => e.startsWith('attach')), isEmpty);
     // A video output must actually be up, or the check below proves nothing.
-    await _waitFor(tester, 'texture output',
-        () async => (await _prop(rig.last, 'current-vo')).isNotEmpty);
+    await _waitFor(
+      tester,
+      'texture output',
+      () async => (await _prop(rig.last, 'current-vo')).isNotEmpty,
+    );
     final vo = await _prop(rig.last, 'current-vo');
     debugPrint('[mac_surface_test] hatch current-vo=$vo');
     expect(vo, isNot('gpu-next'));

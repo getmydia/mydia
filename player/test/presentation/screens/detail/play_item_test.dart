@@ -13,37 +13,44 @@ import '../sources/fake_media_source.dart';
 
 /// Pumps one button that plays [item] from [fake]; answers what was pushed.
 Future<List<String>> _pump(
-    WidgetTester tester, FakeMediaSource fake, ItemRef item) async {
+  WidgetTester tester,
+  FakeMediaSource fake,
+  ItemRef item,
+) async {
   final pushed = <String>[];
   Widget record(BuildContext _, GoRouterState s) {
     pushed.add(s.uri.toString());
     return const SizedBox();
   }
 
-  final router = GoRouter(routes: [
-    GoRoute(
-      path: '/',
-      builder: (_, __) => Consumer(
-        builder: (context, ref, _) => TextButton(
-          key: const Key('play'),
-          onPressed: () => playItem(context, ref, item),
-          child: const Text('Play'),
+  final router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, _) => Consumer(
+          builder: (context, ref, _) => TextButton(
+            key: const Key('play'),
+            onPressed: () => playItem(context, ref, item),
+            child: const Text('Play'),
+          ),
         ),
       ),
+      GoRoute(path: '/s/:id/player/:item', builder: record),
+      GoRoute(path: '/s/:id/show/:item', builder: record),
+      GoRoute(path: '/s/:id/season/:item', builder: record),
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(fake)],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+        builder: toastLayerBuilder,
+      ),
     ),
-    GoRoute(path: '/s/:id/player/:item', builder: record),
-    GoRoute(path: '/s/:id/show/:item', builder: record),
-    GoRoute(path: '/s/:id/season/:item', builder: record),
-  ]);
-  await tester.pumpWidget(ProviderScope(
-    overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(fake)],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: router,
-      builder: toastLayerBuilder,
-    ),
-  ));
+  );
   await tester.tap(find.byKey(const Key('play')));
   await tester.pumpAndSettle();
   return pushed;
@@ -59,7 +66,10 @@ void main() {
 
   testWidgets('a show plays its next-up episode', (tester) async {
     final pushed = await _pump(
-        tester, FakeDetailSource(nextUpEpisode: fakeEpisode(4)), fakeShow.ref);
+      tester,
+      FakeDetailSource(nextUpEpisode: fakeEpisode(4)),
+      fakeShow.ref,
+    );
     expect(Uri.parse(pushed.single).path, '/s/acc1:owner:aa11/player/e4');
   });
 
@@ -79,8 +89,11 @@ void main() {
     final pushed = await _pump(tester, fake, fakeEpisode(3).ref);
     expect(pushed, isEmpty);
     expect(
-        find.text('Could not reach this server. Check that it is running and '
-            'on the network.'),
-        findsOneWidget);
+      find.text(
+        'Could not reach this server. Check that it is running and '
+        'on the network.',
+      ),
+      findsOneWidget,
+    );
   });
 }

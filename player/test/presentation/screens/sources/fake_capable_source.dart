@@ -56,17 +56,17 @@ class FakeCapableSource extends FakeMediaSource
 
   @override
   Set<SourceCapability> get capabilities => {
-        ...super.capabilities,
-        SourceCapability.collections,
-        SourceCapability.calendar,
-        SourceCapability.savedFilters,
-        SourceCapability.unwatchedListing,
-        SourceCapability.favoritesListing,
-        SourceCapability.mediaInfo,
-        SourceCapability.recentlyAdded,
-        SourceCapability.continueWatching,
-        SourceCapability.downloadable,
-      };
+    ...super.capabilities,
+    SourceCapability.collections,
+    SourceCapability.calendar,
+    SourceCapability.savedFilters,
+    SourceCapability.unwatchedListing,
+    SourceCapability.favoritesListing,
+    SourceCapability.mediaInfo,
+    SourceCapability.recentlyAdded,
+    SourceCapability.continueWatching,
+    SourceCapability.downloadable,
+  };
 
   Page<ItemSummary> _page(List<Page<ItemSummary>> pages, Cursor? cursor) {
     final index = int.tryParse(cursor?.value ?? '') ?? 0;

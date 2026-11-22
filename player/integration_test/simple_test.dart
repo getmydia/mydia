@@ -24,8 +24,9 @@ import 'helpers/test_bootstrap.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(ensureTestBootstrap);
-  testWidgets('App boots with the native bridge initialized',
-      (WidgetTester tester) async {
+  testWidgets('App boots with the native bridge initialized', (
+    WidgetTester tester,
+  ) async {
     // Registered before the mount, not called at the end of the body: a
     // failing expect below would skip a terminal call, leaving the app mounted
     // for the framework to dispose later, which is the exact teardown this

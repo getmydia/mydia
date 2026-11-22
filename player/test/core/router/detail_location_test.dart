@@ -5,8 +5,11 @@ void main() {
   group('isDetailLocation', () {
     test('matches movie, show, season and episode pages', () {
       for (final kind in ['movie', 'show', 'season', 'episode']) {
-        expect(isDetailLocation('/s/acc1:owner:aa11/$kind/m1'), isTrue, //
-            reason: kind);
+        expect(
+          isDetailLocation('/s/acc1:owner:aa11/$kind/m1'),
+          isTrue, //
+          reason: kind,
+        );
       }
     });
 

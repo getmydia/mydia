@@ -28,15 +28,14 @@ S3Backend backend(
   http.Client client, {
   S3Location? location,
   Duration timeout = kS3Timeout,
-}) =>
-    S3Backend(
-      location: location ?? _pathLocation,
-      accessKeyId: 'AKIDEXAMPLE',
-      secretAccessKey: 'secret',
-      client: client,
-      clock: () => DateTime.utc(2026, 11, 14, 12),
-      timeout: timeout,
-    );
+}) => S3Backend(
+  location: location ?? _pathLocation,
+  accessKeyId: 'AKIDEXAMPLE',
+  secretAccessKey: 'secret',
+  client: client,
+  clock: () => DateTime.utc(2026, 11, 14, 12),
+  timeout: timeout,
+);
 
 String listing({
   List<String> prefixes = const [],
@@ -72,13 +71,18 @@ final _epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 void main() {
   test('lists folders and files under the prefix', () async {
     late http.Request seen;
-    final entries = await backend(MockClient((r) async {
-      seen = r;
-      return http.Response(
+    final entries = await backend(
+      MockClient((r) async {
+        seen = r;
+        return http.Response(
           listing(
-              prefixes: ['media/Movies/'], contents: [object('media/a.mkv')]),
-          200);
-    })).list('/');
+            prefixes: ['media/Movies/'],
+            contents: [object('media/a.mkv')],
+          ),
+          200,
+        );
+      }),
+    ).list('/');
 
     expect(seen.method, 'GET');
     expect(seen.url.queryParameters, {
@@ -104,33 +108,43 @@ void main() {
 
   test('lists a subfolder under its key prefix', () async {
     late http.Request seen;
-    final entries = await backend(MockClient((r) async {
-      seen = r;
-      return http.Response(
-          listing(contents: [object('media/Movies/x.mkv')]), 200);
-    })).list('/Movies');
+    final entries = await backend(
+      MockClient((r) async {
+        seen = r;
+        return http.Response(
+          listing(contents: [object('media/Movies/x.mkv')]),
+          200,
+        );
+      }),
+    ).list('/Movies');
     expect(seen.url.queryParameters['prefix'], 'media/Movies/');
     expect(entries.single.path, '/Movies/x.mkv');
   });
 
   test('follows continuation tokens', () async {
     final seen = <http.Request>[];
-    final entries = await backend(MockClient((r) async {
-      seen.add(r);
-      if (seen.length == 1) {
-        return http.Response(
+    final entries = await backend(
+      MockClient((r) async {
+        seen.add(r);
+        if (seen.length == 1) {
+          return http.Response(
             listing(
-                contents: [object('media/a.mkv')],
-                truncated: true,
-                token: 't1'),
-            200);
-      }
-      return http.Response(listing(contents: [object('media/b.mkv')]), 200);
-    })).list('/');
+              contents: [object('media/a.mkv')],
+              truncated: true,
+              token: 't1',
+            ),
+            200,
+          );
+        }
+        return http.Response(listing(contents: [object('media/b.mkv')]), 200);
+      }),
+    ).list('/');
 
     expect(seen, hasLength(2));
     expect(
-        seen[0].url.queryParameters.containsKey('continuation-token'), isFalse);
+      seen[0].url.queryParameters.containsKey('continuation-token'),
+      isFalse,
+    );
     expect(seen[1].url.queryParameters['continuation-token'], 't1');
     expect(entries.map((e) => e.path), ['/a.mkv', '/b.mkv']);
   });
@@ -139,13 +153,22 @@ void main() {
     // A V1-style answer: NextMarker, no NextContinuationToken.
     final seen = <http.Request>[];
     await expectLater(
-      backend(MockClient((r) async {
-        seen.add(r);
-        return http.Response(
-            listing(contents: [object('media/a.mkv')], truncated: true), 200);
-      })).list('/'),
-      throwsA(isA<BackendUnreachable>()
-          .having((e) => e.message, 'message', contains('incomplete listing'))),
+      backend(
+        MockClient((r) async {
+          seen.add(r);
+          return http.Response(
+            listing(contents: [object('media/a.mkv')], truncated: true),
+            200,
+          );
+        }),
+      ).list('/'),
+      throwsA(
+        isA<BackendUnreachable>().having(
+          (e) => e.message,
+          'message',
+          contains('incomplete listing'),
+        ),
+      ),
     );
     expect(seen, hasLength(1));
   });
@@ -153,15 +176,19 @@ void main() {
   test('a repeated continuation token fails', () async {
     final seen = <http.Request>[];
     await expectLater(
-      backend(MockClient((r) async {
-        seen.add(r);
-        return http.Response(
+      backend(
+        MockClient((r) async {
+          seen.add(r);
+          return http.Response(
             listing(
-                contents: [object('media/a.mkv')],
-                truncated: true,
-                token: 't1'),
-            200);
-      })).list('/'),
+              contents: [object('media/a.mkv')],
+              truncated: true,
+              token: 't1',
+            ),
+            200,
+          );
+        }),
+      ).list('/'),
       throwsA(isA<BackendUnreachable>()),
     );
     expect(seen, hasLength(2));
@@ -169,18 +196,22 @@ void main() {
 
   test('folders whose key holds // are reachable', () async {
     final heads = <http.Request>[];
-    final b = backend(MockClient((r) async {
-      if (r.method == 'HEAD') {
-        heads.add(r);
-        return http.Response('', 200, headers: {'content-length': '10'});
-      }
-      return switch (r.url.queryParameters['prefix']) {
-        'media/a/' => http.Response(listing(prefixes: ['media/a//']), 200),
-        'media/a//' =>
-          http.Response(listing(contents: [object('media/a//x.mkv')]), 200),
-        final p => http.Response('unexpected prefix $p', 500),
-      };
-    }));
+    final b = backend(
+      MockClient((r) async {
+        if (r.method == 'HEAD') {
+          heads.add(r);
+          return http.Response('', 200, headers: {'content-length': '10'});
+        }
+        return switch (r.url.queryParameters['prefix']) {
+          'media/a/' => http.Response(listing(prefixes: ['media/a//']), 200),
+          'media/a//' => http.Response(
+            listing(contents: [object('media/a//x.mkv')]),
+            200,
+          ),
+          final p => http.Response('unexpected prefix $p', 500),
+        };
+      }),
+    );
 
     final dir = (await b.list('/a')).single;
     expect(dir.isDir, isTrue);
@@ -200,16 +231,20 @@ void main() {
   });
 
   test('folders carry their key prefix as identity', () async {
-    final b = backend(MockClient((r) async {
-      if (r.method == 'HEAD') return http.Response('', 404);
-      return switch (r.url.queryParameters['prefix']) {
-        'media/' => http.Response(listing(prefixes: ['media/a/']), 200),
-        'media/a/' => http.Response(listing(prefixes: ['media/a//']), 200),
-        'media/a//' =>
-          http.Response(listing(contents: [object('media/a//x.mkv')]), 200),
-        final p => http.Response('unexpected prefix $p', 500),
-      };
-    }));
+    final b = backend(
+      MockClient((r) async {
+        if (r.method == 'HEAD') return http.Response('', 404);
+        return switch (r.url.queryParameters['prefix']) {
+          'media/' => http.Response(listing(prefixes: ['media/a/']), 200),
+          'media/a/' => http.Response(listing(prefixes: ['media/a//']), 200),
+          'media/a//' => http.Response(
+            listing(contents: [object('media/a//x.mkv')]),
+            200,
+          ),
+          final p => http.Response('unexpected prefix $p', 500),
+        };
+      }),
+    );
 
     expect((await b.stat('/'))?.identity, 'media/');
     expect((await b.list('/')).single.identity, 'media/a/');
@@ -234,31 +269,49 @@ void main() {
   });
 
   test('an empty first segment at the root is not listed', () async {
-    final entries = await backend(MockClient((_) async => http.Response(
-        listing(prefixes: ['media//', 'media/Movies/']), 200))).list('/');
+    final entries = await backend(
+      MockClient(
+        (_) async =>
+            http.Response(listing(prefixes: ['media//', 'media/Movies/']), 200),
+      ),
+    ).list('/');
     expect(entries.map((e) => e.path), ['/Movies']);
   });
 
   test('skips the folder marker', () async {
-    final entries = await backend(MockClient((_) async => http.Response(
-        listing(contents: [
-          object('media/Movies/', size: 0),
-          object('media/Movies/x.mkv'),
-        ]),
-        200))).list('/Movies');
+    final entries = await backend(
+      MockClient(
+        (_) async => http.Response(
+          listing(
+            contents: [
+              object('media/Movies/', size: 0),
+              object('media/Movies/x.mkv'),
+            ],
+          ),
+          200,
+        ),
+      ),
+    ).list('/Movies');
     expect(entries.map((e) => e.path), ['/Movies/x.mkv']);
   });
 
   test('archived objects are unreadable', () async {
-    final entries = await backend(MockClient((_) async => http.Response(
-        listing(contents: [
-          object('media/g.mkv', storageClass: 'GLACIER'),
-          object('media/d.mkv', storageClass: 'DEEP_ARCHIVE'),
-          object('media/s.mkv', storageClass: 'STANDARD'),
-          object('media/i.mkv', storageClass: 'STANDARD_IA'),
-          object('media/t.mkv', storageClass: 'INTELLIGENT_TIERING'),
-        ]),
-        200))).list('/');
+    final entries = await backend(
+      MockClient(
+        (_) async => http.Response(
+          listing(
+            contents: [
+              object('media/g.mkv', storageClass: 'GLACIER'),
+              object('media/d.mkv', storageClass: 'DEEP_ARCHIVE'),
+              object('media/s.mkv', storageClass: 'STANDARD'),
+              object('media/i.mkv', storageClass: 'STANDARD_IA'),
+              object('media/t.mkv', storageClass: 'INTELLIGENT_TIERING'),
+            ],
+          ),
+          200,
+        ),
+      ),
+    ).list('/');
     final unreadable = {for (final e in entries) e.name: e.unreadable};
     expect(unreadable, {
       'g.mkv': true,
@@ -271,13 +324,19 @@ void main() {
 
   test('stat file', () async {
     late http.Request seen;
-    final entry = await backend(MockClient((r) async {
-      seen = r;
-      return http.Response('', 200, headers: {
-        'content-length': '1234',
-        'last-modified': 'Fri, 02 Jan 2026 03:04:05 GMT',
-      });
-    })).stat('/Movies/x.mkv');
+    final entry = await backend(
+      MockClient((r) async {
+        seen = r;
+        return http.Response(
+          '',
+          200,
+          headers: {
+            'content-length': '1234',
+            'last-modified': 'Fri, 02 Jan 2026 03:04:05 GMT',
+          },
+        );
+      }),
+    ).stat('/Movies/x.mkv');
 
     expect(seen.method, 'HEAD');
     expect(seen.url.path, '/bkt/media/Movies/x.mkv');
@@ -292,12 +351,16 @@ void main() {
   group('stat folder', () {
     test('a 404 with objects under the key is a dir', () async {
       final seen = <http.Request>[];
-      final entry = await backend(MockClient((r) async {
-        seen.add(r);
-        if (r.method == 'HEAD') return http.Response('', 404);
-        return http.Response(
-            listing(contents: [object('media/Movies/x.mkv')]), 200);
-      })).stat('/Movies');
+      final entry = await backend(
+        MockClient((r) async {
+          seen.add(r);
+          if (r.method == 'HEAD') return http.Response('', 404);
+          return http.Response(
+            listing(contents: [object('media/Movies/x.mkv')]),
+            200,
+          );
+        }),
+      ).stat('/Movies');
 
       expect(seen, hasLength(2));
       expect(seen[1].method, 'GET');
@@ -311,10 +374,12 @@ void main() {
     });
 
     test('a 404 with nothing under the key is null', () async {
-      final entry = await backend(MockClient((r) async {
-        if (r.method == 'HEAD') return http.Response('', 404);
-        return http.Response(listing(), 200);
-      })).stat('/Gone');
+      final entry = await backend(
+        MockClient((r) async {
+          if (r.method == 'HEAD') return http.Response('', 404);
+          return http.Response(listing(), 200);
+        }),
+      ).stat('/Gone');
       expect(entry, isNull);
     });
 
@@ -329,53 +394,76 @@ void main() {
 
   test('probe succeeds on an empty listing', () async {
     late http.Request seen;
-    await backend(MockClient((r) async {
-      seen = r;
-      return http.Response(listing(), 200);
-    })).probe();
+    await backend(
+      MockClient((r) async {
+        seen = r;
+        return http.Response(listing(), 200);
+      }),
+    ).probe();
     expect(seen.url.queryParameters['list-type'], '2');
     expect(seen.url.queryParameters['max-keys'], '1');
     expect(seen.url.queryParameters['prefix'], 'media/');
   });
 
   test('probe AccessDenied is CannotList', () async {
-    const body = '<?xml version="1.0" encoding="UTF-8"?><Error>'
+    const body =
+        '<?xml version="1.0" encoding="UTF-8"?><Error>'
         '<Code>AccessDenied</Code><Message>Access Denied</Message></Error>';
     await expectLater(
       backend(MockClient((_) async => http.Response(body, 403))).probe(),
-      throwsA(isA<BackendUnauthorized>()
-          .having((e) => e.code, 'code', kS3CodeCannotList)),
+      throwsA(
+        isA<BackendUnauthorized>().having(
+          (e) => e.code,
+          'code',
+          kS3CodeCannotList,
+        ),
+      ),
     );
   });
 
   test('wrong region from header', () async {
     await expectLater(
-      backend(MockClient((_) async => http.Response('', 301,
-          headers: {'x-amz-bucket-region': 'eu-west-1'}))).probe(),
-      throwsA(isA<BackendUnreachable>()
-          .having((e) => e.code, 'code', kS3CodeWrongRegion)
-          .having((e) => e.hint, 'hint', 'eu-west-1')),
+      backend(
+        MockClient(
+          (_) async => http.Response(
+            '',
+            301,
+            headers: {'x-amz-bucket-region': 'eu-west-1'},
+          ),
+        ),
+      ).probe(),
+      throwsA(
+        isA<BackendUnreachable>()
+            .having((e) => e.code, 'code', kS3CodeWrongRegion)
+            .having((e) => e.hint, 'hint', 'eu-west-1'),
+      ),
     );
   });
 
   test('requests do not follow redirects', () async {
     late http.BaseRequest seen;
-    await backend(MockClient((r) async {
-      seen = r;
-      return http.Response(listing(), 200);
-    })).probe();
+    await backend(
+      MockClient((r) async {
+        seen = r;
+        return http.Response(listing(), 200);
+      }),
+    ).probe();
     expect(seen.followRedirects, isFalse);
   });
 
   group('path style and vhost style URLs', () {
     test('path', () {
-      expect(_pathLocation.objectUri('media/a.mkv').toString(),
-          'https://h:9000/bkt/media/a.mkv');
+      expect(
+        _pathLocation.objectUri('media/a.mkv').toString(),
+        'https://h:9000/bkt/media/a.mkv',
+      );
     });
 
     test('vhost', () {
-      expect(_vhostLocation.objectUri('media/a.mkv').toString(),
-          'https://bkt.s3.us-east-1.amazonaws.com/media/a.mkv');
+      expect(
+        _vhostLocation.objectUri('media/a.mkv').toString(),
+        'https://bkt.s3.us-east-1.amazonaws.com/media/a.mkv',
+      );
     });
 
     test('the backend sends to the vhost host', () async {
@@ -420,15 +508,19 @@ void main() {
   test('keys round-trip from list to playable', () async {
     const key = 'media/Sp ace+&#%é /x.mkv';
     final heads = <http.Request>[];
-    final b = backend(MockClient((r) async {
-      if (r.method == 'HEAD') {
-        heads.add(r);
-        return http.Response('', 200, headers: {'content-length': '10'});
-      }
-      // S3 sends UTF-8; a String body would go out as Latin-1.
-      return http.Response.bytes(
-          utf8.encode(listing(contents: [object(xmlEscape(key))])), 200);
-    }));
+    final b = backend(
+      MockClient((r) async {
+        if (r.method == 'HEAD') {
+          heads.add(r);
+          return http.Response('', 200, headers: {'content-length': '10'});
+        }
+        // S3 sends UTF-8; a String body would go out as Latin-1.
+        return http.Response.bytes(
+          utf8.encode(listing(contents: [object(xmlEscape(key))])),
+          200,
+        );
+      }),
+    );
 
     final entries = await b.list('/Sp ace+&#%é ');
     expect(entries.single.path, '/Sp ace+&#%é /x.mkv');
@@ -450,18 +542,24 @@ void main() {
   test('requests time out', () async {
     final never = Completer<http.Response>();
     await expectLater(
-      backend(MockClient((_) => never.future),
-              timeout: const Duration(milliseconds: 50))
-          .probe(),
+      backend(
+        MockClient((_) => never.future),
+        timeout: const Duration(milliseconds: 50),
+      ).probe(),
       throwsA(isA<BackendUnreachable>()),
     );
   });
 
   test('messages never carry the signature', () async {
     try {
-      await backend(MockClient((_) async => throw http.ClientException(
-              'boom', Uri.parse('https://h:9000/bkt?X-Amz-Signature=SECRET'))))
-          .probe();
+      await backend(
+        MockClient(
+          (_) async => throw http.ClientException(
+            'boom',
+            Uri.parse('https://h:9000/bkt?X-Amz-Signature=SECRET'),
+          ),
+        ),
+      ).probe();
       fail('expected a failure');
     } on BackendFailure catch (e) {
       expect(e, isA<BackendUnreachable>());
@@ -472,8 +570,10 @@ void main() {
   group('S3Location', () {
     test('connection URI round-trips', () {
       final u = _pathLocation.toConnectionUri();
-      expect(u.toString(),
-          's3+https://h:9000/bkt/media/?region=us-east-1&style=path');
+      expect(
+        u.toString(),
+        's3+https://h:9000/bkt/media/?region=us-east-1&style=path',
+      );
       final back = S3Location.fromConnectionUri(u)!;
       expect(back.endpoint, Uri.parse('https://h:9000'));
       expect(back.bucket, 'bkt');
@@ -483,25 +583,37 @@ void main() {
     });
 
     test('a prefix without its trailing slash gains one; case is kept', () {
-      final l = S3Location.fromConnectionUri(Uri.parse(
-          's3+http://minio.lan/bkt/Media/TV?region=us-east-1&style=vhost'))!;
+      final l = S3Location.fromConnectionUri(
+        Uri.parse(
+          's3+http://minio.lan/bkt/Media/TV?region=us-east-1&style=vhost',
+        ),
+      )!;
       expect(l.endpoint, Uri.parse('http://minio.lan'));
       expect(l.prefix, 'Media/TV/');
       expect(l.style, S3Style.vhost);
     });
 
     test('host is lowercased and the default port dropped', () {
-      String canon(String u) => S3Location.fromConnectionUri(Uri.parse(u))!
-          .toConnectionUri()
-          .toString();
-      expect(canon('S3+HTTPS://H.Example.com:443/bkt?style=path&region=r'),
-          's3+https://h.example.com/bkt/?region=r&style=path');
-      expect(canon('s3+http://H:80/bkt?region=r&style=path'),
-          's3+http://h/bkt/?region=r&style=path');
-      expect(canon('s3+http://h:443/bkt?region=r&style=path'),
-          's3+http://h:443/bkt/?region=r&style=path');
-      expect(canon('s3+https://[FE80::1]:9000/bkt?region=r&style=path'),
-          's3+https://[fe80::1]:9000/bkt/?region=r&style=path');
+      String canon(String u) =>
+          S3Location.fromConnectionUri(Uri.parse(u))!
+              .toConnectionUri()
+              .toString();
+      expect(
+        canon('S3+HTTPS://H.Example.com:443/bkt?style=path&region=r'),
+        's3+https://h.example.com/bkt/?region=r&style=path',
+      );
+      expect(
+        canon('s3+http://H:80/bkt?region=r&style=path'),
+        's3+http://h/bkt/?region=r&style=path',
+      );
+      expect(
+        canon('s3+http://h:443/bkt?region=r&style=path'),
+        's3+http://h:443/bkt/?region=r&style=path',
+      );
+      expect(
+        canon('s3+https://[FE80::1]:9000/bkt?region=r&style=path'),
+        's3+https://[fe80::1]:9000/bkt/?region=r&style=path',
+      );
     });
 
     test('a prefix round-trips exactly: literal %XX and interior //', () {
@@ -525,20 +637,22 @@ void main() {
         expect(back.prefix, prefix, reason: prefix);
         // Parsing the stored string gives the same location.
         final stored = S3Location.fromConnectionUri(
-            Uri.parse(l.toConnectionUri().toString()))!;
+          Uri.parse(l.toConnectionUri().toString()),
+        )!;
         expect(stored.prefix, prefix, reason: prefix);
       }
     });
 
     test('leading and trailing slashes of a prefix are the only rewrite', () {
-      String prefixOf(String typed) => S3Location.fromConnectionUri(S3Location(
-            endpoint: Uri.parse('https://h'),
-            bucket: 'bkt',
-            prefix: typed,
-            region: 'r',
-            style: S3Style.path,
-          ).toConnectionUri())!
-              .prefix;
+      String prefixOf(String typed) => S3Location.fromConnectionUri(
+        S3Location(
+          endpoint: Uri.parse('https://h'),
+          bucket: 'bkt',
+          prefix: typed,
+          region: 'r',
+          style: S3Style.path,
+        ).toConnectionUri(),
+      )!.prefix;
       expect(prefixOf('/media/'), 'media/');
       expect(prefixOf('//media'), 'media/');
       expect(prefixOf('media//'), 'media/');
@@ -549,34 +663,44 @@ void main() {
 
     test('an empty prefix stays empty', () {
       final l = S3Location.fromConnectionUri(
-          Uri.parse('s3+https://h/bkt?region=r&style=path'))!;
+        Uri.parse('s3+https://h/bkt?region=r&style=path'),
+      )!;
       expect(l.prefix, '');
-      expect(l.bucketUri({'list-type': '2'}).toString(),
-          'https://h/bkt?list-type=2');
+      expect(
+        l.bucketUri({'list-type': '2'}).toString(),
+        'https://h/bkt?list-type=2',
+      );
     });
 
     test('a non-S3 or incomplete URI is null', () {
       expect(S3Location.fromConnectionUri(Uri.parse('https://h/bkt')), isNull);
       expect(
-          S3Location.fromConnectionUri(
-              Uri.parse('s3+https://h/?region=r&style=path')),
-          isNull);
+        S3Location.fromConnectionUri(
+          Uri.parse('s3+https://h/?region=r&style=path'),
+        ),
+        isNull,
+      );
       expect(
-          S3Location.fromConnectionUri(
-              Uri.parse('s3+https://h/bkt?style=path')),
-          isNull);
+        S3Location.fromConnectionUri(Uri.parse('s3+https://h/bkt?style=path')),
+        isNull,
+      );
       expect(
-          S3Location.fromConnectionUri(
-              Uri.parse('s3+https://h/bkt?region=r&style=other')),
-          isNull);
+        S3Location.fromConnectionUri(
+          Uri.parse('s3+https://h/bkt?region=r&style=other'),
+        ),
+        isNull,
+      );
     });
 
     test('bucketUri encodes query values', () {
       expect(
-          _vhostLocation.bucketUri(
-              {'prefix': 'media/a b+c', 'list-type': '2'}).toString(),
-          'https://bkt.s3.us-east-1.amazonaws.com/'
-          '?prefix=media%2Fa%20b%2Bc&list-type=2');
+        _vhostLocation.bucketUri({
+          'prefix': 'media/a b+c',
+          'list-type': '2',
+        }).toString(),
+        'https://bkt.s3.us-east-1.amazonaws.com/'
+        '?prefix=media%2Fa%20b%2Bc&list-type=2',
+      );
     });
   });
 }

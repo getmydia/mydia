@@ -32,10 +32,8 @@ import 'package:player/presentation/widgets/browse_grid.dart';
 import 'package:player/presentation/widgets/horizontal_rail.dart';
 
 Widget _host(Widget child) => ProviderScope(
-      child: MaterialApp(
-        home: Scaffold(body: child),
-      ),
-    );
+  child: MaterialApp(home: Scaffold(body: child)),
+);
 
 void main() {
   group('HorizontalRail cacheExtent gating (product code)', () {
@@ -43,46 +41,54 @@ void main() {
     // list to HorizontalRail rather than building their own ListView, so
     // this is the one place the gate needs to live for either to inherit it.
     testWidgets(
-        'the ListView HorizontalRail actually builds carries no cacheExtent '
-        'outside the directional tier', (tester) async {
-      await tester.pumpWidget(
-        _host(HorizontalRail(
-          itemCount: 20,
-          height: 200,
-          leftFadeKey: const ValueKey('rail-traversal-left-fade'),
-          rightFadeKey: const ValueKey('rail-traversal-right-fade'),
-          itemBuilder: (context, index) => SizedBox(
-            key: ValueKey('rail-traversal-item-$index'),
-            width: 150,
-            child: Text('Item $index'),
+      'the ListView HorizontalRail actually builds carries no cacheExtent '
+      'outside the directional tier',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            HorizontalRail(
+              itemCount: 20,
+              height: 200,
+              leftFadeKey: const ValueKey('rail-traversal-left-fade'),
+              rightFadeKey: const ValueKey('rail-traversal-right-fade'),
+              itemBuilder: (context, index) => SizedBox(
+                key: ValueKey('rail-traversal-item-$index'),
+                width: 150,
+                child: Text('Item $index'),
+              ),
+            ),
           ),
-        )),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      final list = tester.widget<ListView>(find.byType(ListView));
-      expect(list.scrollCacheExtent, isNull);
-    });
+        final list = tester.widget<ListView>(find.byType(ListView));
+        expect(list.scrollCacheExtent, isNull);
+      },
+    );
   });
 
   group('BrowseGrid cacheExtent gating (product code)', () {
     testWidgets(
-        'the GridView BrowseGrid actually builds carries no cacheExtent '
-        'outside the directional tier', (tester) async {
-      await tester.pumpWidget(
-        _host(BrowseGrid(
-          itemCount: 40,
-          scrollTopPadding: 100,
-          itemBuilder: (context, index) => SizedBox(
-            key: ValueKey('grid-traversal-item-$index'),
-            child: Text('Item $index'),
+      'the GridView BrowseGrid actually builds carries no cacheExtent '
+      'outside the directional tier',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            BrowseGrid(
+              itemCount: 40,
+              scrollTopPadding: 100,
+              itemBuilder: (context, index) => SizedBox(
+                key: ValueKey('grid-traversal-item-$index'),
+                child: Text('Item $index'),
+              ),
+            ),
           ),
-        )),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      final grid = tester.widget<GridView>(find.byType(GridView));
-      expect(grid.scrollCacheExtent, isNull);
-    });
+        final grid = tester.widget<GridView>(find.byType(GridView));
+        expect(grid.scrollCacheExtent, isNull);
+      },
+    );
   });
 }

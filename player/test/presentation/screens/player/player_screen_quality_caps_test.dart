@@ -37,14 +37,16 @@ void main() {
 
   /// Every `startStreamingSession` request the screen made, old document or
   /// legacy one. `strategy` is the variable only these two carry.
-  List<ScriptedRequest> sessionRequests(ScriptedMydiaTransport link) =>
-      link.requests
-          .where((r) => r.variables.containsKey('strategy'))
-          .toList(growable: false);
+  List<ScriptedRequest> sessionRequests(ScriptedMydiaTransport link) => link
+      .requests
+      .where((r) => r.variables.containsKey('strategy'))
+      .toList(growable: false);
 
   Future<void> pumpUntilSessionStarted(
-      WidgetTester tester, ScriptedMydiaTransport link,
-      {int count = 1}) async {
+    WidgetTester tester,
+    ScriptedMydiaTransport link, {
+    int count = 1,
+  }) async {
     await pumpUntil(tester, () => sessionRequests(link).length >= count);
     // Drains `_waitForPlaylist`'s retry loop so no timer outlives the test;
     // see `player_screen_resume_offset_test.dart` for the full explanation.
@@ -83,8 +85,9 @@ void main() {
     });
   }
 
-  testWidgets('sends the stored rung as a bitrate and height cap',
-      (tester) async {
+  testWidgets('sends the stored rung as a bitrate and height cap', (
+    tester,
+  ) async {
     final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 2160),
       session: (_) =>
@@ -105,13 +108,16 @@ void main() {
 
     final variables = sessionRequests(link).single.variables;
     expect(variables['maxBitrate'], 4000);
-    expect(variables['maxHeight'], 720,
-        reason: 'the rung is a pair; sending the bitrate alone leaves the '
-            'server free to spend it on a resolution nobody asked for');
+    expect(
+      variables['maxHeight'],
+      720,
+      reason:
+          'the rung is a pair; sending the bitrate alone leaves the '
+          'server free to spend it on a resolution nobody asked for',
+    );
   });
 
-  testWidgets(
-      'falls back to Auto, transcoding at the source, when the source '
+  testWidgets('falls back to Auto, transcoding at the source, when the source '
       'cannot offer the stored rung', (tester) async {
     // A 720p source: the 1080p rung would upscale, so it is not on this
     // file's ladder at all.
@@ -133,20 +139,28 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables.containsKey('maxHeight'), isFalse,
-        reason: 'a stored rung that would upscale falls back to Auto, which '
-            'transcodes at the source resolution: nothing here says this '
-            "720p file's link cannot carry it");
+    expect(
+      variables.containsKey('maxHeight'),
+      isFalse,
+      reason:
+          'a stored rung that would upscale falls back to Auto, which '
+          'transcodes at the source resolution: nothing here says this '
+          "720p file's link cannot carry it",
+    );
     expect(variables.containsKey('maxBitrate'), isFalse);
   });
 
-  testWidgets('a chosen rung takes precedence over direct play',
-      (tester) async {
+  testWidgets('a chosen rung takes precedence over direct play', (
+    tester,
+  ) async {
     // Direct play is on offer and would normally win on native, handing the
     // file over untouched — with no encoder to apply the cap to.
     final link = linkFor(
       streamingCandidatesResponse(
-          duration: 5400, height: 2160, directPlay: true),
+        duration: 5400,
+        height: 2160,
+        directPlay: true,
+      ),
       session: (_) =>
           startStreamingSessionResponse(maxBitrate: 1500, maxHeight: 480),
     );
@@ -163,13 +177,16 @@ void main() {
     await pumpPlayerScreen(tester, container);
     await pumpUntilSessionStarted(tester, link);
 
-    expect(sessionRequests(link).single.variables['maxHeight'], 480,
-        reason: 'a streaming session must be negotiated at all: taking the '
-            'direct-play shortcut would silently ignore the rung');
+    expect(
+      sessionRequests(link).single.variables['maxHeight'],
+      480,
+      reason:
+          'a streaming session must be negotiated at all: taking the '
+          'direct-play shortcut would silently ignore the rung',
+    );
   });
 
-  testWidgets(
-      'reads the stored default once and carries the rung across a '
+  testWidgets('reads the stored default once and carries the rung across a '
       're-initialization', (tester) async {
     // The rung the viewer is watching at must not round-trip through secure
     // storage to survive a restart. It used to: `_resolveQualityForFile`
@@ -230,17 +247,26 @@ void main() {
     await pumpUntilSessionStarted(tester, link, count: 2);
 
     final attempts = sessionRequests(link);
-    expect(attempts, hasLength(2),
-        reason: 'without a second pass this test proves nothing; the whole '
-            'point is what the re-initialization requests');
-    expect(settings.getDefaultQualityCalls, 1,
-        reason: 'storage seeds the rung, it does not carry it');
-    expect(attempts.last.variables['maxHeight'], 720,
-        reason: 'the rung in effect wins over whatever storage now holds');
+    expect(
+      attempts,
+      hasLength(2),
+      reason:
+          'without a second pass this test proves nothing; the whole '
+          'point is what the re-initialization requests',
+    );
+    expect(
+      settings.getDefaultQualityCalls,
+      1,
+      reason: 'storage seeds the rung, it does not carry it',
+    );
+    expect(
+      attempts.last.variables['maxHeight'],
+      720,
+      reason: 'the rung in effect wins over whatever storage now holds',
+    );
   });
 
-  testWidgets(
-      'an unreadable preference plays at Auto, transcoding at the '
+  testWidgets('an unreadable preference plays at Auto, transcoding at the '
       'source, rather than failing', (tester) async {
     final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 2160),
@@ -263,10 +289,14 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables.containsKey('maxHeight'), isFalse,
-        reason: 'a locked keyring costs the preference, not the playback; '
-            'Auto, the default, transcodes at the source resolution when '
-            'nothing says the connection cannot carry it');
+    expect(
+      variables.containsKey('maxHeight'),
+      isFalse,
+      reason:
+          'a locked keyring costs the preference, not the playback; '
+          'Auto, the default, transcodes at the source resolution when '
+          'nothing says the connection cannot carry it',
+    );
     expect(variables.containsKey('maxBitrate'), isFalse);
   });
 
@@ -294,16 +324,24 @@ void main() {
           .isNotEmpty,
     );
 
-    expect(sessionRequests(link).length, 1,
-        reason: 'a resolver failure is not version skew; retrying it would '
-            'double every real error');
+    expect(
+      sessionRequests(link).length,
+      1,
+      reason:
+          'a resolver failure is not version skew; retrying it would '
+          'double every real error',
+    );
   });
 
-  testWidgets('a remembered decode failure keeps Auto from direct playing',
-      (tester) async {
+  testWidgets('a remembered decode failure keeps Auto from direct playing', (
+    tester,
+  ) async {
     final link = linkFor(
       streamingCandidatesResponse(
-          duration: 5400, height: 1080, directPlay: true),
+        duration: 5400,
+        height: 1080,
+        directPlay: true,
+      ),
       session: (_) => startStreamingSessionResponse(),
     );
 
@@ -338,9 +376,13 @@ void main() {
     // now that nothing has settled a rung, and Auto consults the memory, so
     // if the gate stopped being keyed to `QualityChoiceKind.auto` this would
     // direct play despite the remembered failure.
-    expect(sessionRequests(link), hasLength(1),
-        reason: 'Auto must respect the remembered failure and transcode '
-            'instead of direct playing');
+    expect(
+      sessionRequests(link),
+      hasLength(1),
+      reason:
+          'Auto must respect the remembered failure and transcode '
+          'instead of direct playing',
+    );
     // No recent stall says this link cannot carry the file, so the
     // transcode Auto falls back to is uncapped, like Original.
     final variables = sessionRequests(link).single.variables;
@@ -349,173 +391,209 @@ void main() {
   });
 
   testWidgets(
-      'Auto caps to the highest fitting rung after a recent stall on this '
-      'path', (tester) async {
-    // 20000000 bps = 20000 kbps. 1080p needs 8000 * 1.3 = 10400 > 6000;
-    // 720p needs 4000 * 1.3 = 5200 <= 6000.
-    final link = linkFor(
-      streamingCandidatesResponse(
-          duration: 5400, height: 2160, bitrate: 20000000),
-      session: (_) =>
-          startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
-    );
+    'Auto caps to the highest fitting rung after a recent stall on this '
+    'path',
+    (tester) async {
+      // 20000000 bps = 20000 kbps. 1080p needs 8000 * 1.3 = 10400 > 6000;
+      // 720p needs 4000 * 1.3 = 5200 <= 6000.
+      final link = linkFor(
+        streamingCandidatesResponse(
+          duration: 5400,
+          height: 2160,
+          bitrate: 20000000,
+        ),
+        session: (_) =>
+            startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
+      );
 
-    final container = buildPlayerScreenContainer(
-      server: link,
-      connectionState: HarnessLink.direct(),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-    );
-    addTearDown(container.dispose);
+      final container = buildPlayerScreenContainer(
+        server: link,
+        connectionState: HarnessLink.direct(),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
+      );
+      addTearDown(container.dispose);
 
-    // Seeded before the screen ever reads memory, at the harness source's
-    // server URL, the key for a non-p2p connection.
-    final memory = await container.read(playbackMemoryProvider.future);
-    await memory.recordStall(
-      'http://test.local',
-      LinkPath.http,
-      6000,
-      now: DateTime.now(),
-    );
+      // Seeded before the screen ever reads memory, at the harness source's
+      // server URL, the key for a non-p2p connection.
+      final memory = await container.read(playbackMemoryProvider.future);
+      await memory.recordStall(
+        'http://test.local',
+        LinkPath.http,
+        6000,
+        now: DateTime.now(),
+      );
 
-    await pumpPlayerScreen(tester, container);
-    await pumpUntilSessionStarted(tester, link);
+      await pumpPlayerScreen(tester, container);
+      await pumpUntilSessionStarted(tester, link);
 
-    final variables = sessionRequests(link).single.variables;
-    expect(variables['maxHeight'], 720,
-        reason: 'a recent stall on this link path is evidence Auto acts '
+      final variables = sessionRequests(link).single.variables;
+      expect(
+        variables['maxHeight'],
+        720,
+        reason:
+            'a recent stall on this link path is evidence Auto acts '
             'on: it asks for the highest adaptive rung that fits the '
-            "stall's ceiling");
-    expect(variables['maxBitrate'], 4000);
-  });
+            "stall's ceiling",
+      );
+      expect(variables['maxBitrate'], 4000);
+    },
+  );
 
   testWidgets(
-      'a stored Original direct plays despite a remembered decode failure',
-      (tester) async {
-    final link = linkFor(
-      streamingCandidatesResponse(
-          duration: 5400, height: 1080, directPlay: true),
-    );
+    'a stored Original direct plays despite a remembered decode failure',
+    (tester) async {
+      final link = linkFor(
+        streamingCandidatesResponse(
+          duration: 5400,
+          height: 1080,
+          directPlay: true,
+        ),
+      );
 
-    final container = buildPlayerScreenContainer(
-      server: link,
-      connectionState: HarnessLink.direct(),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-      settingsService: FakeSettingsService(defaultQuality: 'original'),
-    );
-    addTearDown(container.dispose);
+      final container = buildPlayerScreenContainer(
+        server: link,
+        connectionState: HarnessLink.direct(),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
+        settingsService: FakeSettingsService(defaultQuality: 'original'),
+      );
+      addTearDown(container.dispose);
 
-    final memory = await container.read(playbackMemoryProvider.future);
-    await memory.recordFailure(
-      'http://test.local',
-      const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
-      FailureReason.decodeFailed,
-      now: DateTime.now(),
-    );
+      final memory = await container.read(playbackMemoryProvider.future);
+      await memory.recordFailure(
+        'http://test.local',
+        const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
+        FailureReason.decodeFailed,
+        now: DateTime.now(),
+      );
 
-    final logs = <String>[];
-    await withCapturedDebugPrint(logs, () async {
-      await pumpPlayerScreen(tester, container);
-      await pumpUntil(
-          tester, () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')));
-    });
+      final logs = <String>[];
+      await withCapturedDebugPrint(logs, () async {
+        await pumpPlayerScreen(tester, container);
+        await pumpUntil(
+          tester,
+          () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')),
+        );
+      });
 
-    final planLine =
-        logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
-    expect(planLine, contains('directPlay'),
-        reason: 'Original is the viewer overriding the memory');
-    expect(sessionRequests(link), isEmpty);
-  });
-
-  testWidgets(
-      'a stored Original direct plays despite a recent stall below the file '
-      'bitrate', (tester) async {
-    // 11872000 bps = 11872 kbps, and 11872 * 1.3 = 15434 > 10685, so Auto
-    // would not direct play this file.
-    final link = linkFor(streamingCandidatesResponse(
-      duration: 1423,
-      height: 2160,
-      bitrate: 11872000,
-      directPlay: true,
-    ));
-
-    final container = buildPlayerScreenContainer(
-      server: link,
-      connectionState: HarnessLink.direct(),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-      settingsService: FakeSettingsService(defaultQuality: 'original'),
-    );
-    addTearDown(container.dispose);
-
-    // Seeded before the screen ever reads memory, at the harness source's
-    // server URL, the key for a non-p2p connection.
-    final memory = await container.read(playbackMemoryProvider.future);
-    await memory.recordStall(
-      'http://test.local',
-      LinkPath.http,
-      10685,
-      now: DateTime.now(),
-    );
-
-    final logs = <String>[];
-    await withCapturedDebugPrint(logs, () async {
-      await pumpPlayerScreen(tester, container);
-      await pumpUntil(
-          tester, () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')));
-    });
-
-    final planLine =
-        logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
-    expect(planLine, contains('directPlay'),
-        reason: 'Original asks for the file itself; a recent stall does '
-            'not turn it into a transcode');
-    expect(sessionRequests(link), isEmpty);
-  });
+      final planLine = logs.firstWhere(
+        (l) => l.startsWith('[PlayerScreen] Plan: '),
+      );
+      expect(
+        planLine,
+        contains('directPlay'),
+        reason: 'Original is the viewer overriding the memory',
+      );
+      expect(sessionRequests(link), isEmpty);
+    },
+  );
 
   testWidgets(
-      'Auto direct plays when the only remembered stall is on another path',
-      (tester) async {
-    // 11700000 bps = 11700 kbps; 11700 * 1.3 = 15210 > 8000, so a stall
-    // with this ceiling on the http path would stop Auto direct playing.
-    final link = linkFor(streamingCandidatesResponse(
-      duration: 1423,
-      height: 2160,
-      bitrate: 11700000,
-      directPlay: true,
-    ));
+    'a stored Original direct plays despite a recent stall below the file '
+    'bitrate',
+    (tester) async {
+      // 11872000 bps = 11872 kbps, and 11872 * 1.3 = 15434 > 10685, so Auto
+      // would not direct play this file.
+      final link = linkFor(
+        streamingCandidatesResponse(
+          duration: 1423,
+          height: 2160,
+          bitrate: 11872000,
+          directPlay: true,
+        ),
+      );
 
-    final container = buildPlayerScreenContainer(
-      server: link,
-      connectionState: HarnessLink.direct(),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-    );
-    addTearDown(container.dispose);
+      final container = buildPlayerScreenContainer(
+        server: link,
+        connectionState: HarnessLink.direct(),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
+        settingsService: FakeSettingsService(defaultQuality: 'original'),
+      );
+      addTearDown(container.dispose);
 
-    // A relayed p2p stall against the same key. This connection is plain
-    // HTTP, so the record describes a different link and must not apply.
-    final memory = await container.read(playbackMemoryProvider.future);
-    await memory.recordStall(
-      'http://test.local',
-      LinkPath.relay,
-      8000,
-      now: DateTime.now(),
-    );
+      // Seeded before the screen ever reads memory, at the harness source's
+      // server URL, the key for a non-p2p connection.
+      final memory = await container.read(playbackMemoryProvider.future);
+      await memory.recordStall(
+        'http://test.local',
+        LinkPath.http,
+        10685,
+        now: DateTime.now(),
+      );
 
-    final logs = <String>[];
-    await withCapturedDebugPrint(logs, () async {
-      await pumpPlayerScreen(tester, container);
-      await pumpUntil(
-          tester, () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')));
-    });
+      final logs = <String>[];
+      await withCapturedDebugPrint(logs, () async {
+        await pumpPlayerScreen(tester, container);
+        await pumpUntil(
+          tester,
+          () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')),
+        );
+      });
 
-    final planLine =
-        logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
-    expect(planLine, contains('directPlay'));
-    expect(planLine, contains('path=http'));
-    expect(planLine, contains('stallCeilingKbps=null'));
-    expect(sessionRequests(link), isEmpty);
-  });
+      final planLine = logs.firstWhere(
+        (l) => l.startsWith('[PlayerScreen] Plan: '),
+      );
+      expect(
+        planLine,
+        contains('directPlay'),
+        reason:
+            'Original asks for the file itself; a recent stall does '
+            'not turn it into a transcode',
+      );
+      expect(sessionRequests(link), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'Auto direct plays when the only remembered stall is on another path',
+    (tester) async {
+      // 11700000 bps = 11700 kbps; 11700 * 1.3 = 15210 > 8000, so a stall
+      // with this ceiling on the http path would stop Auto direct playing.
+      final link = linkFor(
+        streamingCandidatesResponse(
+          duration: 1423,
+          height: 2160,
+          bitrate: 11700000,
+          directPlay: true,
+        ),
+      );
+
+      final container = buildPlayerScreenContainer(
+        server: link,
+        connectionState: HarnessLink.direct(),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
+      );
+      addTearDown(container.dispose);
+
+      // A relayed p2p stall against the same key. This connection is plain
+      // HTTP, so the record describes a different link and must not apply.
+      final memory = await container.read(playbackMemoryProvider.future);
+      await memory.recordStall(
+        'http://test.local',
+        LinkPath.relay,
+        8000,
+        now: DateTime.now(),
+      );
+
+      final logs = <String>[];
+      await withCapturedDebugPrint(logs, () async {
+        await pumpPlayerScreen(tester, container);
+        await pumpUntil(
+          tester,
+          () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')),
+        );
+      });
+
+      final planLine = logs.firstWhere(
+        (l) => l.startsWith('[PlayerScreen] Plan: '),
+      );
+      expect(planLine, contains('directPlay'));
+      expect(planLine, contains('path=http'));
+      expect(planLine, contains('stallCeilingKbps=null'));
+      expect(sessionRequests(link), isEmpty);
+    },
+  );
 }

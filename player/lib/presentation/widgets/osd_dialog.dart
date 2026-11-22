@@ -58,8 +58,9 @@ class OsdDialog extends StatelessWidget {
                 child: Padding(
                   padding: contentPadding,
                   child: DefaultTextStyle.merge(
-                    style: (textTheme.bodyMedium ?? const TextStyle())
-                        .copyWith(color: palette.textSecondary),
+                    style: (textTheme.bodyMedium ?? const TextStyle()).copyWith(
+                      color: palette.textSecondary,
+                    ),
                     child: content,
                   ),
                 ),

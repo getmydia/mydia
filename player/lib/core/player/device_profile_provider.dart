@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show debugPrint, debugPrintStack, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../cache/fetch_log.dart';
 import '../settings/settings_providers.dart';
 import '../update/update_provider.dart';
@@ -68,8 +69,10 @@ final deviceProfileHolderProvider = Provider<DeviceProfileHolder>((ref) {
     return choice.path;
   }
 
-  unawaited(detectDeviceProfile(resolveMacOutputPath: resolveMacOutputPath)
-      .then((profile) => applyDetectedProfile(holder, profile, fetchLog)));
+  unawaited(
+    detectDeviceProfile(resolveMacOutputPath: resolveMacOutputPath)
+        .then((profile) => applyDetectedProfile(holder, profile, fetchLog)),
+  );
   return holder;
 });
 
@@ -112,7 +115,8 @@ Future<void> applyDetectedProfile(
     await fetchLog.clearAll();
   } catch (error, stackTrace) {
     debugPrint(
-        'Failed to clear fetch log after device profile resolved: $error');
+      'Failed to clear fetch log after device profile resolved: $error',
+    );
     debugPrintStack(stackTrace: stackTrace);
   }
 }

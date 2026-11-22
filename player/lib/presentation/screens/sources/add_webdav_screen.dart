@@ -130,8 +130,12 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       _busy = true;
       _problem = null;
     });
-    final backend =
-        ref.read(webDavConnectorProvider)(base, user, password, _client);
+    final backend = ref.read(webDavConnectorProvider)(
+      base,
+      user,
+      password,
+      _client,
+    );
     try {
       await backend.probe();
       final dir = _dirOf(base);
@@ -147,8 +151,11 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final target = _pickFoldersKey.currentContext;
         if (target == null) return;
-        Scrollable.ensureVisible(target,
-            duration: _revealDuration, curve: Curves.easeOutCubic);
+        Scrollable.ensureVisible(
+          target,
+          duration: _revealDuration,
+          curve: Curves.easeOutCubic,
+        );
       });
     } catch (e) {
       debugPrint('[AddWebDav] Connect failed: $e');
@@ -170,7 +177,10 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
     final selected = ref.read(selectedSourceIdProvider.notifier);
     try {
       final id = await accounts.addWebDavAccount(
-          url: base, user: _user.text.trim(), password: _password.text);
+        url: base,
+        user: _user.text.trim(),
+        password: _password.text,
+      );
       for (final MapEntry(key: path, value: kind) in _chosen.entries) {
         await accounts.addWebDavRoot(id, path: path, kind: kind);
       }
@@ -186,23 +196,27 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   }
 
   String _problemText(AppLocalizations l10n, _Problem p) => switch (p) {
-        _Problem.address => l10n.filesWebDavAddressInvalid,
-        _Problem.httpsRequired => l10n.filesWebDavHttpsRequired,
-        _Problem.unauthorized => l10n.filesWebDavUnauthorized,
-        _Problem.unreachable => l10n.filesWebDavUnreachable,
-        _Problem.save => l10n.filesWebDavSaveFailed,
-      };
+    _Problem.address => l10n.filesWebDavAddressInvalid,
+    _Problem.httpsRequired => l10n.filesWebDavHttpsRequired,
+    _Problem.unauthorized => l10n.filesWebDavUnauthorized,
+    _Problem.unreachable => l10n.filesWebDavUnreachable,
+    _Problem.save => l10n.filesWebDavSaveFailed,
+  };
 
   void _toggle(String path, bool on) => setState(() {
-        if (on) {
-          _chosen.putIfAbsent(path, () => FilesLibraryKind.mixed);
-        } else {
-          _chosen.remove(path);
-        }
-      });
+    if (on) {
+      _chosen.putIfAbsent(path, () => FilesLibraryKind.mixed);
+    } else {
+      _chosen.remove(path);
+    }
+  });
 
-  Widget _folderRow(String path, String name,
-      {required bool busy, required VoidCallback? onOpen}) {
+  Widget _folderRow(
+    String path,
+    String name, {
+    required bool busy,
+    required VoidCallback? onOpen,
+  }) {
     final key = trimRootPath(path);
     final kind = _chosen[key];
     return ListTile(
@@ -230,47 +244,48 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
   /// Address, user, password and the last problem: the whole screen before
   /// the share answers, and the top of the folder list after.
   List<Widget> _form(AppLocalizations l10n, {required bool connected}) => [
-        const FilesExperimentalNotice(key: Key('add-webdav-experimental')),
-        const SizedBox(height: 16),
-        TextField(
-          key: const Key('webdav-url-field'),
-          controller: _url,
-          autofocus: true,
-          enabled: !connected,
-          keyboardType: TextInputType.url,
-          decoration: InputDecoration(
-            labelText: l10n.sourcesServerAddressLabel,
-            hintText: 'https://nas.local/dav', // l10n-ignore: example
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          key: const Key('webdav-user-field'),
-          controller: _user,
-          enabled: !connected,
-          decoration: InputDecoration(labelText: l10n.filesWebDavUserLabel),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          key: const Key('webdav-password-field'),
-          controller: _password,
-          enabled: !connected,
-          obscureText: true,
-          decoration: InputDecoration(labelText: l10n.filesWebDavPasswordLabel),
-          onSubmitted: (_) => connected ? null : _connect(),
-        ),
-        // Once connected the form scrolls away, so the folder picker's
-        // pinned location bar shows it.
-        if (_problem case final p? when !connected) ...[
-          const SizedBox(height: 16),
-          _problemLine(l10n, p),
-        ],
-      ];
+    const FilesExperimentalNotice(key: Key('add-webdav-experimental')),
+    const SizedBox(height: 16),
+    TextField(
+      key: const Key('webdav-url-field'),
+      controller: _url,
+      autofocus: true,
+      enabled: !connected,
+      keyboardType: TextInputType.url,
+      decoration: InputDecoration(
+        labelText: l10n.sourcesServerAddressLabel,
+        hintText: 'https://nas.local/dav', // l10n-ignore: example
+      ),
+    ),
+    const SizedBox(height: 16),
+    TextField(
+      key: const Key('webdav-user-field'),
+      controller: _user,
+      enabled: !connected,
+      decoration: InputDecoration(labelText: l10n.filesWebDavUserLabel),
+    ),
+    const SizedBox(height: 16),
+    TextField(
+      key: const Key('webdav-password-field'),
+      controller: _password,
+      enabled: !connected,
+      obscureText: true,
+      decoration: InputDecoration(labelText: l10n.filesWebDavPasswordLabel),
+      onSubmitted: (_) => connected ? null : _connect(),
+    ),
+    // Once connected the form scrolls away, so the folder picker's
+    // pinned location bar shows it.
+    if (_problem case final p? when !connected) ...[
+      const SizedBox(height: 16),
+      _problemLine(l10n, p),
+    ],
+  ];
 
-  Widget _problemLine(AppLocalizations l10n, _Problem p) =>
-      Text(_problemText(l10n, p),
-          key: const Key('webdav-error'),
-          style: TextStyle(color: Theme.of(context).colorScheme.error));
+  Widget _problemLine(AppLocalizations l10n, _Problem p) => Text(
+    _problemText(l10n, p),
+    key: const Key('webdav-error'),
+    style: TextStyle(color: Theme.of(context).colorScheme.error),
+  );
 
   Widget _actionButton(AppLocalizations l10n, {required bool connected}) =>
       FilledButton(
@@ -280,7 +295,9 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
             : (connected ? _save : _connect),
         child: _busy
             ? const SizedBox.square(
-                dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : Text(connected ? l10n.commonSave : l10n.loginConnect),
       );
 
@@ -308,19 +325,22 @@ class _AddWebDavScreenState extends ConsumerState<AddWebDavScreen> {
         ],
         footer: _actionButton(l10n, connected: true),
         onPicked: (path) => _toggle(trimRootPath(path), true),
-        rowBuilder: (context,
-                {required path,
-                required title,
-                required busy,
-                required onOpen}) =>
-            _folderRow(path, title, busy: busy, onOpen: onOpen),
+        rowBuilder: (
+          context, {
+          required path,
+          required title,
+          required busy,
+          required onOpen,
+        }) => _folderRow(path, title, busy: busy, onOpen: onOpen),
       );
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    _revealDuration =
-        ReducedMotion.duration(context, const Duration(milliseconds: 250));
+    _revealDuration = ReducedMotion.duration(
+      context,
+      const Duration(milliseconds: 250),
+    );
     final backend = _backend;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.filesWebDavTitle)),

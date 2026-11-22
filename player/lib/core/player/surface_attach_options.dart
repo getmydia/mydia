@@ -19,19 +19,19 @@ import 'video_scaling.dart';
 /// pointer first and `vid=auto` last, since mpv creates the output when
 /// `vid` turns on and reads everything else at that moment.
 List<(String, String)> surfaceAttachOptions() => const [
-      ('vo', 'gpu-next'),
-      ('gpu-api', 'vulkan'),
-      ('gpu-context', 'macvk'),
-      ('target-colorspace-hint', 'no'),
-      ('hwdec', 'videotoolbox'),
-      ('scale', 'lanczos'),
-      ('dscale', 'hermite'),
-      ('dither', 'fruit'),
-      ('correct-downscaling', 'yes'),
-      ('linear-downscaling', 'yes'),
-      ('sigmoid-upscaling', 'yes'),
-      ('hdr-compute-peak', 'auto'),
-    ];
+  ('vo', 'gpu-next'),
+  ('gpu-api', 'vulkan'),
+  ('gpu-context', 'macvk'),
+  ('target-colorspace-hint', 'no'),
+  ('hwdec', 'videotoolbox'),
+  ('scale', 'lanczos'),
+  ('dscale', 'hermite'),
+  ('dither', 'fruit'),
+  ('correct-downscaling', 'yes'),
+  ('linear-downscaling', 'yes'),
+  ('sigmoid-upscaling', 'yes'),
+  ('hdr-compute-peak', 'auto'),
+];
 
 /// mpv's `target-colorspace-hint` for a source whose `video-params/gamma`
 /// is [gamma], or null while it is unknown.
@@ -43,14 +43,14 @@ List<(String, String)> surfaceAttachOptions() => const [
 /// grey and 60% darker in the shadows than on the sRGB swapchain mpv uses
 /// with the hint off, where it renders SDR as-is like the texture path.
 String? colorspaceHintFor(String? gamma) => switch (gamma) {
-      null || '' || 'auto' => null,
-      'pq' || 'hlg' => 'yes',
-      _ => 'no',
-    };
+  null || '' || 'auto' => null,
+  'pq' || 'hlg' => 'yes',
+  _ => 'no',
+};
 
 /// mpv's `panscan` for [scaling]: the surface's equivalent of the `BoxFit`
 /// the texture path puts on `Video`.
 String panscanFor(VideoScaling scaling) => switch (scaling) {
-      VideoScaling.fit => '0.0',
-      VideoScaling.fill => '1.0',
-    };
+  VideoScaling.fit => '0.0',
+  VideoScaling.fill => '1.0',
+};

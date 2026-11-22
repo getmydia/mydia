@@ -66,12 +66,15 @@ void main() {
 
     final expected = AmbientTintColors.fromSeed(_rust);
     expect(seen.last, expected);
-    expect(tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
-        expected.ground);
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      expected.ground,
+    );
   });
 
-  testWidgets('the ground spans the window, the controls sit beside the rail',
-      (tester) async {
+  testWidgets('the ground spans the window, the controls sit beside the rail', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -105,8 +108,10 @@ void main() {
     expect(scaffold.left, 0, reason: 'the ground runs under the rail');
     expect(scaffold.width, 1280);
     expect(
-        tester.getRect(find.byTooltip('Back')).left, greaterThanOrEqualTo(88),
-        reason: 'the back button never lands under the rail');
+      tester.getRect(find.byTooltip('Back')).left,
+      greaterThanOrEqualTo(88),
+      reason: 'the back button never lands under the rail',
+    );
   });
 
   testWidgets('loading keeps the inherited tint', (tester) async {
@@ -115,7 +120,9 @@ void main() {
     await tester.pump();
 
     expect(find.byType(Scaffold), findsOneWidget);
-    expect(tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
-        _warm.ground);
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      _warm.ground,
+    );
   });
 }

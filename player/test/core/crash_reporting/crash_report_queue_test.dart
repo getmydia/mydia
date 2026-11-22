@@ -14,13 +14,12 @@ CrashReportQueue _queue(
   FakeAsync async,
   http.Client client, {
   int maxLength = 20,
-}) =>
-    CrashReportQueue(
-      client: client,
-      endpoint: _endpoint,
-      now: () => _start.add(async.elapsed),
-      maxLength: maxLength,
-    );
+}) => CrashReportQueue(
+  client: client,
+  endpoint: _endpoint,
+  now: () => _start.add(async.elapsed),
+  maxLength: maxLength,
+);
 
 /// Never answers, and records whether the queue aborted the request.
 class _HangingClient extends http.BaseClient {
@@ -51,9 +50,10 @@ void main() {
         const Duration(seconds: 60),
       );
       expect(
-        SendResult.fromStatus(429,
-                retryAfterHeader: 'Wed, 21 Oct 2026 07:28:00 GMT')
-            .retryAfter,
+        SendResult.fromStatus(
+          429,
+          retryAfterHeader: 'Wed, 21 Oct 2026 07:28:00 GMT',
+        ).retryAfter,
         isNull,
       );
       expect(
@@ -87,8 +87,10 @@ void main() {
       expect(requests, hasLength(1));
       expect(requests.single.method, 'POST');
       expect(requests.single.url, _endpoint);
-      expect(requests.single.headers['content-type'],
-          startsWith('application/json'));
+      expect(
+        requests.single.headers['content-type'],
+        startsWith('application/json'),
+      );
       expect(jsonDecode(requests.single.body), {'error_type': 'StateError'});
       expect(queue.length, 0);
     });
@@ -169,19 +171,21 @@ void main() {
     });
   });
 
-  test('aborts a request that times out, so a late success cannot duplicate it',
-      () {
-    fakeAsync((async) {
-      final client = _HangingClient();
-      _queue(async, client).enqueue({'n': 1});
+  test(
+    'aborts a request that times out, so a late success cannot duplicate it',
+    () {
+      fakeAsync((async) {
+        final client = _HangingClient();
+        _queue(async, client).enqueue({'n': 1});
 
-      async.elapse(const Duration(seconds: 9));
-      expect(client.aborted, 0);
+        async.elapse(const Duration(seconds: 9));
+        expect(client.aborted, 0);
 
-      async.elapse(const Duration(seconds: 2));
-      expect(client.aborted, 1);
-    });
-  });
+        async.elapse(const Duration(seconds: 2));
+        expect(client.aborted, 1);
+      });
+    },
+  );
 
   test('a 429 without a usable retry-after falls back to the backoff', () {
     fakeAsync((async) {

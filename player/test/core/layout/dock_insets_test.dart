@@ -42,8 +42,9 @@ Future<double> readBottomOf(
 
 void main() {
   group('DockInsets.bottomOf', () {
-    testWidgets('on mobile returns the ambient bottom inset plus the gap',
-        (tester) async {
+    testWidgets('on mobile returns the ambient bottom inset plus the gap', (
+      tester,
+    ) async {
       expect(
         await readBottomOf(tester, size: kMobileSize, inset: 117),
         117 + DockInsets.dockGap,
@@ -57,16 +58,18 @@ void main() {
       );
     });
 
-    testWidgets('on desktop returns the desktop gap and ignores the inset',
-        (tester) async {
+    testWidgets('on desktop returns the desktop gap and ignores the inset', (
+      tester,
+    ) async {
       expect(
         await readBottomOf(tester, size: kDesktopSize, inset: 34),
         DockInsets.desktopGap,
       );
     });
 
-    testWidgets('between 600 and 899 the rail shows, so there is no dock',
-        (tester) async {
+    testWidgets('between 600 and 899 the rail shows, so there is no dock', (
+      tester,
+    ) async {
       expect(
         await readBottomOf(tester, size: const Size(700, 800), inset: 34),
         DockInsets.desktopGap,
@@ -78,18 +81,20 @@ void main() {
     });
 
     testWidgets(
-        'an iPhone with the native bar keeps the phone arm in landscape',
-        (tester) async {
-      NativeTabBarSupport.debugOverrideMode = NativeTabBarMode.bar;
-      addTearDown(() => NativeTabBarSupport.debugOverrideMode = null);
-      expect(
-        await readBottomOf(tester, size: const Size(932, 430), inset: 21),
-        21 + DockInsets.dockGap,
-      );
-    });
+      'an iPhone with the native bar keeps the phone arm in landscape',
+      (tester) async {
+        NativeTabBarSupport.debugOverrideMode = NativeTabBarMode.bar;
+        addTearDown(() => NativeTabBarSupport.debugOverrideMode = null);
+        expect(
+          await readBottomOf(tester, size: const Size(932, 430), inset: 21),
+          21 + DockInsets.dockGap,
+        );
+      },
+    );
 
-    testWidgets('preserves the pre-existing desktop spacing of 32',
-        (tester) async {
+    testWidgets('preserves the pre-existing desktop spacing of 32', (
+      tester,
+    ) async {
       // The eight screens this replaces all used `isDesktop ? 32.0 : 100.0`.
       // Desktop must not shift by a single pixel.
       expect(DockInsets.desktopGap, 32);
@@ -110,10 +115,7 @@ void main() {
             // binding's root is a tight 800x600; a bare SizedBox under it is
             // forced to the full 600 by BoxConstraints.enforce, and getSize
             // would report the viewport height rather than the gap.
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: DockGap(),
-            ),
+            child: Align(alignment: Alignment.topLeft, child: DockGap()),
           ),
         ),
       );
@@ -126,8 +128,9 @@ void main() {
   });
 
   group('SliverDockGap', () {
-    testWidgets('reserves the dock clearance at the end of a sliver list',
-        (tester) async {
+    testWidgets('reserves the dock clearance at the end of a sliver list', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MediaQuery(
           data: MediaQueryData(

@@ -104,13 +104,13 @@ class _GlassDialogState extends State<GlassDialog> {
   }
 
   Widget _actionBar(List<Widget> actions) => Focus(
-        focusNode: _actionsNode,
-        child: OverflowBar(
-          alignment: MainAxisAlignment.end,
-          spacing: 8,
-          children: actions,
-        ),
-      );
+    focusNode: _actionsNode,
+    child: OverflowBar(
+      alignment: MainAxisAlignment.end,
+      spacing: 8,
+      children: actions,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -163,12 +163,17 @@ class _GlassDialogState extends State<GlassDialog> {
                   if (title != null)
                     Padding(
                       padding: EdgeInsets.fromLTRB(
-                          24, icon == null ? 24 : 16, 24, 16),
+                        24,
+                        icon == null ? 24 : 16,
+                        24,
+                        16,
+                      ),
                       child: DefaultTextStyle.merge(
                         style: (textTheme.headlineSmall ?? const TextStyle())
                             .copyWith(color: palette.textPrimary),
-                        textAlign:
-                            icon == null ? TextAlign.start : TextAlign.center,
+                        textAlign: icon == null
+                            ? TextAlign.start
+                            : TextAlign.center,
                         child: title,
                       ),
                     ),
@@ -176,7 +181,11 @@ class _GlassDialogState extends State<GlassDialog> {
                     Flexible(
                       child: SingleChildScrollView(
                         padding: EdgeInsets.fromLTRB(
-                            24, title == null ? 24 : 0, 24, 24),
+                          24,
+                          title == null ? 24 : 0,
+                          24,
+                          24,
+                        ),
                         child: DefaultTextStyle.merge(
                           style: (textTheme.bodyMedium ?? const TextStyle())
                               .copyWith(color: palette.textSecondary),

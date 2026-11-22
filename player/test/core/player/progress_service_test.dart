@@ -4,8 +4,7 @@ import 'package:player/core/player/stream_timeline.dart';
 
 void main() {
   group('ProgressService.resolveSync', () {
-    test(
-        'uses the authoritative server duration, not the partial HLS duration '
+    test('uses the authoritative server duration, not the partial HLS duration '
         '(regression: a few seconds must not read as ~30%)', () {
       const timeline = StreamTimeline(totalDuration: Duration(seconds: 3452));
 
@@ -20,7 +19,9 @@ void main() {
       expect(progress!.durationSeconds, 3452);
       expect(progress.positionSeconds, 12);
       expect(
-          progress.positionSeconds / progress.durationSeconds, lessThan(0.01));
+        progress.positionSeconds / progress.durationSeconds,
+        lessThan(0.01),
+      );
     });
 
     test('falls back to the player duration when the server said nothing', () {
@@ -76,22 +77,26 @@ void main() {
     });
 
     test(
-        'reports nothing for a player with no file loaded, even when the '
-        'timeline knows the duration (regression: a failed reopen synced 0)',
-        () {
-      const timeline = StreamTimeline(totalDuration: Duration(seconds: 1370));
+      'reports nothing for a player with no file loaded, even when the '
+      'timeline knows the duration (regression: a failed reopen synced 0)',
+      () {
+        const timeline = StreamTimeline(totalDuration: Duration(seconds: 1370));
 
-      expect(
-        ProgressService.resolveSync(Duration.zero, Duration.zero, timeline),
-        isNull,
-      );
-    });
+        expect(
+          ProgressService.resolveSync(Duration.zero, Duration.zero, timeline),
+          isNull,
+        );
+      },
+    );
 
     test('still reports position 0 from a loaded file', () {
       const timeline = StreamTimeline(totalDuration: Duration(seconds: 1370));
 
       final progress = ProgressService.resolveSync(
-          Duration.zero, const Duration(seconds: 1370), timeline);
+        Duration.zero,
+        const Duration(seconds: 1370),
+        timeline,
+      );
 
       expect(progress, isNotNull);
       expect(progress!.positionSeconds, 0);

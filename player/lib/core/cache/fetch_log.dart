@@ -31,7 +31,7 @@ abstract class FetchLog {
 /// `main()` installs the Hive-backed one.
 class InMemoryFetchLog implements FetchLog {
   InMemoryFetchLog([Map<QueryKey, DateTime> seed = const {}])
-      : _entries = Map<QueryKey, DateTime>.of(seed);
+    : _entries = Map<QueryKey, DateTime>.of(seed);
 
   final Map<QueryKey, DateTime> _entries;
 
@@ -115,5 +115,6 @@ class HiveFetchLog implements FetchLog {
 ///
 /// Defaults to a non-persistent log so tests and widget previews work without
 /// setup; `main()` overrides it with [HiveFetchLog].
-final Provider<FetchLog> fetchLogProvider =
-    Provider<FetchLog>((ref) => InMemoryFetchLog());
+final Provider<FetchLog> fetchLogProvider = Provider<FetchLog>(
+  (ref) => InMemoryFetchLog(),
+);

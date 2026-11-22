@@ -5,10 +5,7 @@ import 'package:player/core/playback/stats/stats_metrics.dart';
 
 void main() {
   StatsMetrics? resolve(double w, double h, {bool tv = false}) =>
-      StatsMetrics.resolve(
-        viewport: Size(w, h),
-        directionalPrimary: tv,
-      );
+      StatsMetrics.resolve(viewport: Size(w, h), directionalPrimary: tv);
 
   test('a desktop window takes the full panel', () {
     final metrics = resolve(1280, 720);
@@ -61,13 +58,15 @@ void main() {
     expect(metrics.showButtons, isFalse);
   });
 
-  test('a D-pad viewport that falls through to compact still hides buttons',
-      () {
-    final metrics = resolve(844, 390, tv: true);
+  test(
+    'a D-pad viewport that falls through to compact still hides buttons',
+    () {
+      final metrics = resolve(844, 390, tv: true);
 
-    expect(metrics!.density, StatsDensity.compact);
-    expect(metrics.showButtons, isFalse);
-  });
+      expect(metrics!.density, StatsDensity.compact);
+      expect(metrics.showButtons, isFalse);
+    },
+  );
 
   // The panel hangs below the chrome's top pill row, which sits at
   // `Positioned(top: 16)` inside a SafeArea and is GlassPill.defaultHeight

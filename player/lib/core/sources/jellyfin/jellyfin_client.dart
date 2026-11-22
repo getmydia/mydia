@@ -75,8 +75,10 @@ Future<JellyfinServerInfo> jellyfinPublicInfo(
   Duration timeout = SourceHttp.defaultTimeout,
 }) async {
   final json = await http.json(
-      'GET', jellyfinUnder(base, '/System/Info/Public'),
-      timeout: timeout);
+    'GET',
+    jellyfinUnder(base, '/System/Info/Public'),
+    timeout: timeout,
+  );
   if (json is! Map) {
     throw const SourceException.fault(SourceFault.jellyfinNotJellyfin);
   }
@@ -89,21 +91,17 @@ Future<String?> jellyfinIdentityProbe(
   SourceHttp http,
   Uri base,
   Duration timeout,
-) async =>
-    (await jellyfinPublicInfo(http, base, timeout: timeout)).id;
+) async => (await jellyfinPublicInfo(http, base, timeout: timeout)).id;
 
 class JellyfinClient {
   JellyfinClient({
     required this.connection,
-    required SourceHttp http,
-    required Future<JellyfinIdentity> Function() identity,
-    required Future<String?> Function() token,
+    required this._http,
+    required this._identity,
+    required this._token,
     required this.userId,
-    void Function()? onUnauthorized,
-  })  : _http = http,
-        _identity = identity,
-        _token = token,
-        _onUnauthorized = onUnauthorized;
+    this._onUnauthorized,
+  });
 
   final SourceConnection connection;
   final SourceHttp _http;
@@ -116,8 +114,9 @@ class JellyfinClient {
 
   Future<JellyfinIdentity> identity() => _identity();
 
-  Future<Map<String, String>> headers() async =>
-      {'Authorization': (await _identity()).authorization(await _token())};
+  Future<Map<String, String>> headers() async => {
+    'Authorization': (await _identity()).authorization(await _token()),
+  };
 
   /// The access token as Jellyfin's `api_key` parameter, for a cast receiver
   /// that cannot send headers.
@@ -133,8 +132,10 @@ class JellyfinClient {
       _json('GET', path, query, null);
 
   /// An endpoint that answers a bare JSON array, such as `/Items/Latest`.
-  Future<List<Map<String, dynamic>>> getList(String path,
-      [Map<String, String>? query]) async {
+  Future<List<Map<String, dynamic>>> getList(
+    String path, [
+    Map<String, String>? query,
+  ]) async {
     final json = await _decoded('GET', path, query, null);
     return [
       for (final m in (json is List ? json : const []))
@@ -146,8 +147,7 @@ class JellyfinClient {
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) =>
-      _json('POST', path, query, body);
+  }) => _json('POST', path, query, body);
 
   /// A call whose answer does not matter beyond its status.
   Future<void> send(
@@ -155,8 +155,7 @@ class JellyfinClient {
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) =>
-      _send(method, path, query, body);
+  }) => _send(method, path, query, body);
 
   Future<String> text(String path) async =>
       utf8.decode((await _send('GET', path, null, null)).bodyBytes);
@@ -194,9 +193,12 @@ class JellyfinClient {
   ) async {
     final base = await connection.base();
     try {
-      return await _http.send(method, jellyfinUnder(base, path, query),
-          headers: {'Accept': 'application/json', ...await headers()},
-          body: body);
+      return await _http.send(
+        method,
+        jellyfinUnder(base, path, query),
+        headers: {'Accept': 'application/json', ...await headers()},
+        body: body,
+      );
     } on SourceException catch (e) {
       if (e.kind == SourceErrorKind.unreachable) connection.reportFailure(base);
       if (e.kind == SourceErrorKind.unauthorized) _onUnauthorized?.call();

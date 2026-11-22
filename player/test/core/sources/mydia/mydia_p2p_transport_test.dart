@@ -16,8 +16,7 @@ class _ScriptedP2p extends P2pService {
     String? operationName,
     String? authToken,
     String? deviceProfile,
-  }) =>
-      answer();
+  }) => answer();
 }
 
 class _CountingP2p extends P2pService {
@@ -32,8 +31,7 @@ class _CountingP2p extends P2pService {
     String? operationName,
     String? authToken,
     String? deviceProfile,
-  }) =>
-      answers[calls++]();
+  }) => answers[calls++]();
 }
 
 Matcher _kind(SourceErrorKind kind) =>
@@ -45,28 +43,41 @@ Future<Map<String, dynamic>> _send(Future<Map<String, dynamic>> Function() a) =>
 void main() {
   test('a GraphQL error answer is a server error with its message', () async {
     await expectLater(
-        _send(() async =>
-            throw const P2pGraphQLError('Invalid or revoked device token')),
-        throwsA(isA<SourceException>()
+      _send(
+        () async =>
+            throw const P2pGraphQLError('Invalid or revoked device token'),
+      ),
+      throwsA(
+        isA<SourceException>()
             .having((e) => e.kind, 'kind', SourceErrorKind.server)
-            .having((e) => e.message, 'message',
-                'Invalid or revoked device token')));
+            .having(
+              (e) => e.message,
+              'message',
+              'Invalid or revoked device token',
+            ),
+      ),
+    );
   });
 
   test('the auth wording is unauthorized', () async {
     await expectLater(
-        _send(() async => throw const P2pGraphQLError('Unauthorized')),
-        _kind(SourceErrorKind.unauthorized));
+      _send(() async => throw const P2pGraphQLError('Unauthorized')),
+      _kind(SourceErrorKind.unauthorized),
+    );
   });
 
   test('a dial failure is unreachable', () async {
-    await expectLater(_send(() async => throw StateError('dial failed')),
-        _kind(SourceErrorKind.unreachable));
+    await expectLater(
+      _send(() async => throw StateError('dial failed')),
+      _kind(SourceErrorKind.unreachable),
+    );
   });
 
   test('a timeout is unreachable', () async {
-    await expectLater(_send(() async => throw TimeoutException('slow')),
-        _kind(SourceErrorKind.unreachable));
+    await expectLater(
+      _send(() async => throw TimeoutException('slow')),
+      _kind(SourceErrorKind.unreachable),
+    );
   });
 
   test('P2pGraphQLError prints like the Exception it replaces', () {
@@ -92,8 +103,10 @@ void main() {
         () async => throw Exception('connection_stalled: no answer'),
         () async => {'a': 1},
       ]);
-      final result = await P2pMydiaTransport(p2p: p2p, nodeAddr: 'node')
-          .send('query Q { a }', {});
+      final result = await P2pMydiaTransport(
+        p2p: p2p,
+        nodeAddr: 'node',
+      ).send('query Q { a }', {});
       expect(result, {'a': 1});
       expect(p2p.calls, 2);
     });
@@ -113,9 +126,12 @@ void main() {
         () async => {'a': 1},
       ]);
       await expectLater(
-          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node')
-              .send('mutation M { a }', {}),
-          _kind(SourceErrorKind.unreachable));
+        P2pMydiaTransport(
+          p2p: p2p,
+          nodeAddr: 'node',
+        ).send('mutation M { a }', {}),
+        _kind(SourceErrorKind.unreachable),
+      );
       expect(p2p.calls, 1);
     });
 
@@ -125,8 +141,9 @@ void main() {
         () async => {'a': 1},
       ]);
       await expectLater(
-          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
-          throwsA(isA<MydiaGraphqlError>()));
+        P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
+        throwsA(isA<MydiaGraphqlError>()),
+      );
       expect(p2p.calls, 1);
     });
 
@@ -136,8 +153,9 @@ void main() {
         () async => {'a': 1},
       ]);
       await expectLater(
-          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
-          _kind(SourceErrorKind.unreachable));
+        P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
+        _kind(SourceErrorKind.unreachable),
+      );
       expect(p2p.calls, 1);
     });
 
@@ -147,8 +165,9 @@ void main() {
         () async => throw StateError('closed again'),
       ]);
       await expectLater(
-          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
-          _kind(SourceErrorKind.unreachable));
+        P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
+        _kind(SourceErrorKind.unreachable),
+      );
       expect(p2p.calls, 2);
     });
 
@@ -158,8 +177,9 @@ void main() {
         () async => {'a': 1},
       ]);
       await expectLater(
-          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{{{', {}),
-          _kind(SourceErrorKind.unreachable));
+        P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{{{', {}),
+        _kind(SourceErrorKind.unreachable),
+      );
       expect(p2p.calls, 1);
     });
   });

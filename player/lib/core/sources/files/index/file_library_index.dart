@@ -24,7 +24,7 @@ class FileLibraryIndex {
   static const boxName = 'files_index';
 
   FileLibraryIndex(this._box, {required this.accountId})
-      : _prefix = '$accountId/' {
+    : _prefix = '$accountId/' {
     for (final key in _box.keys) {
       if (key is! String || !key.startsWith(_prefix)) continue;
       final rest = key.substring(_prefix.length);

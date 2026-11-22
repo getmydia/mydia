@@ -17,14 +17,20 @@ class _Auth implements DeviceAuth {
   Future<DeviceAuthResult> authenticate() async => result;
 }
 
-ProviderContainer _container(DeviceAuthResult result,
-    {PinStore? pins, DateTime Function()? clock}) {
-  final c = ProviderContainer(overrides: [
-    if (clock != null) lockClockProvider.overrideWithValue(clock),
-    deviceAuthProvider.overrideWithValue(_Auth(result)),
-    pinStoreProvider.overrideWithValue(
-        pins ?? PinStore(MockAuthStorage(), iterations: 1000)),
-  ]);
+ProviderContainer _container(
+  DeviceAuthResult result, {
+  PinStore? pins,
+  DateTime Function()? clock,
+}) {
+  final c = ProviderContainer(
+    overrides: [
+      if (clock != null) lockClockProvider.overrideWithValue(clock),
+      deviceAuthProvider.overrideWithValue(_Auth(result)),
+      pinStoreProvider.overrideWithValue(
+        pins ?? PinStore(MockAuthStorage(), iterations: 1000),
+      ),
+    ],
+  );
   addTearDown(c.dispose);
   return c;
 }
@@ -32,13 +38,17 @@ ProviderContainer _container(DeviceAuthResult result,
 void main() {
   test('starts locked', () {
     expect(
-        _container(DeviceAuthResult.success).read(sourceLockProvider), isFalse);
+      _container(DeviceAuthResult.success).read(sourceLockProvider),
+      isFalse,
+    );
   });
 
   test('device success unlocks; cancel and failure do not', () async {
     final ok = _container(DeviceAuthResult.success);
-    expect(await ok.read(sourceLockProvider.notifier).unlockWithDevice(),
-        DeviceAuthResult.success);
+    expect(
+      await ok.read(sourceLockProvider.notifier).unlockWithDevice(),
+      DeviceAuthResult.success,
+    );
     expect(ok.read(sourceLockProvider), isTrue);
 
     final no = _container(DeviceAuthResult.cancelled);
@@ -50,11 +60,15 @@ void main() {
     final pins = PinStore(MockAuthStorage(), iterations: 1000);
     await pins.setPin('4821');
     final c = _container(DeviceAuthResult.unavailable, pins: pins);
-    expect(await c.read(sourceLockProvider.notifier).unlockWithPin('0000'),
-        isA<PinRejected>());
+    expect(
+      await c.read(sourceLockProvider.notifier).unlockWithPin('0000'),
+      isA<PinRejected>(),
+    );
     expect(c.read(sourceLockProvider), isFalse);
-    expect(await c.read(sourceLockProvider.notifier).unlockWithPin('4821'),
-        isA<PinAccepted>());
+    expect(
+      await c.read(sourceLockProvider.notifier).unlockWithPin('4821'),
+      isA<PinAccepted>(),
+    );
     expect(c.read(sourceLockProvider), isTrue);
   });
 

@@ -23,8 +23,9 @@ class SubtitleSizeSetting extends _$SubtitleSizeSetting {
 
   @override
   Future<SubtitleSize> build() async {
-    final stored =
-        await ref.read(coreSettingsServiceProvider).getSubtitleSize();
+    final stored = await ref
+        .read(coreSettingsServiceProvider)
+        .getSubtitleSize();
     return _selected ?? stored;
   }
 

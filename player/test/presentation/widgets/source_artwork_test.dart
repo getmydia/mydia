@@ -23,10 +23,13 @@ void main() {
 
   test('watch status from user state', () {
     expect(
-        watchStatusFor(const UserState(watched: true), 100)!.watched, isTrue);
+      watchStatusFor(const UserState(watched: true), 100)!.watched,
+      isTrue,
+    );
     expect(
-        watchStatusFor(const UserState(progressSeconds: 25), 100)!.percentage,
-        25);
+      watchStatusFor(const UserState(progressSeconds: 25), 100)!.percentage,
+      25,
+    );
     expect(watchStatusFor(const UserState(), 100), isNull);
   });
 
@@ -36,24 +39,30 @@ void main() {
     expect(status.isUnwatchedContainer, isTrue);
     expect(watchStatusFor(const UserState(unwatchedCount: 0), null), isNull);
     expect(
-        watchStatusFor(const UserState(watched: true, unwatchedCount: 3), null)!
-            .watched,
-        isTrue);
+      watchStatusFor(
+        const UserState(watched: true, unwatchedCount: 3),
+        null,
+      )!.watched,
+      isTrue,
+    );
   });
 
-  testWidgets('SourcePoster resolves artwork through the source',
-      (tester) async {
+  testWidgets('SourcePoster resolves artwork through the source', (
+    tester,
+  ) async {
     final fake = FakeMediaSource();
-    await tester.pumpWidget(ProviderScope(
-      overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(fake)],
-      child: MaterialApp(
-        home: SizedBox(
-          width: 200,
-          height: 320,
-          child: SourcePoster(item: fakeMovie(1, progress: 600)),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(fake)],
+        child: MaterialApp(
+          home: SizedBox(
+            width: 200,
+            height: 320,
+            child: SourcePoster(item: fakeMovie(1, progress: 600)),
+          ),
         ),
       ),
-    ));
+    );
     await tester.pump();
     await tester.pump();
 

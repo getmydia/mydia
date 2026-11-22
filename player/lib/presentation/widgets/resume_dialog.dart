@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/palette.dart';
 import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
@@ -23,8 +24,10 @@ class ResumeDialog extends StatelessWidget {
     final positionText = _formatDuration(savedPositionSeconds);
     // Guard against division by zero
     final percentage = totalDurationSeconds > 0
-        ? ((savedPositionSeconds / totalDurationSeconds * 100).clamp(0, 100))
-            .round()
+        ? ((savedPositionSeconds / totalDurationSeconds * 100).clamp(
+            0,
+            100,
+          )).round()
         : 0;
     final progressValue = totalDurationSeconds > 0
         ? (savedPositionSeconds / totalDurationSeconds).clamp(0.0, 1.0)
@@ -49,9 +52,7 @@ class ResumeDialog extends StatelessWidget {
           LinearProgressIndicator(
             value: progressValue,
             backgroundColor: palette.surfaceVariant,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              palette.primary,
-            ),
+            valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
           ),
           const SizedBox(height: 4),
           Row(
@@ -59,15 +60,13 @@ class ResumeDialog extends StatelessWidget {
             children: [
               Text(
                 _formatDuration(savedPositionSeconds),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: palette.textSecondary,
-                    ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.textSecondary),
               ),
               Text(
                 _formatDuration(totalDurationSeconds),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: palette.textSecondary,
-                    ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: palette.textSecondary),
               ),
             ],
           ),

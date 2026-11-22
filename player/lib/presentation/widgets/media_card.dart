@@ -140,8 +140,9 @@ class MediaCard extends StatelessWidget {
     // the ring traces the same corner radius `PosterFrame` already paints.
     return FocusHighlight(
       onActivate: onTap,
-      borderRadius:
-          const BorderRadius.all(Radius.circular(DepthTokens.radiusPoster)),
+      borderRadius: const BorderRadius.all(
+        Radius.circular(DepthTokens.radiusPoster),
+      ),
       child: MouseRegion(
         cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
         child: GestureDetector(
@@ -150,8 +151,9 @@ class MediaCard extends StatelessWidget {
           // Both reach the same menu, the way Infuse exposes the same actions
           // on iOS and on the Mac.
           onLongPress: contextMenu == null ? null : () => contextMenu(context),
-          onSecondaryTap:
-              contextMenu == null ? null : () => contextMenu(context),
+          onSecondaryTap: contextMenu == null
+              ? null
+              : () => contextMenu(context),
           child: SizedBox(
             width: cardWidth,
             child: Column(
@@ -198,10 +200,8 @@ class MediaCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        height: 1.2,
-                      ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600, height: 1.2),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -209,9 +209,8 @@ class MediaCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: palette.textSecondary,
-                        ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: palette.textSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

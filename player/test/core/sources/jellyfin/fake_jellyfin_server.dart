@@ -44,79 +44,81 @@ class FakeJellyfinServer {
   /// Request bodies by path, decoded, in arrival order.
   final bodies = <(String, Map<String, dynamic>)>[];
 
-  static Map<String, dynamic> movie(int n,
-          {bool played = false, int positionSeconds = 0}) =>
+  static Map<String, dynamic> movie(
+    int n, {
+    bool played = false,
+    int positionSeconds = 0,
+  }) => {
+    'Id': 'm$n',
+    'Name': 'Lantern Bay $n',
+    'Type': 'Movie',
+    'ProductionYear': 2010 + n,
+    'RunTimeTicks': 5400 * ticks,
+    'ImageTags': {'Primary': 'p$n'},
+    'BackdropImageTags': ['b$n'],
+    'UserData': {
+      'Played': played,
+      'PlaybackPositionTicks': positionSeconds * ticks,
+    },
+    'Overview': 'Invented film number $n.',
+    'Genres': ['Drama'],
+    'People': [
+      {'Name': 'Ilse Corran'},
+    ],
+    'Studios': [
+      {'Name': 'Northwind'},
+    ],
+    'CommunityRating': 7.5,
+    'MediaSources': [
       {
         'Id': 'm$n',
-        'Name': 'Lantern Bay $n',
-        'Type': 'Movie',
-        'ProductionYear': 2010 + n,
+        'Container': 'mkv',
+        'Bitrate': 8000000,
         'RunTimeTicks': 5400 * ticks,
-        'ImageTags': {'Primary': 'p$n'},
-        'BackdropImageTags': ['b$n'],
-        'UserData': {
-          'Played': played,
-          'PlaybackPositionTicks': positionSeconds * ticks,
-        },
-        'Overview': 'Invented film number $n.',
-        'Genres': ['Drama'],
-        'People': [
-          {'Name': 'Ilse Corran'}
-        ],
-        'Studios': [
-          {'Name': 'Northwind'}
-        ],
-        'CommunityRating': 7.5,
-        'MediaSources': [
+        'MediaStreams': [
+          {'Index': 0, 'Type': 'Video', 'Codec': 'hevc', 'Height': 1080},
           {
-            'Id': 'm$n',
-            'Container': 'mkv',
-            'Bitrate': 8000000,
-            'RunTimeTicks': 5400 * ticks,
-            'MediaStreams': [
-              {'Index': 0, 'Type': 'Video', 'Codec': 'hevc', 'Height': 1080},
-              {
-                'Index': 1,
-                'Type': 'Audio',
-                'Codec': 'eac3',
-                'Language': 'eng',
-                'DisplayTitle': 'English EAC3 5.1',
-                'IsDefault': true,
-              },
-              {
-                'Index': 2,
-                'Type': 'Subtitle',
-                'Codec': 'subrip',
-                'Language': 'eng',
-                'DisplayTitle': 'English',
-                'IsExternal': false,
-              },
-              {
-                'Index': 3,
-                'Type': 'Subtitle',
-                'Codec': 'subrip',
-                'Language': 'spa',
-                'DisplayTitle': 'Spanish',
-                'IsExternal': true,
-              },
-            ],
+            'Index': 1,
+            'Type': 'Audio',
+            'Codec': 'eac3',
+            'Language': 'eng',
+            'DisplayTitle': 'English EAC3 5.1',
+            'IsDefault': true,
+          },
+          {
+            'Index': 2,
+            'Type': 'Subtitle',
+            'Codec': 'subrip',
+            'Language': 'eng',
+            'DisplayTitle': 'English',
+            'IsExternal': false,
+          },
+          {
+            'Index': 3,
+            'Type': 'Subtitle',
+            'Codec': 'subrip',
+            'Language': 'spa',
+            'DisplayTitle': 'Spanish',
+            'IsExternal': true,
           },
         ],
-      };
+      },
+    ],
+  };
 
   static Map<String, dynamic> episode(int n) => {
-        'Id': 'e$n',
-        'Name': 'The Quiet Tide $n',
-        'Type': 'Episode',
-        'SeriesId': 'show1',
-        'SeriesName': 'Saltmarsh',
-        'SeriesPrimaryImageTag': 'sp',
-        'IndexNumber': n,
-        'ParentIndexNumber': 1,
-        'RunTimeTicks': 2700 * ticks,
-        'ImageTags': {'Primary': 'ep$n'},
-        'UserData': {'Played': n == 1, 'PlaybackPositionTicks': 0},
-      };
+    'Id': 'e$n',
+    'Name': 'The Quiet Tide $n',
+    'Type': 'Episode',
+    'SeriesId': 'show1',
+    'SeriesName': 'Saltmarsh',
+    'SeriesPrimaryImageTag': 'sp',
+    'IndexNumber': n,
+    'ParentIndexNumber': 1,
+    'RunTimeTicks': 2700 * ticks,
+    'ImageTags': {'Primary': 'ep$n'},
+    'UserData': {'Played': n == 1, 'PlaybackPositionTicks': 0},
+  };
 
   static const show = {
     'Id': 'show1',
@@ -139,13 +141,13 @@ class FakeJellyfinServer {
   };
 
   static Map<String, dynamic> get session => {
-        'AccessToken': token,
-        'User': {
-          'Id': userId,
-          'Name': username,
-          'Policy': {'IsAdministrator': true},
-        },
-      };
+    'AccessToken': token,
+    'User': {
+      'Id': userId,
+      'Name': username,
+      'Policy': {'IsAdministrator': true},
+    },
+  };
 
   late final MockClient client = MockClient((request) async {
     requests.add(request);
@@ -204,8 +206,10 @@ class FakeJellyfinServer {
       ]);
     }
     if (request.method == 'GET' && path == '/UserItems/Resume') {
-      return _json(
-          {'Items': resumeItems, 'TotalRecordCount': resumeItems.length});
+      return _json({
+        'Items': resumeItems,
+        'TotalRecordCount': resumeItems.length,
+      });
     }
     if (request.method == 'GET' && path == '/Shows/NextUp') {
       final series = q['seriesId'];
@@ -246,9 +250,9 @@ class FakeJellyfinServer {
     if (request.method == 'GET' && path == '/Items') {
       List<Map<String, dynamic>> all;
       if (q['searchTerm'] case final term?) {
-        all = [
-          for (var n = 1; n <= 5; n++) movie(n),
-        ].where((m) => (m['Name'] as String).contains(term)).toList();
+        all = [for (var n = 1; n <= 5; n++) movie(n)]
+            .where((m) => (m['Name'] as String).contains(term))
+            .toList();
       } else {
         all = switch (q['ParentId']) {
           'lib-movies' => [for (var n = 1; n <= 5; n++) movie(n)],
@@ -311,8 +315,8 @@ class FakeJellyfinServer {
   });
 
   static http.Response _json(Object? body, [int status = 200]) => http.Response(
-        jsonEncode(body),
-        status,
-        headers: {'content-type': 'application/json; charset=utf-8'},
-      );
+    jsonEncode(body),
+    status,
+    headers: {'content-type': 'application/json; charset=utf-8'},
+  );
 }

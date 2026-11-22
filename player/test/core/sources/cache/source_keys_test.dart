@@ -10,7 +10,8 @@ const _b = SourceId('acc2:owner:srv2');
 void main() {
   test('keys carry the source in the operation name', () {
     final key = SourceKeys.item(
-        const ItemRef(sourceId: _a, kind: ItemKind.movie, externalId: '42'));
+      const ItemRef(sourceId: _a, kind: ItemKind.movie, externalId: '42'),
+    );
     expect(key.operationName, 'acc1:owner:srv1/item');
     expect(key.canonical, 'acc1:owner:srv1/item({"id":"42","kind":"movie"})');
   });
@@ -35,21 +36,29 @@ void main() {
 
   test('calendar keys carry the date range', () {
     expect(
-      SourceKeys.calendar(_a, DateTime(2026, 10, 1), DateTime(2026, 10, 31))
-          .canonical,
+      SourceKeys.calendar(
+        _a,
+        DateTime(2026, 10, 1),
+        DateTime(2026, 10, 31),
+      ).canonical,
       'acc1:owner:srv1/calendar({"end":"2026-10-31","start":"2026-10-01"})',
     );
   });
 
   test('collection items differ per collection', () {
-    expect(SourceKeys.collectionItems(_a, 'c1'),
-        isNot(SourceKeys.collectionItems(_a, 'c2')));
+    expect(
+      SourceKeys.collectionItems(_a, 'c1'),
+      isNot(SourceKeys.collectionItems(_a, 'c2')),
+    );
   });
 
   test('a family matches the operation name of its keys', () {
     final key = SourceKeys.children(
-        const ItemRef(sourceId: _a, kind: ItemKind.show, externalId: 's1'));
-    expect(SourceKeys.family(_a, SourceOps.children).operationName,
-        key.operationName);
+      const ItemRef(sourceId: _a, kind: ItemKind.show, externalId: 's1'),
+    );
+    expect(
+      SourceKeys.family(_a, SourceOps.children).operationName,
+      key.operationName,
+    );
   });
 }

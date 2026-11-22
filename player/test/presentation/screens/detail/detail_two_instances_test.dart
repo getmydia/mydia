@@ -36,21 +36,23 @@ Future<GoRouter> _pump(WidgetTester tester, String location) async {
     routes: sourceDetailRoutes(),
   );
   await mockNetworkImages(() async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        mediaSourceProvider(_a)
-            .overrideWithValue(_instance(_a, 'Alpha Harbor')),
-        mediaSourceProvider(_b)
-            .overrideWithValue(_instance(_b, 'Beta Orchard')),
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-        ...castCapableOverrides(),
-      ],
-      child: MaterialApp.router(
-        routerConfig: router,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaSourceProvider(_a)
+              .overrideWithValue(_instance(_a, 'Alpha Harbor')),
+          mediaSourceProvider(_b)
+              .overrideWithValue(_instance(_b, 'Beta Orchard')),
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+          ...castCapableOverrides(),
+        ],
+        child: MaterialApp.router(
+          routerConfig: router,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
   });
   return router;
@@ -71,8 +73,9 @@ void main() {
     expect(find.text('Alpha Harbor'), findsNothing);
   });
 
-  testWidgets('moving between instances with the same id swaps the item',
-      (tester) async {
+  testWidgets('moving between instances with the same id swaps the item', (
+    tester,
+  ) async {
     final router = await _pump(tester, '/s/${_a.value}/movie/7');
 
     router.go('/s/${_b.value}/movie/7');

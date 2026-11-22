@@ -183,7 +183,8 @@ bool looksLikeLocalNetworkDenial({
 /// [CastBackend.failureStream] is unit-testable without a real `CastService`.
 @visibleForTesting
 Stream<CastFailureKind> mapDiscoveryFailures(
-    Stream<dc.CastException> failures) {
+  Stream<dc.CastException> failures,
+) {
   return failures.map(failureKindFor);
 }
 
@@ -221,9 +222,9 @@ dc.CastSession _createSession(dc.CastDevice device) {
     dc.CastProtocol.chromecast => dc.ChromecastSession(device: device),
     dc.CastProtocol.dlna => dc.DlnaSession.fromDevice(device),
     dc.CastProtocol.airplay => throw const CastBackendException(
-        'AirPlay is not supported by this backend.',
-        CastFailureKind.airplayUnsupported,
-      ),
+      'AirPlay is not supported by this backend.',
+      CastFailureKind.airplayUnsupported,
+    ),
   };
 }
 
@@ -304,9 +305,9 @@ class DartCastBackend implements CastBackend {
 
     if (protocols.isEmpty) return Stream.value(const []);
 
-    return _service
-        .startDiscovery(protocols: protocols, timeout: timeout)
-        .map((devices) {
+    return _service.startDiscovery(protocols: protocols, timeout: timeout).map((
+      devices,
+    ) {
       for (final device in devices) {
         _discovered[device.id] = device;
       }
@@ -398,8 +399,8 @@ class DartCastBackend implements CastBackend {
       }
     });
     _positionSub = session.positionStream.listen(_positions.add);
-    _durationSub =
-        sanitizeDurations(session.durationStream).listen(_durations.add);
+    _durationSub = sanitizeDurations(session.durationStream)
+        .listen(_durations.add);
   }
 
   /// Always null: `dart_cast` 0.7.x offers no way to ask a receiver what it is
@@ -443,27 +444,31 @@ class DartCastBackend implements CastBackend {
     final session = _requireSession();
 
     try {
-      await session.loadMedia(dc.CastMedia(
-        url: request.url,
-        type: request.kind == CastMediaKind.hls
-            ? dc.CastMediaType.hls
-            : dc.CastMediaType.mp4,
-        title: request.title,
-        // request.subtitle is a short display line (e.g. "S1E3"), not a
-        // subtitle *track* — dc.CastMedia has no equivalent field, so it is
-        // intentionally dropped here. Only request.subtitles (caption
-        // tracks) maps onto dc.CastMedia.subtitles below.
-        imageUrl: request.imageUrl,
-        startPosition: request.startPosition,
-        subtitles: request.subtitles
-            .map((track) => dc.CastSubtitle(
+      await session.loadMedia(
+        dc.CastMedia(
+          url: request.url,
+          type: request.kind == CastMediaKind.hls
+              ? dc.CastMediaType.hls
+              : dc.CastMediaType.mp4,
+          title: request.title,
+          // request.subtitle is a short display line (e.g. "S1E3"), not a
+          // subtitle *track* — dc.CastMedia has no equivalent field, so it is
+          // intentionally dropped here. Only request.subtitles (caption
+          // tracks) maps onto dc.CastMedia.subtitles below.
+          imageUrl: request.imageUrl,
+          startPosition: request.startPosition,
+          subtitles: request.subtitles
+              .map(
+                (track) => dc.CastSubtitle(
                   url: track.url,
                   label: track.label,
                   language: track.language,
                   format: 'vtt',
-                ))
-            .toList(),
-      ));
+                ),
+              )
+              .toList(),
+        ),
+      );
     } on dc.CastException catch (e) {
       throw CastBackendException(e.toString(), failureKindFor(e));
     } catch (e) {
@@ -488,14 +493,16 @@ class DartCastBackend implements CastBackend {
 
   @override
   Future<void> selectSubtitle(CastSubtitleTrack? track) {
-    return _requireSession().setSubtitle(track == null
-        ? null
-        : dc.CastSubtitle(
-            url: track.url,
-            label: track.label,
-            language: track.language,
-            format: 'vtt',
-          ));
+    return _requireSession().setSubtitle(
+      track == null
+          ? null
+          : dc.CastSubtitle(
+              url: track.url,
+              label: track.label,
+              language: track.language,
+              format: 'vtt',
+            ),
+    );
   }
 
   @override

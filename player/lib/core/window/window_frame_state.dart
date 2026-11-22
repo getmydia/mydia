@@ -64,6 +64,7 @@ class WindowFrameState {
   int get hashCode => Object.hash(maximized, tiled, fullscreen, solidFrame);
 
   @override
-  String toString() => 'WindowFrameState(maximized: $maximized, '
+  String toString() =>
+      'WindowFrameState(maximized: $maximized, '
       'tiled: $tiled, fullscreen: $fullscreen, solidFrame: $solidFrame)';
 }

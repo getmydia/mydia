@@ -8,12 +8,12 @@ import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
 
 AppUpdate _update({String version = '0.16.0'}) => AppUpdate(
-      version: version,
-      downloadUrl: 'https://example.invalid/player-linux-v$version.tar.gz',
-      releaseNotesUrl: 'https://example.invalid/releases/$version',
-      releaseTitle: 'Quieter scanning',
-      publishedAt: DateTime.utc(2026, 9, 1),
-    );
+  version: version,
+  downloadUrl: 'https://example.invalid/player-linux-v$version.tar.gz',
+  releaseNotesUrl: 'https://example.invalid/releases/$version',
+  releaseTitle: 'Quieter scanning',
+  publishedAt: DateTime.utc(2026, 9, 1),
+);
 
 class _StubService implements UpdateService {
   _StubService(this._result);
@@ -122,21 +122,23 @@ void main() {
     expect((updater.applied as AppUpdate).version, '0.16.0');
   });
 
-  test('an updater that throws reports a failure rather than escaping',
-      () async {
-    final backend = ReleaseUpdateBackend(
-      updater: _RecordingUpdater(throws: Exception('read-only file system')),
-      currentVersion: '0.15.0',
-      service: _StubService(_update()),
-    );
-    addTearDown(backend.dispose);
+  test(
+    'an updater that throws reports a failure rather than escaping',
+    () async {
+      final backend = ReleaseUpdateBackend(
+        updater: _RecordingUpdater(throws: Exception('read-only file system')),
+        currentVersion: '0.15.0',
+        service: _StubService(_update()),
+      );
+      addTearDown(backend.dispose);
 
-    await backend.refresh(force: true);
-    final outcome = await backend.requestUpdate();
+      await backend.refresh(force: true);
+      final outcome = await backend.requestUpdate();
 
-    expect(outcome, isA<UpdateFailed>());
-    expect((outcome as UpdateFailed).problem.text, contains('read-only'));
-  });
+      expect(outcome, isA<UpdateFailed>());
+      expect((outcome as UpdateFailed).problem.text, contains('read-only'));
+    },
+  );
 
   test('a refused install permission is unsupported, not a failure', () async {
     final backend = ReleaseUpdateBackend(
@@ -162,8 +164,7 @@ void main() {
     expect(await backend.requestUpdate(), isA<UpdateUnsupported>());
   });
 
-  test(
-      'an updater that hands off unconfirmed reports deferred, not '
+  test('an updater that hands off unconfirmed reports deferred, not '
       'installed', () async {
     final updater = _RecordingUpdater(handsOffUnconfirmed: true);
     final backend = ReleaseUpdateBackend(
@@ -252,25 +253,30 @@ void main() {
       expect(await backend.requestUpdate(), isA<UpdateFailed>());
     });
 
-    test('checks again and installs a newer release than the one it held',
-        () async {
-      final updater = _RecordingUpdater(installsWithoutAsking: true);
-      final service = _SequenceService([_update(), _update(version: '0.17.0')]);
-      final backend = ReleaseUpdateBackend(
-        updater: updater,
-        currentVersion: '0.15.0',
-        service: service,
-      );
-      addTearDown(backend.dispose);
+    test(
+      'checks again and installs a newer release than the one it held',
+      () async {
+        final updater = _RecordingUpdater(installsWithoutAsking: true);
+        final service = _SequenceService([
+          _update(),
+          _update(version: '0.17.0'),
+        ]);
+        final backend = ReleaseUpdateBackend(
+          updater: updater,
+          currentVersion: '0.15.0',
+          service: service,
+        );
+        addTearDown(backend.dispose);
 
-      await backend.refresh(force: true);
-      await backend.requestUpdate();
+        await backend.refresh(force: true);
+        await backend.requestUpdate();
 
-      expect((updater.applied as AppUpdate).version, '0.17.0');
-      // Forced, so UpdateService's rate limit cannot answer the press with
-      // the startup check's result.
-      expect(service.forced, [true, true]);
-    });
+        expect((updater.applied as AppUpdate).version, '0.17.0');
+        // Forced, so UpdateService's rate limit cannot answer the press with
+        // the startup check's result.
+        expect(service.forced, [true, true]);
+      },
+    );
 
     test('installs the release it held when the fresh check fails', () async {
       final updater = _RecordingUpdater(installsWithoutAsking: true);
@@ -333,6 +339,5 @@ class _ThrowingService implements UpdateService {
     required String currentVersion,
     required UpdateTrack track,
     bool force = false,
-  }) async =>
-      throw Exception('feed unreachable');
+  }) async => throw Exception('feed unreachable');
 }

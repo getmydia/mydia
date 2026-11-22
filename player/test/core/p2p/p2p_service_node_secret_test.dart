@@ -53,8 +53,11 @@ void main() {
       expect(secrets[1], same(secrets[0]));
       expect(keystore.reads, 1);
       expect(keystore.writes, 1);
-      expect(keystore.stored, same(secrets[0]),
-          reason: 'the keystore must hold the secret the host starts with');
+      expect(
+        keystore.stored,
+        same(secrets[0]),
+        reason: 'the keystore must hold the secret the host starts with',
+      );
     });
 
     test('a later load reuses the finished one', () async {

@@ -16,7 +16,7 @@ import '../../../domain/merged/fake_merged_source.dart';
 void main() {
   /// Pumps the event queue until Home is past loading.
   Future<HomeRows> settled(ProviderContainer c, HomeScope scope) async {
-    c.listen(homeRowsProvider(scope), (_, __) {});
+    c.listen(homeRowsProvider(scope), (_, _) {});
     for (var i = 0; i < 50; i++) {
       final rows = c.read(homeRowsProvider(scope));
       final previewsLoaded = rows.libraries.every((r) => r.items.isNotEmpty);
@@ -27,10 +27,12 @@ void main() {
   }
 
   ProviderContainer containerFor(List<FakeMergedSource> sources) {
-    final c = ProviderContainer(overrides: [
-      allServersSourcesProvider.overrideWithValue(sources),
-      for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        allServersSourcesProvider.overrideWithValue(sources),
+        for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
@@ -61,24 +63,35 @@ void main() {
     final a = server('a'), b = server('b');
     final rows = await settled(containerFor([a, b]), const AllServers());
     expect(rows.continueWatching, hasLength(2));
-    expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())),
-        ['Films · Server a', 'Films · Server b']);
+    expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())), [
+      'Films · Server a',
+      'Films · Server b',
+    ]);
   });
 
   test('trending rows merge ranked items across servers', () async {
     final sa = fakeServer('a'), sb = fakeServer('b');
     List<RankedItem> top(Source s, List<int> ranks) => [
-          for (final r in ranks) RankedItem(item: item(s, '$r'), rank: r),
-        ];
-    final a = FakeMergedSource(sa,
-        recent: [item(sa, 'an', addedAt: DateTime.utc(2024))],
-        trendingMovies: top(sa, [1, 3, 5]));
-    final b = FakeMergedSource(sb,
-        recent: [item(sb, 'bn', addedAt: DateTime.utc(2024))],
-        trendingMovies: top(sb, [2, 4]));
+      for (final r in ranks) RankedItem(item: item(s, '$r'), rank: r),
+    ];
+    final a = FakeMergedSource(
+      sa,
+      recent: [item(sa, 'an', addedAt: DateTime.utc(2024))],
+      trendingMovies: top(sa, [1, 3, 5]),
+    );
+    final b = FakeMergedSource(
+      sb,
+      recent: [item(sb, 'bn', addedAt: DateTime.utc(2024))],
+      trendingMovies: top(sb, [2, 4]),
+    );
     final rows = await settled(containerFor([a, b]), const AllServers());
-    expect(rows.trendingMovies.map((i) => i.ref.externalId),
-        ['1', '2', '3', '4', '5']);
+    expect(rows.trendingMovies.map((i) => i.ref.externalId), [
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+    ]);
     expect(rows.trendingShows, isEmpty);
   });
 
@@ -92,10 +105,12 @@ void main() {
   test('a server leaving All servers drops its items', () async {
     final a = server('a'), b = server('b');
     final included = StateProvider<List<FakeMergedSource>>((_) => [a, b]);
-    final c = ProviderContainer(overrides: [
-      allServersSourcesProvider.overrideWith((ref) => ref.watch(included)),
-      for (final s in [a, b]) mediaSourceProvider(s.id).overrideWithValue(s),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        allServersSourcesProvider.overrideWith((ref) => ref.watch(included)),
+        for (final s in [a, b]) mediaSourceProvider(s.id).overrideWithValue(s),
+      ],
+    );
     addTearDown(c.dispose);
     await settled(c, const AllServers());
     c.read(included.notifier).state = [a];

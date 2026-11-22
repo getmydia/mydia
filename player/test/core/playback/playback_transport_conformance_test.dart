@@ -27,7 +27,9 @@ void main() {
       relayed: false,
     );
     expect(controller, isA<PlaybackTransport>());
-    expect(ProgressService(fakeMydiaClient(FakeMydiaTransport())),
-        isA<ProgressReporter>());
+    expect(
+      ProgressService(fakeMydiaClient(FakeMydiaTransport())),
+      isA<ProgressReporter>(),
+    );
   });
 }

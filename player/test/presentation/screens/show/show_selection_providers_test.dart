@@ -5,11 +5,20 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/show/show_selection_providers.dart';
 
 const _show = ItemRef(
-    sourceId: SourceId('a:b:c'), kind: ItemKind.show, externalId: 'sh-1');
+  sourceId: SourceId('a:b:c'),
+  kind: ItemKind.show,
+  externalId: 'sh-1',
+);
 const _otherShow = ItemRef(
-    sourceId: SourceId('a:b:c'), kind: ItemKind.show, externalId: 'sh-2');
+  sourceId: SourceId('a:b:c'),
+  kind: ItemKind.show,
+  externalId: 'sh-2',
+);
 const _sameIdOtherSource = ItemRef(
-    sourceId: SourceId('d:e:f'), kind: ItemKind.show, externalId: 'sh-1');
+  sourceId: SourceId('d:e:f'),
+  kind: ItemKind.show,
+  externalId: 'sh-1',
+);
 
 void main() {
   group('selectedEpisodeProvider', () {
@@ -37,7 +46,9 @@ void main() {
 
       expect(container.read(selectedEpisodeProvider(_otherShow)), isNull);
       expect(
-          container.read(selectedEpisodeProvider(_sameIdOtherSource)), isNull);
+        container.read(selectedEpisodeProvider(_sameIdOtherSource)),
+        isNull,
+      );
     });
   });
 

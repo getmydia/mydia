@@ -36,10 +36,7 @@ class SubtitleSizeStepper extends ConsumerWidget {
             children: [
               IconButton(
                 key: const ValueKey('subtitle-size-decrement'),
-                icon: Icon(
-                  Icons.text_decrease,
-                  color: palette.textPrimary,
-                ),
+                icon: Icon(Icons.text_decrease, color: palette.textPrimary),
                 tooltip: context.l10n.subtitleSizeSmaller,
                 onPressed: smaller == null ? null : () => notifier.set(smaller),
               ),
@@ -57,10 +54,7 @@ class SubtitleSizeStepper extends ConsumerWidget {
               ),
               IconButton(
                 key: const ValueKey('subtitle-size-increment'),
-                icon: Icon(
-                  Icons.text_increase,
-                  color: palette.textPrimary,
-                ),
+                icon: Icon(Icons.text_increase, color: palette.textPrimary),
                 tooltip: context.l10n.subtitleSizeLarger,
                 onPressed: larger == null ? null : () => notifier.set(larger),
               ),

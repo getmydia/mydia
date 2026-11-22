@@ -23,11 +23,12 @@ class ConnectionManager {
     CertVerifier? certVerifier,
     AuthStorage? authStorage,
     this.directTimeout = const Duration(seconds: 5),
-  })  : _certVerifier = certVerifier ?? CertVerifier(),
-        _authStorage = authStorage ?? getAuthStorage();
+  }) : _certVerifier = certVerifier ?? CertVerifier(),
+       _authStorage = authStorage ?? getAuthStorage();
 
+  // Reserved for future certificate verification.
   // ignore: unused_field
-  final CertVerifier _certVerifier; // Reserved for future certificate verification
+  final CertVerifier _certVerifier;
   final AuthStorage _authStorage;
 
   /// Timeout for each direct connection attempt.
@@ -66,7 +67,7 @@ class ConnectionManager {
     // Try direct URLs first
     for (final url in directUrls) {
       _emitState('Trying direct URL: $url');
-      
+
       // For now, just return success for direct URLs
       // The actual connection will be established by the GraphQL client
       _emitState('Direct connection successful');

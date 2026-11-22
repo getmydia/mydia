@@ -54,13 +54,21 @@ void main() {
 
     test('containsPosition is inclusive of start and exclusive of end', () {
       expect(
-          intro.containsPosition(const Duration(milliseconds: 29999)), isFalse);
+        intro.containsPosition(const Duration(milliseconds: 29999)),
+        isFalse,
+      );
       expect(
-          intro.containsPosition(const Duration(milliseconds: 30000)), isTrue);
+        intro.containsPosition(const Duration(milliseconds: 30000)),
+        isTrue,
+      );
       expect(
-          intro.containsPosition(const Duration(milliseconds: 89999)), isTrue);
+        intro.containsPosition(const Duration(milliseconds: 89999)),
+        isTrue,
+      );
       expect(
-          intro.containsPosition(const Duration(milliseconds: 90000)), isFalse);
+        intro.containsPosition(const Duration(milliseconds: 90000)),
+        isFalse,
+      );
     });
 
     // Detection is additive background work, so no wire shape may become a
@@ -74,16 +82,18 @@ void main() {
 
     // Partial salvage is the documented behaviour, not an accident: a good
     // segment sitting next to a bad entry still produces a working button.
-    test('listFromJson keeps the well-formed entries beside malformed ones',
-        () {
-      final segments = MediaSegment.listFromJson(const [
-        42,
-        {'type': 'INTRO', 'startMs': 30000, 'endMs': 90000},
-        'nonsense',
-      ]);
+    test(
+      'listFromJson keeps the well-formed entries beside malformed ones',
+      () {
+        final segments = MediaSegment.listFromJson(const [
+          42,
+          {'type': 'INTRO', 'startMs': 30000, 'endMs': 90000},
+          'nonsense',
+        ]);
 
-      expect(segments, [intro]);
-    });
+        expect(segments, [intro]);
+      },
+    );
 
     test('listFromJson parses a well-formed list', () {
       final segments = MediaSegment.listFromJson(const [
@@ -101,19 +111,15 @@ void main() {
   // empty list instead of a cast error.
   group('MediaSegment.forFile', () {
     Map<String, dynamic> payload(Object? files) => {
-          '__typename': 'Query',
-          'movie': {
-            '__typename': 'Movie',
-            'id': 'movie-1',
-            'files': files,
-          },
-        };
+      '__typename': 'Query',
+      'movie': {'__typename': 'Movie', 'id': 'movie-1', 'files': files},
+    };
 
     Map<String, dynamic> file(String id, Object? segments) => {
-          '__typename': 'MediaFile',
-          'id': id,
-          'segments': segments,
-        };
+      '__typename': 'MediaFile',
+      'id': id,
+      'segments': segments,
+    };
 
     const introJson = {
       '__typename': 'MediaSegment',
@@ -139,7 +145,7 @@ void main() {
       expect(
         MediaSegment.forFile(
           payload([
-            file('other-file', const [introJson])
+            file('other-file', const [introJson]),
           ]),
           root: 'movie',
           fileId: 'file-1',
@@ -206,7 +212,7 @@ void main() {
       expect(
         MediaSegment.forFile(
           payload([
-            file('file-1', const [introJson])
+            file('file-1', const [introJson]),
           ]),
           root: 'episode',
           fileId: 'file-1',
@@ -238,8 +244,10 @@ void main() {
       final tracker = SegmentSkipTracker();
 
       expect(
-        tracker
-            .takeAutoSkip(const [intro, credits], const Duration(seconds: 45)),
+        tracker.takeAutoSkip(const [
+          intro,
+          credits,
+        ], const Duration(seconds: 45)),
         intro,
       );
     });
@@ -248,8 +256,10 @@ void main() {
       final tracker = SegmentSkipTracker();
 
       expect(
-        tracker
-            .takeAutoSkip(const [intro, credits], const Duration(seconds: 10)),
+        tracker.takeAutoSkip(const [
+          intro,
+          credits,
+        ], const Duration(seconds: 10)),
         isNull,
       );
     });
@@ -267,11 +277,17 @@ void main() {
       );
       // Viewer seeks back to the top of the intro, then plays through it.
       expect(
-          tracker.takeAutoSkip(segments, const Duration(seconds: 31)), isNull);
+        tracker.takeAutoSkip(segments, const Duration(seconds: 31)),
+        isNull,
+      );
       expect(
-          tracker.takeAutoSkip(segments, const Duration(seconds: 45)), isNull);
+        tracker.takeAutoSkip(segments, const Duration(seconds: 45)),
+        isNull,
+      );
       expect(
-          tracker.takeAutoSkip(segments, const Duration(seconds: 89)), isNull);
+        tracker.takeAutoSkip(segments, const Duration(seconds: 89)),
+        isNull,
+      );
     });
 
     test('a spent intro does not disarm the credits', () {
@@ -308,33 +324,36 @@ void main() {
       tracker.reset();
 
       expect(
-          tracker.takeAutoSkip(segments, const Duration(seconds: 45)), intro);
+        tracker.takeAutoSkip(segments, const Duration(seconds: 45)),
+        intro,
+      );
     });
   });
 
   group('SkipSegmentButton', () {
     Widget wrap(Widget child) => MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: child),
-        );
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
     Widget button({
       MediaSegment segment = intro,
       required Duration position,
       void Function(MediaSegment)? onSkip,
-    }) =>
-        SkipSegmentButton(
-          segment: segment,
-          position: position,
-          onSkip: onSkip ?? (_) {},
-          metrics: PanelMetrics.forWidth(1280),
-        );
+    }) => SkipSegmentButton(
+      segment: segment,
+      position: position,
+      onSkip: onSkip ?? (_) {},
+      metrics: PanelMetrics.forWidth(1280),
+    );
 
-    testWidgets('shows the intro label while inside the segment',
-        (tester) async {
-      await tester
-          .pumpWidget(wrap(button(position: const Duration(seconds: 45))));
+    testWidgets('shows the intro label while inside the segment', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(button(position: const Duration(seconds: 45))),
+      );
 
       expect(find.text('Skip Intro'), findsOneWidget);
       expect(find.byKey(SkipSegmentButton.buttonKey), findsOneWidget);
@@ -365,52 +384,63 @@ void main() {
     });
 
     testWidgets('renders nothing before the segment starts', (tester) async {
-      await tester
-          .pumpWidget(wrap(button(position: const Duration(seconds: 10))));
+      await tester.pumpWidget(
+        wrap(button(position: const Duration(seconds: 10))),
+      );
 
       expect(find.text('Skip Intro'), findsNothing);
     });
 
     testWidgets('renders nothing after the segment ends', (tester) async {
-      await tester
-          .pumpWidget(wrap(button(position: const Duration(seconds: 120))));
+      await tester.pumpWidget(
+        wrap(button(position: const Duration(seconds: 120))),
+      );
 
       expect(find.text('Skip Intro'), findsNothing);
     });
 
-    testWidgets('shows the credits label for a credits segment',
-        (tester) async {
-      await tester.pumpWidget(wrap(button(
-        segment: credits,
-        position: const Duration(seconds: 1210),
-      )));
+    testWidgets('shows the credits label for a credits segment', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(button(segment: credits, position: const Duration(seconds: 1210))),
+      );
 
       expect(find.text('Skip Credits'), findsOneWidget);
     });
 
     testWidgets('shows the ad label for a commercial segment', (tester) async {
-      await tester.pumpWidget(wrap(button(
-        segment: const MediaSegment(
-          type: SegmentType.commercial,
-          startMs: 600000,
-          endMs: 720000,
+      await tester.pumpWidget(
+        wrap(
+          button(
+            segment: const MediaSegment(
+              type: SegmentType.commercial,
+              startMs: 600000,
+              endMs: 720000,
+            ),
+            position: const Duration(seconds: 650),
+          ),
         ),
-        position: const Duration(seconds: 650),
-      )));
+      );
 
       expect(find.text('Skip Ad'), findsOneWidget);
     });
 
-    testWidgets('renders nothing for an unrecognised segment type',
-        (tester) async {
-      await tester.pumpWidget(wrap(button(
-        segment: const MediaSegment(
-          type: SegmentType.unknown,
-          startMs: 0,
-          endMs: 60000,
+    testWidgets('renders nothing for an unrecognised segment type', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(
+          button(
+            segment: const MediaSegment(
+              type: SegmentType.unknown,
+              startMs: 0,
+              endMs: 60000,
+            ),
+            position: const Duration(seconds: 10),
+          ),
         ),
-        position: const Duration(seconds: 10),
-      )));
+      );
 
       expect(find.byKey(SkipSegmentButton.buttonKey), findsNothing);
     });
@@ -418,10 +448,14 @@ void main() {
     testWidgets('reports the segment end when tapped', (tester) async {
       MediaSegment? skipped;
 
-      await tester.pumpWidget(wrap(button(
-        position: const Duration(seconds: 45),
-        onSkip: (segment) => skipped = segment,
-      )));
+      await tester.pumpWidget(
+        wrap(
+          button(
+            position: const Duration(seconds: 45),
+            onSkip: (segment) => skipped = segment,
+          ),
+        ),
+      );
 
       await tester.tap(find.text('Skip Intro'));
       await tester.pump();
@@ -433,13 +467,15 @@ void main() {
 
     // Manual skipping stays available for a segment auto-skip already spent:
     // the once-per-session guard governs the automatic seek, not the button.
-    testWidgets('still renders for a segment already auto-skipped',
-        (tester) async {
+    testWidgets('still renders for a segment already auto-skipped', (
+      tester,
+    ) async {
       final tracker = SegmentSkipTracker();
       tracker.takeAutoSkip(const [intro], const Duration(seconds: 31));
 
-      await tester
-          .pumpWidget(wrap(button(position: const Duration(seconds: 45))));
+      await tester.pumpWidget(
+        wrap(button(position: const Duration(seconds: 45))),
+      );
 
       expect(find.byKey(SkipSegmentButton.buttonKey), findsOneWidget);
       expect(tracker.shouldAutoSkip(intro), isFalse);

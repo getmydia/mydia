@@ -38,21 +38,25 @@ void main() {
     WidgetTester tester, {
     required AmbientTargets targets,
   }) async {
-    final container = ProviderContainer(overrides: [
-      noProgressFlushOverride,
-      sourcesLoadingProvider.overrideWithValue(false),
-      hasMydiaProvider.overrideWithValue(true),
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      castSessionProvider.overrideWith((ref) => Stream.value(null)),
-      castSessionManagerProvider
-          .overrideWith((ref) => Completer<CastSessionManager>().future),
-      ambientTargetsProvider.overrideWithValue(targets),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        noProgressFlushOverride,
+        sourcesLoadingProvider.overrideWithValue(false),
+        hasMydiaProvider.overrideWithValue(true),
+        castCapabilitiesProvider.overrideWithValue(
+          const CastCapabilities.full(),
+        ),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        castSessionManagerProvider.overrideWith(
+          (ref) => Completer<CastSessionManager>().future,
+        ),
+        ambientTargetsProvider.overrideWithValue(targets),
+      ],
+    );
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MyApp(),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const MyApp()),
+    );
     await tester.pump();
     return container;
   }
@@ -77,7 +81,9 @@ void main() {
   /// `_MyAppState.dispose()` removing its lifecycle observer — before the
   /// container underneath them goes away.
   Future<void> teardown(
-      WidgetTester tester, ProviderContainer container) async {
+    WidgetTester tester,
+    ProviderContainer container,
+  ) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     container.dispose();
@@ -121,8 +127,7 @@ void main() {
     }
   }
 
-  testWidgets(
-      'a real OS background transition drops held ambient targets, and '
+  testWidgets('a real OS background transition drops held ambient targets, and '
       'foreground re-establishes them', (tester) async {
     final scripted = ScriptedProbe({
       'node-tv': playingSnapshot(title: 'Blade Runner'),
@@ -138,22 +143,32 @@ void main() {
     // `ambientPlayingProvider`'s own first-listen sweep (`cast_providers.dart`)
     // is what seeds this, the same as it does in production — proving the
     // baseline is real, not manufactured by this test.
-    expect(await targets.playing.first, isNotEmpty,
-        reason: 'baseline: a target is already held before backgrounding');
+    expect(
+      await targets.playing.first,
+      isNotEmpty,
+      reason: 'baseline: a target is already held before backgrounding',
+    );
 
     await goToBackground(tester);
 
-    expect(await targets.playing.first, isEmpty,
-        reason: 'app.dart must call AmbientTargets.onBackground() on a '
-            'real paused transition, not only when every Riverpod '
-            'listener drops');
+    expect(
+      await targets.playing.first,
+      isEmpty,
+      reason:
+          'app.dart must call AmbientTargets.onBackground() on a '
+          'real paused transition, not only when every Riverpod '
+          'listener drops',
+    );
 
     await goToForeground(tester);
     // sweep() is async; give its microtask chain a further beat to settle.
     await tester.pump();
 
-    expect(await targets.playing.first, isNotEmpty,
-        reason: 'recovery is the next foreground sweep');
+    expect(
+      await targets.playing.first,
+      isNotEmpty,
+      reason: 'recovery is the next foreground sweep',
+    );
 
     // Leave it backgrounded again so no live Timer is pending when this
     // test body returns — see `teardown`'s dartdoc.
@@ -161,8 +176,9 @@ void main() {
     await teardown(tester, container);
   });
 
-  testWidgets('an inactive transition does not drop held ambient targets',
-      (tester) async {
+  testWidgets('an inactive transition does not drop held ambient targets', (
+    tester,
+  ) async {
     final scripted = ScriptedProbe({
       'node-tv': playingSnapshot(title: 'Blade Runner'),
     });
@@ -178,9 +194,13 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
 
-    expect(await targets.playing.first, isNotEmpty,
-        reason: 'a notification shade pull (inactive) must not tear down a '
-            'held connection');
+    expect(
+      await targets.playing.first,
+      isNotEmpty,
+      reason:
+          'a notification shade pull (inactive) must not tear down a '
+          'held connection',
+    );
 
     // Back to resumed (the only valid move from inactive-without-hidden),
     // then background before returning, matching `teardown`'s requirement.

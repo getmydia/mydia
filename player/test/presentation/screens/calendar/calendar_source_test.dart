@@ -17,29 +17,28 @@ Future<PushedLocations> _pump(
   required List<FakeCapableSource> sources,
   SourceId screenFor = fakeSourceId,
 }) =>
-    pumpListing(
-      tester,
-      CalendarScreen(sourceId: screenFor),
-      sources: sources,
-    );
+    pumpListing(tester, CalendarScreen(sourceId: screenFor), sources: sources);
 
 void main() {
   final today = truncateToDay(DateTime.now());
   FakeCapableSource sourceWith(List<ItemSummary> entries) =>
       FakeCapableSource()..calendarResult = entries;
 
-  testWidgets('opens on the timeline and Today returns to today',
-      (tester) async {
+  testWidgets('opens on the timeline and Today returns to today', (
+    tester,
+  ) async {
     await _pump(
       tester,
       sources: [
         sourceWith([
           for (var i = 1; i <= 15; i++)
             calendarEntry(
-                'p$i', DateTime(today.year, today.month, today.day - i),
-                playable: true),
+              'p$i',
+              DateTime(today.year, today.month, today.day - i),
+              playable: true,
+            ),
           calendarEntry('today', today),
-        ])
+        ]),
       ],
     );
     final todayGutter = find.byKey(ValueKey('calendar-day-${isoDate(today)}'));
@@ -47,7 +46,9 @@ void main() {
     expect(todayGutter, findsOneWidget);
 
     await tester.drag(
-        find.byKey(const ValueKey('calendar-timeline')), const Offset(0, 3000));
+      find.byKey(const ValueKey('calendar-timeline')),
+      const Offset(0, 3000),
+    );
     await tester.pumpAndSettle();
     expect(todayGutter, findsNothing);
 
@@ -56,8 +57,9 @@ void main() {
     expect(todayGutter, findsOneWidget);
   });
 
-  testWidgets('the month button opens the sheet and jumps to the day picked',
-      (tester) async {
+  testWidgets('the month button opens the sheet and jumps to the day picked', (
+    tester,
+  ) async {
     final later = DateTime(today.year, today.month, today.day + 45);
     await _pump(
       tester,
@@ -67,17 +69,21 @@ void main() {
           // Enough days between that reaching `later` means scrolling.
           for (var i = 11; i <= 30; i++)
             calendarEntry(
-                'f$i', DateTime(today.year, today.month, today.day + i),
-                playable: true),
+              'f$i',
+              DateTime(today.year, today.month, today.day + i),
+              playable: true,
+            ),
           calendarEntry('later', later),
           // Content below `later` so it can scroll to the top of the
           // viewport. Without it, a `later` that is the 1st of a month stays
           // clamped at the end of the list and the previous month is topmost.
           for (var i = 1; i <= 20; i++)
             calendarEntry(
-                'a$i', DateTime(later.year, later.month, later.day + i),
-                playable: true),
-        ])
+              'a$i',
+              DateTime(later.year, later.month, later.day + i),
+              playable: true,
+            ),
+        ]),
       ],
     );
     final todayGutter = find.byKey(ValueKey('calendar-day-${isoDate(today)}'));
@@ -94,13 +100,16 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('calendar-sheet-next')));
       await tester.pumpAndSettle();
     }
-    await tester
-        .tap(find.byKey(ValueKey('calendar-sheet-day-${isoDate(later)}')));
+    await tester.tap(
+      find.byKey(ValueKey('calendar-sheet-day-${isoDate(later)}')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('calendar-sheet-title')), findsNothing);
     expect(
-        find.byKey(ValueKey('calendar-day-${isoDate(later)}')), findsOneWidget);
+      find.byKey(ValueKey('calendar-day-${isoDate(later)}')),
+      findsOneWidget,
+    );
     expect(todayGutter, findsNothing);
     expect(
       find.descendant(
@@ -112,28 +121,24 @@ void main() {
   });
 
   testWidgets('an empty window shows the empty state', (tester) async {
-    await _pump(
-      tester,
-      sources: [sourceWith(const [])],
-    );
+    await _pump(tester, sources: [sourceWith(const [])]);
 
     expect(find.byKey(const ValueKey('calendar-empty')), findsOneWidget);
   });
 
-  testWidgets('asks the source for the window around today and opens an entry',
-      (tester) async {
-    final source = sourceWith([calendarEntry('e1', today, playable: true)]);
-    final pushed = await _pump(
-      tester,
-      sources: [source],
-    );
+  testWidgets(
+    'asks the source for the window around today and opens an entry',
+    (tester) async {
+      final source = sourceWith([calendarEntry('e1', today, playable: true)]);
+      final pushed = await _pump(tester, sources: [source]);
 
-    expect(source.calls.single, startsWith('calendar('));
+      expect(source.calls.single, startsWith('calendar('));
 
-    await tester.tap(find.byKey(const ValueKey('calendar-card-e1')));
-    await tester.pumpAndSettle();
-    expect(pushed.last, '/s/acc1:owner:aa11/episode/e1');
-  });
+      await tester.tap(find.byKey(const ValueKey('calendar-card-e1')));
+      await tester.pumpAndSettle();
+      expect(pushed.last, '/s/acc1:owner:aa11/episode/e1');
+    },
+  );
 
   testWidgets('an entry with no version has no play button', (tester) async {
     await _pump(
@@ -150,13 +155,14 @@ void main() {
     expect(find.byKey(const ValueKey('calendar-play-ready')), findsOneWidget);
   });
 
-  testWidgets('play goes to the source player with the default version',
-      (tester) async {
+  testWidgets('play goes to the source player with the default version', (
+    tester,
+  ) async {
     final entry = calendarEntry('ready', today, playable: true);
     final pushed = await _pump(
       tester,
       sources: [
-        sourceWith([entry])
+        sourceWith([entry]),
       ],
     );
 
@@ -169,20 +175,22 @@ void main() {
     );
   });
 
-  testWidgets('shows the calendar of the source it is scoped to',
-      (tester) async {
-    final a =
-        sourceWith([calendarEntry('a1', today, title: 'First Source Ep')]);
+  testWidgets('shows the calendar of the source it is scoped to', (
+    tester,
+  ) async {
+    final a = sourceWith([
+      calendarEntry('a1', today, title: 'First Source Ep'),
+    ]);
     final b = FakeCapableSource(id: otherSourceId)
       ..calendarResult = [
-        calendarEntry('b1', today,
-            sourceId: otherSourceId, title: 'Second Source Ep'),
+        calendarEntry(
+          'b1',
+          today,
+          sourceId: otherSourceId,
+          title: 'Second Source Ep',
+        ),
       ];
-    await _pump(
-      tester,
-      sources: [a, b],
-      screenFor: otherSourceId,
-    );
+    await _pump(tester, sources: [a, b], screenFor: otherSourceId);
 
     expect(find.byKey(const ValueKey('calendar-row-b1')), findsOneWidget);
     expect(find.byKey(const ValueKey('calendar-row-a1')), findsNothing);

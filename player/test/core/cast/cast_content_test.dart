@@ -8,7 +8,10 @@ import 'package:player/domain/sources/item.dart';
 
 void main() {
   const device = CastDevice(
-      id: 'tv-1', name: 'Den TV', protocol: CastProtocolKind.chromecast);
+    id: 'tv-1',
+    name: 'Den TV',
+    protocol: CastProtocolKind.chromecast,
+  );
   final savedAt = DateTime.utc(2026, 10, 4, 12);
 
   test('a source record round-trips its item and version', () {
@@ -16,9 +19,10 @@ void main() {
       device: device,
       content: const SourceCastContent(
         item: ItemRef(
-            sourceId: SourceId('px1:owner:srv'),
-            kind: ItemKind.episode,
-            externalId: '4021'),
+          sourceId: SourceId('px1:owner:srv'),
+          kind: ItemKind.episode,
+          externalId: '4021',
+        ),
         versionId: '77',
       ),
       title: 'The Quiet Harbor',
@@ -35,10 +39,10 @@ void main() {
     expect(back.mediaUrl, record.mediaUrl);
   });
 
-  test('a record with no content kind or instance reads as the legacy Mydia',
-      () {
-    final back = PersistedCastSession.fromMap(
-      {
+  test(
+    'a record with no content kind or instance reads as the legacy Mydia',
+    () {
+      final back = PersistedCastSession.fromMap({
         'device': device.toJson(),
         'mediaId': 'm1',
         'mediaType': 'episode',
@@ -48,20 +52,20 @@ void main() {
         'positionSeconds': 10,
         'routeKind': 'direct',
         'savedAt': savedAt.toIso8601String(),
-      },
-      legacyMydia: const SourceId('macct'),
-    );
+      }, legacyMydia: const SourceId('macct'));
 
-    expect(
-      back.content,
-      const MydiaCastContent(
+      expect(
+        back.content,
+        const MydiaCastContent(
           sourceId: SourceId('macct'),
           fileId: 'f1',
           mediaId: 'm1',
           mediaType: 'episode',
-          showId: 's1'),
-    );
-  });
+          showId: 's1',
+        ),
+      );
+    },
+  );
 
   test('a Mydia record still writes the legacy keys', () {
     final map = PersistedCastSession(

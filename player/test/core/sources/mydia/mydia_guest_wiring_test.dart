@@ -15,9 +15,17 @@ const guest = Source(
     activeProfileId: 'owner',
   ),
   profile: SourceProfile(
-      id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+    id: 'owner',
+    accountId: 'mguest',
+    name: 'Owner',
+    isOwner: true,
+  ),
   server: SourceServer(
-      id: 'inst-2', accountId: 'mguest', profileId: 'owner', name: 'Lakeside'),
+    id: 'inst-2',
+    accountId: 'mguest',
+    profileId: 'owner',
+    name: 'Lakeside',
+  ),
 );
 
 void main() {

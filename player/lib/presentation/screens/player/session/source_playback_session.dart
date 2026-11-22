@@ -26,14 +26,14 @@ import 'playback_session_types.dart';
 
 /// The MIME type the player expects for a file in [container].
 String containerMime(String? container) => switch (container) {
-      'mkv' => 'video/x-matroska',
-      'mp4' || 'm4v' || 'mov' => 'video/mp4',
-      'avi' => 'video/x-msvideo',
-      'ts' || 'mpegts' => 'video/mp2t',
-      'webm' => 'video/webm',
-      null => 'video/mp4',
-      final other => 'video/$other',
-    };
+  'mkv' => 'video/x-matroska',
+  'mp4' || 'm4v' || 'mov' => 'video/mp4',
+  'avi' => 'video/x-msvideo',
+  'ts' || 'mpegts' => 'video/mp2t',
+  'webm' => 'video/webm',
+  null => 'video/mp4',
+  final other => 'video/$other',
+};
 
 const _maxChildPages = 10;
 
@@ -59,15 +59,19 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     final fresh = source.item(item);
     _detail = fresh;
     // A failure is not cached: a later call retries.
-    fresh.then<void>((_) {}, onError: (Object _) {
-      if (identical(_detail, fresh)) _detail = null;
-    });
+    fresh.then<void>(
+      (_) {},
+      onError: (Object _) {
+        if (identical(_detail, fresh)) _detail = null;
+      },
+    );
     return fresh;
   }
 
   Future<(ItemDetail, MediaVersion?)> pickedVersion() async {
     final detail = await loadDetail();
-    final version = detail.versions.where((v) => v.id == fileId).firstOrNull ??
+    final version =
+        detail.versions.where((v) => v.id == fileId).firstOrNull ??
         detail.versions.firstOrNull;
     return (detail, version);
   }
@@ -89,8 +93,8 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   /// Subtitle tracks a receiver can show for [version]. Empty when the
   /// source has none it can serve as WebVTT or burn in.
   Future<List<CastSubtitleTrack>> receiverSubtitles(
-          MediaVersion version) async =>
-      const [];
+    MediaVersion version,
+  ) async => const [];
 
   /// The source subtitle stream that matches the track the viewer has on
   /// locally, for a cast. Sidecars carry the source's stream id; an embedded
@@ -185,8 +189,9 @@ abstract class SourcePlaybackSession implements PlaybackSession {
         // sidecars need the server.
         serverSubtitleTracks: external.isEmpty ? null : external,
         showId: item.kind == ItemKind.episode ? detail.show?.externalId : null,
-        seasonNumber:
-            item.kind == ItemKind.episode ? detail.summary.parentIndex : null,
+        seasonNumber: item.kind == ItemKind.episode
+            ? detail.summary.parentIndex
+            : null,
       );
     } catch (_) {
       return null;
@@ -218,15 +223,18 @@ abstract class SourcePlaybackSession implements PlaybackSession {
       if (!isCurrent()) return const StreamingSuperseded();
       if (version == null) {
         return const StreamingUnavailable(
-            PlaybackProblem(PlaybackIssue.noPlayableFile));
+          PlaybackProblem(PlaybackIssue.noPlayableFile),
+        );
       }
-      return StreamingReady(StreamingSetup(
-        memoryKey: 'source:${source.id}',
-        progress: createProgress(),
-        createTransport: ({required bool relayed}) => SimplePlaybackTransport(
-          resolver: createResolver(detail, version),
+      return StreamingReady(
+        StreamingSetup(
+          memoryKey: 'source:${source.id}',
+          progress: createProgress(),
+          createTransport: ({required bool relayed}) => SimplePlaybackTransport(
+            resolver: createResolver(detail, version),
+          ),
         ),
-      ));
+      );
     } on SourceException catch (e) {
       return StreamingUnavailable(PlaybackProblem.fromError(e));
     }
@@ -303,7 +311,8 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   @override
   Future<SubtitleTrack> downloadSubtitle(SubtitleCandidate candidate) =>
       throw const SubtitleActionException.issue(
-          SubtitleIssue.downloadMydiaOnly);
+        SubtitleIssue.downloadMydiaOnly,
+      );
 
   @override
   bool get canWrite => false;
@@ -312,8 +321,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   Future<WriteOutcome> saveSubtitleOffset({
     required String trackRef,
     required int offsetMs,
-  }) async =>
-      WriteOutcome.unavailable;
+  }) async => WriteOutcome.unavailable;
 
   @override
   Future<List<String>?> rememberAudioLanguage(String language) async => null;
@@ -325,17 +333,12 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     required String title,
     required int seasonNumber,
     required String? showId,
-  }) =>
-      sourcePlayerLocation(
-        ItemRef(
-            sourceId: source.id, kind: ItemKind.episode, externalId: episodeId),
-        fileId: fileId,
-        title: title,
-        extra: {
-          if (showId != null) 'showId': showId,
-          'seasonNumber': '$seasonNumber',
-        },
-      );
+  }) => sourcePlayerLocation(
+    ItemRef(sourceId: source.id, kind: ItemKind.episode, externalId: episodeId),
+    fileId: fileId,
+    title: title,
+    extra: {'showId': ?showId, 'seasonNumber': '$seasonNumber'},
+  );
 
   @override
   Future<void> writeSubtitlePreference({

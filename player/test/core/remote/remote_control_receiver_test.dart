@@ -19,43 +19,45 @@ const _capabilities = FlutterTargetCapabilities(
 // and FlutterLoadContentRequest in this plan, since all their u64 fields cross
 // the bridge as BigInt.
 FlutterPlaybackSnapshot playingSnapshot() => FlutterPlaybackSnapshot(
-      state: FlutterPlaybackState.playing,
-      mediaItemId: 'item-1',
-      episodeId: null,
-      title: 'Blade Runner',
-      subtitle: null,
-      imageUrl: null,
-      positionMs: BigInt.from(2530000),
-      durationMs: BigInt.from(6960000),
-      volume: 0.8,
-      muted: false,
-      audioTracks: [],
-      subtitleTracks: [],
-      selectedAudio: null,
-      selectedSubtitle: null,
-      capabilities: _capabilities,
-      sequence: BigInt.one,
-    );
+  state: FlutterPlaybackState.playing,
+  mediaItemId: 'item-1',
+  episodeId: null,
+  title: 'Blade Runner',
+  subtitle: null,
+  imageUrl: null,
+  positionMs: BigInt.from(2530000),
+  durationMs: BigInt.from(6960000),
+  volume: 0.8,
+  muted: false,
+  audioTracks: [],
+  subtitleTracks: [],
+  selectedAudio: null,
+  selectedSubtitle: null,
+  capabilities: _capabilities,
+  sequence: BigInt.one,
+);
 
 /// A roster stub backed by a scripted transport, so the real query path is
 /// exercised.
 RemoteRoster rosterAllowing(List<String> nodeIds) => RemoteRoster(
-      client: fakeMydiaClient(ScriptedMydiaTransport.responses([
-        {
-          'devices': [
-            for (final (i, id) in nodeIds.indexed)
-              {
-                '__typename': 'RemoteDevice',
-                'id': 'd$i',
-                'deviceName': 'Device $i',
-                'platform': 'linux',
-                'nodeId': id,
-              }
-          ],
-        },
-      ])),
-      now: () => DateTime(2026, 8, 20, 12, 0),
-    );
+  client: fakeMydiaClient(
+    ScriptedMydiaTransport.responses([
+      {
+        'devices': [
+          for (final (i, id) in nodeIds.indexed)
+            {
+              '__typename': 'RemoteDevice',
+              'id': 'd$i',
+              'deviceName': 'Device $i',
+              'platform': 'linux',
+              'nodeId': id,
+            },
+        ],
+      },
+    ]),
+  ),
+  now: () => DateTime(2026, 8, 20, 12, 0),
+);
 
 void main() {
   group('RemoteControlReceiver', () {
@@ -85,24 +87,27 @@ void main() {
     FlutterInboundControlRequest inbound(
       String peer,
       FlutterRemoteControlRequest request,
-    ) =>
-        FlutterInboundControlRequest(
-          peer: peer,
-          requestId: 'req-1',
-          request: request,
-        );
+    ) => FlutterInboundControlRequest(
+      peer: peer,
+      requestId: 'req-1',
+      request: request,
+    );
 
     test('answers Hello with its name and capabilities', () async {
-      final receiver =
-          build(allowed: ['node-controller'], snapshot: playingSnapshot());
+      final receiver = build(
+        allowed: ['node-controller'],
+        snapshot: playingSnapshot(),
+      );
 
-      await receiver.handle(inbound(
-        'node-controller',
-        const FlutterRemoteControlRequest_Hello(
-          controllerName: 'iPhone',
-          protocolVersion: 1,
+      await receiver.handle(
+        inbound(
+          'node-controller',
+          const FlutterRemoteControlRequest_Hello(
+            controllerName: 'iPhone',
+            protocolVersion: 1,
+          ),
         ),
-      ));
+      );
 
       expect(responses.single, isA<FlutterRemoteControlResponse_Welcome>());
       final welcome = responses.single as FlutterRemoteControlResponse_Welcome;
@@ -111,51 +116,70 @@ void main() {
       expect(intents, isEmpty, reason: 'Hello is not a playback action');
     });
 
-    test(
-        "Welcome reports this target's own protocol version, not the "
+    test("Welcome reports this target's own protocol version, not the "
         "controller's", () async {
-      final receiver =
-          build(allowed: ['node-controller'], snapshot: playingSnapshot());
+      final receiver = build(
+        allowed: ['node-controller'],
+        snapshot: playingSnapshot(),
+      );
 
       // A controller claiming a wildly different version than this build
       // actually speaks — proving the response is not simply echoing
       // `request.protocolVersion` back.
-      await receiver.handle(inbound(
-        'node-controller',
-        const FlutterRemoteControlRequest_Hello(
-          controllerName: 'iPhone',
-          protocolVersion: 999,
+      await receiver.handle(
+        inbound(
+          'node-controller',
+          const FlutterRemoteControlRequest_Hello(
+            controllerName: 'iPhone',
+            protocolVersion: 999,
+          ),
         ),
-      ));
+      );
 
       final welcome = responses.single as FlutterRemoteControlResponse_Welcome;
-      expect(welcome.protocolVersion, remoteControlProtocolVersion,
-          reason: 'echoing the request would make a real version mismatch '
-              'permanently invisible to the controller');
+      expect(
+        welcome.protocolVersion,
+        remoteControlProtocolVersion,
+        reason:
+            'echoing the request would make a real version mismatch '
+            'permanently invisible to the controller',
+      );
     });
 
     test('refuses a peer that is not in the roster', () async {
-      final receiver =
-          build(allowed: ['node-mine'], snapshot: playingSnapshot());
+      final receiver = build(
+        allowed: ['node-mine'],
+        snapshot: playingSnapshot(),
+      );
 
       await receiver.handle(
-          inbound('node-stranger', const FlutterRemoteControlRequest_Play()));
+        inbound('node-stranger', const FlutterRemoteControlRequest_Play()),
+      );
 
       expect(
-          responses.single, isA<FlutterRemoteControlResponse_NotAuthorized>());
-      expect(intents, isEmpty,
-          reason: 'an unauthorized command must not reach playback');
+        responses.single,
+        isA<FlutterRemoteControlResponse_NotAuthorized>(),
+      );
+      expect(
+        intents,
+        isEmpty,
+        reason: 'an unauthorized command must not reach playback',
+      );
     });
 
     test('reports state for a session it never started', () async {
       // The whole point of the feature: a controller that did not start this
       // session can still read and drive it.
-      final receiver =
-          build(allowed: ['node-controller'], snapshot: playingSnapshot());
+      final receiver = build(
+        allowed: ['node-controller'],
+        snapshot: playingSnapshot(),
+      );
 
       await receiver.handle(
         inbound(
-            'node-controller', const FlutterRemoteControlRequest_GetState()),
+          'node-controller',
+          const FlutterRemoteControlRequest_GetState(),
+        ),
       );
 
       expect(responses.single, isA<FlutterRemoteControlResponse_State>());
@@ -167,20 +191,25 @@ void main() {
     test('answers NotPlaying when no player is mounted', () async {
       final receiver = build(allowed: ['node-controller'], snapshot: null);
 
-      await receiver.handle(inbound(
-          'node-controller', const FlutterRemoteControlRequest_Pause()));
+      await receiver.handle(
+        inbound('node-controller', const FlutterRemoteControlRequest_Pause()),
+      );
 
       expect(responses.single, isA<FlutterRemoteControlResponse_NotPlaying>());
       expect(intents, isEmpty);
     });
 
     test('forwards a transport command as an intent and accepts it', () async {
-      final receiver =
-          build(allowed: ['node-controller'], snapshot: playingSnapshot());
+      final receiver = build(
+        allowed: ['node-controller'],
+        snapshot: playingSnapshot(),
+      );
 
       await receiver.handle(
-        inbound('node-controller',
-            FlutterRemoteControlRequest.seek(positionMs: BigInt.from(754000))),
+        inbound(
+          'node-controller',
+          FlutterRemoteControlRequest.seek(positionMs: BigInt.from(754000)),
+        ),
       );
 
       expect(responses.single, isA<FlutterRemoteControlResponse_Accepted>());
@@ -194,24 +223,29 @@ void main() {
       // player already existing. The app-level listener navigates.
       final receiver = build(allowed: ['node-controller'], snapshot: null);
 
-      await receiver.handle(inbound(
-        'node-controller',
-        FlutterRemoteControlRequest_LoadContent(
-          FlutterLoadContentRequest(
-            mediaItemId: 'item-9',
-            episodeId: null,
-            positionMs: BigInt.zero,
-            audioTrack: null,
-            subtitleTrack: null,
-            autoplay: true,
+      await receiver.handle(
+        inbound(
+          'node-controller',
+          FlutterRemoteControlRequest_LoadContent(
+            FlutterLoadContentRequest(
+              mediaItemId: 'item-9',
+              episodeId: null,
+              positionMs: BigInt.zero,
+              audioTrack: null,
+              subtitleTrack: null,
+              autoplay: true,
+            ),
           ),
         ),
-      ));
+      );
 
       expect(responses.single, isA<FlutterRemoteControlResponse_Accepted>());
       expect(intents.single, isA<LoadContentIntent>());
-      expect(peers.single, 'node-controller',
-          reason: 'the listener needs the sender to find its instance');
+      expect(
+        peers.single,
+        'node-controller',
+        reason: 'the listener needs the sender to find its instance',
+      );
     });
   });
 }

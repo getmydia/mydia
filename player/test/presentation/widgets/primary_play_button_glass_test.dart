@@ -10,11 +10,11 @@ import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/primary_play_button.dart';
 
 Widget _host(VoidCallback? onPressed, {required bool liquid}) => MaterialApp(
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
-      home: Scaffold(
-        body: Center(child: PrimaryPlayButton(onPressed: onPressed)),
-      ),
-    );
+  theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+  home: Scaffold(
+    body: Center(child: PrimaryPlayButton(onPressed: onPressed)),
+  ),
+);
 
 void main() {
   testWidgets('Liquid Glass: a 50pt Large capsule', (tester) async {
@@ -22,33 +22,41 @@ void main() {
     final size = tester.getSize(find.byKey(PrimaryPlayButton.pillKey));
     expect(size.height, LiquidGeometry.buttonLarge);
     expect(size.height, greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
-    final glass =
-        tester.widget<GlassSurface>(find.byKey(PrimaryPlayButton.pillKey));
+    final glass = tester.widget<GlassSurface>(
+      find.byKey(PrimaryPlayButton.pillKey),
+    );
     expect(glass.borderRadius, BorderRadius.circular(25));
   });
 
-  testWidgets('Liquid Glass: a neutral glass capsule that plays',
-      (tester) async {
+  testWidgets('Liquid Glass: a neutral glass capsule that plays', (
+    tester,
+  ) async {
     var taps = 0;
     await tester.pumpWidget(_host(() => taps++, liquid: true));
     expect(find.byType(GlassSurface), findsOneWidget);
     expect(find.byType(GlassInteraction), findsOneWidget);
     expect(find.byKey(PrimaryPlayButton.pillKey), findsOneWidget);
-    final glass =
-        tester.widget<GlassSurface>(find.byKey(PrimaryPlayButton.pillKey));
+    final glass = tester.widget<GlassSurface>(
+      find.byKey(PrimaryPlayButton.pillKey),
+    );
     expect(glass.liquidAdaptiveMax, DepthTokens.liquidControlAdaptiveMax);
     expect(glass.liquidTintOpacity, DepthTokens.liquidControlTintOpacity);
-    expect(tester.widget<Icon>(find.byIcon(Icons.play_arrow_rounded)).color,
-        Colors.white);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.play_arrow_rounded)).color,
+      Colors.white,
+    );
     expect(tester.widget<Text>(find.text('Play')).style?.color, Colors.white);
-    expect(tester.widget<FocusHighlight>(find.byType(FocusHighlight)).ringColor,
-        Colors.white);
+    expect(
+      tester.widget<FocusHighlight>(find.byType(FocusHighlight)).ringColor,
+      Colors.white,
+    );
     await tester.tap(find.byKey(PrimaryPlayButton.pillKey));
     expect(taps, 1);
   });
 
-  testWidgets('disabled on Liquid Glass keeps the solid disabled pill',
-      (tester) async {
+  testWidgets('disabled on Liquid Glass keeps the solid disabled pill', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(null, liquid: true));
     expect(find.byType(GlassSurface), findsNothing);
   });
@@ -58,7 +66,9 @@ void main() {
     expect(find.byType(GlassSurface), findsNothing);
     final pill = tester.widget<Material>(find.byKey(PrimaryPlayButton.pillKey));
     expect(pill.color, Colors.white);
-    expect(tester.getSize(find.byKey(PrimaryPlayButton.pillKey)).height,
-        PrimaryPlayButton.height);
+    expect(
+      tester.getSize(find.byKey(PrimaryPlayButton.pillKey)).height,
+      PrimaryPlayButton.height,
+    );
   });
 }

@@ -42,15 +42,20 @@ class _Harness {
 int _boxes = 0;
 final _l10n = AppLocalizationsEn();
 
-Future<_Harness> _pump(WidgetTester tester,
-    {String? reauthAccountId,
-    _Harness? reuse,
-    FileSystemBackend? backend}) async {
+Future<_Harness> _pump(
+  WidgetTester tester, {
+  String? reauthAccountId,
+  _Harness? reuse,
+  FileSystemBackend? backend,
+}) async {
   var box = reuse?.box;
   if (box == null) {
-    final opened = (await tester.runAsync(() =>
-        Hive.openBox<Map<dynamic, dynamic>>('s3_screen_${_boxes++}',
-            bytes: Uint8List(0))))!;
+    final opened = (await tester.runAsync(
+      () => Hive.openBox<Map<dynamic, dynamic>>(
+        's3_screen_${_boxes++}',
+        bytes: Uint8List(0),
+      ),
+    ))!;
     addTearDown(() => tester.runAsync(opened.close));
     box = opened;
   }
@@ -68,38 +73,44 @@ Future<_Harness> _pump(WidgetTester tester,
   final router = GoRouter(
     initialLocation: '/home',
     routes: [
-      GoRoute(path: '/home', builder: (_, __) => const Text('home')),
+      GoRoute(path: '/home', builder: (_, _) => const Text('home')),
       GoRoute(
-          path: '/add',
-          builder: (_, __) => AddS3Screen(reauthAccountId: reauthAccountId)),
+        path: '/add',
+        builder: (_, _) => AddS3Screen(reauthAccountId: reauthAccountId),
+      ),
       GoRoute(
-          path: '/s/:id',
-          builder: (_, s) => Text('opened ${s.pathParameters['id']}')),
+        path: '/s/:id',
+        builder: (_, s) => Text('opened ${s.pathParameters['id']}'),
+      ),
     ],
   );
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => h.store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(h.storage)),
-      filesIndexBoxProvider.overrideWithValue(h.box),
-      filesProgressStoreProvider
-          .overrideWithValue(InMemoryPlaybackProgressStore()),
-      mediaNamesProvider.overrideWithValue(FakeMediaNames()),
-      relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-      filesBackendBuilderProvider
-          .overrideWithValue((ref, source) => FakeBackend({})),
-      s3ConnectorProvider.overrideWithValue((location, credentials, client) {
-        h.connects.add((location, credentials));
-        return backend ?? h.backend;
-      }),
-    ],
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: router,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => h.store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(h.storage)),
+        filesIndexBoxProvider.overrideWithValue(h.box),
+        filesProgressStoreProvider.overrideWithValue(
+          InMemoryPlaybackProgressStore(),
+        ),
+        mediaNamesProvider.overrideWithValue(FakeMediaNames()),
+        relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
+        filesBackendBuilderProvider.overrideWithValue(
+          (ref, source) => FakeBackend({}),
+        ),
+        s3ConnectorProvider.overrideWithValue((location, credentials, client) {
+          h.connects.add((location, credentials));
+          return backend ?? h.backend;
+        }),
+      ],
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   unawaited(router.push('/add'));
   await tester.pumpAndSettle();
@@ -116,8 +127,12 @@ Future<void> _choose(WidgetTester tester, String label) async {
 Future<void> _enter(WidgetTester tester, String key, String text) =>
     tester.enterText(find.byKey(Key(key)), text);
 
-Future<void> _fillAndConnect(WidgetTester tester,
-    {String bucket = 'reels', String prefix = '', String secret = 'sk'}) async {
+Future<void> _fillAndConnect(
+  WidgetTester tester, {
+  String bucket = 'reels',
+  String prefix = '',
+  String secret = 'sk',
+}) async {
   await _enter(tester, 's3-bucket', bucket);
   await _enter(tester, 's3-prefix', prefix);
   await _enter(tester, 's3-access-key', 'AK');
@@ -129,10 +144,12 @@ Future<void> _fillAndConnect(WidgetTester tester,
 }
 
 /// The "Other" preset at [endpoint].
-Future<void> _connectOther(WidgetTester tester,
-    {String endpoint = 'https://s3.example.test',
-    String prefix = '',
-    String secret = 'sk'}) async {
+Future<void> _connectOther(
+  WidgetTester tester, {
+  String endpoint = 'https://s3.example.test',
+  String prefix = '',
+  String secret = 'sk',
+}) async {
   await _choose(tester, 'Other or self-hosted');
   await _enter(tester, 's3-endpoint', endpoint);
   await _fillAndConnect(tester, prefix: prefix, secret: secret);
@@ -168,7 +185,9 @@ void main() {
     await _fillAndConnect(tester);
     final location = h.connects.single.$1;
     expect(
-        location.endpoint, Uri.parse('https://abc.r2.cloudflarestorage.com'));
+      location.endpoint,
+      Uri.parse('https://abc.r2.cloudflarestorage.com'),
+    );
     expect(location.region, 'auto');
     expect(location.style, S3Style.path);
   });
@@ -200,8 +219,9 @@ void main() {
     await _enter(tester, 's3-endpoint', 'https://s3.eu-west-1.amazonaws.com');
     await tester.pump();
     expect(
-        tester.widget<SwitchListTile>(find.byKey(const Key('s3-style'))).value,
-        isFalse);
+      tester.widget<SwitchListTile>(find.byKey(const Key('s3-style'))).value,
+      isFalse,
+    );
     await tester.tap(find.byKey(const Key('s3-style')));
     await tester.pumpAndSettle();
     // Retyping the endpoint keeps the viewer's choice.
@@ -210,8 +230,9 @@ void main() {
     expect(h.connects.single.$1.style, S3Style.path);
   });
 
-  testWidgets('http on a public host is refused without a request',
-      (tester) async {
+  testWidgets('http on a public host is refused without a request', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     await _connectOther(tester, endpoint: 'http://example.com');
     expect(find.text(_l10n.filesS3ErrorHttpsRequired), findsOneWidget);
@@ -222,17 +243,22 @@ void main() {
     final h = await _pump(tester);
     await _connectOther(tester, endpoint: '192.168.1.20:9000');
     expect(
-        h.connects.single.$1.endpoint, Uri.parse('https://192.168.1.20:9000'));
+      h.connects.single.$1.endpoint,
+      Uri.parse('https://192.168.1.20:9000'),
+    );
     await tester.pumpWidget(const SizedBox());
 
     final h2 = await _pump(tester);
     await _connectOther(tester, endpoint: 'http://192.168.1.20:9000');
     expect(
-        h2.connects.single.$1.endpoint, Uri.parse('http://192.168.1.20:9000'));
+      h2.connects.single.$1.endpoint,
+      Uri.parse('http://192.168.1.20:9000'),
+    );
   });
 
-  testWidgets('an endpoint with a path is refused without a request',
-      (tester) async {
+  testWidgets('an endpoint with a path is refused without a request', (
+    tester,
+  ) async {
     final h = await _pump(tester);
     await _connectOther(tester, endpoint: 'https://s3.example.test/x');
     expect(find.text(_l10n.filesS3EndpointInvalid), findsOneWidget);
@@ -244,40 +270,40 @@ void main() {
     final cases = <String, (BackendFailure, String)>{
       'clock': (
         const BackendUnauthorized('x', kS3CodeClockSkew),
-        _l10n.filesS3ErrorClock
+        _l10n.filesS3ErrorClock,
       ),
       'region': (
         const BackendUnreachable('x', 301, kS3CodeWrongRegion, 'eu-west-1'),
-        _l10n.filesS3ErrorRegion('eu-west-1')
+        _l10n.filesS3ErrorRegion('eu-west-1'),
       ),
       'region unknown': (
         const BackendUnreachable('x', 301, kS3CodeWrongRegion),
-        _l10n.filesS3ErrorRegionUnknown
+        _l10n.filesS3ErrorRegionUnknown,
       ),
       // A public host is refused over http://, so it gets no such advice.
       'tls on a public host': (
         const BackendUnreachable('x', null, kS3CodeTls),
-        _l10n.filesS3ErrorTlsPublic(host)
+        _l10n.filesS3ErrorTlsPublic(host),
       ),
       'bad keys': (
         const BackendUnauthorized('x', kS3CodeBadKeys),
-        _l10n.filesS3ErrorBadKeys
+        _l10n.filesS3ErrorBadKeys,
       ),
       'cannot list': (
         const BackendUnauthorized('x', kS3CodeCannotList),
-        _l10n.filesS3ErrorCannotList
+        _l10n.filesS3ErrorCannotList,
       ),
       'no bucket': (
         const BackendNotFound('x', kS3CodeNoSuchBucket, 'reels'),
-        _l10n.filesS3ErrorNoBucket('reels')
+        _l10n.filesS3ErrorNoBucket('reels'),
       ),
       'server': (
         const BackendUnreachable(null, 503),
-        _l10n.filesS3ErrorServer('503')
+        _l10n.filesS3ErrorServer('503'),
       ),
       'unreachable': (
         const BackendUnreachable('x'),
-        _l10n.filesS3ErrorUnreachable(host)
+        _l10n.filesS3ErrorUnreachable(host),
       ),
     };
     for (final MapEntry(key: name, value: (failure, message))
@@ -296,8 +322,10 @@ void main() {
       final h = await _pump(tester);
       h.backend.probeFailure = const BackendUnreachable('x', null, kS3CodeTls);
       await _connectOther(tester, endpoint: 'https://192.168.1.20:9000');
-      expect(find.text(_l10n.filesS3ErrorTls('192.168.1.20:9000')),
-          findsOneWidget);
+      expect(
+        find.text(_l10n.filesS3ErrorTls('192.168.1.20:9000')),
+        findsOneWidget,
+      );
     });
   });
 
@@ -326,8 +354,9 @@ void main() {
     expect(record.account.id, accountId);
     final connection = record.servers.single.connections.single.uri;
     expect(connection.toString(), isNot(contains('sk')));
-    final secret = await h.storage
-        .read('${record.account.storageNamespace}/account_token');
+    final secret = await h.storage.read(
+      '${record.account.storageNamespace}/account_token',
+    );
     final creds = S3Credentials.fromJson(secret!);
     expect((creds.accessKeyId, creds.secretAccessKey), ('AK', 'sk'));
 
@@ -337,8 +366,9 @@ void main() {
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
   });
 
-  testWidgets('S3 folders that differ by a trailing slash stay apart',
-      (tester) async {
+  testWidgets('S3 folders that differ by a trailing slash stay apart', (
+    tester,
+  ) async {
     final h = await _pump(tester, backend: _SlashBackend());
     await _connectOther(tester, prefix: 'media');
 
@@ -352,19 +382,25 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('s3-tick-/Films/')));
     await tester.pumpAndSettle();
     expect(
-        tester
-            .widget<Checkbox>(find.byKey(const ValueKey('s3-tick-/Films')))
-            .value,
-        isFalse);
+      tester
+          .widget<Checkbox>(find.byKey(const ValueKey('s3-tick-/Films')))
+          .value,
+      isFalse,
+    );
 
     // Into `/Films/` and back up lands in `/Films`, not the bucket root.
     // Its name, not the row's centre, which the kind picker now covers.
-    await tester.tap(find.descendant(
+    await tester.tap(
+      find.descendant(
         of: find.byKey(const ValueKey('s3-folder-/Films/')),
-        matching: find.text('/')));
+        matching: find.text('/'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(
-        tester.widget<Text>(find.byKey(const Key('s3-dir'))).data, '/Films/');
+      tester.widget<Text>(find.byKey(const Key('s3-dir'))).data,
+      '/Films/',
+    );
     await tester.tap(find.byKey(const Key('s3-up')));
     await tester.pumpAndSettle();
     expect(tester.widget<Text>(find.byKey(const Key('s3-dir'))).data, '/Films');
@@ -373,17 +409,20 @@ void main() {
     await tester.pumpAndSettle();
     final accountId = (await h.store.load()).accounts.single.account.id;
     expect(
-        FileLibraryIndex(h.box, accountId: accountId)
-            .roots()
-            .map((r) => r.path),
-        ['/Films/']);
+      FileLibraryIndex(h.box, accountId: accountId).roots().map((r) => r.path),
+      ['/Films/'],
+    );
   });
 
-  testWidgets('sign in again locks the location and saves the keys',
-      (tester) async {
+  testWidgets('sign in again locks the location and saves the keys', (
+    tester,
+  ) async {
     final h = await _pump(tester);
-    await _connectOther(tester,
-        endpoint: 'https://s3.example.test:9000', prefix: 'media');
+    await _connectOther(
+      tester,
+      endpoint: 'https://s3.example.test:9000',
+      prefix: 'media',
+    );
     await tester.tap(find.byKey(const Key('s3-tick-/Films')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('s3-save')));
@@ -392,7 +431,8 @@ void main() {
     final accountId = saved.account.id;
     // The keys stopped working: sign in again changes only them.
     await h.store.putAccount(
-        saved.copyWith(account: saved.account.copyWith(needsReauth: true)));
+      saved.copyWith(account: saved.account.copyWith(needsReauth: true)),
+    );
 
     await tester.pumpWidget(const SizedBox());
     final again = await _pump(tester, reauthAccountId: accountId, reuse: h);
@@ -408,16 +448,19 @@ void main() {
     expect(_field(tester, 's3-access-key').readOnly, isFalse);
     expect(_field(tester, 's3-secret-key').readOnly, isFalse);
     expect(
-        tester
-            .widget<DropdownButtonFormField<S3Preset>>(
-                find.byKey(const Key('s3-provider')))
-            .onChanged,
-        isNull);
+      tester
+          .widget<DropdownButtonFormField<S3Preset>>(
+            find.byKey(const Key('s3-provider')),
+          )
+          .onChanged,
+      isNull,
+    );
     expect(
-        tester
-            .widget<SwitchListTile>(find.byKey(const Key('s3-style')))
-            .onChanged,
-        isNull);
+      tester
+          .widget<SwitchListTile>(find.byKey(const Key('s3-style')))
+          .onChanged,
+      isNull,
+    );
 
     await _enter(tester, 's3-access-key', 'AK2');
     await _enter(tester, 's3-secret-key', 'new');
@@ -426,20 +469,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-        again.connects.single.$1.toConnectionUri(),
-        S3Location.fromConnectionUri((await h.store.load())
-                .accounts
-                .single
-                .servers
-                .single
-                .connections
-                .single
-                .uri)!
-            .toConnectionUri());
+      again.connects.single.$1.toConnectionUri(),
+      S3Location.fromConnectionUri(
+        (await h.store.load())
+            .accounts
+            .single
+            .servers
+            .single
+            .connections
+            .single
+            .uri,
+      )!.toConnectionUri(),
+    );
     final record = (await h.store.load()).accounts.single;
     expect(record.account.id, accountId);
-    final secret = await h.storage
-        .read('${record.account.storageNamespace}/account_token');
+    final secret = await h.storage.read(
+      '${record.account.storageNamespace}/account_token',
+    );
     expect(S3Credentials.fromJson(secret!).secretAccessKey, 'new');
     expect(FileLibraryIndex(h.box, accountId: accountId).roots(), hasLength(1));
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
@@ -458,7 +504,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     return (
       await _pump(tester, reauthAccountId: accountId, reuse: h),
-      accountId
+      accountId,
     );
   }
 
@@ -481,23 +527,25 @@ void main() {
 
     final record = (await h.store.load()).accounts.single;
     expect(record.account.id, accountId);
-    final secret = await h.storage
-        .read('${record.account.storageNamespace}/account_token');
+    final secret = await h.storage.read(
+      '${record.account.storageNamespace}/account_token',
+    );
     expect(S3Credentials.fromJson(secret!).secretAccessKey, 'newer');
     expect(
-        FileLibraryIndex(h.box, accountId: accountId)
-            .roots()
-            .map((r) => r.path),
-        unorderedEquals(['/Films', '/Shows']));
+      FileLibraryIndex(h.box, accountId: accountId).roots().map((r) => r.path),
+      unorderedEquals(['/Films', '/Shows']),
+    );
     expect(find.text('opened $accountId:owner:$accountId'), findsOneWidget);
   });
 
-  testWidgets('leaving during the probe saves nothing and does not throw',
-      (tester) async {
+  testWidgets('leaving during the probe saves nothing and does not throw', (
+    tester,
+  ) async {
     final (h, accountId) = await reopen(tester);
     final saved = (await h.store.load()).accounts.single;
     await h.store.putAccount(
-        saved.copyWith(account: saved.account.copyWith(needsReauth: true)));
+      saved.copyWith(account: saved.account.copyWith(needsReauth: true)),
+    );
     // Reopen so the screen reads needsReauth.
     await tester.pumpWidget(const SizedBox());
     final again = await _pump(tester, reauthAccountId: accountId, reuse: h);
@@ -525,8 +573,9 @@ void main() {
     // which the connect handler swallows and logs.
     expect(logged.where((l) => l.startsWith('[AddS3]')), isEmpty);
     final record = (await h.store.load()).accounts.single;
-    final secret = await h.storage
-        .read('${record.account.storageNamespace}/account_token');
+    final secret = await h.storage.read(
+      '${record.account.storageNamespace}/account_token',
+    );
     expect(S3Credentials.fromJson(secret!).secretAccessKey, 'sk');
   });
 }
@@ -542,10 +591,10 @@ class _SlashBackend implements FileSystemBackend {
 
   @override
   Future<List<FileEntry>> list(String dir) async => switch (dir) {
-        '/' || '' => [_dir('/Films', 'Films')],
-        '/Films' => [_dir('/Films/', '/')],
-        _ => const [],
-      };
+    '/' || '' => [_dir('/Films', 'Films')],
+    '/Films' => [_dir('/Films/', '/')],
+    _ => const [],
+  };
 
   @override
   Future<FileEntry?> stat(String path) async => null;

@@ -22,7 +22,9 @@ void main() {
 
     expect(await storage.read('source/acc1/account_token'), 'acct-token');
     expect(
-        await storage.read('source/acc1/owner/abc123/token'), 'server-token');
+      await storage.read('source/acc1/owner/abc123/token'),
+      'server-token',
+    );
     expect(await secrets.accountToken(record.account), 'acct-token');
     expect(await secrets.serverToken(source), 'server-token');
 
@@ -66,8 +68,11 @@ void main() {
     await secrets.writeAccountToken(account, 'acct-token');
 
     expect(await secrets.userToken(account, kOwnerProfileId), 'acct-token');
-    expect(await secrets.userToken(account, 'kid0001'), isNull,
-        reason: 'only the owner may borrow the admin token');
+    expect(
+      await secrets.userToken(account, 'kid0001'),
+      isNull,
+      reason: 'only the owner may borrow the admin token',
+    );
 
     await secrets.writeUserToken(account, kOwnerProfileId, 'switched');
     expect(await secrets.userToken(account, kOwnerProfileId), 'switched');
@@ -76,12 +81,22 @@ void main() {
   test('deleteAll removes every profile user token', () async {
     final storage = MockAuthStorage();
     final secrets = SourceSecrets(storage);
-    final record = plexRecord().copyWith(profiles: const [
-      SourceProfile(
-          id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
-      SourceProfile(
-          id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
-    ]);
+    final record = plexRecord().copyWith(
+      profiles: const [
+        SourceProfile(
+          id: 'owner',
+          accountId: 'acc1',
+          name: 'Quill',
+          isOwner: true,
+        ),
+        SourceProfile(
+          id: 'kid0001',
+          accountId: 'acc1',
+          name: 'Pip',
+          isOwner: false,
+        ),
+      ],
+    );
     await secrets.writeUserToken(record.account, 'kid0001', 'kid-token');
     await secrets.writeUserToken(record.account, 'owner', 'owner-token');
 
@@ -96,9 +111,17 @@ void main() {
     final record = plexRecord().copyWith(
       profiles: const [
         SourceProfile(
-            id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+          id: 'owner',
+          accountId: 'acc1',
+          name: 'Quill',
+          isOwner: true,
+        ),
         SourceProfile(
-            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+          id: 'kid0001',
+          accountId: 'acc1',
+          name: 'Pip',
+          isOwner: false,
+        ),
       ],
       chosenServerIds: const ['abc123', 'zz99'],
     );

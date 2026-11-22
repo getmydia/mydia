@@ -19,28 +19,32 @@ void main() {
       // multicast entitlement is explicitly out of scope. An empty
       // entitlements plist referenced from the build settings signs nothing
       // and only invites confusion, so neither should exist.
-      final pbxproj =
-          File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+      final pbxproj = File('ios/Runner.xcodeproj/project.pbxproj')
+          .readAsStringSync();
 
       expect(File('ios/Runner/Runner.entitlements').existsSync(), isFalse);
       expect(pbxproj, isNot(contains('Runner.entitlements')));
     });
 
-    test('macOS Info.plist declares local network usage and Bonjour service',
-        () {
-      final plist = File('macos/Runner/Info.plist').readAsStringSync();
+    test(
+      'macOS Info.plist declares local network usage and Bonjour service',
+      () {
+        final plist = File('macos/Runner/Info.plist').readAsStringSync();
 
-      expect(plist, contains('NSLocalNetworkUsageDescription'));
-      expect(plist, contains('NSBonjourServices'));
-      expect(plist, contains('_googlecast._tcp'));
-    });
+        expect(plist, contains('NSLocalNetworkUsageDescription'));
+        expect(plist, contains('NSBonjourServices'));
+        expect(plist, contains('_googlecast._tcp'));
+      },
+    );
 
     test('Android manifest requests multicast permission', () {
-      final manifest =
-          File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+      final manifest = File('android/app/src/main/AndroidManifest.xml')
+          .readAsStringSync();
 
       expect(
-          manifest, contains('android.permission.CHANGE_WIFI_MULTICAST_STATE'));
+        manifest,
+        contains('android.permission.CHANGE_WIFI_MULTICAST_STATE'),
+      );
     });
 
     test('flutter_chrome_cast is no longer a dependency', () {

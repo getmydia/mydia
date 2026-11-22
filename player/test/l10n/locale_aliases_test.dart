@@ -28,10 +28,12 @@ void main() {
         locale: const Locale('cnr'),
         localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(builder: (context) {
-          captured = context;
-          return const Scaffold(body: BackButton());
-        }),
+        home: Builder(
+          builder: (context) {
+            captured = context;
+            return const Scaffold(body: BackButton());
+          },
+        ),
       ),
     );
 

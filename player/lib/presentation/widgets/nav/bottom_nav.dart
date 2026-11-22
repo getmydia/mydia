@@ -28,9 +28,7 @@ List<SourceNavEntry> bottomNavEntries(
     if (downloadSupported) 'downloads' else 'favorites',
     'settings',
   ];
-  return [
-    for (final id in ids) ...entries.where((e) => e.id == id).take(1),
-  ];
+  return [for (final id in ids) ...entries.where((e) => e.id == id).take(1)];
 }
 
 /// The source's own rows that the bar has no room for: its libraries and the
@@ -88,8 +86,12 @@ class BottomNav extends StatelessWidget {
     );
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(DockGlass.sideMargin, 0,
-            DockGlass.sideMargin, DockGlass.sideMargin),
+        padding: const EdgeInsets.fromLTRB(
+          DockGlass.sideMargin,
+          0,
+          DockGlass.sideMargin,
+          DockGlass.sideMargin,
+        ),
         child: ToastObstruction(
           edge: ToastEdge.bottom,
           child: DecoratedBox(
@@ -114,7 +116,8 @@ class BottomNav extends StatelessWidget {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final count = entries.length + (showBackToMydia ? 1 : 0);
-                    final compact = count > 0 &&
+                    final compact =
+                        count > 0 &&
                         constraints.maxWidth / count < compactItemWidth;
                     final row = Row(
                       // Liquid Glass: every item is as tall as the tallest, so
@@ -153,13 +156,14 @@ class BottomNav extends StatelessWidget {
                                         isOffline && entry.id != 'downloads',
                                     compact: compact,
                                     onTap: () => onNavigate(entry.route),
-                                    onLongPress: entry.id == 'home' &&
+                                    onLongPress:
+                                        entry.id == 'home' &&
                                             libraryEntries.isNotEmpty
                                         ? () => showLibrarySheet(
-                                              context,
-                                              entries: libraryEntries,
-                                              onNavigate: onNavigate,
-                                            )
+                                            context,
+                                            entries: libraryEntries,
+                                            onNavigate: onNavigate,
+                                          )
                                         : null,
                                   ),
                           ),
@@ -220,9 +224,10 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.92,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -252,8 +257,8 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
     final effectiveColor = widget.isDisabled
         ? palette.textDisabled
         : widget.isSelected
-            ? palette.primary
-            : palette.textSecondary;
+        ? palette.primary
+        : palette.textSecondary;
 
     final item = FocusHighlight(
       onActivate: widget.onTap,
@@ -303,17 +308,14 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
                             ? widget.selectedIcon
                             : widget.icon,
                         key: ValueKey(
-                            '${widget.isSelected}_${widget.isDisabled}'),
+                          '${widget.isSelected}_${widget.isDisabled}',
+                        ),
                         color: effectiveColor,
                         size: 24,
                       ),
                     ),
                     if (widget.badge != null)
-                      Positioned(
-                        top: -3,
-                        right: -3,
-                        child: widget.badge!,
-                      ),
+                      Positioned(top: -3, right: -3, child: widget.badge!),
                   ],
                 ),
                 if (!widget.compact) ...[

@@ -57,8 +57,10 @@ class PeerFilesStore {
   /// fetch lands.
   FileLibraryIndex index(String localAccountId) {
     final generation = _generation(localAccountId, _gen(localAccountId));
-    return _indexes[generation] ??=
-        FileLibraryIndex(_box, accountId: generation);
+    return _indexes[generation] ??= FileLibraryIndex(
+      _box,
+      accountId: generation,
+    );
   }
 
   /// The host revision the live copy was fetched at, null before the first.
@@ -94,8 +96,10 @@ class PeerFilesStore {
     // generation starts empty and nothing stale is read into it.
     await _box.deleteAll(_recordKeys(localAccountId, keep: live));
     _indexes.remove(_generation(localAccountId, next));
-    final staging =
-        FileLibraryIndex(_box, accountId: _generation(localAccountId, next));
+    final staging = FileLibraryIndex(
+      _box,
+      accountId: _generation(localAccountId, next),
+    );
     for (final page in pages) {
       await staging.putRecords(
         roots: decodeJsonRecords(page.roots, LibraryRoot.fromMap),
@@ -205,5 +209,7 @@ class _Changes extends ChangeNotifier {
 }
 
 /// The store over its box, opened with the files library boxes at startup.
-final peerFilesStoreProvider = Provider<PeerFilesStore>((ref) =>
-    PeerFilesStore(Hive.box<Map<dynamic, dynamic>>(PeerFilesStore.boxName)));
+final peerFilesStoreProvider = Provider<PeerFilesStore>(
+  (ref) =>
+      PeerFilesStore(Hive.box<Map<dynamic, dynamic>>(PeerFilesStore.boxName)),
+);

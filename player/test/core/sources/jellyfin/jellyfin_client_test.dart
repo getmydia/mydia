@@ -10,10 +10,13 @@ import '../fixed_connection.dart';
 import 'fake_jellyfin_server.dart';
 
 const identity = JellyfinIdentity(
-    deviceId: 'dev1', version: '1.2.3', deviceName: 'Mydia Player on Linux');
+  deviceId: 'dev1',
+  version: '1.2.3',
+  deviceName: 'Mydia Player on Linux',
+);
 
 ({JellyfinClient client, FakeJellyfinServer server, List<int> unauthorized})
-    buildClient({Uri? base}) {
+buildClient({Uri? base}) {
   final server = FakeJellyfinServer();
   final unauthorized = <int>[];
   final client = JellyfinClient(
@@ -38,8 +41,11 @@ void main() {
   });
 
   test('quotes in the device name cannot break the header', () {
-    const odd =
-        JellyfinIdentity(deviceId: 'd', version: '1', deviceName: 'Den "TV"');
+    const odd = JellyfinIdentity(
+      deviceId: 'd',
+      version: '1',
+      deviceName: 'Den "TV"',
+    );
     expect(odd.authorization(), contains('Device="Den \'TV\'"'));
   });
 
@@ -52,35 +58,43 @@ void main() {
 
   test('keeps a reverse-proxy subpath and merges queries', () {
     expect(
-      jellyfinUnder(Uri.parse('https://h.test/jf/'), '/Items?a=1', {'b': '2'})
-          .toString(),
+      jellyfinUnder(Uri.parse('https://h.test/jf/'), '/Items?a=1', {
+        'b': '2',
+      }).toString(),
       'https://h.test/jf/Items?a=1&b=2',
     );
     expect(
-        jellyfinUnder(Uri.parse('http://h.test:8096'), '/UserViews').toString(),
-        'http://h.test:8096/UserViews');
+      jellyfinUnder(Uri.parse('http://h.test:8096'), '/UserViews').toString(),
+      'http://h.test:8096/UserViews',
+    );
   });
 
   test('sends the token as a header and never in the URL', () async {
     final b = buildClient();
     await b.client.get('/UserViews', {'userId': FakeJellyfinServer.userId});
     final request = b.server.requests.single;
-    expect(request.headers['Authorization'],
-        contains('Token="${FakeJellyfinServer.token}"'));
+    expect(
+      request.headers['Authorization'],
+      contains('Token="${FakeJellyfinServer.token}"'),
+    );
     expect(request.url.toString(), isNot(contains(FakeJellyfinServer.token)));
   });
 
   test('an empty 204 reads as an empty map', () async {
     final b = buildClient();
-    expect(await b.client.post('/Sessions/Playing', body: {'ItemId': 'm1'}),
-        isEmpty);
+    expect(
+      await b.client.post('/Sessions/Playing', body: {'ItemId': 'm1'}),
+      isEmpty,
+    );
   });
 
   test('a 401 calls onUnauthorized and rethrows', () async {
     final b = buildClient();
     b.server.status = 401;
     await expectLater(
-        b.client.get('/UserViews'), throwsA(isA<SourceException>()));
+      b.client.get('/UserViews'),
+      throwsA(isA<SourceException>()),
+    );
     expect(b.unauthorized, [1]);
   });
 
@@ -96,16 +110,23 @@ void main() {
     );
     server.status = 599;
     await expectLater(
-        client.get('/UserViews'), throwsA(isA<SourceException>()));
-    expect(connection.failures, isEmpty,
-        reason: 'an HTTP error is an answer, not an unreachable server');
+      client.get('/UserViews'),
+      throwsA(isA<SourceException>()),
+    );
+    expect(
+      connection.failures,
+      isEmpty,
+      reason: 'an HTTP error is an answer, not an unreachable server',
+    );
   });
 
   group('public info', () {
     test('reads id, name, version and LAN address', () async {
       final server = FakeJellyfinServer();
       final info = await jellyfinPublicInfo(
-          SourceHttp(client: server.client), FakeJellyfinServer.base);
+        SourceHttp(client: server.client),
+        FakeJellyfinServer.base,
+      );
       expect(info.id, FakeJellyfinServer.serverId);
       expect(info.name, 'Harbor');
       expect(info.isJellyfin, isTrue);
@@ -134,9 +155,13 @@ void main() {
     test('the probe returns the server id and sends no token', () async {
       final server = FakeJellyfinServer();
       expect(
-          await jellyfinIdentityProbe(SourceHttp(client: server.client),
-              FakeJellyfinServer.base, const Duration(seconds: 3)),
-          FakeJellyfinServer.serverId);
+        await jellyfinIdentityProbe(
+          SourceHttp(client: server.client),
+          FakeJellyfinServer.base,
+          const Duration(seconds: 3),
+        ),
+        FakeJellyfinServer.serverId,
+      );
       expect(server.requests.single.headers['Authorization'], isNull);
     });
   });

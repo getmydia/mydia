@@ -16,7 +16,9 @@ const kWebDavTimeout = Duration(seconds: 20);
 /// the decoded form [WebDavBackend] takes and hands out (`/my share`). A
 /// segment that is not valid UTF-8 (a Latin-1 name, say) is kept as sent,
 /// so the backend sends the same bytes back.
-String webDavDecodePath(String path) => path.split('/').map((s) {
+String webDavDecodePath(String path) => path
+    .split('/')
+    .map((s) {
       try {
         return Uri.decodeComponent(s);
       } on FormatException {
@@ -24,9 +26,11 @@ String webDavDecodePath(String path) => path.split('/').map((s) {
       } on ArgumentError {
         return s;
       }
-    }).join('/');
+    })
+    .join('/');
 
-const _propfindBody = '<?xml version="1.0" encoding="utf-8"?>'
+const _propfindBody =
+    '<?xml version="1.0" encoding="utf-8"?>'
     '<d:propfind xmlns:d="DAV:"><d:prop>'
     '<d:resourcetype/><d:getcontentlength/><d:getlastmodified/>'
     '</d:prop></d:propfind>';
@@ -34,15 +38,13 @@ const _propfindBody = '<?xml version="1.0" encoding="utf-8"?>'
 /// Reads media from a WebDAV server with HTTP Basic auth.
 class WebDavBackend implements FileSystemBackend {
   WebDavBackend({
-    required Uri base,
+    required this._base,
     required String user,
     required String password,
     http.Client? client,
-    Duration timeout = kWebDavTimeout,
-  })  : _base = base,
-        _client = client ?? http.Client(),
-        _timeout = timeout,
-        _auth = 'Basic ${base64.encode(utf8.encode('$user:$password'))}';
+    this._timeout = kWebDavTimeout,
+  }) : _client = client ?? http.Client(),
+       _auth = 'Basic ${base64.encode(utf8.encode('$user:$password'))}';
 
   final Uri _base;
   final http.Client _client;
@@ -68,31 +70,38 @@ class WebDavBackend implements FileSystemBackend {
       // How this server shapes a reply, without its content: a reply can
       // carry signed URLs, and logs are shared.
       _loggedReplyShape = true;
-      debugPrint('[WebDavBackend] PROPFIND $dir: ${body.length} chars, '
-          '${all.length} entries, ${all.where((e) => e.isDir).length} '
-          'folders, ${all.where((e) => !e.isDir && e.size > 0).length} sized '
-          'files, ${all.where((e) => e.unreadable).length} unreadable, '
-          '${_absoluteHref.allMatches(body).length} absolute hrefs');
+      debugPrint(
+        '[WebDavBackend] PROPFIND $dir: ${body.length} chars, '
+        '${all.length} entries, ${all.where((e) => e.isDir).length} '
+        'folders, ${all.where((e) => !e.isDir && e.size > 0).length} sized '
+        'files, ${all.where((e) => e.unreadable).length} unreadable, '
+        '${_absoluteHref.allMatches(body).length} absolute hrefs',
+      );
     }
     final children = all.where((e) => _normalize(e.path) != self).toList();
     if (all.isNotEmpty &&
         all.length == children.length &&
         !_loggedMissingSelf) {
       _loggedMissingSelf = true;
-      debugPrint('[WebDavBackend] $dir: no entry for the folder itself among '
-          '${all.length}');
+      debugPrint(
+        '[WebDavBackend] $dir: no entry for the folder itself among '
+        '${all.length}',
+      );
     }
     // A child outside the folder asked for means the server's hrefs are not
     // the paths the client sent, and every path built from them is wrong.
     // Counted, not shown: a relative href keeps its query, which can be a
     // signature.
     final prefix = _asCollection(self);
-    final foreign =
-        children.where((e) => !_normalize(e.path).startsWith(prefix)).length;
+    final foreign = children
+        .where((e) => !_normalize(e.path).startsWith(prefix))
+        .length;
     if (foreign > 0 && !_loggedForeignChild) {
       _loggedForeignChild = true;
-      debugPrint('[WebDavBackend] $dir: $foreign of ${children.length} '
-          'entries outside the folder asked for');
+      debugPrint(
+        '[WebDavBackend] $dir: $foreign of ${children.length} '
+        'entries outside the folder asked for',
+      );
     }
     return children;
   }
@@ -110,10 +119,10 @@ class WebDavBackend implements FileSystemBackend {
   }
 
   @override
-  Future<PlayableFile> playable(String path) async =>
-      PlayableFile(url: _url(path).toString(), headers: {
-        'Authorization': _auth,
-      });
+  Future<PlayableFile> playable(String path) async => PlayableFile(
+    url: _url(path).toString(),
+    headers: {'Authorization': _auth},
+  );
 
   @override
   Future<void> probe() async {
@@ -189,7 +198,8 @@ class WebDavBackend implements FileSystemBackend {
         continue;
       }
       final path = _decodePath(href);
-      final isDir = href.endsWith('/') ||
+      final isDir =
+          href.endsWith('/') ||
           response.descendantElements.where(_isDav('collection')).isNotEmpty;
       // An entry the server answers with an error (one file or folder it
       // denies) is listed as unreadable: left out, it would read as deleted
@@ -210,25 +220,30 @@ class WebDavBackend implements FileSystemBackend {
           .firstOrNull;
       final normalized = _normalize(path);
       final segments = normalized.split('/')..removeWhere((s) => s.isEmpty);
-      entries.add(FileEntry(
-        path: path,
-        name: segments.isEmpty ? '/' : segments.last,
-        isDir: isDir,
-        size: isDir ? 0 : (length ?? 0),
-        modified: _parseDate(modifiedText),
-        unreadable: unreadable,
-      ));
+      entries.add(
+        FileEntry(
+          path: path,
+          name: segments.isEmpty ? '/' : segments.last,
+          isDir: isDir,
+          size: isDir ? 0 : (length ?? 0),
+          modified: _parseDate(modifiedText),
+          unreadable: unreadable,
+        ),
+      );
     }
     if (withoutHref > 0) {
-      debugPrint('[WebDavBackend] dropped $withoutHref responses without '
-          'an href');
+      debugPrint(
+        '[WebDavBackend] dropped $withoutHref responses without '
+        'an href',
+      );
     }
     return entries;
   }
 
-  static bool Function(XmlElement) _isDav(String local) => (e) =>
-      e.name.local == local &&
-      (e.name.namespaceUri == null || e.name.namespaceUri == 'DAV:');
+  static bool Function(XmlElement) _isDav(String local) =>
+      (e) =>
+          e.name.local == local &&
+          (e.name.namespaceUri == null || e.name.namespaceUri == 'DAV:');
 
   static final _statusCode = RegExp(r'^HTTP/\S+\s+(\d{3})');
 

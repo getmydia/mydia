@@ -33,7 +33,8 @@ class _ContinueWatchingScreenState
   final Set<ItemRef> _hidden = {};
 
   void _openMenu(BuildContext posterContext, ItemSummary item) {
-    final removable = ref
+    final removable =
+        ref
             .read(mediaSourceProvider(widget.sourceId))
             ?.as<ContinueWatching>()
             ?.canRemoveFromContinueWatching(item) ??
@@ -53,8 +54,9 @@ class _ContinueWatchingScreenState
   }
 
   Future<void> _remove(ItemSummary item) async {
-    final continueWatching =
-        ref.read(mediaSourceProvider(widget.sourceId))?.as<ContinueWatching>();
+    final continueWatching = ref
+        .read(mediaSourceProvider(widget.sourceId))
+        ?.as<ContinueWatching>();
     if (continueWatching == null) return;
     // Captured before the await: the card is being removed from under this
     // context.
@@ -68,10 +70,7 @@ class _ContinueWatchingScreenState
       await continueWatching.removeFromContinueWatching(key);
     } catch (_) {
       if (mounted) setState(() => _hidden.remove(key));
-      toaster.show(
-        l10n.continueRemoveFailed,
-        kind: ToastKind.error,
-      );
+      toaster.show(l10n.continueRemoveFailed, kind: ToastKind.error);
       return;
     }
     if (mounted) invalidateSourceContinueWatchingWrites(ref, key);
@@ -86,7 +85,9 @@ class _ContinueWatchingScreenState
       icon: Icons.play_circle_outline_rounded,
       title: context.l10n.nextUpContinueWatching,
       queryKey: SourceKeys.continueWatching(sourceId),
-      items: ref.watch(provider).whenData(
+      items: ref
+          .watch(provider)
+          .whenData(
             (items) => [
               for (final item in items)
                 if (!_hidden.contains(item.dismissRef)) item,

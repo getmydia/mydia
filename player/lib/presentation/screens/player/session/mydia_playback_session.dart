@@ -55,8 +55,8 @@ class MydiaPlaybackSession implements PlaybackSession {
     required this.fileId,
     this.showId,
     this.seasonNumber,
-    required MediaProxy Function() proxy,
-  }) : _proxy = proxy;
+    required this._proxy,
+  });
 
   /// The instance this playback belongs to.
   final MydiaSource source;
@@ -93,20 +93,16 @@ class MydiaPlaybackSession implements PlaybackSession {
     required String title,
     required int seasonNumber,
     required String? showId,
-  }) =>
-      sourcePlayerLocation(
-        ItemRef(
-          sourceId: item.sourceId,
-          kind: ItemKind.episode,
-          externalId: episodeId,
-        ),
-        fileId: fileId,
-        title: title,
-        extra: {
-          'seasonNumber': '$seasonNumber',
-          if (showId != null) 'showId': showId,
-        },
-      );
+  }) => sourcePlayerLocation(
+    ItemRef(
+      sourceId: item.sourceId,
+      kind: ItemKind.episode,
+      externalId: episodeId,
+    ),
+    fileId: fileId,
+    title: title,
+    extra: {'seasonNumber': '$seasonNumber', 'showId': ?showId},
+  );
 
   @override
   Future<ProgressReporter> openProgress() async =>
@@ -136,19 +132,26 @@ class MydiaPlaybackSession implements PlaybackSession {
       // Held against the screen's State, released at its dispose. A re-run
       // re-targets the proxy without stacking holds.
       try {
-        await mydiaProxyBase(_proxy(), credentials,
-            owner: owner, target: target);
+        await mydiaProxyBase(
+          _proxy(),
+          credentials,
+          owner: owner,
+          target: target,
+        );
       } on ArgumentError catch (e) {
         final detail = e.message;
-        return StreamingUnavailable(detail == null
-            ? const PlaybackProblem(PlaybackIssue.p2pUnsupported)
-            : PlaybackProblem.fromText('$detail'));
+        return StreamingUnavailable(
+          detail == null
+              ? const PlaybackProblem(PlaybackIssue.p2pUnsupported)
+              : PlaybackProblem.fromText('$detail'),
+        );
       }
       if (!isCurrent()) return const StreamingSuperseded();
       urls = ProxyStreamUrls(_proxy(), target: target);
     } else if (serverUrl == null) {
       return const StreamingUnavailable(
-          PlaybackProblem(PlaybackIssue.serverUrlMissing));
+        PlaybackProblem(PlaybackIssue.serverUrlMissing),
+      );
     } else {
       urls = HttpStreamUrls(
         serverUrl: serverUrl,
@@ -157,23 +160,22 @@ class MydiaPlaybackSession implements PlaybackSession {
       );
     }
 
-    return StreamingReady(StreamingSetup(
-      memoryKey: credentials.nodeAddr ?? serverUrl!,
-      viaP2p: credentials.isP2p,
-      progress: ProgressService(client),
-      scrubThumbnails: serverUrl == null
-          ? null
-          : (
-              serverUrl: serverUrl,
-              token: credentials.accessToken,
-              isP2PMode: credentials.isP2p,
-            ),
-      createTransport: ({required bool relayed}) => PlaybackController(
-        client: client,
-        urls: urls,
-        relayed: relayed,
+    return StreamingReady(
+      StreamingSetup(
+        memoryKey: credentials.nodeAddr ?? serverUrl!,
+        viaP2p: credentials.isP2p,
+        progress: ProgressService(client),
+        scrubThumbnails: serverUrl == null
+            ? null
+            : (
+                serverUrl: serverUrl,
+                token: credentials.accessToken,
+                isP2PMode: credentials.isP2p,
+              ),
+        createTransport: ({required bool relayed}) =>
+            PlaybackController(client: client, urls: urls, relayed: relayed),
       ),
-    ));
+    );
   }
 
   @override
@@ -207,8 +209,9 @@ class MydiaPlaybackSession implements PlaybackSession {
           language: language,
         ).toJson(),
       );
-      final updated = (data['setAudioLanguagePreference']
-          as Map<String, Object?>?)?['preferredAudioLanguages'];
+      final updated =
+          (data['setAudioLanguagePreference']
+              as Map<String, Object?>?)?['preferredAudioLanguages'];
       debugPrint('[PlayerScreen] Remembered audio language: $language');
       return updated is List ? updated.cast<String>() : null;
     } catch (e) {
@@ -265,20 +268,22 @@ class MydiaPlaybackSession implements PlaybackSession {
     final (contentType, id) = switch (scope) {
       CandidateScope.file => ('file', fileId),
       CandidateScope.item => (
-          _isEpisode ? 'episode' : 'movie',
-          item.externalId
-        ),
+        _isEpisode ? 'episode' : 'movie',
+        item.externalId,
+      ),
     };
     try {
-      final data = Query$StreamingCandidates.fromJson(rootQuery(
-        await source.client.request(
-          documentNodeQueryStreamingCandidates,
-          Variables$Query$StreamingCandidates(
-            contentType: contentType,
-            id: id,
-          ).toJson(),
+      final data = Query$StreamingCandidates.fromJson(
+        rootQuery(
+          await source.client.request(
+            documentNodeQueryStreamingCandidates,
+            Variables$Query$StreamingCandidates(
+              contentType: contentType,
+              id: id,
+            ).toJson(),
+          ),
         ),
-      )).streamingCandidates;
+      ).streamingCandidates;
       if (data == null) return (offer: null, serverRejected: false);
       return (
         offer: PlaybackOffer(
@@ -332,36 +337,42 @@ class MydiaPlaybackSession implements PlaybackSession {
   Future<PlaybackDetail?> detail() async {
     try {
       if (!_isEpisode) {
-        final data = Query$MovieDetail.fromJson(rootQuery(
-          await _requestKeepingPartial(
-            documentNodeQueryMovieDetail,
-            Variables$Query$MovieDetail(id: item.externalId).toJson(),
+        final data = Query$MovieDetail.fromJson(
+          rootQuery(
+            await _requestKeepingPartial(
+              documentNodeQueryMovieDetail,
+              Variables$Query$MovieDetail(id: item.externalId).toJson(),
+            ),
           ),
-        ));
+        );
         final movie = data.movie;
         return PlaybackDetail(
           savedPositionSeconds: movie?.progress?.positionSeconds,
           savedDurationSeconds: movie?.progress?.durationSeconds,
-          lastWatchedAt:
-              DateTime.tryParse(movie?.progress?.lastWatchedAt ?? ''),
+          lastWatchedAt: DateTime.tryParse(
+            movie?.progress?.lastWatchedAt ?? '',
+          ),
           runtimeMinutes: movie?.runtime,
           serverSubtitleTracks: _subtitlesFor(movie?.files, fileId),
         );
       }
-      final data = Query$EpisodeDetail.fromJson(rootQuery(
-        await _requestKeepingPartial(
-          documentNodeQueryEpisodeDetail,
-          Variables$Query$EpisodeDetail(id: item.externalId).toJson(),
+      final data = Query$EpisodeDetail.fromJson(
+        rootQuery(
+          await _requestKeepingPartial(
+            documentNodeQueryEpisodeDetail,
+            Variables$Query$EpisodeDetail(id: item.externalId).toJson(),
+          ),
         ),
-      ));
+      );
       final episode = data.episode;
       final showId = episode?.$show?.id;
       _detailShowId = showId;
       return PlaybackDetail(
         savedPositionSeconds: episode?.progress?.positionSeconds,
         savedDurationSeconds: episode?.progress?.durationSeconds,
-        lastWatchedAt:
-            DateTime.tryParse(episode?.progress?.lastWatchedAt ?? ''),
+        lastWatchedAt: DateTime.tryParse(
+          episode?.progress?.lastWatchedAt ?? '',
+        ),
         runtimeMinutes: episode?.runtime,
         serverSubtitleTracks: _subtitlesFor(episode?.files, fileId),
         showId: showId,
@@ -422,11 +433,7 @@ class MydiaPlaybackSession implements PlaybackSession {
             ? Variables$Query$MovieSegments(id: item.externalId).toJson()
             : Variables$Query$EpisodeSegments(id: item.externalId).toJson(),
       );
-      return MediaSegment.forFile(
-        rootQuery(data),
-        root: root,
-        fileId: fileId,
-      );
+      return MediaSegment.forFile(rootQuery(data), root: root, fileId: fileId);
     } catch (e) {
       debugPrint('[PlayerScreen] No segments available: $e');
       return null;
@@ -440,16 +447,18 @@ class MydiaPlaybackSession implements PlaybackSession {
   Future<FetchedSubtitlePreference?> subtitlePreference() async {
     final root = _root;
     try {
-      final data = rootQuery(await source.client.request(
-        root == 'movie'
-            ? documentNodeQueryMovieSubtitlePreference
-            : documentNodeQueryEpisodeSubtitlePreference,
-        root == 'movie'
-            ? Variables$Query$MovieSubtitlePreference(id: item.externalId)
-                .toJson()
-            : Variables$Query$EpisodeSubtitlePreference(id: item.externalId)
-                .toJson(),
-      ));
+      final data = rootQuery(
+        await source.client.request(
+          root == 'movie'
+              ? documentNodeQueryMovieSubtitlePreference
+              : documentNodeQueryEpisodeSubtitlePreference,
+          root == 'movie'
+              ? Variables$Query$MovieSubtitlePreference(id: item.externalId)
+                    .toJson()
+              : Variables$Query$EpisodeSubtitlePreference(id: item.externalId)
+                    .toJson(),
+        ),
+      );
       final preferred = preferredSubtitleJsonForFile(
         data,
         root: root,
@@ -475,12 +484,14 @@ class MydiaPlaybackSession implements PlaybackSession {
   @override
   Future<Map<String, int>?> subtitleOffsets() async {
     try {
-      final settings = Query$SubtitleTrackSettings.fromJson(rootQuery(
-        await source.client.request(
-          documentNodeQuerySubtitleTrackSettings,
-          Variables$Query$SubtitleTrackSettings(mediaFileId: fileId).toJson(),
+      final settings = Query$SubtitleTrackSettings.fromJson(
+        rootQuery(
+          await source.client.request(
+            documentNodeQuerySubtitleTrackSettings,
+            Variables$Query$SubtitleTrackSettings(mediaFileId: fileId).toJson(),
+          ),
         ),
-      )).subtitleTrackSettings;
+      ).subtitleTrackSettings;
       return {for (final s in settings) s.trackRef: s.offsetMs};
     } catch (e) {
       debugPrint('[PlayerScreen] Subtitle offsets unavailable: $e');
@@ -494,15 +505,17 @@ class MydiaPlaybackSession implements PlaybackSession {
     if (showId == null) return null;
     try {
       // Like [detail], a partial answer still carries the episodes.
-      final episodes = Query$SeasonEpisodes.fromJson(rootQuery(
-        await _requestKeepingPartial(
-          documentNodeQuerySeasonEpisodes,
-          Variables$Query$SeasonEpisodes(
-            showId: showId,
-            seasonNumber: seasonNumber,
-          ).toJson(),
+      final episodes = Query$SeasonEpisodes.fromJson(
+        rootQuery(
+          await _requestKeepingPartial(
+            documentNodeQuerySeasonEpisodes,
+            Variables$Query$SeasonEpisodes(
+              showId: showId,
+              seasonNumber: seasonNumber,
+            ).toJson(),
+          ),
         ),
-      )).seasonEpisodes;
+      ).seasonEpisodes;
       if (episodes == null) return null;
       return episodes
           .whereType<Query$SeasonEpisodes$seasonEpisodes>()
@@ -552,19 +565,22 @@ class MydiaPlaybackSession implements PlaybackSession {
     }
 
     try {
-      final payload = Query$SubtitleSearch.fromJson(rootQuery(
-        await source.client.request(
-          documentNodeQuerySubtitleSearch,
-          Variables$Query$SubtitleSearch(
-            mediaFileId: fileId,
-            languages: languages,
-          ).toJson(),
+      final payload = Query$SubtitleSearch.fromJson(
+        rootQuery(
+          await source.client.request(
+            documentNodeQuerySubtitleSearch,
+            Variables$Query$SubtitleSearch(
+              mediaFileId: fileId,
+              languages: languages,
+            ).toJson(),
+          ),
         ),
-      )).subtitleSearch;
+      ).subtitleSearch;
       return SubtitleSearchOutcome(
         results: payload.results.map(SubtitleCandidate.fromGraphQL).toList(),
-        providers:
-            payload.providers.map(SubtitleProviderStatus.fromGraphQL).toList(),
+        providers: payload.providers
+            .map(SubtitleProviderStatus.fromGraphQL)
+            .toList(),
       );
     } on SourceException catch (e) {
       debugPrint('[PlayerScreen] Subtitle search failed: $e');
@@ -633,18 +649,20 @@ class MydiaPlaybackSession implements PlaybackSession {
   @override
   Future<String?> subtitleContent(String trackId) async {
     try {
-      final content = Query$SubtitleContent.fromJson(rootQuery(
-        await source.client.request(
-          documentNodeQuerySubtitleContent,
-          Variables$Query$SubtitleContent(
-            mediaFileId: fileId,
-            trackId: trackId,
-          ).toJson(),
-          // Measured at almost 11 s on a large file; the server gives up at
-          // 30 s, so 45 s lets the server's own answer arrive first.
-          const Duration(seconds: 45),
+      final content = Query$SubtitleContent.fromJson(
+        rootQuery(
+          await source.client.request(
+            documentNodeQuerySubtitleContent,
+            Variables$Query$SubtitleContent(
+              mediaFileId: fileId,
+              trackId: trackId,
+            ).toJson(),
+            // Measured at almost 11 s on a large file; the server gives up at
+            // 30 s, so 45 s lets the server's own answer arrive first.
+            const Duration(seconds: 45),
+          ),
         ),
-      )).subtitleContent;
+      ).subtitleContent;
       if (content == null || content.isEmpty) {
         debugPrint('[PlayerScreen] No subtitle content for $trackId');
         return null;
@@ -652,7 +670,8 @@ class MydiaPlaybackSession implements PlaybackSession {
       return content;
     } catch (e) {
       debugPrint(
-          '[PlayerScreen] Failed to fetch subtitle content for $trackId: $e');
+        '[PlayerScreen] Failed to fetch subtitle content for $trackId: $e',
+      );
       return null;
     }
   }

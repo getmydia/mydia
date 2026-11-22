@@ -29,12 +29,13 @@ class _RecordingService extends Fake implements DownloadService {
   Future<DownloadTask> start(DownloadRequest request) async {
     requests.add(request);
     return DownloadTask(
-        id: request.ref.externalId,
-        mediaId: request.ref.externalId,
-        title: request.metadata.title,
-        quality: request.optionId,
-        status: 'queued',
-        createdAt: DateTime(2026));
+      id: request.ref.externalId,
+      mediaId: request.ref.externalId,
+      title: request.metadata.title,
+      quality: request.optionId,
+      status: 'queued',
+      createdAt: DateTime(2026),
+    );
   }
 }
 
@@ -46,10 +47,7 @@ void main() {
     collectionId: {'name': 'Favorites', 'resolution': '1080p'},
   };
 
-  ({
-    ProviderContainer container,
-    CollectionAutoSync autoSync,
-  }) makeHarness({
+  ({ProviderContainer container, CollectionAutoSync autoSync}) makeHarness({
     required void Function() onFetchCollections,
     required DateTime Function() now,
   }) {
@@ -64,10 +62,7 @@ void main() {
     addTearDown(container.dispose);
     return (
       container: container,
-      autoSync: CollectionAutoSync.forTest(
-        read: container.read,
-        now: now,
-      ),
+      autoSync: CollectionAutoSync.forTest(read: container.read, now: now),
     );
   }
 
@@ -89,8 +84,7 @@ void main() {
       return container;
     }
 
-    test(
-        'syncs every page of a collection from the source it was saved on '
+    test('syncs every page of a collection from the source it was saved on '
         'at the saved option', () async {
       final source = FakeCapableSource(id: otherSourceId)
         ..collectionItemPages = [
@@ -98,36 +92,44 @@ void main() {
           Page(items: [fakeMovie(2)]),
         ];
       final service = _RecordingService();
-      final container = containerFor({
-        'c1': {
-          'name': 'Saga',
-          'resolution': '720p',
-          'sourceId': otherSourceId.value,
+      final container = containerFor(
+        {
+          'c1': {
+            'name': 'Saga',
+            'resolution': '720p',
+            'sourceId': otherSourceId.value,
+          },
         },
-      }, {
-        otherSourceId: source,
-      }, service);
+        {otherSourceId: source},
+        service,
+      );
 
-      final queued =
-          await CollectionAutoSync.forTest(read: container.read).run();
+      final queued = await CollectionAutoSync.forTest(read: container.read)
+          .run();
 
       expect(queued, 2);
-      expect(service.requests.map((r) => (r.ref.externalId, r.optionId)),
-          [('m1', '720p'), ('m2', '720p')]);
+      expect(service.requests.map((r) => (r.ref.externalId, r.optionId)), [
+        ('m1', '720p'),
+        ('m2', '720p'),
+      ]);
     });
 
     test('skips a collection whose source is gone', () async {
       final service = _RecordingService();
-      final container = containerFor({
-        'c1': {
-          'name': 'Saga',
-          'resolution': '720p',
-          'sourceId': otherSourceId.value,
+      final container = containerFor(
+        {
+          'c1': {
+            'name': 'Saga',
+            'resolution': '720p',
+            'sourceId': otherSourceId.value,
+          },
         },
-      }, const {}, service);
+        const {},
+        service,
+      );
 
-      final queued =
-          await CollectionAutoSync.forTest(read: container.read).run();
+      final queued = await CollectionAutoSync.forTest(read: container.read)
+          .run();
 
       expect(queued, 0);
       expect(service.requests, isEmpty);
@@ -135,24 +137,26 @@ void main() {
   });
 
   group('CollectionAutoSync.run', () {
-    test('skips work when called again within the five-minute debounce window',
-        () async {
-      final baseTime = DateTime(2026, 8, 9, 12, 0);
-      var currentTime = baseTime;
-      var fetchCount = 0;
+    test(
+      'skips work when called again within the five-minute debounce window',
+      () async {
+        final baseTime = DateTime(2026, 8, 9, 12, 0);
+        var currentTime = baseTime;
+        var fetchCount = 0;
 
-      final harness = makeHarness(
-        onFetchCollections: () => fetchCount++,
-        now: () => currentTime,
-      );
+        final harness = makeHarness(
+          onFetchCollections: () => fetchCount++,
+          now: () => currentTime,
+        );
 
-      await harness.autoSync.run();
-      expect(fetchCount, 1);
+        await harness.autoSync.run();
+        expect(fetchCount, 1);
 
-      currentTime = baseTime.add(const Duration(minutes: 2));
-      expect(await harness.autoSync.run(), 0);
-      expect(fetchCount, 1);
-    });
+        currentTime = baseTime.add(const Duration(minutes: 2));
+        expect(await harness.autoSync.run(), 0);
+        expect(fetchCount, 1);
+      },
+    );
 
     test('runs again after the debounce window expires', () async {
       final baseTime = DateTime(2026, 8, 9, 12, 0);

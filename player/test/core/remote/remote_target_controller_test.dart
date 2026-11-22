@@ -45,29 +45,27 @@ class FakePlayerBinding implements RemotePlayerBinding {
 
   @override
   FlutterPlaybackSnapshot describe(int sequence) => FlutterPlaybackSnapshot(
-        state: playing
-            ? FlutterPlaybackState.playing
-            : FlutterPlaybackState.paused,
-        mediaItemId: 'item-1',
-        episodeId: null,
-        title: 'Blade Runner',
-        subtitle: null,
-        imageUrl: null,
-        positionMs: BigInt.from(position.inMilliseconds),
-        durationMs: BigInt.from(6960000),
-        volume: 0.8,
-        muted: false,
-        audioTracks: const [],
-        subtitleTracks: const [],
-        selectedAudio: null,
-        selectedSubtitle: null,
-        capabilities: const FlutterTargetCapabilities(
-          volume: true,
-          trackSelection: true,
-          nextPrevious: true,
-        ),
-        sequence: BigInt.from(sequence),
-      );
+    state: playing ? FlutterPlaybackState.playing : FlutterPlaybackState.paused,
+    mediaItemId: 'item-1',
+    episodeId: null,
+    title: 'Blade Runner',
+    subtitle: null,
+    imageUrl: null,
+    positionMs: BigInt.from(position.inMilliseconds),
+    durationMs: BigInt.from(6960000),
+    volume: 0.8,
+    muted: false,
+    audioTracks: const [],
+    subtitleTracks: const [],
+    selectedAudio: null,
+    selectedSubtitle: null,
+    capabilities: const FlutterTargetCapabilities(
+      volume: true,
+      trackSelection: true,
+      nextPrevious: true,
+    ),
+    sequence: BigInt.from(sequence),
+  );
 }
 
 void main() {
@@ -88,26 +86,30 @@ void main() {
       expect(snapshot.state, FlutterPlaybackState.playing);
     });
 
-    test('advances the sequence on every snapshot so pollers can order them',
-        () {
-      final controller = RemoteTargetController();
-      controller.attachPlayer(FakePlayerBinding());
+    test(
+      'advances the sequence on every snapshot so pollers can order them',
+      () {
+        final controller = RemoteTargetController();
+        controller.attachPlayer(FakePlayerBinding());
 
-      final first = controller.snapshot()!.sequence;
-      final second = controller.snapshot()!.sequence;
+        final first = controller.snapshot()!.sequence;
+        final second = controller.snapshot()!.sequence;
 
-      expect(second, greaterThan(first));
-    });
+        expect(second, greaterThan(first));
+      },
+    );
 
     test('drives the attached player from a transport intent', () async {
       final controller = RemoteTargetController();
       final binding = FakePlayerBinding();
       controller.attachPlayer(binding);
 
-      controller.submit(const TransportIntent(
-        TransportAction.seek,
-        position: Duration(milliseconds: 754000),
-      ));
+      controller.submit(
+        const TransportIntent(
+          TransportAction.seek,
+          position: Duration(milliseconds: 754000),
+        ),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(binding.calls, ['seek:754000']);
@@ -120,32 +122,37 @@ void main() {
 
       controller.submit(const VolumeIntent(level: 0.4));
       controller.submit(
-          const TrackSelectionIntent(kind: TrackKind.subtitle, trackId: null));
+        const TrackSelectionIntent(kind: TrackKind.subtitle, trackId: null),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(binding.calls, ['volume:0.4', 'track:subtitle:null']);
     });
 
-    test('publishes LoadContent on the intent stream rather than to the player',
-        () async {
-      // Nothing is mounted yet, so LoadContent has to reach the app layer,
-      // which navigates. A binding cannot serve it.
-      final controller = RemoteTargetController();
-      final seen = <RemoteControlIntent>[];
-      controller.intents.listen(seen.add);
+    test(
+      'publishes LoadContent on the intent stream rather than to the player',
+      () async {
+        // Nothing is mounted yet, so LoadContent has to reach the app layer,
+        // which navigates. A binding cannot serve it.
+        final controller = RemoteTargetController();
+        final seen = <RemoteControlIntent>[];
+        controller.intents.listen(seen.add);
 
-      controller.submit(const LoadContentIntent(
-        mediaItemId: 'item-9',
-        episodeId: null,
-        startAt: Duration.zero,
-        audioTrack: null,
-        subtitleTrack: null,
-        autoplay: true,
-      ));
-      await Future<void>.delayed(Duration.zero);
+        controller.submit(
+          const LoadContentIntent(
+            mediaItemId: 'item-9',
+            episodeId: null,
+            startAt: Duration.zero,
+            audioTrack: null,
+            subtitleTrack: null,
+            autoplay: true,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      expect(seen.single, isA<LoadContentIntent>());
-    });
+        expect(seen.single, isA<LoadContentIntent>());
+      },
+    );
 
     test('drops transport intents once the player detaches', () async {
       final controller = RemoteTargetController();
@@ -160,8 +167,7 @@ void main() {
       expect(controller.snapshot(), isNull);
     });
 
-    test(
-        'a late detach from a binding that was already replaced does not '
+    test('a late detach from a binding that was already replaced does not '
         'clear the newer one', () async {
       // Mirrors Flutter mounting a new PlayerScreen (a remote LoadContent
       // pushing a second one over an existing screen) before the old one
@@ -175,15 +181,22 @@ void main() {
       controller.attachPlayer(newBinding);
       controller.detachPlayer(oldBinding);
 
-      expect(controller.snapshot(), isNotNull,
-          reason: 'the newer binding must still be attached');
+      expect(
+        controller.snapshot(),
+        isNotNull,
+        reason: 'the newer binding must still be attached',
+      );
 
       controller.submit(const TransportIntent(TransportAction.play));
       await Future<void>.delayed(Duration.zero);
 
-      expect(newBinding.calls, ['play'],
-          reason: 'commands must keep reaching the newer, still-attached '
-              'binding');
+      expect(
+        newBinding.calls,
+        ['play'],
+        reason:
+            'commands must keep reaching the newer, still-attached '
+            'binding',
+      );
       expect(oldBinding.calls, isEmpty);
     });
 

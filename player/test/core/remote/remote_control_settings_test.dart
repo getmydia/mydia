@@ -24,8 +24,7 @@ void main() {
   });
 
   group('RemoteControlSettings', () {
-    test('defaults to controllable, so a freshly paired device just appears',
-        () async {
+    test('defaults to controllable, so a freshly paired device just appears', () async {
       // The cost is an idle QUIC endpoint. Defaulting off would mean every new
       // device is invisible in the picker with no hint why.
       final settings = RemoteControlSettings(box: box);

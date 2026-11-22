@@ -18,25 +18,29 @@ Source _source(
   String server, {
   bool presence = true,
   bool needsReauth = false,
-}) =>
-    Source(
-      account: ProviderAccount(
-        id: account,
-        kind: SourceKind.plex,
-        displayName: 'name-$account',
-        storageNamespace: 'source/$account',
-        activeProfileId: 'owner',
-        needsReauth: needsReauth,
-      ),
-      profile: SourceProfile(
-          id: 'owner', accountId: account, name: 'Quill', isOwner: true),
-      server: SourceServer(
-          id: server,
-          accountId: account,
-          profileId: 'owner',
-          name: 'Server $server',
-          presence: presence),
-    );
+}) => Source(
+  account: ProviderAccount(
+    id: account,
+    kind: SourceKind.plex,
+    displayName: 'name-$account',
+    storageNamespace: 'source/$account',
+    activeProfileId: 'owner',
+    needsReauth: needsReauth,
+  ),
+  profile: SourceProfile(
+    id: 'owner',
+    accountId: account,
+    name: 'Quill',
+    isOwner: true,
+  ),
+  server: SourceServer(
+    id: server,
+    accountId: account,
+    profileId: 'owner',
+    name: 'Server $server',
+    presence: presence,
+  ),
+);
 
 /// Opens the picker from a button standing in for the sidebar header, and
 /// returns the list the picker's result lands in.
@@ -56,44 +60,49 @@ Future<List<PickerChoice?>> _open(
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
   final results = <PickerChoice?>[];
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      thirdPartySourcesProvider
-          .overrideWithValue([testMydiaSource, ...sources]),
-      allServersSourcesProvider.overrideWithValue(included),
-      for (final s in [testMydiaSource, ...sources])
-        mediaSourceProvider(s.id)
-            .overrideWithValue(fakes[s.id] ?? FakeMediaSource()),
-      for (final account in {
-        for (final s in [testMydiaSource, ...sources]) s.account.id
-      })
-        accountProfilesProvider(account).overrideWithValue([
-          for (final p in profiles)
-            if (p.accountId == account) p
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        thirdPartySourcesProvider.overrideWithValue([
+          testMydiaSource,
+          ...sources,
         ]),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: anchorWidth,
-            height: anchorWidth < 240 ? anchorWidth : null,
-            child: Builder(
-              builder: (context) => TextButton(
-                key: const Key('open-picker'),
-                onPressed: () async => results
-                    .add(await showSourcePicker(context, currentId: currentId)),
-                child: const Text('open'),
+        allServersSourcesProvider.overrideWithValue(included),
+        for (final s in [testMydiaSource, ...sources])
+          mediaSourceProvider(s.id)
+              .overrideWithValue(fakes[s.id] ?? FakeMediaSource()),
+        for (final account in {
+          for (final s in [testMydiaSource, ...sources]) s.account.id,
+        })
+          accountProfilesProvider(account).overrideWithValue([
+            for (final p in profiles)
+              if (p.accountId == account) p,
+          ]),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: anchorWidth,
+              height: anchorWidth < 240 ? anchorWidth : null,
+              child: Builder(
+                builder: (context) => TextButton(
+                  key: const Key('open-picker'),
+                  onPressed: () async => results.add(
+                    await showSourcePicker(context, currentId: currentId),
+                  ),
+                  child: const Text('open'),
+                ),
               ),
             ),
           ),
         ),
       ),
     ),
-  ));
+  );
   await tester.tap(find.byKey(const Key('open-picker')));
   await tester.pumpAndSettle();
   return results;
@@ -104,27 +113,29 @@ Finder _row(String id) => find.byKey(ValueKey('source-switcher-$id'));
 void main() {
   popoverTransitionTests();
 
-  testWidgets('All servers is the first row once two servers are included',
-      (tester) async {
+  testWidgets('All servers is the first row once two servers are included', (
+    tester,
+  ) async {
     final a = _source('acc1', 'aa11');
     final b = _source('acc2', 'bb22');
-    final results = await _open(tester, [
-      a,
-      b
-    ], included: [
-      FakeMergedSource(a),
-      FakeMergedSource(b),
-    ]);
+    final results = await _open(
+      tester,
+      [a, b],
+      included: [FakeMergedSource(a), FakeMergedSource(b)],
+    );
     expect(_row('all'), findsOneWidget);
-    expect(tester.getTopLeft(_row('all')).dy,
-        lessThan(tester.getTopLeft(_row(testMydiaSourceId.value)).dy));
+    expect(
+      tester.getTopLeft(_row('all')).dy,
+      lessThan(tester.getTopLeft(_row(testMydiaSourceId.value)).dy),
+    );
     await tester.tap(_row('all'));
     await tester.pumpAndSettle();
     expect(results.single, isA<PickAllServers>());
   });
 
-  testWidgets('at /all the All servers row is current and no source row is',
-      (tester) async {
+  testWidgets('at /all the All servers row is current and no source row is', (
+    tester,
+  ) async {
     final guest = _source('acc1', 'aa11');
     final results = await _open(
       tester,
@@ -154,10 +165,14 @@ void main() {
       _source('acc2', 'bb22'),
       _source('acc1', 'cc33'),
     ]);
-    expect(find.byKey(const ValueKey('source-switcher-account-acc1')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('source-switcher-account-acc2')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('source-switcher-account-acc1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('source-switcher-account-acc2')),
+      findsOneWidget,
+    );
     final acc2Top = tester
         .getTopLeft(find.byKey(const ValueKey('source-switcher-account-acc2')))
         .dy;
@@ -166,8 +181,10 @@ void main() {
     }
     // The Mydia account heads the list, under a caption like any other.
     expect(_row(testMydiaSourceId.value), findsOneWidget);
-    expect(find.byKey(const ValueKey('source-switcher-account-macct')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('source-switcher-account-macct')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('every Mydia account gets its account caption', (tester) async {
@@ -180,18 +197,27 @@ void main() {
         activeProfileId: 'owner',
       ),
       profile: SourceProfile(
-          id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+        id: 'owner',
+        accountId: 'mguest',
+        name: 'Owner',
+        isOwner: true,
+      ),
       server: SourceServer(
-          id: 'inst-2',
-          accountId: 'mguest',
-          profileId: 'owner',
-          name: 'Lakeside'),
+        id: 'inst-2',
+        accountId: 'mguest',
+        profileId: 'owner',
+        name: 'Lakeside',
+      ),
     );
     await _open(tester, [guest]);
-    expect(find.byKey(const ValueKey('source-switcher-account-mguest')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('source-switcher-account-macct')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('source-switcher-account-mguest')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('source-switcher-account-macct')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('picking a source returns it and closes', (tester) async {
@@ -199,30 +225,49 @@ void main() {
     await tester.tap(_row('acc1:owner:aa11'));
     await tester.pumpAndSettle();
     expect(results, hasLength(1));
-    expect((results.single! as PickSource).source.id,
-        const SourceId('acc1:owner:aa11'));
+    expect(
+      (results.single! as PickSource).source.id,
+      const SourceId('acc1:owner:aa11'),
+    );
     expect(find.byKey(const ValueKey('source-picker')), findsNothing);
   });
 
-  testWidgets('a Plex Home with other users offers Switch user',
-      (tester) async {
-    final results = await _open(tester, [
-      _source('acc1', 'aa11'),
-      _source('acc2', 'bb22'),
-    ], profiles: const [
-      SourceProfile(
-          id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
-      SourceProfile(
-          id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
-      SourceProfile(
-          id: 'owner', accountId: 'acc2', name: 'Wren', isOwner: true),
-    ]);
-    final switchUser =
-        find.byKey(const ValueKey('source-switcher-switch-user-acc1'));
+  testWidgets('a Plex Home with other users offers Switch user', (
+    tester,
+  ) async {
+    final results = await _open(
+      tester,
+      [_source('acc1', 'aa11'), _source('acc2', 'bb22')],
+      profiles: const [
+        SourceProfile(
+          id: 'owner',
+          accountId: 'acc1',
+          name: 'Quill',
+          isOwner: true,
+        ),
+        SourceProfile(
+          id: 'kid0001',
+          accountId: 'acc1',
+          name: 'Pip',
+          isOwner: false,
+        ),
+        SourceProfile(
+          id: 'owner',
+          accountId: 'acc2',
+          name: 'Wren',
+          isOwner: true,
+        ),
+      ],
+    );
+    final switchUser = find.byKey(
+      const ValueKey('source-switcher-switch-user-acc1'),
+    );
     expect(switchUser, findsOneWidget);
-    expect(find.byKey(const ValueKey('source-switcher-switch-user-acc2')),
-        findsNothing,
-        reason: 'a Home of one has nobody to switch to');
+    expect(
+      find.byKey(const ValueKey('source-switcher-switch-user-acc2')),
+      findsNothing,
+      reason: 'a Home of one has nobody to switch to',
+    );
     await tester.tap(switchUser);
     await tester.pumpAndSettle();
     expect((results.single! as SwitchUser).account.id, 'acc1');
@@ -240,10 +285,13 @@ void main() {
     expect(results[1], isA<ManageServers>());
   });
 
-  testWidgets('the current source has focus when the picker opens',
-      (tester) async {
-    await _open(tester, [_source('acc1', 'aa11'), _source('acc2', 'bb22')],
-        currentId: const SourceId('acc2:owner:bb22'));
+  testWidgets('the current source has focus when the picker opens', (
+    tester,
+  ) async {
+    await _open(tester, [
+      _source('acc1', 'aa11'),
+      _source('acc2', 'bb22'),
+    ], currentId: const SourceId('acc2:owner:bb22'));
     final focused = FocusManager.instance.primaryFocus!.context!;
     expect(
       find.descendant(
@@ -254,14 +302,16 @@ void main() {
     );
   });
 
-  testWidgets('focus reaches a current server that starts off-screen',
-      (tester) async {
-    final sources = [
-      for (var i = 0; i < 15; i++) _source('acc$i', 'srv$i'),
-    ];
-    await _open(tester, sources,
-        currentId: const SourceId('acc14:owner:srv14'),
-        size: const Size(1280, 500));
+  testWidgets('focus reaches a current server that starts off-screen', (
+    tester,
+  ) async {
+    final sources = [for (var i = 0; i < 15; i++) _source('acc$i', 'srv$i')];
+    await _open(
+      tester,
+      sources,
+      currentId: const SourceId('acc14:owner:srv14'),
+      size: const Size(1280, 500),
+    );
     final focused = FocusManager.instance.primaryFocus!.context!;
     expect(
       find.descendant(
@@ -279,22 +329,29 @@ void main() {
 
   testWidgets('an offline server is dimmed', (tester) async {
     await _open(tester, [_source('acc1', 'aa11', presence: false)]);
-    final opacity = tester.widget<Opacity>(find
-        .ancestor(of: _row('acc1:owner:aa11'), matching: find.byType(Opacity))
-        .first);
+    final opacity = tester.widget<Opacity>(
+      find
+          .ancestor(of: _row('acc1:owner:aa11'), matching: find.byType(Opacity))
+          .first,
+    );
     expect(opacity.opacity, lessThan(1));
   });
 
-  testWidgets('an unreachable server dims while the picker is open',
-      (tester) async {
+  testWidgets('an unreachable server dims while the picker is open', (
+    tester,
+  ) async {
     final source = _source('acc1', 'aa11');
     final fake = FakeMediaSource();
     await _open(tester, [source], fakes: {source.id: fake});
     double opacity() => tester
-        .widget<Opacity>(find
-            .ancestor(
-                of: _row('acc1:owner:aa11'), matching: find.byType(Opacity))
-            .first)
+        .widget<Opacity>(
+          find
+              .ancestor(
+                of: _row('acc1:owner:aa11'),
+                matching: find.byType(Opacity),
+              )
+              .first,
+        )
         .opacity;
     expect(opacity(), 1);
     (fake.statusListenable as ValueNotifier<SourceConnectionStatus>).value =
@@ -308,8 +365,9 @@ void main() {
     expect(find.byType(BottomSheet), findsOneWidget);
   });
 
-  testWidgets('the rail width already gets the popover, not a sheet',
-      (tester) async {
+  testWidgets('the rail width already gets the popover, not a sheet', (
+    tester,
+  ) async {
     await _open(tester, [_source('acc1', 'aa11')], size: const Size(600, 600));
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.byKey(const ValueKey('source-picker')), findsOneWidget);
@@ -318,26 +376,34 @@ void main() {
   testWidgets('wide layouts hang a popover under the anchor', (tester) async {
     await _open(tester, [_source('acc1', 'aa11')], size: const Size(1280, 900));
     expect(find.byType(BottomSheet), findsNothing);
-    final anchorBottom =
-        tester.getBottomLeft(find.byKey(const Key('open-picker'))).dy;
+    final anchorBottom = tester
+        .getBottomLeft(find.byKey(const Key('open-picker')))
+        .dy;
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('source-picker'))).dy,
       greaterThanOrEqualTo(anchorBottom),
     );
   });
 
-  testWidgets('a 48px anchor opens a full-width popover beside it',
-      (tester) async {
-    await _open(tester, [_source('acc1', 'aa11')],
-        size: const Size(1280, 800), anchorWidth: 48);
+  testWidgets('a 48px anchor opens a full-width popover beside it', (
+    tester,
+  ) async {
+    await _open(
+      tester,
+      [_source('acc1', 'aa11')],
+      size: const Size(1280, 800),
+      anchorWidth: 48,
+    );
     expect(tester.takeException(), isNull);
 
-    final anchor = tester.getRect(find
-        .ancestor(
-          of: find.byKey(const Key('open-picker')),
-          matching: find.byType(SizedBox),
-        )
-        .first);
+    final anchor = tester.getRect(
+      find
+          .ancestor(
+            of: find.byKey(const Key('open-picker')),
+            matching: find.byType(SizedBox),
+          )
+          .first,
+    );
     expect(anchor.width, 48);
     final popover = tester.getRect(find.byKey(const ValueKey('source-picker')));
     expect(popover.width, greaterThanOrEqualTo(240));
@@ -345,8 +411,9 @@ void main() {
   });
 
   testWidgets('Escape closes the popover with no choice', (tester) async {
-    final results = await _open(tester, [_source('acc1', 'aa11')],
-        size: const Size(1280, 900));
+    final results = await _open(tester, [
+      _source('acc1', 'aa11'),
+    ], size: const Size(1280, 900));
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(results, [null]);
@@ -356,12 +423,12 @@ void main() {
 
 void popoverTransitionTests() {
   Widget build(bool liquid) => popoverTransition(
-        animation: const AlwaysStoppedAnimation(0.5),
-        emergenceAlignment: Alignment.center,
-        reduceMotion: false,
-        liquid: liquid,
-        child: const SizedBox(),
-      );
+    animation: const AlwaysStoppedAnimation(0.5),
+    emergenceAlignment: Alignment.center,
+    reduceMotion: false,
+    liquid: liquid,
+    child: const SizedBox(),
+  );
 
   testWidgets('popover transition only fades off Liquid Glass', (tester) async {
     await tester.pumpWidget(build(false));

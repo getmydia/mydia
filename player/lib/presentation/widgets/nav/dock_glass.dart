@@ -15,11 +15,11 @@ abstract final class DockGlass {
       Border.all(color: palette.border.withValues(alpha: 0.2));
 
   static List<BoxShadow> get shadow => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.1),
-          blurRadius: 16,
-          spreadRadius: 2,
-          offset: const Offset(0, 4),
-        ),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.1),
+      blurRadius: 16,
+      spreadRadius: 2,
+      offset: const Offset(0, 4),
+    ),
+  ];
 }

@@ -39,7 +39,10 @@ class FilesMediaInfoCache {
   }
 
   Future<void> put(
-      String accountId, IndexedFile file, ProbeResult result) async {
+    String accountId,
+    IndexedFile file,
+    ProbeResult result,
+  ) async {
     await _box.put(_key(accountId, file.key), {
       'size': file.size,
       'modified': file.modified.millisecondsSinceEpoch,
@@ -50,9 +53,11 @@ class FilesMediaInfoCache {
   /// Drops [accountId]'s entries whose file key is not in [liveFileKeys].
   Future<void> sweep(String accountId, Set<String> liveFileKeys) async {
     final prefix = _prefix(accountId);
-    await _delete((k) =>
-        k.startsWith(prefix) &&
-        !liveFileKeys.contains(k.substring(prefix.length)));
+    await _delete(
+      (k) =>
+          k.startsWith(prefix) &&
+          !liveFileKeys.contains(k.substring(prefix.length)),
+    );
   }
 
   Future<void> clearAccount(String accountId) async {

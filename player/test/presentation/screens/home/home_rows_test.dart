@@ -18,10 +18,11 @@ import '../../../domain/merged/fake_merged_source.dart';
 const _down = SourceException.unreachable();
 
 Library lib(Source s, String id, String title) => Library(
-    ref: LibraryRef(sourceId: s.id, id: id),
-    title: title,
-    kind: LibraryKind.movies,
-    sortOptions: const []);
+  ref: LibraryRef(sourceId: s.id, id: id),
+  title: title,
+  kind: LibraryKind.movies,
+  sortOptions: const [],
+);
 
 HomeFeeds feeds(
   Source s, {
@@ -41,8 +42,8 @@ HomeFeeds feeds(
   AsyncValue<T> v<T>(T value, bool fails) => loading
       ? AsyncLoading<T>()
       : fails
-          ? AsyncError<T>(_down, StackTrace.empty)
-          : AsyncData(value);
+      ? AsyncError<T>(_down, StackTrace.empty)
+      : AsyncData(value);
   return HomeFeeds(
     id: s.id,
     name: s.displayName,
@@ -57,9 +58,12 @@ HomeFeeds feeds(
 }
 
 List<RankedItem> ranked(Source s, int n, ItemKind kind) => [
-      for (var r = 1; r <= n; r++)
-        RankedItem(item: item(s, 't$r', kind: kind), rank: r),
-    ];
+  for (var r = 1; r <= n; r++)
+    RankedItem(
+      item: item(s, 't$r', kind: kind),
+      rank: r,
+    ),
+];
 
 void main() {
   final a = fakeServer('a'), b = fakeServer('b');
@@ -78,7 +82,8 @@ void main() {
       recentlyAdded: base.recentlyAdded,
       favorites: base.favorites,
       libraries: const AsyncLoading<List<Library>>().copyWithPrevious(
-          const AsyncError<List<Library>>(_down, StackTrace.empty)),
+        const AsyncError<List<Library>>(_down, StackTrace.empty),
+      ),
     );
     expect(retrying.libraries.hasError, isTrue);
     expect(retrying.libraries.isLoading, isTrue);
@@ -106,38 +111,49 @@ void main() {
 
   test('hero is the first Continue Watching item', () {
     final rows = buildHomeRows([
-      feeds(a,
-          resuming: [item(a, 'r1', lastPlayedAt: DateTime.utc(2024))],
-          recent: [item(a, 'm1', addedAt: DateTime.utc(2024))]),
+      feeds(
+        a,
+        resuming: [item(a, 'r1', lastPlayedAt: DateTime.utc(2024))],
+        recent: [item(a, 'm1', addedAt: DateTime.utc(2024))],
+      ),
     ]);
     expect(rows.hero?.ref.externalId, 'r1');
   });
 
   test('without Continue Watching the hero is the newest movie', () {
     final rows = buildHomeRows([
-      feeds(a, recent: [
-        item(a, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024, 2)),
-        item(a, 'm1', addedAt: DateTime.utc(2024, 1)),
-      ]),
+      feeds(
+        a,
+        recent: [
+          item(a, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024, 2)),
+          item(a, 'm1', addedAt: DateTime.utc(2024, 1)),
+        ],
+      ),
     ]);
     expect(rows.hero?.ref.externalId, 'm1');
   });
 
   test('with no movies the hero is the newest item', () {
     final rows = buildHomeRows([
-      feeds(a, recent: [
-        item(a, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024)),
-      ]),
+      feeds(
+        a,
+        recent: [
+          item(a, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024)),
+        ],
+      ),
     ]);
     expect(rows.hero?.ref.externalId, 's1');
   });
 
   test('Recently Added splits into movies and TV', () {
     final rows = buildHomeRows([
-      feeds(a, recent: [
-        item(a, 'm1', addedAt: DateTime.utc(2024, 2)),
-        item(a, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024, 1)),
-      ]),
+      feeds(
+        a,
+        recent: [
+          item(a, 'm1', addedAt: DateTime.utc(2024, 2)),
+          item(a, 's1', kind: ItemKind.show, addedAt: DateTime.utc(2024, 1)),
+        ],
+      ),
     ]);
     expect(rows.recentMovies.map((i) => i.ref.externalId), ['m1']);
     expect(rows.recentShows.map((i) => i.ref.externalId), ['s1']);
@@ -157,20 +173,24 @@ void main() {
       feeds(b, libraries: [lib(b, 'movies', 'Films'), lib(b, 'x', 'Extras')]),
     ]);
     expect(rows.labelled, isTrue);
-    expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())),
-        ['Films · Server a', 'Films · Server b', 'Extras · Server b']);
+    expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())), [
+      'Films · Server a',
+      'Films · Server b',
+      'Extras · Server b',
+    ]);
   });
 
   test('a library row is hidden once its preview loads empty', () {
     final films = lib(a, 'movies', 'Films'), empty = lib(a, 'e', 'Empty');
     final rows = buildHomeRows([
-      feeds(a, libraries: [
-        films,
-        empty
-      ], previews: {
-        films.ref: AsyncData([item(a, 'm1')]),
-        empty.ref: const AsyncData([]),
-      }),
+      feeds(
+        a,
+        libraries: [films, empty],
+        previews: {
+          films.ref: AsyncData([item(a, 'm1')]),
+          empty.ref: const AsyncData([]),
+        },
+      ),
     ]);
     expect(rows.libraries.map((r) => r.title(AppLocalizationsEn())), ['Films']);
     expect(rows.libraries.single.items.single.ref.externalId, 'm1');
@@ -187,9 +207,11 @@ void main() {
   test('a server whose libraries fail is unavailable and its items drop', () {
     final rows = buildHomeRows([
       feeds(a, recent: [item(a, 'm1', addedAt: DateTime.utc(2024))]),
-      feeds(b,
-          recent: [item(b, 'm2', addedAt: DateTime.utc(2024))],
-          librariesFail: true),
+      feeds(
+        b,
+        recent: [item(b, 'm2', addedAt: DateTime.utc(2024))],
+        librariesFail: true,
+      ),
     ]);
     expect(rows.unavailable, [b.id]);
     expect(rows.recentMovies.map((i) => i.ref.externalId), ['m1']);
@@ -217,39 +239,51 @@ void main() {
   });
 
   test('a next card for a show watched today outranks a stale resume', () {
-    Map<String, dynamic> card(String id, String type,
-            {String? activity, String? watchedAt, int position = 0}) =>
-        {
-          'id': id,
-          'type': type,
-          'title': id,
-          if (type == 'EPISODE') 'showId': 'show-$id',
-          if (activity != null) 'lastActivityAt': activity,
-          'progress': {
-            'positionSeconds': position,
-            'durationSeconds': 1440,
-            'percentage': 0.0,
-            'watched': false,
-            'lastWatchedAt': watchedAt,
-          },
-          'files': <Object>[],
-        };
+    Map<String, dynamic> card(
+      String id,
+      String type, {
+      String? activity,
+      String? watchedAt,
+      int position = 0,
+    }) => {
+      'id': id,
+      'type': type,
+      'title': id,
+      if (type == 'EPISODE') 'showId': 'show-$id',
+      'lastActivityAt': ?activity,
+      'progress': {
+        'positionSeconds': position,
+        'durationSeconds': 1440,
+        'percentage': 0.0,
+        'watched': false,
+        'lastWatchedAt': watchedAt,
+      },
+      'files': <Object>[],
+    };
 
     final stale = continueWatchingSummary(
-        a.id,
-        card('half-watched', 'MOVIE',
-            activity: '2026-10-02T20:46:44Z',
-            watchedAt: '2026-10-02T20:46:44Z',
-            position: 672))!;
+      a.id,
+      card(
+        'half-watched',
+        'MOVIE',
+        activity: '2026-10-02T20:46:44Z',
+        watchedAt: '2026-10-02T20:46:44Z',
+        position: 672,
+      ),
+    )!;
     final binge = continueWatchingSummary(
-        a.id, card('next-up', 'EPISODE', activity: '2026-10-17T12:38:36Z'))!;
+      a.id,
+      card('next-up', 'EPISODE', activity: '2026-10-17T12:38:36Z'),
+    )!;
 
     // The server's order, which the merge must not undo.
     final rows = buildHomeRows([
-      feeds(a, resuming: [binge, stale])
+      feeds(a, resuming: [binge, stale]),
     ]);
-    expect(rows.continueWatching.map((i) => i.ref.externalId),
-        ['next-up', 'half-watched']);
+    expect(rows.continueWatching.map((i) => i.ref.externalId), [
+      'next-up',
+      'half-watched',
+    ]);
   });
 
   test('copies on two servers are one card with a count', () {
@@ -264,9 +298,11 @@ void main() {
   group('trending rows', () {
     test('five or more ranked items fill the rows', () {
       final rows = buildHomeRows([
-        feeds(a,
-            trendMovies: ranked(a, 5, ItemKind.movie),
-            trendShows: ranked(a, 6, ItemKind.show)),
+        feeds(
+          a,
+          trendMovies: ranked(a, 5, ItemKind.movie),
+          trendShows: ranked(a, 6, ItemKind.show),
+        ),
       ]);
       expect(rows.trendingMovies, hasLength(homeTrendingMinimum));
       expect(rows.trendingShows, hasLength(6));
@@ -282,10 +318,11 @@ void main() {
 
     test('trending failure hides only the trending rows', () {
       final rows = buildHomeRows([
-        feeds(a,
-            recent: [item(a, 'm1', addedAt: DateTime.utc(2024))],
-            trending:
-                const AsyncError<List<RankedItem>>(_down, StackTrace.empty)),
+        feeds(
+          a,
+          recent: [item(a, 'm1', addedAt: DateTime.utc(2024))],
+          trending: const AsyncError<List<RankedItem>>(_down, StackTrace.empty),
+        ),
       ]);
       expect(rows.recentMovies, hasLength(1));
       expect(rows.unavailable, isEmpty);
@@ -296,9 +333,11 @@ void main() {
 
     test('trending still loading does not hold Home loading', () {
       final rows = buildHomeRows([
-        feeds(a,
-            recent: [item(a, 'm1', addedAt: DateTime.utc(2024))],
-            trending: const AsyncLoading<List<RankedItem>>()),
+        feeds(
+          a,
+          recent: [item(a, 'm1', addedAt: DateTime.utc(2024))],
+          trending: const AsyncLoading<List<RankedItem>>(),
+        ),
       ]);
       expect(rows.loading, isFalse);
       expect(rows.recentMovies, hasLength(1));

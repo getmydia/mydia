@@ -8,10 +8,12 @@ import '../sources/item.dart';
 
 @immutable
 class MergedResult<T> {
-  const MergedResult(this.value,
-      {this.unavailable = const [],
-      this.skipped = const [],
-      this.extraCopies = const {}});
+  const MergedResult(
+    this.value, {
+    this.unavailable = const [],
+    this.skipped = const [],
+    this.extraCopies = const {},
+  });
 
   final T value;
 

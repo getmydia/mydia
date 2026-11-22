@@ -12,7 +12,8 @@ const _sceneFields = '''
   tags { name }
 ''';
 
-const stashFindScenes = '''
+const stashFindScenes =
+    '''
 query FindScenes(\$filter: FindFilterType, \$scene_filter: SceneFilterType) {
   findScenes(filter: \$filter, scene_filter: \$scene_filter) {
     count
@@ -20,7 +21,8 @@ query FindScenes(\$filter: FindFilterType, \$scene_filter: SceneFilterType) {
   }
 }''';
 
-const stashFindScene = '''
+const stashFindScene =
+    '''
 query FindScene(\$id: ID!) {
   findScene(id: \$id) { $_sceneFields }
 }''';

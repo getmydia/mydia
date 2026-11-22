@@ -14,14 +14,15 @@ void main() {
   final skipReason = InputCapabilities.directionalPrimary
       ? false
       : 'requires --dart-define=MYDIA_FORCE_TV=true to force '
-          'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
-          'flag (bool.fromEnvironment), so this file is a deliberate no-op '
-          'unless the whole test process is compiled with that define. CI '
-          'runs it explicitly in the "Run television-tier tests" step.';
+            'InputCapabilities.directionalPrimary; forcedTv is a compile-time '
+            'flag (bool.fromEnvironment), so this file is a deliberate no-op '
+            'unless the whole test process is compiled with that define. CI '
+            'runs it explicitly in the "Run television-tier tests" step.';
 
   group('TvCanvas (requires MYDIA_FORCE_TV=true)', () {
-    testWidgets('presents a 1280x720 canvas for a 960x540 viewport',
-        (tester) async {
+    testWidgets('presents a 1280x720 canvas for a 960x540 viewport', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -43,8 +44,9 @@ void main() {
       expect(seen, const Size(1280, 720));
     });
 
-    testWidgets('passes the devicePixelRatio through untouched',
-        (tester) async {
+    testWidgets('passes the devicePixelRatio through untouched', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 2.0;
       addTearDown(tester.view.reset);
@@ -69,8 +71,9 @@ void main() {
       expect(seenDpr, 2.0);
     });
 
-    testWidgets('is a passthrough when the canvas is already large enough',
-        (tester) async {
+    testWidgets('is a passthrough when the canvas is already large enough', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -92,8 +95,7 @@ void main() {
       expect(seen, const Size(1920, 1080));
     });
 
-    testWidgets(
-        'lays the tree out on the enlarged canvas, not just the '
+    testWidgets('lays the tree out on the enlarged canvas, not just the '
         'MediaQuery', (tester) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1.0;
@@ -102,9 +104,7 @@ void main() {
       const probeKey = ValueKey('tv-canvas-probe');
       await tester.pumpWidget(
         const MaterialApp(
-          home: TvCanvas(
-            child: SizedBox.expand(key: probeKey),
-          ),
+          home: TvCanvas(child: SizedBox.expand(key: probeKey)),
         ),
       );
 
@@ -115,8 +115,9 @@ void main() {
       expect(tester.getSize(find.byKey(probeKey)), const Size(1280, 720));
     });
 
-    testWidgets('a pointer reaches the far corner of the enlarged canvas',
-        (tester) async {
+    testWidgets('a pointer reaches the far corner of the enlarged canvas', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);

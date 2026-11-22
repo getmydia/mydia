@@ -65,11 +65,13 @@ Future<CollectionSyncResult> syncCollectionItems({
             skipped++;
             continue;
           }
-          await manager.start(DownloadRequest(
-            ref: item.ref,
-            optionId: optionId,
-            metadata: metadataFor(item),
-          ));
+          await manager.start(
+            DownloadRequest(
+              ref: item.ref,
+              optionId: optionId,
+              metadata: metadataFor(item),
+            ),
+          );
           moviesQueued++;
         } catch (e) {
           debugPrint('Failed to queue download for movie ${item.title}: $e');
@@ -121,8 +123,10 @@ Future<List<ItemSummary>> allCollectionItems(
   final items = <ItemSummary>[];
   Cursor? cursor;
   do {
-    final page =
-        await collections.collectionItems(collectionId, cursor: cursor);
+    final page = await collections.collectionItems(
+      collectionId,
+      cursor: cursor,
+    );
     items.addAll(page.items);
     cursor = page.nextCursor;
   } while (cursor != null);

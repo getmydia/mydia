@@ -68,14 +68,13 @@ void main() {
     bool isFullscreen = false,
     DecorationLayout layout = endOnly,
     TextDirection dir = TextDirection.ltr,
-  }) =>
-      windowChromeInsetsFor(
-        isWeb: isWeb,
-        platform: platform,
-        isFullscreen: isFullscreen,
-        decorationLayout: layout,
-        textDirection: dir,
-      );
+  }) => windowChromeInsetsFor(
+    isWeb: isWeb,
+    platform: platform,
+    isFullscreen: isFullscreen,
+    decorationLayout: layout,
+    textDirection: dir,
+  );
 
   // `kIsWeb` is a compile-time constant baked in per build target — it is
   // always `false` under `flutter test`, so a regression that deleted the
@@ -86,21 +85,27 @@ void main() {
   // target — mirrors
   // `platform_features_keyboard_test.dart`/`computeSupportsKeyboardShortcuts`.
   group('windowChromeInsetsFor', () {
-    test(
-        'zero on web even on macOS, Linux, and Windows (kIsWeb is false under test)',
-        () {
-      expect(resolve(isWeb: true, platform: TargetPlatform.macOS),
-          WindowChromeInsets.zero);
-      expect(resolve(isWeb: true, platform: TargetPlatform.linux),
-          WindowChromeInsets.zero);
-      expect(resolve(isWeb: true, platform: TargetPlatform.windows),
-          WindowChromeInsets.zero);
+    test('zero on web even on macOS, Linux, and Windows (kIsWeb is false under test)', () {
+      expect(
+        resolve(isWeb: true, platform: TargetPlatform.macOS),
+        WindowChromeInsets.zero,
+      );
+      expect(
+        resolve(isWeb: true, platform: TargetPlatform.linux),
+        WindowChromeInsets.zero,
+      );
+      expect(
+        resolve(isWeb: true, platform: TargetPlatform.windows),
+        WindowChromeInsets.zero,
+      );
     });
 
     for (final platform in TargetPlatform.values) {
       test('zero in fullscreen on ${platform.name}', () {
-        expect(resolve(platform: platform, isFullscreen: true),
-            WindowChromeInsets.zero);
+        expect(
+          resolve(platform: platform, isFullscreen: true),
+          WindowChromeInsets.zero,
+        );
       });
     }
 
@@ -117,22 +122,14 @@ void main() {
     test('Windows reserves caption buttons on the trailing side under LTR', () {
       expect(
         resolve(platform: TargetPlatform.windows),
-        const WindowChromeInsets(
-          height: 40.0,
-          leading: 0.0,
-          trailing: 138.0,
-        ),
+        const WindowChromeInsets(height: 40.0, leading: 0.0, trailing: 138.0),
       );
     });
 
     test('Windows moves caption buttons to leading under RTL', () {
       expect(
         resolve(platform: TargetPlatform.windows, dir: TextDirection.rtl),
-        const WindowChromeInsets(
-          height: 40.0,
-          leading: 138.0,
-          trailing: 0.0,
-        ),
+        const WindowChromeInsets(height: 40.0, leading: 138.0, trailing: 0.0),
       );
     });
 
@@ -140,22 +137,26 @@ void main() {
       expect(
         resolve(platform: TargetPlatform.macOS),
         const WindowChromeInsets(
-            height: kMacTitleBarOverlap,
-            leading: kMacTrafficLightsWidth,
-            trailing: 0),
+          height: kMacTitleBarOverlap,
+          leading: kMacTrafficLightsWidth,
+          trailing: 0,
+        ),
       );
     });
 
-    test('macOS lights stay physically left, so RTL moves them to trailing',
-        () {
-      expect(
-        resolve(platform: TargetPlatform.macOS, dir: TextDirection.rtl),
-        const WindowChromeInsets(
+    test(
+      'macOS lights stay physically left, so RTL moves them to trailing',
+      () {
+        expect(
+          resolve(platform: TargetPlatform.macOS, dir: TextDirection.rtl),
+          const WindowChromeInsets(
             height: kMacTitleBarOverlap,
             leading: 0,
-            trailing: kMacTrafficLightsWidth),
-      );
-    });
+            trailing: kMacTrafficLightsWidth,
+          ),
+        );
+      },
+    );
 
     test('the traffic lights end at x 71, inside the reserve', () {
       expect(kMacTrafficLightsWidth, greaterThan(71));
@@ -165,16 +166,18 @@ void main() {
       expect(
         resolve(platform: TargetPlatform.linux),
         WindowChromeInsets(
-            height: kLinuxWindowChromeHeight,
-            leading: 0,
-            trailing: linuxButtonGroupReserve(3)),
+          height: kLinuxWindowChromeHeight,
+          leading: 0,
+          trailing: linuxButtonGroupReserve(3),
+        ),
       );
       expect(
         resolve(platform: TargetPlatform.linux, layout: both),
         WindowChromeInsets(
-            height: kLinuxWindowChromeHeight,
-            leading: linuxButtonGroupReserve(1),
-            trailing: linuxButtonGroupReserve(2)),
+          height: kLinuxWindowChromeHeight,
+          leading: linuxButtonGroupReserve(1),
+          trailing: linuxButtonGroupReserve(2),
+        ),
       );
     });
 
@@ -192,22 +195,27 @@ void main() {
   });
 
   group('WindowChromeInsets scope', () {
-    testWidgets('WindowChromeInset publishes the resolved insets',
-        (tester) async {
+    testWidgets('WindowChromeInset publishes the resolved insets', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       try {
         late WindowChromeInsets seen;
-        await tester.pumpWidget(Directionality(
-          textDirection: TextDirection.ltr,
-          child: WindowChromeInset(
-            fullscreen: ValueNotifier(false),
-            decorationLayout: ValueNotifier(endOnly),
-            child: Builder(builder: (context) {
-              seen = WindowChromeInsets.of(context);
-              return const SizedBox.shrink();
-            }),
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: WindowChromeInset(
+              fullscreen: ValueNotifier(false),
+              decorationLayout: ValueNotifier(endOnly),
+              child: Builder(
+                builder: (context) {
+                  seen = WindowChromeInsets.of(context);
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
           ),
-        ));
+        );
         expect(seen.leading, kMacTrafficLightsWidth);
       } finally {
         debugDefaultTargetPlatformOverride = null;
@@ -216,36 +224,49 @@ void main() {
 
     testWidgets('of() is zero with no scope above', (tester) async {
       late WindowChromeInsets seen;
-      await tester.pumpWidget(Builder(builder: (context) {
-        seen = WindowChromeInsets.of(context);
-        return const SizedBox.shrink();
-      }));
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            seen = WindowChromeInsets.of(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      );
       expect(seen, WindowChromeInsets.zero);
     });
 
-    testWidgets('removeBand removes only the band, keeping a status bar',
-        (tester) async {
+    testWidgets('removeBand removes only the band, keeping a status bar', (
+      tester,
+    ) async {
       late double top;
-      await tester.pumpWidget(MediaQuery(
-        data: const MediaQueryData(padding: EdgeInsets.only(top: 24 + 40)),
-        child: WindowChromeInsets.scope(
-          insets:
-              const WindowChromeInsets(height: 40, leading: 80, trailing: 0),
-          child: WindowChromeInsets.removeBand(
-            child: Builder(builder: (context) {
-              top = MediaQuery.paddingOf(context).top;
-              return const SizedBox.shrink();
-            }),
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(padding: EdgeInsets.only(top: 24 + 40)),
+          child: WindowChromeInsets.scope(
+            insets: const WindowChromeInsets(
+              height: 40,
+              leading: 80,
+              trailing: 0,
+            ),
+            child: WindowChromeInsets.removeBand(
+              child: Builder(
+                builder: (context) {
+                  top = MediaQuery.paddingOf(context).top;
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
           ),
         ),
-      ));
+      );
       expect(top, 24);
     });
   });
 
   group('WindowChromeInset', () {
-    testWidgets('reserves the traffic light strip on windowed macOS',
-        (tester) async {
+    testWidgets('reserves the traffic light strip on windowed macOS', (
+      tester,
+    ) async {
       final top = await _topPaddingUnder(
         tester,
         platform: TargetPlatform.macOS,
@@ -255,8 +276,9 @@ void main() {
       expect(top, kMacTitleBarOverlap);
     });
 
-    testWidgets('adds to any inset already present rather than replacing it',
-        (tester) async {
+    testWidgets('adds to any inset already present rather than replacing it', (
+      tester,
+    ) async {
       final top = await _topPaddingUnder(
         tester,
         platform: TargetPlatform.macOS,
@@ -267,16 +289,18 @@ void main() {
       expect(top, 12 + kMacTitleBarOverlap);
     });
 
-    testWidgets('reserves nothing in fullscreen, where macOS hides the lights',
-        (tester) async {
-      final top = await _topPaddingUnder(
-        tester,
-        platform: TargetPlatform.macOS,
-        fullscreen: ValueNotifier(true),
-      );
+    testWidgets(
+      'reserves nothing in fullscreen, where macOS hides the lights',
+      (tester) async {
+        final top = await _topPaddingUnder(
+          tester,
+          platform: TargetPlatform.macOS,
+          fullscreen: ValueNotifier(true),
+        );
 
-      expect(top, 0);
-    });
+        expect(top, 0);
+      },
+    );
 
     testWidgets('reserves the button band on windowed Linux', (tester) async {
       final top = await _topPaddingUnder(
@@ -298,8 +322,9 @@ void main() {
       expect(top, 0);
     });
 
-    testWidgets('reserves the caption button band on windowed Windows',
-        (tester) async {
+    testWidgets('reserves the caption button band on windowed Windows', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         late double top;
@@ -311,11 +336,13 @@ void main() {
               textDirection: TextDirection.ltr,
               child: WindowChromeInset(
                 fullscreen: ValueNotifier(false),
-                child: Builder(builder: (context) {
-                  top = MediaQuery.of(context).padding.top;
-                  insets = WindowChromeInsets.of(context);
-                  return const SizedBox.shrink();
-                }),
+                child: Builder(
+                  builder: (context) {
+                    top = MediaQuery.of(context).padding.top;
+                    insets = WindowChromeInsets.of(context);
+                    return const SizedBox.shrink();
+                  },
+                ),
               ),
             ),
           ),
@@ -329,10 +356,7 @@ void main() {
       }
     });
 
-    for (final platform in [
-      TargetPlatform.iOS,
-      TargetPlatform.android,
-    ]) {
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
       testWidgets('reserves nothing on ${platform.name}', (tester) async {
         final top = await _topPaddingUnder(
           tester,
@@ -344,8 +368,9 @@ void main() {
       });
     }
 
-    testWidgets('drops the inset live when the window enters fullscreen',
-        (tester) async {
+    testWidgets('drops the inset live when the window enters fullscreen', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       try {
         final fullscreen = ValueNotifier(false);
@@ -378,40 +403,42 @@ void main() {
     });
 
     testWidgets(
-        'falls back to the real windowFullscreenSignal when no fullscreen '
-        'listenable is injected', (tester) async {
-      // Every other test in this file injects `fullscreen:`, which never
-      // exercises the `_fullscreen ?? windowFullscreen` fallback in
-      // `WindowChromeInset.build` — this is the one test that drives the
-      // real app-wide signal instead. try/finally so a failed assertion
-      // still restores the global to its default (`false`) rather than
-      // leaking `true` into whichever test runs next in this process.
-      final originalValue = windowFullscreenSignal.value;
-      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-      try {
-        windowFullscreenSignal.value = false;
-        late double captured;
+      'falls back to the real windowFullscreenSignal when no fullscreen '
+      'listenable is injected',
+      (tester) async {
+        // Every other test in this file injects `fullscreen:`, which never
+        // exercises the `_fullscreen ?? windowFullscreen` fallback in
+        // `WindowChromeInset.build` — this is the one test that drives the
+        // real app-wide signal instead. try/finally so a failed assertion
+        // still restores the global to its default (`false`) rather than
+        // leaking `true` into whichever test runs next in this process.
+        final originalValue = windowFullscreenSignal.value;
+        debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+        try {
+          windowFullscreenSignal.value = false;
+          late double captured;
 
-        await tester.pumpWidget(
-          MediaQuery(
-            data: const MediaQueryData(),
-            child: Directionality(
-              textDirection: TextDirection.ltr,
-              child: WindowChromeInset(
-                child: _PaddingProbe(onBuild: (top) => captured = top),
+          await tester.pumpWidget(
+            MediaQuery(
+              data: const MediaQueryData(),
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: WindowChromeInset(
+                  child: _PaddingProbe(onBuild: (top) => captured = top),
+                ),
               ),
             ),
-          ),
-        );
-        expect(captured, kMacTitleBarOverlap);
+          );
+          expect(captured, kMacTitleBarOverlap);
 
-        windowFullscreenSignal.value = true;
-        await tester.pump();
-        expect(captured, 0);
-      } finally {
-        windowFullscreenSignal.value = originalValue;
-        debugDefaultTargetPlatformOverride = null;
-      }
-    });
+          windowFullscreenSignal.value = true;
+          await tester.pump();
+          expect(captured, 0);
+        } finally {
+          windowFullscreenSignal.value = originalValue;
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
   });
 }

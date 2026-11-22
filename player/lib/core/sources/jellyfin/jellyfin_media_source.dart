@@ -32,8 +32,8 @@ class JellyfinMediaSource extends MediaSource
   JellyfinMediaSource({
     required this.source,
     required this.client,
-    void Function()? onDispose,
-  }) : _onDispose = onDispose;
+    this._onDispose,
+  });
 
   @override
   final Source source;
@@ -46,18 +46,18 @@ class JellyfinMediaSource extends MediaSource
 
   @override
   Set<SourceCapability> get capabilities => const {
-        SourceCapability.progressReporting,
-        SourceCapability.watchedState,
-        SourceCapability.searchable,
-        SourceCapability.continueWatching,
-        SourceCapability.similar,
-        SourceCapability.favorites,
-        SourceCapability.nextUp,
-        SourceCapability.recentlyAdded,
-        SourceCapability.skipSegments,
-        SourceCapability.downloadable,
-        SourceCapability.progressSync,
-      };
+    SourceCapability.progressReporting,
+    SourceCapability.watchedState,
+    SourceCapability.searchable,
+    SourceCapability.continueWatching,
+    SourceCapability.similar,
+    SourceCapability.favorites,
+    SourceCapability.nextUp,
+    SourceCapability.recentlyAdded,
+    SourceCapability.skipSegments,
+    SourceCapability.downloadable,
+    SourceCapability.progressSync,
+  };
 
   /// `send` throws a `SourceException` on a transport failure or any non-2xx
   /// answer, so a refused push leaves the local record unsynced.
@@ -68,13 +68,20 @@ class JellyfinMediaSource extends MediaSource
     required int durationSeconds,
     required bool watched,
   }) async {
-    await client.send('POST', '/Sessions/Playing/Stopped', body: {
-      'ItemId': ref.externalId,
-      'PositionTicks': positionSeconds * jellyfinTicksPerSecond,
-    });
+    await client.send(
+      'POST',
+      '/Sessions/Playing/Stopped',
+      body: {
+        'ItemId': ref.externalId,
+        'PositionTicks': positionSeconds * jellyfinTicksPerSecond,
+      },
+    );
     if (watched) {
-      await client.send('POST', '/UserPlayedItems/${ref.externalId}',
-          query: {'userId': client.userId});
+      await client.send(
+        'POST',
+        '/UserPlayedItems/${ref.externalId}',
+        query: {'userId': client.userId},
+      );
     }
   }
 
@@ -94,19 +101,20 @@ class JellyfinMediaSource extends MediaSource
     String itemId, {
     required String mediaSourceId,
     required Map<String, dynamic> deviceProfile,
-  }) async =>
-      JellyfinPlaybackInfo.fromJson(await client.post(
-        '/Items/$itemId/PlaybackInfo',
-        query: _user,
-        body: {
-          'DeviceProfile': deviceProfile,
-          'MediaSourceId': mediaSourceId,
-          'AutoOpenLiveStream': false,
-          'EnableDirectPlay': true,
-          'EnableDirectStream': true,
-          'EnableTranscoding': true,
-        },
-      ));
+  }) async => JellyfinPlaybackInfo.fromJson(
+    await client.post(
+      '/Items/$itemId/PlaybackInfo',
+      query: _user,
+      body: {
+        'DeviceProfile': deviceProfile,
+        'MediaSourceId': mediaSourceId,
+        'AutoOpenLiveStream': false,
+        'EnableDirectPlay': true,
+        'EnableDirectStream': true,
+        'EnableTranscoding': true,
+      },
+    ),
+  );
 
   /// Library kinds by id, so paging does not re-fetch `/UserViews` on every
   /// page. Filled by [libraries].
@@ -118,12 +126,14 @@ class JellyfinMediaSource extends MediaSource
 
   @override
   Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
-        this,
-        ref,
-        url: (v) => client.url('/Videos/${ref.externalId}/stream',
-            {'static': 'true', 'mediaSourceId': v.id}),
-        headers: client.headers,
-      );
+    this,
+    ref,
+    url: (v) => client.url('/Videos/${ref.externalId}/stream', {
+      'static': 'true',
+      'mediaSourceId': v.id,
+    }),
+    headers: client.headers,
+  );
 
   @override
   Future<List<Library>> libraries() async {
@@ -146,7 +156,7 @@ class JellyfinMediaSource extends MediaSource
     final kind = _libraryKinds?[library.id] ?? LibraryKind.videos;
     final sort =
         jellyfinSortOptions.where((o) => o.id == query.sortId).firstOrNull ??
-            jellyfinSortOptions.first;
+        jellyfinSortOptions.first;
     final descending = query.descending ?? sort.descendingByDefault;
     final known = {for (final f in jellyfinFilterOptions) f.id};
     final filters = query.filterIds.where(known.contains).join(',');
@@ -179,8 +189,9 @@ class JellyfinMediaSource extends MediaSource
     return Page(
       items: items,
       total: total,
-      nextCursor:
-          total != null && next < total && raw > 0 ? Cursor('$next') : null,
+      nextCursor: total != null && next < total && raw > 0
+          ? Cursor('$next')
+          : null,
     );
   }
 
@@ -198,23 +209,25 @@ class JellyfinMediaSource extends MediaSource
     if (parent.kind == ItemKind.show && start > 0) return const Page(items: []);
     final pageQuery = {'StartIndex': '$start', 'Limit': '$_childPage'};
     final body = switch (parent.kind) {
-      ItemKind.show => await client.get('/Shows/${parent.externalId}/Seasons',
-          {..._user, 'Fields': 'ChildCount,$jellyfinIdFields'}),
+      ItemKind.show => await client.get('/Shows/${parent.externalId}/Seasons', {
+        ..._user,
+        'Fields': 'ChildCount,$jellyfinIdFields',
+      }),
       ItemKind.season => await client.get('/Items', {
-          ..._user,
-          'ParentId': parent.externalId,
-          'IncludeItemTypes': 'Episode',
-          'Fields': 'Overview,$jellyfinIdFields',
-          'SortBy': 'IndexNumber',
-          ...pageQuery,
-        }),
+        ..._user,
+        'ParentId': parent.externalId,
+        'IncludeItemTypes': 'Episode',
+        'Fields': 'Overview,$jellyfinIdFields',
+        'SortBy': 'IndexNumber',
+        ...pageQuery,
+      }),
       ItemKind.folder => await client.get('/Items', {
-          ..._user,
-          'ParentId': parent.externalId,
-          'SortBy': 'SortName',
-          'Fields': 'ChildCount,$jellyfinIdFields',
-          ...pageQuery,
-        }),
+        ..._user,
+        'ParentId': parent.externalId,
+        'SortBy': 'SortName',
+        'Fields': 'ChildCount,$jellyfinIdFields',
+        ...pageQuery,
+      }),
       ItemKind.movie || ItemKind.episode || ItemKind.video => null,
     };
     if (body == null) return const Page(items: []);
@@ -264,17 +277,17 @@ class JellyfinMediaSource extends MediaSource
 
   @override
   Future<void> setFavorite(ItemRef ref, bool favorite) => client.send(
-        favorite ? 'POST' : 'DELETE',
-        '/UserFavoriteItems/${ref.externalId}',
-        query: _user,
-      );
+    favorite ? 'POST' : 'DELETE',
+    '/UserFavoriteItems/${ref.externalId}',
+    query: _user,
+  );
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) => client.send(
-        watched ? 'POST' : 'DELETE',
-        '/UserPlayedItems/${ref.externalId}',
-        query: _user,
-      );
+    watched ? 'POST' : 'DELETE',
+    '/UserPlayedItems/${ref.externalId}',
+    query: _user,
+  );
 
   /// What the viewer has under way, then the next episode of each show they
   /// follow. Jellyfin keeps the two apart (Resume and Next Up); Plex's own
@@ -308,9 +321,10 @@ class JellyfinMediaSource extends MediaSource
         if (m['SeriesId'] case final String show) show,
     };
     return [
-      ...resume,
-      ..._maps(bodies[1]).where((m) => !resumingShows.contains(m['SeriesId'])),
-    ]
+          ...resume,
+          ..._maps(bodies[1])
+              .where((m) => !resumingShows.contains(m['SeriesId'])),
+        ]
         .map((m) => jellyfinSummary(id, m))
         .whereType<ItemSummary>()
         .take(_rowLimit)
@@ -343,25 +357,28 @@ class JellyfinMediaSource extends MediaSource
   /// is left as it was.
   @override
   Future<void> removeFromContinueWatching(ItemRef ref) => client.send(
-        'POST',
-        '/UserItems/${ref.externalId}/UserData',
-        query: _user,
-        body: {'PlaybackPositionTicks': 0},
-      );
+    'POST',
+    '/UserItems/${ref.externalId}/UserData',
+    query: _user,
+    body: {'PlaybackPositionTicks': 0},
+  );
 
   static List<Map<String, dynamic>> _maps(Map<String, dynamic> body) => [
-        for (final m in (body['Items'] as List? ?? const []))
-          if (m is Map) m.cast<String, dynamic>(),
-      ];
+    for (final m in (body['Items'] as List? ?? const []))
+      if (m is Map) m.cast<String, dynamic>(),
+  ];
 
   /// 10.10 and later. Segments exist only where a provider plugin (Intro
   /// Skipper, for one) has run; core Jellyfin detects nothing itself.
   @override
-  Future<List<MediaSegment>> skipSegments(ItemRef ref,
-      {String? versionId}) async {
+  Future<List<MediaSegment>> skipSegments(
+    ItemRef ref, {
+    String? versionId,
+  }) async {
     try {
       return jellyfinSegments(
-          await client.get('/MediaSegments/${ref.externalId}'));
+        await client.get('/MediaSegments/${ref.externalId}'),
+      );
     } on SourceException catch (e) {
       if (e.kind == SourceErrorKind.notFound) return const [];
       rethrow;

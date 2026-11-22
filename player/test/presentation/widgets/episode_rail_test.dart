@@ -39,10 +39,7 @@ Future<void> _pump(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: EpisodeRail(
-              episodes: episodes,
-              onEpisodeTap: onEpisodeTap,
-            ),
+            body: EpisodeRail(episodes: episodes, onEpisodeTap: onEpisodeTap),
           ),
         ),
       ),
@@ -52,8 +49,9 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('renders one card per episode, each with a stable id key',
-      (tester) async {
+  testWidgets('renders one card per episode, each with a stable id key', (
+    tester,
+  ) async {
     await _pump(tester, _episodes(3));
 
     expect(find.byType(EpisodeRailCard), findsNWidgets(3));
@@ -68,8 +66,9 @@ void main() {
     expect(find.byType(EpisodeRailCard), findsNothing);
   });
 
-  testWidgets('shows the right fade and hides the left fade at offset 0',
-      (tester) async {
+  testWidgets('shows the right fade and hides the left fade at offset 0', (
+    tester,
+  ) async {
     await _pump(tester, _episodes(20, hasFile: false));
 
     // At rest (offset 0) only the right-edge fade is shown.
@@ -77,26 +76,18 @@ void main() {
       find.byKey(const ValueKey('episode-rail-right-fade')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('episode-rail-left-fade')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('episode-rail-left-fade')), findsNothing);
   });
 
-  testWidgets('shows no fades when the episodes already fit on screen',
-      (tester) async {
+  testWidgets('shows no fades when the episodes already fit on screen', (
+    tester,
+  ) async {
     // A single card cannot overflow the default 800px test surface, so there
     // is nothing to scroll to and neither edge should be faded.
     await _pump(tester, _episodes(1, hasFile: false));
 
-    expect(
-      find.byKey(const ValueKey('episode-rail-right-fade')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey('episode-rail-left-fade')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('episode-rail-right-fade')), findsNothing);
+    expect(find.byKey(const ValueKey('episode-rail-left-fade')), findsNothing);
   });
 
   testWidgets('tapping a card forwards the correct episode', (tester) async {

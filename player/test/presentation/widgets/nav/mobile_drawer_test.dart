@@ -21,54 +21,61 @@ const _padding = FakeViewPadding(left: 20, top: 47, bottom: 34);
 
 final _scaffoldKey = GlobalKey<ScaffoldState>();
 
-Future<void> _openDrawer(WidgetTester tester,
-    {ValueChanged<String>? onNavigate,
-    FakeViewPadding padding = _padding,
-    TextDirection? direction,
-    bool liquid = true}) async {
+Future<void> _openDrawer(
+  WidgetTester tester, {
+  ValueChanged<String>? onNavigate,
+  FakeViewPadding padding = _padding,
+  TextDirection? direction,
+  bool liquid = true,
+}) async {
   tester.view.physicalSize = const Size(400, 800);
   tester.view.devicePixelRatio = 1;
   tester.view.padding = padding;
   addTearDown(tester.view.reset);
   final scaffoldKey = _scaffoldKey;
 
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      sidebarLayoutStoreProvider
-          .overrideWithValue(InMemorySidebarLayoutStore()),
-      thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
-      hasMydiaProvider.overrideWithValue(true),
-      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeCapableSource()),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
-      builder: direction == null
-          ? null
-          : (c, child) =>
-              Directionality(textDirection: direction, child: child!),
-      home: Scaffold(
-        key: scaffoldKey,
-        drawer: MobileDrawer(location: '/', onNavigate: onNavigate ?? (_) {}),
-        body: const SizedBox.expand(),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sidebarLayoutStoreProvider.overrideWithValue(
+          InMemorySidebarLayoutStore(),
+        ),
+        thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+        hasMydiaProvider.overrideWithValue(true),
+        mediaSourceProvider(fakeSourceId)
+            .overrideWithValue(FakeCapableSource()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+        builder: direction == null
+            ? null
+            : (c, child) =>
+                  Directionality(textDirection: direction, child: child!),
+        home: Scaffold(
+          key: scaffoldKey,
+          drawer: MobileDrawer(location: '/', onNavigate: onNavigate ?? (_) {}),
+          body: const SizedBox.expand(),
+        ),
       ),
     ),
-  ));
+  );
   scaffoldKey.currentState!.openDrawer();
   await tester.pumpAndSettle();
 }
 
 Finder get _glass => find.descendant(
-      of: find.byType(MobileDrawer),
-      matching: find.byType(GlassSurface),
-    );
+  of: find.byType(MobileDrawer),
+  matching: find.byType(GlassSurface),
+);
 
 void main() {
   tearDown(() => LiquidGlassSupport.debugOverride = null);
 
-  testWidgets('off Liquid Glass the drawer is edge to edge, rounded right',
-      (tester) async {
+  testWidgets('off Liquid Glass the drawer is edge to edge, rounded right', (
+    tester,
+  ) async {
     LiquidGlassSupport.debugOverride = false;
     await _openDrawer(tester, liquid: false);
 
@@ -86,8 +93,9 @@ void main() {
     expect(rect.bottom, 800);
   });
 
-  testWidgets('the shader being available is not enough without the setting',
-      (tester) async {
+  testWidgets('the shader being available is not enough without the setting', (
+    tester,
+  ) async {
     LiquidGlassSupport.debugOverride = true;
     await _openDrawer(tester, liquid: false);
 
@@ -97,8 +105,9 @@ void main() {
     expect(rect.bottom, 800);
   });
 
-  testWidgets('on Liquid Glass the drawer floats inset like the rail',
-      (tester) async {
+  testWidgets('on Liquid Glass the drawer floats inset like the rail', (
+    tester,
+  ) async {
     LiquidGlassSupport.debugOverride = true;
     await _openDrawer(tester);
 
@@ -128,16 +137,19 @@ void main() {
     final routes = <String>[];
     await _openDrawer(tester, onNavigate: routes.add);
 
-    await tester.tap(find.descendant(
-      of: find.byType(MobileDrawer),
-      matching: find.text('Settings'),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(MobileDrawer),
+        matching: find.text('Settings'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(routes, isNotEmpty);
   });
 
-  testWidgets('a tap in the top margin dismisses the floating drawer',
-      (tester) async {
+  testWidgets('a tap in the top margin dismisses the floating drawer', (
+    tester,
+  ) async {
     LiquidGlassSupport.debugOverride = true;
     await _openDrawer(tester);
     expect(_scaffoldKey.currentState!.isDrawerOpen, isTrue);
@@ -147,8 +159,9 @@ void main() {
     expect(_scaffoldKey.currentState!.isDrawerOpen, isFalse);
   });
 
-  testWidgets('a tap on empty panel space keeps the floating drawer open',
-      (tester) async {
+  testWidgets('a tap on empty panel space keeps the floating drawer open', (
+    tester,
+  ) async {
     LiquidGlassSupport.debugOverride = true;
     await _openDrawer(tester);
 
@@ -158,8 +171,9 @@ void main() {
     expect(_scaffoldKey.currentState!.isDrawerOpen, isTrue);
   });
 
-  testWidgets('the floating drawer insets from the right edge in RTL',
-      (tester) async {
+  testWidgets('the floating drawer insets from the right edge in RTL', (
+    tester,
+  ) async {
     LiquidGlassSupport.debugOverride = true;
     await _openDrawer(
       tester,

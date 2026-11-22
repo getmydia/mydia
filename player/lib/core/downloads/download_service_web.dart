@@ -186,7 +186,10 @@ class _WebDownloadService implements DownloadService {
 
   @override
   Future<int> deleteSeasonDownloads(
-      SourceId source, String showId, int seasonNumber) async {
+    SourceId source,
+    String showId,
+    int seasonNumber,
+  ) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
 
@@ -199,8 +202,8 @@ class _WebDownloadService implements DownloadService {
 
   @override
   Future<int> deleteDownloadsOfUnknownAccounts(
-          Set<String> knownAccountIds) async =>
-      0;
+    Set<String> knownAccountIds,
+  ) async => 0;
 
   @override
   List<DownloadTask> getActiveDownloads() => [];

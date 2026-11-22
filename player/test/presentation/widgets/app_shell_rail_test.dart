@@ -31,8 +31,10 @@ import '../screens/sources/fake_media_source.dart';
 
 class _MydiaLike extends FakeCapableSource {
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.continueWatching};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.continueWatching,
+  };
 }
 
 const _railKey = Key('floating-rail');
@@ -41,12 +43,11 @@ double _railWidth(WidgetTester tester) =>
     tester.getSize(find.byKey(_railKey)).width;
 
 List<Override> _overrides() => [
-      sidebarLayoutStoreProvider
-          .overrideWithValue(InMemorySidebarLayoutStore()),
-      thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
-      hasMydiaProvider.overrideWithValue(true),
-      mediaSourceProvider(fakeSourceId).overrideWithValue(_MydiaLike()),
-    ];
+  sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
+  thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+  hasMydiaProvider.overrideWithValue(true),
+  mediaSourceProvider(fakeSourceId).overrideWithValue(_MydiaLike()),
+];
 
 void _setSize(WidgetTester tester, Size size) {
   tester.view.physicalSize = size;
@@ -56,40 +57,41 @@ void _setSize(WidgetTester tester, Size size) {
 
 /// Mirrors the shell's choice between the rail and the phone bottom bar.
 Widget _switchingHost() => ProviderScope(
-      overrides: _overrides(),
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => Scaffold(
-            bottomNavigationBar: Breakpoints.showsRail(context)
-                ? null
-                : BottomNav(
+  overrides: _overrides(),
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Builder(
+      builder: (context) => Scaffold(
+        bottomNavigationBar: Breakpoints.showsRail(context)
+            ? null
+            : BottomNav(
+                location: '/',
+                onNavigate: (_) {},
+                entries: const [],
+                isOffline: false,
+              ),
+        body: Breakpoints.showsRail(context)
+            ? Stack(
+                children: [
+                  FloatingRail(
                     location: '/',
                     onNavigate: (_) {},
-                    entries: const [],
                     isOffline: false,
                   ),
-            body: Breakpoints.showsRail(context)
-                ? Stack(
-                    children: [
-                      FloatingRail(
-                        location: '/',
-                        onNavigate: (_) {},
-                        isOffline: false,
-                      ),
-                    ],
-                  )
-                : const SizedBox.expand(),
-          ),
-        ),
+                ],
+              )
+            : const SizedBox.expand(),
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
   for (final width in [600.0, 1280.0]) {
-    testWidgets('renders the rail, not the bottom bar, at $width',
-        (tester) async {
+    testWidgets('renders the rail, not the bottom bar, at $width', (
+      tester,
+    ) async {
       _setSize(tester, Size(width, 800));
       await tester.pumpWidget(_switchingHost());
       await tester.pumpAndSettle();
@@ -166,8 +168,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('Left at the content edge opens the rail on the selected row',
-        (tester) async {
+    testWidgets('Left at the content edge opens the rail on the selected row', (
+      tester,
+    ) async {
       await pumpShell(tester);
       expect(_railWidth(tester), 72);
 
@@ -178,8 +181,9 @@ void main() {
       expect(_railWidth(tester), 272);
     });
 
-    testWidgets('Right returns to the original content node and collapses',
-        (tester) async {
+    testWidgets('Right returns to the original content node and collapses', (
+      tester,
+    ) async {
       await pumpShell(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pumpAndSettle();
@@ -192,16 +196,18 @@ void main() {
       expect(_railWidth(tester), 72);
     });
 
-    testWidgets('Up and Down keep focus inside the rail at its ends',
-        (tester) async {
+    testWidgets('Up and Down keep focus inside the rail at its ends', (
+      tester,
+    ) async {
       await pumpShell(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pumpAndSettle();
 
-      final stops = railScope.traversalDescendants
-          .where((n) => n.canRequestFocus && n.context != null)
-          .toList()
-        ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
+      final stops =
+          railScope.traversalDescendants
+              .where((n) => n.canRequestFocus && n.context != null)
+              .toList()
+            ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
       expect(stops.length, greaterThan(1));
       // Captured now: the list scrolls as focus moves, which shifts rects.
       final firstTop = stops.first.rect.top;
@@ -217,10 +223,12 @@ void main() {
       // focused node is, or is nested with, one of the stops at that end.
       bool onRow(Iterable<FocusNode> row) {
         final primary = FocusManager.instance.primaryFocus!;
-        return row.any((n) =>
-            n == primary ||
-            primary.ancestors.contains(n) ||
-            n.ancestors.contains(primary));
+        return row.any(
+          (n) =>
+              n == primary ||
+              primary.ancestors.contains(n) ||
+              n.ancestors.contains(primary),
+        );
       }
 
       expect(onRow(firstRow), isTrue);
@@ -236,8 +244,9 @@ void main() {
     });
   });
 
-  testWidgets('the rail and content column clear the safe area',
-      (tester) async {
+  testWidgets('the rail and content column clear the safe area', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1280, 800));
     final reported = <double>[];
     final railScope = FocusScopeNode();
@@ -343,12 +352,14 @@ void main() {
                   sidebarNode: railRow,
                   contentScope: contentScope,
                 ),
-                content: Builder(builder: (context) {
-                  insetSeen.add(ShellRailInset.of(context));
-                  return const ShellPageInset(
-                    child: SizedBox.expand(key: contentKey),
-                  );
-                }),
+                content: Builder(
+                  builder: (context) {
+                    insetSeen.add(ShellRailInset.of(context));
+                    return const ShellPageInset(
+                      child: SizedBox.expand(key: contentKey),
+                    );
+                  },
+                ),
                 railBuilder: (onExitRequested) => FloatingRail(
                   location: '/',
                   onNavigate: (_) {},
@@ -380,90 +391,97 @@ void main() {
     });
 
     testWidgets(
-        'a page opened over another never moves it, on any frame of the push '
-        'and the pop', (tester) async {
-      _setSize(tester, const Size(1280, 800));
-      final railScope = FocusScopeNode();
-      final contentScope = FocusScopeNode();
-      final railRow = FocusNode();
-      final navKey = GlobalKey<NavigatorState>();
-      addTearDown(railScope.dispose);
-      addTearDown(contentScope.dispose);
-      addTearDown(railRow.dispose);
-      const probeKey = Key('probe');
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: _overrides(),
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(
-              body: AppShell.railLayers(
-                regionsEnabled: false,
-                contentLeft: Breakpoints.railContentInset(pinned: false),
-                railScope: railScope,
-                contentScope: contentScope,
-                boundary: SidebarFocusBoundary(
-                  sidebarNode: railRow,
+      'a page opened over another never moves it, on any frame of the push '
+      'and the pop',
+      (tester) async {
+        _setSize(tester, const Size(1280, 800));
+        final railScope = FocusScopeNode();
+        final contentScope = FocusScopeNode();
+        final railRow = FocusNode();
+        final navKey = GlobalKey<NavigatorState>();
+        addTearDown(railScope.dispose);
+        addTearDown(contentScope.dispose);
+        addTearDown(railRow.dispose);
+        const probeKey = Key('probe');
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: _overrides(),
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: AppShell.railLayers(
+                  regionsEnabled: false,
+                  contentLeft: Breakpoints.railContentInset(pinned: false),
+                  railScope: railScope,
                   contentScope: contentScope,
-                ),
-                // The shell's routed child: a navigator holding the page.
-                content: Navigator(
-                  key: navKey,
-                  onGenerateRoute: (_) => MaterialPageRoute<void>(
-                    builder: (_) => const ShellPageInset(
-                      child: SizedBox.expand(key: probeKey),
+                  boundary: SidebarFocusBoundary(
+                    sidebarNode: railRow,
+                    contentScope: contentScope,
+                  ),
+                  // The shell's routed child: a navigator holding the page.
+                  content: Navigator(
+                    key: navKey,
+                    onGenerateRoute: (_) => MaterialPageRoute<void>(
+                      builder: (_) => const ShellPageInset(
+                        child: SizedBox.expand(key: probeKey),
+                      ),
                     ),
                   ),
-                ),
-                railBuilder: (onExitRequested) => FloatingRail(
-                  location: '/',
-                  onNavigate: (_) {},
-                  isOffline: false,
-                  selectedRowFocusNode: railRow,
-                  onExitRequested: onExitRequested,
+                  railBuilder: (onExitRequested) => FloatingRail(
+                    location: '/',
+                    onNavigate: (_) {},
+                    isOffline: false,
+                    selectedRowFocusNode: railRow,
+                    onExitRequested: onExitRequested,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final home = tester.getTopLeft(find.byKey(probeKey)).dx;
-      expect(home, Breakpoints.railContentInset(pinned: false));
+        );
+        await tester.pumpAndSettle();
+        final home = tester.getTopLeft(find.byKey(probeKey)).dx;
+        expect(home, Breakpoints.railContentInset(pinned: false));
 
-      Future<void> everyFrame() async {
-        for (var i = 0; i < 40; i++) {
-          await tester.pump(const Duration(milliseconds: 16));
-          expect(
-            tester.getTopLeft(find.byKey(probeKey, skipOffstage: false)).dx,
-            home,
-            reason: 'frame $i',
-          );
+        Future<void> everyFrame() async {
+          for (var i = 0; i < 40; i++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            expect(
+              tester.getTopLeft(find.byKey(probeKey, skipOffstage: false)).dx,
+              home,
+              reason: 'frame $i',
+            );
+          }
         }
-      }
 
-      // A fade moves nothing, so any shift of the probe is the shell's own
-      // padding (a platform slide or zoom would move it by itself).
-      unawaited(navKey.currentState!.push(PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 300),
-        reverseTransitionDuration: const Duration(milliseconds: 300),
-        pageBuilder: (_, __, ___) => const Scaffold(body: Text('detail')),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-      )));
-      await everyFrame();
-      await tester.pumpAndSettle();
+        // A fade moves nothing, so any shift of the probe is the shell's own
+        // padding (a platform slide or zoom would move it by itself).
+        unawaited(
+          navKey.currentState!.push(
+            PageRouteBuilder<void>(
+              transitionDuration: const Duration(milliseconds: 300),
+              reverseTransitionDuration: const Duration(milliseconds: 300),
+              pageBuilder: (_, _, _) => const Scaffold(body: Text('detail')),
+              transitionsBuilder: (_, animation, _, child) =>
+                  FadeTransition(opacity: animation, child: child),
+            ),
+          ),
+        );
+        await everyFrame();
+        await tester.pumpAndSettle();
 
-      navKey.currentState!.pop();
-      await everyFrame();
-      await tester.pumpAndSettle();
-      expect(tester.getTopLeft(find.byKey(probeKey)).dx, home);
-    });
+        navKey.currentState!.pop();
+        await everyFrame();
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(find.byKey(probeKey)).dx, home);
+      },
+    );
   });
 
-  testWidgets('sidebarChrome reports the pinned rail footprint (312)',
-      (tester) async {
+  testWidgets('sidebarChrome reports the pinned rail footprint (312)', (
+    tester,
+  ) async {
     final reported = <double>[];
     await tester.pumpWidget(
       DockExtents(

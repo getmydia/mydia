@@ -8,14 +8,13 @@ VideoOutputPath _choose({
   bool legacyHatch = false,
   String? failedVersion,
   String appVersion = '1.5.0',
-}) =>
-    chooseVideoOutputPath(
-      platform: platform,
-      isWeb: isWeb,
-      legacyHatch: legacyHatch,
-      failedVersion: failedVersion,
-      appVersion: appVersion,
-    );
+}) => chooseVideoOutputPath(
+  platform: platform,
+  isWeb: isWeb,
+  legacyHatch: legacyHatch,
+  failedVersion: failedVersion,
+  appVersion: appVersion,
+);
 
 void main() {
   test('macOS with nothing against it uses the surface', () {
@@ -23,8 +22,9 @@ void main() {
   });
 
   test('other platforms keep the texture', () {
-    for (final p
-        in TargetPlatform.values.where((p) => p != TargetPlatform.macOS)) {
+    for (final p in TargetPlatform.values.where(
+      (p) => p != TargetPlatform.macOS,
+    )) {
       expect(_choose(platform: p), VideoOutputPath.texture, reason: '$p');
     }
   });
@@ -49,14 +49,13 @@ void main() {
     Future<MacVideoOutputChoice> resolve({
       required Future<bool> Function() hatch,
       required Future<String?> Function() failed,
-    }) =>
-        resolveVideoOutputChoice(
-          readLegacyHatch: hatch,
-          readFailedVersion: failed,
-          appVersion: '1.5.0',
-          platform: TargetPlatform.macOS,
-          isWeb: false,
-        );
+    }) => resolveVideoOutputChoice(
+      readLegacyHatch: hatch,
+      readFailedVersion: failed,
+      appVersion: '1.5.0',
+      platform: TargetPlatform.macOS,
+      isWeb: false,
+    );
 
     test('a hatch read that throws still reads the failure marker', () async {
       final choice = await resolve(

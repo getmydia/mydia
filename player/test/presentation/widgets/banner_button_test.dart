@@ -32,8 +32,9 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('while loading it spins instead of labelling, and is inert',
-      (tester) async {
+  testWidgets('while loading it spins instead of labelling, and is inert', (
+    tester,
+  ) async {
     var taps = 0;
     await _pump(tester, isLoading: true, onPressed: () => taps++);
 

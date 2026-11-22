@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/cast/cast_backend.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_seek.dart';
@@ -91,10 +92,12 @@ class _CastBarLayerState extends ConsumerState<CastBarLayer> {
   bool _nativeBar = false;
   bool _popup = false;
 
-  late final PageCoverObserver _rootRoutes =
-      ref.read(pageCoverObserverProvider);
-  late final ShellPopupObserver _shellRoutes =
-      ref.read(shellPopupObserverProvider);
+  late final PageCoverObserver _rootRoutes = ref.read(
+    pageCoverObserverProvider,
+  );
+  late final ShellPopupObserver _shellRoutes = ref.read(
+    shellPopupObserverProvider,
+  );
 
   @override
   void initState() {
@@ -151,7 +154,8 @@ class _CastBarLayerState extends ConsumerState<CastBarLayer> {
     // bar floats at the window edge there (the shell's dock reports 0 once
     // covered). Nothing while the bar is hidden or has stood down, and
     // nothing above the keyboard, which covers the bar.
-    final pageInset = !_nativeBar &&
+    final pageInset =
+        !_nativeBar &&
             !hidden &&
             !hasDock &&
             _castBar > 0 &&
@@ -212,8 +216,9 @@ class _CastBarLayerState extends ConsumerState<CastBarLayer> {
                       // screens outside the shell) the bar keeps its full
                       // width.
                       constraints: BoxConstraints(
-                        maxWidth:
-                            _sidebar > 0 ? CastPill.maxWidth : double.infinity,
+                        maxWidth: _sidebar > 0
+                            ? CastPill.maxWidth
+                            : double.infinity,
                       ),
                       child: MediaQuery.removePadding(
                         context: context,
@@ -277,15 +282,17 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   double? _dragFraction;
 
   Widget? _buildContent() => switch (ref.watch(castBarStateProvider)) {
-        null => null,
-        CastBarAmbient(:final target, :final deviceName) =>
-          _buildAmbient(target, deviceName),
-        CastBarOffline(:final device) => _buildOffline(device),
-        CastBarConnecting(:final device) => _buildConnecting(device),
-        CastBarStale(:final session) => _buildStale(session),
-        CastBarIdle(:final device) => _buildIdle(device),
-        CastBarPlaying(:final session) => _buildPlaying(session),
-      };
+    null => null,
+    CastBarAmbient(:final target, :final deviceName) => _buildAmbient(
+      target,
+      deviceName,
+    ),
+    CastBarOffline(:final device) => _buildOffline(device),
+    CastBarConnecting(:final device) => _buildConnecting(device),
+    CastBarStale(:final session) => _buildStale(session),
+    CastBarIdle(:final device) => _buildIdle(device),
+    CastBarPlaying(:final session) => _buildPlaying(session),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -332,75 +339,79 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   /// One outer transport slot. An absent control still takes its width, so
   /// play/pause stays centered whichever optional controls apply.
   Widget _slot(Widget? child) => SizedBox(
-        width: _transportSlot,
-        child: child == null ? null : Center(child: child),
-      );
+    width: _transportSlot,
+    child: child == null ? null : Center(child: child),
+  );
 
   /// Connected, nothing loaded. "Ready to play on" rather than "Will play on":
   /// this is a statement about a connection that exists, not a promise about
   /// the future.
   Widget _buildIdle(CastDevice device) => CastPill(
-        child: CastBarRow(
-          leading: const CastIconTile(
-              accent: true, child: Icon(Icons.cast_connected)),
-          title: CastBarText.idleTitle(context.l10n, device.name),
-          status: CastBarText.idleStatus(context.l10n),
-          dot: CastDot.live,
-          actions: [
-            _closeButton(
-              key: const Key('cast-bar-idle-clear'),
-              tooltip: context.l10n.castBarStopCastingTo(device.name),
-              onPressed: _stopCasting,
-            ),
-          ],
+    child: CastBarRow(
+      leading: const CastIconTile(
+        accent: true,
+        child: Icon(Icons.cast_connected),
+      ),
+      title: CastBarText.idleTitle(context.l10n, device.name),
+      status: CastBarText.idleStatus(context.l10n),
+      dot: CastDot.live,
+      actions: [
+        _closeButton(
+          key: const Key('cast-bar-idle-clear'),
+          tooltip: context.l10n.castBarStopCastingTo(device.name),
+          onPressed: _stopCasting,
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _buildConnecting(CastDevice device) => CastPill(
-        child: CastBarRow(
-          leading: CastIconTile(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: context.palette.primary),
-            ),
+    child: CastBarRow(
+      leading: CastIconTile(
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: context.palette.primary,
           ),
-          title: CastBarText.connectingTitle(context.l10n, device.name),
-          actions: [
-            _closeButton(
-              key: const Key('cast-bar-connecting-cancel'),
-              tooltip: context.l10n.castBarCancelConnecting(device.name),
-              // Tears down whatever the in-flight connect established rather
-              // than merely forgetting the device.
-              onPressed: _stopCasting,
-            ),
-          ],
         ),
-      );
+      ),
+      title: CastBarText.connectingTitle(context.l10n, device.name),
+      actions: [
+        _closeButton(
+          key: const Key('cast-bar-connecting-cancel'),
+          tooltip: context.l10n.castBarCancelConnecting(device.name),
+          // Tears down whatever the in-flight connect established rather
+          // than merely forgetting the device.
+          onPressed: _stopCasting,
+        ),
+      ],
+    ),
+  );
 
   /// A device is remembered but nothing is connected — a failed connect, or a
   /// receiver that idle-timed-out while the user browsed.
   Widget _buildOffline(CastDevice device) => CastPill(
-        child: CastBarRow(
-          leading: const CastIconTile(child: Icon(Icons.cast)),
-          title: device.name,
-          status: CastBarText.offlineStatus(context.l10n),
-          dot: CastDot.idle,
-          actions: [
-            CastPrimaryAction(
-              key: const Key('cast-bar-offline-reconnect'),
-              label: context.l10n.castBarReconnect,
-              onPressed: () => _reconnectIdle(device),
-            ),
-            _closeButton(
-              key: const Key('cast-bar-offline-clear'),
-              tooltip: context.l10n.castBarForget(device.name),
-              onPressed: _stopCasting,
-            ),
-          ],
+    child: CastBarRow(
+      leading: const CastIconTile(child: Icon(Icons.cast)),
+      title: device.name,
+      status: CastBarText.offlineStatus(context.l10n),
+      dot: CastDot.idle,
+      actions: [
+        CastPrimaryAction(
+          key: const Key('cast-bar-offline-reconnect'),
+          label: context.l10n.castBarReconnect,
+          onPressed: () => _reconnectIdle(device),
         ),
-      );
+        _closeButton(
+          key: const Key('cast-bar-offline-clear'),
+          tooltip: context.l10n.castBarForget(device.name),
+          onPressed: _stopCasting,
+        ),
+      ],
+    ),
+  );
 
   /// The "Playing on X" row; see [castBarStateProvider] for when it shows.
   ///
@@ -451,43 +462,50 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await manager.connectTo(device);
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showCastErrorToast(context, e,
-          ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
+      showCastErrorToast(
+        context,
+        e,
+        ref: ref,
+        isMydiaTarget: device.protocol == CastProtocolKind.mydia,
+      );
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting: $e');
       if (!mounted) return;
-      showToast(context, context.l10n.castConnectFailed('$e'),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.castConnectFailed('$e'),
+        kind: ToastKind.error,
+      );
     }
   }
 
   Widget _buildStale(CastSession session) => CastPill(
-        child: CastBarRow(
-          leading: CastThumb(
-            imageUrl: session.mediaInfo?.imageUrl,
-            fallbackIcon: Icons.cast,
-            dimmed: true,
-          ),
-          title: session.mediaInfo?.title ?? session.device.name,
-          status: CastBarText.staleStatus(context.l10n, session.device.name),
-          dot: CastDot.lost,
-          actions: [
-            // Re-cast what the *stale session* was playing. Anything else
-            // here would silently start whatever this screen happens to be
-            // showing instead.
-            CastPrimaryAction(
-              key: const Key('cast-stale-reconnect'),
-              label: context.l10n.castBarReconnect,
-              onPressed: _reconnectStaleSession,
-            ),
-            CastGhostAction(
-              key: const Key('cast-stale-stop'),
-              label: context.l10n.commonStop,
-              onPressed: _stopCasting,
-            ),
-          ],
+    child: CastBarRow(
+      leading: CastThumb(
+        imageUrl: session.mediaInfo?.imageUrl,
+        fallbackIcon: Icons.cast,
+        dimmed: true,
+      ),
+      title: session.mediaInfo?.title ?? session.device.name,
+      status: CastBarText.staleStatus(context.l10n, session.device.name),
+      dot: CastDot.lost,
+      actions: [
+        // Re-cast what the *stale session* was playing. Anything else
+        // here would silently start whatever this screen happens to be
+        // showing instead.
+        CastPrimaryAction(
+          key: const Key('cast-stale-reconnect'),
+          label: context.l10n.castBarReconnect,
+          onPressed: _reconnectStaleSession,
         ),
-      );
+        CastGhostAction(
+          key: const Key('cast-stale-stop'),
+          label: context.l10n.commonStop,
+          onPressed: _stopCasting,
+        ),
+      ],
+    ),
+  );
 
   Widget _buildPlaying(CastSession session) {
     final info = session.mediaInfo;
@@ -519,8 +537,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           CastBarRow(
             leading: CastThumb(imageUrl: info.imageUrl),
             title: info.title,
-            status: CastBarText.playingStatus(context.l10n, session.device.name,
-                syncing: syncing),
+            status: CastBarText.playingStatus(
+              context.l10n,
+              session.device.name,
+              syncing: syncing,
+            ),
             dot: syncing ? CastDot.idle : CastDot.live,
             actions: [
               // What the close button does depends on whether this device
@@ -533,8 +554,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
               if (isMydia)
                 _closeButton(
                   key: const Key('cast-bar-dismiss'),
-                  tooltip:
-                      context.l10n.castBarHideKeepPlaying(session.device.name),
+                  tooltip: context.l10n.castBarHideKeepPlaying(
+                    session.device.name,
+                  ),
                   onPressed: () => _detach(session),
                 )
               else
@@ -559,9 +581,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 children: [
                   Text(
                     _formatDuration(info.position),
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
+                    style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: palette.textSecondary),
                   ),
                   Expanded(
@@ -576,12 +596,15 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                           : null,
                       onChangeEnd: durationKnown && !syncing
                           ? (v) async {
-                              final target =
-                                  seekTargetForFraction(v, info.duration);
+                              final target = seekTargetForFraction(
+                                v,
+                                info.duration,
+                              );
                               setState(() => _dragFraction = null);
                               if (target == null) return;
-                              final manager = await ref
-                                  .read(castSessionManagerProvider.future);
+                              final manager = await ref.read(
+                                castSessionManagerProvider.future,
+                              );
                               await manager.seek(target);
                             }
                           : null,
@@ -590,9 +613,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   Text(
                     key: const Key('cast-bar-duration'),
                     durationKnown ? _formatDuration(info.duration) : '--:--',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
+                    style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: palette.textSecondary),
                   ),
                 ],
@@ -605,48 +626,59 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
               key: const Key('cast-bar-transport'),
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _slot(session.subtitles.isEmpty
-                    ? null
-                    : IconButton(
-                        key: const Key('cast-bar-subtitles'),
-                        tooltip: context.l10n.commonSubtitles,
-                        color: palette.textPrimary,
-                        icon: Icon(
-                          session.selectedSubtitle == null
-                              ? Icons.closed_caption_off
-                              : Icons.closed_caption,
+                _slot(
+                  session.subtitles.isEmpty
+                      ? null
+                      : IconButton(
+                          key: const Key('cast-bar-subtitles'),
+                          tooltip: context.l10n.commonSubtitles,
+                          color: palette.textPrimary,
+                          icon: Icon(
+                            session.selectedSubtitle == null
+                                ? Icons.closed_caption_off
+                                : Icons.closed_caption,
+                          ),
+                          onPressed: syncing
+                              ? null
+                              : () => _pickSubtitle(session),
                         ),
-                        onPressed:
-                            syncing ? null : () => _pickSubtitle(session),
-                      )),
+                ),
                 // Mydia only: on a Chromecast the header close button is
                 // already the stop control. Confirmed, because media is
                 // actively playing on someone else's screen.
                 if (isMydia)
-                  _slot(IconButton(
-                    key: const Key('cast-bar-stop'),
-                    icon: const Icon(Icons.stop),
+                  _slot(
+                    IconButton(
+                      key: const Key('cast-bar-stop'),
+                      icon: const Icon(Icons.stop),
+                      color: palette.textPrimary,
+                      tooltip: context.l10n.castBarStopPlaybackOn(
+                        session.device.name,
+                      ),
+                      onPressed: () => _confirmStop(session.device),
+                    ),
+                  ),
+                _slot(
+                  IconButton(
+                    key: const Key('cast-bar-rewind'),
+                    icon: const Icon(Icons.replay_10),
                     color: palette.textPrimary,
-                    tooltip:
-                        context.l10n.castBarStopPlaybackOn(session.device.name),
-                    onPressed: () => _confirmStop(session.device),
-                  )),
-                _slot(IconButton(
-                  key: const Key('cast-bar-rewind'),
-                  icon: const Icon(Icons.replay_10),
-                  color: palette.textPrimary,
-                  tooltip: context.l10n.castBarBack10,
-                  onPressed: syncing
-                      ? null
-                      : () async {
-                          final manager =
-                              await ref.read(castSessionManagerProvider.future);
-                          await manager.seek(clampSeekTarget(
-                            info.position - const Duration(seconds: 10),
-                            info.duration,
-                          ));
-                        },
-                )),
+                    tooltip: context.l10n.castBarBack10,
+                    onPressed: syncing
+                        ? null
+                        : () async {
+                            final manager = await ref.read(
+                              castSessionManagerProvider.future,
+                            );
+                            await manager.seek(
+                              clampSeekTarget(
+                                info.position - const Duration(seconds: 10),
+                                info.duration,
+                              ),
+                            );
+                          },
+                  ),
+                ),
                 IconButton.filled(
                   key: const Key('cast-bar-play-pause'),
                   icon: Icon(
@@ -663,40 +695,47 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   onPressed: syncing
                       ? null
                       : () async => toggleCastPlayback(
-                            await ref.read(castSessionManagerProvider.future),
-                            session,
-                          ),
+                          await ref.read(castSessionManagerProvider.future),
+                          session,
+                        ),
                 ),
-                _slot(IconButton(
-                  key: const Key('cast-bar-forward'),
-                  icon: const Icon(Icons.forward_10),
-                  color: palette.textPrimary,
-                  tooltip: context.l10n.castBarForward10,
-                  onPressed: syncing
-                      ? null
-                      : () async {
-                          final manager =
-                              await ref.read(castSessionManagerProvider.future);
-                          await manager.seek(clampSeekTarget(
-                            info.position + const Duration(seconds: 10),
-                            info.duration,
-                          ));
-                        },
-                )),
+                _slot(
+                  IconButton(
+                    key: const Key('cast-bar-forward'),
+                    icon: const Icon(Icons.forward_10),
+                    color: palette.textPrimary,
+                    tooltip: context.l10n.castBarForward10,
+                    onPressed: syncing
+                        ? null
+                        : () async {
+                            final manager = await ref.read(
+                              castSessionManagerProvider.future,
+                            );
+                            await manager.seek(
+                              clampSeekTarget(
+                                info.position + const Duration(seconds: 10),
+                                info.duration,
+                              ),
+                            );
+                          },
+                  ),
+                ),
                 // Pull: only a Mydia target runs this same app, so only one
                 // can hand playback back to this device at its exact
                 // position. Shown for a self-started cast too, not just an
                 // adopted one: bringing your own cast back is exactly as
                 // valid a thing to want as pulling someone else's.
-                _slot(isMydia
-                    ? IconButton(
-                        key: const Key('cast-bar-pull'),
-                        icon: const Icon(Icons.phone_iphone),
-                        color: palette.textPrimary,
-                        tooltip: context.l10n.castBarPlayHere,
-                        onPressed: syncing ? null : _pullToLocal,
-                      )
-                    : null),
+                _slot(
+                  isMydia
+                      ? IconButton(
+                          key: const Key('cast-bar-pull'),
+                          icon: const Icon(Icons.phone_iphone),
+                          color: palette.textPrimary,
+                          tooltip: context.l10n.castBarPlayHere,
+                          onPressed: syncing ? null : _pullToLocal,
+                        )
+                      : null,
+                ),
                 // Balances the stop slot so play/pause stays centered.
                 if (isMydia) _slot(null),
               ],
@@ -733,8 +772,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       // The ids in the pulled session are the target's own instance's, so
       // the instance comes from the device before pulling ends the session.
       final device = ref.read(castSessionProvider).value?.device;
-      final via =
-          device == null ? null : sourceIdsOfCastDevice(device).firstOrNull;
+      final via = device == null
+          ? null
+          : sourceIdsOfCastDevice(device).firstOrNull;
 
       final manager = await ref.read(castSessionManagerProvider.future);
       final pulled = await manager.pullToLocal();
@@ -760,12 +800,16 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       // `GoRouter` above it to find; `rootNavigatorKey.currentContext` is
       // the router's own root, same fallback `_confirmStop` already uses.
       final router = GoRouter.of(rootNavigatorKey.currentContext ?? context);
-      final screenWidth =
-          MediaQuery.sizeOf(rootNavigatorKey.currentContext ?? context).width;
+      final screenWidth = MediaQuery.sizeOf(
+        rootNavigatorKey.currentContext ?? context,
+      ).width;
 
       if (intent.via == null) {
-        showToast(context, context.l10n.castBarServerUnknown,
-            kind: ToastKind.error);
+        showToast(
+          context,
+          context.l10n.castBarServerUnknown,
+          kind: ToastKind.error,
+        );
         return;
       }
 
@@ -783,8 +827,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error pulling session: $e');
       if (!mounted) return;
-      showToast(context, context.l10n.castBarPullFailed('$e'),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.castBarPullFailed('$e'),
+        kind: ToastKind.error,
+      );
     }
   }
 
@@ -797,13 +844,20 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } on CastBackendException catch (e) {
       if (!mounted) return;
       final target = ref.read(castTargetProvider);
-      showCastErrorToast(context, e,
-          ref: ref, isMydiaTarget: target?.protocol == CastProtocolKind.mydia);
+      showCastErrorToast(
+        context,
+        e,
+        ref: ref,
+        isMydiaTarget: target?.protocol == CastProtocolKind.mydia,
+      );
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting cast: $e');
       if (!mounted) return;
-      showToast(context, context.l10n.castBarReconnectFailed('$e'),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.castBarReconnectFailed('$e'),
+        kind: ToastKind.error,
+      );
     }
   }
 
@@ -826,8 +880,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error stopping cast: $e');
       if (!mounted) return;
-      showToast(context, context.l10n.castBarStopFailed('$e'),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.castBarStopFailed('$e'),
+        kind: ToastKind.error,
+      );
     }
   }
 
@@ -848,8 +905,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error disconnecting: $e');
       if (!mounted) return;
-      showToast(context, context.l10n.castBarDisconnectFailed('$e'),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.castBarDisconnectFailed('$e'),
+        kind: ToastKind.error,
+      );
     }
   }
 

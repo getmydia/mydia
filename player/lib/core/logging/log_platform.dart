@@ -2,5 +2,6 @@
 /// web, where `openLogStore` answers null.
 library;
 
-export 'log_platform_stub.dart' if (dart.library.io) 'log_platform_io.dart'
+export 'log_platform_stub.dart'
+    if (dart.library.io) 'log_platform_io.dart'
     show openLogStore, gzipBytes;

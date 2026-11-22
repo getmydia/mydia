@@ -66,9 +66,13 @@ class FreshnessHeader extends ConsumerWidget {
     // The shell's OfflineBanner reports the source of the current route, so
     // this header must read the same one. Outside a router, the active source.
     final location = _ownLocation(context);
-    final offline = isOffline(ref.watch(location == null
-        ? currentSourceStatusProvider
-        : routeSourceStatusProvider(location)));
+    final offline = isOffline(
+      ref.watch(
+        location == null
+            ? currentSourceStatusProvider
+            : routeSourceStatusProvider(location),
+      ),
+    );
     // OfflineBanner already owns this message. Two stacked warning banners
     // saying overlapping things is how banners get ignored.
     if (offline) return const SizedBox.shrink();
@@ -84,7 +88,8 @@ class FreshnessHeader extends ConsumerWidget {
     // together with `data == null`, well before anything is on screen. Without
     // this the banner would claim to be "showing" data over a shimmer, or
     // (on a failed cold fetch) over the error screen.
-    final showBanner = fetchedAt != null &&
+    final showBanner =
+        fetchedAt != null &&
         freshness.hasData &&
         (freshness.refreshFailed ||
             (freshness.isStale && !freshness.isRefreshing));
@@ -189,10 +194,7 @@ class _FreshnessBanner extends StatelessWidget {
             ),
             child: Text(
               failed ? l10n.commonRetry : l10n.commonRefresh,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         ],

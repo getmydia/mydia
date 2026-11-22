@@ -14,8 +14,8 @@ class MergedRoster implements DeviceRoster {
   MergedRoster(
     Map<SourceId, DeviceRoster> rosters, {
     List<DeviceRoster> extras = const [],
-  })  : _rosters = Map.unmodifiable(rosters),
-        _extras = List.unmodifiable(extras);
+  }) : _rosters = Map.unmodifiable(rosters),
+       _extras = List.unmodifiable(extras);
 
   final Map<SourceId, DeviceRoster> _rosters;
   final List<DeviceRoster> _extras;
@@ -46,9 +46,9 @@ class MergedRoster implements DeviceRoster {
 
   @override
   int get hashCode => Object.hashAll([
-        for (final e in _rosters.entries) ...[e.key, identityHashCode(e.value)],
-        for (final extra in _extras) identityHashCode(extra),
-      ]);
+    for (final e in _rosters.entries) ...[e.key, identityHashCode(e.value)],
+    for (final extra in _extras) identityHashCode(extra),
+  ]);
 
   @override
   Future<List<RemoteDeviceEntry>> entries() =>
@@ -97,8 +97,10 @@ class MergedRoster implements DeviceRoster {
           }
         }(),
     ]);
-    final (serverLists, extraLists) =
-        await (serverListsFuture, extraListsFuture).wait;
+    final (serverLists, extraLists) = await (
+      serverListsFuture,
+      extraListsFuture,
+    ).wait;
 
     final seen = <String>{};
     return [
@@ -149,8 +151,10 @@ class CurrentDeviceRoster implements DeviceRoster {
 final mergedRosterProvider = Provider<MergedRoster>((ref) {
   final rosters = <SourceId, DeviceRoster>{};
   for (final id in ref.watch(mydiaSourceIdsProvider)) {
-    final roster =
-        ref.watch(mediaSourceProvider(id))?.as<RemoteTargets>()?.roster;
+    final roster = ref
+        .watch(mediaSourceProvider(id))
+        ?.as<RemoteTargets>()
+        ?.roster;
     if (roster != null) rosters[id] = roster;
   }
   final peerGroupRoster = ref.watch(peerGroupRosterProvider);

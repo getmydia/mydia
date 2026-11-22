@@ -49,8 +49,9 @@ class FloatingRail extends ConsumerStatefulWidget {
 
   /// The dim behind the expanded rail, shared with the floating phone drawer
   /// so the two overlays match.
-  static Color scrimColor(BuildContext context) => Colors.black
-      .withValues(alpha: MediaQuery.highContrastOf(context) ? 0.7 : 0.55);
+  static Color scrimColor(BuildContext context) => Colors.black.withValues(
+    alpha: MediaQuery.highContrastOf(context) ? 0.7 : 0.55,
+  );
 
   @override
   ConsumerState<FloatingRail> createState() => _FloatingRailState();
@@ -324,8 +325,9 @@ class _RailFooter extends ConsumerWidget {
                             ref.read(sidebarEditModeProvider.notifier).toggle(),
                         icon: Icon(
                           Icons.edit_outlined,
-                          color:
-                              editing ? palette.primary : palette.textSecondary,
+                          color: editing
+                              ? palette.primary
+                              : palette.textSecondary,
                         ),
                       ),
                     ],

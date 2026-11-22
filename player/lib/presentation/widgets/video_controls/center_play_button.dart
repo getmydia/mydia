@@ -68,10 +68,7 @@ class CenterPlayButton extends StatelessWidget {
                   transitionBuilder: (child, animation) {
                     return ScaleTransition(
                       scale: animation,
-                      child: FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      ),
+                      child: FadeTransition(opacity: animation, child: child),
                     );
                   },
                   child: Icon(

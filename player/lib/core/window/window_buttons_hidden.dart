@@ -12,8 +12,9 @@ import 'package:flutter/foundation.dart';
 /// intended writer. Deliberately NOT marked `@visibleForTesting`: that
 /// annotation fires `invalid_use_of_visible_for_testing_member` as soon as
 /// the bridge, which lives in a different library file, touches it.
-final ValueNotifier<bool> windowButtonsHiddenSignal =
-    ValueNotifier<bool>(false);
+final ValueNotifier<bool> windowButtonsHiddenSignal = ValueNotifier<bool>(
+  false,
+);
 
 /// Read-only view of [windowButtonsHiddenSignal] for consumers.
 ValueListenable<bool> get windowButtonsHidden => windowButtonsHiddenSignal;

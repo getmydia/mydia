@@ -11,8 +11,11 @@ import 'package:player/domain/sources/source_error.dart';
 
 import 'plex_home_fixtures.dart';
 
-const identity =
-    PlexIdentity(clientIdentifier: 'cid', version: '1', platform: 'Linux');
+const identity = PlexIdentity(
+  clientIdentifier: 'cid',
+  version: '1',
+  platform: 'Linux',
+);
 
 const resourcesJson = '''
 [
@@ -42,11 +45,13 @@ void main() {
     requests = [];
     return PlexTvClient(
       identity: identity,
-      http: SourceHttp(client: MockClient((request) async {
-        requests.add(request);
-        final route = routes['${request.method} ${request.url.path}'];
-        return route == null ? http.Response('', 404) : route();
-      })),
+      http: SourceHttp(
+        client: MockClient((request) async {
+          requests.add(request);
+          final route = routes['${request.method} ${request.url.path}'];
+          return route == null ? http.Response('', 404) : route();
+        }),
+      ),
     );
   }
 
@@ -59,8 +64,11 @@ void main() {
     expect(pin.id, 7);
     expect(pin.code, 'QZ4K');
     expect(requests.single.headers['X-Plex-Client-Identifier'], 'cid');
-    expect(requests.single.url.queryParameters.containsKey('strong'), isFalse,
-        reason: 'plex.tv/link only accepts the short code');
+    expect(
+      requests.single.url.queryParameters.containsKey('strong'),
+      isFalse,
+      reason: 'plex.tv/link only accepts the short code',
+    );
   });
 
   test('a PIN without a token yet answers null', () async {
@@ -82,8 +90,9 @@ void main() {
   test('reads the user with the token in a header', () async {
     final tv = client({
       'GET /api/v2/user': () => http.Response(
-          jsonEncode({'uuid': 'u1', 'username': 'quill', 'title': 'Quill'}),
-          200),
+        jsonEncode({'uuid': 'u1', 'username': 'quill', 'title': 'Quill'}),
+        200,
+      ),
     });
     final user = await tv.user('acct');
     expect(user.username, 'quill');
@@ -114,9 +123,17 @@ void main() {
   test('reconcile updates known servers and marks missing ones gone', () {
     final stored = [
       const SourceServer(
-          id: 'aa11', accountId: 'acc1', profileId: 'owner', name: 'Old name'),
+        id: 'aa11',
+        accountId: 'acc1',
+        profileId: 'owner',
+        name: 'Old name',
+      ),
       const SourceServer(
-          id: 'zz99', accountId: 'acc1', profileId: 'owner', name: 'Sold'),
+        id: 'zz99',
+        accountId: 'acc1',
+        profileId: 'owner',
+        name: 'Sold',
+      ),
     ];
     final resources = [
       PlexResource(
@@ -149,24 +166,26 @@ void main() {
   });
 
   group('Plex Home', () {
-    test('lists home users with the admin as owner and odd ids skipped',
-        () async {
-      final tv = client({
-        'GET /api/v2/home/users': () => http.Response(homeUsersJson, 200),
-      });
-      final users = await tv.homeUsers('acct');
-      expect([for (final u in users) u.title], ['Quill', 'Pip', 'Wren']);
-      expect(users.first.profileId, 'owner');
-      expect(users[1].profileId, 'kid0001');
-      expect(users[1].protected, isTrue);
-      expect(requests.single.headers['X-Plex-Token'], 'acct');
+    test(
+      'lists home users with the admin as owner and odd ids skipped',
+      () async {
+        final tv = client({
+          'GET /api/v2/home/users': () => http.Response(homeUsersJson, 200),
+        });
+        final users = await tv.homeUsers('acct');
+        expect([for (final u in users) u.title], ['Quill', 'Pip', 'Wren']);
+        expect(users.first.profileId, 'owner');
+        expect(users[1].profileId, 'kid0001');
+        expect(users[1].protected, isTrue);
+        expect(requests.single.headers['X-Plex-Token'], 'acct');
 
-      final profile = users[1].toProfile('acc1');
-      expect(profile.id, 'kid0001');
-      expect(profile.accountId, 'acc1');
-      expect(profile.isOwner, isFalse);
-      expect(profile.protected, isTrue);
-    });
+        final profile = users[1].toProfile('acc1');
+        expect(profile.id, 'kid0001');
+        expect(profile.accountId, 'acc1');
+        expect(profile.isOwner, isFalse);
+        expect(profile.protected, isTrue);
+      },
+    );
 
     test('reads a bare list too', () async {
       final users =
@@ -201,8 +220,13 @@ void main() {
       });
       expect(
         () => tv.switchUser('acct', 'kid0001', pin: '0000'),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.wrongPin)),
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.wrongPin,
+          ),
+        ),
       );
     });
 
@@ -212,8 +236,13 @@ void main() {
       });
       expect(
         () => tv.switchUser('acct', 'guest02'),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)),
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.unauthorized,
+          ),
+        ),
       );
     });
 
@@ -224,8 +253,13 @@ void main() {
       });
       expect(
         () => tv.switchUser('acct', 'guest02'),
-        throwsA(isA<SourceException>()
-            .having((e) => e.kind, 'kind', SourceErrorKind.server)),
+        throwsA(
+          isA<SourceException>().having(
+            (e) => e.kind,
+            'kind',
+            SourceErrorKind.server,
+          ),
+        ),
       );
     });
   });

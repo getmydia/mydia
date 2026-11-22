@@ -13,26 +13,30 @@ RecoveryKey _key(int fill) => RecoveryKey.fromBytes(List.filled(32, fill));
 
 /// Opens the enable sheet from a button, so its result can be read.
 Future<List<bool>> _open(
-    WidgetTester tester, FakeBackupSyncService fake) async {
+  WidgetTester tester,
+  FakeBackupSyncService fake,
+) async {
   tester.view.physicalSize = const Size(900, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final results = <bool>[];
-  await tester.pumpWidget(MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    builder: toastLayerBuilder,
-    home: Builder(
-      builder: (context) => Scaffold(
-        body: TextButton(
-          key: const Key('open'),
-          onPressed: () async =>
-              results.add(await showEnableBackupSheet(context, fake)),
-          child: const Text('open'),
+  await tester.pumpWidget(
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: toastLayerBuilder,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            key: const Key('open'),
+            onPressed: () async =>
+                results.add(await showEnableBackupSheet(context, fake)),
+            child: const Text('open'),
+          ),
         ),
       ),
     ),
-  ));
+  );
   await tester.tap(find.byKey(const Key('open')));
   await tester.pumpAndSettle();
   return results;
@@ -40,8 +44,9 @@ Future<List<bool>> _open(
 
 final _savedBox = find.byKey(const Key('recovery-key-saved-checkbox'));
 
-FilledButton _confirm(WidgetTester tester) => tester
-    .widget<FilledButton>(find.byKey(const Key('recovery-key-confirm-button')));
+FilledButton _confirm(WidgetTester tester) => tester.widget<FilledButton>(
+  find.byKey(const Key('recovery-key-confirm-button')),
+);
 
 void main() {
   testWidgets('shows 13 groups of 4 and a QR code', (tester) async {
@@ -54,8 +59,9 @@ void main() {
     expect(find.byKey(const Key('recovery-key-copy')), findsOneWidget);
   });
 
-  testWidgets('turn on stays disabled until the saved box is ticked',
-      (tester) async {
+  testWidgets('turn on stays disabled until the saved box is ticked', (
+    tester,
+  ) async {
     final key = _key(42);
     final fake = FakeBackupSyncService()..keys.add(key);
     final results = await _open(tester, fake);
@@ -94,14 +100,18 @@ void main() {
     expect(find.byKey(const Key('recovery-key-retry')), findsOneWidget);
     expect(find.text(second.display), findsOneWidget);
     expect(find.text(first.display), findsNothing);
-    expect(_confirm(tester).onPressed, isNull,
-        reason: 'the new key has to be confirmed as saved again');
+    expect(
+      _confirm(tester).onPressed,
+      isNull,
+      reason: 'the new key has to be confirmed as saved again',
+    );
     expect(tester.widget<CheckboxListTile>(_savedBox).value, isFalse);
     expect(results, isEmpty);
   });
 
-  testWidgets('a failure after relay is enabled keeps the same key',
-      (tester) async {
+  testWidgets('a failure after relay is enabled keeps the same key', (
+    tester,
+  ) async {
     final first = _key(1);
     final second = _key(2);
     final fake = FakeBackupSyncService()
@@ -125,38 +135,47 @@ void main() {
     expect(results, [true]);
   });
 
-  testWidgets('a copied key is cleared from the clipboard on close',
-      (tester) async {
+  testWidgets('a copied key is cleared from the clipboard on close', (
+    tester,
+  ) async {
     String? clipboard;
-    tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') {
-        clipboard = (call.arguments as Map)['text'] as String?;
-      } else if (call.method == 'Clipboard.getData') {
-        return {'text': clipboard};
-      }
-      return null;
-    });
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboard = (call.arguments as Map)['text'] as String?;
+        } else if (call.method == 'Clipboard.getData') {
+          return {'text': clipboard};
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
     tester.view.physicalSize = const Size(900, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final key = _key(3);
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: Builder(
-        builder: (context) => Scaffold(
-          body: TextButton(
-            key: const Key('open'),
-            onPressed: () => showRecoveryKeySheet(context, key.display),
-            child: const Text('open'),
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              key: const Key('open'),
+              onPressed: () => showRecoveryKeySheet(context, key.display),
+              child: const Text('open'),
+            ),
           ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.byKey(const Key('open')));
     await tester.pumpAndSettle();
 
@@ -164,41 +183,54 @@ void main() {
     await tester.pump();
     expect(clipboard, key.display);
     expect(
-        find.text('Recovery key copied. Keep it somewhere safe, like a '
-            'password manager.'),
-        findsOneWidget);
+      find.text(
+        'Recovery key copied. Keep it somewhere safe, like a '
+        'password manager.',
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('recovery-key-done')));
     await tester.pumpAndSettle();
     expect(find.byType(RecoveryKeySheet), findsNothing);
     // The clear goes through the platform channel's own async hops.
-    await tester
-        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
     await tester.pump();
     expect(clipboard, '');
   });
 
-  testWidgets('a clipboard the viewer changed since is left alone',
-      (tester) async {
+  testWidgets('a clipboard the viewer changed since is left alone', (
+    tester,
+  ) async {
     String? clipboard;
-    tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') {
-        clipboard = (call.arguments as Map)['text'] as String?;
-      } else if (call.method == 'Clipboard.getData') {
-        return {'text': clipboard};
-      }
-      return null;
-    });
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboard = (call.arguments as Map)['text'] as String?;
+        } else if (call.method == 'Clipboard.getData') {
+          return {'text': clipboard};
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
     final key = _key(4);
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: Scaffold(body: RecoveryKeySheet.show(keyText: key.display)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Scaffold(body: RecoveryKeySheet.show(keyText: key.display)),
+      ),
+    );
     await tester.tap(find.byKey(const Key('recovery-key-copy')));
     await tester.pump();
     clipboard = 'something else';
@@ -209,12 +241,14 @@ void main() {
 
   testWidgets('show mode only displays the key', (tester) async {
     final key = _key(9);
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: Scaffold(body: RecoveryKeySheet.show(keyText: key.display)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Scaffold(body: RecoveryKeySheet.show(keyText: key.display)),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text(key.display), findsOneWidget);
     expect(_savedBox, findsNothing);

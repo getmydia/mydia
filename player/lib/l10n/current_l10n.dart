@@ -16,7 +16,8 @@ void rememberInterfaceLocale(Locale? locale) => _chosenLocale = locale;
 /// that have no `BuildContext`. Widgets use `context.l10n` instead: it follows
 /// the tree, this does not.
 AppLocalizations currentAppLocalizations() {
-  final locale = _chosenLocale ??
+  final locale =
+      _chosenLocale ??
       resolveAppLocale(
         PlatformDispatcher.instance.locales,
         AppLocalizations.supportedLocales,

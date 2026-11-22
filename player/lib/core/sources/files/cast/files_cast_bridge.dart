@@ -15,10 +15,7 @@ import 'subtitle_vtt.dart';
 
 /// A sidecar subtitle track registered on a [FilesCastBridge] session.
 class FilesCastSubtitle {
-  const FilesCastSubtitle({
-    required this.file,
-    required this.format,
-  });
+  const FilesCastSubtitle({required this.file, required this.format});
 
   final PlayableFile file;
   final String format;
@@ -70,10 +67,10 @@ class FilesCastBridge {
   FilesCastBridge({
     Future<String?> Function()? lanAddressResolver,
     http.Client? client,
-  })  : _lanAddressResolver =
-            lanAddressResolver ?? LocalProxyService.resolveLanAddress,
-        _client = client ?? http.Client(),
-        _ownsClient = client == null;
+  }) : _lanAddressResolver =
+           lanAddressResolver ?? LocalProxyService.resolveLanAddress,
+       _client = client ?? http.Client(),
+       _ownsClient = client == null;
 
   final Future<String?> Function() _lanAddressResolver;
   final http.Client _client;
@@ -279,10 +276,13 @@ class FilesCastBridge {
     } catch (e) {
       // Never `$e`: an `http.ClientException` quotes the upstream URL, and an
       // S3 file's URL is presigned. The type and the query-less URL suffice.
-      final target =
-          segments.length == 3 ? _redactedUrl(session.media.url) : 'a subtitle';
-      debugPrint('[FilesCastBridge] Request error: ${e.runtimeType} '
-          'serving $target');
+      final target = segments.length == 3
+          ? _redactedUrl(session.media.url)
+          : 'a subtitle';
+      debugPrint(
+        '[FilesCastBridge] Request error: ${e.runtimeType} '
+        'serving $target',
+      );
       try {
         response.statusCode = HttpStatus.badGateway;
       } catch (_) {}
@@ -292,10 +292,7 @@ class FilesCastBridge {
     }
   }
 
-  Future<void> _serveMedia(
-    HttpRequest request,
-    _ActiveSession session,
-  ) async {
+  Future<void> _serveMedia(HttpRequest request, _ActiveSession session) async {
     final localFile = _asLocalFile(session.media.url);
     if (localFile != null) {
       await _serveLocalFile(request, localFile, session.mime);
@@ -375,8 +372,10 @@ class FilesCastBridge {
     // method: a HEAD with it is refused. Its HEAD is answered from a GET
     // instead, of the asked range or of one byte, whose body is dropped.
     final headFromGet = request.method == 'HEAD' && _isPresigned(upstreamUri);
-    final upstreamReq =
-        http.Request(headFromGet ? 'GET' : request.method, upstreamUri);
+    final upstreamReq = http.Request(
+      headFromGet ? 'GET' : request.method,
+      upstreamUri,
+    );
     upstreamReq.headers.addAll(authHeaders);
     if (range != null) {
       upstreamReq.headers[HttpHeaders.rangeHeader] = range;
@@ -397,8 +396,12 @@ class FilesCastBridge {
       // The one byte asked for stood in for a plain HEAD: answer as the
       // whole object would.
       response.statusCode = HttpStatus.ok;
-      _copyMediaHeaders(response, upstreamResp, fallbackMime,
-          contentRange: false);
+      _copyMediaHeaders(
+        response,
+        upstreamResp,
+        fallbackMime,
+        contentRange: false,
+      );
       response.headers.contentLength = total;
       await response.close();
       return;
@@ -469,8 +472,9 @@ class FilesCastBridge {
 
   /// Whether [uri] carries a SigV4 query signature, which is bound to the
   /// method it was presigned for.
-  static bool _isPresigned(Uri uri) => uri.queryParametersAll.keys
-      .any((k) => k.toLowerCase() == 'x-amz-signature');
+  static bool _isPresigned(Uri uri) => uri.queryParametersAll.keys.any(
+    (k) => k.toLowerCase() == 'x-amz-signature',
+  );
 
   /// The object's length from the answer to a `bytes=0-0` GET: the total
   /// of a 206's or a 416's `Content-Range`, or a 200's length. Null when
@@ -570,7 +574,7 @@ class FilesCastBridge {
       'avi',
       'ts',
       'mpg',
-      'mpeg'
+      'mpeg',
     ]) {
       if (path.endsWith('.$ext')) return ext;
     }

@@ -35,9 +35,9 @@ class _Device {
       settings: settings,
       loadSubtitleLanguages: () async => null,
       saveSubtitleLanguages: (_) async {},
-      onRemoteFilesChanges: (_, __) async {},
+      onRemoteFilesChanges: (_, _) async {},
       rootsFor: (_) async => const [],
-      putRoots: (_, __) async {},
+      putRoots: (_, _) async {},
     );
   }
 
@@ -55,8 +55,9 @@ class _Device {
   final services = <CloudStoreKind, CloudBackupService>{};
   final engines = <SlotSyncEngine>[];
 
-  Future<CloudBackupService> service(
-      [CloudStoreKind kind = CloudStoreKind.gdrive]) async {
+  Future<CloudBackupService> service([
+    CloudStoreKind kind = CloudStoreKind.gdrive,
+  ]) async {
     final existing = services[kind];
     if (existing != null) return existing;
     final engine = SlotSyncEngine(
@@ -68,8 +69,10 @@ class _Device {
       filterOwn: CloudBackupService.filterOwn,
     );
     engines.add(engine);
-    final backend =
-        backends[kind] = InMemoryCloudBackend(accounts[kind]!, kind: kind);
+    final backend = backends[kind] = InMemoryCloudBackend(
+      accounts[kind]!,
+      kind: kind,
+    );
     return services[kind] = CloudBackupService(
       engine: engine,
       backend: backend,
@@ -88,8 +91,9 @@ class _Device {
 
   bool watched(String key) => sync.watchRecord(key)?.watched ?? false;
 
-  Future<List<String>> accountIds() async =>
-      [for (final r in (await sources.load()).accounts) r.account.id];
+  Future<List<String>> accountIds() async => [
+    for (final r in (await sources.load()).accounts) r.account.id,
+  ];
 
   void dispose() {
     for (final e in engines) {
@@ -109,14 +113,19 @@ SourceAccountRecord _plex([String id = 'p1', String name = 'Night Harbor']) =>
       ),
       profiles: [
         SourceProfile(
-            id: kOwnerProfileId, accountId: id, name: 'Ana', isOwner: true),
+          id: kOwnerProfileId,
+          accountId: id,
+          name: 'Ana',
+          isOwner: true,
+        ),
       ],
       servers: [
         SourceServer(
-            id: 'srv-$id',
-            accountId: id,
-            profileId: kOwnerProfileId,
-            name: name),
+          id: 'srv-$id',
+          accountId: id,
+          profileId: kOwnerProfileId,
+          name: name,
+        ),
       ],
       addedAtMs: 1000,
     );
@@ -130,14 +139,18 @@ void main() {
   final devices = <_Device>[];
 
   _Device device(String name) {
-    final d = _Device(
-        name, {CloudStoreKind.gdrive: drive, CloudStoreKind.icloud: icloud});
+    final d = _Device(name, {
+      CloudStoreKind.gdrive: drive,
+      CloudStoreKind.icloud: icloud,
+    });
     devices.add(d);
     return d;
   }
 
-  Future<_Device> enabled(String name,
-      [CloudStoreKind kind = CloudStoreKind.gdrive]) async {
+  Future<_Device> enabled(
+    String name, [
+    CloudStoreKind kind = CloudStoreKind.gdrive,
+  ]) async {
     final d = device(name);
     await (await d.service(kind)).enable();
     return d;
@@ -181,7 +194,9 @@ void main() {
       ..signedIn = true
       ..reachable = false;
     await expectLater(
-        s.enable(), _throwsRelay(BackupRelayError.cloudUnavailable));
+      s.enable(),
+      _throwsRelay(BackupRelayError.cloudUnavailable),
+    );
     expect(s.enabled, isFalse);
     expect(drive.bytes, isEmpty);
   });
@@ -195,27 +210,33 @@ void main() {
   test('group_records_never_written_to_cloud', () async {
     final a = device('Living Room TV');
     await a.auth.write(
-        PeerGroupSecret.storageKey,
-        PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 3)))
-            .toBase64Url());
+      PeerGroupSecret.storageKey,
+      PeerGroupSecret.fromBytes(Uint8List.fromList(List.filled(32, 3)))
+          .toBase64Url(),
+    );
     await a.watch('tmdb:movie:1');
     expect(
-        (await a.snapshot.collect(nowMs: _t0)).whereType<GroupBackupRecord>(),
-        isNotEmpty,
-        reason: 'the device has a group record to leave out');
+      (await a.snapshot.collect(nowMs: _t0)).whereType<GroupBackupRecord>(),
+      isNotEmpty,
+      reason: 'the device has a group record to leave out',
+    );
     await (await a.service()).enable();
     final stored = BackupPayload.decode(drive.bytes[await a.slotId()]!);
     expect(stored.records.whereType<GroupBackupRecord>(), isEmpty);
     expect(stored.records.whereType<WatchBackupRecord>(), isNotEmpty);
-    expect(CloudBackupService.filterOwn(await a.snapshot.collect(nowMs: _t0)),
-        isNot(contains(isA<GroupBackupRecord>())));
+    expect(
+      CloudBackupService.filterOwn(await a.snapshot.collect(nowMs: _t0)),
+      isNot(contains(isA<GroupBackupRecord>())),
+    );
   });
 
   test('restore_on_empty_store_throws_notFound', () async {
     final a = device('Living Room TV');
     final s = await a.service();
     await expectLater(
-        s.previewRestore(), _throwsRelay(BackupRelayError.notFound));
+      s.previewRestore(),
+      _throwsRelay(BackupRelayError.notFound),
+    );
 
     // Only a moved stub and this device's own slot: still nothing to restore.
     final b = await enabled('Laptop');
@@ -225,7 +246,9 @@ void main() {
     a.backends[CloudStoreKind.gdrive]!.signedIn = true;
     expect(drive.bytes.keys, hasLength(2));
     await expectLater(
-        s.previewRestore(), _throwsRelay(BackupRelayError.notFound));
+      s.previewRestore(),
+      _throwsRelay(BackupRelayError.notFound),
+    );
   });
 
   test('restore_applies_accounts_and_settings_then_joins', () async {
@@ -241,8 +264,11 @@ void main() {
     expect(preview.payloads.keys, [await a.slotId()]);
     expect(preview.unreadableSlots, isEmpty);
     expect(preview.records.whereType<AccountBackupRecord>(), isNotEmpty);
-    expect(b.watched('tmdb:movie:1'), isFalse,
-        reason: 'a preview changes nothing');
+    expect(
+      b.watched('tmdb:movie:1'),
+      isFalse,
+      reason: 'a preview changes nothing',
+    );
 
     await sb.commitRestore(preview);
     expect(await b.accountIds(), ['p1']);
@@ -259,7 +285,9 @@ void main() {
     final s = await a.service();
     final preview = await s.previewRestore();
     await expectLater(
-        s.commitRestore(preview), throwsA(isA<BackupAlreadyOnException>()));
+      s.commitRestore(preview),
+      throwsA(isA<BackupAlreadyOnException>()),
+    );
   });
 
   test('restore skips an unreadable slot and reports it', () async {
@@ -296,8 +324,11 @@ void main() {
     final b = device('Laptop');
     final sb = await b.service();
     await sb.enable();
-    expect(await b.accountIds(), isEmpty,
-        reason: 'a live device is offered accounts, not given them');
+    expect(
+      await b.accountIds(),
+      isEmpty,
+      reason: 'a live device is offered accounts, not given them',
+    );
     expect(sb.pendingOffers.value.map((o) => o.accountId), ['p1']);
     expect(sb.pendingOffers.value.single.fromDevice, 'Living Room TV');
 
@@ -315,27 +346,29 @@ void main() {
     expect(await b.accountIds(), ['p1']);
   });
 
-  test('remove_device_deletes_slot_and_it_reappears_on_its_next_upload',
-      () async {
-    final a = await enabled('Living Room TV');
-    final b = await enabled('Laptop');
-    final sa = await a.service();
-    final bSlot = await b.slotId();
-    await sa.poll();
-    expect(sa.slots.value.map((s) => s.slotId), contains(bSlot));
+  test(
+    'remove_device_deletes_slot_and_it_reappears_on_its_next_upload',
+    () async {
+      final a = await enabled('Living Room TV');
+      final b = await enabled('Laptop');
+      final sa = await a.service();
+      final bSlot = await b.slotId();
+      await sa.poll();
+      expect(sa.slots.value.map((s) => s.slotId), contains(bSlot));
 
-    await sa.removeDevice(bSlot);
-    expect(drive.bytes.keys, isNot(contains(bSlot)));
-    expect(drive.deletes, [bSlot]);
-    expect(sa.slots.value.map((s) => s.slotId), isNot(contains(bSlot)));
-    await expectLater(sa.removeDevice(await a.slotId()), throwsArgumentError);
+      await sa.removeDevice(bSlot);
+      expect(drive.bytes.keys, isNot(contains(bSlot)));
+      expect(drive.deletes, [bSlot]);
+      expect(sa.slots.value.map((s) => s.slotId), isNot(contains(bSlot)));
+      await expectLater(sa.removeDevice(await a.slotId()), throwsArgumentError);
 
-    // Removal is cleanup: B, still signed in, writes its slot again.
-    await (await b.service()).poll();
-    expect(drive.bytes.keys, contains(bSlot));
-    await sa.poll();
-    expect(sa.slots.value.map((s) => s.slotId), contains(bSlot));
-  });
+      // Removal is cleanup: B, still signed in, writes its slot again.
+      await (await b.service()).poll();
+      expect(drive.bytes.keys, contains(bSlot));
+      await sa.poll();
+      expect(sa.slots.value.map((s) => s.slotId), contains(bSlot));
+    },
+  );
 
   test('switch_away_leaves_stub_and_other_device_sees_moved', () async {
     final a = await enabled('Living Room TV');
@@ -359,24 +392,26 @@ void main() {
     expect(sb.movedSlots.value, {aSlot: 'icloud'});
   });
 
-  test('switch away deleting the old backup keeps only the moved stub',
-      () async {
-    final a = await enabled('Living Room TV');
-    final b = await enabled('Laptop');
-    final sa = await a.service();
-    await sa.switchAway('icloud', deleteOld: true);
-    expect(sa.enabled, isFalse);
+  test(
+    'switch away deleting the old backup keeps only the moved stub',
+    () async {
+      final a = await enabled('Living Room TV');
+      final b = await enabled('Laptop');
+      final sa = await a.service();
+      await sa.switchAway('icloud', deleteOld: true);
+      expect(sa.enabled, isFalse);
 
-    final aSlot = await a.slotId();
-    expect(drive.bytes.keys, [aSlot]);
-    expect(drive.deletes, [await b.slotId()]);
-    expect(BackupPayload.decode(drive.bytes[aSlot]!).movedTo, 'icloud');
+      final aSlot = await a.slotId();
+      expect(drive.bytes.keys, [aSlot]);
+      expect(drive.deletes, [await b.slotId()]);
+      expect(BackupPayload.decode(drive.bytes[aSlot]!).movedTo, 'icloud');
 
-    // B, still signed in, is told where A went.
-    final sb = await b.service();
-    await sb.poll();
-    expect(sb.movedSlots.value, {aSlot: 'icloud'});
-  });
+      // B, still signed in, is told where A went.
+      final sb = await b.service();
+      await sb.poll();
+      expect(sb.movedSlots.value, {aSlot: 'icloud'});
+    },
+  );
 
   test('crossed_switch_shows_prompt_both_ways', () async {
     // A leaves iCloud for Google Drive while B leaves Google Drive for
@@ -401,20 +436,22 @@ void main() {
     expect(icloud.bytes.keys, hasLength(2));
   });
 
-  test('disable detaches, signs out and keeps local data and the slot',
-      () async {
-    final a = await enabled('Living Room TV');
-    await a.watch('tmdb:movie:1');
-    await a.sources.putAccount(_plex());
-    final s = await a.service();
-    await s.disable();
-    expect(s.enabled, isFalse);
-    expect(s.status.value, isA<BackupOff>());
-    expect(a.backends[CloudStoreKind.gdrive]!.signOuts, 1);
-    expect(a.watched('tmdb:movie:1'), isTrue);
-    expect(await a.accountIds(), ['p1']);
-    expect(drive.bytes.keys, [await a.slotId()]);
-  });
+  test(
+    'disable detaches, signs out and keeps local data and the slot',
+    () async {
+      final a = await enabled('Living Room TV');
+      await a.watch('tmdb:movie:1');
+      await a.sources.putAccount(_plex());
+      final s = await a.service();
+      await s.disable();
+      expect(s.enabled, isFalse);
+      expect(s.status.value, isA<BackupOff>());
+      expect(a.backends[CloudStoreKind.gdrive]!.signOuts, 1);
+      expect(a.watched('tmdb:movie:1'), isTrue);
+      expect(await a.accountIds(), ['p1']);
+      expect(drive.bytes.keys, [await a.slotId()]);
+    },
+  );
 
   test('deleteBackup deletes every slot, then disables', () async {
     final a = await enabled('Living Room TV');
@@ -428,28 +465,38 @@ void main() {
     expect(a.watched('tmdb:movie:1'), isTrue);
   });
 
-  test('a store signed out mid-session halts with signedOut until reconnect',
-      () async {
-    final a = await enabled('Living Room TV');
-    final s = await a.service();
-    final backend = a.backends[CloudStoreKind.gdrive]!;
-    backend.signedIn = false;
-    await s.poll();
-    expect(
+  test(
+    'a store signed out mid-session halts with signedOut until reconnect',
+    () async {
+      final a = await enabled('Living Room TV');
+      final s = await a.service();
+      final backend = a.backends[CloudStoreKind.gdrive]!;
+      backend.signedIn = false;
+      await s.poll();
+      expect(
         s.status.value,
-        isA<BackupError>()
-            .having((e) => e.kind, 'kind', BackupRelayError.signedOut));
-    await expectLater(s.reconnect(), _throwsRelay(BackupRelayError.signedOut));
-    backend.signedIn = true;
-    await s.reconnect();
-    expect(s.status.value, isA<BackupIdle>());
-  });
+        isA<BackupError>().having(
+          (e) => e.kind,
+          'kind',
+          BackupRelayError.signedOut,
+        ),
+      );
+      await expectLater(
+        s.reconnect(),
+        _throwsRelay(BackupRelayError.signedOut),
+      );
+      backend.signedIn = true;
+      await s.reconnect();
+      expect(s.status.value, isA<BackupIdle>());
+    },
+  );
 
   test('enable_write_failure_detaches_and_stays_off', () async {
     final a = device('Living Room TV');
     final s = await a.service();
-    a.backends[CloudStoreKind.gdrive]!
-        .failNext(const BackupRelayException(BackupRelayError.quotaFull));
+    a.backends[CloudStoreKind.gdrive]!.failNext(
+      const BackupRelayException(BackupRelayError.quotaFull),
+    );
 
     await expectLater(s.enable(), _throwsRelay(BackupRelayError.quotaFull));
 

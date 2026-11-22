@@ -24,8 +24,9 @@ class LibrarySortSheet extends StatelessWidget {
           ? null
           : BoxDecoration(
               color: palette.surface,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -47,17 +48,15 @@ class LibrarySortSheet extends StatelessWidget {
                 const SizedBox(width: 12),
                 Text(
                   context.l10n.librarySortBy,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 TextButton.icon(
                   key: const Key('sort-direction-toggle'),
                   onPressed: directionEnabled
-                      ? () => Navigator.of(context).pop(
-                            const LibrarySortSelection.toggleDirection(),
-                          )
+                      ? () => Navigator.of(context)
+                            .pop(const LibrarySortSelection.toggleDirection())
                       : null,
                   icon: Icon(
                     currentSort.direction == SortDirection.asc
@@ -105,8 +104,8 @@ class LibrarySortSheet extends StatelessWidget {
 class LibrarySortSelection {
   const LibrarySortSelection.field(this.field) : toggleOnly = false;
   const LibrarySortSelection.toggleDirection()
-      : field = null,
-        toggleOnly = true;
+    : field = null,
+      toggleOnly = true;
 
   final SortField? field;
   final bool toggleOnly;

@@ -37,40 +37,43 @@ class RecordingNav implements SettingsNav {
 
 /// One account with an owner profile on server `srv`, plus a `kid` profile
 /// on server `srv-kid` when [kidProfile] is set.
-SourceAccountRecord hubRecord(String id, String name, SourceKind kind,
-        {bool kidProfile = false}) =>
-    SourceAccountRecord(
-      account: ProviderAccount(
-        id: id,
-        kind: kind,
-        displayName: name,
-        storageNamespace: 'source/$id',
-        activeProfileId: 'owner',
+SourceAccountRecord hubRecord(
+  String id,
+  String name,
+  SourceKind kind, {
+  bool kidProfile = false,
+}) => SourceAccountRecord(
+  account: ProviderAccount(
+    id: id,
+    kind: kind,
+    displayName: name,
+    storageNamespace: 'source/$id',
+    activeProfileId: 'owner',
+  ),
+  profiles: [
+    SourceProfile(id: 'owner', accountId: id, name: 'o', isOwner: true),
+    if (kidProfile)
+      SourceProfile(id: 'kid', accountId: id, name: 'k', isOwner: false),
+  ],
+  servers: [
+    SourceServer(
+      id: 'srv',
+      accountId: id,
+      profileId: 'owner',
+      name: name,
+      presence: true,
+    ),
+    if (kidProfile)
+      SourceServer(
+        id: 'srv-kid',
+        accountId: id,
+        profileId: 'kid',
+        name: name,
+        presence: true,
       ),
-      profiles: [
-        SourceProfile(id: 'owner', accountId: id, name: 'o', isOwner: true),
-        if (kidProfile)
-          SourceProfile(id: 'kid', accountId: id, name: 'k', isOwner: false),
-      ],
-      servers: [
-        SourceServer(
-          id: 'srv',
-          accountId: id,
-          profileId: 'owner',
-          name: name,
-          presence: true,
-        ),
-        if (kidProfile)
-          SourceServer(
-            id: 'srv-kid',
-            accountId: id,
-            profileId: 'kid',
-            name: name,
-            presence: true,
-          ),
-      ],
-      addedAtMs: 0,
-    );
+  ],
+  addedAtMs: 0,
+);
 
 ConnectionServer hubServer(
   String id,
@@ -81,17 +84,16 @@ ConnectionServer hubServer(
   bool locked = false,
   bool inAllServers = false,
   bool kidProfile = false,
-}) =>
-    ConnectionServer(
-      record: hubRecord(id, name, kind, kidProfile: kidProfile),
-      kind: kind,
-      name: name,
-      host: host,
-      serverCount: 1,
-      status: status,
-      locked: locked,
-      inAllServers: inAllServers,
-    );
+}) => ConnectionServer(
+  record: hubRecord(id, name, kind, kidProfile: kidProfile),
+  kind: kind,
+  name: name,
+  host: host,
+  serverCount: 1,
+  status: status,
+  locked: locked,
+  inAllServers: inAllServers,
+);
 
 /// A device that synced five minutes before this call, by the wall clock the
 /// hub's "synced X ago" also reads. Call it inside the test body: a device
@@ -112,13 +114,12 @@ ConnectionsOverview hubOverview({
   bool? isPaired,
   bool serversLoading = false,
   bool serversFailed = false,
-}) =>
-    ConnectionsOverview(
-      localName: 'Living room TV',
-      localPlatform: 'linux',
-      servers: servers,
-      devices: devices,
-      isPaired: isPaired ?? devices.isNotEmpty,
-      serversFailed: serversFailed,
-      serversLoading: serversLoading,
-    );
+}) => ConnectionsOverview(
+  localName: 'Living room TV',
+  localPlatform: 'linux',
+  servers: servers,
+  devices: devices,
+  isPaired: isPaired ?? devices.isNotEmpty,
+  serversFailed: serversFailed,
+  serversLoading: serversLoading,
+);

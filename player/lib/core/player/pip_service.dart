@@ -108,11 +108,7 @@ class PipToggleButton extends StatelessWidget {
   final PipService pipService;
   final VoidCallback? onToggle;
 
-  const PipToggleButton({
-    super.key,
-    required this.pipService,
-    this.onToggle,
-  });
+  const PipToggleButton({super.key, required this.pipService, this.onToggle});
 
   @override
   Widget build(BuildContext context) {

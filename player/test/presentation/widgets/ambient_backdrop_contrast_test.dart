@@ -73,30 +73,38 @@ void main() {
   // longer drift from what AmbientBackdropScrim actually paints. The previous
   // version named Palettes.projectionBooth.background here while the widget painted a navy
   // literal, and stayed green throughout.
-  final scrim =
-      AmbientBackdropScrim.baseColor(Palettes.projectionBooth).withValues(
-    alpha: AmbientBackdropScrim.baseDim,
-  );
+  final scrim = AmbientBackdropScrim.baseColor(Palettes.projectionBooth)
+      .withValues(alpha: AmbientBackdropScrim.baseDim);
   final effectiveBackground = _composite(scrim, brightArtwork);
 
   group('AmbientBackdrop scrim contrast over bright artwork', () {
     test('primary text holds a high contrast ratio (~15:1 target)', () {
       final ratio = _contrastRatio(
-          Palettes.projectionBooth.textPrimary, effectiveBackground);
+        Palettes.projectionBooth.textPrimary,
+        effectiveBackground,
+      );
       // Over worst-case white artwork the scrim must keep primary text strongly
       // legible. We require a comfortably-AAA ratio; the theme targets ~15:1 on
       // the flat background, and the dim keeps it well above the 7:1 AAA bar.
-      expect(ratio, greaterThanOrEqualTo(7.0),
-          reason: 'primary text contrast was $ratio');
+      expect(
+        ratio,
+        greaterThanOrEqualTo(7.0),
+        reason: 'primary text contrast was $ratio',
+      );
     });
 
     test('secondary text holds an AA-large / body-legible ratio', () {
       final ratio = _contrastRatio(
-          Palettes.projectionBooth.textSecondary, effectiveBackground);
+        Palettes.projectionBooth.textSecondary,
+        effectiveBackground,
+      );
       // Secondary text targets ~7:1 on the flat theme; over worst-case bright
       // artwork it must still clear the WCAG AA 4.5:1 body-text bar.
-      expect(ratio, greaterThanOrEqualTo(4.5),
-          reason: 'secondary text contrast was $ratio');
+      expect(
+        ratio,
+        greaterThanOrEqualTo(4.5),
+        reason: 'secondary text contrast was $ratio',
+      );
     });
 
     test('the effective background stays dark (luminance well below mid)', () {
@@ -115,14 +123,16 @@ void main() {
     // Sidebar/control chrome: surface tint at the chrome fill opacity, over the
     // scrimmed white backdrop.
     final sidebarBg = _composite(
-      Palettes.projectionBooth.surface
-          .withValues(alpha: DepthTokens.chromeFillOpacity),
+      Palettes.projectionBooth.surface.withValues(
+        alpha: DepthTokens.chromeFillOpacity,
+      ),
       effectiveBackground,
     );
     // App-bar/video chrome: background tint at the chrome fill opacity.
     final barBg = _composite(
-      Palettes.projectionBooth.background
-          .withValues(alpha: DepthTokens.chromeFillOpacity),
+      Palettes.projectionBooth.background.withValues(
+        alpha: DepthTokens.chromeFillOpacity,
+      ),
       effectiveBackground,
     );
 
@@ -164,10 +174,16 @@ void main() {
     test('is hueless so it does not drain colour from the artwork', () {
       final c = AmbientBackdropScrim.baseColor(Palettes.projectionBooth);
       const tolerance = 2 / 255;
-      expect((c.b - c.r).abs(), lessThanOrEqualTo(tolerance),
-          reason: 'blue cast of ${(c.b - c.r).abs()}');
-      expect((c.g - c.r).abs(), lessThanOrEqualTo(tolerance),
-          reason: 'green cast of ${(c.g - c.r).abs()}');
+      expect(
+        (c.b - c.r).abs(),
+        lessThanOrEqualTo(tolerance),
+        reason: 'blue cast of ${(c.b - c.r).abs()}',
+      );
+      expect(
+        (c.g - c.r).abs(),
+        lessThanOrEqualTo(tolerance),
+        reason: 'green cast of ${(c.g - c.r).abs()}',
+      );
     });
   });
 }

@@ -123,11 +123,7 @@ Future<void> showDeleteSeasonDialog(
   if (confirmed != true) return;
 
   final service = await ref.read(downloadManagerProvider.future);
-  await service.deleteSeasonDownloads(
-    sourceId,
-    showId,
-    seasonNumber,
-  );
+  await service.deleteSeasonDownloads(sourceId, showId, seasonNumber);
 }
 
 /// Confirms deleting every download for the show, queued or complete.

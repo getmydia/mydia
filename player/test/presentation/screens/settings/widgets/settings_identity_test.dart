@@ -35,31 +35,35 @@ void main() {
     expect(find.text('mydia.local:4000'), findsOneWidget);
   });
 
-  testWidgets('the avatar shows the first character of the username',
-      (tester) async {
+  testWidgets('the avatar shows the first character of the username', (
+    tester,
+  ) async {
     await _pump(tester, username: 'alex');
 
     expect(find.text('A'), findsOneWidget);
   });
 
-  testWidgets('an empty username reads as signed in rather than blank',
-      (tester) async {
+  testWidgets('an empty username reads as signed in rather than blank', (
+    tester,
+  ) async {
     await _pump(tester, username: '');
 
     expect(find.text('Signed in'), findsOneWidget);
     expect(find.byIcon(Icons.person), findsOneWidget);
   });
 
-  testWidgets('an empty server url omits the host line entirely',
-      (tester) async {
+  testWidgets('an empty server url omits the host line entirely', (
+    tester,
+  ) async {
     await _pump(tester, serverUrl: '');
 
     expect(find.text('admin'), findsOneWidget);
     expect(find.text(''), findsNothing);
   });
 
-  testWidgets('a long server url is ellipsized rather than wrapped',
-      (tester) async {
+  testWidgets('a long server url is ellipsized rather than wrapped', (
+    tester,
+  ) async {
     const long = 'https://a-very-long-hostname.example.internal:44300/mydia';
     await _pump(tester, serverUrl: long);
 
@@ -69,8 +73,9 @@ void main() {
     expect(host.overflow, TextOverflow.ellipsis);
   });
 
-  testWidgets('sits on the page background rather than on a card',
-      (tester) async {
+  testWidgets('sits on the page background rather than on a card', (
+    tester,
+  ) async {
     // The whole point of replacing the hero: identity is not a panel. This
     // guards against someone re-wrapping the band in a SettingsCard.
     await _pump(tester);

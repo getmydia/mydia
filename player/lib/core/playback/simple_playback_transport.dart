@@ -51,9 +51,9 @@ abstract interface class StreamResolver {
 
 class SimplePlaybackTransport implements PlaybackTransport {
   SimplePlaybackTransport({
-    required StreamResolver resolver,
+    required this._resolver,
     this.firstAdvanceTimeout = const Duration(seconds: 60),
-  }) : _resolver = resolver;
+  });
 
   final StreamResolver _resolver;
   final Duration firstAdvanceTimeout;
@@ -82,8 +82,11 @@ class SimplePlaybackTransport implements PlaybackTransport {
   }) async {
     final lifetime = _lifetime;
     onProgress?.call(const LoadingStep(LoadingStepKind.startingStream));
-    final resolved =
-        await _resolver.resolve(plan, fileId: fileId, startAt: startAt);
+    final resolved = await _resolver.resolve(
+      plan,
+      fileId: fileId,
+      startAt: startAt,
+    );
     final id = resolved.sessionId;
     if (id != null) _owned.add(id);
     if (lifetime.isCompleted) {
@@ -117,11 +120,13 @@ class SimplePlaybackTransport implements PlaybackTransport {
     _sessionId = null;
     PlaybackSource? source;
     try {
-      source = await open(plan,
-          fileId: fileId,
-          startAt: realPosition,
-          totalDuration: totalDuration,
-          onProgress: onProgress);
+      source = await open(
+        plan,
+        fileId: fileId,
+        startAt: realPosition,
+        totalDuration: totalDuration,
+        onProgress: onProgress,
+      );
       final positions = await attach(source);
       await awaitFirstAdvance(positions, timeout: firstAdvanceTimeout);
       if (lifetime.isCompleted) throw StateError('Playback ended');

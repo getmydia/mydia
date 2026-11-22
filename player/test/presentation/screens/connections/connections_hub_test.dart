@@ -29,16 +29,20 @@ import 'fake_peer_sync_service.dart';
 /// wall clock, and CI runs the whole suite in one isolate, where a value
 /// first read while tests are declared is minutes old once this one runs.
 ConnectionsOverview _populated() => hubOverview(
-      servers: [
-        hubServer('home', 'Home Mydia',
-            host: 'home.example.net', inAllServers: true),
-        hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
-      ],
-      devices: [
-        hubDevice('n1', 'Pixel phone', 'android'),
-        hubDevice('n2', 'NAS', 'linux'),
-      ],
-    );
+  servers: [
+    hubServer(
+      'home',
+      'Home Mydia',
+      host: 'home.example.net',
+      inAllServers: true,
+    ),
+    hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
+  ],
+  devices: [
+    hubDevice('n1', 'Pixel phone', 'android'),
+    hubDevice('n2', 'NAS', 'linux'),
+  ],
+);
 
 /// Opens the real account detail page, as the router and the dialog do.
 class _PushingNav extends RecordingNav {
@@ -47,8 +51,11 @@ class _PushingNav extends RecordingNav {
   @override
   void openAccount(String accountId) {
     super.openAccount(accountId);
-    navigatorKey.currentState?.push(MaterialPageRoute<void>(
-        builder: (_) => AccountDetailPage(accountId: accountId)));
+    navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => AccountDetailPage(accountId: accountId),
+      ),
+    );
   }
 }
 
@@ -69,36 +76,41 @@ Future<_Harness> _pump(
 }) async {
   final nav = RecordingNav();
   final store = InMemoryPeerSyncStore();
-  final service =
-      FakePeerSyncService(store: store, isPaired: overview.isPaired);
+  final service = FakePeerSyncService(
+    store: store,
+    isPaired: overview.isPaired,
+  );
   final roster = PeerGroupRoster(
     store: store,
     localNodeId: () => service.localNodeId,
     isPeerConnected: (_) => true,
   );
   final relay = backup ?? FakeBackupSyncService();
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      connectionsOverviewProvider.overrideWithValue(overview),
-      connectionsDirectSourceProvider.overrideWithValue(direct),
-      peerSyncServiceProvider.overrideWithValue(service),
-      peerSyncStoreProvider.overrideWithValue(store),
-      peerGroupRosterProvider.overrideWithValue(roster),
-      isWebProvider.overrideWithValue(isWeb),
-      backupSyncServiceProvider.overrideWithValue(relay),
-      backupControllerProvider
-          .overrideWithValue(FakeBackupController(relay: relay)),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: SettingsNavScope(
-        nav: nav,
-        child: ConnectionsHubScreen(initialSection: initialSection),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        connectionsOverviewProvider.overrideWithValue(overview),
+        connectionsDirectSourceProvider.overrideWithValue(direct),
+        peerSyncServiceProvider.overrideWithValue(service),
+        peerSyncStoreProvider.overrideWithValue(store),
+        peerGroupRosterProvider.overrideWithValue(roster),
+        isWebProvider.overrideWithValue(isWeb),
+        backupSyncServiceProvider.overrideWithValue(relay),
+        backupControllerProvider.overrideWithValue(
+          FakeBackupController(relay: relay),
+        ),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: SettingsNavScope(
+          nav: nav,
+          child: ConnectionsHubScreen(initialSection: initialSection),
+        ),
       ),
     ),
-  ));
+  );
   if (settle) {
     await tester.pumpAndSettle();
   } else {
@@ -120,8 +132,9 @@ void main() {
     expect(find.byKey(const Key('backup-switch')), findsNothing);
   });
 
-  testWidgets('a join into the group backup toasts once, with a way there',
-      (tester) async {
+  testWidgets('a join into the group backup toasts once, with a way there', (
+    tester,
+  ) async {
     _phone(tester);
     final backup = FakeBackupSyncService()
       ..isEnabled = true
@@ -137,10 +150,15 @@ void main() {
     await tester.tap(find.byKey(const Key('pair-submit-code-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('This device is now backed up with your group'),
-        findsWidgets);
-    expect(backup.calls, contains('acknowledgeJoinedNotice'),
-        reason: 'shown once: the toast marks it seen');
+    expect(
+      find.text('This device is now backed up with your group'),
+      findsWidgets,
+    );
+    expect(
+      backup.calls,
+      contains('acknowledgeJoinedNotice'),
+      reason: 'shown once: the toast marks it seen',
+    );
     expect(find.byKey(const Key('backup-joined-notice')), findsNothing);
 
     await tester.tap(find.text('View'));
@@ -154,26 +172,35 @@ void main() {
 
     expect(find.byKey(const Key('connections-this-device')), findsOneWidget);
     expect(find.text('Living room TV'), findsOneWidget);
-    expect(find.text('Reaching 2 of 2 servers · synced 5 minutes ago'),
-        findsOneWidget);
     expect(
-        find.byKey(const Key('connections-servers-section')), findsOneWidget);
+      find.text('Reaching 2 of 2 servers · synced 5 minutes ago'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('connections-servers-section')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('connections-server-home')), findsOneWidget);
     expect(
-        find.byKey(const Key('connections-server-plex-acc')), findsOneWidget);
+      find.byKey(const Key('connections-server-plex-acc')),
+      findsOneWidget,
+    );
     expect(find.text('Mydia · home.example.net'), findsOneWidget);
     expect(find.text('Plex · 1 server'), findsOneWidget);
     expect(find.byKey(const Key('manage-add')), findsOneWidget);
     expect(
-        find.byKey(const Key('connections-devices-section')), findsOneWidget);
+      find.byKey(const Key('connections-devices-section')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('connections-device-n1')), findsOneWidget);
     expect(find.byKey(const Key('connections-device-n2')), findsOneWidget);
     expect(find.text('Watch progress syncs between these'), findsOneWidget);
     expect(find.byKey(const Key('connections-pair-cta')), findsOneWidget);
   });
 
-  testWidgets('every server tap, Mydia included, opens its account',
-      (tester) async {
+  testWidgets('every server tap, Mydia included, opens its account', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     final h = await _pump(tester, _populated());
 
@@ -190,34 +217,41 @@ void main() {
     expect(h.nav.calls.last, 'add');
   });
 
-  testWidgets('a Mydia account\'s lock control is reachable from the hub',
-      (tester) async {
+  testWidgets('a Mydia account\'s lock control is reachable from the hub', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     final server = hubServer('home', 'Home Mydia');
     final sources = InMemorySourceStore();
     await sources.putAccount(server.record);
     final navigatorKey = GlobalKey<NavigatorState>();
     final nav = _PushingNav(navigatorKey);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ...noHiveOverrides,
-        sourceStoreProvider.overrideWith((ref) async => sources),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
-        connectionsOverviewProvider
-            .overrideWithValue(hubOverview(servers: [server])),
-        connectionsDirectSourceProvider.overrideWithValue(null),
-        backupControllerProvider.overrideWithValue(FakeBackupController()),
-      ],
-      child: MaterialApp(
-        navigatorKey: navigatorKey,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: (context, child) => SettingsNavScope(
-            nav: nav, child: toastLayerBuilder(context, child)),
-        home: const ConnectionsHubScreen(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...noHiveOverrides,
+          sourceStoreProvider.overrideWith((ref) async => sources),
+          sourceSecretsProvider.overrideWithValue(
+            SourceSecrets(MockAuthStorage()),
+          ),
+          connectionsOverviewProvider.overrideWithValue(
+            hubOverview(servers: [server]),
+          ),
+          connectionsDirectSourceProvider.overrideWithValue(null),
+          backupControllerProvider.overrideWithValue(FakeBackupController()),
+        ],
+        child: MaterialApp(
+          navigatorKey: navigatorKey,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => SettingsNavScope(
+            nav: nav,
+            child: toastLayerBuilder(context, child),
+          ),
+          home: const ConnectionsHubScreen(),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('connections-server-home')));
@@ -228,37 +262,53 @@ void main() {
     expect(find.byKey(const Key('manage-settings-home')), findsOneWidget);
   });
 
-  testWidgets('this device and device cards word their meta as one phrase',
-      (tester) async {
+  testWidgets('this device and device cards word their meta as one phrase', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
-    await _pump(tester,
-        hubOverview(devices: [hubDevice('n1', 'Pixel phone', 'android')]));
+    await _pump(
+      tester,
+      hubOverview(devices: [hubDevice('n1', 'Pixel phone', 'android')]),
+    );
     // No servers: the synced half stands alone and starts the sentence.
     expect(find.text('Synced 5 minutes ago'), findsOneWidget);
     expect(
-        find.descendant(
-            of: find.byKey(const Key('connections-device-n1')),
-            matching: find.textContaining(' · synced 5 minutes ago')),
-        findsOneWidget);
+      find.descendant(
+        of: find.byKey(const Key('connections-device-n1')),
+        matching: find.textContaining(' · synced 5 minutes ago'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('chips reflect status', (tester) async {
     _phone(tester, height: 1400);
     await _pump(
       tester,
-      hubOverview(servers: [
-        hubServer('a', 'Home Mydia', inAllServers: true),
-        hubServer('b', 'Basement Plex',
-            kind: SourceKind.plex, status: ConnectionStatus.offline),
-        hubServer('c', 'NAS',
-            kind: SourceKind.jellyfin, status: ConnectionStatus.needsSignIn),
-        hubServer('d', 'Stash box', kind: SourceKind.stash, locked: true),
-      ]),
+      hubOverview(
+        servers: [
+          hubServer('a', 'Home Mydia', inAllServers: true),
+          hubServer(
+            'b',
+            'Basement Plex',
+            kind: SourceKind.plex,
+            status: ConnectionStatus.offline,
+          ),
+          hubServer(
+            'c',
+            'NAS',
+            kind: SourceKind.jellyfin,
+            status: ConnectionStatus.needsSignIn,
+          ),
+          hubServer('d', 'Stash box', kind: SourceKind.stash, locked: true),
+        ],
+      ),
     );
 
     Finder chip(String server, String text) => find.descendant(
-        of: find.byKey(Key('connections-server-$server')),
-        matching: find.text(text));
+      of: find.byKey(Key('connections-server-$server')),
+      matching: find.text(text),
+    );
 
     expect(chip('a', 'Online'), findsOneWidget);
     expect(chip('a', 'In All servers'), findsOneWidget);
@@ -268,8 +318,9 @@ void main() {
     expect(chip('d', 'In All servers'), findsNothing);
   });
 
-  testWidgets('direct p2p replaces online on the reached Mydia',
-      (tester) async {
+  testWidgets('direct p2p replaces online on the reached Mydia', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     final server = hubServer('a', 'Home Mydia');
     await _pump(
@@ -281,26 +332,31 @@ void main() {
     expect(find.text('Online'), findsNothing);
   });
 
-  testWidgets('direct p2p shows on a Mydia reached through a non-owner profile',
-      (tester) async {
-    _phone(tester, height: 1400);
-    final server = hubServer('a', 'Home Mydia', kidProfile: true);
-    final kid = server.record.sources.singleWhere((s) => !s.profile.isOwner);
-    await _pump(tester, hubOverview(servers: [server]), direct: kid.id);
-    expect(find.text('Direct connection'), findsOneWidget);
-    expect(find.text('Online'), findsNothing);
-  });
+  testWidgets(
+    'direct p2p shows on a Mydia reached through a non-owner profile',
+    (tester) async {
+      _phone(tester, height: 1400);
+      final server = hubServer('a', 'Home Mydia', kidProfile: true);
+      final kid = server.record.sources.singleWhere((s) => !s.profile.isOwner);
+      await _pump(tester, hubOverview(servers: [server]), direct: kid.id);
+      expect(find.text('Direct connection'), findsOneWidget);
+      expect(find.text('Online'), findsNothing);
+    },
+  );
 
-  testWidgets('the route has a window title bar with a back button',
-      (tester) async {
+  testWidgets('the route has a window title bar with a back button', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     await _pump(tester, _populated());
     expect(find.byType(WindowTitleBar), findsOneWidget);
     expect(
-        find.descendant(
-            of: find.byType(WindowTitleBar),
-            matching: find.text('Servers & devices')),
-        findsOneWidget);
+      find.descendant(
+        of: find.byType(WindowTitleBar),
+        matching: find.text('Servers & devices'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byType(AppBar), findsNothing);
   });
 
@@ -338,8 +394,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('paired-leave-group-button')));
     await tester.pumpAndSettle();
-    await tester
-        .tap(find.byKey(const Key('paired-leave-group-confirm-button')));
+    await tester.tap(
+      find.byKey(const Key('paired-leave-group-confirm-button')),
+    );
     await tester.pumpAndSettle();
     expect(h.service.leaveGroupCount, 1);
   });
@@ -362,8 +419,9 @@ void main() {
     expect(h.service.revokePeerCalls, ['n1']);
   });
 
-  testWidgets('initialSection devices scrolls the devices section into view',
-      (tester) async {
+  testWidgets('initialSection devices scrolls the devices section into view', (
+    tester,
+  ) async {
     _phone(tester);
     await _pump(
       tester,
@@ -376,81 +434,106 @@ void main() {
       initialSection: 'devices',
     );
 
-    final top =
-        tester.getTopLeft(find.byKey(const Key('connections-devices-section')));
+    final top = tester.getTopLeft(
+      find.byKey(const Key('connections-devices-section')),
+    );
     expect(top.dy, greaterThanOrEqualTo(0));
     expect(top.dy, lessThan(600));
   });
 
   testWidgets(
-      'empty hub shows the add-server ghost and the pair call to action',
-      (tester) async {
-    _phone(tester, height: 1400);
-    final h = await _pump(tester, hubOverview());
+    'empty hub shows the add-server ghost and the pair call to action',
+    (tester) async {
+      _phone(tester, height: 1400);
+      final h = await _pump(tester, hubOverview());
 
-    expect(
-        find.byKey(const Key('connections-add-mydia-ghost')), findsOneWidget);
-    expect(find.text('Add a Mydia server'), findsOneWidget);
-    expect(find.byKey(const Key('connections-other-servers-section')),
-        findsNothing);
-    expect(find.byKey(const Key('connections-pair-cta')), findsOneWidget);
-    expect(find.text('Sync another Mydia Player'), findsOneWidget);
-    expect(find.byKey(const Key('connections-devices-section')), findsNothing);
+      expect(
+        find.byKey(const Key('connections-add-mydia-ghost')),
+        findsOneWidget,
+      );
+      expect(find.text('Add a Mydia server'), findsOneWidget);
+      expect(
+        find.byKey(const Key('connections-other-servers-section')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('connections-pair-cta')), findsOneWidget);
+      expect(find.text('Sync another Mydia Player'), findsOneWidget);
+      expect(
+        find.byKey(const Key('connections-devices-section')),
+        findsNothing,
+      );
 
-    await tester.tap(find.byKey(const Key('connections-add-mydia-ghost')));
-    await tester.pump();
-    expect(h.nav.calls, ['add mydia']);
+      await tester.tap(find.byKey(const Key('connections-add-mydia-ghost')));
+      await tester.pump();
+      expect(h.nav.calls, ['add mydia']);
 
-    // The kind picker stays one tap away, on the Mydia header.
-    expect(
+      // The kind picker stays one tap away, on the Mydia header.
+      expect(
         find.descendant(
           of: find.byKey(const Key('connections-mydia-servers-section')),
           matching: find.byKey(const Key('manage-add')),
         ),
-        findsOneWidget);
-    await tester.tap(find.byKey(const Key('manage-add')));
-    await tester.pump();
-    expect(h.nav.calls.last, 'add');
-  });
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('manage-add')));
+      await tester.pump();
+      expect(h.nav.calls.last, 'add');
+    },
+  );
 
   testWidgets('Mydia servers lead, above every other kind', (tester) async {
     _phone(tester, height: 1400);
     // Saved Plex first: the hub still puts Mydia on top.
     await _pump(
       tester,
-      hubOverview(servers: [
-        hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
-        hubServer('home', 'Home Mydia', host: 'home.example.net'),
-      ]),
+      hubOverview(
+        servers: [
+          hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
+          hubServer('home', 'Home Mydia', host: 'home.example.net'),
+        ],
+      ),
     );
 
-    final mydiaSection =
-        find.byKey(const Key('connections-mydia-servers-section'));
-    final otherSection =
-        find.byKey(const Key('connections-other-servers-section'));
+    final mydiaSection = find.byKey(
+      const Key('connections-mydia-servers-section'),
+    );
+    final otherSection = find.byKey(
+      const Key('connections-other-servers-section'),
+    );
     expect(find.text('Mydia servers'), findsOneWidget);
     expect(
-        find.text(
-            'Recommended. Your progress follows you to every device you sign in on.'),
-        findsOneWidget);
+      find.text(
+        'Recommended. Your progress follows you to every device you sign in on.',
+      ),
+      findsOneWidget,
+    );
     expect(
-        find.descendant(
-            of: mydiaSection,
-            matching: find.byKey(const Key('connections-server-home'))),
-        findsOneWidget);
+      find.descendant(
+        of: mydiaSection,
+        matching: find.byKey(const Key('connections-server-home')),
+      ),
+      findsOneWidget,
+    );
     expect(
-        find.descendant(
-            of: otherSection,
-            matching: find.byKey(const Key('connections-server-plex-acc'))),
-        findsOneWidget);
-    expect(tester.getTopLeft(mydiaSection).dy,
-        lessThan(tester.getTopLeft(otherSection).dy));
+      find.descendant(
+        of: otherSection,
+        matching: find.byKey(const Key('connections-server-plex-acc')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(mydiaSection).dy,
+      lessThan(tester.getTopLeft(otherSection).dy),
+    );
     // One Add button, on Other servers.
     expect(find.byKey(const Key('manage-add')), findsOneWidget);
     expect(
-        find.descendant(
-            of: otherSection, matching: find.byKey(const Key('manage-add'))),
-        findsOneWidget);
+      find.descendant(
+        of: otherSection,
+        matching: find.byKey(const Key('manage-add')),
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('connections-add-mydia-ghost')), findsNothing);
   });
 
@@ -460,71 +543,90 @@ void main() {
       tester,
       hubOverview(servers: [hubServer('home', 'Home Mydia')]),
     );
-    expect(find.byKey(const Key('connections-other-servers-section')),
-        findsNothing);
     expect(
-        find.descendant(
-          of: find.byKey(const Key('connections-mydia-servers-section')),
-          matching: find.byKey(const Key('manage-add')),
-        ),
-        findsOneWidget);
+      find.byKey(const Key('connections-other-servers-section')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('connections-mydia-servers-section')),
+        matching: find.byKey(const Key('manage-add')),
+      ),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('only other servers: the Mydia section invites an add',
-      (tester) async {
+  testWidgets('only other servers: the Mydia section invites an add', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     final h = await _pump(
       tester,
-      hubOverview(servers: [
-        hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
-      ]),
+      hubOverview(
+        servers: [
+          hubServer('plex-acc', 'Basement Plex', kind: SourceKind.plex),
+        ],
+      ),
     );
     expect(
-        find.byKey(const Key('connections-add-mydia-ghost')), findsOneWidget);
-    expect(find.byKey(const Key('connections-other-servers-section')),
-        findsOneWidget);
+      find.byKey(const Key('connections-add-mydia-ghost')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('connections-other-servers-section')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('connections-add-mydia-ghost')));
     await tester.pump();
     expect(h.nav.calls, ['add mydia']);
   });
 
-  testWidgets('the pair card says Mydia servers need no pairing',
-      (tester) async {
+  testWidgets('the pair card says Mydia servers need no pairing', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     await _pump(tester, hubOverview());
     expect(
-        find.descendant(
-          of: find.byKey(const Key('connections-pair-cta')),
-          matching: find.textContaining('Not needed for Mydia servers'),
-        ),
-        findsOneWidget);
+      find.descendant(
+        of: find.byKey(const Key('connections-pair-cta')),
+        matching: find.textContaining('Not needed for Mydia servers'),
+      ),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('loading servers shows a progress indicator, not the ghost',
-      (tester) async {
+  testWidgets('loading servers shows a progress indicator, not the ghost', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     await _pump(tester, hubOverview(serversLoading: true), settle: false);
     expect(
-        find.byKey(const Key('connections-servers-loading')), findsOneWidget);
+      find.byKey(const Key('connections-servers-loading')),
+      findsOneWidget,
+    );
     expect(find.text('Add a server'), findsNothing);
   });
 
-  testWidgets('a failed server read says so instead of inviting an add',
-      (tester) async {
+  testWidgets('a failed server read says so instead of inviting an add', (
+    tester,
+  ) async {
     _phone(tester, height: 1400);
     await _pump(tester, hubOverview(serversFailed: true));
     expect(find.byKey(const Key('connections-servers-failed')), findsOneWidget);
     expect(find.text('Could not read the saved servers.'), findsOneWidget);
     expect(find.byKey(const Key('connections-add-mydia-ghost')), findsNothing);
-    expect(find.byKey(const Key('connections-mydia-servers-section')),
-        findsNothing);
     expect(
-        find.descendant(
-          of: find.byKey(const Key('connections-servers-section')),
-          matching: find.byKey(const Key('show-hidden-sources')),
-        ),
-        findsOneWidget);
+      find.byKey(const Key('connections-mydia-servers-section')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('connections-servers-section')),
+        matching: find.byKey(const Key('show-hidden-sources')),
+      ),
+      findsOneWidget,
+    );
   });
 
   // Builders, not overviews: this list is evaluated while tests are declared.
@@ -534,8 +636,9 @@ void main() {
     ('failed', () => hubOverview(serversFailed: true)),
     ('populated', _populated),
   ]) {
-    testWidgets('the servers section ends with show hidden servers ($name)',
-        (tester) async {
+    testWidgets('the servers section ends with show hidden servers ($name)', (
+      tester,
+    ) async {
       _phone(tester, height: 1400);
       await _pump(tester, overview(), settle: false);
       final row = find.descendant(

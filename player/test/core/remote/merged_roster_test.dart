@@ -29,11 +29,11 @@ class _FakeRoster implements DeviceRoster {
 }
 
 RemoteDeviceEntry _device(String id, String nodeId) => RemoteDeviceEntry(
-      id: id,
-      deviceName: 'Device $id',
-      platform: 'linux',
-      nodeId: nodeId,
-    );
+  id: id,
+  deviceName: 'Device $id',
+  platform: 'linux',
+  nodeId: nodeId,
+);
 
 const _a = SourceId('mydia-a');
 const _b = SourceId('mydia-b');
@@ -82,9 +82,7 @@ void main() {
     expect(await merged.allows('N1'), isFalse);
   });
 
-  test(
-      'includes extra peer group roster in entries and allows without any mydia server',
-      () async {
+  test('includes extra peer group roster in entries and allows without any mydia server', () async {
     final extraRoster = _FakeRoster([_device('extra-1', 'PEER-NODE-1')]);
     final merged = MergedRoster(const {}, extras: [extraRoster]);
 
@@ -96,30 +94,34 @@ void main() {
 
     expect(await merged.allows('PEER-NODE-1'), isTrue);
     expect(await merged.allows('other'), isFalse);
-    expect(await merged.instancesOf('PEER-NODE-1'), isEmpty,
-        reason: 'instancesOf remains scoped to server rosters');
+    expect(
+      await merged.instancesOf('PEER-NODE-1'),
+      isEmpty,
+      reason: 'instancesOf remains scoped to server rosters',
+    );
   });
 
   test(
-      'deduplicates device present in both server roster and peer group roster',
-      () async {
-    final serverRoster = _FakeRoster([_device('srv-1', 'SHARED-NODE')]);
-    final extraRoster = _FakeRoster([_device('extra-1', 'shared-node')]);
+    'deduplicates device present in both server roster and peer group roster',
+    () async {
+      final serverRoster = _FakeRoster([_device('srv-1', 'SHARED-NODE')]);
+      final extraRoster = _FakeRoster([_device('extra-1', 'shared-node')]);
 
-    final merged = MergedRoster(
-      {_a: serverRoster},
-      extras: [extraRoster],
-    );
+      final merged = MergedRoster({_a: serverRoster}, extras: [extraRoster]);
 
-    final entries = await merged.entries();
-    expect(entries.length, 1);
-    expect(entries.first.id, 'srv-1',
-        reason: 'server roster entry takes priority in deduplication');
-    expect(entries.first.nodeId, 'SHARED-NODE');
+      final entries = await merged.entries();
+      expect(entries.length, 1);
+      expect(
+        entries.first.id,
+        'srv-1',
+        reason: 'server roster entry takes priority in deduplication',
+      );
+      expect(entries.first.nodeId, 'SHARED-NODE');
 
-    expect(await merged.instancesOf('shared-node'), [_a]);
-    expect(await merged.allows('shared-node'), isTrue);
-  });
+      expect(await merged.instancesOf('shared-node'), [_a]);
+      expect(await merged.allows('shared-node'), isTrue);
+    },
+  );
 
   test('MergedRoster equality and hashCode include extras by identity', () {
     final r1 = _FakeRoster([_device('1', 'n1')]);

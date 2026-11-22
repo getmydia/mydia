@@ -1,7 +1,8 @@
 import 'package:media_kit/media_kit.dart';
 
 import 'subtitle_stream_index_stub.dart'
-    if (dart.library.io) 'subtitle_stream_index_native.dart' as platform;
+    if (dart.library.io) 'subtitle_stream_index_native.dart'
+    as platform;
 
 /// mpv's ffmpeg stream index for each subtitle track read from the loaded
 /// file, keyed by mpv track id (the `id` media_kit reports on a

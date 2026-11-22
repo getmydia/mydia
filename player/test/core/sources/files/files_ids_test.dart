@@ -40,14 +40,19 @@ void main() {
 
     test('normalized_form_keeps_ipv6_brackets_and_odd_ports', () {
       expect(
-          normalizeSmbUrl(Uri.parse('smb://[fe80::1]/M')), 'smb://[fe80::1]/m');
-      expect(normalizeSmbUrl(Uri.parse('smb://NAS:4455/Media/')),
-          'smb://nas:4455/media');
+        normalizeSmbUrl(Uri.parse('smb://[fe80::1]/M')),
+        'smb://[fe80::1]/m',
+      );
+      expect(
+        normalizeSmbUrl(Uri.parse('smb://NAS:4455/Media/')),
+        'smb://nas:4455/media',
+      );
     });
 
     test('target_defaults_to_port_445', () {
-      final t =
-          smbTargetOf(Uri.parse(normalizeSmbUrl(Uri.parse('smb://nas/Media'))));
+      final t = smbTargetOf(
+        Uri.parse(normalizeSmbUrl(Uri.parse('smb://nas/Media'))),
+      );
       expect((t.host, t.port, t.share), ('nas', 445, 'media'));
       final v6 = smbTargetOf(Uri.parse('smb://[fe80::1]:4455/m'));
       expect((v6.host, v6.port, v6.share), ('fe80::1', 4455, 'm'));
@@ -66,12 +71,17 @@ void main() {
     String norm(String url) => normalizeS3Url(Uri.parse(url));
 
     test('normalizes_equivalent_connections', () {
-      final a =
-          norm('s3+https://H.example.com:443/bkt/media?style=path&region=r');
+      final a = norm(
+        's3+https://H.example.com:443/bkt/media?style=path&region=r',
+      );
       expect(
-          norm('s3+https://h.example.com/bkt//media/?region=r&style=path'), a);
+        norm('s3+https://h.example.com/bkt//media/?region=r&style=path'),
+        a,
+      );
       expect(
-          norm('s3+https://h.example.com/bkt/media/?region=r&style=path'), a);
+        norm('s3+https://h.example.com/bkt/media/?region=r&style=path'),
+        a,
+      );
       expect(norm('s3+https://h.example.com/bkt/media?region=r&style=path'), a);
       expect(a, 's3+https://h.example.com/bkt/media/?region=r&style=path');
     });
@@ -79,43 +89,59 @@ void main() {
     test('interior_slashes_and_escapes_in_a_prefix_are_kept', () {
       // Only leading and trailing slashes are rewritten: `a//b/` and
       // `a%20b/` are other keys than `a/b/` and `a b/`.
-      expect(norm('s3+https://h.example.com/bkt/a//b/?region=r&style=path'),
-          's3+https://h.example.com/bkt/a//b/?region=r&style=path');
-      expect(norm('s3+https://h.example.com/bkt/a//b/?region=r&style=path'),
-          isNot(norm('s3+https://h.example.com/bkt/a/b/?region=r&style=path')));
       expect(
-          norm('s3+https://h.example.com/bkt/a%2520b/?region=r&style=path'),
-          isNot(
-              norm('s3+https://h.example.com/bkt/a%20b/?region=r&style=path')));
+        norm('s3+https://h.example.com/bkt/a//b/?region=r&style=path'),
+        's3+https://h.example.com/bkt/a//b/?region=r&style=path',
+      );
+      expect(
+        norm('s3+https://h.example.com/bkt/a//b/?region=r&style=path'),
+        isNot(norm('s3+https://h.example.com/bkt/a/b/?region=r&style=path')),
+      );
+      expect(
+        norm('s3+https://h.example.com/bkt/a%2520b/?region=r&style=path'),
+        isNot(norm('s3+https://h.example.com/bkt/a%20b/?region=r&style=path')),
+      );
     });
 
     test('ids_of_canonical_connections_are_unchanged', () {
       // Pinned: changing how a connection is built must not move an
       // account to a new id.
       expect(
-          s3AccountId(Uri.parse(
-              's3+https://h.example.com/bkt/media/?region=r&style=path')),
-          '3cdf2ebf66c8be1d6');
+        s3AccountId(
+          Uri.parse('s3+https://h.example.com/bkt/media/?region=r&style=path'),
+        ),
+        '3cdf2ebf66c8be1d6',
+      );
       expect(
-          normalizeS3Url(Uri.parse(
-              's3+http://minio.lan:9000/bkt/My%20Films/TV/?style=vhost&region=r')),
-          's3+http://minio.lan:9000/bkt/My%20Films/TV/?region=r&style=vhost');
+        normalizeS3Url(
+          Uri.parse(
+            's3+http://minio.lan:9000/bkt/My%20Films/TV/?style=vhost&region=r',
+          ),
+        ),
+        's3+http://minio.lan:9000/bkt/My%20Films/TV/?region=r&style=vhost',
+      );
     });
 
     test('keys_are_case_sensitive', () {
       expect(
-          norm('s3+https://h.example.com/bkt/Media/?region=r&style=path'),
-          isNot(
-              norm('s3+https://h.example.com/bkt/media/?region=r&style=path')));
+        norm('s3+https://h.example.com/bkt/Media/?region=r&style=path'),
+        isNot(norm('s3+https://h.example.com/bkt/media/?region=r&style=path')),
+      );
     });
 
     test('http_drops_port_80_and_keeps_others', () {
-      expect(norm('s3+http://h:80/bkt?region=r&style=path'),
-          's3+http://h/bkt/?region=r&style=path');
-      expect(norm('s3+http://h:9000/bkt?region=r&style=path'),
-          's3+http://h:9000/bkt/?region=r&style=path');
-      expect(norm('s3+https://h:9000/bkt?region=r&style=vhost'),
-          's3+https://h:9000/bkt/?region=r&style=vhost');
+      expect(
+        norm('s3+http://h:80/bkt?region=r&style=path'),
+        's3+http://h/bkt/?region=r&style=path',
+      );
+      expect(
+        norm('s3+http://h:9000/bkt?region=r&style=path'),
+        's3+http://h:9000/bkt/?region=r&style=path',
+      );
+      expect(
+        norm('s3+https://h:9000/bkt?region=r&style=vhost'),
+        's3+https://h:9000/bkt/?region=r&style=vhost',
+      );
     });
 
     test('a_non_s3_connection_throws', () {
@@ -124,26 +150,33 @@ void main() {
 
     test('ids_are_3_plus_16_hex_and_distinct_from_smb', () {
       final s3 = s3AccountId(
-          Uri.parse('s3+https://h.example.com/bkt/?region=r&style=path'));
+        Uri.parse('s3+https://h.example.com/bkt/?region=r&style=path'),
+      );
       expect(s3, matches(RegExp(r'^3[0-9a-f]{16}$')));
       expect(isS3AccountId(s3), isTrue);
       expect(isSmbAccountId(s3), isFalse);
       expect(
-          isS3AccountId(smbAccountId(Uri.parse('smb://nas/media'))), isFalse);
+        isS3AccountId(smbAccountId(Uri.parse('smb://nas/media'))),
+        isFalse,
+      );
       expect(isS3AccountId('w0123456789abcdef'), isFalse);
       expect(isS3AccountId('30123456789abcde'), isFalse);
     });
   });
 
   test('S3Credentials round-trip and never print the secret', () {
-    const c =
-        S3Credentials(accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'sekrit');
+    const c = S3Credentials(
+      accessKeyId: 'AKIDEXAMPLE',
+      secretAccessKey: 'sekrit',
+    );
     final back = S3Credentials.fromJson(c.toJson());
     expect((back.accessKeyId, back.secretAccessKey), ('AKIDEXAMPLE', 'sekrit'));
     expect(c.toString(), contains('AKIDEXAMPLE'));
     expect(c.toString(), isNot(contains('sekrit')));
-    expect(() => S3Credentials.fromJson('{"accessKeyId":"a"}'),
-        throwsFormatException);
+    expect(
+      () => S3Credentials.fromJson('{"accessKeyId":"a"}'),
+      throwsFormatException,
+    );
     expect(() => S3Credentials.fromJson('[]'), throwsFormatException);
   });
 }

@@ -36,9 +36,7 @@ Future<void> playCalendarEntry(
     }
   }
   if (!context.mounted) return;
-  await context.push(sourcePlayerLocation(
-    entry.ref,
-    fileId: fileId,
-    title: entry.title,
-  ));
+  await context.push(
+    sourcePlayerLocation(entry.ref, fileId: fileId, title: entry.title),
+  );
 }

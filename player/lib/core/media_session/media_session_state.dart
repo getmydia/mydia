@@ -43,8 +43,10 @@ class MediaSessionState {
     this.canGoPrevious = false,
   });
 
-  static const stopped =
-      MediaSessionState(status: MediaSessionStatus.stopped, title: '');
+  static const stopped = MediaSessionState(
+    status: MediaSessionStatus.stopped,
+    title: '',
+  );
 
   final MediaSessionStatus status;
 
@@ -80,8 +82,19 @@ class MediaSessionState {
       other.canGoPrevious == canGoPrevious;
 
   @override
-  int get hashCode => Object.hash(status, trackId, title, subtitle, artworkPath,
-      duration, position, volume, canSeek, canGoNext, canGoPrevious);
+  int get hashCode => Object.hash(
+    status,
+    trackId,
+    title,
+    subtitle,
+    artworkPath,
+    duration,
+    position,
+    volume,
+    canSeek,
+    canGoNext,
+    canGoPrevious,
+  );
 
   @override
   String toString() =>
@@ -89,17 +102,14 @@ class MediaSessionState {
 }
 
 MediaSessionStatus _statusOf(FlutterPlaybackState state) => switch (state) {
-      FlutterPlaybackState.playing ||
-      FlutterPlaybackState.buffering =>
-        MediaSessionStatus.playing,
-      FlutterPlaybackState.paused ||
-      FlutterPlaybackState.loading =>
-        MediaSessionStatus.paused,
-      FlutterPlaybackState.idle ||
-      FlutterPlaybackState.ended ||
-      FlutterPlaybackState.error =>
-        MediaSessionStatus.stopped,
-    };
+  FlutterPlaybackState.playing ||
+  FlutterPlaybackState.buffering => MediaSessionStatus.playing,
+  FlutterPlaybackState.paused ||
+  FlutterPlaybackState.loading => MediaSessionStatus.paused,
+  FlutterPlaybackState.idle ||
+  FlutterPlaybackState.ended ||
+  FlutterPlaybackState.error => MediaSessionStatus.stopped,
+};
 
 /// Maps what the attached player reports, plus resolved metadata, onto a
 /// session state. A null [snapshot] means no player is on screen.

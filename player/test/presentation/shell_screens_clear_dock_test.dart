@@ -19,12 +19,14 @@ const String _routerPath = 'lib/core/router/app_router.dart';
 /// that merely imports it.
 const String _dockInsetsPath = 'lib/core/layout/dock_insets.dart';
 
-final RegExp _shellBuilder =
-    RegExp(r'=>\s*(?:const\s+)?([A-Z]\w*(?:Screen|RouteStub))\(');
+final RegExp _shellBuilder = RegExp(
+  r'=>\s*(?:const\s+)?([A-Z]\w*(?:Screen|RouteStub))\(',
+);
 final RegExp _classDecl = RegExp(r'^class (\w+)', multiLine: true);
 final RegExp _import = RegExp(r"""^import '([^']+)'""", multiLine: true);
-final RegExp _reservesDock =
-    RegExp(r'DockInsets\.bottomOf\(|\bDockGap\(|\bSliverDockGap\(');
+final RegExp _reservesDock = RegExp(
+  r'DockInsets\.bottomOf\(|\bDockGap\(|\bSliverDockGap\(',
+);
 
 /// The source of the `ShellRoute(...)` call, matched by parentheses.
 String _shellRouteBlock(String router) {
@@ -64,8 +66,8 @@ List<String> _withDirectImports(String path) {
     final resolved = target.startsWith('package:player/')
         ? 'lib/${target.substring('package:player/'.length)}'
         : target.startsWith('package:')
-            ? null
-            : dir.resolve(target).toFilePath();
+        ? null
+        : dir.resolve(target).toFilePath();
     if (resolved == null || resolved == _dockInsetsPath) continue;
     files.add(resolved);
   }
@@ -76,11 +78,12 @@ String _withoutLineComments(String source) =>
     source.split('\n').map((line) => line.split('//').first).join('\n');
 
 bool _reservesClearance(String path) => _withDirectImports(path).any(
-      (file) =>
-          File(file).existsSync() &&
-          _reservesDock
-              .hasMatch(_withoutLineComments(File(file).readAsStringSync())),
-    );
+  (file) =>
+      File(file).existsSync() &&
+      _reservesDock.hasMatch(
+        _withoutLineComments(File(file).readAsStringSync()),
+      ),
+);
 
 void main() {
   test('every shell screen reserves dock clearance', () {
@@ -88,22 +91,26 @@ void main() {
     expect(
       router.existsSync(),
       isTrue,
-      reason: 'flutter test runs with the package root as cwd; '
+      reason:
+          'flutter test runs with the package root as cwd; '
           '$_routerPath should resolve. cwd is ${Directory.current.path}',
     );
 
     final screens = _shellBuilder
-        .allMatches(_shellRouteBlock(router.readAsStringSync())
-            // The search route is built by a helper so a test can mount it;
-            // it is still a shell screen.
-            .replaceAll('sourceSearchRoute()', '=> SourceSearchScreen('))
+        .allMatches(
+          _shellRouteBlock(router.readAsStringSync())
+          // The search route is built by a helper so a test can mount it;
+          // it is still a shell screen.
+          .replaceAll('sourceSearchRoute()', '=> SourceSearchScreen('),
+        )
         .map((m) => m.group(1)!)
         .toSet();
 
     expect(
       screens,
       allOf(contains('HomeScreen'), contains('SettingsScreen')),
-      reason: 'The ShellRoute in $_routerPath no longer matches the shape '
+      reason:
+          'The ShellRoute in $_routerPath no longer matches the shape '
           'this test parses. Update _shellBuilder rather than deleting the '
           'test. Found: $screens',
     );
@@ -123,7 +130,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'These screens are routed inside the ShellRoute, where the '
+      reason:
+          'These screens are routed inside the ShellRoute, where the '
           'floating dock covers the bottom of the viewport, but neither the '
           'screen nor anything it imports directly reserves its height. Use '
           'DockInsets.bottomOf(context) for a ListView or GridView padding, '

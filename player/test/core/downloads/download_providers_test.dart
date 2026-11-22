@@ -59,9 +59,11 @@ void main() {
   });
 
   ProviderContainer makeContainer() {
-    final container = ProviderContainer(overrides: [
-      downloadDatabaseProvider.overrideWith((ref) async => database),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        downloadDatabaseProvider.overrideWith((ref) async => database),
+      ],
+    );
     addTearDown(container.dispose);
     return container;
   }
@@ -81,25 +83,33 @@ void main() {
     await container.read(downloadSettingsProvider.future);
   }
 
-  test('saving download settings does not tear down the download service',
-      () async {
-    final container = makeContainer();
+  test(
+    'saving download settings does not tear down the download service',
+    () async {
+      final container = makeContainer();
 
-    final before = await container.read(downloadManagerProvider.future);
+      final before = await container.read(downloadManagerProvider.future);
 
-    // This is what the storage settings sheet does on save. It invalidates
-    // downloadSettingsProvider, which used to rebuild downloadManagerProvider
-    // and dispose the service, cancelling every download in flight.
-    await saveSettings(
-      container,
-      const DownloadSettings(maxConcurrentDownloads: 4, autoStartQueued: false),
-    );
+      // This is what the storage settings sheet does on save. It invalidates
+      // downloadSettingsProvider, which used to rebuild downloadManagerProvider
+      // and dispose the service, cancelling every download in flight.
+      await saveSettings(
+        container,
+        const DownloadSettings(
+          maxConcurrentDownloads: 4,
+          autoStartQueued: false,
+        ),
+      );
 
-    final after = await container.read(downloadManagerProvider.future);
+      final after = await container.read(downloadManagerProvider.future);
 
-    expect(identical(before, after), isTrue,
-        reason: 'the service instance must survive a settings change');
-  });
+      expect(
+        identical(before, after),
+        isTrue,
+        reason: 'the service instance must survive a settings change',
+      );
+    },
+  );
 
   test('a settings change still reaches the service', () async {
     final container = makeContainer();
@@ -114,26 +124,35 @@ void main() {
     // ref.listen fires on the next microtask.
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
-    await database.saveTask(DownloadTask(
-      id: 'occupying',
-      mediaId: 'm0',
-      title: 'Occupying',
-      quality: '1080p',
-      status: 'downloading',
-      downloadUrl: 'https://test.invalid/0.mp4',
-      sourceId: testMydiaSourceId.value,
-      createdAt: DateTime(2026, 1, 1),
-    ));
+    await database.saveTask(
+      DownloadTask(
+        id: 'occupying',
+        mediaId: 'm0',
+        title: 'Occupying',
+        quality: '1080p',
+        status: 'downloading',
+        downloadUrl: 'https://test.invalid/0.mp4',
+        sourceId: testMydiaSourceId.value,
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    );
 
-    final queued = await service.start(DownloadRequest(
-      ref: testMydiaRef(ItemKind.movie, 'm1'),
-      optionId: '1080p',
-      metadata:
-          const DownloadMetadata(title: 'Second', mediaType: MediaType.movie),
-    ));
+    final queued = await service.start(
+      DownloadRequest(
+        ref: testMydiaRef(ItemKind.movie, 'm1'),
+        optionId: '1080p',
+        metadata: const DownloadMetadata(
+          title: 'Second',
+          mediaType: MediaType.movie,
+        ),
+      ),
+    );
 
-    expect(database.getTask(queued.id)!.status, 'queued',
-        reason: 'the new limit of 1 must have reached the service');
+    expect(
+      database.getTask(queued.id)!.status,
+      'queued',
+      reason: 'the new limit of 1 must have reached the service',
+    );
   });
 
   group('a task whose source has no MediaSource right now', () {
@@ -141,25 +160,32 @@ void main() {
 
     /// Seeds an interrupted Plex task, builds the manager over [records] (its
     /// sweep resolves the task at once) and returns the task once it has run.
-    Future<DownloadTask> sweep(Future<SourceSnapshot> Function() records,
-        {SourceId source = fakeSourceId, bool loaded = true}) async {
-      await database.saveTask(DownloadTask(
-        id: 'hidden-dl',
-        mediaId: '42',
-        title: 'Quill Harbor',
-        quality: 'original',
-        status: 'interrupted',
-        sourceId: source.value,
-        // Recent, or the startup cleanup deletes it once it has failed.
-        createdAt: DateTime.now(),
-        lastProgressAt: seededAt,
-      ));
-      final container = ProviderContainer(overrides: [
-        downloadDatabaseProvider.overrideWith((ref) async => database),
-        sourceRecordsProvider.overrideWith(() => _Records(records)),
-        // Hidden while the app is locked: no source is built.
-        mediaSourceProvider(source).overrideWithValue(null),
-      ]);
+    Future<DownloadTask> sweep(
+      Future<SourceSnapshot> Function() records, {
+      SourceId source = fakeSourceId,
+      bool loaded = true,
+    }) async {
+      await database.saveTask(
+        DownloadTask(
+          id: 'hidden-dl',
+          mediaId: '42',
+          title: 'Quill Harbor',
+          quality: 'original',
+          status: 'interrupted',
+          sourceId: source.value,
+          // Recent, or the startup cleanup deletes it once it has failed.
+          createdAt: DateTime.now(),
+          lastProgressAt: seededAt,
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          downloadDatabaseProvider.overrideWith((ref) async => database),
+          sourceRecordsProvider.overrideWith(() => _Records(records)),
+          // Hidden while the app is locked: no source is built.
+          mediaSourceProvider(source).overrideWithValue(null),
+        ],
+      );
       addTearDown(container.dispose);
       // The app has the records loaded long before a sweep matters.
       if (loaded) await container.read(sourceRecordsProvider.future);
@@ -179,8 +205,9 @@ void main() {
     }
 
     test('is parked while its account is still stored', () async {
-      final task =
-          await sweep(() async => SourceSnapshot(accounts: [plexRecord()]));
+      final task = await sweep(
+        () async => SourceSnapshot(accounts: [plexRecord()]),
+      );
       expect(task.status, 'interrupted');
       expect(task.recoveryAttempts, 0);
     });

@@ -156,8 +156,10 @@ class _StubDownloadService implements DownloadService {
 
   @override
   Future<int> deleteSeasonDownloads(
-          SourceId source, String showId, int seasonNumber) async =>
-      0;
+    SourceId source,
+    String showId,
+    int seasonNumber,
+  ) async => 0;
 
   @override
   ({int count, int bytes}) accountDownloads(String accountId) =>
@@ -168,8 +170,8 @@ class _StubDownloadService implements DownloadService {
 
   @override
   Future<int> deleteDownloadsOfUnknownAccounts(
-          Set<String> knownAccountIds) async =>
-      0;
+    Set<String> knownAccountIds,
+  ) async => 0;
 
   @override
   List<DownloadTask> getActiveDownloads() => [];

@@ -17,12 +17,20 @@ void main() {
     test('skips audio and video tracks', () {
       expect(
         subtitleStreamIndexEntry(
-            type: 'audio', id: '1', ffIndex: '1', external: 'no'),
+          type: 'audio',
+          id: '1',
+          ffIndex: '1',
+          external: 'no',
+        ),
         isNull,
       );
       expect(
         subtitleStreamIndexEntry(
-            type: 'video', id: '1', ffIndex: '0', external: 'no'),
+          type: 'video',
+          id: '1',
+          ffIndex: '0',
+          external: 'no',
+        ),
         isNull,
       );
     });
@@ -33,7 +41,11 @@ void main() {
       // alias the container's stream 0.
       expect(
         subtitleStreamIndexEntry(
-            type: 'sub', id: '5', ffIndex: '0', external: 'yes'),
+          type: 'sub',
+          id: '5',
+          ffIndex: '0',
+          external: 'yes',
+        ),
         isNull,
       );
     });
@@ -42,7 +54,11 @@ void main() {
       // `getProperty` answers "" for a property the entry does not have.
       expect(
         subtitleStreamIndexEntry(
-            type: 'sub', id: '2', ffIndex: '', external: 'no'),
+          type: 'sub',
+          id: '2',
+          ffIndex: '',
+          external: 'no',
+        ),
         isNull,
       );
     });
@@ -50,12 +66,20 @@ void main() {
     test('skips an entry with no id or an unreadable index', () {
       expect(
         subtitleStreamIndexEntry(
-            type: 'sub', id: '', ffIndex: '4', external: 'no'),
+          type: 'sub',
+          id: '',
+          ffIndex: '4',
+          external: 'no',
+        ),
         isNull,
       );
       expect(
         subtitleStreamIndexEntry(
-            type: 'sub', id: '2', ffIndex: 'four', external: 'no'),
+          type: 'sub',
+          id: '2',
+          ffIndex: 'four',
+          external: 'no',
+        ),
         isNull,
       );
     });

@@ -4,6 +4,7 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import 'frb_generated.dart';
+
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
@@ -64,10 +65,13 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// where it was already decided. A slice of the wrong length is dropped
   /// rather than trusted, which costs a fresh identity but never a
   /// malformed one.
-  static (P2PHost, String) init(
-          {required List<String> relayUrls, Uint8List? keypairBytes}) =>
-      RustLib.instance.api
-          .crateP2PHostInit(relayUrls: relayUrls, keypairBytes: keypairBytes);
+  static (P2PHost, String) init({
+    required List<String> relayUrls,
+    Uint8List? keypairBytes,
+  }) => RustLib.instance.api.crateP2PHostInit(
+    relayUrls: relayUrls,
+    keypairBytes: keypairBytes,
+  );
 
   /// Forget every grant of `account_id`, for when its index changed.
   Future<void> invalidatePeerFileGrants({required String accountId});
@@ -75,8 +79,10 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// Open an HLS request to a specific peer and return a handle Dart pulls
   /// the body from. Fails if the stream cannot be opened or the server
   /// answers with an error.
-  Future<HlsStreamHandle> openHlsStream(
-      {required String peer, required FlutterHlsRequest req});
+  Future<HlsStreamHandle> openHlsStream({
+    required String peer,
+    required FlutterHlsRequest req,
+  });
 
   /// Stream the host's grant requests to Dart. Each must be answered with
   /// `respond_peer_file_grant` within 10 seconds or the read gets 502.
@@ -103,16 +109,22 @@ abstract class P2PHost implements RustOpaqueInterface {
 
   /// Answer a grant request: granted, not shared (the read gets 404), or
   /// failed (the read gets 502).
-  Future<void> respondPeerFileGrant(
-      {required String requestId, required FlutterPeerFileGrantAnswer answer});
+  Future<void> respondPeerFileGrant({
+    required String requestId,
+    required FlutterPeerFileGrantAnswer answer,
+  });
 
   /// Answer an inbound peer files request.
-  Future<void> respondToPeerFiles(
-      {required String requestId, required FlutterPeerFilesResponse res});
+  Future<void> respondToPeerFiles({
+    required String requestId,
+    required FlutterPeerFilesResponse res,
+  });
 
   /// Answer an inbound peer sync request.
-  Future<void> respondToPeerSync(
-      {required String requestId, required FlutterPeerSyncResponse res});
+  Future<void> respondToPeerSync({
+    required String requestId,
+    required FlutterPeerSyncResponse res,
+  });
 
   /// Answer an inbound control request.
   ///
@@ -121,35 +133,49 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// real: a process that exits promptly after this returns can drop an
   /// in-flight response. Callers that need the answer delivered must keep
   /// the host alive until the peer's request completes.
-  Future<void> respondToRemoteControl(
-      {required String requestId, required FlutterRemoteControlResponse res});
+  Future<void> respondToRemoteControl({
+    required String requestId,
+    required FlutterRemoteControlResponse res,
+  });
 
   /// Send a GraphQL request to a specific peer.
-  Future<FlutterGraphQLResponse> sendGraphqlRequest(
-      {required String peer, required FlutterGraphQLRequest req});
+  Future<FlutterGraphQLResponse> sendGraphqlRequest({
+    required String peer,
+    required FlutterGraphQLRequest req,
+  });
 
   /// Send an HLS request to a specific peer and collect the complete response.
   ///
   /// This is a non-streaming version that collects all chunks into a single buffer.
   /// For large files, consider using the local proxy service instead.
-  Future<FlutterHlsResponse> sendHlsRequest(
-      {required String peer, required FlutterHlsRequest req});
+  Future<FlutterHlsResponse> sendHlsRequest({
+    required String peer,
+    required FlutterHlsRequest req,
+  });
 
   /// Send a pairing request to a specific peer.
-  Future<FlutterPairingResponse> sendPairingRequest(
-      {required String peer, required FlutterPairingRequest req});
+  Future<FlutterPairingResponse> sendPairingRequest({
+    required String peer,
+    required FlutterPairingRequest req,
+  });
 
   /// Send a peer files request to a peer and await its answer.
-  Future<FlutterPeerFilesResponse> sendPeerFiles(
-      {required String peer, required FlutterPeerFilesRequest req});
+  Future<FlutterPeerFilesResponse> sendPeerFiles({
+    required String peer,
+    required FlutterPeerFilesRequest req,
+  });
 
   /// Send a peer sync request to a peer and await its answer.
-  Future<FlutterPeerSyncResponse> sendPeerSync(
-      {required String peer, required FlutterPeerSyncRequest req});
+  Future<FlutterPeerSyncResponse> sendPeerSync({
+    required String peer,
+    required FlutterPeerSyncRequest req,
+  });
 
   /// Send a control command to a peer and await its answer.
-  Future<FlutterRemoteControlResponse> sendRemoteControlRequest(
-      {required String peer, required FlutterRemoteControlRequest req});
+  Future<FlutterRemoteControlResponse> sendRemoteControlRequest({
+    required String peer,
+    required FlutterRemoteControlRequest req,
+  });
 
   /// Set which peers may read this player's shared files: the node ids of
   /// the sync group's active members. Replaces the previous list, which
@@ -162,10 +188,7 @@ class ClaimPayload {
   final String nodeAddr;
   final String instanceId;
 
-  const ClaimPayload({
-    required this.nodeAddr,
-    required this.instanceId,
-  });
+  const ClaimPayload({required this.nodeAddr, required this.instanceId});
 
   @override
   int get hashCode => nodeAddr.hashCode ^ instanceId.hashCode;
@@ -192,7 +215,6 @@ enum FlutterConnectionType {
 
   /// No active connection
   none,
-  ;
 }
 
 /// Free and total bytes on a volume.
@@ -200,10 +222,7 @@ class FlutterDiskSpace {
   final BigInt free;
   final BigInt total;
 
-  const FlutterDiskSpace({
-    required this.free,
-    required this.total,
-  });
+  const FlutterDiskSpace({required this.free, required this.total});
 
   @override
   int get hashCode => free.hashCode ^ total.hashCode;
@@ -262,10 +281,7 @@ class FlutterGraphQLResponse {
   final String? data;
   final String? errors;
 
-  const FlutterGraphQLResponse({
-    this.data,
-    this.errors,
-  });
+  const FlutterGraphQLResponse({this.data, this.errors});
 
   @override
   int get hashCode => data.hashCode ^ errors.hashCode;
@@ -320,10 +336,7 @@ class FlutterHlsResponse {
   final FlutterHlsResponseHeader header;
   final Uint8List data;
 
-  const FlutterHlsResponse({
-    required this.header,
-    required this.data,
-  });
+  const FlutterHlsResponse({required this.header, required this.data});
 
   @override
   int get hashCode => header.hashCode ^ data.hashCode;
@@ -605,10 +618,7 @@ class FlutterPeerFileGrant {
   final String url;
   final List<(String, String)> headers;
 
-  const FlutterPeerFileGrant({
-    required this.url,
-    required this.headers,
-  });
+  const FlutterPeerFileGrant({required this.url, required this.headers});
 
   @override
   int get hashCode => url.hashCode ^ headers.hashCode;
@@ -670,9 +680,8 @@ class FlutterPeerFileGrantRequest {
 sealed class FlutterPeerFilesRequest with _$FlutterPeerFilesRequest {
   const FlutterPeerFilesRequest._();
 
-  const factory FlutterPeerFilesRequest.manifest({
-    required String authProof,
-  }) = FlutterPeerFilesRequest_Manifest;
+  const factory FlutterPeerFilesRequest.manifest({required String authProof}) =
+      FlutterPeerFilesRequest_Manifest;
   const factory FlutterPeerFilesRequest.indexPage({
     required String authProof,
     required String accountId,
@@ -737,9 +746,8 @@ sealed class FlutterPeerSyncResponse with _$FlutterPeerSyncResponse {
     String? backupStore,
     String? backupAccount,
   }) = FlutterPeerSyncResponse_Paired;
-  const factory FlutterPeerSyncResponse.pairRejected({
-    required String reason,
-  }) = FlutterPeerSyncResponse_PairRejected;
+  const factory FlutterPeerSyncResponse.pairRejected({required String reason}) =
+      FlutterPeerSyncResponse_PairRejected;
   const factory FlutterPeerSyncResponse.syncAck({
     required List<FlutterWirePeerMember> roster,
     required List<FlutterWireWatchRecord> watchRecords,
@@ -837,7 +845,6 @@ enum FlutterPlaybackState {
   paused,
   ended,
   error,
-  ;
 }
 
 @freezed
@@ -856,21 +863,16 @@ sealed class FlutterRemoteControlRequest with _$FlutterRemoteControlRequest {
       FlutterRemoteControlRequest_Pause;
   const factory FlutterRemoteControlRequest.stop() =
       FlutterRemoteControlRequest_Stop;
-  const factory FlutterRemoteControlRequest.seek({
-    required BigInt positionMs,
-  }) = FlutterRemoteControlRequest_Seek;
-  const factory FlutterRemoteControlRequest.setVolume({
-    required double level,
-  }) = FlutterRemoteControlRequest_SetVolume;
-  const factory FlutterRemoteControlRequest.setMute({
-    required bool muted,
-  }) = FlutterRemoteControlRequest_SetMute;
-  const factory FlutterRemoteControlRequest.selectAudioTrack({
-    String? id,
-  }) = FlutterRemoteControlRequest_SelectAudioTrack;
-  const factory FlutterRemoteControlRequest.selectSubtitleTrack({
-    String? id,
-  }) = FlutterRemoteControlRequest_SelectSubtitleTrack;
+  const factory FlutterRemoteControlRequest.seek({required BigInt positionMs}) =
+      FlutterRemoteControlRequest_Seek;
+  const factory FlutterRemoteControlRequest.setVolume({required double level}) =
+      FlutterRemoteControlRequest_SetVolume;
+  const factory FlutterRemoteControlRequest.setMute({required bool muted}) =
+      FlutterRemoteControlRequest_SetMute;
+  const factory FlutterRemoteControlRequest.selectAudioTrack({String? id}) =
+      FlutterRemoteControlRequest_SelectAudioTrack;
+  const factory FlutterRemoteControlRequest.selectSubtitleTrack({String? id}) =
+      FlutterRemoteControlRequest_SelectSubtitleTrack;
   const factory FlutterRemoteControlRequest.nextEpisode() =
       FlutterRemoteControlRequest_NextEpisode;
   const factory FlutterRemoteControlRequest.previousEpisode() =
@@ -900,19 +902,15 @@ sealed class FlutterRemoteControlResponse with _$FlutterRemoteControlResponse {
       FlutterRemoteControlResponse_NotPlaying;
   const factory FlutterRemoteControlResponse.unsupported() =
       FlutterRemoteControlResponse_Unsupported;
-  const factory FlutterRemoteControlResponse.error(
-    String field0,
-  ) = FlutterRemoteControlResponse_Error;
+  const factory FlutterRemoteControlResponse.error(String field0) =
+      FlutterRemoteControlResponse_Error;
 }
 
 class FlutterSealedClaim {
   final String lookupKey;
   final String sealed;
 
-  const FlutterSealedClaim({
-    required this.lookupKey,
-    required this.sealed,
-  });
+  const FlutterSealedClaim({required this.lookupKey, required this.sealed});
 
   @override
   int get hashCode => lookupKey.hashCode ^ sealed.hashCode;
@@ -1171,9 +1169,7 @@ class FlutterWireWatchRecord {
 class PairingKeys {
   final String code;
 
-  const PairingKeys({
-    required this.code,
-  });
+  const PairingKeys({required this.code});
 
   /// Derive from a claim code as the user typed it. Case, dashes, and
   /// whitespace are normalized inside the core crate.
@@ -1181,9 +1177,8 @@ class PairingKeys {
       RustLib.instance.api.cratePairingKeysDerive(code: code);
 
   /// The relay URL path segment: 64 lowercase hex characters.
-  Future<String> lookupKey() => RustLib.instance.api.cratePairingKeysLookupKey(
-        that: this,
-      );
+  Future<String> lookupKey() =>
+      RustLib.instance.api.cratePairingKeysLookupKey(that: this);
 
   /// Open a sealed blob fetched from the relay.
   ///
@@ -1194,10 +1189,14 @@ class PairingKeys {
       RustLib.instance.api.cratePairingKeysOpen(that: this, sealed: sealed);
 
   /// Seal a node address and instance ID into a claim blob for the relay.
-  Future<FlutterSealedClaim> seal(
-          {required String nodeAddr, required String instanceId}) =>
-      RustLib.instance.api.cratePairingKeysSeal(
-          that: this, nodeAddr: nodeAddr, instanceId: instanceId);
+  Future<FlutterSealedClaim> seal({
+    required String nodeAddr,
+    required String instanceId,
+  }) => RustLib.instance.api.cratePairingKeysSeal(
+    that: this,
+    nodeAddr: nodeAddr,
+    instanceId: instanceId,
+  );
 
   @override
   int get hashCode => code.hashCode;

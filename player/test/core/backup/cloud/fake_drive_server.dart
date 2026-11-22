@@ -57,12 +57,15 @@ class FakeDriveServer {
   void failOnce(String match, FakeDriveFailure f) =>
       failures.putIfAbsent(match, () => []).add(f);
 
-  http.Response _json(int status, Object body,
-          {Map<String, String> headers = const {}}) =>
-      http.Response(jsonEncode(body), status, headers: {
-        'content-type': 'application/json',
-        ...headers,
-      });
+  http.Response _json(
+    int status,
+    Object body, {
+    Map<String, String> headers = const {},
+  }) => http.Response(
+    jsonEncode(body),
+    status,
+    headers: {'content-type': 'application/json', ...headers},
+  );
 
   Future<http.Response> _handle(http.Request r) async {
     final key = '${r.method} ${r.url.path}';
@@ -74,7 +77,7 @@ class FakeDriveServer {
     }
     if (r.headers['Authorization'] != 'Bearer $validToken') {
       return _json(401, {
-        'error': {'code': 401, 'status': 'UNAUTHENTICATED'}
+        'error': {'code': 401, 'status': 'UNAUTHENTICATED'},
       });
     }
     for (final entry in failures.entries) {
@@ -97,7 +100,7 @@ class FakeDriveServer {
       final file = files[one.group(1)];
       if (file == null) {
         return _json(404, {
-          'error': {'code': 404, 'status': 'NOT_FOUND'}
+          'error': {'code': 404, 'status': 'NOT_FOUND'},
         });
       }
       if (r.method == 'GET') {
@@ -137,7 +140,7 @@ class FakeDriveServer {
             'modifiedTime': f.modified.toIso8601String(),
             'size': '${f.bytes.length}',
             'appProperties': f.appProperties,
-          }
+          },
       ],
       if (more) 'nextPageToken': '${start + page.length}',
     });
@@ -173,15 +176,16 @@ class FakeDriveServer {
       }
       if (file == null) {
         return _json(404, {
-          'error': {'code': 404, 'status': 'NOT_FOUND'}
+          'error': {'code': 404, 'status': 'NOT_FOUND'},
         });
       }
     }
     if (meta['name'] != null) file.name = meta['name'] as String;
     file.appProperties = {
       ...file.appProperties,
-      ...(meta['appProperties'] as Map<String, dynamic>? ?? {})
-          .map((k, v) => MapEntry(k, v as String)),
+      ...(meta['appProperties'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k, v as String),
+      ),
     };
     file.bytes = parts[1].body;
     file.version = ++_clock;
@@ -190,7 +194,9 @@ class FakeDriveServer {
   }
 
   List<({String header, List<int> body})> _parts(
-      List<int> body, String boundary) {
+    List<int> body,
+    String boundary,
+  ) {
     final text = latin1.decode(body);
     final delim = '--$boundary';
     final out = <({String header, List<int> body})>[];

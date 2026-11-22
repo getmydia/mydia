@@ -17,18 +17,18 @@ class LibraryRoot {
   final String title;
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'path': path,
-        'kind': kind.name,
-        'title': title,
-      };
+    'id': id,
+    'path': path,
+    'kind': kind.name,
+    'title': title,
+  };
 
   factory LibraryRoot.fromMap(Map<dynamic, dynamic> m) => LibraryRoot(
-        id: m['id'] as String,
-        path: m['path'] as String,
-        kind: FilesLibraryKind.values.byName(m['kind'] as String),
-        title: m['title'] as String,
-      );
+    id: m['id'] as String,
+    path: m['path'] as String,
+    kind: FilesLibraryKind.values.byName(m['kind'] as String),
+    title: m['title'] as String,
+  );
 }
 
 /// One media file found under a root. [path] is relative to the root.
@@ -59,16 +59,16 @@ class IndexedFile {
   final FilesLibraryKind? parsedAs;
 
   Map<String, dynamic> toMap() => {
-        'key': key,
-        'rootId': rootId,
-        'path': path,
-        'size': size,
-        'modified': modified.millisecondsSinceEpoch,
-        'firstSeen': firstSeen.millisecondsSinceEpoch,
-        'parsed': parsed?.toMap(),
-        'sidecars': sidecars,
-        'parsedAs': parsedAs?.name,
-      };
+    'key': key,
+    'rootId': rootId,
+    'path': path,
+    'size': size,
+    'modified': modified.millisecondsSinceEpoch,
+    'firstSeen': firstSeen.millisecondsSinceEpoch,
+    'parsed': parsed?.toMap(),
+    'sidecars': sidecars,
+    'parsedAs': parsedAs?.name,
+  };
 
   factory IndexedFile.fromMap(Map<dynamic, dynamic> m) {
     final parsed = m['parsed'] as Map<dynamic, dynamic>?;
@@ -119,33 +119,32 @@ class GroupMatch {
     bool? pinned,
     DateTime? matchedAt,
     int? pinRevision,
-  }) =>
-      GroupMatch(
-        groupKey: groupKey ?? this.groupKey,
-        isShow: isShow ?? this.isShow,
-        tmdbId: tmdbId ?? this.tmdbId,
-        pinned: pinned ?? this.pinned,
-        matchedAt: matchedAt ?? this.matchedAt,
-        pinRevision: pinRevision ?? this.pinRevision,
-      );
+  }) => GroupMatch(
+    groupKey: groupKey ?? this.groupKey,
+    isShow: isShow ?? this.isShow,
+    tmdbId: tmdbId ?? this.tmdbId,
+    pinned: pinned ?? this.pinned,
+    matchedAt: matchedAt ?? this.matchedAt,
+    pinRevision: pinRevision ?? this.pinRevision,
+  );
 
   Map<String, dynamic> toMap() => {
-        'groupKey': groupKey,
-        'isShow': isShow,
-        'tmdbId': tmdbId,
-        'pinned': pinned,
-        'matchedAt': matchedAt.millisecondsSinceEpoch,
-        'pinRevision': pinRevision,
-      };
+    'groupKey': groupKey,
+    'isShow': isShow,
+    'tmdbId': tmdbId,
+    'pinned': pinned,
+    'matchedAt': matchedAt.millisecondsSinceEpoch,
+    'pinRevision': pinRevision,
+  };
 
   factory GroupMatch.fromMap(Map<dynamic, dynamic> m) => GroupMatch(
-        groupKey: m['groupKey'] as String,
-        isShow: m['isShow'] as bool,
-        tmdbId: m['tmdbId'] as int?,
-        pinned: m['pinned'] as bool,
-        matchedAt: _date(m['matchedAt']),
-        pinRevision: (m['pinRevision'] as num?)?.toInt(),
-      );
+    groupKey: m['groupKey'] as String,
+    isShow: m['isShow'] as bool,
+    tmdbId: m['tmdbId'] as int?,
+    pinned: m['pinned'] as bool,
+    matchedAt: _date(m['matchedAt']),
+    pinRevision: (m['pinRevision'] as num?)?.toInt(),
+  );
 }
 
 class MatchedMovie {
@@ -170,26 +169,26 @@ class MatchedMovie {
   final String? releaseDate;
 
   Map<String, dynamic> toMap() => {
-        'tmdbId': tmdbId,
-        'title': title,
-        'year': year,
-        'overview': overview,
-        'posterPath': posterPath,
-        'backdropPath': backdropPath,
-        'runtimeMinutes': runtimeMinutes,
-        'releaseDate': releaseDate,
-      };
+    'tmdbId': tmdbId,
+    'title': title,
+    'year': year,
+    'overview': overview,
+    'posterPath': posterPath,
+    'backdropPath': backdropPath,
+    'runtimeMinutes': runtimeMinutes,
+    'releaseDate': releaseDate,
+  };
 
   factory MatchedMovie.fromMap(Map<dynamic, dynamic> m) => MatchedMovie(
-        tmdbId: m['tmdbId'] as int,
-        title: m['title'] as String,
-        year: m['year'] as int?,
-        overview: m['overview'] as String?,
-        posterPath: m['posterPath'] as String?,
-        backdropPath: m['backdropPath'] as String?,
-        runtimeMinutes: m['runtimeMinutes'] as int?,
-        releaseDate: m['releaseDate'] as String?,
-      );
+    tmdbId: m['tmdbId'] as int,
+    title: m['title'] as String,
+    year: m['year'] as int?,
+    overview: m['overview'] as String?,
+    posterPath: m['posterPath'] as String?,
+    backdropPath: m['backdropPath'] as String?,
+    runtimeMinutes: m['runtimeMinutes'] as int?,
+    releaseDate: m['releaseDate'] as String?,
+  );
 }
 
 class MatchedEpisode {
@@ -212,24 +211,24 @@ class MatchedEpisode {
   final int? runtimeMinutes;
 
   Map<String, dynamic> toMap() => {
-        'season': season,
-        'episode': episode,
-        'title': title,
-        'overview': overview,
-        'stillPath': stillPath,
-        'airDate': airDate,
-        'runtimeMinutes': runtimeMinutes,
-      };
+    'season': season,
+    'episode': episode,
+    'title': title,
+    'overview': overview,
+    'stillPath': stillPath,
+    'airDate': airDate,
+    'runtimeMinutes': runtimeMinutes,
+  };
 
   factory MatchedEpisode.fromMap(Map<dynamic, dynamic> m) => MatchedEpisode(
-        season: m['season'] as int,
-        episode: m['episode'] as int,
-        title: m['title'] as String?,
-        overview: m['overview'] as String?,
-        stillPath: m['stillPath'] as String?,
-        airDate: m['airDate'] as String?,
-        runtimeMinutes: m['runtimeMinutes'] as int?,
-      );
+    season: m['season'] as int,
+    episode: m['episode'] as int,
+    title: m['title'] as String?,
+    overview: m['overview'] as String?,
+    stillPath: m['stillPath'] as String?,
+    airDate: m['airDate'] as String?,
+    runtimeMinutes: m['runtimeMinutes'] as int?,
+  );
 }
 
 class MatchedShow {
@@ -256,18 +255,18 @@ class MatchedShow {
   /// beside it: a season TMDB lists with no episodes would otherwise vanish
   /// on reload and be fetched again on every scan.
   Map<String, dynamic> toMap() => {
-        'tmdbId': tmdbId,
-        'title': title,
-        'year': year,
-        'overview': overview,
-        'posterPath': posterPath,
-        'backdropPath': backdropPath,
-        'seasonNumbers': seasons.keys.toList(),
-        'episodes': [
-          for (final eps in seasons.values)
-            for (final e in eps) e.toMap(),
-        ],
-      };
+    'tmdbId': tmdbId,
+    'title': title,
+    'year': year,
+    'overview': overview,
+    'posterPath': posterPath,
+    'backdropPath': backdropPath,
+    'seasonNumbers': seasons.keys.toList(),
+    'episodes': [
+      for (final eps in seasons.values)
+        for (final e in eps) e.toMap(),
+    ],
+  };
 
   factory MatchedShow.fromMap(Map<dynamic, dynamic> m) {
     final seasons = <int, List<MatchedEpisode>>{

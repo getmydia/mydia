@@ -109,26 +109,34 @@ void main() {
       await backend.connect(receiverB);
 
       expect(service.sessions, hasLength(2));
-      expect(service.sessions.first.disconnected, isTrue,
-          reason: 'the first receiver must be released');
-      expect(service.sessions.first.disposed, isTrue,
-          reason: 'the first session must not leak its stream controllers');
+      expect(
+        service.sessions.first.disconnected,
+        isTrue,
+        reason: 'the first receiver must be released',
+      );
+      expect(
+        service.sessions.first.disposed,
+        isTrue,
+        reason: 'the first session must not leak its stream controllers',
+      );
       expect(service.sessions.last.disconnected, isFalse);
       expect(backend.connectedDevice?.id, 'b');
     });
 
-    test('reconnecting to the same receiver does not tear its session down',
-        () async {
-      final service = _RecordingCastService();
-      final backend = DartCastBackend.withService(service);
-      addTearDown(backend.dispose);
+    test(
+      'reconnecting to the same receiver does not tear its session down',
+      () async {
+        final service = _RecordingCastService();
+        final backend = DartCastBackend.withService(service);
+        addTearDown(backend.dispose);
 
-      await backend.connect(receiverA);
-      await backend.connect(receiverA);
+        await backend.connect(receiverA);
+        await backend.connect(receiverA);
 
-      expect(service.sessions.first.disconnected, isFalse);
-      expect(backend.connectedDevice?.id, 'a');
-    });
+        expect(service.sessions.first.disconnected, isFalse);
+        expect(backend.connectedDevice?.id, 'a');
+      },
+    );
   });
 
   group('chromecastDeviceFromBonsoir', () {
@@ -257,39 +265,43 @@ void main() {
   });
 
   group('BonsoirChromecastDiscovery failure channel', () {
-    test('surfaces a discovery failure that dart_cast would otherwise swallow',
-        () async {
-      final discovery = BonsoirChromecastDiscovery();
-      addTearDown(discovery.dispose);
+    test(
+      'surfaces a discovery failure that dart_cast would otherwise swallow',
+      () async {
+        final discovery = BonsoirChromecastDiscovery();
+        addTearDown(discovery.dispose);
 
-      final failures = <dc.CastException>[];
-      discovery.failures.listen(failures.add);
+        final failures = <dc.CastException>[];
+        discovery.failures.listen(failures.add);
 
-      // No platform channel is registered in this test environment, so
-      // `BonsoirDiscovery.initialize()` throws MissingPluginException — the
-      // same "the platform refused" shape a real discovery denial takes.
-      // dart_cast's own DiscoveryManager only logs a provider's stream
-      // errors (see discovery_manager.dart) rather than forwarding them, so
-      // `failures` is the only channel this can ever reach the app through.
-      discovery.startDiscovery();
+        // No platform channel is registered in this test environment, so
+        // `BonsoirDiscovery.initialize()` throws MissingPluginException — the
+        // same "the platform refused" shape a real discovery denial takes.
+        // dart_cast's own DiscoveryManager only logs a provider's stream
+        // errors (see discovery_manager.dart) rather than forwarding them, so
+        // `failures` is the only channel this can ever reach the app through.
+        discovery.startDiscovery();
 
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(failures, hasLength(1));
-      expect(failures.single, isA<dc.DiscoveryException>());
-    });
+        expect(failures, hasLength(1));
+        expect(failures.single, isA<dc.DiscoveryException>());
+      },
+    );
   });
 
   group('toDomainDevice', () {
     test('maps a Chromecast device', () {
-      final domain = toDomainDevice(dc.CastDevice(
-        id: 'abc',
-        name: 'Living Room',
-        protocol: dc.CastProtocol.chromecast,
-        address: InternetAddress('192.168.1.50'),
-        port: 8009,
-        metadata: const {'md': 'Chromecast Ultra'},
-      ));
+      final domain = toDomainDevice(
+        dc.CastDevice(
+          id: 'abc',
+          name: 'Living Room',
+          protocol: dc.CastProtocol.chromecast,
+          address: InternetAddress('192.168.1.50'),
+          port: 8009,
+          metadata: const {'md': 'Chromecast Ultra'},
+        ),
+      );
 
       expect(domain.id, 'abc');
       expect(domain.protocol, CastProtocolKind.chromecast);
@@ -300,16 +312,18 @@ void main() {
     });
 
     test('maps a DLNA device', () {
-      final domain = toDomainDevice(dc.CastDevice(
-        id: 'uuid:1',
-        name: 'Bedroom TV',
-        protocol: dc.CastProtocol.dlna,
-        address: InternetAddress('192.168.1.51'),
-        port: 1900,
-        metadata: const {
-          'avTransportControlUrl': 'http://192.168.1.51:1900/AVTransport'
-        },
-      ));
+      final domain = toDomainDevice(
+        dc.CastDevice(
+          id: 'uuid:1',
+          name: 'Bedroom TV',
+          protocol: dc.CastProtocol.dlna,
+          address: InternetAddress('192.168.1.51'),
+          port: 1900,
+          metadata: const {
+            'avTransportControlUrl': 'http://192.168.1.51:1900/AVTransport',
+          },
+        ),
+      );
 
       expect(domain.protocol, CastProtocolKind.dlna);
       expect(domain.model, isNull);
@@ -341,8 +355,7 @@ void main() {
       expect(rebuilt.metadata['md'], 'Chromecast Ultra');
     });
 
-    test(
-        'rebuilds a DLNA device including the control-URL metadata '
+    test('rebuilds a DLNA device including the control-URL metadata '
         'DlnaSession.fromDevice needs', () {
       const domain = CastDevice(
         id: 'uuid:1',
@@ -390,8 +403,7 @@ void main() {
   });
 
   group('DartCastBackend.connect reconstruction failures', () {
-    test(
-        'a malformed persisted host surfaces as CastBackendException, not a '
+    test('a malformed persisted host surfaces as CastBackendException, not a '
         'raw ArgumentError', () async {
       // Regression test: reconstructDartCastDevice used to run outside the
       // try/catch that translates dart_cast errors. InternetAddress(host)
@@ -411,35 +423,53 @@ void main() {
 
       await expectLater(
         backend.connect(neverDiscovered),
-        throwsA(isA<CastBackendException>()
-            .having((e) => e.kind, 'kind', CastFailureKind.unknown)),
+        throwsA(
+          isA<CastBackendException>().having(
+            (e) => e.kind,
+            'kind',
+            CastFailureKind.unknown,
+          ),
+        ),
       );
     });
   });
 
   group('playbackStateFrom', () {
     test('maps every dart_cast session state', () {
-      expect(playbackStateFrom(dc.SessionState.playing),
-          CastPlaybackState.playing);
       expect(
-          playbackStateFrom(dc.SessionState.paused), CastPlaybackState.paused);
-      expect(playbackStateFrom(dc.SessionState.buffering),
-          CastPlaybackState.buffering);
-      expect(playbackStateFrom(dc.SessionState.loading),
-          CastPlaybackState.buffering);
-      expect(playbackStateFrom(dc.SessionState.connecting),
-          CastPlaybackState.buffering);
+        playbackStateFrom(dc.SessionState.playing),
+        CastPlaybackState.playing,
+      );
+      expect(
+        playbackStateFrom(dc.SessionState.paused),
+        CastPlaybackState.paused,
+      );
+      expect(
+        playbackStateFrom(dc.SessionState.buffering),
+        CastPlaybackState.buffering,
+      );
+      expect(
+        playbackStateFrom(dc.SessionState.loading),
+        CastPlaybackState.buffering,
+      );
+      expect(
+        playbackStateFrom(dc.SessionState.connecting),
+        CastPlaybackState.buffering,
+      );
       expect(playbackStateFrom(dc.SessionState.idle), CastPlaybackState.idle);
       expect(
-          playbackStateFrom(dc.SessionState.connected), CastPlaybackState.idle);
-      expect(playbackStateFrom(dc.SessionState.disconnected),
-          CastPlaybackState.idle);
+        playbackStateFrom(dc.SessionState.connected),
+        CastPlaybackState.idle,
+      );
+      expect(
+        playbackStateFrom(dc.SessionState.disconnected),
+        CastPlaybackState.idle,
+      );
     });
   });
 
   group('failureKindFor', () {
-    test(
-        'maps DeviceUnreachableException to unreachable (future-proofing; '
+    test('maps DeviceUnreachableException to unreachable (future-proofing; '
         'never actually thrown today)', () {
       expect(
         failureKindFor(dc.DeviceUnreachableException('unreachable')),
@@ -447,8 +477,7 @@ void main() {
       );
     });
 
-    test(
-        'maps ProxyUpstreamException to unreachable (future-proofing; '
+    test('maps ProxyUpstreamException to unreachable (future-proofing; '
         'never actually thrown today)', () {
       expect(
         failureKindFor(dc.ProxyUpstreamException('proxy failed')),
@@ -456,8 +485,7 @@ void main() {
       );
     });
 
-    test(
-        'maps MediaLoadFailedException (the real Chromecast LOAD failure) '
+    test('maps MediaLoadFailedException (the real Chromecast LOAD failure) '
         'to mediaLoadFailed', () {
       expect(
         failureKindFor(dc.MediaLoadFailedException('LOAD_FAILED')),
@@ -465,8 +493,7 @@ void main() {
       );
     });
 
-    test(
-        'maps ProtocolException (the real DLNA SOAP failure) to '
+    test('maps ProtocolException (the real DLNA SOAP failure) to '
         'mediaLoadFailed, the same as Chromecast\'s LOAD failure', () {
       expect(
         failureKindFor(dc.ProtocolException('HTTP 500', dc.CastProtocol.dlna)),
@@ -474,8 +501,7 @@ void main() {
       );
     });
 
-    test(
-        'maps ConnectionLostException to connectionLost (future-proofing; '
+    test('maps ConnectionLostException to connectionLost (future-proofing; '
         'never actually thrown today)', () {
       expect(
         failureKindFor(dc.ConnectionLostException('lost')),
@@ -492,24 +518,28 @@ void main() {
 
     test('maps an unrecognized CastException to unknown', () {
       expect(
-          failureKindFor(dc.CastException('mystery')), CastFailureKind.unknown);
+        failureKindFor(dc.CastException('mystery')),
+        CastFailureKind.unknown,
+      );
     });
   });
 
   group('mapDiscoveryFailures', () {
-    test('translates each discovery exception through failureKindFor',
-        () async {
-      final controller = StreamController<dc.CastException>();
-      addTearDown(controller.close);
+    test(
+      'translates each discovery exception through failureKindFor',
+      () async {
+        final controller = StreamController<dc.CastException>();
+        addTearDown(controller.close);
 
-      final kinds = <CastFailureKind>[];
-      mapDiscoveryFailures(controller.stream).listen(kinds.add);
+        final kinds = <CastFailureKind>[];
+        mapDiscoveryFailures(controller.stream).listen(kinds.add);
 
-      controller.add(dc.DiscoveryException('denied'));
-      await Future<void>.delayed(Duration.zero);
+        controller.add(dc.DiscoveryException('denied'));
+        await Future<void>.delayed(Duration.zero);
 
-      expect(kinds, [CastFailureKind.discoveryDenied]);
-    });
+        expect(kinds, [CastFailureKind.discoveryDenied]);
+      },
+    );
   });
 
   group('sanitizeDurations', () {
@@ -567,8 +597,11 @@ void main() {
         '192.168.1.42',
         '169.254.10.20',
       ]) {
-        expect(isLocalNetworkAddress(InternetAddress(address)), isTrue,
-            reason: '$address should be treated as local');
+        expect(
+          isLocalNetworkAddress(InternetAddress(address)),
+          isTrue,
+          reason: '$address should be treated as local',
+        );
       }
     });
 
@@ -585,8 +618,11 @@ void main() {
         '127.0.0.1',
         '100.64.0.1',
       ]) {
-        expect(isLocalNetworkAddress(InternetAddress(address)), isFalse,
-            reason: '$address should not be treated as local');
+        expect(
+          isLocalNetworkAddress(InternetAddress(address)),
+          isFalse,
+          reason: '$address should not be treated as local',
+        );
       }
     });
 
@@ -597,8 +633,10 @@ void main() {
 
     test('rejects IPv6 loopback and global unicast', () {
       expect(isLocalNetworkAddress(InternetAddress('::1')), isFalse);
-      expect(isLocalNetworkAddress(InternetAddress('2001:4860:4860::8888')),
-          isFalse);
+      expect(
+        isLocalNetworkAddress(InternetAddress('2001:4860:4860::8888')),
+        isFalse,
+      );
     });
   });
 

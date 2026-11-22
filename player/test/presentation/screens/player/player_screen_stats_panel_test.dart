@@ -152,7 +152,9 @@ Future<(ProviderContainer, _FakePlatformPlayer)> _mountPlayingScreen(
     createPlayer: () => Player(platformPlayer: fake),
   );
   await pumpUntil(
-      tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+    tester,
+    () => find.byType(PlaybackChrome).evaluate().isNotEmpty,
+  );
 
   // Lets `statsOverlayEnabledProvider`'s own async `build()` (the initial
   // `getStatsOverlayEnabled()` read) resolve before the test mutates it,
@@ -164,33 +166,42 @@ Future<(ProviderContainer, _FakePlatformPlayer)> _mountPlayingScreen(
 
 void main() {
   testWidgets(
-      'turning the flag on mid-playback shows the panel after one pump plus '
-      "the collector's first tick, with no other rebuild to mask it",
-      (tester) async {
-    final (container, _) = await _mountPlayingScreen(tester);
+    'turning the flag on mid-playback shows the panel after one pump plus '
+    "the collector's first tick, with no other rebuild to mask it",
+    (tester) async {
+      final (container, _) = await _mountPlayingScreen(tester);
 
-    expect(find.byType(StatsPanel), findsNothing,
-        reason: 'the flag starts off, so nothing has armed the collector');
+      expect(
+        find.byType(StatsPanel),
+        findsNothing,
+        reason: 'the flag starts off, so nothing has armed the collector',
+      );
 
-    await container.read(statsOverlayEnabledProvider.notifier).set(true);
-    // Exactly one pump for the listener's own rebuild, then one tick for
-    // the collector's first sample -- not `pumpAndSettle`, which would
-    // paper over a missing `setState` by pumping until something else
-    // incidentally rebuilds the tree.
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+      await container.read(statsOverlayEnabledProvider.notifier).set(true);
+      // Exactly one pump for the listener's own rebuild, then one tick for
+      // the collector's first sample -- not `pumpAndSettle`, which would
+      // paper over a missing `setState` by pumping until something else
+      // incidentally rebuilds the tree.
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(find.byType(StatsPanel), findsOneWidget,
-        reason: 'the on branch must setState like the off branch does, or '
+      expect(
+        find.byType(StatsPanel),
+        findsOneWidget,
+        reason:
+            'the on branch must setState like the off branch does, or '
             'the collector starts sampling with nothing on screen to show '
-            'it');
+            'it',
+      );
 
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
-  });
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
 
-  testWidgets('turning the flag off mid-playback hides the panel',
-      (tester) async {
+  testWidgets('turning the flag off mid-playback hides the panel', (
+    tester,
+  ) async {
     final (container, _) = await _mountPlayingScreen(tester);
     await container.read(statsOverlayEnabledProvider.notifier).set(true);
     await tester.pump();
@@ -212,8 +223,7 @@ void main() {
   // whole cast session. Invisible (the cast placeholder replaces the body
   // that holds the panel) is not the same as inactive, so the assertion
   // below checks the collector's own subscription, not what is on screen.
-  testWidgets(
-      'starting a cast session stops the stats collector, not just the '
+  testWidgets('starting a cast session stops the stats collector, not just the '
       'panel', (tester) async {
     final sessions = StreamController<CastSession?>.broadcast();
     // Registered before `_mountPlayingScreen` runs (which registers
@@ -234,24 +244,33 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(StatsPanel), findsOneWidget);
-    expect(fake.hasBufferListener, isTrue,
-        reason: 'sanity check: the armed collector subscribes to the '
-            'buffer stream, or the assertion below would pass vacuously');
+    expect(
+      fake.hasBufferListener,
+      isTrue,
+      reason:
+          'sanity check: the armed collector subscribes to the '
+          'buffer stream, or the assertion below would pass vacuously',
+    );
 
-    sessions.add(const CastSession(
-      device: testDevice,
-      mediaInfo: CastMediaInfo(
-        title: 'The Long Aurora',
-        duration: Duration(seconds: 5400),
-        position: Duration.zero,
+    sessions.add(
+      const CastSession(
+        device: testDevice,
+        mediaInfo: CastMediaInfo(
+          title: 'The Long Aurora',
+          duration: Duration(seconds: 5400),
+          position: Duration.zero,
+        ),
+        playbackState: CastPlaybackState.playing,
+        connectionState: CastConnectionState.connected,
       ),
-      playbackState: CastPlaybackState.playing,
-      connectionState: CastConnectionState.connected,
-    ));
+    );
     await tester.pump();
 
-    expect(find.byType(StatsPanel), findsNothing,
-        reason: 'the cast placeholder replaces the body that holds it');
+    expect(
+      find.byType(StatsPanel),
+      findsNothing,
+      reason: 'the cast placeholder replaces the body that holds it',
+    );
 
     // `_stopStatsCollector` (like `_stopVerification` beside it) disposes
     // fire-and-forget (`unawaited`), and `PlaybackStatsCollector.dispose`
@@ -276,10 +295,14 @@ void main() {
     // spent, per its own contract.
     await tester.pump();
 
-    expect(fake.hasBufferListener, isFalse,
-        reason: '_stopStatsCollector must run alongside _stopVerification '
-            'on cast start, or the collector keeps sampling mpv for the '
-            'whole cast session with nothing on screen to show for it');
+    expect(
+      fake.hasBufferListener,
+      isFalse,
+      reason:
+          '_stopStatsCollector must run alongside _stopVerification '
+          'on cast start, or the collector keeps sampling mpv for the '
+          'whole cast session with nothing on screen to show for it',
+    );
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
@@ -296,70 +319,86 @@ void main() {
   // fires it, so this listener needs its own guard, reaching the same
   // defect by a different path.
   testWidgets(
-      'toggling the flag off then on during an active cast session does '
-      'not re-arm the collector', (tester) async {
-    final sessions = StreamController<CastSession?>.broadcast();
-    // Same LIFO teardown reasoning as the test above: dispose the
-    // container before closing the broadcast stream it is still
-    // subscribed to.
-    addTearDown(sessions.close);
+    'toggling the flag off then on during an active cast session does '
+    'not re-arm the collector',
+    (tester) async {
+      final sessions = StreamController<CastSession?>.broadcast();
+      // Same LIFO teardown reasoning as the test above: dispose the
+      // container before closing the broadcast stream it is still
+      // subscribed to.
+      addTearDown(sessions.close);
 
-    final (container, fake) = await _mountPlayingScreen(
-      tester,
-      castSessionStream: sessions.stream,
-    );
+      final (container, fake) = await _mountPlayingScreen(
+        tester,
+        castSessionStream: sessions.stream,
+      );
 
-    await container.read(statsOverlayEnabledProvider.notifier).set(true);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(fake.hasBufferListener, isTrue,
-        reason: 'sanity check: the armed collector subscribes to the '
-            'buffer stream, or the assertions below would pass vacuously');
+      await container.read(statsOverlayEnabledProvider.notifier).set(true);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        fake.hasBufferListener,
+        isTrue,
+        reason:
+            'sanity check: the armed collector subscribes to the '
+            'buffer stream, or the assertions below would pass vacuously',
+      );
 
-    sessions.add(const CastSession(
-      device: testDevice,
-      mediaInfo: CastMediaInfo(
-        title: 'The Long Aurora',
-        duration: Duration(seconds: 5400),
-        position: Duration.zero,
-      ),
-      playbackState: CastPlaybackState.playing,
-      connectionState: CastConnectionState.connected,
-    ));
-    await tester.pump();
+      sessions.add(
+        const CastSession(
+          device: testDevice,
+          mediaInfo: CastMediaInfo(
+            title: 'The Long Aurora',
+            duration: Duration(seconds: 5400),
+            position: Duration.zero,
+          ),
+          playbackState: CastPlaybackState.playing,
+          connectionState: CastConnectionState.connected,
+        ),
+      );
+      await tester.pump();
 
-    // Same async gap the test above documents: `dispose()` cancels its
-    // subscriptions behind their own `await`s, which only progresses on the
-    // real event loop.
-    await tester.runAsync(() async {
-      for (var i = 0; i < 40 && fake.hasBufferListener; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
-    });
-    await tester.pump();
-    expect(fake.hasBufferListener, isFalse,
-        reason: 'sanity check: cast start already stopped the collector, '
-            'or the assertions below would pass vacuously');
+      // Same async gap the test above documents: `dispose()` cancels its
+      // subscriptions behind their own `await`s, which only progresses on the
+      // real event loop.
+      await tester.runAsync(() async {
+        for (var i = 0; i < 40 && fake.hasBufferListener; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+      });
+      await tester.pump();
+      expect(
+        fake.hasBufferListener,
+        isFalse,
+        reason:
+            'sanity check: cast start already stopped the collector, '
+            'or the assertions below would pass vacuously',
+      );
 
-    // Off then on, both while the cast session is still active. Neither
-    // transitions `isCastingProvider`, so the listener above never fires
-    // for either flip -- this listener is the only one that can see it.
-    await container.read(statsOverlayEnabledProvider.notifier).set(false);
-    await tester.pump();
-    await container.read(statsOverlayEnabledProvider.notifier).set(true);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+      // Off then on, both while the cast session is still active. Neither
+      // transitions `isCastingProvider`, so the listener above never fires
+      // for either flip -- this listener is the only one that can see it.
+      await container.read(statsOverlayEnabledProvider.notifier).set(false);
+      await tester.pump();
+      await container.read(statsOverlayEnabledProvider.notifier).set(true);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(fake.hasBufferListener, isFalse,
-        reason: 'the on branch must not re-arm the collector while '
+      expect(
+        fake.hasBufferListener,
+        isFalse,
+        reason:
+            'the on branch must not re-arm the collector while '
             'casting -- it would sample the hidden local player for the '
             'rest of the cast session, the same defect the '
             'isCastingProvider listener exists to prevent, reached here by '
-            'flipping the flag instead of starting a new cast session');
+            'flipping the flag instead of starting a new cast session',
+      );
 
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump();
-  });
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
 
   // The cast-end half of this scenario -- ending the session and confirming
   // the collector re-arms once local playback resumes -- is deliberately

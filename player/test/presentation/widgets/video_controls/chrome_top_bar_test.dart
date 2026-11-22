@@ -7,29 +7,23 @@ import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Stack(
-          children: [
-            const Positioned.fill(child: ColoredBox(color: Colors.white)),
-            child,
-          ],
-        ),
-      ),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: Stack(
+      children: [
+        const Positioned.fill(child: ColoredBox(color: Colors.white)),
+        child,
+      ],
+    ),
+  ),
+);
 
 void main() {
   group('ChromeTopBar', () {
     testWidgets('renders a back pill that fires', (tester) async {
       var backed = false;
-      await tester.pumpWidget(
-        _host(
-          ChromeTopBar(
-            onBack: () => backed = true,
-          ),
-        ),
-      );
+      await tester.pumpWidget(_host(ChromeTopBar(onBack: () => backed = true)));
 
       expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
       await tester.tap(find.byKey(ChromeTopBar.backKey));
@@ -37,75 +31,62 @@ void main() {
     });
 
     testWidgets(
-        'the back pill is present but inert when onBack is null, so the '
-        'title stays optically centered rather than the pill vanishing',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(
-          const ChromeTopBar(
-            title: 'Silo',
-          ),
-        ),
-      );
+      'the back pill is present but inert when onBack is null, so the '
+      'title stays optically centered rather than the pill vanishing',
+      (tester) async {
+        await tester.pumpWidget(_host(const ChromeTopBar(title: 'Silo')));
 
-      // Rendered...
-      expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
-      // ...but tapping it does nothing observable and does not throw. There
-      // is no GestureDetector/MouseRegion wrapper to find when onTap is null
-      // (GlassPill skips it), so assert on that directly rather than relying
-      // on the tap silently no-op'ing.
-      expect(
-        find.descendant(
-          of: find.byKey(ChromeTopBar.backKey),
-          matching: find.byType(GestureDetector),
-        ),
-        findsNothing,
-      );
-    });
+        // Rendered...
+        expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
+        // ...but tapping it does nothing observable and does not throw. There
+        // is no GestureDetector/MouseRegion wrapper to find when onTap is null
+        // (GlassPill skips it), so assert on that directly rather than relying
+        // on the tap silently no-op'ing.
+        expect(
+          find.descendant(
+            of: find.byKey(ChromeTopBar.backKey),
+            matching: find.byType(GestureDetector),
+          ),
+          findsNothing,
+        );
+      },
+    );
 
     testWidgets('shows the title when supplied', (tester) async {
       await tester.pumpWidget(
-        _host(
-          const ChromeTopBar(
-            title: 'Pride & Prejudice',
-          ),
-        ),
+        _host(const ChromeTopBar(title: 'Pride & Prejudice')),
       );
 
       expect(find.byKey(ChromeTopBar.titleKey), findsOneWidget);
       expect(find.text('Pride & Prejudice'), findsOneWidget);
     });
 
-    testWidgets('omits the title pill when no title is supplied',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(const ChromeTopBar()),
-      );
+    testWidgets('omits the title pill when no title is supplied', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const ChromeTopBar()));
       expect(find.byKey(ChromeTopBar.titleKey), findsNothing);
     });
 
-    testWidgets('omits the cast pill when no action is supplied',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(const ChromeTopBar()),
-      );
+    testWidgets('omits the cast pill when no action is supplied', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const ChromeTopBar()));
       expect(find.byKey(ChromeTopBar.castKey), findsNothing);
     });
 
-    testWidgets('shows the cast pill when an action is supplied',
-        (tester) async {
+    testWidgets('shows the cast pill when an action is supplied', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _host(
-          const ChromeTopBar(
-            castAction: Icon(Icons.cast_rounded),
-          ),
-        ),
+        _host(const ChromeTopBar(castAction: Icon(Icons.cast_rounded))),
       );
       expect(find.byKey(ChromeTopBar.castKey), findsOneWidget);
     });
 
-    testWidgets('the cast pill fires onCastTap across its whole surface',
-        (tester) async {
+    testWidgets('the cast pill fires onCastTap across its whole surface', (
+      tester,
+    ) async {
       // The tap target has to be the pill, not the glyph. An 18px icon in a
       // 36px pill leaves most of the affordance dead to touch, so this taps
       // the pill itself rather than the icon inside it.
@@ -123,14 +104,11 @@ void main() {
       expect(casted, isTrue);
     });
 
-    testWidgets('the cast pill is inert when onCastTap is null, like back',
-        (tester) async {
+    testWidgets('the cast pill is inert when onCastTap is null, like back', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _host(
-          const ChromeTopBar(
-            castAction: Icon(Icons.cast_rounded),
-          ),
-        ),
+        _host(const ChromeTopBar(castAction: Icon(Icons.cast_rounded))),
       );
 
       expect(
@@ -146,7 +124,8 @@ void main() {
       await tester.pumpWidget(
         _host(
           const ChromeTopBar(
-            title: 'An Extremely Long Episode Title That Cannot Possibly Fit '
+            title:
+                'An Extremely Long Episode Title That Cannot Possibly Fit '
                 'Inside The Available Horizontal Space Without Truncation',
           ),
         ),
@@ -164,8 +143,7 @@ void main() {
       expect(titleRect.right, lessThanOrEqualTo(rowWidth + 0.5));
     });
 
-    testWidgets(
-        'the title pill is centered on the row when a cast action is '
+    testWidgets('the title pill is centered on the row when a cast action is '
         'present (symmetric flanks)', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -179,38 +157,27 @@ void main() {
 
       final rowRect = tester.getRect(find.byType(ChromeTopBar));
       final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-      expect(
-        titleRect.center.dx,
-        closeTo(rowRect.center.dx, 1.0),
-      );
+      expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
     });
 
     testWidgets(
-        'the title pill stays centered on the row even when there is no '
-        'cast action (asymmetric content, symmetric flex allocation)',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(
-          ChromeTopBar(
-            onBack: () {},
-            title: 'Silo',
-          ),
-        ),
-      );
+      'the title pill stays centered on the row even when there is no '
+      'cast action (asymmetric content, symmetric flex allocation)',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(ChromeTopBar(onBack: () {}, title: 'Silo')),
+        );
 
-      final rowRect = tester.getRect(find.byType(ChromeTopBar));
-      final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-      expect(
-        titleRect.center.dx,
-        closeTo(rowRect.center.dx, 1.0),
-      );
-    });
+        final rowRect = tester.getRect(find.byType(ChromeTopBar));
+        final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
+        expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
+      },
+    );
 
-    testWidgets('stays sane with no title, no onBack, no castAction',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(const ChromeTopBar()),
-      );
+    testWidgets('stays sane with no title, no onBack, no castAction', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const ChromeTopBar()));
 
       expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
       expect(find.byKey(ChromeTopBar.titleKey), findsNothing);
@@ -222,8 +189,7 @@ void main() {
       );
     });
 
-    testWidgets(
-        'all three pills are the same height even though their content '
+    testWidgets('all three pills are the same height even though their content '
         'differs (icon+label, text, icon-only)', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -235,12 +201,15 @@ void main() {
         ),
       );
 
-      final backHeight =
-          tester.getSize(find.byKey(ChromeTopBar.backKey)).height;
-      final titleHeight =
-          tester.getSize(find.byKey(ChromeTopBar.titleKey)).height;
-      final castHeight =
-          tester.getSize(find.byKey(ChromeTopBar.castKey)).height;
+      final backHeight = tester
+          .getSize(find.byKey(ChromeTopBar.backKey))
+          .height;
+      final titleHeight = tester
+          .getSize(find.byKey(ChromeTopBar.titleKey))
+          .height;
+      final castHeight = tester
+          .getSize(find.byKey(ChromeTopBar.castKey))
+          .height;
 
       expect(backHeight, GlassPill.defaultHeight);
       expect(titleHeight, GlassPill.defaultHeight);
@@ -248,44 +217,49 @@ void main() {
     });
 
     testWidgets(
-        'showBack: false omits the back pill entirely and keeps the title '
-        'centered', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          ChromeTopBar(
-            showBack: false,
-            onBack: () {},
-            title: 'Harbor Lights',
+      'showBack: false omits the back pill entirely and keeps the title '
+      'centered',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            ChromeTopBar(
+              showBack: false,
+              onBack: () {},
+              title: 'Harbor Lights',
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(find.byKey(ChromeTopBar.backKey), findsNothing);
+        expect(find.byKey(ChromeTopBar.backKey), findsNothing);
 
-      final rowRect = tester.getRect(find.byType(ChromeTopBar));
-      final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-      expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
-    });
+        final rowRect = tester.getRect(find.byType(ChromeTopBar));
+        final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
+        expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
+      },
+    );
 
     for (final width in const [320.0, 360.0]) {
-      testWidgets('title, back, scaling and cast all fit at ${width}px',
-          (tester) async {
+      testWidgets('title, back, scaling and cast all fit at ${width}px', (
+        tester,
+      ) async {
         tester.view.physicalSize = Size(width, 640);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
         await tester.pumpWidget(
           // PlaybackChrome pads the bar 16px a side (PlayerTopBarSlot).
-          _host(Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ChromeTopBar(
-              title: 'A reasonably long episode title',
-              onBack: () {},
-              onScalingTap: () {},
-              castAction: const Icon(Icons.cast_rounded),
-              onCastTap: () {},
+          _host(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ChromeTopBar(
+                title: 'A reasonably long episode title',
+                onBack: () {},
+                onScalingTap: () {},
+                castAction: const Icon(Icons.cast_rounded),
+                onCastTap: () {},
+              ),
             ),
-          )),
+          ),
         );
 
         expect(tester.takeException(), isNull);
@@ -301,20 +275,23 @@ void main() {
       });
     }
 
-    testWidgets('a long title can grow past a third of a wide bar',
-        (tester) async {
+    testWidgets('a long title can grow past a third of a wide bar', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1200, 640);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await tester.pumpWidget(
-        _host(ChromeTopBar(
-          title: 'An extremely long episode title ' * 6,
-          onBack: () {},
-          onScalingTap: () {},
-          castAction: const Icon(Icons.cast_rounded),
-          onCastTap: () {},
-        )),
+        _host(
+          ChromeTopBar(
+            title: 'An extremely long episode title ' * 6,
+            onBack: () {},
+            onScalingTap: () {},
+            castAction: const Icon(Icons.cast_rounded),
+            onCastTap: () {},
+          ),
+        ),
       );
 
       final bar = tester.getSize(find.byType(ChromeTopBar)).width;
@@ -322,21 +299,22 @@ void main() {
       expect(title, greaterThan(bar / 3));
     });
 
-    testWidgets('omits the scaling pill when no handler is wired',
-        (tester) async {
+    testWidgets('omits the scaling pill when no handler is wired', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const ChromeTopBar()));
 
       expect(find.byKey(ChromeTopBar.scalingKey), findsNothing);
     });
 
-    testWidgets('scaling pill shows the current mode and fires',
-        (tester) async {
+    testWidgets('scaling pill shows the current mode and fires', (
+      tester,
+    ) async {
       var taps = 0;
       await tester.pumpWidget(
-        _host(ChromeTopBar(
-          onScalingTap: () => taps++,
-          scaling: VideoScaling.fill,
-        )),
+        _host(
+          ChromeTopBar(onScalingTap: () => taps++, scaling: VideoScaling.fill),
+        ),
       );
 
       expect(
@@ -352,24 +330,28 @@ void main() {
 
     testWidgets('scaling pill sits left of the cast pill', (tester) async {
       await tester.pumpWidget(
-        _host(ChromeTopBar(
-          onScalingTap: () {},
-          castAction: const Icon(Icons.cast_rounded),
-          onCastTap: () {},
-        )),
+        _host(
+          ChromeTopBar(
+            onScalingTap: () {},
+            castAction: const Icon(Icons.cast_rounded),
+            onCastTap: () {},
+          ),
+        ),
       );
 
       expect(
         tester.getRect(find.byKey(ChromeTopBar.scalingKey)).right,
         lessThanOrEqualTo(
-            tester.getRect(find.byKey(ChromeTopBar.castKey)).left),
+          tester.getRect(find.byKey(ChromeTopBar.castKey)).left,
+        ),
       );
     });
   });
 
   group('GlassPill', () {
-    testWidgets('sits on the OSD material with the pill shadow',
-        (tester) async {
+    testWidgets('sits on the OSD material with the pill shadow', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           const Align(
@@ -404,9 +386,7 @@ void main() {
         _host(
           const Align(
             alignment: Alignment.topLeft,
-            child: GlassPill(
-              child: Text('Back'),
-            ),
+            child: GlassPill(child: Text('Back')),
           ),
         ),
       );
@@ -441,10 +421,7 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Center(
-              child: GlassPill(
-                key: Key('default-pill'),
-                child: Text('Back'),
-              ),
+              child: GlassPill(key: Key('default-pill'), child: Text('Back')),
             ),
           ),
         ),
@@ -473,10 +450,7 @@ void main() {
         ),
       );
 
-      expect(
-        tester.getSize(find.byKey(const Key('tall-pill'))).height,
-        44.0,
-      );
+      expect(tester.getSize(find.byKey(const Key('tall-pill'))).height, 44.0);
     });
   });
 }

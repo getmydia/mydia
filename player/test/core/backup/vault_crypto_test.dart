@@ -15,13 +15,13 @@ void main() {
   final plain = [1, 2, 3, 4, 5];
 
   Future<Uint8List> seal() => VaultCrypto.sealSlot(
-        vaultKey: vk,
-        vaultId: vaultId,
-        epoch: 3,
-        slotId: slotId,
-        seq: 7,
-        plaintext: plain,
-      );
+    vaultKey: vk,
+    vaultId: vaultId,
+    epoch: 3,
+    slotId: slotId,
+    seq: 7,
+    plaintext: plain,
+  );
 
   Future<Uint8List> open(
     Uint8List sealed, {
@@ -29,15 +29,14 @@ void main() {
     int epoch = 3,
     String sid = slotId,
     int seq = 7,
-  }) =>
-      VaultCrypto.openSlot(
-        vaultKey: vk,
-        vaultId: vid,
-        epoch: epoch,
-        slotId: sid,
-        seq: seq,
-        sealed: sealed,
-      );
+  }) => VaultCrypto.openSlot(
+    vaultKey: vk,
+    vaultId: vid,
+    epoch: epoch,
+    slotId: sid,
+    seq: seq,
+    sealed: sealed,
+  );
 
   group('slots', () {
     test('round trip and layout', () async {
@@ -109,10 +108,7 @@ void main() {
             vaultId: vaultId,
             epoch: epoch,
           );
-      await expectLater(
-        o(other, env, 3),
-        throwsA(isA<VaultCryptoException>()),
-      );
+      await expectLater(o(other, env, 3), throwsA(isA<VaultCryptoException>()));
       await expectLater(o(box, env, 4), throwsA(isA<VaultCryptoException>()));
       await expectLater(
         o(box, Uint8List.sublistView(env, 0, 103), 3),

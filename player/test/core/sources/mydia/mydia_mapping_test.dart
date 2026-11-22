@@ -32,8 +32,10 @@ void main() {
 
   test('a movie maps its summary, resume point and artwork', () {
     final m = movieSummary(s, fx.movie('m-1', position: 300));
-    expect(m.ref,
-        const ItemRef(sourceId: s, kind: ItemKind.movie, externalId: 'm-1'));
+    expect(
+      m.ref,
+      const ItemRef(sourceId: s, kind: ItemKind.movie, externalId: 'm-1'),
+    );
     expect(m.title, 'The Quiet Orchard m-1');
     expect(m.year, 2021);
     expect(m.poster, const ArtworkRef('https://img.example/m-1-poster.jpg'));
@@ -70,7 +72,9 @@ void main() {
     expect(d.cast.single.name, 'Tomas Reyne');
     expect(d.cast.single.role, 'Beekeeper');
     expect(
-        d.cast.single.photo, const ArtworkRef('https://img.example/tomas.jpg'));
+      d.cast.single.photo,
+      const ArtworkRef('https://img.example/tomas.jpg'),
+    );
     expect(d.trailerUrl, 'https://video.example/orchard-trailer');
     final v = d.versions.single;
     expect(v.id, 'f-m-1');
@@ -92,18 +96,23 @@ void main() {
     expect(d.cast.single.name, 'Ines Varga');
     expect(d.cast.single.role, 'Keeper');
     expect(
-        d.cast.single.photo, const ArtworkRef('https://img.example/ines.jpg'));
+      d.cast.single.photo,
+      const ArtworkRef('https://img.example/ines.jpg'),
+    );
     expect(d.trailerUrl, 'https://video.example/trailer');
     expect(d.isFavorite, isFalse);
   });
 
   test('seasons map with the show as parent and their own watched state', () {
-    final season = seasonSummary(s, 's-1',
-        (fx.show('s-1')['seasons'] as List).first as Map<String, dynamic>);
+    final season = seasonSummary(
+      s,
+      's-1',
+      (fx.show('s-1')['seasons'] as List).first as Map<String, dynamic>,
+    );
     expect(
-        season.ref,
-        const ItemRef(
-            sourceId: s, kind: ItemKind.season, externalId: 's-1.s1'));
+      season.ref,
+      const ItemRef(sourceId: s, kind: ItemKind.season, externalId: 's-1.s1'),
+    );
     expect(season.index, 1);
     expect(season.title, 'Season 1');
     expect(season.childCount, 3);
@@ -121,8 +130,10 @@ void main() {
   test('season detail links back to its show', () {
     final d = seasonDetail(s, fx.show('s-1'), 2);
     expect(d.summary.ref.externalId, 's-1.s2');
-    expect(d.show,
-        const ItemRef(sourceId: s, kind: ItemKind.show, externalId: 's-1'));
+    expect(
+      d.show,
+      const ItemRef(sourceId: s, kind: ItemKind.show, externalId: 's-1'),
+    );
   });
 
   test('an episode maps numbers, air date and its show and season links', () {
@@ -132,25 +143,35 @@ void main() {
     expect(d.summary.airDate, '2019-04-02');
     expect(d.summary.showTitle, 'Lantern Street s-1');
     expect(d.summary.userState.progressSeconds, 60);
-    expect(d.show,
-        const ItemRef(sourceId: s, kind: ItemKind.show, externalId: 's-1'));
     expect(
-        d.season,
-        const ItemRef(
-            sourceId: s, kind: ItemKind.season, externalId: 's-1.s2'));
+      d.show,
+      const ItemRef(sourceId: s, kind: ItemKind.show, externalId: 's-1'),
+    );
+    expect(
+      d.season,
+      const ItemRef(sourceId: s, kind: ItemKind.season, externalId: 's-1.s2'),
+    );
     expect(d.versions.single.id, 'f-e-21');
   });
 
-  test('an episode detail carries its show artwork and its thumbnail as still',
-      () {
-    final d = episodeDetail(s, fx.episode('e-21'));
-    expect(
-        d.summary.backdrop, const ArtworkRef('https://img.example/e-21.jpg'));
-    expect(d.showBackdrop,
-        const ArtworkRef('https://img.example/s-1-backdrop.jpg'));
-    expect(
-        d.showPoster, const ArtworkRef('https://img.example/s-1-poster.jpg'));
-  });
+  test(
+    'an episode detail carries its show artwork and its thumbnail as still',
+    () {
+      final d = episodeDetail(s, fx.episode('e-21'));
+      expect(
+        d.summary.backdrop,
+        const ArtworkRef('https://img.example/e-21.jpg'),
+      );
+      expect(
+        d.showBackdrop,
+        const ArtworkRef('https://img.example/s-1-backdrop.jpg'),
+      );
+      expect(
+        d.showPoster,
+        const ArtworkRef('https://img.example/s-1-poster.jpg'),
+      );
+    },
+  );
 
   test('an episode with no thumbnail has no still but keeps the show art', () {
     final d = episodeDetail(s, {...fx.episode('e-21'), 'thumbnailUrl': null});
@@ -160,43 +181,51 @@ void main() {
 
   test('continue watching dates a card by its activity, not its episode', () {
     Map<String, dynamic> card({Object? activity, Object? watchedAt}) => {
-          'id': 'e-22',
-          'type': 'EPISODE',
-          'title': 'High Water',
-          'showId': 's-1',
-          'showTitle': 'Lantern Street',
-          'seasonNumber': 2,
-          'episodeNumber': 2,
-          if (activity != null) 'lastActivityAt': activity,
-          'progress': {
-            'positionSeconds': 0,
-            'durationSeconds': 1440,
-            'percentage': 0.0,
-            'watched': false,
-            'lastWatchedAt': watchedAt,
-          },
-          'files': <Object>[],
-        };
+      'id': 'e-22',
+      'type': 'EPISODE',
+      'title': 'High Water',
+      'showId': 's-1',
+      'showTitle': 'Lantern Street',
+      'seasonNumber': 2,
+      'episodeNumber': 2,
+      'lastActivityAt': ?activity,
+      'progress': {
+        'positionSeconds': 0,
+        'durationSeconds': 1440,
+        'percentage': 0.0,
+        'watched': false,
+        'lastWatchedAt': watchedAt,
+      },
+      'files': <Object>[],
+    };
 
     // A next card: its own episode was never started, the show was watched.
     expect(
-        continueWatchingSummary(s, card(activity: '2026-10-17T12:38:36Z'))!
-            .lastPlayedAt,
-        DateTime.utc(2026, 10, 17, 12, 38, 36));
+      continueWatchingSummary(
+        s,
+        card(activity: '2026-10-17T12:38:36Z'),
+      )!.lastPlayedAt,
+      DateTime.utc(2026, 10, 17, 12, 38, 36),
+    );
     // The activity wins over the episode's own date.
     expect(
-        continueWatchingSummary(
-                s,
-                card(
-                    activity: '2026-10-17T12:38:36Z',
-                    watchedAt: '2026-10-01T09:00:00Z'))!
-            .lastPlayedAt,
-        DateTime.utc(2026, 10, 17, 12, 38, 36));
+      continueWatchingSummary(
+        s,
+        card(
+          activity: '2026-10-17T12:38:36Z',
+          watchedAt: '2026-10-01T09:00:00Z',
+        ),
+      )!.lastPlayedAt,
+      DateTime.utc(2026, 10, 17, 12, 38, 36),
+    );
     // A server without the field: the episode's own date, as before.
     expect(
-        continueWatchingSummary(s, card(watchedAt: '2026-10-01T09:00:00Z'))!
-            .lastPlayedAt,
-        DateTime.utc(2026, 10, 1, 9));
+      continueWatchingSummary(
+        s,
+        card(watchedAt: '2026-10-01T09:00:00Z'),
+      )!.lastPlayedAt,
+      DateTime.utc(2026, 10, 1, 9),
+    );
     expect(continueWatchingSummary(s, card())!.lastPlayedAt, isNull);
   });
 
@@ -215,10 +244,10 @@ void main() {
         'durationSeconds': 6000,
         'percentage': 1.5,
         'watched': false,
-        'lastWatchedAt': null
+        'lastWatchedAt': null,
       },
       'files': [
-        {'id': 'f-m-1'}
+        {'id': 'f-m-1'},
       ],
     });
     expect(movie!.ref.kind, ItemKind.movie);
@@ -239,18 +268,20 @@ void main() {
         'durationSeconds': 1440,
         'percentage': 0.0,
         'watched': false,
-        'lastWatchedAt': null
+        'lastWatchedAt': null,
       },
       'files': [
-        {'id': 'f-e-21'}
+        {'id': 'f-e-21'},
       ],
     });
     expect(ep!.ref.kind, ItemKind.episode);
     expect(ep.showTitle, 'Lantern Street');
     expect(ep.parentIndex, 2);
     expect(ep.index, 1);
-    expect(ep.showRef,
-        const ItemRef(sourceId: s, kind: ItemKind.show, externalId: 's-1'));
+    expect(
+      ep.showRef,
+      const ItemRef(sourceId: s, kind: ItemKind.show, externalId: 's-1'),
+    );
     expect(ep.dismissRef, ep.showRef);
     expect(movie.showRef, isNull);
     expect(movie.dismissRef, movie.ref);
@@ -258,54 +289,62 @@ void main() {
     // the key reads as none.
     expect(ItemSummary.fromJson(ep.toJson()).showRef, ep.showRef);
     expect(
-        ItemSummary.fromJson((ep.toJson()..remove('showRef'))).showRef, isNull);
+      ItemSummary.fromJson((ep.toJson()..remove('showRef'))).showRef,
+      isNull,
+    );
 
     expect(
-        continueWatchingSummary(s, {
-          'id': 'x',
-          'type': 'TV_SHOW',
-          'title': 'x',
-          'progress': <String, dynamic>{}
-        }),
-        isNull);
+      continueWatchingSummary(s, {
+        'id': 'x',
+        'type': 'TV_SHOW',
+        'title': 'x',
+        'progress': <String, dynamic>{},
+      }),
+      isNull,
+    );
   });
 
-  test('search results map movies and shows, skip episodes without a parent',
-      () {
-    expect(
+  test(
+    'search results map movies and shows, skip episodes without a parent',
+    () {
+      expect(
         searchResultSummary(s, {
           'id': 'm-1',
           'type': 'MOVIE',
           'title': 'A',
           'year': 2020,
-          'artwork': fx.art('m-1')
-        })!
-            .ref
-            .kind,
-        ItemKind.movie);
-    expect(
+          'artwork': fx.art('m-1'),
+        })!.ref.kind,
+        ItemKind.movie,
+      );
+      expect(
         searchResultSummary(s, {
           'id': 's-1',
           'type': 'TV_SHOW',
           'title': 'B',
           'year': 2019,
-          'artwork': null
-        })!
-            .ref
-            .kind,
-        ItemKind.show);
-    expect(
-        searchResultSummary(s,
-            {'id': 'e-1', 'type': 'EPISODE', 'title': 'C', 'parentId': null}),
-        isNull);
-  });
+          'artwork': null,
+        })!.ref.kind,
+        ItemKind.show,
+      );
+      expect(
+        searchResultSummary(s, {
+          'id': 'e-1',
+          'type': 'EPISODE',
+          'title': 'C',
+          'parentId': null,
+        }),
+        isNull,
+      );
+    },
+  );
 
   test('missing artwork is no artwork', () {
     final m = fx.movie('m-2')
       ..['artwork'] = {
         'posterUrl': '',
         'backdropUrl': null,
-        'thumbnailUrl': null
+        'thumbnailUrl': null,
       };
     expect(movieSummary(s, m).poster, isNull);
   });
@@ -315,11 +354,14 @@ void main() {
       'id': '1',
       'title': 'The Invented Voyage',
       'tmdbId': 42,
-      'imdbId': 'tt0000042'
+      'imdbId': 'tt0000042',
     });
     expect(m.externalIds, const ExternalIds(tmdb: '42', imdb: 'tt0000042'));
-    final sh = showSummary(
-        s, {'id': '2', 'title': 'Invented Harbour', 'tvdbId': 9001});
+    final sh = showSummary(s, {
+      'id': '2',
+      'title': 'Invented Harbour',
+      'tvdbId': 9001,
+    });
     expect(sh.externalIds, const ExternalIds(tvdb: '9001'));
   });
 
@@ -356,7 +398,9 @@ void main() {
         'imdbId': 'tt0009001',
       });
       expect(
-          sh!.externalIds, const ExternalIds(tvdb: '9001', imdb: 'tt0009001'));
+        sh!.externalIds,
+        const ExternalIds(tvdb: '9001', imdb: 'tt0009001'),
+      );
     });
 
     test('a continue watching episode ignores them', () {
@@ -424,17 +468,17 @@ void main() {
 
   group('calendarSummary', () {
     Map<String, dynamic> episode(Map<String, dynamic> artwork) => {
-          'id': 'e1',
-          'kind': 'episode',
-          'airDate': '2026-10-16',
-          'title': 'The Tide Ledger',
-          'seasonNumber': 2,
-          'episodeNumber': 5,
-          'mediaItemId': 'm1',
-          'mediaItemTitle': 'The Lantern Coast',
-          'artwork': artwork,
-          'files': const <Object>[],
-        };
+      'id': 'e1',
+      'kind': 'episode',
+      'airDate': '2026-10-16',
+      'title': 'The Tide Ledger',
+      'seasonNumber': 2,
+      'episodeNumber': 5,
+      'mediaItemId': 'm1',
+      'mediaItemTitle': 'The Lantern Coast',
+      'artwork': artwork,
+      'files': const <Object>[],
+    };
 
     test('uses the episode still as the backdrop', () {
       final item = calendarSummary(

@@ -30,8 +30,7 @@ void main() {
   );
 
   // A browser serves one instance at its root, under whatever name it has.
-  test(
-      're-points to a second target, and tears down only when both holders '
+  test('re-points to a second target, and tears down only when both holders '
       'release', () async {
     final proxy = ServiceWorkerMediaProxy(TestP2pService());
     final first = Object();

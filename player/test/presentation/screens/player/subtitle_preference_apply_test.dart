@@ -177,12 +177,12 @@ class _SlowProbePlayer extends _ProbedPlayer {
 /// The server's view of a file whose English subtitle is an embedded
 /// stream, which is the case the startup fetch used to hit.
 Map<String, dynamic> _embeddedEnglishFile() => mediaFileWithSubtitle(
-      trackId: '3',
-      language: 'eng',
-      title: 'English',
-      url: null,
-      embedded: true,
-    );
+  trackId: '3',
+  language: 'eng',
+  title: 'English',
+  url: null,
+  embedded: true,
+);
 
 /// Mounts the screen without waiting for the open to settle, so a test can
 /// act between `open()` and mpv's probe.
@@ -239,8 +239,13 @@ class _GateableTransport extends ScriptedMydiaTransport {
       subtitleContentHeld = true;
       await hold.future;
     }
-    return super.send(query, variables,
-        token: token, deviceProfile: deviceProfile, timeout: timeout);
+    return super.send(
+      query,
+      variables,
+      token: token,
+      deviceProfile: deviceProfile,
+      timeout: timeout,
+    );
   }
 }
 
@@ -347,11 +352,14 @@ int _applyRetries(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('a remembered track is fetched without the viewer picking',
-      (tester) async {
+  testWidgets('a remembered track is fetched without the viewer picking', (
+    tester,
+  ) async {
     final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      preferredSubtitle: preferredSubtitleObject(
+        mode: 'TRACK',
+        language: 'eng',
+      ),
     );
 
     await _pump(
@@ -364,7 +372,8 @@ void main() {
     expect(
       _subtitleContentRequests(link),
       1,
-      reason: 'the remembered English track should have been selected, which '
+      reason:
+          'the remembered English track should have been selected, which '
           'fetches its body exactly once',
     );
   });
@@ -383,7 +392,8 @@ void main() {
     expect(
       _subtitleContentRequests(link),
       0,
-      reason: 'an explicit Off must not select anything, including the track '
+      reason:
+          'an explicit Off must not select anything, including the track '
           'the file would otherwise default to',
     );
     // The point of the assertion above is that Off selects nothing. The point
@@ -393,7 +403,8 @@ void main() {
     expect(
       player.selectedSubtitleTracks,
       [SubtitleTrack.no()],
-      reason: 'Off must reach the player as an explicit selection, not as a '
+      reason:
+          'Off must reach the player as an explicit selection, not as a '
           'no-op that leaves mpv on its own default track',
     );
   });
@@ -408,17 +419,21 @@ void main() {
     expect(
       player.selectedSubtitleTracks,
       isEmpty,
-      reason: 'with no stored preference nothing at all should have been '
+      reason:
+          'with no stored preference nothing at all should have been '
           'selected',
     );
   });
 
-  testWidgets('a republished track list does not fetch a second time',
-      (tester) async {
+  testWidgets('a republished track list does not fetch a second time', (
+    tester,
+  ) async {
     final player = _ProbedPlayer();
     final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      preferredSubtitle: preferredSubtitleObject(
+        mode: 'TRACK',
+        language: 'eng',
+      ),
     );
 
     await _pump(
@@ -430,7 +445,8 @@ void main() {
     expect(
       player.selectedSubtitleTracks,
       hasLength(1),
-      reason: 'the preference has to have applied once for the revision below '
+      reason:
+          'the preference has to have applied once for the revision below '
           'to be able to apply it a second time',
     );
 
@@ -449,7 +465,8 @@ void main() {
     expect(
       _subtitleContentRequests(link),
       1,
-      reason: 'the preference must apply once per file, not once per track '
+      reason:
+          'the preference must apply once per file, not once per track '
           'list revision',
     );
     // Do not simplify this into the fetch count above. The fetched body is
@@ -459,110 +476,123 @@ void main() {
     expect(
       player.selectedSubtitleTracks,
       hasLength(1),
-      reason: 'the remembered track must reach the player exactly once, not '
+      reason:
+          'the remembered track must reach the player exactly once, not '
           'once per track list revision',
     );
   });
 
   testWidgets(
-      'a track-list revision during the apply does not spend the preference',
-      (tester) async {
-    // The failure this pins: `_applySubtitlePreference` sets
-    // `_preferenceAppliedForPlayback` before awaiting the apply, and a
-    // revision landing during that await reaches `_syncSelectedSubtitleTrack`,
-    // which bumps `_subtitleSelectionGeneration`. The bump makes
-    // `shouldApplySubtitleSelection` discard the in-flight selection, so the
-    // preference never reaches the player while the flag records that it did.
-    // Embedded extraction can take 7-10s while mpv publishes probe results
-    // early, so the window is wide.
-    final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
-    );
-    final hold = Completer<void>();
-    link.holdSubtitleContent = hold;
-    final player = _ProbedPlayer();
+    'a track-list revision during the apply does not spend the preference',
+    (tester) async {
+      // The failure this pins: `_applySubtitlePreference` sets
+      // `_preferenceAppliedForPlayback` before awaiting the apply, and a
+      // revision landing during that await reaches `_syncSelectedSubtitleTrack`,
+      // which bumps `_subtitleSelectionGeneration`. The bump makes
+      // `shouldApplySubtitleSelection` discard the in-flight selection, so the
+      // preference never reaches the player while the flag records that it did.
+      // Embedded extraction can take 7-10s while mpv publishes probe results
+      // early, so the window is wide.
+      final link = _link(
+        preferredSubtitle: preferredSubtitleObject(
+          mode: 'TRACK',
+          language: 'eng',
+        ),
+      );
+      final hold = Completer<void>();
+      link.holdSubtitleContent = hold;
+      final player = _ProbedPlayer();
 
-    // The body fetch is held open, so the preferred track's apply is still
-    // resolving when the revision below lands. That is the window a spent flag
-    // turns into a lost preference.
-    await _pump(
-      tester,
-      link,
-      player,
-      settled: () => link.subtitleContentHeld,
-    );
-    expect(
-      player.selectedSubtitleTracks,
-      isEmpty,
-      reason: 'the hold is what keeps the apply in flight, so nothing can have '
-          'reached the player yet',
-    );
+      // The body fetch is held open, so the preferred track's apply is still
+      // resolving when the revision below lands. That is the window a spent flag
+      // turns into a lost preference.
+      await _pump(
+        tester,
+        link,
+        player,
+        settled: () => link.subtitleContentHeld,
+      );
+      expect(
+        player.selectedSubtitleTracks,
+        isEmpty,
+        reason:
+            'the hold is what keeps the apply in flight, so nothing can have '
+            'reached the player yet',
+      );
 
-    // The revision that used to steal the one-shot. It changes the derived
-    // list, which is what reaches `_syncSelectedSubtitleTrack` and bumps the
-    // generation the held apply is running under.
-    player.publishSubtitleTracks(const [
-      _mpvSubtitleTrack,
-      SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
-    ]);
-    await tester.pump();
+      // The revision that used to steal the one-shot. It changes the derived
+      // list, which is what reaches `_syncSelectedSubtitleTrack` and bumps the
+      // generation the held apply is running under.
+      player.publishSubtitleTracks(const [
+        _mpvSubtitleTrack,
+        SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
+      ]);
+      await tester.pump();
 
-    hold.complete();
-    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+      hold.complete();
+      await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
 
-    expect(
-      player.selectedSubtitleTracks.last.language,
-      'eng',
-      reason: 'the preference must be applied against the list that '
-          'superseded the attempt, not lost with the spent flag',
-    );
-  });
+      expect(
+        player.selectedSubtitleTracks.last.language,
+        'eng',
+        reason:
+            'the preference must be applied against the list that '
+            'superseded the attempt, not lost with the spent flag',
+      );
+    },
+  );
 
   testWidgets(
-      'a track list revised while a selection is still in flight applies it '
-      'once', (tester) async {
-    final hold = Completer<void>();
-    final player = _ProbedPlayer()..holdSubtitleTrack = hold;
-    final link = _link(preferredSubtitle: preferredSubtitleObject(mode: 'OFF'));
+    'a track list revised while a selection is still in flight applies it '
+    'once',
+    (tester) async {
+      final hold = Completer<void>();
+      final player = _ProbedPlayer()..holdSubtitleTrack = hold;
+      final link = _link(
+        preferredSubtitle: preferredSubtitleObject(mode: 'OFF'),
+      );
 
-    await _pump(
-      tester,
-      link,
-      player,
-      settled: () => player.selectedSubtitleTracks.isNotEmpty,
-    );
-    expect(
-      player.selectedSubtitleTracks,
-      [SubtitleTrack.no()],
-      reason: 'the Off has to have reached the player for the revision below '
-          'to be able to select a second time',
-    );
+      await _pump(
+        tester,
+        link,
+        player,
+        settled: () => player.selectedSubtitleTracks.isNotEmpty,
+      );
+      expect(
+        player.selectedSubtitleTracks,
+        [SubtitleTrack.no()],
+        reason:
+            'the Off has to have reached the player for the revision below '
+            'to be able to select a second time',
+      );
 
-    // The window `_preferenceAppliedForPlayback` exists for: a revision
-    // arriving while `_applySubtitleSelection` is still awaiting the player.
-    // `_setSubtitleTrack` is the await in `_applySubtitlePreference` for an
-    // Off, and it is held, so the selection is genuinely in flight here.
-    player.publishSubtitleTracks(const [
-      _mpvSubtitleTrack,
-      SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
-    ]);
-    await tester.pump();
-    hold.complete();
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+      // The window `_preferenceAppliedForPlayback` exists for: a revision
+      // arriving while `_applySubtitleSelection` is still awaiting the player.
+      // `_setSubtitleTrack` is the await in `_applySubtitlePreference` for an
+      // Off, and it is held, so the selection is genuinely in flight here.
+      player.publishSubtitleTracks(const [
+        _mpvSubtitleTrack,
+        SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
+      ]);
+      await tester.pump();
+      hold.complete();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(
-      player.selectedSubtitleTracks,
-      [SubtitleTrack.no()],
-      reason: 'the Off must be applied once, not once per revision landing '
-          'while it is still in flight: the flag is set before that await '
-          'precisely so this second apply never starts',
-    );
-  });
+      expect(
+        player.selectedSubtitleTracks,
+        [SubtitleTrack.no()],
+        reason:
+            'the Off must be applied once, not once per revision landing '
+            'while it is still in flight: the flag is set before that await '
+            'precisely so this second apply never starts',
+      );
+    },
+  );
 
-  testWidgets('revisions landing during an apply do not spend the retry budget',
-      (tester) async {
+  testWidgets('revisions landing during an apply do not spend the retry budget', (
+    tester,
+  ) async {
     // Every revision below changes the derived track list, so every one of
     // them used to reach `_syncSelectedSubtitleTrack` and bump the generation
     // the held apply was running under. That apply is discarded on the way
@@ -570,8 +600,10 @@ void main() {
     // `_maxPreferenceApplyRetries` times -- against a list mpv keeps revising
     // for as long as a slow fetch (embedded extraction takes seconds) is open.
     final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      preferredSubtitle: preferredSubtitleObject(
+        mode: 'TRACK',
+        language: 'eng',
+      ),
     );
     final hold = Completer<void>();
     link.holdSubtitleContent = hold;
@@ -591,162 +623,231 @@ void main() {
     await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
     await tester.pump(const Duration(seconds: 1));
 
-    expect(_applyRetries(tester), 0,
-        reason: 'a revision is not a supersession: the apply it landed under '
-            'is still the live one, so there is nothing to retake');
-    expect(player.selectedSubtitleTracks.last.language, 'eng',
-        reason: 'and the preference is applied in place rather than retried '
-            'into position');
+    expect(
+      _applyRetries(tester),
+      0,
+      reason:
+          'a revision is not a supersession: the apply it landed under '
+          'is still the live one, so there is nothing to retake',
+    );
+    expect(
+      player.selectedSubtitleTracks.last.language,
+      'eng',
+      reason:
+          'and the preference is applied in place rather than retried '
+          'into position',
+    );
   });
 
   testWidgets(
-      'a selection a revision arrived alongside is reported as delivered, '
-      'not discarded', (tester) async {
-    // The distinction `_applySubtitlePreference`'s retry turns on: an apply
-    // that delivered and had the revision adopt it versus one the revision
-    // discarded. `_selectedSubtitleTrack` reads what the revision synced, not
-    // the target, so a revision landing while the selection is still reaching
-    // the player used to look like a discard -- and the retry sent the same
-    // selection to the player a second time.
-    final hold = Completer<void>();
-    final player = _ProbedPlayer()..holdSubtitleTrack = hold;
-    final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
-    );
+    'a selection a revision arrived alongside is reported as delivered, '
+    'not discarded',
+    (tester) async {
+      // The distinction `_applySubtitlePreference`'s retry turns on: an apply
+      // that delivered and had the revision adopt it versus one the revision
+      // discarded. `_selectedSubtitleTrack` reads what the revision synced, not
+      // the target, so a revision landing while the selection is still reaching
+      // the player used to look like a discard -- and the retry sent the same
+      // selection to the player a second time.
+      final hold = Completer<void>();
+      final player = _ProbedPlayer()..holdSubtitleTrack = hold;
+      final link = _link(
+        preferredSubtitle: preferredSubtitleObject(
+          mode: 'TRACK',
+          language: 'eng',
+        ),
+      );
 
-    await _pump(
-      tester,
-      link,
-      player,
-      settled: () => player.selectedSubtitleTracks.isNotEmpty,
-    );
+      await _pump(
+        tester,
+        link,
+        player,
+        settled: () => player.selectedSubtitleTracks.isNotEmpty,
+      );
 
-    // The revision lands inside the apply's own await on the player.
-    player.publishSubtitleTracks(const [
-      _mpvSubtitleTrack,
-      SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
-    ]);
-    await tester.pump();
-    hold.complete();
-    player.holdSubtitleTrack = null;
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+      // The revision lands inside the apply's own await on the player.
+      player.publishSubtitleTracks(const [
+        _mpvSubtitleTrack,
+        SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
+      ]);
+      await tester.pump();
+      hold.complete();
+      player.holdSubtitleTrack = null;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(_applyRetries(tester), 0,
-        reason: 'the apply the revision landed under is the one that list was '
-            'waiting for: nothing about it was discarded');
-    expect(player.selectedSubtitleTracks, hasLength(1),
-        reason: 'a revision that arrives as the selection is landing must not '
-            'make that selection be sent to the player twice');
-  });
+      expect(
+        _applyRetries(tester),
+        0,
+        reason:
+            'the apply the revision landed under is the one that list was '
+            'waiting for: nothing about it was discarded',
+      );
+      expect(
+        player.selectedSubtitleTracks,
+        hasLength(1),
+        reason:
+            'a revision that arrives as the selection is landing must not '
+            'make that selection be sent to the player twice',
+      );
+    },
+  );
 
   testWidgets(
-      'in direct play the preference waits for mpv and selects its own track',
-      (tester) async {
-    final player = _SlowProbePlayer(
-      mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
-    );
-    final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
-      file: _embeddedEnglishFile(),
-    );
+    'in direct play the preference waits for mpv and selects its own track',
+    (tester) async {
+      final player = _SlowProbePlayer(
+        mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
+      );
+      final link = _link(
+        preferredSubtitle: preferredSubtitleObject(
+          mode: 'TRACK',
+          language: 'eng',
+        ),
+        file: _embeddedEnglishFile(),
+      );
 
-    await _mount(tester, link, player);
-    // The empty revision has landed and the server list is on screen as the
-    // fallback. Give any apply it could trigger every chance to run.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(_subtitleContentRequests(link), 0,
-        reason: 'nothing may be fetched against the fallback list while mpv '
-            'is still probing');
+      await _mount(tester, link, player);
+      // The empty revision has landed and the server list is on screen as the
+      // fallback. Give any apply it could trigger every chance to run.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(
+        _subtitleContentRequests(link),
+        0,
+        reason:
+            'nothing may be fetched against the fallback list while mpv '
+            'is still probing',
+      );
 
-    player.probe();
-    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
-    await tester.pump(const Duration(seconds: 1));
+      player.probe();
+      await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(_subtitleContentRequests(link), 0,
-        reason: 'mpv carries the stream itself, so the server must not be '
-            'asked to extract it');
-    expect(player.selectedSubtitleTracks.single.id, '1',
-        reason: "the preference lands on mpv's own English track");
-  });
+      expect(
+        _subtitleContentRequests(link),
+        0,
+        reason:
+            'mpv carries the stream itself, so the server must not be '
+            'asked to extract it',
+      );
+      expect(
+        player.selectedSubtitleTracks.single.id,
+        '1',
+        reason: "the preference lands on mpv's own English track",
+      );
+    },
+  );
 
-  testWidgets('an embedded preference keeps waiting for mpv past the track cap',
-      (tester) async {
-    // The iPad sequence: the 3 s cap ran out before mpv listed anything, the
-    // preference matched the server's list and asked the server to extract an
-    // embedded stream mpv listed itself four seconds later.
-    final player = _SlowProbePlayer(
-      mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
-    );
-    final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
-      file: _embeddedEnglishFile(),
-    );
+  testWidgets(
+    'an embedded preference keeps waiting for mpv past the track cap',
+    (tester) async {
+      // The iPad sequence: the 3 s cap ran out before mpv listed anything, the
+      // preference matched the server's list and asked the server to extract an
+      // embedded stream mpv listed itself four seconds later.
+      final player = _SlowProbePlayer(
+        mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
+      );
+      final link = _link(
+        preferredSubtitle: preferredSubtitleObject(
+          mode: 'TRACK',
+          language: 'eng',
+        ),
+        file: _embeddedEnglishFile(),
+      );
 
-    await _mount(tester, link, player);
-    // Past `awaitRealTracks`' 3 s cap in `_openPlayerAndStart`.
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(_subtitleContentRequests(link), 0,
-        reason: 'the cap expiring is not mpv listing its tracks: an embedded '
+      await _mount(tester, link, player);
+      // Past `awaitRealTracks`' 3 s cap in `_openPlayerAndStart`.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(
+        _subtitleContentRequests(link),
+        0,
+        reason:
+            'the cap expiring is not mpv listing its tracks: an embedded '
             'stream must not be fetched from the server while mpv may still '
-            'offer it');
-    expect(player.selectedSubtitleTracks, isEmpty);
+            'offer it',
+      );
+      expect(player.selectedSubtitleTracks, isEmpty);
 
-    player.probe();
-    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
-    await tester.pump(const Duration(seconds: 1));
+      player.probe();
+      await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(_subtitleContentRequests(link), 0,
-        reason: 'mpv carries the stream itself, so the server must not be '
-            'asked to extract it');
-    expect(player.selectedSubtitleTracks.single.id, '1',
-        reason: "the preference lands on mpv's own English track");
-  });
+      expect(
+        _subtitleContentRequests(link),
+        0,
+        reason:
+            'mpv carries the stream itself, so the server must not be '
+            'asked to extract it',
+      );
+      expect(
+        player.selectedSubtitleTracks.single.id,
+        '1',
+        reason: "the preference lands on mpv's own English track",
+      );
+    },
+  );
 
   testWidgets(
-      'if mpv never reports tracks, the preference fetches from the server '
-      'five seconds after the first frame', (tester) async {
+    'if mpv never reports tracks, the preference fetches from the server '
+    'five seconds after the first frame',
+    (tester) async {
+      final player = _SlowProbePlayer(mpvSubtitles: const []);
+      final link = _link(
+        preferredSubtitle: preferredSubtitleObject(
+          mode: 'TRACK',
+          language: 'eng',
+        ),
+        file: _embeddedEnglishFile(),
+      );
+
+      await _mount(tester, link, player);
+      // Past `awaitRealTracks`' 3 s cap in `_openPlayerAndStart`.
+      await tester.pump(const Duration(seconds: 4));
+      expect(
+        _subtitleContentRequests(link),
+        0,
+        reason: 'still inside the wait for mpv',
+      );
+
+      player.emitFirstFrame();
+      await tester.pump(const Duration(milliseconds: 4900));
+      expect(
+        _subtitleContentRequests(link),
+        0,
+        reason: 'the backstop runs from the first frame, not from the cap',
+      );
+
+      await tester.pump(const Duration(milliseconds: 200));
+      await pumpUntil(tester, () => _subtitleContentRequests(link) > 0);
+
+      expect(
+        _subtitleContentRequests(link),
+        1,
+        reason:
+            "with no mpv list the server's copy is the only one there is: "
+            'the preference is delayed, never dropped',
+      );
+
+      await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+      expect(
+        player.selectedSubtitleTracks.last.language,
+        'eng',
+        reason: "the server's English copy reached the player",
+      );
+    },
+  );
+
+  testWidgets('a sidecar preference applies as soon as the cap expires', (
+    tester,
+  ) async {
     final player = _SlowProbePlayer(mpvSubtitles: const []);
     final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
-      file: _embeddedEnglishFile(),
-    );
-
-    await _mount(tester, link, player);
-    // Past `awaitRealTracks`' 3 s cap in `_openPlayerAndStart`.
-    await tester.pump(const Duration(seconds: 4));
-    expect(_subtitleContentRequests(link), 0,
-        reason: 'still inside the wait for mpv');
-
-    player.emitFirstFrame();
-    await tester.pump(const Duration(milliseconds: 4900));
-    expect(_subtitleContentRequests(link), 0,
-        reason: 'the backstop runs from the first frame, not from the cap');
-
-    await tester.pump(const Duration(milliseconds: 200));
-    await pumpUntil(tester, () => _subtitleContentRequests(link) > 0);
-
-    expect(_subtitleContentRequests(link), 1,
-        reason: "with no mpv list the server's copy is the only one there is: "
-            'the preference is delayed, never dropped');
-
-    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
-    expect(player.selectedSubtitleTracks.last.language, 'eng',
-        reason: "the server's English copy reached the player");
-  });
-
-  testWidgets('a sidecar preference applies as soon as the cap expires',
-      (tester) async {
-    final player = _SlowProbePlayer(mpvSubtitles: const []);
-    final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      preferredSubtitle: preferredSubtitleObject(
+        mode: 'TRACK',
+        language: 'eng',
+      ),
       // The default fixture track: a sidecar with a URL of its own.
       file: mediaFileWithSubtitle(),
     );
@@ -755,19 +856,26 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     await pumpUntil(tester, () => _subtitleContentRequests(link) > 0);
 
-    expect(_subtitleContentRequests(link), 1,
-        reason: 'mpv will never list a sidecar, so there is nothing to wait '
-            'for, and no first frame is needed either');
+    expect(
+      _subtitleContentRequests(link),
+      1,
+      reason:
+          'mpv will never list a sidecar, so there is nothing to wait '
+          'for, and no first frame is needed either',
+    );
   });
 
-  testWidgets('selecting a track mpv already carries shows no loading toast',
-      (tester) async {
+  testWidgets('selecting a track mpv already carries shows no loading toast', (
+    tester,
+  ) async {
     final player = _SlowProbePlayer(
       mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
     );
     final link = _link(
-      preferredSubtitle:
-          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      preferredSubtitle: preferredSubtitleObject(
+        mode: 'TRACK',
+        language: 'eng',
+      ),
       file: _embeddedEnglishFile(),
     );
 

@@ -20,8 +20,9 @@ Future<void> _pump(WidgetTester tester, Widget child) {
 
 void main() {
   group('DetailHeroBackground', () {
-    testWidgets('without art and with a fallback icon, shows the icon',
-        (tester) async {
+    testWidgets('without art and with a fallback icon, shows the icon', (
+      tester,
+    ) async {
       await _pump(
         tester,
         const DetailHeroBackground(
@@ -90,10 +91,12 @@ void main() {
       );
 
       final gradients = tester
-          .widgetList<DecoratedBox>(find.descendant(
-            of: find.byType(DetailHeroBackground),
-            matching: find.byType(DecoratedBox),
-          ))
+          .widgetList<DecoratedBox>(
+            find.descendant(
+              of: find.byType(DetailHeroBackground),
+              matching: find.byType(DecoratedBox),
+            ),
+          )
           .map((d) => d.decoration)
           .whereType<BoxDecoration>()
           .map((d) => d.gradient)
@@ -139,8 +142,10 @@ void main() {
         ),
       );
 
-      expect(tester.getSize(find.byKey(const Key('poster'))),
-          const Size(160, 240));
+      expect(
+        tester.getSize(find.byKey(const Key('poster'))),
+        const Size(160, 240),
+      );
     });
 
     testWidgets('drops the poster below the breakpoint', (tester) async {

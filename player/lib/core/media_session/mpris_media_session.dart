@@ -49,8 +49,10 @@ class MprisMediaSession implements SystemMediaSession {
     final object = _MprisObject(position: position, now: now);
     await client.registerObject(object);
     for (final name in [mprisBusName, '$mprisBusName.instance${pid ?? _pid}']) {
-      final reply = await client
-          .requestName(name, flags: {DBusRequestNameFlag.doNotQueue});
+      final reply = await client.requestName(
+        name,
+        flags: {DBusRequestNameFlag.doNotQueue},
+      );
       if (reply == DBusRequestNameReply.primaryOwner) {
         return MprisMediaSession._(client, object, name);
       }
@@ -85,9 +87,8 @@ class MprisMediaSession implements SystemMediaSession {
 int get _pid => pid;
 
 class _MprisObject extends DBusObject {
-  _MprisObject({required Duration Function() position, required this.now})
-      : _position = position,
-        super(DBusObjectPath('/org/mpris/MediaPlayer2'));
+  _MprisObject({required this._position, required this.now})
+    : super(DBusObjectPath('/org/mpris/MediaPlayer2'));
 
   final Duration Function() _position;
   final DateTime Function() now;
@@ -146,8 +147,9 @@ class _MprisObject extends DBusObject {
 
     final jumped = _jumped(previous, next);
     if (jumped) {
-      await emitSignal(_playerInterface, 'Seeked',
-          [DBusInt64(next.position.inMicroseconds)]);
+      await emitSignal(_playerInterface, 'Seeked', [
+        DBusInt64(next.position.inMicroseconds),
+      ]);
     }
 
     // Resync the baseline whenever a client is known to re-read Position:
@@ -213,38 +215,38 @@ class _MprisObject extends DBusObject {
   }
 
   Map<String, DBusValue> _metadata(MediaSessionState s) => {
-        'mpris:trackid': DBusObjectPath(mprisTrackPath(
-            s.status == MediaSessionStatus.stopped ? null : s.trackId)),
-        if (s.status != MediaSessionStatus.stopped) ...{
-          'xesam:title': DBusString(s.title),
-          if (s.subtitle != null)
-            'xesam:artist': DBusArray.string([s.subtitle!]),
-          if (s.duration > Duration.zero)
-            'mpris:length': DBusInt64(s.duration.inMicroseconds),
-          if (s.artworkPath != null)
-            'mpris:artUrl': DBusString(Uri.file(s.artworkPath!).toString()),
-        },
-      };
+    'mpris:trackid': DBusObjectPath(
+      mprisTrackPath(s.status == MediaSessionStatus.stopped ? null : s.trackId),
+    ),
+    if (s.status != MediaSessionStatus.stopped) ...{
+      'xesam:title': DBusString(s.title),
+      if (s.subtitle != null) 'xesam:artist': DBusArray.string([s.subtitle!]),
+      if (s.duration > Duration.zero)
+        'mpris:length': DBusInt64(s.duration.inMicroseconds),
+      if (s.artworkPath != null)
+        'mpris:artUrl': DBusString(Uri.file(s.artworkPath!).toString()),
+    },
+  };
 
   Map<String, DBusValue> _rootProperties() => {
-        'CanQuit': const DBusBoolean(false),
-        'CanRaise': const DBusBoolean(true),
-        'CanSetFullscreen': const DBusBoolean(false),
-        'Fullscreen': const DBusBoolean(false),
-        'HasTrackList': const DBusBoolean(false),
-        'Identity': DBusString(BuildChannel.current.appName),
-        'DesktopEntry': const DBusString('dev.mydia.player'),
-        'SupportedUriSchemes': DBusArray.string(const []),
-        'SupportedMimeTypes': DBusArray.string(const []),
-      };
+    'CanQuit': const DBusBoolean(false),
+    'CanRaise': const DBusBoolean(true),
+    'CanSetFullscreen': const DBusBoolean(false),
+    'Fullscreen': const DBusBoolean(false),
+    'HasTrackList': const DBusBoolean(false),
+    'Identity': DBusString(BuildChannel.current.appName),
+    'DesktopEntry': const DBusString('dev.mydia.player'),
+    'SupportedUriSchemes': DBusArray.string(const []),
+    'SupportedMimeTypes': DBusArray.string(const []),
+  };
 
   Map<String, DBusValue>? _propertiesOf(String interface) =>
       switch (interface) {
         _rootInterface => _rootProperties(),
         _playerInterface => {
-            ..._playerProperties(_state),
-            'Position': DBusInt64(_position().inMicroseconds),
-          },
+          ..._playerProperties(_state),
+          'Position': DBusInt64(_position().inMicroseconds),
+        },
         _ => null,
       };
 
@@ -266,7 +268,10 @@ class _MprisObject extends DBusObject {
 
   @override
   Future<DBusMethodResponse> setProperty(
-      String interface, String name, DBusValue value) async {
+    String interface,
+    String name,
+    DBusValue value,
+  ) async {
     if (interface == _playerInterface && name == 'Volume') {
       if (value is! DBusDouble) return DBusMethodErrorResponse.invalidArgs();
       _emit(VolumeIntent(level: value.value.clamp(0.0, 1.0).toDouble()));
@@ -314,9 +319,13 @@ class _MprisObject extends DBusObject {
         if (active) _emit(const TransportIntent(TransportAction.pause));
       case 'PlayPause':
         if (active) {
-          _emit(TransportIntent(s.status == MediaSessionStatus.playing
-              ? TransportAction.pause
-              : TransportAction.play));
+          _emit(
+            TransportIntent(
+              s.status == MediaSessionStatus.playing
+                  ? TransportAction.pause
+                  : TransportAction.play,
+            ),
+          );
         }
       case 'Stop':
         if (active) _emit(const TransportIntent(TransportAction.stop));
@@ -372,54 +381,88 @@ class _MprisObject extends DBusObject {
 
   @override
   List<DBusIntrospectInterface> introspect() => [
-        DBusIntrospectInterface(_rootInterface, methods: [
-          DBusIntrospectMethod('Raise'),
-          DBusIntrospectMethod('Quit'),
-        ], properties: [
-          for (final e in _rootProperties().entries)
-            DBusIntrospectProperty(e.key, e.value.signature,
-                access: DBusPropertyAccess.read),
-        ]),
-        DBusIntrospectInterface(_playerInterface, methods: [
-          for (final name in [
-            'Next',
-            'Previous',
-            'Pause',
-            'PlayPause',
-            'Stop',
-            'Play',
-          ])
-            DBusIntrospectMethod(name),
-          DBusIntrospectMethod('Seek', args: [
+    DBusIntrospectInterface(
+      _rootInterface,
+      methods: [DBusIntrospectMethod('Raise'), DBusIntrospectMethod('Quit')],
+      properties: [
+        for (final e in _rootProperties().entries)
+          DBusIntrospectProperty(
+            e.key,
+            e.value.signature,
+            access: DBusPropertyAccess.read,
+          ),
+      ],
+    ),
+    DBusIntrospectInterface(
+      _playerInterface,
+      methods: [
+        for (final name in [
+          'Next',
+          'Previous',
+          'Pause',
+          'PlayPause',
+          'Stop',
+          'Play',
+        ])
+          DBusIntrospectMethod(name),
+        DBusIntrospectMethod(
+          'Seek',
+          args: [
             DBusIntrospectArgument(
-                DBusSignature('x'), DBusArgumentDirection.in_,
-                name: 'Offset'),
-          ]),
-          DBusIntrospectMethod('SetPosition', args: [
+              DBusSignature('x'),
+              DBusArgumentDirection.in_,
+              name: 'Offset',
+            ),
+          ],
+        ),
+        DBusIntrospectMethod(
+          'SetPosition',
+          args: [
             DBusIntrospectArgument(
-                DBusSignature('o'), DBusArgumentDirection.in_,
-                name: 'TrackId'),
+              DBusSignature('o'),
+              DBusArgumentDirection.in_,
+              name: 'TrackId',
+            ),
             DBusIntrospectArgument(
-                DBusSignature('x'), DBusArgumentDirection.in_,
-                name: 'Position'),
-          ]),
-          DBusIntrospectMethod('OpenUri', args: [
+              DBusSignature('x'),
+              DBusArgumentDirection.in_,
+              name: 'Position',
+            ),
+          ],
+        ),
+        DBusIntrospectMethod(
+          'OpenUri',
+          args: [
             DBusIntrospectArgument(
-                DBusSignature('s'), DBusArgumentDirection.in_,
-                name: 'Uri'),
-          ]),
-        ], signals: [
-          DBusIntrospectSignal('Seeked', args: [
+              DBusSignature('s'),
+              DBusArgumentDirection.in_,
+              name: 'Uri',
+            ),
+          ],
+        ),
+      ],
+      signals: [
+        DBusIntrospectSignal(
+          'Seeked',
+          args: [
             DBusIntrospectArgument(
-                DBusSignature('x'), DBusArgumentDirection.out,
-                name: 'Position'),
-          ]),
-        ], properties: [
-          for (final e in _propertiesOf(_playerInterface)!.entries)
-            DBusIntrospectProperty(e.key, e.value.signature,
-                access: e.key == 'Volume'
-                    ? DBusPropertyAccess.readwrite
-                    : DBusPropertyAccess.read),
-        ]),
-      ];
+              DBusSignature('x'),
+              DBusArgumentDirection.out,
+              name: 'Position',
+            ),
+          ],
+        ),
+      ],
+      properties: [
+        for (final e in _propertiesOf(_playerInterface)!.entries)
+          DBusIntrospectProperty(
+            e.key,
+            e.value.signature,
+            access: e.key == 'Volume'
+                ? DBusPropertyAccess.readwrite
+                : DBusPropertyAccess.read,
+          ),
+      ],
+    ),
+  ];
 }

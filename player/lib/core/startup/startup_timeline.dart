@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 /// twice still reports the first occurrence.
 class StartupTimeline {
   StartupTimeline(this.label, {int Function()? elapsedMs})
-      : _elapsedMs = elapsedMs ?? _stopwatchClock();
+    : _elapsedMs = elapsedMs ?? _stopwatchClock();
 
   static int Function() _stopwatchClock() {
     final sw = Stopwatch()..start();

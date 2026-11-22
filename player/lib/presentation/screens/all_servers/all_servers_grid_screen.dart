@@ -17,10 +17,10 @@ import 'all_servers_cards.dart';
 import 'all_servers_providers.dart';
 
 String _sortLabel(AppLocalizations l10n, SharedSort sort) => switch (sort) {
-      SharedSort.title => l10n.sortTitle,
-      SharedSort.added => l10n.allServersSortAdded,
-      SharedSort.released => l10n.sortReleaseDate,
-    };
+  SharedSort.title => l10n.sortTitle,
+  SharedSort.added => l10n.allServersSortAdded,
+  SharedSort.released => l10n.sortReleaseDate,
+};
 
 class AllServersGridScreen extends ConsumerWidget {
   const AllServersGridScreen({super.key, required this.kind});
@@ -35,8 +35,7 @@ class AllServersGridScreen extends ConsumerWidget {
     final state = grid.value;
     final items = stillIncluded(names, state?.items ?? const []);
     final skipped = [
-      for (final id in state?.skipped ?? const <SourceId>[])
-        if (names[id] case final name?) name,
+      for (final id in state?.skipped ?? const <SourceId>[]) ?names[id],
     ];
     void retry() => ref.invalidate(allServersGridProvider(kind));
 
@@ -94,26 +93,29 @@ class AllServersGridScreen extends ConsumerWidget {
             AllServersBanner(unavailable: state.unavailable, onRetry: retry),
           Expanded(
             child: switch (grid) {
-              AsyncError(:final error) when state == null =>
-                SourceErrorView(error: error, onRetry: retry),
-              _ when state == null =>
-                const Center(child: CircularProgressIndicator()),
+              AsyncError(:final error) when state == null => SourceErrorView(
+                error: error,
+                onRetry: retry,
+              ),
+              _ when state == null => const Center(
+                child: CircularProgressIndicator(),
+              ),
               _ => NotificationListener<ScrollNotification>(
-                  onNotification: (n) {
-                    if (n.metrics.extentAfter < 800) notifier.loadMore();
-                    return false;
-                  },
-                  child: BrowseGrid(
-                    // The Column above already reserved the bar's height.
-                    scrollTopPadding: 0,
-                    itemCount: items.length,
-                    itemId: (index) => items[index].ref,
-                    itemBuilder: (context, index) => AllServersPoster(
-                      item: items[index],
-                      extraCopies: state.extraCopies[items[index].ref] ?? 0,
-                    ),
+                onNotification: (n) {
+                  if (n.metrics.extentAfter < 800) notifier.loadMore();
+                  return false;
+                },
+                child: BrowseGrid(
+                  // The Column above already reserved the bar's height.
+                  scrollTopPadding: 0,
+                  itemCount: items.length,
+                  itemId: (index) => items[index].ref,
+                  itemBuilder: (context, index) => AllServersPoster(
+                    item: items[index],
+                    extraCopies: state.extraCopies[items[index].ref] ?? 0,
                   ),
                 ),
+              ),
             },
           ),
         ],

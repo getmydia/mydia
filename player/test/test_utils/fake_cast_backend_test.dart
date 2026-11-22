@@ -41,11 +41,13 @@ void main() {
 
   test('records loaded media requests', () async {
     await backend.connect(device);
-    await backend.loadMedia(const CastMediaRequest(
-      url: 'http://example.test/a.m3u8',
-      kind: CastMediaKind.hls,
-      title: 'Movie',
-    ));
+    await backend.loadMedia(
+      const CastMediaRequest(
+        url: 'http://example.test/a.m3u8',
+        kind: CastMediaKind.hls,
+        title: 'Movie',
+      ),
+    );
 
     expect(backend.loadedRequests.single.url, 'http://example.test/a.m3u8');
     expect(backend.loadedRequests.single.kind, CastMediaKind.hls);
@@ -56,13 +58,20 @@ void main() {
     backend.failNextLoad(CastFailureKind.mediaLoadFailed);
 
     await expectLater(
-      backend.loadMedia(const CastMediaRequest(
-        url: 'http://example.test/a.m3u8',
-        kind: CastMediaKind.hls,
-        title: 'Movie',
-      )),
-      throwsA(isA<CastBackendException>()
-          .having((e) => e.kind, 'kind', CastFailureKind.mediaLoadFailed)),
+      backend.loadMedia(
+        const CastMediaRequest(
+          url: 'http://example.test/a.m3u8',
+          kind: CastMediaKind.hls,
+          title: 'Movie',
+        ),
+      ),
+      throwsA(
+        isA<CastBackendException>().having(
+          (e) => e.kind,
+          'kind',
+          CastFailureKind.mediaLoadFailed,
+        ),
+      ),
     );
   });
 

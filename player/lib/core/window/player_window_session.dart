@@ -58,14 +58,11 @@ class PlayerWindowSession with WindowListener {
   Completer<void>? _fullscreenExitSignal;
 
   PlayerWindowSession({
-    required WindowController window,
-    required WindowGeometryController geometry,
-    AfterFrameScheduler afterFrame = runAfterCurrentFrame,
-    Duration fullscreenExitTimeout = const Duration(seconds: 2),
-  })  : _window = window,
-        _geometry = geometry,
-        _afterFrame = afterFrame,
-        _fullscreenExitTimeout = fullscreenExitTimeout;
+    required this._window,
+    required this._geometry,
+    this._afterFrame = runAfterCurrentFrame,
+    this._fullscreenExitTimeout = const Duration(seconds: 2),
+  });
 
   bool get isLive => _live;
 

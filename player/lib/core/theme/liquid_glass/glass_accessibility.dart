@@ -22,16 +22,16 @@ class GlassAccessibility {
   final bool increaseContrast;
 
   static GlassAccessibility? fromChannel(Object? value) => switch (value) {
-        {
-          'reduceTransparency': final bool reduceTransparency,
-          'increaseContrast': final bool increaseContrast,
-        } =>
-          GlassAccessibility(
-            reduceTransparency: reduceTransparency,
-            increaseContrast: increaseContrast,
-          ),
-        _ => null,
-      };
+    {
+      'reduceTransparency': final bool reduceTransparency,
+      'increaseContrast': final bool increaseContrast,
+    } =>
+      GlassAccessibility(
+        reduceTransparency: reduceTransparency,
+        increaseContrast: increaseContrast,
+      ),
+    _ => null,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -43,14 +43,15 @@ class GlassAccessibility {
   int get hashCode => Object.hash(reduceTransparency, increaseContrast);
 
   @override
-  String toString() => 'GlassAccessibility(reduceTransparency: '
+  String toString() =>
+      'GlassAccessibility(reduceTransparency: '
       '$reduceTransparency, increaseContrast: $increaseContrast)';
 }
 
 final glassAccessibilityProvider =
     NotifierProvider<GlassAccessibilityNotifier, GlassAccessibility>(
-  GlassAccessibilityNotifier.new,
-);
+      GlassAccessibilityNotifier.new,
+    );
 
 /// Queries the flags once, follows native pushes, and re-queries on app resume
 /// because iOS does not replay notifications missed while suspended.
@@ -92,9 +93,10 @@ class GlassAccessibilityNotifier extends Notifier<GlassAccessibility> {
   /// current value, and a later push still applies.
   Future<void> _refresh(NativeTabBarChannel channel) async {
     final pushesBefore = _pushes;
-    final value = await channel
-        .queryGlassAccessibility()
-        .timeout(const Duration(seconds: 2), onTimeout: () => null);
+    final value = await channel.queryGlassAccessibility().timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => null,
+    );
     // A push that arrived while the query was in flight is newer than this
     // reply, so the reply must not overwrite it with stale values.
     if (value != null && ref.mounted && _pushes == pushesBefore) state = value;
@@ -131,7 +133,7 @@ class GlassAccessibilityHost extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => GlassAccessibilityScope(
-        value: ref.watch(glassAccessibilityProvider),
-        child: child,
-      );
+    value: ref.watch(glassAccessibilityProvider),
+    child: child,
+  );
 }

@@ -10,27 +10,30 @@ import '../../../test_utils/toast_harness.dart';
 import 'fake_backup_controller.dart';
 import 'fake_backup_sync_service.dart';
 
-Future<FakeBackupSyncService> _pump(WidgetTester tester,
-    [FakeBackupSyncService? service]) async {
+Future<FakeBackupSyncService> _pump(
+  WidgetTester tester, [
+  FakeBackupSyncService? service,
+]) async {
   tester.view.physicalSize = const Size(900, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final fake = service ?? FakeBackupSyncService();
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      backupSyncServiceProvider.overrideWithValue(fake),
-      backupControllerProvider
-          .overrideWithValue(FakeBackupController(relay: fake)),
-    ],
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: Scaffold(
-        body: SingleChildScrollView(child: BackupSection()),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        backupSyncServiceProvider.overrideWithValue(fake),
+        backupControllerProvider.overrideWithValue(
+          FakeBackupController(relay: fake),
+        ),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Scaffold(body: SingleChildScrollView(child: BackupSection())),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return fake;
 }
@@ -38,30 +41,36 @@ Future<FakeBackupSyncService> _pump(WidgetTester tester,
 FakeBackupSyncService _enabled() => FakeBackupSyncService()
   ..isEnabled = true
   ..keyText = 'ABCD ' * 12 + 'ABCD'
-  ..statusNotifier.value = BackupIdle(DateTime.now()
-      .subtract(const Duration(minutes: 3))
-      .millisecondsSinceEpoch)
+  ..statusNotifier.value = BackupIdle(
+    DateTime.now().subtract(const Duration(minutes: 3)).millisecondsSinceEpoch,
+  )
   ..membersNotifier.value = const [
     BackupMemberInfo(slotId: 'own', isThisDevice: true),
     BackupMemberInfo(
-        slotId: 'tv', isThisDevice: false, deviceName: 'Living Room TV'),
+      slotId: 'tv',
+      isThisDevice: false,
+      deviceName: 'Living Room TV',
+    ),
   ];
 
 void main() {
   testWidgets('Off shows the switch, off, and the idle notice', (tester) async {
     await _pump(tester);
-    final tile =
-        tester.widget<SwitchListTile>(find.byKey(const Key('backup-switch')));
+    final tile = tester.widget<SwitchListTile>(
+      find.byKey(const Key('backup-switch')),
+    );
     expect(tile.value, isFalse);
     expect(find.byKey(const Key('backup-unavailable')), findsNothing);
     expect(
-        find.text('A backup that goes 180 days without a change is deleted.'),
-        findsOneWidget);
+      find.text('A backup that goes 180 days without a change is deleted.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('backup-show-key')), findsNothing);
   });
 
-  testWidgets('Unavailable shows the copy in place of the switch',
-      (tester) async {
+  testWidgets('Unavailable shows the copy in place of the switch', (
+    tester,
+  ) async {
     final fake = FakeBackupSyncService()
       ..statusNotifier.value = const BackupUnavailable();
     await _pump(tester, fake);
@@ -76,12 +85,14 @@ void main() {
     expect(find.byKey(const Key('recovery-key-text')), findsOneWidget);
     expect(fake.calls, ['prepareEnable']);
     final button = tester.widget<FilledButton>(
-        find.byKey(const Key('recovery-key-confirm-button')));
+      find.byKey(const Key('recovery-key-confirm-button')),
+    );
     expect(button.onPressed, isNull);
   });
 
-  testWidgets('enabled shows status, devices and the key actions',
-      (tester) async {
+  testWidgets('enabled shows status, devices and the key actions', (
+    tester,
+  ) async {
     await _pump(tester, _enabled());
     expect(find.text('Last backed up 3 minutes ago'), findsOneWidget);
     expect(find.byKey(const Key('backup-member-own')), findsOneWidget);
@@ -97,18 +108,20 @@ void main() {
   testWidgets('an error keeps the last success in view', (tester) async {
     final fake = _enabled()
       ..statusNotifier.value = BackupError(
-          BackupRelayError.network,
-          DateTime.now()
-              .subtract(const Duration(minutes: 3))
-              .millisecondsSinceEpoch);
+        BackupRelayError.network,
+        DateTime.now()
+            .subtract(const Duration(minutes: 3))
+            .millisecondsSinceEpoch,
+      );
     await _pump(tester, fake);
-    expect(find.text("Can't reach the backup service. It will try again."),
-        findsOneWidget);
+    expect(
+      find.text("Can't reach the backup service. It will try again."),
+      findsOneWidget,
+    );
     expect(find.text('Last backed up 3 minutes ago'), findsOneWidget);
   });
 
-  testWidgets(
-      'removing a device asks first, then shows the new recovery key '
+  testWidgets('removing a device asks first, then shows the new recovery key '
       'until acknowledged', (tester) async {
     final fake = await _pump(tester, _enabled());
     await tester.tap(find.byKey(const Key('backup-member-remove-tv')));
@@ -140,42 +153,53 @@ void main() {
   });
 
   testWidgets(
-      'a new recovery key never acknowledged is flagged until Done on its '
-      'sheet', (tester) async {
-    final fake = _enabled()..unsavedKeyNotifier.value = true;
-    await _pump(tester, fake);
-    expect(find.byKey(const Key('backup-unsaved-key')), findsOneWidget);
-    expect(find.text('Your recovery key was replaced. Save the new one.'),
-        findsOneWidget);
+    'a new recovery key never acknowledged is flagged until Done on its '
+    'sheet',
+    (tester) async {
+      final fake = _enabled()..unsavedKeyNotifier.value = true;
+      await _pump(tester, fake);
+      expect(find.byKey(const Key('backup-unsaved-key')), findsOneWidget);
+      expect(
+        find.text('Your recovery key was replaced. Save the new one.'),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.byKey(const Key('backup-unsaved-key-show')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
-    expect(find.text(fake.keyText!), findsOneWidget);
-    // Not dismissable: a tap outside leaves it up and acknowledges nothing.
-    await tester.tapAt(const Offset(5, 5));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
-    expect(fake.calls, isEmpty);
+      await tester.tap(find.byKey(const Key('backup-unsaved-key-show')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
+      expect(find.text(fake.keyText!), findsOneWidget);
+      // Not dismissable: a tap outside leaves it up and acknowledges nothing.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recovery-key-replaced')), findsOneWidget);
+      expect(fake.calls, isEmpty);
 
-    await tester.tap(find.byKey(const Key('recovery-key-done')));
-    await tester.pumpAndSettle();
-    expect(fake.calls, ['acknowledgeNewRecoveryKey']);
-    expect(find.byKey(const Key('backup-unsaved-key')), findsNothing);
-  });
+      await tester.tap(find.byKey(const Key('recovery-key-done')));
+      await tester.pumpAndSettle();
+      expect(fake.calls, ['acknowledgeNewRecoveryKey']);
+      expect(find.byKey(const Key('backup-unsaved-key')), findsNothing);
+    },
+  );
 
-  testWidgets('a revoked device still in the backup is flagged with Remove',
-      (tester) async {
+  testWidgets('a revoked device still in the backup is flagged with Remove', (
+    tester,
+  ) async {
     final fake = _enabled()
       ..removalsNotifier.value = const [
         PendingRemoval(
-            nodeId: 'node-tv', slotId: 'tv', deviceName: 'Living Room TV'),
+          nodeId: 'node-tv',
+          slotId: 'tv',
+          deviceName: 'Living Room TV',
+        ),
       ];
     await _pump(tester, fake);
     expect(
-        find.text('Living Room TV was removed from your devices but can still '
-            'read your backup'),
-        findsOneWidget);
+      find.text(
+        'Living Room TV was removed from your devices but can still '
+        'read your backup',
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('backup-pending-removal-remove-tv')));
     await tester.pumpAndSettle();
@@ -188,8 +212,9 @@ void main() {
     expect(find.byKey(const Key('backup-pending-removal-tv')), findsNothing);
   });
 
-  testWidgets('a device that joined by pairing has no key to show',
-      (tester) async {
+  testWidgets('a device that joined by pairing has no key to show', (
+    tester,
+  ) async {
     await _pump(tester, _enabled()..keyText = null);
     expect(find.byKey(const Key('backup-show-key')), findsNothing);
     expect(find.byKey(const Key('backup-no-key')), findsOneWidget);
@@ -203,10 +228,11 @@ void main() {
 
   testWidgets('an unreadable slot names its device', (tester) async {
     await _pump(
-        tester,
-        _enabled()
-          ..names = {'tv': 'Living Room TV'}
-          ..unreadableNotifier.value = {'tv'});
+      tester,
+      _enabled()
+        ..names = {'tv': 'Living Room TV'}
+        ..unreadableNotifier.value = {'tv'},
+    );
     expect(find.text("Couldn't read Living Room TV's backup"), findsOneWidget);
   });
 
@@ -239,12 +265,15 @@ void main() {
     expect(fake.calls, ['disable']);
   });
 
-  testWidgets('the joined notice shows once and not after acknowledgement',
-      (tester) async {
+  testWidgets('the joined notice shows once and not after acknowledgement', (
+    tester,
+  ) async {
     final fake = _enabled()..joinedNoticeNotifier.value = true;
     await _pump(tester, fake);
-    expect(find.text('This device is now backed up with your group'),
-        findsOneWidget);
+    expect(
+      find.text('This device is now backed up with your group'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('backup-joined-notice-dismiss')));
     await tester.pumpAndSettle();
     expect(fake.calls, ['acknowledgeJoinedNotice']);
@@ -256,8 +285,9 @@ void main() {
     expect(find.byKey(const Key('backup-joined-notice')), findsNothing);
   });
 
-  testWidgets('a vault choice offered by pairing opens the dialog',
-      (tester) async {
+  testWidgets('a vault choice offered by pairing opens the dialog', (
+    tester,
+  ) async {
     final fake = await _pump(tester, _enabled());
     fake.vaultChoiceNotifier.value = (current: 'mine', offered: 'group');
     await tester.pumpAndSettle();
@@ -268,8 +298,9 @@ void main() {
     expect(find.byKey(const Key('backup-vault-choice-row')), findsNothing);
   });
 
-  testWidgets('a pending vault choice stays as a row until answered',
-      (tester) async {
+  testWidgets('a pending vault choice stays as a row until answered', (
+    tester,
+  ) async {
     final fake = _enabled()
       ..vaultChoiceNotifier.value = (current: 'mine', offered: 'group');
     await _pump(tester, fake);

@@ -68,8 +68,9 @@ class _Visitor extends RecursiveAstVisitor<void> {
     }
     final index = _uiPositionalCalls[node.methodName.name];
     if (node.target == null && index != null) {
-      final positional =
-          node.argumentList.arguments.whereType<Expression>().toList();
+      final positional = node.argumentList.arguments
+          .whereType<Expression>()
+          .toList();
       if (positional.length > index) _check(positional[index]);
     }
     super.visitMethodInvocation(node);
@@ -100,7 +101,7 @@ class _Visitor extends RecursiveAstVisitor<void> {
       case BinaryExpression(
             :final operator,
             :final leftOperand,
-            :final rightOperand
+            :final rightOperand,
           )
           when operator.lexeme == '??':
         _check(leftOperand);
@@ -125,9 +126,9 @@ class _Visitor extends RecursiveAstVisitor<void> {
 
   /// The literal parts of a string, without interpolated expressions.
   String _literalText(StringLiteral s) => switch (s) {
-        SimpleStringLiteral(:final value) => value,
-        StringInterpolation(:final elements) =>
-          elements.whereType<InterpolationString>().map((p) => p.value).join(),
-        AdjacentStrings(:final strings) => strings.map(_literalText).join(),
-      };
+    SimpleStringLiteral(:final value) => value,
+    StringInterpolation(:final elements) =>
+      elements.whereType<InterpolationString>().map((p) => p.value).join(),
+    AdjacentStrings(:final strings) => strings.map(_literalText).join(),
+  };
 }

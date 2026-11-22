@@ -15,11 +15,11 @@ class ProbeResult {
   });
 
   Map<String, Object?> toMap() => {
-        'container': container,
-        'durationSeconds': durationSeconds,
-        'bitrate': bitrate,
-        'streams': streams.map(_streamToMap).toList(),
-      };
+    'container': container,
+    'durationSeconds': durationSeconds,
+    'bitrate': bitrate,
+    'streams': streams.map(_streamToMap).toList(),
+  };
 
   factory ProbeResult.fromMap(Map<dynamic, dynamic> map) {
     final raw = map['streams'];
@@ -34,8 +34,9 @@ class ProbeResult {
   }
 
   MediaStream? get _defaultVideo {
-    final videos =
-        streams.where((s) => s.type == MediaStreamType.video).toList();
+    final videos = streams
+        .where((s) => s.type == MediaStreamType.video)
+        .toList();
     if (videos.isEmpty) return null;
     return videos.firstWhere((s) => s.isDefault, orElse: () => videos.first);
   }
@@ -97,8 +98,10 @@ ProbeResult mapMpvProbe({
   final videoTracks = tracks.where((t) => t['type'] == 'video').toList();
   Map<dynamic, dynamic>? colourTrack;
   if (videoTracks.isNotEmpty) {
-    colourTrack = videoTracks.firstWhere((t) => _bool(t['default']),
-        orElse: () => videoTracks.first);
+    colourTrack = videoTracks.firstWhere(
+      (t) => _bool(t['default']),
+      orElse: () => videoTracks.first,
+    );
   }
 
   final streams = <MediaStream>[];
@@ -111,7 +114,8 @@ ProbeResult mapMpvProbe({
     };
     if (type == null) continue;
     streams.add(
-        _mapTrack(t, type, identical(t, colourTrack) ? videoParams : null));
+      _mapTrack(t, type, identical(t, colourTrack) ? videoParams : null),
+    );
   }
 
   // File size over duration is the real overall rate. FFmpeg often leaves
@@ -200,62 +204,62 @@ double? _double(Object? v) {
 bool _bool(Object? v) => v == true || v == 'yes' || v == 'true';
 
 Map<String, Object?> _streamToMap(MediaStream s) => {
-      'index': s.index,
-      'type': s.type.name,
-      'codec': s.codec,
-      'codecLong': s.codecLong,
-      'profile': s.profile,
-      'level': s.level,
-      'language': s.language,
-      'title': s.title,
-      'bitrate': s.bitrate,
-      'isDefault': s.isDefault,
-      'isForced': s.isForced,
-      'isHearingImpaired': s.isHearingImpaired,
-      'isCommentary': s.isCommentary,
-      'width': s.width,
-      'height': s.height,
-      'frameRate': s.frameRate,
-      'pixelFormat': s.pixelFormat,
-      'bitDepth': s.bitDepth,
-      'colorSpace': s.colorSpace,
-      'colorTransfer': s.colorTransfer,
-      'colorPrimaries': s.colorPrimaries,
-      'dolbyVisionProfile': s.dolbyVisionProfile,
-      'aspectRatio': s.aspectRatio,
-      'channels': s.channels,
-      'channelLayout': s.channelLayout,
-      'sampleRate': s.sampleRate,
-    };
+  'index': s.index,
+  'type': s.type.name,
+  'codec': s.codec,
+  'codecLong': s.codecLong,
+  'profile': s.profile,
+  'level': s.level,
+  'language': s.language,
+  'title': s.title,
+  'bitrate': s.bitrate,
+  'isDefault': s.isDefault,
+  'isForced': s.isForced,
+  'isHearingImpaired': s.isHearingImpaired,
+  'isCommentary': s.isCommentary,
+  'width': s.width,
+  'height': s.height,
+  'frameRate': s.frameRate,
+  'pixelFormat': s.pixelFormat,
+  'bitDepth': s.bitDepth,
+  'colorSpace': s.colorSpace,
+  'colorTransfer': s.colorTransfer,
+  'colorPrimaries': s.colorPrimaries,
+  'dolbyVisionProfile': s.dolbyVisionProfile,
+  'aspectRatio': s.aspectRatio,
+  'channels': s.channels,
+  'channelLayout': s.channelLayout,
+  'sampleRate': s.sampleRate,
+};
 
 MediaStream _streamFromMap(Map<dynamic, dynamic> m) => MediaStream(
-      index: _int(m['index']),
-      type: MediaStreamType.values.firstWhere(
-        (t) => t.name == m['type'],
-        orElse: () => MediaStreamType.video,
-      ),
-      codec: _str(m['codec']),
-      codecLong: _str(m['codecLong']),
-      profile: _str(m['profile']),
-      level: _int(m['level']),
-      language: _str(m['language']),
-      title: _str(m['title']),
-      bitrate: _int(m['bitrate']),
-      isDefault: _bool(m['isDefault']),
-      isForced: _bool(m['isForced']),
-      isHearingImpaired: _bool(m['isHearingImpaired']),
-      isCommentary: _bool(m['isCommentary']),
-      width: _int(m['width']),
-      height: _int(m['height']),
-      frameRate: _double(m['frameRate']),
-      pixelFormat: _str(m['pixelFormat']),
-      bitDepth: _int(m['bitDepth']),
-      colorSpace: _str(m['colorSpace']),
-      colorTransfer: _str(m['colorTransfer']),
-      colorPrimaries: _str(m['colorPrimaries']),
-      dolbyVisionProfile: _int(m['dolbyVisionProfile']),
-      aspectRatio: _str(m['aspectRatio']),
-      channels: _int(m['channels']),
-      channelLayout: _str(m['channelLayout']),
-      sampleRate: _int(m['sampleRate']),
-    );
+  index: _int(m['index']),
+  type: MediaStreamType.values.firstWhere(
+    (t) => t.name == m['type'],
+    orElse: () => MediaStreamType.video,
+  ),
+  codec: _str(m['codec']),
+  codecLong: _str(m['codecLong']),
+  profile: _str(m['profile']),
+  level: _int(m['level']),
+  language: _str(m['language']),
+  title: _str(m['title']),
+  bitrate: _int(m['bitrate']),
+  isDefault: _bool(m['isDefault']),
+  isForced: _bool(m['isForced']),
+  isHearingImpaired: _bool(m['isHearingImpaired']),
+  isCommentary: _bool(m['isCommentary']),
+  width: _int(m['width']),
+  height: _int(m['height']),
+  frameRate: _double(m['frameRate']),
+  pixelFormat: _str(m['pixelFormat']),
+  bitDepth: _int(m['bitDepth']),
+  colorSpace: _str(m['colorSpace']),
+  colorTransfer: _str(m['colorTransfer']),
+  colorPrimaries: _str(m['colorPrimaries']),
+  dolbyVisionProfile: _int(m['dolbyVisionProfile']),
+  aspectRatio: _str(m['aspectRatio']),
+  channels: _int(m['channels']),
+  channelLayout: _str(m['channelLayout']),
+  sampleRate: _int(m['sampleRate']),
+);

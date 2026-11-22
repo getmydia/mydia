@@ -12,7 +12,11 @@ void main() {
     final d = dedupe([
       item(a, 'a1', ids: const ExternalIds(tmdb: '7')),
       item(a, 'a2'),
-      item(b, 'b1', ids: const ExternalIds(tmdb: '7', imdb: 'tt7')),
+      item(
+        b,
+        'b1',
+        ids: const ExternalIds(tmdb: '7', imdb: 'tt7'),
+      ),
     ], order);
     expect(d.items.map((i) => i.ref.externalId), ['a1', 'a2']);
     expect(d.extraCopies, {d.items.first.ref: 1});
@@ -21,7 +25,12 @@ void main() {
   test('a different kind never matches', () {
     final d = dedupe([
       item(a, 'm', ids: const ExternalIds(tmdb: '7')),
-      item(b, 's', kind: ItemKind.show, ids: const ExternalIds(tmdb: '7')),
+      item(
+        b,
+        's',
+        kind: ItemKind.show,
+        ids: const ExternalIds(tmdb: '7'),
+      ),
     ], order);
     expect(d.items, hasLength(2));
     expect(d.extraCopies, isEmpty);
@@ -30,7 +39,11 @@ void main() {
   test('matching is transitive across different ids', () {
     final d = dedupe([
       item(a, 'a1', ids: const ExternalIds(tmdb: '1')),
-      item(b, 'b1', ids: const ExternalIds(tmdb: '1', imdb: 'tt1')),
+      item(
+        b,
+        'b1',
+        ids: const ExternalIds(tmdb: '1', imdb: 'tt1'),
+      ),
       item(c, 'c1', ids: const ExternalIds(imdb: 'tt1')),
     ], order);
     expect(d.items, hasLength(1));

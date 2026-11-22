@@ -27,17 +27,16 @@ EpisodeView testEpisodeView({
     DetailFeature.watched,
     DetailFeature.download,
   },
-}) =>
-    EpisodeView(
-      target: SourceTarget(testEpisodeRef(id)),
-      showTitle: 'Test Show',
-      seasonNumber: seasonNumber,
-      episodeNumber: episodeNumber,
-      title: title,
-      overview: overview,
-      still: thumbnailUrl == null ? null : UrlArt(thumbnailUrl),
-      progress: progress,
-      files: files,
-      hasFile: hasFile,
-      features: features,
-    );
+}) => EpisodeView(
+  target: SourceTarget(testEpisodeRef(id)),
+  showTitle: 'Test Show',
+  seasonNumber: seasonNumber,
+  episodeNumber: episodeNumber,
+  title: title,
+  overview: overview,
+  still: thumbnailUrl == null ? null : UrlArt(thumbnailUrl),
+  progress: progress,
+  files: files,
+  hasFile: hasFile,
+  features: features,
+);

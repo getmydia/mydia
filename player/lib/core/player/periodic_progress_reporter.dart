@@ -38,8 +38,11 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
   static const _seekJump = Duration(seconds: 3);
 
   @override
-  void start(Player player,
-      {required String mediaType, required String mediaId}) {
+  void start(
+    Player player, {
+    required String mediaType,
+    required String mediaId,
+  }) {
     stopSync();
     _timer = Timer.periodic(interval, (_) => unawaited(_report(player)));
     _playing = player.stream.playing.listen((_) => unawaited(_report(player)));
@@ -58,12 +61,14 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
     Player player, {
     required String mediaType,
     required String mediaId,
-  }) =>
-      _report(player);
+  }) => _report(player);
 
   @override
   bool isWatched(Player player) => ProgressService.isWatchedAt(
-      player.state.position, player.state.duration, timeline);
+    player.state.position,
+    player.state.duration,
+    timeline,
+  );
 
   @override
   void stopSync() {
@@ -84,22 +89,35 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
     final last = _last;
     if (last == null || _stopped) return;
     _stopped = true;
-    unawaited(_inFlight.then((_) => _guard(() => sendStopped(
-          positionSeconds: last.positionSeconds,
-          durationSeconds: last.durationSeconds,
-        ))));
+    unawaited(
+      _inFlight.then(
+        (_) => _guard(
+          () => sendStopped(
+            positionSeconds: last.positionSeconds,
+            durationSeconds: last.durationSeconds,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _report(Player player) async {
     final sync = ProgressService.resolveSync(
-        player.state.position, player.state.duration, timeline);
+      player.state.position,
+      player.state.duration,
+      timeline,
+    );
     if (sync == null || _disposed) return;
     _last = sync;
-    final progress = _track(_guard(() => sendProgress(
+    final progress = _track(
+      _guard(
+        () => sendProgress(
           positionSeconds: sync.positionSeconds,
           durationSeconds: sync.durationSeconds,
           paused: !player.state.playing,
-        )));
+        ),
+      ),
+    );
     await progress;
     if (!_disposed && !_watchedSent && isWatched(player)) {
       _watchedSent = true;

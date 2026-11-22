@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'codec_profile.dart';
 import 'mac_video_output.dart';
 import 'device_profile_web.dart'
-    if (dart.library.io) 'device_profile_native.dart' as platform;
+    if (dart.library.io) 'device_profile_native.dart'
+    as platform;
 
 export 'codec_profile.dart'
     show CodecProfile, ProfileComparison, ProfileCondition, ProfileProperty;
@@ -38,46 +39,45 @@ class DeviceProfile {
   DeviceProfile copyWith({
     List<CodecProfile>? codecProfiles,
     List<String>? hdrFormats,
-  }) =>
-      DeviceProfile(
-        containers: containers,
-        videoCodecs: videoCodecs,
-        audioCodecs: audioCodecs,
-        hdrFormats: hdrFormats ?? this.hdrFormats,
-        codecProfiles: codecProfiles ?? this.codecProfiles,
-      );
+  }) => DeviceProfile(
+    containers: containers,
+    videoCodecs: videoCodecs,
+    audioCodecs: audioCodecs,
+    hdrFormats: hdrFormats ?? this.hdrFormats,
+    codecProfiles: codecProfiles ?? this.codecProfiles,
+  );
 
   /// What browsers decode. Mirrors `DeviceProfile.browser_default/0` on the
   /// server, so a web client asserts nothing the server would not have assumed.
   const DeviceProfile.webDefault()
-      : containers = const ['mp4', 'webm', 'm4v'],
-        videoCodecs = const [
-          'h264',
-          'h.264',
-          'avc',
-          'avc1',
-          'vp9',
-          'vp09',
-          'av1',
-          'av01',
-        ],
-        audioCodecs = const ['aac', 'mp3', 'opus', 'vorbis'],
-        hdrFormats = const [],
-        // A browser enforces its own codec support at `canPlayType`, and this
-        // client has no capability table to read, so it constrains nothing.
-        codecProfiles = const [];
+    : containers = const ['mp4', 'webm', 'm4v'],
+      videoCodecs = const [
+        'h264',
+        'h.264',
+        'avc',
+        'avc1',
+        'vp9',
+        'vp09',
+        'av1',
+        'av01',
+      ],
+      audioCodecs = const ['aac', 'mp3', 'opus', 'vorbis'],
+      hdrFormats = const [],
+      // A browser enforces its own codec support at `canPlayType`, and this
+      // client has no capability table to read, so it constrains nothing.
+      codecProfiles = const [];
 
   Map<String, dynamic> toJson() => {
-        'containers': containers,
-        'videoCodecs': videoCodecs,
-        'audioCodecs': audioCodecs,
-        'hdrFormats': hdrFormats,
-        // Omitted entirely when empty. An older server ignores the key either
-        // way, but sending nothing keeps the header at the size it has always
-        // been for clients with nothing to constrain.
-        if (codecProfiles.isNotEmpty)
-          'codecProfiles': codecProfiles.map((p) => p.toJson()).toList(),
-      };
+    'containers': containers,
+    'videoCodecs': videoCodecs,
+    'audioCodecs': audioCodecs,
+    'hdrFormats': hdrFormats,
+    // Omitted entirely when empty. An older server ignores the key either
+    // way, but sending nothing keeps the header at the size it has always
+    // been for clients with nothing to constrain.
+    if (codecProfiles.isNotEmpty)
+      'codecProfiles': codecProfiles.map((p) => p.toJson()).toList(),
+  };
 
   /// Unpadded base64url of the JSON, which is what the server's plug decodes.
   String toHeaderValue() {
@@ -99,8 +99,7 @@ class DeviceProfile {
 /// follows; it is ignored on every other platform.
 Future<DeviceProfile> detectDeviceProfile({
   Future<VideoOutputPath> Function()? resolveMacOutputPath,
-}) =>
-    platform.detectDeviceProfile(resolveMacOutputPath: resolveMacOutputPath);
+}) => platform.detectDeviceProfile(resolveMacOutputPath: resolveMacOutputPath);
 
 /// A mutable, session-lived slot for the profile [detectDeviceProfile]
 /// eventually resolves to.

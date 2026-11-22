@@ -31,10 +31,10 @@ class _Host extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
-        body: isOffline(ref.watch(routeSourceStatusProvider(location)))
-            ? OfflineBanner(location: location)
-            : const SizedBox.shrink(),
-      );
+    body: isOffline(ref.watch(routeSourceStatusProvider(location)))
+        ? OfflineBanner(location: location)
+        : const SizedBox.shrink(),
+  );
 }
 
 void main() {
@@ -52,31 +52,38 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester, {String location = '/'}) async {
-    container = ProviderContainer(overrides: [
-      selectedSourceIdProvider.overrideWith(_Selected.new),
-      activeSourceIdProvider
-          .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
-      mediaSourceProvider(_idA).overrideWith((ref) {
-        builtA++;
-        return a;
-      }),
-      mediaSourceProvider(_idB).overrideWith((ref) {
-        builtB++;
-        return b;
-      }),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        selectedSourceIdProvider.overrideWith(_Selected.new),
+        activeSourceIdProvider.overrideWith(
+          (ref) => ref.watch(selectedSourceIdProvider),
+        ),
+        mediaSourceProvider(_idA).overrideWith((ref) {
+          builtA++;
+          return a;
+        }),
+        mediaSourceProvider(_idB).overrideWith((ref) {
+          builtB++;
+          return b;
+        }),
+      ],
+    );
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: _Host(location: location)),
-    ));
+          home: _Host(location: location),
+        ),
+      ),
+    );
   }
 
-  testWidgets('shows with Retry while unreachable, hides when remote',
-      (tester) async {
+  testWidgets('shows with Retry while unreachable, hides when remote', (
+    tester,
+  ) async {
     a.setStatus(SourceConnectionStatus.unreachable);
     await pump(tester);
 
@@ -88,8 +95,9 @@ void main() {
     expect(find.byType(OfflineBanner), findsNothing);
   });
 
-  testWidgets('only the current source decides: A offline, B fine',
-      (tester) async {
+  testWidgets('only the current source decides: A offline, B fine', (
+    tester,
+  ) async {
     a.setStatus(SourceConnectionStatus.unreachable);
     await pump(tester);
     expect(find.byType(OfflineBanner), findsOneWidget);
@@ -114,8 +122,9 @@ void main() {
     expect(builtA, 2);
   });
 
-  testWidgets('Retry rebuilds the source on screen, not the active one',
-      (tester) async {
+  testWidgets('Retry rebuilds the source on screen, not the active one', (
+    tester,
+  ) async {
     b.setStatus(SourceConnectionStatus.unreachable);
     await pump(tester, location: '/s/${_idB.value}');
     expect(find.byType(OfflineBanner), findsOneWidget);

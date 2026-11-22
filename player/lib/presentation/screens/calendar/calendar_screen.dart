@@ -128,8 +128,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       padding: EdgeInsets.only(top: scrollTopPadding + 80, left: 32, right: 32),
       child: Column(
         children: [
-          Icon(Icons.calendar_month_outlined,
-              size: 48, color: palette.textDisabled),
+          Icon(
+            Icons.calendar_month_outlined,
+            size: 48,
+            color: palette.textDisabled,
+          ),
           const SizedBox(height: 16),
           Text(
             context.l10n.calendarEmptyTitle,
@@ -151,8 +154,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     if (isCalendarUnsupported(error)) {
       return Padding(
         key: const ValueKey('calendar-unsupported'),
-        padding:
-            EdgeInsets.only(top: scrollTopPadding + 80, left: 32, right: 32),
+        padding: EdgeInsets.only(
+          top: scrollTopPadding + 80,
+          left: 32,
+          right: 32,
+        ),
         child: Column(
           children: [
             Icon(Icons.update, size: 48, color: palette.textDisabled),

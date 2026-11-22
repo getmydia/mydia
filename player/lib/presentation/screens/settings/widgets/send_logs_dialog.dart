@@ -13,16 +13,15 @@ import '../../../widgets/glass/glass_dialog.dart';
 Future<void> showSendLogsDialog(
   BuildContext context, {
   required Future<String> Function(String? note) send,
-}) =>
-    showDialog<void>(
-      context: context,
-      // A tap outside must not drop an in-flight upload: the code the relay
-      // hands back would be lost, and the user's next move would be to send
-      // the same logs again. See the PopScope in build() for the back-press
-      // equivalent.
-      barrierDismissible: false,
-      builder: (_) => SendLogsDialog(send: send),
-    );
+}) => showDialog<void>(
+  context: context,
+  // A tap outside must not drop an in-flight upload: the code the relay
+  // hands back would be lost, and the user's next move would be to send
+  // the same logs again. See the PopScope in build() for the back-press
+  // equivalent.
+  barrierDismissible: false,
+  builder: (_) => SendLogsDialog(send: send),
+);
 
 class SendLogsDialog extends StatefulWidget {
   const SendLogsDialog({
@@ -79,17 +78,17 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
   }
 
   Widget _noteField() => TextField(
-        key: const Key('diagnostics-send-logs-note'),
-        controller: _note,
-        maxLength: 2000,
-        maxLines: _tv ? 1 : 3,
-        autofocus: _tv,
-        textInputAction: _tv ? TextInputAction.done : null,
-        onSubmitted: _tv ? (_) => _stopEditingNote() : null,
-        decoration: InputDecoration(
-          labelText: context.l10n.settingsDiagnosticsNoteLabel,
-        ),
-      );
+    key: const Key('diagnostics-send-logs-note'),
+    controller: _note,
+    maxLength: 2000,
+    maxLines: _tv ? 1 : 3,
+    autofocus: _tv,
+    textInputAction: _tv ? TextInputAction.done : null,
+    onSubmitted: _tv ? (_) => _stopEditingNote() : null,
+    decoration: InputDecoration(
+      labelText: context.l10n.settingsDiagnosticsNoteLabel,
+    ),
+  );
 
   Widget _noteRow() {
     final note = _note.text.trim();
@@ -177,67 +176,69 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
         content: switch (_phase) {
           _Phase.editing => _tv && !_editingNote ? _noteRow() : _noteField(),
           _Phase.sending => const SizedBox(
-              height: 48,
-              child: Center(child: CircularProgressIndicator()),
-            ),
+            height: 48,
+            child: Center(child: CircularProgressIndicator()),
+          ),
           _Phase.sent => Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(l10n.settingsDiagnosticsShareCode),
-                const SizedBox(height: 8),
-                SelectableText(
-                  _code!,
-                  key: const Key('diagnostics-report-code'),
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5,
-                  ),
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.settingsDiagnosticsShareCode),
+              const SizedBox(height: 8),
+              SelectableText(
+                _code!,
+                key: const Key('diagnostics-report-code'),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.5,
                 ),
-              ],
-            ),
-          _Phase.failed =>
-            Text(_error!, key: const Key('diagnostics-report-error')),
+              ),
+            ],
+          ),
+          _Phase.failed => Text(
+            _error!,
+            key: const Key('diagnostics-report-error'),
+          ),
         },
         actions: switch (_phase) {
           _Phase.editing => [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(l10n.commonCancel),
-              ),
-              FilledButton(
-                key: const Key('diagnostics-send-logs-confirm'),
-                // Focused on open regardless of what GlassDialog's own
-                // fallback does, so a remote press lands on Send.
-                autofocus: true,
-                onPressed: _send,
-                child: Text(l10n.commonSend),
-              ),
-            ],
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.commonCancel),
+            ),
+            FilledButton(
+              key: const Key('diagnostics-send-logs-confirm'),
+              // Focused on open regardless of what GlassDialog's own
+              // fallback does, so a remote press lands on Send.
+              autofocus: true,
+              onPressed: _send,
+              child: Text(l10n.commonSend),
+            ),
+          ],
           _Phase.sending => const <Widget>[],
           _Phase.sent => [
-              TextButton(
-                key: const Key('diagnostics-report-copy'),
-                onPressed: _copy,
-                child: Text(l10n.commonCopy),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(l10n.commonDone),
-              ),
-            ],
+            TextButton(
+              key: const Key('diagnostics-report-copy'),
+              onPressed: _copy,
+              child: Text(l10n.commonCopy),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.commonDone),
+            ),
+          ],
           _Phase.failed => [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(l10n.commonClose),
-              ),
-              FilledButton(
-                key: const Key('diagnostics-report-retry'),
-                onPressed: _send,
-                child: Text(l10n.commonRetry),
-              ),
-            ],
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.commonClose),
+            ),
+            FilledButton(
+              key: const Key('diagnostics-report-retry'),
+              onPressed: _send,
+              child: Text(l10n.commonRetry),
+            ),
+          ],
         },
       ),
     );

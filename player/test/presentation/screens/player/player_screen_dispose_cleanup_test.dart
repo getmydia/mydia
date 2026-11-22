@@ -18,65 +18,81 @@ import 'player_screen_test_harness.dart';
 
 void main() {
   testWidgets(
-      'dispose() stops the local P2P proxy when the connection is in P2P '
-      'mode, with no ref-safety error', (tester) async {
-    final castManager = CapturingCastSessionManager();
-    final proxyService = TrackingLocalProxyService();
+    'dispose() stops the local P2P proxy when the connection is in P2P '
+    'mode, with no ref-safety error',
+    (tester) async {
+      final castManager = CapturingCastSessionManager();
+      final proxyService = TrackingLocalProxyService();
 
-    // The target is pre-set, like `CastButton` on a detail screen, so
-    // `_castToTargetIfSet` short-circuits `_initializePlayer` before it ever
-    // reaches HLS negotiation. This test only needs the P2P connection
-    // state, nothing about the streaming candidates or progress queries this
-    // scenario never reaches.
-    //
-    // The pre-play queries now fire concurrently (see `runIsolated`), so an
-    // ordered `ScriptedMydiaTransport.responses` list can no longer script
-    // them -- dispatch on the operation instead.
-    final server = ScriptedMydiaTransport((request, index) {
-      if (request.operation == 'MovieDetail') return movieDetailResponse();
-      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
-      if (request.operation == 'SubtitleTrackSettings') {
-        return subtitleTrackSettingsResponse();
-      }
-      if (request.operation == 'MovieSubtitlePreference') {
-        return subtitlePreferenceResponse();
-      }
-      return streamingCandidatesResponse(duration: 5400);
-    });
+      // The target is pre-set, like `CastButton` on a detail screen, so
+      // `_castToTargetIfSet` short-circuits `_initializePlayer` before it ever
+      // reaches HLS negotiation. This test only needs the P2P connection
+      // state, nothing about the streaming candidates or progress queries this
+      // scenario never reaches.
+      //
+      // The pre-play queries now fire concurrently (see `runIsolated`), so an
+      // ordered `ScriptedMydiaTransport.responses` list can no longer script
+      // them -- dispatch on the operation instead.
+      final server = ScriptedMydiaTransport((request, index) {
+        if (request.operation == 'MovieDetail') return movieDetailResponse();
+        if (request.operation == 'MovieSegments') {
+          return movieSegmentsResponse();
+        }
+        if (request.operation == 'SubtitleTrackSettings') {
+          return subtitleTrackSettingsResponse();
+        }
+        if (request.operation == 'MovieSubtitlePreference') {
+          return subtitlePreferenceResponse();
+        }
+        return streamingCandidatesResponse(duration: 5400);
+      });
 
-    final container = buildPlayerScreenContainer(
-      server: server,
-      connectionState: HarnessLink.p2p(serverNodeAddr: 'peer-1'),
-      castManager: castManager,
-      proxyService: proxyService,
-    );
-    addTearDown(container.dispose);
+      final container = buildPlayerScreenContainer(
+        server: server,
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'peer-1'),
+        castManager: castManager,
+        proxyService: proxyService,
+      );
+      addTearDown(container.dispose);
 
-    container.read(castTargetProvider.notifier).set(testDevice);
+      container.read(castTargetProvider.notifier).set(testDevice);
 
-    await pumpPlayerScreen(tester, container);
-    await pumpUntil(tester, () => castManager.capturedRequest != null);
-    expect(castManager.capturedRequest, isNotNull,
-        reason: 'sanity check: the cast short-circuit must actually have '
+      await pumpPlayerScreen(tester, container);
+      await pumpUntil(tester, () => castManager.capturedRequest != null);
+      expect(
+        castManager.capturedRequest,
+        isNotNull,
+        reason:
+            'sanity check: the cast short-circuit must actually have '
             'run before dispose, or this test proves nothing about the P2P '
-            'mode captured at that point');
-    expect(proxyService.stopped, isFalse,
-        reason: 'stop() must not fire until dispose — otherwise this test '
-            'could pass even if dispose() never called it');
+            'mode captured at that point',
+      );
+      expect(
+        proxyService.stopped,
+        isFalse,
+        reason:
+            'stop() must not fire until dispose — otherwise this test '
+            'could pass even if dispose() never called it',
+      );
 
-    // Unmount. Before the fix, `_PlayerScreenState.dispose()` throws here
-    // (see this file's header) — that exception is reported through
-    // Flutter's own error-reporting zone rather than at this `await`, which
-    // is why `tester.takeException()`, not a try/catch, is what would
-    // surface it. It's asserted null explicitly below rather than merely
-    // relying on the test framework to fail on an unconsumed error, so a
-    // regression here reads as a clear assertion failure instead of a wall
-    // of framework stack trace.
-    await tester.pumpWidget(const SizedBox());
-    expect(tester.takeException(), isNull);
+      // Unmount. Before the fix, `_PlayerScreenState.dispose()` throws here
+      // (see this file's header) — that exception is reported through
+      // Flutter's own error-reporting zone rather than at this `await`, which
+      // is why `tester.takeException()`, not a try/catch, is what would
+      // surface it. It's asserted null explicitly below rather than merely
+      // relying on the test framework to fail on an unconsumed error, so a
+      // regression here reads as a clear assertion failure instead of a wall
+      // of framework stack trace.
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
 
-    expect(proxyService.stopped, isTrue,
-        reason: '_terminateHlsSession must have called proxy.stop() during '
-            'dispose(), since the connection was in P2P mode throughout');
-  });
+      expect(
+        proxyService.stopped,
+        isTrue,
+        reason:
+            '_terminateHlsSession must have called proxy.stop() during '
+            'dispose(), since the connection was in P2P mode throughout',
+      );
+    },
+  );
 }

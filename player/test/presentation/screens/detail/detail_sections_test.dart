@@ -23,13 +23,14 @@ Future<void> _pump(WidgetTester tester, Widget child, {double width = 1000}) {
 void main() {
   group('DetailHeroBody', () {
     Widget body() => DetailHeroBody(
-          actionColumn: (compact) =>
-              Text(compact ? 'compact' : 'full', key: const Key('actions')),
-          tagColumn: const Text('tags', key: Key('tags')),
-        );
+      actionColumn: (compact) =>
+          Text(compact ? 'compact' : 'full', key: const Key('actions')),
+      tagColumn: const Text('tags', key: Key('tags')),
+    );
 
-    testWidgets('sits side by side, compact, at or above the breakpoint',
-        (tester) async {
+    testWidgets('sits side by side, compact, at or above the breakpoint', (
+      tester,
+    ) async {
       await _pump(tester, body(), width: kDetailHeroBreakpoint);
 
       expect(find.text('compact'), findsOneWidget);
@@ -62,20 +63,22 @@ void main() {
 
       expect(find.text('leading'), findsOneWidget);
       expect(find.text('4K'), findsOneWidget);
-      expect(find.text('A lighthouse keeper inherits an orchard.'),
-          findsOneWidget);
+      expect(
+        find.text('A lighthouse keeper inherits an orchard.'),
+        findsOneWidget,
+      );
       expect(find.text('7.9'), findsOneWidget);
       expect(find.text('TMDB'), findsOneWidget);
     });
 
-    testWidgets('tag chips are 12% white, 8 radius, borderless',
-        (tester) async {
+    testWidgets('tag chips are 12% white, 8 radius, borderless', (
+      tester,
+    ) async {
       await _pump(tester, const DetailTagColumn(tags: ['4K']));
 
-      final chip = tester.widget<Container>(find.ancestor(
-        of: find.text('4K'),
-        matching: find.byType(Container),
-      ));
+      final chip = tester.widget<Container>(
+        find.ancestor(of: find.text('4K'), matching: find.byType(Container)),
+      );
       final decoration = chip.decoration! as BoxDecoration;
       expect(decoration.color, Colors.white.withValues(alpha: 0.12));
       expect(decoration.border, isNull);
@@ -92,17 +95,18 @@ void main() {
 
   group('DetailMetadataChip', () {
     testWidgets('uses the unified chip values', (tester) async {
-      await _pump(
-        tester,
-        const DetailMetadataChip(label: 'Ended'),
-      );
+      await _pump(tester, const DetailMetadataChip(label: 'Ended'));
 
       final box = tester.widget<Container>(find.byType(Container));
       final decoration = box.decoration! as BoxDecoration;
-      expect(decoration.color,
-          Palettes.projectionBooth.textSecondary.withValues(alpha: 0.15));
       expect(
-          box.padding, const EdgeInsets.symmetric(horizontal: 12, vertical: 6));
+        decoration.color,
+        Palettes.projectionBooth.textSecondary.withValues(alpha: 0.15),
+      );
+      expect(
+        box.padding,
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      );
       expect(find.byType(Icon), findsNothing);
     });
 

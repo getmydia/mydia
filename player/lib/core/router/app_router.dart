@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
 // Conditional import for web URL handling
-import 'web_url_stub.dart' if (dart.library.js_interop) 'web_url.dart'
+import 'web_url_stub.dart'
+    if (dart.library.js_interop) 'web_url.dart'
     as web_url;
 import 'source_detail_routes.dart';
 import '../sources/all_servers_inclusion.dart';
@@ -141,13 +143,13 @@ SourceId? _sourceIdIn(String location) {
 /// A source's search; `?q=` fills the box, which is where the legacy
 /// `/search?q=` redirect lands.
 GoRoute sourceSearchRoute() => GoRoute(
-      path: '/s/:sourceId/search',
-      name: 'source_search',
-      builder: (context, state) => SourceSearchScreen(
-        sourceId: SourceId(state.pathParameters['sourceId']!),
-        initialQuery: state.uri.queryParameters['q'],
-      ),
-    );
+  path: '/s/:sourceId/search',
+  name: 'source_search',
+  builder: (context, state) => SourceSearchScreen(
+    sourceId: SourceId(state.pathParameters['sourceId']!),
+    initialQuery: state.uri.queryParameters['q'],
+  ),
+);
 
 Widget _legacyStub(BuildContext context, GoRouterState state) =>
     const SizedBox.shrink();
@@ -158,32 +160,32 @@ final List<(String, String, Widget Function(SourceId))> _sourceListings = [
   (
     SourceListing.collections.segment,
     'source_collections',
-    (id) => CollectionsScreen(sourceId: id)
+    (id) => CollectionsScreen(sourceId: id),
   ),
   (
     SourceListing.calendar.segment,
     'source_calendar',
-    (id) => CalendarScreen(sourceId: id)
+    (id) => CalendarScreen(sourceId: id),
   ),
   (
     SourceListing.favorites.segment,
     'source_favorites',
-    (id) => FavoritesScreen(sourceId: id)
+    (id) => FavoritesScreen(sourceId: id),
   ),
   (
     SourceListing.unwatched.segment,
     'source_unwatched',
-    (id) => UnwatchedScreen(sourceId: id)
+    (id) => UnwatchedScreen(sourceId: id),
   ),
   (
     SourceListing.recentlyAdded.segment,
     'source_recently_added',
-    (id) => RecentlyAddedScreen(sourceId: id)
+    (id) => RecentlyAddedScreen(sourceId: id),
   ),
   (
     SourceListing.continueWatching.segment,
     'source_continue_watching',
-    (id) => ContinueWatchingScreen(sourceId: id)
+    (id) => ContinueWatchingScreen(sourceId: id),
   ),
 ];
 
@@ -193,8 +195,7 @@ final List<(String, String, Widget Function(SourceId))> _sourceListings = [
 String? allServersRouteRedirect({
   required bool sourcesLoading,
   required int included,
-}) =>
-    sourcesLoading ? null : allServersRedirect(included);
+}) => sourcesLoading ? null : allServersRedirect(included);
 
 /// Where `/sources/add/mydia` redirects: an instance-hosted web player that
 /// already has its Mydia account cannot add servers of its own. With no
@@ -202,23 +203,22 @@ String? allServersRouteRedirect({
 String? addMydiaRouteRedirect({
   required bool hasMydia,
   bool? instanceHostedWeb,
-}) =>
-    (instanceHostedWeb ?? isInstanceHostedWeb) && hasMydia ? '/' : null;
+}) => (instanceHostedWeb ?? isInstanceHostedWeb) && hasMydia ? '/' : null;
 
 /// Where signing files account [accountId] in again goes: Add folder for
 /// this device's folders, the SMB, S3 or WebDAV form, address filled in, for
 /// a share or bucket.
 String filesReauthLocation(String? accountId) =>
     accountId == null || accountId == kFilesLocalAccountId
-        ? '/sources/add/folder'
-        : Uri(
-            path: isSmbAccountId(accountId)
-                ? '/sources/add/smb'
-                : isS3AccountId(accountId)
-                    ? '/sources/add/s3'
-                    : '/sources/add/webdav',
-            queryParameters: {'account': accountId},
-          ).toString();
+    ? '/sources/add/folder'
+    : Uri(
+        path: isSmbAccountId(accountId)
+            ? '/sources/add/smb'
+            : isS3AccountId(accountId)
+            ? '/sources/add/s3'
+            : '/sources/add/webdav',
+        queryParameters: {'account': accountId},
+      ).toString();
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
@@ -250,7 +250,8 @@ String? appRedirect({
   // Reached from the login screen's "Connect another server instead" and
   // "Show hidden servers" (Manage servers, after the unlock screen), and
   // "Restore from backup" on both.
-  final isSignedOutSourcesRoute = location == '/sources/add' ||
+  final isSignedOutSourcesRoute =
+      location == '/sources/add' ||
       location.startsWith('/sources/add/') ||
       location == '/sources/manage' ||
       location == restoreBackupLocation;
@@ -274,12 +275,12 @@ GoRouter appRouter(Ref ref) {
   final refreshNotifier = _RouterRefreshNotifier();
 
   // A first third-party source (Plex, Jellyfin or Stash) makes the app usable without Mydia.
-  ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
-  ref.listen(sourcesLoadingProvider, (_, __) => refreshNotifier.refresh());
-  ref.listen(selectedSourceIdProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(thirdPartySourcesProvider, (_, _) => refreshNotifier.refresh());
+  ref.listen(sourcesLoadingProvider, (_, _) => refreshNotifier.refresh());
+  ref.listen(selectedSourceIdProvider, (_, _) => refreshNotifier.refresh());
   // Where an old unprefixed location lands depends on which instances exist.
-  ref.listen(legacyMydiaSourceIdProvider, (_, __) => refreshNotifier.refresh());
-  ref.listen(mydiaSourceIdsProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(legacyMydiaSourceIdProvider, (_, _) => refreshNotifier.refresh());
+  ref.listen(mydiaSourceIdsProvider, (_, _) => refreshNotifier.refresh());
   // Whether `/` and `/all*` open All servers depends on how many servers it
   // includes, counted from providers this router already reads. Listening
   // to a provider that joins the source list with the All servers choices
@@ -288,12 +289,12 @@ GoRouter appRouter(Ref ref) {
   // keepAlive router tripped an assertion when the container was disposed.
   // A choice made in Manage servers is picked up by the next redirect.
   int includedCount() => allServersIncluded(
-        ref.read(thirdPartySourcesProvider),
-        ref.read(allServersChoicesProvider),
-        ref.read(gatedSourceIdsProvider),
-      ).length;
+    ref.read(thirdPartySourcesProvider),
+    ref.read(allServersChoicesProvider),
+    ref.read(gatedSourceIdsProvider),
+  ).length;
   // A relock while a gated screen is open sends it to /unlock.
-  ref.listen(gatedSourceIdsProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(gatedSourceIdsProvider, (_, _) => refreshNotifier.refresh());
 
   // Dispose the notifier when the provider is disposed
   ref.onDispose(() {
@@ -328,8 +329,10 @@ GoRouter appRouter(Ref ref) {
         ),
       );
       if (target != null) {
-        debugPrint('[AppRouter] Redirecting ${state.matchedLocation} '
-            'to $target');
+        debugPrint(
+          '[AppRouter] Redirecting ${state.matchedLocation} '
+          'to $target',
+        );
       }
       return target;
     },
@@ -368,8 +371,10 @@ GoRouter appRouter(Ref ref) {
             ref.read(isWebProvider) ? '/sources/add' : null,
         // `?store=icloud` opens straight on that store's backup.
         builder: (context, state) => RestoreBackupScreen(
-            initialStore:
-                BackupStoreKind.parse(state.uri.queryParameters['store'])),
+          initialStore: BackupStoreKind.parse(
+            state.uri.queryParameters['store'],
+          ),
+        ),
       ),
       GoRoute(
         path: '/sources/add/plex',
@@ -405,17 +410,15 @@ GoRouter appRouter(Ref ref) {
         path: '/sources/add/smb',
         name: 'add_source_smb',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => AddSmbScreen(
-          reauthAccountId: state.uri.queryParameters['account'],
-        ),
+        builder: (context, state) =>
+            AddSmbScreen(reauthAccountId: state.uri.queryParameters['account']),
       ),
       GoRoute(
         path: '/sources/add/s3',
         name: 'add_source_s3',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => AddS3Screen(
-          reauthAccountId: state.uri.queryParameters['account'],
-        ),
+        builder: (context, state) =>
+            AddS3Screen(reauthAccountId: state.uri.queryParameters['account']),
       ),
       // Signing a files account in again (`SettingsNav.reauth`): the folder
       // picker for this device, the login form for a WebDAV share.
@@ -440,14 +443,16 @@ GoRouter appRouter(Ref ref) {
         name: 'add_source_mydia',
         parentNavigatorKey: rootNavigatorKey,
         redirect: (context, state) => addMydiaRouteRedirect(
-          hasMydia: ref.read(sourceRecordsProvider).value?.accounts.any(
-                    (r) => r.account.kind == SourceKind.mydia,
-                  ) ??
+          hasMydia:
+              ref
+                  .read(sourceRecordsProvider)
+                  .value
+                  ?.accounts
+                  .any((r) => r.account.kind == SourceKind.mydia) ??
               false,
         ),
-        builder: (context, state) => LoginScreen(
-          reauthAccountId: state.uri.queryParameters['account'],
-        ),
+        builder: (context, state) =>
+            LoginScreen(reauthAccountId: state.uri.queryParameters['account']),
       ),
 
       GoRoute(
@@ -464,9 +469,8 @@ GoRouter appRouter(Ref ref) {
         path: '/sources/manage/account/:accountId',
         name: 'manage_account',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => AccountDetailPage(
-          accountId: state.pathParameters['accountId']!,
-        ),
+        builder: (context, state) =>
+            AccountDetailPage(accountId: state.pathParameters['accountId']!),
       ),
       // One Mydia instance's settings; also where `/settings/devices` lands.
       GoRoute(
@@ -487,38 +491,20 @@ GoRouter appRouter(Ref ref) {
         // shell page (Home, Movies...) as a page covering the shell, hiding
         // the macOS sidebar on all of them.
         notifyRootObserver: false,
-        builder: (context, state, child) => AppShell(
-          location: state.matchedLocation,
-          child: child,
-        ),
+        builder: (context, state, child) =>
+            AppShell(location: state.matchedLocation, child: child),
         // Every page insets itself by the rail (`shellPages`); the shell
         // navigator spans the window so full-bleed pages can paint under it.
         routes: shellPages([
-          GoRoute(
-            path: '/',
-            name: 'home',
-            builder: _legacyStub,
-          ),
+          GoRoute(path: '/', name: 'home', builder: _legacyStub),
           GoRoute(
             path: '/movies',
             name: 'movies_library',
             builder: _legacyStub,
           ),
-          GoRoute(
-            path: '/shows',
-            name: 'shows_library',
-            builder: _legacyStub,
-          ),
-          GoRoute(
-            path: '/filter/:id',
-            name: 'filter',
-            builder: _legacyStub,
-          ),
-          GoRoute(
-            path: '/favorites',
-            name: 'favorites',
-            builder: _legacyStub,
-          ),
+          GoRoute(path: '/shows', name: 'shows_library', builder: _legacyStub),
+          GoRoute(path: '/filter/:id', name: 'filter', builder: _legacyStub),
+          GoRoute(path: '/favorites', name: 'favorites', builder: _legacyStub),
           GoRoute(
             path: '/recently-added',
             name: 'recently_added',
@@ -529,16 +515,8 @@ GoRouter appRouter(Ref ref) {
             name: 'continue_watching',
             builder: _legacyStub,
           ),
-          GoRoute(
-            path: '/unwatched',
-            name: 'unwatched',
-            builder: _legacyStub,
-          ),
-          GoRoute(
-            path: '/calendar',
-            name: 'calendar',
-            builder: _legacyStub,
-          ),
+          GoRoute(path: '/unwatched', name: 'unwatched', builder: _legacyStub),
+          GoRoute(path: '/calendar', name: 'calendar', builder: _legacyStub),
           GoRoute(
             path: '/collections',
             name: 'collections',
@@ -601,7 +579,8 @@ GoRouter appRouter(Ref ref) {
               included: includedCount(),
             ),
             builder: (context, state) => const AllServersListingScreen(
-                listing: AllServersListing.continueWatching),
+              listing: AllServersListing.continueWatching,
+            ),
           ),
           GoRoute(
             path: allServersRecentlyAddedLocation,
@@ -627,7 +606,8 @@ GoRouter appRouter(Ref ref) {
               included: includedCount(),
             ),
             builder: (context, state) => const AllServersListingScreen(
-                listing: AllServersListing.favorites),
+              listing: AllServersListing.favorites,
+            ),
           ),
           GoRoute(
             path: allServersCollectionsLocation,
@@ -681,11 +661,7 @@ GoRouter appRouter(Ref ref) {
               filterId: state.pathParameters['filterId']!,
             ),
           ),
-          GoRoute(
-            path: '/search',
-            name: 'search',
-            builder: _legacyStub,
-          ),
+          GoRoute(path: '/search', name: 'search', builder: _legacyStub),
         ]),
       ),
 
@@ -709,7 +685,7 @@ GoRouter appRouter(Ref ref) {
         path: '/settings/paired-devices',
         name: 'paired_devices',
         parentNavigatorKey: rootNavigatorKey,
-        redirect: (_, __) => '/sources/manage?section=devices',
+        redirect: (_, _) => '/sources/manage?section=devices',
       ),
       GoRoute(
         path: '/collection/:id',
@@ -755,8 +731,11 @@ GoRouter appRouter(Ref ref) {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline,
-                        size: 64, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 16),
                     Text(context.l10n.routerQueueEmpty),
                     const SizedBox(height: 24),

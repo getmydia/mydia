@@ -7,15 +7,17 @@ import '../../../domain/sources/library.dart';
 const filesSortOptions = [
   SortOption(id: 'title', name: SortName.title, shared: SharedSort.title),
   SortOption(
-      id: 'added',
-      name: SortName.recentlyAdded,
-      descendingByDefault: true,
-      shared: SharedSort.added),
+    id: 'added',
+    name: SortName.recentlyAdded,
+    descendingByDefault: true,
+    shared: SharedSort.added,
+  ),
   SortOption(
-      id: 'released',
-      name: SortName.releaseDate,
-      descendingByDefault: true,
-      shared: SharedSort.released),
+    id: 'released',
+    name: SortName.releaseDate,
+    descendingByDefault: true,
+    shared: SharedSort.released,
+  ),
 ];
 
 const filesFilterOptions = [
@@ -44,7 +46,8 @@ List<ItemSummary> sortFilesItems(
   String? sortId, {
   bool? descending,
 }) {
-  final sort = filesSortOptions.where((o) => o.id == sortId).firstOrNull ??
+  final sort =
+      filesSortOptions.where((o) => o.id == sortId).firstOrNull ??
       filesSortOptions.first;
   final desc = descending ?? sort.descendingByDefault;
   int byTitle(ItemSummary a, ItemSummary b) => (a.sortTitle ?? a.title)
@@ -52,12 +55,12 @@ List<ItemSummary> sortFilesItems(
       .compareTo((b.sortTitle ?? b.title).toLowerCase());
   String released(ItemSummary i) => i.airDate ?? '${i.year ?? ''}';
   int compare(ItemSummary a, ItemSummary b) => switch (sort.id) {
-        'added' =>
-          (a.addedAt ?? DateTime(0)).compareTo(b.addedAt ?? DateTime(0)),
-        'released' => released(a).compareTo(released(b)),
-        _ => byTitle(a, b),
-      };
-  final sorted = [...items]..sort((a, b) {
+    'added' => (a.addedAt ?? DateTime(0)).compareTo(b.addedAt ?? DateTime(0)),
+    'released' => released(a).compareTo(released(b)),
+    _ => byTitle(a, b),
+  };
+  final sorted = [...items]
+    ..sort((a, b) {
       final c = desc ? compare(b, a) : compare(a, b);
       return c != 0 ? c : byTitle(a, b);
     });

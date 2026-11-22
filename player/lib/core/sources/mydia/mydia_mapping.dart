@@ -20,10 +20,10 @@ Map<String, dynamic> _map(Object? value) =>
     value is Map<String, dynamic> ? value : const {};
 
 List<Map<String, dynamic>> _list(Object? value) => [
-      if (value is List)
-        for (final v in value)
-          if (v is Map<String, dynamic>) v,
-    ];
+  if (value is List)
+    for (final v in value)
+      if (v is Map<String, dynamic>) v,
+];
 
 ArtworkRef? _art(Object? url) =>
     url is String && url.isNotEmpty ? ArtworkRef(url) : null;
@@ -91,10 +91,10 @@ MediaVersion mediaVersion(Map<String, dynamic> file, {int? durationSeconds}) {
 }
 
 ExternalIds _ids(Map<String, dynamic> m) => ExternalIds(
-      tmdb: m['tmdbId']?.toString(),
-      tvdb: m['tvdbId']?.toString(),
-      imdb: m['imdbId'] as String?,
-    );
+  tmdb: m['tmdbId']?.toString(),
+  tvdb: m['tvdbId']?.toString(),
+  imdb: m['imdbId'] as String?,
+);
 
 ItemSummary movieSummary(SourceId sid, Map<String, dynamic> m) {
   final artwork = _map(m['artwork']);
@@ -152,26 +152,27 @@ ItemSummary episodeSummary(
   SourceId sid,
   Map<String, dynamic> e, {
   String? showTitle,
-}) =>
-    ItemSummary(
-      ref: _ref(sid, ItemKind.episode, e['id'] as String),
-      title: e['title'] as String? ?? '',
-      subtitle: episodeSubtitle(
-          e['seasonNumber'] as int?, e['episodeNumber'] as int?),
-      showTitle: showTitle ?? _map(e['show'])['title'] as String?,
-      poster: _art(e['thumbnailUrl']),
-      // The thumbnail is a landscape still, which is what the show page's
-      // episode rail reads as a backdrop.
-      backdrop: _art(e['thumbnailUrl']),
-      durationSeconds: _minutes(e['runtime']),
-      userState: _progress(e['progress']),
-      index: e['episodeNumber'] as int?,
-      parentIndex: e['seasonNumber'] as int?,
-      overview: e['overview'] as String?,
-      airDate: e['airDate'] as String?,
-      defaultVersionId: _firstFileId(e['files']),
-      lastPlayedAt: _instant(_map(e['progress'])['lastWatchedAt']),
-    );
+}) => ItemSummary(
+  ref: _ref(sid, ItemKind.episode, e['id'] as String),
+  title: e['title'] as String? ?? '',
+  subtitle: episodeSubtitle(
+    e['seasonNumber'] as int?,
+    e['episodeNumber'] as int?,
+  ),
+  showTitle: showTitle ?? _map(e['show'])['title'] as String?,
+  poster: _art(e['thumbnailUrl']),
+  // The thumbnail is a landscape still, which is what the show page's
+  // episode rail reads as a backdrop.
+  backdrop: _art(e['thumbnailUrl']),
+  durationSeconds: _minutes(e['runtime']),
+  userState: _progress(e['progress']),
+  index: e['episodeNumber'] as int?,
+  parentIndex: e['seasonNumber'] as int?,
+  overview: e['overview'] as String?,
+  airDate: e['airDate'] as String?,
+  defaultVersionId: _firstFileId(e['files']),
+  lastPlayedAt: _instant(_map(e['progress'])['lastWatchedAt']),
+);
 
 ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
   final kind = switch (c['type']) {
@@ -197,7 +198,8 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
     defaultVersionId: _firstFileId(c['files']),
     // The show's newest watch, which the server ranks the rail by. A next
     // card's own episode was never played, so its progress has no date.
-    lastPlayedAt: _instant(c['lastActivityAt']) ??
+    lastPlayedAt:
+        _instant(c['lastActivityAt']) ??
         _instant(_map(c['progress'])['lastWatchedAt']),
     externalIds: kind == ItemKind.movie ? _ids(c) : ExternalIds.none,
     showRef: kind == ItemKind.episode && c['showId'] != null
@@ -265,7 +267,7 @@ ItemSummary calendarSummary(SourceId sid, Map<String, dynamic> e) {
   final files = _list(e['files']);
   final playable =
       files.where((f) => f['directPlaySupported'] == true).firstOrNull ??
-          files.firstOrNull;
+      files.firstOrNull;
   final artwork = _map(e['artwork']);
   return ItemSummary(
     ref: episode
@@ -300,10 +302,10 @@ SourceCollection collectionOf(SourceId sid, Map<String, dynamic> c) =>
     );
 
 List<String> _genres(Object? genres) => [
-      if (genres is List)
-        for (final g in genres)
-          if (g is String) g
-    ];
+  if (genres is List)
+    for (final g in genres)
+      if (g is String) g,
+];
 
 double? _rating(Object? rating) => rating is num ? rating.toDouble() : null;
 
@@ -326,33 +328,37 @@ ItemDetail movieDetail(SourceId sid, Map<String, dynamic> m) {
 }
 
 List<Person> _castOf(Object? cast) => [
-      for (final c in _list(cast))
-        Person(
-          name: c['name'] as String? ?? '',
-          role: c['character'] as String?,
-          photo: _art(c['profileUrl']),
-        ),
-    ];
+  for (final c in _list(cast))
+    Person(
+      name: c['name'] as String? ?? '',
+      role: c['character'] as String?,
+      photo: _art(c['profileUrl']),
+    ),
+];
 
 ItemDetail showDetail(SourceId sid, Map<String, dynamic> s) => ItemDetail(
-      summary: showSummary(sid, s),
-      overview: s['overview'] as String?,
-      genres: _genres(s['genres']),
-      rating: _rating(s['rating']),
-      contentRating: s['contentRating'] as String?,
-      isFavorite: s['isFavorite'] as bool? ?? false,
-      trailerUrl: s['trailerUrl'] as String?,
-      cast: _castOf(s['cast']),
-    );
+  summary: showSummary(sid, s),
+  overview: s['overview'] as String?,
+  genres: _genres(s['genres']),
+  rating: _rating(s['rating']),
+  contentRating: s['contentRating'] as String?,
+  isFavorite: s['isFavorite'] as bool? ?? false,
+  trailerUrl: s['trailerUrl'] as String?,
+  cast: _castOf(s['cast']),
+);
 
 /// The poster a show's seasons borrow.
 ArtworkRef? showPoster(Map<String, dynamic> show) =>
     _art(_map(show['artwork'])['posterUrl']);
 
 ItemDetail seasonDetail(
-    SourceId sid, Map<String, dynamic> show, int seasonNumber) {
+  SourceId sid,
+  Map<String, dynamic> show,
+  int seasonNumber,
+) {
   final showId = show['id'] as String;
-  final season = _list(show['seasons'])
+  final season =
+      _list(show['seasons'])
           .where((s) => s['seasonNumber'] == seasonNumber)
           .firstOrNull ??
       {'seasonNumber': seasonNumber};

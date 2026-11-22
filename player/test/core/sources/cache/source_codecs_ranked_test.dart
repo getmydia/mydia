@@ -13,8 +13,11 @@ void main() {
       for (var i = 1; i <= 2; i++)
         RankedItem(
           item: ItemSummary(
-            ref:
-                ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-$i'),
+            ref: ItemRef(
+              sourceId: sid,
+              kind: ItemKind.show,
+              externalId: 's-$i',
+            ),
             title: 'Invented Show $i',
           ),
           rank: i,

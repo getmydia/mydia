@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
 import 'platform_features_stub.dart'
-    if (dart.library.io) 'platform_features_native.dart' as platform;
+    if (dart.library.io) 'platform_features_native.dart'
+    as platform;
 
 class PlatformFeatures {
   /// Check if running on mobile (iOS or Android)
@@ -76,8 +77,7 @@ class PlatformFeatures {
   static bool computeSupportsKeyboardShortcuts({
     required bool isDesktop,
     required bool isWeb,
-  }) =>
-      isDesktop || isWeb;
+  }) => isDesktop || isWeb;
 
   /// Check if Picture-in-Picture is supported (mobile only)
   static bool get supportsPiP => isMobile;

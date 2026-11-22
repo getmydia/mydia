@@ -53,8 +53,9 @@ class NativeSidebarHost extends ConsumerStatefulWidget {
 }
 
 class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
-  late final NativeTabBarChannel _channel =
-      ref.read(nativeTabBarChannelProvider);
+  late final NativeTabBarChannel _channel = ref.read(
+    nativeTabBarChannelProvider,
+  );
   final GlobalKey _anchorKey = GlobalKey();
   StreamSubscription<NativeTabBarEvent>? _events;
 
@@ -84,26 +85,28 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
         final current = currentSwitcherSource(ref, location);
         final anchor = _anchorKey.currentContext;
         if (current != null && anchor != null) {
-          unawaited(openSourcePicker(
-            anchor,
-            ref,
-            location: location,
-            current: current,
-            onNavigate: widget.onNavigate,
-          ));
+          unawaited(
+            openSourcePicker(
+              anchor,
+              ref,
+              location: location,
+              current: current,
+              onNavigate: widget.onNavigate,
+            ),
+          );
         }
       case kNewFilterId:
-        unawaited(showFilterEditor(
-          context: context,
-          ref: ref,
-          initialFilter: MediaFilter.allMovies,
-        ));
+        unawaited(
+          showFilterEditor(
+            context: context,
+            ref: ref,
+            initialFilter: MediaFilter.allMovies,
+          ),
+        );
       case kEditSidebarId:
-        unawaited(showSidebarEditSheet(
-          context: context,
-          ref: ref,
-          location: location,
-        ));
+        unawaited(
+          showSidebarEditSheet(context: context, ref: ref, location: location),
+        );
       default:
         _openRow(id);
     }
@@ -132,7 +135,8 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
     final location = widget.location;
     final allServers = isAllServersLocation(location);
     final source = ref.watch(currentSourceIdProvider(location));
-    final canFilter = !allServers &&
+    final canFilter =
+        !allServers &&
         source != null &&
         (ref
                 .watch(mediaSourceProvider(source))
@@ -159,8 +163,8 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
       sourceHeader: current == null
           ? null
           : allServers
-              ? context.l10n.navAllServers
-              : current.displayName,
+          ? context.l10n.navAllServers
+          : current.displayName,
       settingsBadge: widget.settingsBadge,
       // The macOS pane is a source list, which reads best with headings.
       grouped: defaultTargetPlatform == TargetPlatform.macOS,
@@ -178,9 +182,11 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
       unawaited(_channel.setSidebar(sidebar.toMap()));
       // Like the Flutter sidebar, a route with no row highlights none.
       final selected = selectedNativeSidebarId(entries, location);
-      unawaited(selected == null
-          ? _channel.clearSelection()
-          : _channel.select(selected));
+      unawaited(
+        selected == null
+            ? _channel.clearSelection()
+            : _channel.select(selected),
+      );
       unawaited(_channel.setVisible(visible));
     });
     // The picker's popover opens beside a narrow anchor, so this sits just

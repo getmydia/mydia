@@ -31,7 +31,7 @@ const _idB = SourceId('acc2:owner:bb22');
 /// A source whose connection status the test drives.
 class _StatusSource extends FakeResumingSource {
   _StatusSource(SourceConnectionStatus status, {super.resuming})
-      : _notifier = ValueNotifier(status);
+    : _notifier = ValueNotifier(status);
 
   final ValueNotifier<SourceConnectionStatus> _notifier;
 
@@ -55,35 +55,37 @@ Future<void> _pumpShell(
         builder: (_, state, child) =>
             AppShell(location: state.uri.path, child: child),
         routes: [
-          GoRoute(
-            path: '/s/:id',
-            builder: (_, state) => const SizedBox(),
-          ),
+          GoRoute(path: '/s/:id', builder: (_, state) => const SizedBox()),
         ],
       ),
     ],
   );
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      noProgressFlushOverride,
-      sidebarLayoutStoreProvider
-          .overrideWithValue(InMemorySidebarLayoutStore()),
-      mediaSourceProvider(_idA).overrideWithValue(a),
-      mediaSourceProvider(_idB).overrideWithValue(b),
-    ],
-    child: MaterialApp.router(
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        noProgressFlushOverride,
+        sidebarLayoutStoreProvider.overrideWithValue(
+          InMemorySidebarLayoutStore(),
+        ),
+        mediaSourceProvider(_idA).overrideWithValue(a),
+        mediaSourceProvider(_idB).overrideWithValue(b),
+      ],
+      child: MaterialApp.router(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        routerConfig: router),
-  ));
+        routerConfig: router,
+      ),
+    ),
+  );
   await tester.pump();
 }
 
 void main() {
-  testWidgets('the banner follows the source on screen, not the others',
-      (tester) async {
+  testWidgets('the banner follows the source on screen, not the others', (
+    tester,
+  ) async {
     final a = _StatusSource(SourceConnectionStatus.unreachable);
     final b = _StatusSource(SourceConnectionStatus.remote);
     await _pumpShell(tester, '/s/${_idA.value}', a: a, b: b);
@@ -95,8 +97,9 @@ void main() {
     expect(find.byType(OfflineBanner), findsNothing);
   });
 
-  testWidgets('an unreachable source shows its stored rows, not an error',
-      (tester) async {
+  testWidgets('an unreachable source shows its stored rows, not an error', (
+    tester,
+  ) async {
     final stored = [fakeMovie(1), fakeMovie(2)];
     final key = SourceKeys.continueWatching(fakeSourceId);
     final cache = InMemorySourceCache();
@@ -109,28 +112,33 @@ void main() {
       resuming: stored,
     )..continueError = const SourceException.unreachable();
 
-    final router = GoRouter(routes: [
-      GoRoute(
-        path: '/',
-        builder: (_, __) => const HomeScreen(scope: OneServer(fakeSourceId)),
-      ),
-    ]);
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const HomeScreen(scope: OneServer(fakeSourceId)),
+        ),
+      ],
+    );
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        noProgressFlushOverride,
-        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-        sourceCacheProvider.overrideWithValue(cache),
-        fetchLogProvider.overrideWithValue(fetchLog),
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ],
-      child: MaterialApp.router(
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          noProgressFlushOverride,
+          mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+          sourceCacheProvider.overrideWithValue(cache),
+          fetchLogProvider.overrideWithValue(fetchLog),
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ],
+        child: MaterialApp.router(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           routerConfig: router,
-          builder: toastLayerBuilder),
-    ));
+          builder: toastLayerBuilder,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // The libraries row lists the same fake films, so look inside the row
@@ -139,7 +147,9 @@ void main() {
     expect(row, findsOneWidget);
     for (final title in ['Invented Film 1', 'Invented Film 2']) {
       expect(
-          find.descendant(of: row, matching: find.text(title)), findsOneWidget);
+        find.descendant(of: row, matching: find.text(title)),
+        findsOneWidget,
+      );
     }
     expect(find.byType(SourceErrorView), findsNothing);
   });

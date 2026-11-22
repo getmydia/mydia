@@ -27,21 +27,25 @@ void main() {
       'photos',
       'livetv',
       'playlists',
-      'boxsets'
+      'boxsets',
     ]) {
       expect(jellyfinLibraryKind(skipped), isNull, reason: skipped);
     }
     expect(
-        jellyfinLibrary(
-            sid, {'Id': 'l', 'Name': 'T', 'CollectionType': 'music'}),
-        isNull);
+      jellyfinLibrary(sid, {'Id': 'l', 'Name': 'T', 'CollectionType': 'music'}),
+      isNull,
+    );
   });
 
   test('a film summary carries art, year, duration and resume', () {
     final s = jellyfinSummary(
-        sid, FakeJellyfinServer.movie(2, positionSeconds: 300))!;
-    expect(s.ref,
-        const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm2'));
+      sid,
+      FakeJellyfinServer.movie(2, positionSeconds: 300),
+    )!;
+    expect(
+      s.ref,
+      const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm2'),
+    );
     expect(s.title, 'Lantern Bay 2');
     expect(s.year, 2012);
     expect(s.durationSeconds, 5400);
@@ -53,10 +57,12 @@ void main() {
 
   test('a zero resume position is no resume position', () {
     expect(
-        jellyfinSummary(sid, FakeJellyfinServer.movie(1))!
-            .userState
-            .progressSeconds,
-        isNull);
+      jellyfinSummary(
+        sid,
+        FakeJellyfinServer.movie(1),
+      )!.userState.progressSeconds,
+      isNull,
+    );
   });
 
   test('episodes carry numbers, the show title and an S/E caption', () {
@@ -158,7 +164,7 @@ void main() {
       'SeasonId': 'season1',
       'OfficialRating': 'TV-14',
       'RemoteTrailers': [
-        {'Url': 'https://video.test/watch?v=abc'}
+        {'Url': 'https://video.test/watch?v=abc'},
       ],
       'UserData': {'IsFavorite': true, 'Played': false},
       'People': [
@@ -167,15 +173,17 @@ void main() {
           'Name': 'Ana Bergstrom',
           'Role': 'Kira',
           'Type': 'Actor',
-          'PrimaryImageTag': 't1'
+          'PrimaryImageTag': 't1',
         },
         {'Id': 'p2', 'Name': 'Ilse Varga', 'Type': 'Director'},
       ],
     })!;
     expect(detail.cast.single.name, 'Ana Bergstrom');
     expect(detail.cast.single.role, 'Kira');
-    expect(detail.cast.single.photo,
-        const ArtworkRef('/Items/p1/Images/Primary?tag=t1'));
+    expect(
+      detail.cast.single.photo,
+      const ArtworkRef('/Items/p1/Images/Primary?tag=t1'),
+    );
     expect(detail.trailerUrl, 'https://video.test/watch?v=abc');
     expect(detail.contentRating, 'TV-14');
     expect(detail.isFavorite, isTrue);
@@ -212,8 +220,11 @@ void main() {
   });
 
   test('a short premiere date does not throw', () {
-    final s = jellyfinSummary(
-        sid, {'Id': 'a', 'Type': 'Movie', 'PremiereDate': '2024'})!;
+    final s = jellyfinSummary(sid, {
+      'Id': 'a',
+      'Type': 'Movie',
+      'PremiereDate': '2024',
+    })!;
     expect(s.airDate, '2024');
   });
 
@@ -274,7 +285,7 @@ void main() {
           {
             'Type': 'Commercial',
             'StartTicks': 700000000,
-            'EndTicks': 900000000
+            'EndTicks': 900000000,
           },
           {'Type': 'Outro', 'StartTicks': 17000000000, 'EndTicks': 18000000000},
           {'Type': 'Intro'},
@@ -284,9 +295,15 @@ void main() {
       expect(segments, const [
         MediaSegment(type: SegmentType.intro, startMs: 1000, endMs: 61000),
         MediaSegment(
-            type: SegmentType.commercial, startMs: 70000, endMs: 90000),
+          type: SegmentType.commercial,
+          startMs: 70000,
+          endMs: 90000,
+        ),
         MediaSegment(
-            type: SegmentType.credits, startMs: 1700000, endMs: 1800000),
+          type: SegmentType.credits,
+          startMs: 1700000,
+          endMs: 1800000,
+        ),
       ]);
     });
 

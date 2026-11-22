@@ -23,16 +23,12 @@ typedef GetDeviceProfile = FutureOr<DeviceProfile?> Function();
 
 class MydiaClient {
   MydiaClient({
-    required MydiaGqlTransport transport,
-    required Future<MydiaCredentials> Function() load,
-    required Future<void> Function(MydiaCredentials) save,
-    required void Function() onUnauthorized,
-    GetDeviceProfile? getDeviceProfile,
-  })  : _transport = transport,
-        _load = load,
-        _save = save,
-        _onUnauthorized = onUnauthorized,
-        _getDeviceProfile = getDeviceProfile;
+    required this._transport,
+    required this._load,
+    required this._save,
+    required this._onUnauthorized,
+    this._getDeviceProfile,
+  });
 
   final MydiaGqlTransport _transport;
   final Future<MydiaCredentials> Function() _load;
@@ -46,8 +42,9 @@ class MydiaClient {
 
   static const mediaTokenRefreshThresholdSeconds = 3600;
 
-  final ValueNotifier<SourceConnectionStatus> _status =
-      ValueNotifier(SourceConnectionStatus.connecting);
+  final ValueNotifier<SourceConnectionStatus> _status = ValueNotifier(
+    SourceConnectionStatus.connecting,
+  );
 
   ValueListenable<SourceConnectionStatus> get status => _status;
 
@@ -70,8 +67,13 @@ class MydiaClient {
     final profile = await _getDeviceProfile?.call();
     final headerValue = profile?.toHeaderValue();
     try {
-      return await _send(query, variables, sentWith,
-          deviceProfile: headerValue, timeout: timeout);
+      return await _send(
+        query,
+        variables,
+        sentWith,
+        deviceProfile: headerValue,
+        timeout: timeout,
+      );
     } on SourceException catch (e) {
       if (e.kind != SourceErrorKind.unauthorized) rethrow;
       // A refresh may have finished while this request was in flight.
@@ -80,15 +82,21 @@ class MydiaClient {
       if (latest != null && latest != sentWith) {
         fresh = latest;
       } else {
-        fresh = await (_refreshing ??=
-            _refresh().whenComplete(() => _refreshing = null));
+        fresh = await (_refreshing ??= _refresh().whenComplete(
+          () => _refreshing = null,
+        ));
       }
       if (fresh == null) {
         rethrow;
       }
       try {
-        return await _send(query, variables, fresh,
-            deviceProfile: headerValue, timeout: timeout);
+        return await _send(
+          query,
+          variables,
+          fresh,
+          deviceProfile: headerValue,
+          timeout: timeout,
+        );
       } on SourceException catch (retry) {
         if (retry.kind == SourceErrorKind.unauthorized) _onUnauthorized();
         rethrow;
@@ -137,7 +145,8 @@ class MydiaClient {
     if (mediaToken == null) return null;
 
     final expiry = current.mediaTokenExpiry;
-    final needsRefresh = expiry == null ||
+    final needsRefresh =
+        expiry == null ||
         expiry.difference(DateTime.now()).inSeconds <=
             mediaTokenRefreshThresholdSeconds;
 
@@ -148,9 +157,11 @@ class MydiaClient {
     final inFlight = _mediaTokenRefreshing;
     if (inFlight != null) return inFlight;
 
-    return _mediaTokenRefreshing =
-        _refreshMediaToken(current, mediaToken, expiry)
-            .whenComplete(() => _mediaTokenRefreshing = null);
+    return _mediaTokenRefreshing = _refreshMediaToken(
+      current,
+      mediaToken,
+      expiry,
+    ).whenComplete(() => _mediaTokenRefreshing = null);
   }
 
   /// Build a media URL with authentication query parameter if a media token
@@ -184,8 +195,8 @@ class MydiaClient {
         },
       });
 
-      final compat =
-          Query$ServerCompatibility.fromJson(payload).serverCompatibility;
+      final compat = Query$ServerCompatibility.fromJson(payload)
+          .serverCompatibility;
       if (compat == null) return null;
 
       return ServerCompatibilityInfo(
@@ -212,8 +223,13 @@ class MydiaClient {
     Duration? timeout,
   }) async {
     try {
-      final data = await _transport.send(query, variables,
-          token: token, deviceProfile: deviceProfile, timeout: timeout);
+      final data = await _transport.send(
+        query,
+        variables,
+        token: token,
+        deviceProfile: deviceProfile,
+        timeout: timeout,
+      );
       _status.value = _transport.reachedVia;
       return data;
     } on SourceException catch (e) {
@@ -273,8 +289,8 @@ class MydiaClient {
         Variables$Mutation$RefreshMediaToken(token: mediaToken).toJson(),
       );
       final payload = rootMutation(data);
-      final refreshed =
-          Mutation$RefreshMediaToken.fromJson(payload).refreshMediaToken;
+      final refreshed = Mutation$RefreshMediaToken.fromJson(payload)
+          .refreshMediaToken;
       if (refreshed != null) {
         final expiresAt = DateTime.tryParse(refreshed.expiresAt);
         final latest = _credentials ?? await credentials();

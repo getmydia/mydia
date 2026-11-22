@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+
 import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/liquid_glass/glass_accessibility.dart';
@@ -147,15 +148,15 @@ class GlassSurface extends StatelessWidget {
     bool grouped = false,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.blurChrome,
-          tint: GlassTint.ground,
-          tintOpacity: opacity,
-          liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
-          liquidScrollEdge: true,
-          grouped: grouped,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.blurChrome,
+         tint: GlassTint.ground,
+         tintOpacity: opacity,
+         liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
+         liquidScrollEdge: true,
+         grouped: grouped,
+         child: child,
+       );
 
   /// Modal / sheet glass: modal blur sigma, the ambient surface at the modal
   /// fill opacity, the palette border @0.2 border, radius 20. Takes the panel
@@ -166,18 +167,18 @@ class GlassSurface extends StatelessWidget {
     bool grouped = false,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.blurModal,
-          tint: GlassTint.surface,
-          tintOpacity: DepthTokens.modalFillOpacity,
-          liquidTintOpacity: DepthTokens.liquidModalTintOpacity,
-          liquidAdaptiveMax: DepthTokens.liquidModalAdaptiveMax,
-          liquidProfile: LiquidGlassProfile.panel,
-          borderRadius: borderRadius ?? BorderRadius.circular(20),
-          paletteBorderAlpha: 0.2,
-          grouped: grouped,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.blurModal,
+         tint: GlassTint.surface,
+         tintOpacity: DepthTokens.modalFillOpacity,
+         liquidTintOpacity: DepthTokens.liquidModalTintOpacity,
+         liquidAdaptiveMax: DepthTokens.liquidModalAdaptiveMax,
+         liquidProfile: LiquidGlassProfile.panel,
+         borderRadius: borderRadius ?? BorderRadius.circular(20),
+         paletteBorderAlpha: 0.2,
+         grouped: grouped,
+         child: child,
+       );
 
   /// Chrome glass that follows the ambient tint: the bottom dock pill and the
   /// cast pill. Fill is the tint's surface at [opacity].
@@ -190,18 +191,18 @@ class GlassSurface extends StatelessWidget {
     bool grouped = false,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.blurChrome,
-          tint: GlassTint.surface,
-          tintOpacity: opacity,
-          liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
-          liquidAdaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
-          borderRadius: borderRadius,
-          border: border,
-          shadows: shadows,
-          grouped: grouped,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.blurChrome,
+         tint: GlassTint.surface,
+         tintOpacity: opacity,
+         liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
+         liquidAdaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
+         borderRadius: borderRadius,
+         border: border,
+         shadows: shadows,
+         grouped: grouped,
+         child: child,
+       );
 
   /// The floating sidebar and drawer: [GlassSurface.chrome]'s recipe on the
   /// panel Liquid Glass profile, so a full-height pane reads as frosted glass
@@ -216,19 +217,19 @@ class GlassSurface extends StatelessWidget {
     bool grouped = false,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.blurChrome,
-          tint: GlassTint.surface,
-          tintOpacity: opacity,
-          liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
-          liquidAdaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
-          liquidProfile: LiquidGlassProfile.panel,
-          borderRadius: borderRadius,
-          border: border,
-          shadows: shadows,
-          grouped: grouped,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.blurChrome,
+         tint: GlassTint.surface,
+         tintOpacity: opacity,
+         liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
+         liquidAdaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
+         liquidProfile: LiquidGlassProfile.panel,
+         borderRadius: borderRadius,
+         border: border,
+         shadows: shadows,
+         grouped: grouped,
+         child: child,
+       );
 
   /// A floating control: a circle or capsule over content (back, close,
   /// cast, Play; the white prominent pill with [prominentColor]). Casts the
@@ -241,24 +242,25 @@ class GlassSurface extends StatelessWidget {
     bool grouped = false,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.blurChrome,
-          fillColor: prominentColor?.withValues(
-              alpha: DepthTokens.liquidProminentTintOpacity),
-          tint: prominentColor == null ? GlassTint.surface : null,
-          // The frosted fallback cannot adapt, so it fills at the alpha white
-          // control labels are rated at over pure white.
-          tintOpacity: DepthTokens.liquidControlAdaptiveMax,
-          liquidTintOpacity: prominentColor != null
-              ? DepthTokens.liquidProminentTintOpacity
-              : DepthTokens.liquidControlTintOpacity,
-          liquidAdaptiveMax: prominentColor != null
-              ? null
-              : DepthTokens.liquidControlAdaptiveMax,
-          borderRadius: borderRadius,
-          grouped: grouped,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.blurChrome,
+         fillColor: prominentColor?.withValues(
+           alpha: DepthTokens.liquidProminentTintOpacity,
+         ),
+         tint: prominentColor == null ? GlassTint.surface : null,
+         // The frosted fallback cannot adapt, so it fills at the alpha white
+         // control labels are rated at over pure white.
+         tintOpacity: DepthTokens.liquidControlAdaptiveMax,
+         liquidTintOpacity: prominentColor != null
+             ? DepthTokens.liquidProminentTintOpacity
+             : DepthTokens.liquidControlTintOpacity,
+         liquidAdaptiveMax: prominentColor != null
+             ? null
+             : DepthTokens.liquidControlAdaptiveMax,
+         borderRadius: borderRadius,
+         grouped: grouped,
+         child: child,
+       );
 
   /// Media-card hover overlay glass: hover blur sigma, vertical black gradient
   /// (0.3 -> 0.6), radius 12.
@@ -268,20 +270,20 @@ class GlassSurface extends StatelessWidget {
     bool grouped = false,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.blurHoverOverlay,
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.black.withValues(alpha: 0.3),
-              Colors.black.withValues(alpha: 0.6),
-            ],
-          ),
-          borderRadius: borderRadius ?? BorderRadius.circular(12),
-          grouped: grouped,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.blurHoverOverlay,
+         gradient: LinearGradient(
+           begin: Alignment.topCenter,
+           end: Alignment.bottomCenter,
+           colors: [
+             Colors.black.withValues(alpha: 0.3),
+             Colors.black.withValues(alpha: 0.6),
+           ],
+         ),
+         borderRadius: borderRadius ?? BorderRadius.circular(12),
+         grouped: grouped,
+         child: child,
+       );
 
   /// Faux-glass: a token-driven translucent surface with **no** live blur
   /// ([BackdropFilter] is omitted). Used for surfaces that appear in scrolling
@@ -299,22 +301,22 @@ class GlassSurface extends StatelessWidget {
     bool showRim = true,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.blurNone,
-          live: false,
-          fillColor: fillColor,
-          gradient: gradient,
-          borderRadius: borderRadius ?? BorderRadius.zero,
-          border: showRim
-              ? const Border.fromBorderSide(
-                  BorderSide(
-                    color: DepthTokens.rimColor,
-                    width: DepthTokens.rimWidth,
-                  ),
-                )
-              : null,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.blurNone,
+         live: false,
+         fillColor: fillColor,
+         gradient: gradient,
+         borderRadius: borderRadius ?? BorderRadius.zero,
+         border: showRim
+             ? const Border.fromBorderSide(
+                 BorderSide(
+                   color: DepthTokens.rimColor,
+                   width: DepthTokens.rimWidth,
+                 ),
+               )
+             : null,
+         child: child,
+       );
 
   /// The on-screen-display material: the playback panel, the top-bar pills,
   /// up next, skip segment, the stats panel, and the pickers opened from
@@ -337,28 +339,31 @@ class GlassSurface extends StatelessWidget {
     OsdElevation elevation = OsdElevation.panel,
     Widget? child,
   }) : this(
-          key: key,
-          blurSigma: DepthTokens.osdBlurSigma,
-          fillColor:
-              DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),
-          borderRadius: borderRadius ??
-              const BorderRadius.all(
-                Radius.circular(DepthTokens.radiusOsdPanel),
-              ),
-          border: Border.all(
-            color: DepthTokens.osdHairline,
-            width: DepthTokens.rimWidth,
-          ),
-          shadows: elevation.shadows,
-          child: child,
-        );
+         key: key,
+         blurSigma: DepthTokens.osdBlurSigma,
+         fillColor: DepthTokens.osdTint.withValues(
+           alpha: DepthTokens.osdFillOpacity,
+         ),
+         borderRadius:
+             borderRadius ??
+             const BorderRadius.all(
+               Radius.circular(DepthTokens.radiusOsdPanel),
+             ),
+         border: Border.all(
+           color: DepthTokens.osdHairline,
+           width: DepthTokens.rimWidth,
+         ),
+         shadows: elevation.shadows,
+         child: child,
+       );
 
   @override
   Widget build(BuildContext context) {
     final base = _baseColor(context);
     final liquidOpacity = liquidTintOpacity;
     final alpha = paletteBorderAlpha;
-    final resolvedBorder = border ??
+    final resolvedBorder =
+        border ??
         (alpha == null
             ? null
             : Border.all(
@@ -382,7 +387,8 @@ class GlassSurface extends StatelessWidget {
         );
       }
     }
-    final fill = fillColor ??
+    final fill =
+        fillColor ??
         (gradient != null ? null : base?.withValues(alpha: tintOpacity));
     return _withShadow(_surface(fill, resolvedBorder), cast);
   }
@@ -393,7 +399,8 @@ class GlassSurface extends StatelessWidget {
   /// the glass does not. The scroll edge casts none, and the Frosted style
   /// keeps [shadows] as passed.
   List<BoxShadow> _castShadows(BuildContext context) {
-    final lift = shadows.isEmpty &&
+    final lift =
+        shadows.isEmpty &&
         liquidTintOpacity != null &&
         !liquidScrollEdge &&
         GlassStyle.of(context);
@@ -413,10 +420,8 @@ class GlassSurface extends StatelessWidget {
   }
 
   /// Reduce Transparency: an opaque fill, no backdrop pass.
-  Widget _solid(Color color, BoxBorder? border) => ClipRRect(
-        borderRadius: borderRadius,
-        child: _fill(color, border),
-      );
+  Widget _solid(Color color, BoxBorder? border) =>
+      ClipRRect(borderRadius: borderRadius, child: _fill(color, border));
 
   Widget _liquid(
     BuildContext context,
@@ -424,14 +429,16 @@ class GlassSurface extends StatelessWidget {
     double opacity,
     GlassAccessibility access,
   ) {
-    final boost =
-        access.increaseContrast ? DepthTokens.liquidHighContrastTintBoost : 0.0;
+    final boost = access.increaseContrast
+        ? DepthTokens.liquidHighContrastTintBoost
+        : 0.0;
     final adaptiveMax = liquidAdaptiveMax;
     final alpha = (opacity + boost).clamp(0.0, 1.0);
     final rim = access.increaseContrast
         ? Border.all(
-            color: context.palette.textPrimary
-                .withValues(alpha: DepthTokens.liquidHighContrastRimAlpha),
+            color: context.palette.textPrimary.withValues(
+              alpha: DepthTokens.liquidHighContrastRimAlpha,
+            ),
             width: DepthTokens.rimWidth,
           )
         : null;
@@ -461,12 +468,17 @@ class GlassSurface extends StatelessWidget {
   /// under a ground gradient, opaque enough at the top for the title and
   /// clearer at the bottom so the glass chips there see the content.
   Widget _scrollEdge(
-      BuildContext context, Color base, GlassAccessibility access) {
-    final boost =
-        access.increaseContrast ? DepthTokens.liquidHighContrastTintBoost : 0.0;
+    BuildContext context,
+    Color base,
+    GlassAccessibility access,
+  ) {
+    final boost = access.increaseContrast
+        ? DepthTokens.liquidHighContrastTintBoost
+        : 0.0;
     double a(double v) => (v + boost).clamp(0.0, 1.0);
-    final top =
-        base.withValues(alpha: a(DepthTokens.liquidScrollEdgeTopOpacity));
+    final top = base.withValues(
+      alpha: a(DepthTokens.liquidScrollEdgeTopOpacity),
+    );
     final filter = ImageFilter.blur(
       sigmaX: DepthTokens.liquidScrollEdgeBlurSigma,
       sigmaY: DepthTokens.liquidScrollEdgeBlurSigma,
@@ -481,7 +493,8 @@ class GlassSurface extends StatelessWidget {
             top,
             top,
             base.withValues(
-                alpha: a(DepthTokens.liquidScrollEdgeBottomOpacity)),
+              alpha: a(DepthTokens.liquidScrollEdgeBottomOpacity),
+            ),
           ],
         ),
       ),
@@ -509,8 +522,10 @@ class GlassSurface extends StatelessWidget {
     // Faux-glass: no BackdropFilter at all (R8).
     if (!live) {
       return RepaintBoundary(
-        child:
-            ClipRRect(borderRadius: borderRadius, child: _fill(fill, border)),
+        child: ClipRRect(
+          borderRadius: borderRadius,
+          child: _fill(fill, border),
+        ),
       );
     }
 

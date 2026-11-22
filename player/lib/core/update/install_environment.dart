@@ -25,17 +25,16 @@ enum InstallEnvironment {
 
   /// Resolves the environment for the running process.
   static InstallEnvironment detect() => resolve(
-        isLinux: Platform.isLinux,
-        flatpakId: Platform.environment['FLATPAK_ID'],
-        flatpakInfoExists:
-            Platform.isLinux && File('/.flatpak-info').existsSync(),
-        installDirWritable: installDirWritable(
-          path: probeDirectory(
-            appImagePath: AppImageUpdater.runningAppImagePath(),
-            resolvedExecutable: Platform.resolvedExecutable,
-          ),
-        ),
-      );
+    isLinux: Platform.isLinux,
+    flatpakId: Platform.environment['FLATPAK_ID'],
+    flatpakInfoExists: Platform.isLinux && File('/.flatpak-info').existsSync(),
+    installDirWritable: installDirWritable(
+      path: probeDirectory(
+        appImagePath: AppImageUpdater.runningAppImagePath(),
+        resolvedExecutable: Platform.resolvedExecutable,
+      ),
+    ),
+  );
 
   /// The decision itself, separated from the platform lookups so every branch
   /// is reachable from one test host. Mirrors the split
@@ -91,6 +90,5 @@ enum InstallEnvironment {
   static String probeDirectory({
     required String? appImagePath,
     required String resolvedExecutable,
-  }) =>
-      File(appImagePath ?? resolvedExecutable).parent.path;
+  }) => File(appImagePath ?? resolvedExecutable).parent.path;
 }

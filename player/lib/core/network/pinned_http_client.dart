@@ -64,11 +64,7 @@ class PinnedHttpClient {
 
     final client = HttpClient();
     client.badCertificateCallback = (cert, host, port) {
-      return _verifyCertificate(
-        cert,
-        storedFingerprint,
-        allowUnknown,
-      );
+      return _verifyCertificate(cert, storedFingerprint, allowUnknown);
     };
 
     return client;

@@ -13,13 +13,15 @@ List<ServerConnection> rankPlexConnections(
   required bool allowInsecureLocal,
 }) =>
     all
-        .where((c) =>
-            c.uri.scheme == 'https' ||
-            // plex.tv's `local` flag is only a claim: a plain HTTP candidate
-            // must also be a private address.
-            (c.local &&
-                !c.relay &&
-                allowInsecureLocal &&
-                isPrivateHost(c.uri.host)))
+        .where(
+          (c) =>
+              c.uri.scheme == 'https' ||
+              // plex.tv's `local` flag is only a claim: a plain HTTP candidate
+              // must also be a private address.
+              (c.local &&
+                  !c.relay &&
+                  allowInsecureLocal &&
+                  isPrivateHost(c.uri.host)),
+        )
         .toList()
       ..sort((a, b) => connectionRank(a).compareTo(connectionRank(b)));

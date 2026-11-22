@@ -91,9 +91,11 @@ class HiveSourceCache implements SourceCache {
       await Hive.openBox<String>(boxName),
       maxEntries,
     );
-    unawaited(cache._sweep(DateTime.now()).catchError((Object e) {
-      debugPrint('[SourceCache] sweep failed: $e');
-    }));
+    unawaited(
+      cache._sweep(DateTime.now()).catchError((Object e) {
+        debugPrint('[SourceCache] sweep failed: $e');
+      }),
+    );
     return cache;
   }
 
@@ -115,13 +117,13 @@ class HiveSourceCache implements SourceCache {
 
   @override
   Future<void> write(QueryKey key, Object? json, DateTime at) => _box.put(
-        key.canonical,
-        jsonEncode({
-          'v': SourceCache.schemaVersion,
-          'at': at.millisecondsSinceEpoch,
-          'd': json,
-        }),
-      );
+    key.canonical,
+    jsonEncode({
+      'v': SourceCache.schemaVersion,
+      'at': at.millisecondsSinceEpoch,
+      'd': json,
+    }),
+  );
 
   @override
   Future<void> delete(QueryKey key) => _box.delete(key.canonical);
@@ -130,10 +132,12 @@ class HiveSourceCache implements SourceCache {
   Future<void> deleteAccount(String accountId) => deletePrefix('$accountId:');
 
   @override
-  Future<void> deletePrefix(String prefix) => _box.deleteAll(_box.keys
-      .whereType<String>()
-      .where((key) => key.startsWith(prefix))
-      .toList());
+  Future<void> deletePrefix(String prefix) => _box.deleteAll(
+    _box.keys
+        .whereType<String>()
+        .where((key) => key.startsWith(prefix))
+        .toList(),
+  );
 
   Future<void> _sweep(DateTime now) async {
     final doomed = <String>[];
@@ -167,8 +171,10 @@ class HiveSourceCache implements SourceCache {
       if (map['v'] != SourceCache.schemaVersion) return null;
       return CacheEntry(
         json: map['d'],
-        writtenAt:
-            DateTime.fromMillisecondsSinceEpoch(map['at']! as int, isUtc: true),
+        writtenAt: DateTime.fromMillisecondsSinceEpoch(
+          map['at']! as int,
+          isUtc: true,
+        ),
       );
     } catch (_) {
       return null;
@@ -178,5 +184,6 @@ class HiveSourceCache implements SourceCache {
 
 /// In-memory by default so tests need no setup; `main()` overrides it with
 /// [HiveSourceCache].
-final Provider<SourceCache> sourceCacheProvider =
-    Provider<SourceCache>((ref) => InMemorySourceCache());
+final Provider<SourceCache> sourceCacheProvider = Provider<SourceCache>(
+  (ref) => InMemorySourceCache(),
+);

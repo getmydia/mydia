@@ -3,7 +3,8 @@ library;
 
 import 'package:media_kit/media_kit.dart';
 
-import 'hdr_tonemap_stub.dart' if (dart.library.io) 'hdr_tonemap_native.dart'
+import 'hdr_tonemap_stub.dart'
+    if (dart.library.io) 'hdr_tonemap_native.dart'
     as platform;
 import 'mac_video_output.dart';
 

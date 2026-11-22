@@ -51,9 +51,7 @@ void main() {
       tester,
       const UrlArt('https://art/night-ferry.jpg'),
       seen,
-      overrides: [
-        tintExtractorProvider.overrideWithValue((_) async => _rust),
-      ],
+      overrides: [tintExtractorProvider.overrideWithValue((_) async => _rust)],
     );
     await tester.pumpAndSettle();
     expect(seen.last, AmbientTintColors.fromSeed(_rust));
@@ -97,8 +95,9 @@ void main() {
     expect(seen.last, AmbientTintColors.fromSeed(_rust));
   });
 
-  testWidgets('source art resolves through its source with headers',
-      (tester) async {
+  testWidgets('source art resolves through its source with headers', (
+    tester,
+  ) async {
     final seen = <AmbientTintColors>[];
     final calls = <BackdropSource>[];
     await _pump(
@@ -127,25 +126,27 @@ void main() {
 
   testWidgets('a second scope for the same art hits the cache', (tester) async {
     var extractions = 0;
-    final container = ProviderContainer(overrides: [
-      tintExtractorProvider.overrideWithValue((_) async {
-        extractions++;
-        return _rust;
-      }),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        tintExtractorProvider.overrideWithValue((_) async {
+          extractions++;
+          return _rust;
+        }),
+      ],
+    );
     addTearDown(container.dispose);
     final seen = <AmbientTintColors>[];
     Future<void> mount() => tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: MaterialApp(
-              home: DetailTintScope(
-                art: const UrlArt('https://art/night-ferry.jpg'),
-                child: _Probe(seen),
-              ),
-            ),
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: DetailTintScope(
+            art: const UrlArt('https://art/night-ferry.jpg'),
+            child: _Probe(seen),
           ),
-        );
+        ),
+      ),
+    );
     await mount();
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());

@@ -12,10 +12,7 @@ import 'package:player/presentation/widgets/artwork_image.dart';
 
 import '../../test_utils/mock_network_images.dart';
 
-Widget _host(
-  Widget child, {
-  bool disableAnimations = false,
-}) {
+Widget _host(Widget child, {bool disableAnimations = false}) {
   return MaterialApp(
     home: MediaQuery(
       data: MediaQueryData(disableAnimations: disableAnimations),
@@ -30,14 +27,17 @@ AnimatedSwitcher _switcherOf(WidgetTester tester) {
 
 void main() {
   group('AmbientBackdrop', () {
-    testWidgets('renders the blur via ImageFiltered, not BackdropFilter',
-        (tester) async {
+    testWidgets('renders the blur via ImageFiltered, not BackdropFilter', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/a.jpg',
-            id: 'a',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/a.jpg',
+              id: 'a',
+            ),
+          ),
         );
         await tester.pump();
 
@@ -46,16 +46,19 @@ void main() {
       });
     });
 
-    testWidgets('passes headers and cacheKey through to the ArtworkImage',
-        (tester) async {
+    testWidgets('passes headers and cacheKey through to the ArtworkImage', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://art/x.jpg',
-            id: 'x',
-            headers: {'X-Token': 'a'},
-            cacheKey: 'k',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://art/x.jpg',
+              id: 'x',
+              headers: {'X-Token': 'a'},
+              cacheKey: 'k',
+            ),
+          ),
         );
         await tester.pump();
 
@@ -65,8 +68,9 @@ void main() {
       });
     });
 
-    testWidgets('null imageUrl renders the static fallback (no image)',
-        (tester) async {
+    testWidgets('null imageUrl renders the static fallback (no image)', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const AmbientBackdrop()));
       await tester.pump();
 
@@ -74,24 +78,29 @@ void main() {
       expect(find.byType(ImageFiltered), findsNothing);
     });
 
-    testWidgets('changing the id key triggers an AnimatedSwitcher transition',
-        (tester) async {
+    testWidgets('changing the id key triggers an AnimatedSwitcher transition', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/a.jpg',
-            id: 'a',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/a.jpg',
+              id: 'a',
+            ),
+          ),
         );
         await tester.pump();
 
         // Swap the id -> a new keyed child; the switcher keeps both layers
         // present mid-fade.
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/b.jpg',
-            id: 'b',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/b.jpg',
+              id: 'b',
+            ),
+          ),
         );
         await tester.pump(const Duration(milliseconds: 100));
 
@@ -104,23 +113,28 @@ void main() {
       });
     });
 
-    testWidgets('same id with unchanged params does not transition',
-        (tester) async {
+    testWidgets('same id with unchanged params does not transition', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/a.jpg',
-            id: 'a',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/a.jpg',
+              id: 'a',
+            ),
+          ),
         );
         await tester.pump();
 
         // Rebuild with identical id/url.
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/a.jpg',
-            id: 'a',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/a.jpg',
+              id: 'a',
+            ),
+          ),
         );
         await tester.pump(const Duration(milliseconds: 100));
 
@@ -129,8 +143,7 @@ void main() {
       });
     });
 
-    testWidgets(
-        'toggling artwork on and off faster than the crossfade does not '
+    testWidgets('toggling artwork on and off faster than the crossfade does not '
         'duplicate the fallback key', (tester) async {
       // Hovering across a poster grid flips the source artwork <-> none on
       // every mouse enter/leave, much faster than the 600ms crossfade. Each
@@ -145,10 +158,12 @@ void main() {
         await tester.pump();
 
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/a.jpg',
-            id: 'a',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/a.jpg',
+              id: 'a',
+            ),
+          ),
         );
         await tester.pump(const Duration(milliseconds: 100));
 
@@ -159,10 +174,12 @@ void main() {
 
         // Switching away again leaves both fallback layers outgoing at once.
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/b.jpg',
-            id: 'b',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/b.jpg',
+              id: 'b',
+            ),
+          ),
         );
         await tester.pump(const Duration(milliseconds: 100));
 
@@ -173,8 +190,9 @@ void main() {
       });
     });
 
-    testWidgets('with reduced motion on, the crossfade duration is zero',
-        (tester) async {
+    testWidgets('with reduced motion on, the crossfade duration is zero', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
           _host(
@@ -191,14 +209,17 @@ void main() {
       });
     });
 
-    testWidgets('with motion allowed, the crossfade duration is non-zero',
-        (tester) async {
+    testWidgets('with motion allowed, the crossfade duration is non-zero', (
+      tester,
+    ) async {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          _host(const AmbientBackdrop(
-            imageUrl: 'https://example.com/a.jpg',
-            id: 'a',
-          )),
+          _host(
+            const AmbientBackdrop(
+              imageUrl: 'https://example.com/a.jpg',
+              id: 'a',
+            ),
+          ),
         );
         await tester.pump();
 
@@ -206,8 +227,9 @@ void main() {
       });
     });
 
-    testWidgets('decodes the backdrop at viewport width, capped at w1280',
-        (tester) async {
+    testWidgets('decodes the backdrop at viewport width, capped at w1280', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(800, 600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -251,139 +273,145 @@ void main() {
     });
 
     testWidgets(
-        'didUpdateWidget precaches the bucketed key, never the unbounded one',
-        (tester) async {
-      // The test above only ever mounts once, so didUpdateWidget's
-      // precacheImage call never runs. Swapping the id/url here is the only
-      // way to exercise it.
-      PaintingBinding.instance.imageCache.clear();
-      tester.view.physicalSize = const Size(800, 600);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
+      'didUpdateWidget precaches the bucketed key, never the unbounded one',
+      (tester) async {
+        // The test above only ever mounts once, so didUpdateWidget's
+        // precacheImage call never runs. Swapping the id/url here is the only
+        // way to exercise it.
+        PaintingBinding.instance.imageCache.clear();
+        tester.view.physicalSize = const Size(800, 600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
 
-      const urlA = 'https://image.tmdb.org/t/p/w1280/a.jpg';
-      const urlB = 'https://image.tmdb.org/t/p/w1280/b.jpg';
+        const urlA = 'https://image.tmdb.org/t/p/w1280/a.jpg';
+        const urlB = 'https://image.tmdb.org/t/p/w1280/b.jpg';
 
-      await mockNetworkImages(() async {
-        await tester.pumpWidget(
-          const MaterialApp(
-            home: Scaffold(
-              body: SizedBox.expand(
-                child: AmbientBackdrop(imageUrl: urlA, id: 'a'),
+        await mockNetworkImages(() async {
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: SizedBox.expand(
+                  child: AmbientBackdrop(imageUrl: urlA, id: 'a'),
+                ),
               ),
             ),
-          ),
-        );
-        await tester.pump();
+          );
+          await tester.pump();
 
-        // New id -> didUpdateWidget sees imageUrl change and precaches.
-        await tester.pumpWidget(
-          const MaterialApp(
-            home: Scaffold(
-              body: SizedBox.expand(
-                child: AmbientBackdrop(imageUrl: urlB, id: 'b'),
+          // New id -> didUpdateWidget sees imageUrl change and precaches.
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: SizedBox.expand(
+                  child: AmbientBackdrop(imageUrl: urlB, id: 'b'),
+                ),
               ),
             ),
-          ),
-        );
-
-        final boundedProvider = artworkImageProvider(
-          urlB,
-          cacheManager: BackdropCacheManager(),
-          decodeWidth: 832,
-        );
-        // What didUpdateWidget would precache if it dropped the decode
-        // width: the full-resolution provider _ArtworkLayer never asks for.
-        final unboundedProvider = artworkImageProvider(
-          urlB,
-          cacheManager: BackdropCacheManager(),
-          decodeWidth: null,
-        );
-
-        ImageCacheStatus? boundedStatus;
-        ImageCacheStatus? unboundedStatus;
-        // obtainKey (and so obtainCacheStatus) is documented async; run it
-        // under runAsync so any real Future it awaits can actually complete.
-        await tester.runAsync(() async {
-          boundedStatus = await boundedProvider.obtainCacheStatus(
-            configuration: const ImageConfiguration(),
           );
-          unboundedStatus = await unboundedProvider.obtainCacheStatus(
-            configuration: const ImageConfiguration(),
+
+          final boundedProvider = artworkImageProvider(
+            urlB,
+            cacheManager: BackdropCacheManager(),
+            decodeWidth: 832,
           );
+          // What didUpdateWidget would precache if it dropped the decode
+          // width: the full-resolution provider _ArtworkLayer never asks for.
+          final unboundedProvider = artworkImageProvider(
+            urlB,
+            cacheManager: BackdropCacheManager(),
+            decodeWidth: null,
+          );
+
+          ImageCacheStatus? boundedStatus;
+          ImageCacheStatus? unboundedStatus;
+          // obtainKey (and so obtainCacheStatus) is documented async; run it
+          // under runAsync so any real Future it awaits can actually complete.
+          await tester.runAsync(() async {
+            boundedStatus = await boundedProvider.obtainCacheStatus(
+              configuration: const ImageConfiguration(),
+            );
+            unboundedStatus = await unboundedProvider.obtainCacheStatus(
+              configuration: const ImageConfiguration(),
+            );
+          });
+
+          // The precache must land the same bucketed key _ArtworkLayer
+          // resolves...
+          expect(boundedStatus?.tracked, isTrue);
+          // ...and never the unbounded one. Otherwise the backdrop decodes
+          // twice: once for the precache's full-resolution fetch, once for the
+          // layer's correctly sized one -- the exact waste the precache exists
+          // to avoid.
+          expect(unboundedStatus?.tracked ?? false, isFalse);
+
+          // Let the crossfade finish so a single Image remains to compare.
+          await tester.pump(const Duration(milliseconds: 600));
+          await tester.pumpAndSettle();
+
+          final rendered = tester
+              .widget<Image>(
+                find.descendant(
+                  of: find.byType(AmbientBackdrop),
+                  matching: find.byType(Image),
+                ),
+              )
+              .image;
+
+          expect(rendered, boundedProvider);
+
+          // Sync the cache manager's deferred work: its store schedules a 10 s
+          // cleanup timer once its first lookup lands, and when an earlier file
+          // has left the shared manager usable that timer would otherwise be
+          // pending when the tree is disposed. Poll in real time, bounded at
+          // about 5 s, until a probe lookup completes: that means the store's
+          // lookups have landed and the timer is scheduled, so the pump below
+          // fires it. A lone run has no usable store, the probe never
+          // completes and no timer is ever scheduled, so giving up at the
+          // bound is correct there, not a failure.
+          await tester.runAsync(() async {
+            final deadline = DateTime.now().add(const Duration(seconds: 5));
+            var settled = false;
+            unawaited(
+              BackdropCacheManager()
+                  .getFileFromCache('ambient-backdrop-test-drain-probe')
+                  .then((_) => settled = true, onError: (_) => settled = true),
+            );
+            while (!settled && DateTime.now().isBefore(deadline)) {
+              await Future<void>.delayed(const Duration(milliseconds: 20));
+            }
+          });
+          await tester.pump(const Duration(seconds: 11));
         });
-
-        // The precache must land the same bucketed key _ArtworkLayer
-        // resolves...
-        expect(boundedStatus?.tracked, isTrue);
-        // ...and never the unbounded one. Otherwise the backdrop decodes
-        // twice: once for the precache's full-resolution fetch, once for the
-        // layer's correctly sized one -- the exact waste the precache exists
-        // to avoid.
-        expect(unboundedStatus?.tracked ?? false, isFalse);
-
-        // Let the crossfade finish so a single Image remains to compare.
-        await tester.pump(const Duration(milliseconds: 600));
-        await tester.pumpAndSettle();
-
-        final rendered = tester
-            .widget<Image>(
-              find.descendant(
-                of: find.byType(AmbientBackdrop),
-                matching: find.byType(Image),
-              ),
-            )
-            .image;
-
-        expect(rendered, boundedProvider);
-
-        // Sync the cache manager's deferred work: its store schedules a 10 s
-        // cleanup timer once its first lookup lands, and when an earlier file
-        // has left the shared manager usable that timer would otherwise be
-        // pending when the tree is disposed. Poll in real time, bounded at
-        // about 5 s, until a probe lookup completes: that means the store's
-        // lookups have landed and the timer is scheduled, so the pump below
-        // fires it. A lone run has no usable store, the probe never
-        // completes and no timer is ever scheduled, so giving up at the
-        // bound is correct there, not a failure.
-        await tester.runAsync(() async {
-          final deadline = DateTime.now().add(const Duration(seconds: 5));
-          var settled = false;
-          unawaited(BackdropCacheManager()
-              .getFileFromCache('ambient-backdrop-test-drain-probe')
-              .then((_) => settled = true, onError: (_) => settled = true));
-          while (!settled && DateTime.now().isBefore(deadline)) {
-            await Future<void>.delayed(const Duration(milliseconds: 20));
-          }
-        });
-        await tester.pump(const Duration(seconds: 11));
-      });
-    });
+      },
+    );
   });
 
   group('AmbientBackdrop tint', () {
     ColoredBox firstBase(WidgetTester tester) => tester.widget<ColoredBox>(
-          find
-              .descendant(
-                of: find.byType(AmbientBackdrop),
-                matching: find.byType(ColoredBox),
-              )
-              .first,
-        );
+      find
+          .descendant(
+            of: find.byType(AmbientBackdrop),
+            matching: find.byType(ColoredBox),
+          )
+          .first,
+    );
 
     testWidgets('base takes the tinted ground', (tester) async {
       final warm = AmbientTintColors.fromSeed(const Color(0xFF9F4A2F));
       await tester.pumpWidget(
-        _host(AmbientTint(
-          colors: warm,
-          child: const AmbientBackdrop(imageUrl: null, id: 'a'),
-        )),
+        _host(
+          AmbientTint(
+            colors: warm,
+            child: const AmbientBackdrop(imageUrl: null, id: 'a'),
+          ),
+        ),
       );
       expect(firstBase(tester).color, warm.ground);
     });
 
-    testWidgets('base is the neutral background without a scope',
-        (tester) async {
+    testWidgets('base is the neutral background without a scope', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(const AmbientBackdrop(imageUrl: null, id: 'a')),
       );

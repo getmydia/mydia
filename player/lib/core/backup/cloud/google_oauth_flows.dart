@@ -17,10 +17,8 @@ String _b64NoPad(List<int> bytes) =>
 /// Desktop sign-in (macOS, Linux, Windows): the system browser, a one-shot
 /// HTTP listener on `127.0.0.1` for the redirect, and PKCE.
 class LoopbackPkceFlow {
-  LoopbackPkceFlow({
-    Random? random,
-    this.timeout = const Duration(minutes: 5),
-  }) : _random = random ?? Random.secure();
+  LoopbackPkceFlow({Random? random, this.timeout = const Duration(minutes: 5)})
+    : _random = random ?? Random.secure();
 
   final Random _random;
 
@@ -46,8 +44,9 @@ class LoopbackPkceFlow {
     Future<bool> Function(Uri) launch = launchUrl,
   }) async {
     final verifier = newVerifier(_random);
-    final state =
-        _b64NoPad(List<int>.generate(16, (_) => _random.nextInt(256)));
+    final state = _b64NoPad(
+      List<int>.generate(16, (_) => _random.nextInt(256)),
+    );
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     try {
       final redirectUri = 'http://127.0.0.1:${server.port}';
@@ -183,8 +182,8 @@ class DeviceCodeFlow {
   DeviceCodeFlow({
     Future<void> Function(Duration)? delay,
     DateTime Function()? now,
-  })  : _delay = delay ?? Future<void>.delayed,
-        _now = now ?? DateTime.now;
+  }) : _delay = delay ?? Future<void>.delayed,
+       _now = now ?? DateTime.now;
 
   final Future<void> Function(Duration) _delay;
   final DateTime Function() _now;
@@ -222,13 +221,16 @@ class DeviceCodeFlow {
           throw const FormatException('malformed device code response');
         }
         final expiresAt = _now().add(Duration(seconds: expiresIn.toInt()));
-        var interval =
-            Duration(seconds: (json['interval'] as num?)?.toInt() ?? 5);
-        controller.add(DeviceCodePending(
-          userCode: userCode,
-          verificationUrl: Uri.parse(verification),
-          expiresAt: expiresAt,
-        ));
+        var interval = Duration(
+          seconds: (json['interval'] as num?)?.toInt() ?? 5,
+        );
+        controller.add(
+          DeviceCodePending(
+            userCode: userCode,
+            verificationUrl: Uri.parse(verification),
+            expiresAt: expiresAt,
+          ),
+        );
 
         while (!cancelled) {
           await Future.any<void>([_delay(interval), done.future]);

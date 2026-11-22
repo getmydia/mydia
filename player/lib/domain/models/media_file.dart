@@ -43,26 +43,22 @@ class MediaFile {
   /// e.g. "1080p • hevc • HDR10", or null when the file says nothing about
   /// its quality; the screen then says it is unknown.
   String? get displayQuality {
-    final parts = <String>[
-      if (resolution != null) resolution!,
-      if (codec != null) codec!,
-      if (hdrFormat != null) hdrFormat!,
-    ];
+    final parts = <String>[?resolution, ?codec, ?hdrFormat];
     return parts.isEmpty ? null : parts.join(' • ');
   }
 }
 
 List<MediaFile> filesFromVersions(List<MediaVersion> versions) => [
-      for (final v in versions)
-        MediaFile(
-          id: v.id,
-          resolution: v.height == null ? null : '${v.height}p',
-          codec: v.videoCodec,
-          audioCodec: v.audioCodec,
-          // MediaFile.bitrate is bits per second; versions carry kilobits.
-          bitrate: v.bitrateKbps == null ? null : v.bitrateKbps! * 1000,
-          size: v.sizeBytes,
-          hdrFormat: v.hdrFormat,
-          directPlaySupported: v.directPlaySupported ?? true,
-        ),
-    ];
+  for (final v in versions)
+    MediaFile(
+      id: v.id,
+      resolution: v.height == null ? null : '${v.height}p',
+      codec: v.videoCodec,
+      audioCodec: v.audioCodec,
+      // MediaFile.bitrate is bits per second; versions carry kilobits.
+      bitrate: v.bitrateKbps == null ? null : v.bitrateKbps! * 1000,
+      size: v.sizeBytes,
+      hdrFormat: v.hdrFormat,
+      directPlaySupported: v.directPlaySupported ?? true,
+    ),
+];

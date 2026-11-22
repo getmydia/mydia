@@ -18,8 +18,9 @@ class CastPill extends StatelessWidget {
   /// action button (the tallest part of a row) inside [_padding] on both
   /// sides. The pill is held at that minimum so its radius is half its height.
   static const double liquidMinHeight = kMinInteractiveDimension + 2 * _padding;
-  static const liquidRadius =
-      BorderRadius.all(Radius.circular(liquidMinHeight / 2));
+  static const liquidRadius = BorderRadius.all(
+    Radius.circular(liquidMinHeight / 2),
+  );
 
   /// Widest the bar grows beside the desktop sidebar, including this pill's
   /// own side margins. Wider than this the scrubber gains nothing and the
@@ -44,8 +45,10 @@ class CastPill extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: DockGlass.sideMargin),
       child: DecoratedBox(
-        decoration:
-            BoxDecoration(borderRadius: shape, boxShadow: DockGlass.shadow),
+        decoration: BoxDecoration(
+          borderRadius: shape,
+          boxShadow: DockGlass.shadow,
+        ),
         child: GlassSurface.chrome(
           opacity: DockGlass.fillOpacity,
           borderRadius: shape,
@@ -56,8 +59,9 @@ class CastPill extends StatelessWidget {
             type: MaterialType.transparency,
             child: liquid
                 ? ConstrainedBox(
-                    constraints:
-                        const BoxConstraints(minHeight: liquidMinHeight),
+                    constraints: const BoxConstraints(
+                      minHeight: liquidMinHeight,
+                    ),
                     // A Row centres its child in the height the minimum
                     // forces, so a short state does not sit at the top.
                     child: Row(

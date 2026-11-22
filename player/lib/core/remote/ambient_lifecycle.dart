@@ -121,25 +121,32 @@ class AmbientLifecycleBinding {
     // timer in `cast_providers.dart`) must keep no-oping through a
     // background period no matter how many times it fires.
     current.onForeground();
-    unawaited(current.sweep().then((_) {
-      // The app may have backgrounded again while this sweep was still in
-      // flight (see `_foreground`'s dartdoc). Undo it rather than leaving a
-      // stale foreground sweep's connections open behind a backgrounded
-      // app.
-      if (!_foreground) current.onBackground();
-    }).catchError((Object error) {
-      // `sweep()` awaits `rosterSource()`, a real GraphQL fetch in
-      // production (`ambientTargetsProvider` in `core/cast/cast_providers.dart`
-      // builds it from `RemoteRoster.entries()`), which can throw on a
-      // network or auth failure. This call has no caller of its own to
-      // report to — `unawaited` above already says so — so without this
-      // handler that failure becomes an unhandled async error on every
-      // foreground transition with no reachable server. The next foreground
-      // transition retries; there is nothing more useful to do here than
-      // log it and still honor a background transition that arrived while
-      // this sweep was failing.
-      debugPrint('[AmbientLifecycleBinding] Ignoring sweep error: $error');
-      if (!_foreground) current.onBackground();
-    }));
+    unawaited(
+      current
+          .sweep()
+          .then((_) {
+            // The app may have backgrounded again while this sweep was still in
+            // flight (see `_foreground`'s dartdoc). Undo it rather than leaving a
+            // stale foreground sweep's connections open behind a backgrounded
+            // app.
+            if (!_foreground) current.onBackground();
+          })
+          .catchError((Object error) {
+            // `sweep()` awaits `rosterSource()`, a real GraphQL fetch in
+            // production (`ambientTargetsProvider` in `core/cast/cast_providers.dart`
+            // builds it from `RemoteRoster.entries()`), which can throw on a
+            // network or auth failure. This call has no caller of its own to
+            // report to — `unawaited` above already says so — so without this
+            // handler that failure becomes an unhandled async error on every
+            // foreground transition with no reachable server. The next foreground
+            // transition retries; there is nothing more useful to do here than
+            // log it and still honor a background transition that arrived while
+            // this sweep was failing.
+            debugPrint(
+              '[AmbientLifecycleBinding] Ignoring sweep error: $error',
+            );
+            if (!_foreground) current.onBackground();
+          }),
+    );
   }
 }

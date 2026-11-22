@@ -77,36 +77,41 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
 
 /// One Mydia instance whose roster answers [response].
 Override _rosterOf(Map<String, dynamic> response) =>
-    mergedRosterProvider.overrideWithValue(MergedRoster({
-      const SourceId('mydia-a'): RemoteRoster(
-        client: fakeMydiaClient(ScriptedMydiaTransport.responses([response])),
-      ),
-    }));
+    mergedRosterProvider.overrideWithValue(
+      MergedRoster({
+        const SourceId('mydia-a'): RemoteRoster(
+          client: fakeMydiaClient(ScriptedMydiaTransport.responses([response])),
+        ),
+      }),
+    );
 
-Map<String, dynamic> _device(String id, String nodeId,
-        {required bool online}) =>
-    {
-      '__typename': 'RemoteDevice',
-      'id': id,
-      'deviceName': id,
-      'platform': 'android',
-      'nodeId': nodeId,
-      'isRevoked': false,
-      'online': online,
-    };
+Map<String, dynamic> _device(
+  String id,
+  String nodeId, {
+  required bool online,
+}) => {
+  '__typename': 'RemoteDevice',
+  'id': id,
+  'deviceName': id,
+  'platform': 'android',
+  'nodeId': nodeId,
+  'isRevoked': false,
+  'online': online,
+};
 
 void main() {
   group('mydiaCastBackendProvider rebuild on host swap', () {
-    test(
-        'stays null until the status record carries a node id, then '
+    test('stays null until the status record carries a node id, then '
         'rebuilds non-null once it does', () async {
       final statusNotifier = _FakeP2pStatusNotifier();
 
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+          p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+          _rosterOf(<String, dynamic>{'__typename': 'Query'}),
+        ],
+      );
       addTearDown(container.dispose);
 
       expect(
@@ -120,55 +125,63 @@ void main() {
       expect(
         container.read(mydiaCastBackendProvider),
         isNotNull,
-        reason: 'the host and the node id are both present now, so the '
+        reason:
+            'the host and the node id are both present now, so the '
             'provider must rebuild rather than keep handing out the '
             'earlier null',
       );
     });
 
-    test('a peer connecting does not swap the backend out mid-session',
-        () async {
-      // Connecting to a Mydia target is itself a peer connection, so the
-      // status record moves the moment a cast session opens. Rebuilding on
-      // that disposes the very backend that just sent `Hello`: `connect`
-      // returns at its `if (_disposed) return`, polling never starts, and
-      // the adopted session sits at a zero duration forever. Only an
-      // identity change is a real host swap.
-      final statusNotifier = _FakeP2pStatusNotifier();
+    test(
+      'a peer connecting does not swap the backend out mid-session',
+      () async {
+        // Connecting to a Mydia target is itself a peer connection, so the
+        // status record moves the moment a cast session opens. Rebuilding on
+        // that disposes the very backend that just sent `Hello`: `connect`
+        // returns at its `if (_disposed) return`, polling never starts, and
+        // the adopted session sits at a zero duration forever. Only an
+        // identity change is a real host swap.
+        final statusNotifier = _FakeP2pStatusNotifier();
 
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
-      ]);
-      addTearDown(container.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+            p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+            _rosterOf(<String, dynamic>{'__typename': 'Query'}),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      // Read once before publishing: the notifier has to be mounted before
-      // it can set state, exactly as the test above does.
-      expect(container.read(mydiaCastBackendProvider), isNull);
+        // Read once before publishing: the notifier has to be mounted before
+        // it can set state, exactly as the test above does.
+        expect(container.read(mydiaCastBackendProvider), isNull);
 
-      statusNotifier.publish('a' * 64);
-      final before = container.read(mydiaCastBackendProvider);
-      expect(before, isNotNull);
+        statusNotifier.publish('a' * 64);
+        final before = container.read(mydiaCastBackendProvider);
+        expect(before, isNotNull);
 
-      statusNotifier.publishPeerConnected('a' * 64);
+        statusNotifier.publishPeerConnected('a' * 64);
 
-      expect(
-        identical(container.read(mydiaCastBackendProvider), before),
-        isTrue,
-        reason: 'the same host and identity must keep the same backend, or '
-            'the live session it is holding is disposed underneath it',
-      );
-    });
+        expect(
+          identical(container.read(mydiaCastBackendProvider), before),
+          isTrue,
+          reason:
+              'the same host and identity must keep the same backend, or '
+              'the live session it is holding is disposed underneath it',
+        );
+      },
+    );
 
     test('the node address arriving does not swap the backend', () async {
       final statusNotifier = _FakeP2pStatusNotifier();
 
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+          p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+          _rosterOf(<String, dynamic>{'__typename': 'Query'}),
+        ],
+      );
       addTearDown(container.dispose);
 
       expect(container.read(mydiaCastBackendProvider), isNull);
@@ -179,22 +192,25 @@ void main() {
       statusNotifier.publishAddr('a' * 64, '{"id":"${'a' * 64}","addrs":[]}');
 
       expect(
-          identical(container.read(mydiaCastBackendProvider), before), isTrue,
-          reason: 'the provider never reads nodeAddr');
+        identical(container.read(mydiaCastBackendProvider), before),
+        isTrue,
+        reason: 'the provider never reads nodeAddr',
+      );
     });
   });
 
   group('ambientTargetsProvider rebuild on host swap', () {
-    test(
-        'stays null until the status record carries a node id, then '
+    test('stays null until the status record carries a node id, then '
         'rebuilds non-null once it does', () async {
       final statusNotifier = _FakeP2pStatusNotifier();
 
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+          p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+          _rosterOf(<String, dynamic>{'__typename': 'Query'}),
+        ],
+      );
       addTearDown(container.dispose);
 
       expect(
@@ -208,109 +224,127 @@ void main() {
       expect(
         container.read(ambientTargetsProvider),
         isNotNull,
-        reason: 'the host and the node id are both present now, so the '
+        reason:
+            'the host and the node id are both present now, so the '
             'provider must rebuild rather than keep handing out the '
             'earlier null',
       );
     });
 
-    test('a peer connecting does not dispose the held ambient targets',
-        () async {
-      // Ambient awareness holds a live connection per playing target, and
-      // opening one is itself a peer connection. Rebuilding on that disposed
-      // the `AmbientTargets` that had just connected, so every sweep tore
-      // down the connections the previous sweep established.
-      final statusNotifier = _FakeP2pStatusNotifier();
+    test(
+      'a peer connecting does not dispose the held ambient targets',
+      () async {
+        // Ambient awareness holds a live connection per playing target, and
+        // opening one is itself a peer connection. Rebuilding on that disposed
+        // the `AmbientTargets` that had just connected, so every sweep tore
+        // down the connections the previous sweep established.
+        final statusNotifier = _FakeP2pStatusNotifier();
 
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
-      ]);
-      addTearDown(container.dispose);
-
-      expect(container.read(ambientTargetsProvider), isNull);
-
-      statusNotifier.publish('a' * 64);
-      final before = container.read(ambientTargetsProvider);
-      expect(before, isNotNull);
-
-      statusNotifier.publishPeerConnected('a' * 64);
-
-      expect(
-        identical(container.read(ambientTargetsProvider), before),
-        isTrue,
-        reason: 'the same host and identity must keep the same ambient '
-            'targets, or each sweep disposes its own connections',
-      );
-    });
-
-    test('scans only the devices the server reports online, never itself',
-        () async {
-      // A device that is playing is talking to the server, so an offline one
-      // cannot be what the banner is looking for, and each dial to it costs a
-      // 10 second on-demand timeout on every 30 second scan.
-      final statusNotifier = _FakeP2pStatusNotifier();
-
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{
-          '__typename': 'Query',
-          'devices': [
-            _device('this-device', 'a' * 64, online: true),
-            _device('hall-screen', 'b' * 64, online: true),
-            _device('attic-tablet', 'c' * 64, online: false),
+        final container = ProviderContainer(
+          overrides: [
+            p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+            p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+            _rosterOf(<String, dynamic>{'__typename': 'Query'}),
           ],
-        }),
-      ]);
-      addTearDown(container.dispose);
+        );
+        addTearDown(container.dispose);
 
-      expect(container.read(ambientTargetsProvider), isNull);
+        expect(container.read(ambientTargetsProvider), isNull);
 
-      statusNotifier.publish('a' * 64);
-      final targets = container.read(ambientTargetsProvider);
-      expect(targets, isNotNull);
+        statusNotifier.publish('a' * 64);
+        final before = container.read(ambientTargetsProvider);
+        expect(before, isNotNull);
 
-      expect(await targets!.rosterSource(), ['b' * 64]);
-    });
+        statusNotifier.publishPeerConnected('a' * 64);
 
-    test('the node address arriving does not rebuild ambient targets',
-        () async {
-      // Each rebuild is a new AmbientTargets and a fresh sweep, which is one
-      // more OnlineDevices query on every launch.
-      final statusNotifier = _FakeP2pStatusNotifier();
-
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
-      ]);
-      addTearDown(container.dispose);
-
-      expect(container.read(ambientTargetsProvider), isNull);
-      statusNotifier.publish('a' * 64);
-      final before = container.read(ambientTargetsProvider);
-      expect(before, isNotNull);
-
-      statusNotifier.publishAddr('a' * 64, '{"id":"${'a' * 64}","addrs":[]}');
-
-      expect(identical(container.read(ambientTargetsProvider), before), isTrue,
-          reason: 'the provider never reads nodeAddr');
-    });
+        expect(
+          identical(container.read(ambientTargetsProvider), before),
+          isTrue,
+          reason:
+              'the same host and identity must keep the same ambient '
+              'targets, or each sweep disposes its own connections',
+        );
+      },
+    );
 
     test(
-        'a player found stopped clears its hidden banner, with nothing '
+      'scans only the devices the server reports online, never itself',
+      () async {
+        // A device that is playing is talking to the server, so an offline one
+        // cannot be what the banner is looking for, and each dial to it costs a
+        // 10 second on-demand timeout on every 30 second scan.
+        final statusNotifier = _FakeP2pStatusNotifier();
+
+        final container = ProviderContainer(
+          overrides: [
+            p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+            p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+            _rosterOf(<String, dynamic>{
+              '__typename': 'Query',
+              'devices': [
+                _device('this-device', 'a' * 64, online: true),
+                _device('hall-screen', 'b' * 64, online: true),
+                _device('attic-tablet', 'c' * 64, online: false),
+              ],
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        expect(container.read(ambientTargetsProvider), isNull);
+
+        statusNotifier.publish('a' * 64);
+        final targets = container.read(ambientTargetsProvider);
+        expect(targets, isNotNull);
+
+        expect(await targets!.rosterSource(), ['b' * 64]);
+      },
+    );
+
+    test(
+      'the node address arriving does not rebuild ambient targets',
+      () async {
+        // Each rebuild is a new AmbientTargets and a fresh sweep, which is one
+        // more OnlineDevices query on every launch.
+        final statusNotifier = _FakeP2pStatusNotifier();
+
+        final container = ProviderContainer(
+          overrides: [
+            p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+            p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+            _rosterOf(<String, dynamic>{'__typename': 'Query'}),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        expect(container.read(ambientTargetsProvider), isNull);
+        statusNotifier.publish('a' * 64);
+        final before = container.read(ambientTargetsProvider);
+        expect(before, isNotNull);
+
+        statusNotifier.publishAddr('a' * 64, '{"id":"${'a' * 64}","addrs":[]}');
+
+        expect(
+          identical(container.read(ambientTargetsProvider), before),
+          isTrue,
+          reason: 'the provider never reads nodeAddr',
+        );
+      },
+    );
+
+    test('a player found stopped clears its hidden banner, with nothing '
         'watching ambientPlayingProvider', () async {
       final statusNotifier = _FakeP2pStatusNotifier();
-      final container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        _rosterOf(<String, dynamic>{
-          '__typename': 'Query',
-          'devices': [_device('hall-screen', 'b' * 64, online: true)],
-        }),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+          p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+          _rosterOf(<String, dynamic>{
+            '__typename': 'Query',
+            'devices': [_device('hall-screen', 'b' * 64, online: true)],
+          }),
+        ],
+      );
       addTearDown(container.dispose);
       expect(container.read(ambientTargetsProvider), isNull);
       statusNotifier.publish('a' * 64);
@@ -337,20 +371,24 @@ void main() {
       records = _Records([_record('a'), _record('b')]);
       status = _FakeP2pStatusNotifier();
       rosters.clear();
-      container = ProviderContainer(overrides: [
-        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
-        p2pStatusNotifierProvider.overrideWith(() => status),
-        sourceRecordsProvider.overrideWith(() => records),
-        mediaSourceProvider.overrideWith((ref, id) {
-          for (final a in ['a', 'b', 'c']) {
-            if (id == mydiaSourceIdOf(_record(a))) {
-              return _RosterSource(
-                  id, rosters.putIfAbsent(a, _EmptyRoster.new));
+      container = ProviderContainer(
+        overrides: [
+          p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+          p2pStatusNotifierProvider.overrideWith(() => status),
+          sourceRecordsProvider.overrideWith(() => records),
+          mediaSourceProvider.overrideWith((ref, id) {
+            for (final a in ['a', 'b', 'c']) {
+              if (id == mydiaSourceIdOf(_record(a))) {
+                return _RosterSource(
+                  id,
+                  rosters.putIfAbsent(a, _EmptyRoster.new),
+                );
+              }
             }
-          }
-          return null;
-        }),
-      ]);
+            return null;
+          }),
+        ],
+      );
       addTearDown(container.dispose);
       await container.read(sourceRecordsProvider.future);
       container.read(p2pStatusNotifierProvider);
@@ -367,9 +405,13 @@ void main() {
       await pumpEventQueue();
 
       expect(
-          identical(container.read(mydiaCastBackendProvider), backend), isTrue);
+        identical(container.read(mydiaCastBackendProvider), backend),
+        isTrue,
+      );
       expect(
-          identical(container.read(ambientTargetsProvider), targets), isTrue);
+        identical(container.read(ambientTargetsProvider), targets),
+        isTrue,
+      );
       expect(identical(container.read(mergedRosterProvider), roster), isTrue);
     });
 
@@ -381,8 +423,10 @@ void main() {
       await pumpEventQueue();
 
       expect(identical(container.read(mergedRosterProvider), roster), isFalse);
-      expect(identical(container.read(mydiaCastBackendProvider), backend),
-          isFalse);
+      expect(
+        identical(container.read(mydiaCastBackendProvider), backend),
+        isFalse,
+      );
     });
   });
 }
@@ -403,8 +447,10 @@ class _RosterSource extends FakeMediaSource implements RemoteTargets {
   final DeviceRoster roster;
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.remoteTargets};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.remoteTargets,
+  };
 
   @override
   Future<bool> registerNode(String nodeId) async => true;
@@ -439,11 +485,19 @@ SourceAccountRecord _record(String account, {bool needsReauth = false}) =>
       ),
       profiles: [
         SourceProfile(
-            id: 'owner', accountId: account, name: 'Owner', isOwner: true),
+          id: 'owner',
+          accountId: account,
+          name: 'Owner',
+          isOwner: true,
+        ),
       ],
       servers: [
         SourceServer(
-            id: 'inst', accountId: account, profileId: 'owner', name: account),
+          id: 'inst',
+          accountId: account,
+          profileId: 'owner',
+          name: account,
+        ),
       ],
       addedAtMs: account.codeUnitAt(0),
     );

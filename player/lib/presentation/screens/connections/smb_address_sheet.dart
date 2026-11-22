@@ -88,9 +88,9 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
   /// The saved share, which the new address must also serve.
   late final SmbTarget? _current =
       switch (widget.record.servers.firstOrNull?.connections.firstOrNull?.uri) {
-    final uri? => smbTargetOf(Uri.parse(normalizeSmbUrl(uri))),
-    null => null,
-  };
+        final uri? => smbTargetOf(Uri.parse(normalizeSmbUrl(uri))),
+        null => null,
+      };
 
   @override
   void initState() {
@@ -114,11 +114,11 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
   }
 
   void _pick(DiscoveredSmbServer server) => setState(() {
-        _host.text = server.host;
-        _port.text = server.port == kSmbDefaultPort ? '' : '${server.port}';
-        _discovered = server;
-        _problem = null;
-      });
+    _host.text = server.host;
+    _port.text = server.port == kSmbDefaultPort ? '' : '${server.port}';
+    _discovered = server;
+    _problem = null;
+  });
 
   /// The stored sign-in, or null when it is missing or unreadable.
   Future<SmbCredentials?> _credentials() async {
@@ -134,19 +134,21 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
   }
 
   static _Problem _problemOf(Object e) => switch (e) {
-        BackendUnauthorized() => const _Simple(_Kind.unauthorized),
-        BackendPermissionLost() => const _Simple(_Kind.accessDenied),
-        BackendUnreachable(message: kSmb1OnlyReason) =>
-          const _Simple(_Kind.smb1Only),
-        _ => const _Simple(_Kind.unreachable),
-      };
+    BackendUnauthorized() => const _Simple(_Kind.unauthorized),
+    BackendPermissionLost() => const _Simple(_Kind.accessDenied),
+    BackendUnreachable(message: kSmb1OnlyReason) => const _Simple(
+      _Kind.smb1Only,
+    ),
+    _ => const _Simple(_Kind.unreachable),
+  };
 
   Future<void> _save() async {
     final current = _current;
     final address = parseSmbAddress(_host.text, _port.text);
     if (current == null || address == null) {
-      setState(() =>
-          _problem = _Simple(current == null ? _Kind.save : _Kind.address));
+      setState(
+        () => _problem = _Simple(current == null ? _Kind.save : _Kind.address),
+      );
       return;
     }
     setState(() {
@@ -171,12 +173,13 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
       // hostname; a typed one only where it was typed.
       final hosts = server == null
           ? [address.host]
-          : [
-              ...server.addresses,
-              if (server.hostname case final hostname?) hostname,
-            ];
+          : [...server.addresses, ?server.hostname];
       final (shares, reached) = await listSharesAtFirstReachable(
-          native, hosts, address.port, credentials);
+        native,
+        hosts,
+        address.port,
+        credentials,
+      );
       final share = current.share.toLowerCase();
       if (!shares.any((s) => s.toLowerCase() == share)) {
         if (mounted) setState(() => _problem = _ShareMissing(current.share));
@@ -185,9 +188,10 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
       // Listing the shares does not prove these credentials can open this
       // one there; a failure here leaves the saved address alone.
       await native.probe(
-          SmbTarget(host: reached, port: address.port, share: current.share),
-          credentials,
-          '/');
+        SmbTarget(host: reached, port: address.port, share: current.share),
+        credentials,
+        '/',
+      );
       if (!await _store(accounts, reached, address.port, server)) {
         if (mounted) setState(() => _problem = const _Simple(_Kind.save));
         return;
@@ -205,8 +209,12 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
   /// hostname and other addresses as alternatives; false when that failed.
   /// A share removed while the sheet was open counts as done, so the sheet
   /// closes quietly.
-  Future<bool> _store(FilesAccounts accounts, String host, int port,
-      DiscoveredSmbServer? server) async {
+  Future<bool> _store(
+    FilesAccounts accounts,
+    String host,
+    int port,
+    DiscoveredSmbServer? server,
+  ) async {
     try {
       await accounts.setSmbAddress(
         widget.record.account.id,
@@ -214,10 +222,7 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
         port: port,
         alternatives: server == null
             ? const []
-            : [
-                if (server.hostname case final hostname?) hostname,
-                ...server.addresses.where((a) => a != host),
-              ],
+            : [?server.hostname, ...server.addresses.where((a) => a != host)],
         serviceName: server?.name,
       );
     } on StateError catch (e) {
@@ -230,15 +235,14 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
   }
 
   String _problemText(AppLocalizations l10n, _Problem p) => switch (p) {
-        _ShareMissing(:final share) =>
-          l10n.filesChangeAddressShareMissing(share),
-        _Simple(kind: _Kind.address) => l10n.filesSmbAddressInvalid,
-        _Simple(kind: _Kind.unauthorized) => l10n.filesSmbUnauthorized,
-        _Simple(kind: _Kind.accessDenied) => l10n.filesSmbAccessDenied,
-        _Simple(kind: _Kind.unreachable) => l10n.filesSmbUnreachable,
-        _Simple(kind: _Kind.smb1Only) => l10n.filesSmbSmb1Only,
-        _Simple(kind: _Kind.save) => l10n.filesSmbSaveFailed,
-      };
+    _ShareMissing(:final share) => l10n.filesChangeAddressShareMissing(share),
+    _Simple(kind: _Kind.address) => l10n.filesSmbAddressInvalid,
+    _Simple(kind: _Kind.unauthorized) => l10n.filesSmbUnauthorized,
+    _Simple(kind: _Kind.accessDenied) => l10n.filesSmbAccessDenied,
+    _Simple(kind: _Kind.unreachable) => l10n.filesSmbUnreachable,
+    _Simple(kind: _Kind.smb1Only) => l10n.filesSmbSmb1Only,
+    _Simple(kind: _Kind.save) => l10n.filesSmbSaveFailed,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -265,8 +269,9 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
               controller: _host,
               enabled: !_busy,
               keyboardType: TextInputType.url,
-              decoration:
-                  InputDecoration(labelText: l10n.filesChangeAddressHost),
+              decoration: InputDecoration(
+                labelText: l10n.filesChangeAddressHost,
+              ),
               // An edited host is a typed one, whatever filled it.
               onChanged: (_) => _discovered = null,
               onSubmitted: (_) => _busy ? null : _save(),
@@ -278,14 +283,18 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
               enabled: !_busy,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                  labelText: l10n.filesSmbPortLabel, hintText: '445'),
+                labelText: l10n.filesSmbPortLabel,
+                hintText: '445',
+              ),
               onChanged: (_) => _discovered = null,
               onSubmitted: (_) => _busy ? null : _save(),
             ),
             if (_servers.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(l10n.filesSmbServersHeading,
-                  style: theme.textTheme.titleSmall),
+              Text(
+                l10n.filesSmbServersHeading,
+                style: theme.textTheme.titleSmall,
+              ),
               for (final s in _servers)
                 ListTile(
                   // Discovery keeps the advertised name unique.
@@ -301,9 +310,11 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
             if (problem != null)
               Padding(
                 padding: const EdgeInsets.only(top: 16),
-                child: Text(_problemText(l10n, problem),
-                    key: const Key('smb-address-error'),
-                    style: TextStyle(color: theme.colorScheme.error)),
+                child: Text(
+                  _problemText(l10n, problem),
+                  key: const Key('smb-address-error'),
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
             const SizedBox(height: 24),
             FilledButton(
@@ -312,7 +323,8 @@ class _SmbAddressSheetState extends ConsumerState<SmbAddressSheet> {
               child: _busy
                   ? const SizedBox.square(
                       dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : Text(l10n.filesChangeAddressSave),
             ),
           ],

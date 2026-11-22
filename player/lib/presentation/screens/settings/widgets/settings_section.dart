@@ -42,9 +42,7 @@ class SettingsCard extends StatelessWidget {
     final result = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
-        result.add(
-          Divider(height: 1, thickness: 1, color: palette.divider),
-        );
+        result.add(Divider(height: 1, thickness: 1, color: palette.divider));
       }
       result.add(children[i]);
     }

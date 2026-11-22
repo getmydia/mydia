@@ -101,12 +101,12 @@ String mediaContextLabel(AppLocalizations l10n, MediaContextAction action) =>
 
 /// Menu glyph for [action].
 IconData mediaContextIcon(MediaContextAction action) => switch (action) {
-      MediaContextAction.play => Icons.play_arrow_rounded,
-      MediaContextAction.goToShow => Icons.tv_rounded,
-      MediaContextAction.movieDetails => Icons.info_outline_rounded,
-      MediaContextAction.removeFromContinueWatching =>
-        Icons.remove_circle_outline_rounded,
-    };
+  MediaContextAction.play => Icons.play_arrow_rounded,
+  MediaContextAction.goToShow => Icons.tv_rounded,
+  MediaContextAction.movieDetails => Icons.info_outline_rounded,
+  MediaContextAction.removeFromContinueWatching =>
+    Icons.remove_circle_outline_rounded,
+};
 
 /// Where a navigation entry goes, or null for entries that do not navigate.
 ///
@@ -115,20 +115,18 @@ IconData mediaContextIcon(MediaContextAction action) => switch (action) {
 String? mediaContextLocation(
   MediaContextAction action,
   MediaContextTarget target,
-) =>
-    switch (action) {
-      MediaContextAction.goToShow when target.isEpisode =>
-        detailLocation(SourceTarget(target.item)),
-      MediaContextAction.goToShow => switch (target.show) {
-          final show? => detailLocation(SourceTarget(show)),
-          null => null,
-        },
-      MediaContextAction.movieDetails =>
-        detailLocation(SourceTarget(target.item)),
-      MediaContextAction.play ||
-      MediaContextAction.removeFromContinueWatching =>
-        null,
-    };
+) => switch (action) {
+  MediaContextAction.goToShow when target.isEpisode => detailLocation(
+    SourceTarget(target.item),
+  ),
+  MediaContextAction.goToShow => switch (target.show) {
+    final show? => detailLocation(SourceTarget(show)),
+    null => null,
+  },
+  MediaContextAction.movieDetails => detailLocation(SourceTarget(target.item)),
+  MediaContextAction.play ||
+  MediaContextAction.removeFromContinueWatching => null,
+};
 
 /// Where a popup menu opens to sit under [context]'s card, or null when
 /// [context] has no laid-out box.

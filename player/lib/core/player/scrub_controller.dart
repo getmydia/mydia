@@ -20,14 +20,11 @@ enum ScrubDirection { backward, forward }
 /// injectable through `elapsed`.
 class ScrubController extends ChangeNotifier {
   ScrubController({
-    required Duration Function() position,
-    required Duration Function() duration,
-    required Future<void> Function(Duration target) onCommit,
+    required this._position,
+    required this._duration,
+    required this._onCommit,
     Duration Function()? elapsed,
-  })  : _position = position,
-        _duration = duration,
-        _onCommit = onCommit,
-        _elapsed = elapsed ?? _stopwatch();
+  }) : _elapsed = elapsed ?? _stopwatch();
 
   /// How far one press moves the cursor.
   static const Duration tapStep = Duration(seconds: 10);

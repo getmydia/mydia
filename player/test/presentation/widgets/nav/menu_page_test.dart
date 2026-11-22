@@ -26,28 +26,30 @@ class _Host extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: Center(
-          child: TextButton(
-            onPressed: () => MenuPage.open(
-              context,
-              state: state,
-              onNavigate: navigated.add,
-              onSwitchSource: switched.add,
-            ),
-            child: const Text('open-menu'),
-          ),
+    body: Center(
+      child: TextButton(
+        onPressed: () => MenuPage.open(
+          context,
+          state: state,
+          onNavigate: navigated.add,
+          onSwitchSource: switched.add,
         ),
-      );
+        child: const Text('open-menu'),
+      ),
+    ),
+  );
 }
 
 Future<
-    ({
-      ValueNotifier<MenuPageState> state,
-      List<String> navigated,
-      List<String> switched,
-      ProviderContainer container,
-      ValueNotifier<bool> hostShown,
-    })> _openMenu(WidgetTester tester) async {
+  ({
+    ValueNotifier<MenuPageState> state,
+    List<String> navigated,
+    List<String> switched,
+    ProviderContainer container,
+    ValueNotifier<bool> hostShown,
+  })
+>
+_openMenu(WidgetTester tester) async {
   tester.view.physicalSize = const Size(400, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -55,31 +57,37 @@ Future<
   addTearDown(state.dispose);
   final navigated = <String>[];
   final switched = <String>[];
-  final container = ProviderContainer(overrides: [
-    sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
-    thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
-    hasMydiaProvider.overrideWithValue(true),
-    mediaSourceProvider(fakeSourceId).overrideWithValue(FakeCapableSource()),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      sidebarLayoutStoreProvider.overrideWithValue(
+        InMemorySidebarLayoutStore(),
+      ),
+      thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+      hasMydiaProvider.overrideWithValue(true),
+      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeCapableSource()),
+    ],
+  );
   addTearDown(container.dispose);
   // Clearing it unmounts the host under the open menu, as a redirect
   // replacing the shell does.
   final hostShown = ValueNotifier(true);
   addTearDown(hostShown.dispose);
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: ValueListenableBuilder<bool>(
-        valueListenable: hostShown,
-        builder: (_, shown, __) => shown
-            ? _Host(state: state, navigated: navigated, switched: switched)
-            : const SizedBox.shrink(),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ValueListenableBuilder<bool>(
+          valueListenable: hostShown,
+          builder: (_, shown, _) => shown
+              ? _Host(state: state, navigated: navigated, switched: switched)
+              : const SizedBox.shrink(),
+        ),
       ),
     ),
-  ));
+  );
   await tester.tap(find.text('open-menu'));
   await tester.pumpAndSettle();
   return (
@@ -108,10 +116,12 @@ void main() {
   testWidgets('a destination closes the menu, then navigates', (tester) async {
     final menu = await _openMenu(tester);
 
-    await tester.tap(find.descendant(
-      of: find.byType(MenuPage),
-      matching: find.text('Settings'),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(MenuPage),
+        matching: find.text('Settings'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(menu.navigated, ['/settings']);
@@ -130,8 +140,9 @@ void main() {
     expect(find.byType(MenuPage), findsOneWidget);
   });
 
-  testWidgets('follows the shell location and offline state while open',
-      (tester) async {
+  testWidgets('follows the shell location and offline state while open', (
+    tester,
+  ) async {
     final menu = await _openMenu(tester);
     expect(_content(tester).location, '/');
     expect(_content(tester).isOffline, isFalse);
@@ -156,8 +167,9 @@ void main() {
     expect(menu.container.read(sidebarEditModeProvider), isFalse);
   });
 
-  testWidgets('edit mode ends even when the opener is gone by then',
-      (tester) async {
+  testWidgets('edit mode ends even when the opener is gone by then', (
+    tester,
+  ) async {
     final menu = await _openMenu(tester);
     menu.container.read(sidebarEditModeProvider.notifier).toggle();
     menu.hostShown.value = false;

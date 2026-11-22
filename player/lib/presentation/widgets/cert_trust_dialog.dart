@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import '../../l10n/l10n.dart';
@@ -40,16 +41,14 @@ class CertTrustDialog extends StatelessWidget {
         children: [
           Text(
             context.l10n.certTrustFirstConnection,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: palette.textSecondary,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: palette.textSecondary),
           ),
           const SizedBox(height: 8),
           Text(
             serverUrl,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Text(
@@ -62,20 +61,15 @@ class CertTrustDialog extends StatelessWidget {
             decoration: BoxDecoration(
               color: palette.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: palette.border,
-                width: 1,
-              ),
+              border: Border.all(color: palette.border, width: 1),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: SelectableText(
                     fingerprint,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontFamily: 'monospace',
-                          fontSize: 11,
-                        ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(fontFamily: 'monospace', fontSize: 11),
                   ),
                 ),
                 IconButton(
@@ -116,9 +110,8 @@ class CertTrustDialog extends StatelessWidget {
                 Expanded(
                   child: Text(
                     context.l10n.certTrustWarning,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.warning,
-                        ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: AppColors.warning),
                   ),
                 ),
               ],
@@ -152,9 +145,7 @@ Future<bool?> showCertTrustDialog(
   return showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => CertTrustDialog(
-      serverUrl: serverUrl,
-      fingerprint: fingerprint,
-    ),
+    builder: (context) =>
+        CertTrustDialog(serverUrl: serverUrl, fingerprint: fingerprint),
   );
 }

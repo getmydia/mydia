@@ -50,7 +50,8 @@ class NextUpEpisode {
       episodeNumber: json['episodeNumber'] as int,
       title: json['title'] as String?,
       runtimeMinutes: json['runtime'] as int?,
-      files: (json['files'] as List<dynamic>?)
+      files:
+          (json['files'] as List<dynamic>?)
               ?.map((e) => MediaFile.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
@@ -60,7 +61,8 @@ class NextUpEpisode {
     );
   }
 
-  String get episodeCode => 'S${seasonNumber.toString().padLeft(2, '0')}'
+  String get episodeCode =>
+      'S${seasonNumber.toString().padLeft(2, '0')}'
       'E${episodeNumber.toString().padLeft(2, '0')}';
 }
 

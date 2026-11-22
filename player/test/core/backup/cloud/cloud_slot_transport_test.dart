@@ -24,42 +24,57 @@ void main() {
     });
 
     test('writes the device name and platform with the slot', () async {
-      await a.writeOwn(const BackupPayload(
+      await a.writeOwn(
+        const BackupPayload(
           deviceName: 'Living Room',
           platform: 'ios',
           createdAt: 1,
-          records: []));
+          records: [],
+        ),
+      );
       expect(store.names['slot-a'], 'Living Room');
       expect(store.platforms['slot-a'], 'ios');
     });
 
     test('a group record never reaches the store', () async {
-      await a.writeOwn(const BackupPayload(
-        deviceName: 'Living Room',
-        platform: 'ios',
-        createdAt: 1,
-        records: [
-          GroupBackupRecord(
+      await a.writeOwn(
+        const BackupPayload(
+          deviceName: 'Living Room',
+          platform: 'ios',
+          createdAt: 1,
+          records: [
+            GroupBackupRecord(
               key: 'group',
               groupSecretB64: 'c2VjcmV0',
               nodeToSlot: {},
-              updatedAt: 1),
-        ],
-      ));
+              updatedAt: 1,
+            ),
+          ],
+        ),
+      );
       final stored = BackupPayload.decode(store.bytes['slot-a']!);
       expect(stored.records, isEmpty);
     });
 
     test('the own slot missing from a listing marks it stale', () async {
       final b = CloudSlotTransport(InMemoryCloudBackend(store), 'slot-b');
-      await b.writeOwn(const BackupPayload(
-          deviceName: 'Bedroom', platform: 'ios', createdAt: 1, records: []));
+      await b.writeOwn(
+        const BackupPayload(
+          deviceName: 'Bedroom',
+          platform: 'ios',
+          createdAt: 1,
+          records: [],
+        ),
+      );
       expect((await a.list())!.ownStale, isTrue);
-      await a.writeOwn(const BackupPayload(
+      await a.writeOwn(
+        const BackupPayload(
           deviceName: 'Living Room',
           platform: 'ios',
           createdAt: 1,
-          records: []));
+          records: [],
+        ),
+      );
       expect((await a.list())!.ownStale, isFalse);
     });
   });

@@ -51,12 +51,12 @@ class _Vault {
   }
 
   BackupVaultState initialState() => BackupVaultState(
-        vaultId: vaultId,
-        epoch: 1,
-        keysByEpoch: {1: key},
-        recoveryKeyText: null,
-        ownSeq: 0,
-      );
+    vaultId: vaultId,
+    epoch: 1,
+    keysByEpoch: {1: key},
+    recoveryKeyText: null,
+    ownSeq: 0,
+  );
 
   RelaySlotTransport transport(_Member m, {BackupVaultState? state}) =>
       RelaySlotTransport(
@@ -99,22 +99,24 @@ class _Member {
 }
 
 BackupPayload _payload(String deviceName, {int stamp = 1}) => BackupPayload(
-      deviceName: deviceName,
-      platform: 'linux',
-      createdAt: stamp,
-      records: [
-        SettingBackupRecord(
-          key: 'setting:theme',
-          settingKey: 'theme',
-          value: 'dark-$stamp',
-          updatedAt: stamp,
-        ),
-      ],
-    );
+  deviceName: deviceName,
+  platform: 'linux',
+  createdAt: stamp,
+  records: [
+    SettingBackupRecord(
+      key: 'setting:theme',
+      settingKey: 'theme',
+      value: 'dark-$stamp',
+      updatedAt: stamp,
+    ),
+  ],
+);
 
-http.Response _http412() =>
-    http.Response(jsonEncode({'error': 'precondition_failed'}), 412,
-        headers: {'content-type': 'application/json'});
+http.Response _http412() => http.Response(
+  jsonEncode({'error': 'precondition_failed'}),
+  412,
+  headers: {'content-type': 'application/json'},
+);
 
 /// Base64 of [n] random bytes: does not compress under gzip.
 String _noise(int n) {
@@ -162,8 +164,13 @@ void main() {
       v.fake.override = (r) => r.method == 'PUT' ? _http412() : null;
       await expectLater(
         a.writeOwn(_payload('Living Room')),
-        throwsA(isA<BackupRelayException>().having(
-            (e) => e.kind, 'kind', BackupRelayError.preconditionFailed)),
+        throwsA(
+          isA<BackupRelayException>().having(
+            (e) => e.kind,
+            'kind',
+            BackupRelayError.preconditionFailed,
+          ),
+        ),
       );
       expect(v.puts(v.a), 2);
     });
@@ -243,8 +250,9 @@ void main() {
       final b = v.transport(v.b);
       await a.writeOwn(_payload('Living Room'));
       v.fake.corruptSlot(v.vaultId, v.a.slotId);
-      final info =
-          (await b.list())!.slots.singleWhere((s) => s.slotId == v.a.slotId);
+      final info = (await b.list())!.slots.singleWhere(
+        (s) => s.slotId == v.a.slotId,
+      );
       await expectLater(b.read(info), throwsFormatException);
     });
 
@@ -252,12 +260,14 @@ void main() {
       final a = v.transport(v.a);
       final b = v.transport(v.b);
       await a.writeOwn(_payload('Living Room'));
-      final info =
-          (await b.list())!.slots.singleWhere((s) => s.slotId == v.a.slotId);
+      final info = (await b.list())!.slots.singleWhere(
+        (s) => s.slotId == v.a.slotId,
+      );
       expect(info.deviceName, isNull);
       await b.read(info);
-      final again =
-          (await b.list())!.slots.singleWhere((s) => s.slotId == v.a.slotId);
+      final again = (await b.list())!.slots.singleWhere(
+        (s) => s.slotId == v.a.slotId,
+      );
       expect(again.deviceName, 'Living Room');
       expect(again.updatedAtMs, _t0);
     });
@@ -279,8 +289,13 @@ void main() {
       );
       await expectLater(
         a.writeOwn(big),
-        throwsA(isA<BackupRelayException>()
-            .having((e) => e.kind, 'kind', BackupRelayError.tooLarge)),
+        throwsA(
+          isA<BackupRelayException>().having(
+            (e) => e.kind,
+            'kind',
+            BackupRelayError.tooLarge,
+          ),
+        ),
       );
       expect(v.fake.requests.where((r) => r.startsWith('PUT ')), isEmpty);
       expect(a.state.ownSeq, 0);
@@ -291,46 +306,61 @@ void main() {
       await expectLater(a.delete(v.b.slotId), throwsUnsupportedError);
     });
 
-    test('readSlot_rethrows_and_preview_skips_NewerBackupVersionException',
-        () async {
-      final fake = FakeBackupRelay(now: () => _t0);
-      final client = fake.relayClient();
-      final ops = BackupVaultOps(client);
-      final member = await _Member.create();
-      final recovery = await RecoveryMember.of(RecoveryKey.generate());
-      final vaultKey = randomVaultKey();
-      final vaultId =
-          await ops.createVault(member.identity, recovery, vaultKey);
+    test(
+      'readSlot_rethrows_and_preview_skips_NewerBackupVersionException',
+      () async {
+        final fake = FakeBackupRelay(now: () => _t0);
+        final client = fake.relayClient();
+        final ops = BackupVaultOps(client);
+        final member = await _Member.create();
+        final recovery = await RecoveryMember.of(RecoveryKey.generate());
+        final vaultKey = randomVaultKey();
+        final vaultId = await ops.createVault(
+          member.identity,
+          recovery,
+          vaultKey,
+        );
 
-      final futurePlaintext = gzipEncode(utf8.encode(jsonEncode({
-        'v': BackupPayload.version + 1,
-        'deviceName': 'Future',
-        'platform': 'ios',
-        'createdAt': _t0,
-        'records': const <Object?>[],
-      })));
-      final sealed = await VaultCrypto.sealSlot(
-        vaultKey: vaultKey,
-        vaultId: vaultId,
-        epoch: 1,
-        slotId: member.slotId,
-        seq: 1,
-        plaintext: futurePlaintext,
-      );
-      await client.putSlot(
-          vaultId, member.identity.signer, member.slotId, sealed,
-          ifMatch: null, epoch: 1);
+        final futurePlaintext = gzipEncode(
+          utf8.encode(
+            jsonEncode({
+              'v': BackupPayload.version + 1,
+              'deviceName': 'Future',
+              'platform': 'ios',
+              'createdAt': _t0,
+              'records': const <Object?>[],
+            }),
+          ),
+        );
+        final sealed = await VaultCrypto.sealSlot(
+          vaultKey: vaultKey,
+          vaultId: vaultId,
+          epoch: 1,
+          slotId: member.slotId,
+          seq: 1,
+          plaintext: futurePlaintext,
+        );
+        await client.putSlot(
+          vaultId,
+          member.identity.signer,
+          member.slotId,
+          sealed,
+          ifMatch: null,
+          epoch: 1,
+        );
 
-      final opened = await ops.openWithRecovery(recovery);
-      await expectLater(
-        ops.readSlot(vaultId, recovery.signer, opened.manifest.slots.single,
-            {opened.manifest.epoch: vaultKey}),
-        throwsA(isA<NewerBackupVersionException>()),
-      );
+        final opened = await ops.openWithRecovery(recovery);
+        await expectLater(
+          ops.readSlot(vaultId, recovery.signer, opened.manifest.slots.single, {
+            opened.manifest.epoch: vaultKey,
+          }),
+          throwsA(isA<NewerBackupVersionException>()),
+        );
 
-      final preview = await ops.preview(recovery);
-      expect(preview.unreadableSlots, contains(member.slotId));
-      expect(preview.records, isEmpty);
-    });
+        final preview = await ops.preview(recovery);
+        expect(preview.unreadableSlots, contains(member.slotId));
+        expect(preview.records, isEmpty);
+      },
+    );
   });
 }

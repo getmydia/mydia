@@ -34,8 +34,9 @@ Future<void> _pump(WidgetTester tester, int count) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          playbackProgressStoreProvider
-              .overrideWith((ref) async => InMemoryPlaybackProgressStore()),
+          playbackProgressStoreProvider.overrideWith(
+            (ref) async => InMemoryPlaybackProgressStore(),
+          ),
         ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -63,8 +64,9 @@ void main() {
     expect(find.byKey(const ValueKey('ep-3')), findsOneWidget);
   });
 
-  testWidgets('renders nothing when the season has no downloads',
-      (tester) async {
+  testWidgets('renders nothing when the season has no downloads', (
+    tester,
+  ) async {
     await _pump(tester, 0);
 
     expect(find.byType(DownloadedEpisodeCard), findsNothing);

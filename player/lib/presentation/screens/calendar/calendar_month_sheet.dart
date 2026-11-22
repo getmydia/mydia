@@ -14,20 +14,19 @@ Future<DateTime?> showCalendarMonthSheet(
   required Map<DateTime, bool> daySummaries,
   required DateTime initialMonth,
   required DateTime today,
-}) =>
-    showGlassSheet<DateTime>(
-      context: context,
-      backgroundColor: context.palette.surface,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => CalendarMonthSheet(
-        windowStart: windowStart,
-        windowEnd: windowEnd,
-        daySummaries: daySummaries,
-        initialMonth: initialMonth,
-        today: today,
-      ),
-    );
+}) => showGlassSheet<DateTime>(
+  context: context,
+  backgroundColor: context.palette.surface,
+  isScrollControlled: true,
+  showDragHandle: true,
+  builder: (context) => CalendarMonthSheet(
+    windowStart: windowStart,
+    windowEnd: windowEnd,
+    daySummaries: daySummaries,
+    initialMonth: initialMonth,
+    today: today,
+  ),
+);
 
 /// A month grid for jumping the calendar to a day.
 ///
@@ -58,8 +57,10 @@ class CalendarMonthSheet extends StatefulWidget {
 }
 
 class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
-  late final List<DateTime> _months =
-      monthsInWindow(widget.windowStart, widget.windowEnd);
+  late final List<DateTime> _months = monthsInWindow(
+    widget.windowStart,
+    widget.windowEnd,
+  );
   late int _index = _initialIndex();
 
   int _initialIndex() {
@@ -123,7 +124,10 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
                       child: Text(
                         context.l10n.weekdayNarrow(
                           DateTime(
-                              _aMonday.year, _aMonday.month, _aMonday.day + i),
+                            _aMonday.year,
+                            _aMonday.month,
+                            _aMonday.day + i,
+                          ),
                         ),
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -151,12 +155,14 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
               Row(
                 children: [
                   _LegendDot(
-                      color: palette.primary,
-                      label: context.l10n.calendarLegendPlayable),
+                    color: palette.primary,
+                    label: context.l10n.calendarLegendPlayable,
+                  ),
                   const SizedBox(width: 16),
                   _LegendDot(
-                      color: palette.textDisabled,
-                      label: context.l10n.calendarLegendScheduled),
+                    color: palette.textDisabled,
+                    label: context.l10n.calendarLegendScheduled,
+                  ),
                 ],
               ),
             ],
@@ -178,7 +184,11 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
   }) {
     if (!visible) return const SizedBox(width: 48, height: 48);
     return IconButton(
-        key: key, icon: Icon(icon), tooltip: tooltip, onPressed: onPressed);
+      key: key,
+      icon: Icon(icon),
+      tooltip: tooltip,
+      onPressed: onPressed,
+    );
   }
 
   /// The month's days in Monday-first weeks, padded with nulls.
@@ -281,9 +291,10 @@ class _LegendDot extends StatelessWidget {
           decoration: BoxDecoration(shape: BoxShape.circle, color: color),
         ),
         const SizedBox(width: 6),
-        Text(label,
-            style:
-                TextStyle(fontSize: 11, color: context.palette.textDisabled)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: context.palette.textDisabled),
+        ),
       ],
     );
   }

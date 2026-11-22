@@ -9,12 +9,12 @@ import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Center(child: SizedBox(width: 600, child: child)),
-      ),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: Center(child: SizedBox(width: 600, child: child)),
+  ),
+);
 
 void main() {
   group('VolumeSurface', () {
@@ -30,34 +30,40 @@ void main() {
       );
 
       expect(find.byKey(VolumeSurface.sliderKey), findsOneWidget);
-      expect(tester.getSize(find.byKey(VolumeSurface.sliderKey)).width,
-          greaterThan(0));
+      expect(
+        tester.getSize(find.byKey(VolumeSurface.sliderKey)).width,
+        greaterThan(0),
+      );
     });
 
-    testWidgets('Liquid Glass widens the slider by the knob to keep the track',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 600,
-              child: VolumeSurface(
-                volume: 60,
-                onVolumeChanged: (_) {},
-                onToggleMute: () {},
+    testWidgets(
+      'Liquid Glass widens the slider by the knob to keep the track',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 600,
+                  child: VolumeSurface(
+                    volume: 60,
+                    onVolumeChanged: (_) {},
+                    onToggleMute: () {},
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ));
-      expect(
-        tester.getSize(find.byKey(VolumeSurface.sliderKey)).width,
-        VolumeSurface.sliderWidth + LiquidGeometry.sliderKnobWidth,
-      );
-    });
+        );
+        expect(
+          tester.getSize(find.byKey(VolumeSurface.sliderKey)).width,
+          VolumeSurface.sliderWidth + LiquidGeometry.sliderKnobWidth,
+        );
+      },
+    );
 
     testWidgets('shows a muted glyph at zero volume', (tester) async {
       await tester.pumpWidget(
@@ -93,8 +99,7 @@ void main() {
       );
     });
 
-    testWidgets(
-        'shows the loud glyph at exactly half volume — the <50 vs '
+    testWidgets('shows the loud glyph at exactly half volume — the <50 vs '
         '>=50 seam', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -129,27 +134,28 @@ void main() {
     });
 
     testWidgets(
-        'mute button sits immediately left of the slider — geometry, not '
-        'just widget presence', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          VolumeSurface(
-            volume: 60,
-            onVolumeChanged: (_) {},
-            onToggleMute: () {},
+      'mute button sits immediately left of the slider — geometry, not '
+      'just widget presence',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            VolumeSurface(
+              volume: 60,
+              onVolumeChanged: (_) {},
+              onToggleMute: () {},
+            ),
           ),
-        ),
-      );
+        );
 
-      final muteRect = tester.getRect(find.byKey(VolumeSurface.muteKey));
-      final sliderRect = tester.getRect(find.byKey(VolumeSurface.sliderKey));
+        final muteRect = tester.getRect(find.byKey(VolumeSurface.muteKey));
+        final sliderRect = tester.getRect(find.byKey(VolumeSurface.sliderKey));
 
-      expect(muteRect.right, lessThanOrEqualTo(sliderRect.left));
-      expect(sliderRect.width, VolumeSurface.sliderWidth);
-    });
+        expect(muteRect.right, lessThanOrEqualTo(sliderRect.left));
+        expect(sliderRect.width, VolumeSurface.sliderWidth);
+      },
+    );
 
-    testWidgets(
-        'dragging the slider fully right reports volume on the 0-100 '
+    testWidgets('dragging the slider fully right reports volume on the 0-100 '
         'scale, not the raw 0-1 slider fraction', (tester) async {
       double? received;
       await tester.pumpWidget(
@@ -180,8 +186,7 @@ void main() {
       expect(received!, closeTo(100.0, 0.5));
     });
 
-    testWidgets(
-        'dragging the slider fully left reports 0, not a residual '
+    testWidgets('dragging the slider fully left reports 0, not a residual '
         'fraction', (tester) async {
       double? received;
       await tester.pumpWidget(
@@ -206,8 +211,7 @@ void main() {
       expect(received!, closeTo(0.0, 0.5));
     });
 
-    testWidgets(
-        'a volume above 100 clamps the slider to its max instead of '
+    testWidgets('a volume above 100 clamps the slider to its max instead of '
         'throwing', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -229,8 +233,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-        'a negative volume clamps the slider to its min instead of '
+    testWidgets('a negative volume clamps the slider to its min instead of '
         'throwing', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -267,8 +270,9 @@ void main() {
       );
     });
 
-    testWidgets('disables subtitles only when no handler is wired',
-        (tester) async {
+    testWidgets('disables subtitles only when no handler is wired', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const SecondaryCluster()));
 
       expect(
@@ -285,8 +289,9 @@ void main() {
     // made that unreachable, so the tap assertion matters as much as the
     // `enabled` one: an enabled button with a null `onTap` would pass the
     // first check and still do nothing.
-    testWidgets('keeps subtitles tappable when the file has no tracks',
-        (tester) async {
+    testWidgets('keeps subtitles tappable when the file has no tracks', (
+      tester,
+    ) async {
       var tapped = false;
       await tester.pumpWidget(
         _host(
@@ -333,14 +338,13 @@ void main() {
     });
 
     testWidgets('shows quality when a callback is supplied', (tester) async {
-      await tester.pumpWidget(
-        _host(SecondaryCluster(onQualityTap: () {})),
-      );
+      await tester.pumpWidget(_host(SecondaryCluster(onQualityTap: () {})));
       expect(find.byKey(SecondaryCluster.qualityKey), findsOneWidget);
     });
 
-    testWidgets('omits fullscreen when no callback is supplied',
-        (tester) async {
+    testWidgets('omits fullscreen when no callback is supplied', (
+      tester,
+    ) async {
       // Null means the browser has no fullscreen route at all
       // (`FullscreenMode.unsupported`), not that fullscreen is momentarily
       // unavailable, so a dead button would be worse than none.
@@ -349,9 +353,7 @@ void main() {
     });
 
     testWidgets('shows fullscreen when a callback is supplied', (tester) async {
-      await tester.pumpWidget(
-        _host(SecondaryCluster(onFullscreenTap: () {})),
-      );
+      await tester.pumpWidget(_host(SecondaryCluster(onFullscreenTap: () {})));
       expect(find.byKey(SecondaryCluster.fullscreenKey), findsOneWidget);
     });
 
@@ -380,11 +382,10 @@ void main() {
       );
     });
 
-    testWidgets('shows the enter-fullscreen glyph when not fullscreen',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(SecondaryCluster(onFullscreenTap: () {})),
-      );
+    testWidgets('shows the enter-fullscreen glyph when not fullscreen', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(SecondaryCluster(onFullscreenTap: () {})));
 
       expect(
         tester
@@ -394,22 +395,23 @@ void main() {
       );
     });
 
-    testWidgets('omits always-on-top when no callback is supplied',
-        (tester) async {
+    testWidgets('omits always-on-top when no callback is supplied', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const SecondaryCluster()));
       expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsNothing);
     });
 
-    testWidgets('shows always-on-top when a callback is supplied',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(SecondaryCluster(onAlwaysOnTopTap: () {})),
-      );
+    testWidgets('shows always-on-top when a callback is supplied', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(SecondaryCluster(onAlwaysOnTopTap: () {})));
       expect(find.byKey(SecondaryCluster.alwaysOnTopKey), findsOneWidget);
     });
 
-    testWidgets('the always-on-top icon stays upright when pinned',
-        (tester) async {
+    testWidgets('the always-on-top icon stays upright when pinned', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(SecondaryCluster(isAlwaysOnTop: true, onAlwaysOnTopTap: () {})),
       );
@@ -437,9 +439,7 @@ void main() {
     });
 
     testWidgets('tilts the always-on-top icon when not pinned', (tester) async {
-      await tester.pumpWidget(
-        _host(SecondaryCluster(onAlwaysOnTopTap: () {})),
-      );
+      await tester.pumpWidget(_host(SecondaryCluster(onAlwaysOnTopTap: () {})));
 
       // Icon is always push_pin_rounded (respects icon_family_test.dart's
       // _rounded-only rule); state is differentiated by rotation. The key is
@@ -474,10 +474,10 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets(
-        'subtitles, audio, quality, and fullscreen stay left-to-right '
-        'ordered with a uniform pitch of buttonWidth + SecondaryCluster.gap',
-        (tester) async {
+    testWidgets('subtitles, audio, quality, and fullscreen stay left-to-right '
+        'ordered with a uniform pitch of buttonWidth + SecondaryCluster.gap', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           SecondaryCluster(
@@ -490,13 +490,16 @@ void main() {
         ),
       );
 
-      final subtitlesRect =
-          tester.getRect(find.byKey(SecondaryCluster.subtitlesKey));
+      final subtitlesRect = tester.getRect(
+        find.byKey(SecondaryCluster.subtitlesKey),
+      );
       final audioRect = tester.getRect(find.byKey(SecondaryCluster.audioKey));
-      final qualityRect =
-          tester.getRect(find.byKey(SecondaryCluster.qualityKey));
-      final fullscreenRect =
-          tester.getRect(find.byKey(SecondaryCluster.fullscreenKey));
+      final qualityRect = tester.getRect(
+        find.byKey(SecondaryCluster.qualityKey),
+      );
+      final fullscreenRect = tester.getRect(
+        find.byKey(SecondaryCluster.fullscreenKey),
+      );
 
       // 32, not the previous 40: the whole control row was compacted so four
       // discrete buttons fit down to 360px. See `chrome_panel.dart`'s
@@ -539,20 +542,26 @@ void main() {
       );
     });
 
-    testWidgets('omits the scaling button when no handler is wired',
-        (tester) async {
+    testWidgets('omits the scaling button when no handler is wired', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const SecondaryCluster()));
 
       expect(find.byKey(SecondaryCluster.scalingKey), findsNothing);
     });
 
-    testWidgets('scaling button shows the current mode and fires',
-        (tester) async {
+    testWidgets('scaling button shows the current mode and fires', (
+      tester,
+    ) async {
       var taps = 0;
-      await tester.pumpWidget(_host(SecondaryCluster(
-        onScalingTap: () => taps++,
-        scaling: VideoScaling.fit,
-      )));
+      await tester.pumpWidget(
+        _host(
+          SecondaryCluster(
+            onScalingTap: () => taps++,
+            scaling: VideoScaling.fit,
+          ),
+        ),
+      );
 
       expect(
         tester

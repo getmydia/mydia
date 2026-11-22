@@ -21,24 +21,29 @@ void main() {
       expect(gate.shouldAttempt, isTrue);
     });
 
-    test('blocks a second, concurrent attempt while the first is in flight',
-        () {
-      final gate = RemoteControlInitGate();
-      gate.begin();
-      expect(gate.shouldAttempt, isFalse);
-    });
-
     test(
-        'allows a retry once an in-flight attempt ends without succeeding — '
+      'blocks a second, concurrent attempt while the first is in flight',
+      () {
+        final gate = RemoteControlInitGate();
+        gate.begin();
+        expect(gate.shouldAttempt, isFalse);
+      },
+    );
+
+    test('allows a retry once an in-flight attempt ends without succeeding — '
         'an opt-out or a thrown startup failure', () {
       final gate = RemoteControlInitGate();
       gate.begin();
       gate.end();
 
-      expect(gate.shouldAttempt, isTrue,
-          reason: 'the bug this class fixes: a failed or opted-out attempt '
-              'must not permanently disable this device as a target for '
-              'the rest of the launch');
+      expect(
+        gate.shouldAttempt,
+        isTrue,
+        reason:
+            'the bug this class fixes: a failed or opted-out attempt '
+            'must not permanently disable this device as a target for '
+            'the rest of the launch',
+      );
     });
 
     test('permanently blocks further attempts once one has succeeded', () {
@@ -47,13 +52,16 @@ void main() {
       gate.succeed();
       gate.end();
 
-      expect(gate.shouldAttempt, isFalse,
-          reason: 'a receiver that is already wired must not be wired a '
-              'second time onto the same control-request stream');
+      expect(
+        gate.shouldAttempt,
+        isFalse,
+        reason:
+            'a receiver that is already wired must not be wired a '
+            'second time onto the same control-request stream',
+      );
     });
 
-    test(
-        'a later successful attempt after a failed one still latches '
+    test('a later successful attempt after a failed one still latches '
         'closed', () {
       final gate = RemoteControlInitGate();
       gate.begin();

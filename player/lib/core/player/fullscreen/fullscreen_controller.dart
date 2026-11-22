@@ -27,16 +27,15 @@ class FullscreenController {
   FullscreenController({
     FullscreenBackendFactory? backendFactory,
     ValueNotifier<bool>? state,
-  })  : _state = state ?? ValueNotifier<bool>(false),
-        _ownsState = state == null {
+  }) : _state = state ?? ValueNotifier<bool>(false),
+       _ownsState = state == null {
     _backend = (backendFactory ?? _defaultBackend)(_set, _fail);
   }
 
   static FullscreenBackend _defaultBackend(
     ValueChanged<bool> onChange,
     FullscreenFailureSink onFailure,
-  ) =>
-      createFullscreenBackend(onChange: onChange, onFailure: onFailure);
+  ) => createFullscreenBackend(onChange: onChange, onFailure: onFailure);
 
   final ValueNotifier<bool> _state;
   final bool _ownsState;

@@ -30,8 +30,9 @@ void main() {
         ),
       );
 
-  testWidgets('a different unavailable server shows the banner again',
-      (tester) async {
+  testWidgets('a different unavailable server shows the banner again', (
+    tester,
+  ) async {
     await pump(tester, [a.id]);
     expect(find.byKey(const Key('all-unavailable-banner')), findsOneWidget);
 

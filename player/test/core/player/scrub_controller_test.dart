@@ -14,11 +14,11 @@ void main() {
   });
 
   ScrubController build(FakeAsync async) => ScrubController(
-        position: () => position,
-        duration: () => runtime,
-        onCommit: (target) async => commits.add(target),
-        elapsed: () => async.elapsed,
-      );
+    position: () => position,
+    duration: () => runtime,
+    onCommit: (target) async => commits.add(target),
+    elapsed: () => async.elapsed,
+  );
 
   /// Presses [direction], then repeats it every [every] for [total], the way
   /// Android delivers a held D-pad key.
@@ -131,8 +131,12 @@ void main() {
       fakeAsync((async) {
         final scrub = build(async);
 
-        hold(scrub, async, ScrubDirection.forward,
-            total: const Duration(seconds: 1));
+        hold(
+          scrub,
+          async,
+          ScrubDirection.forward,
+          total: const Duration(seconds: 1),
+        );
 
         // 10 s for the press, then 1 s held at 30x.
         expect(scrub.cursor, const Duration(minutes: 10, seconds: 40));
@@ -144,8 +148,12 @@ void main() {
       fakeAsync((async) {
         final scrub = build(async);
 
-        hold(scrub, async, ScrubDirection.forward,
-            total: const Duration(seconds: 2));
+        hold(
+          scrub,
+          async,
+          ScrubDirection.forward,
+          total: const Duration(seconds: 2),
+        );
 
         // Press: 10 s. Repeats at 100..1400 ms: 14 x 3 s = 42 s.
         // Repeats at 1500..2000 ms: 6 x 12 s = 72 s. Total 124 s.
@@ -178,7 +186,9 @@ void main() {
     test('the fast tier never drops below the medium one', () {
       expect(
         ScrubController.speedFor(
-            const Duration(seconds: 4), const Duration(minutes: 10)),
+          const Duration(seconds: 4),
+          const Duration(minutes: 10),
+        ),
         ScrubController.mediumSpeed,
       );
     });

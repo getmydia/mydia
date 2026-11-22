@@ -39,7 +39,8 @@ export 'backup_controller.dart';
 export 'backup_sync_service.dart';
 
 final backupMetaStoreProvider = Provider<BackupMetaStore>(
-    (ref) => BackupMetaStore(backupMetaStorageFromHive()));
+  (ref) => BackupMetaStore(backupMetaStorageFromHive()),
+);
 
 /// Keys of the `peer_sync` box whose changes are backed up: watch state and
 /// pins. Roster and watermark writes are not.
@@ -77,26 +78,32 @@ final backupSnapshotProvider = Provider<BackupSnapshot>((ref) {
 /// a folder by hand does (`FilesAccounts._addRoot`): invalidates the landed
 /// groups and starts a scan.
 Future<void> _putRoots(
-    Ref ref, String accountId, List<LibraryRoot> roots) async {
+  Ref ref,
+  String accountId,
+  List<LibraryRoot> roots,
+) async {
   if (!ref.read(filesStorageOpenProvider)) return;
   final index = ref.read(filesIndexProvider(accountId));
   for (final root in roots) {
     await index.putRoot(root);
   }
   final snapshot = await ref.read(sourceRecordsProvider.future);
-  final record =
-      snapshot.accounts.where((a) => a.account.id == accountId).firstOrNull;
+  final record = snapshot.accounts
+      .where((a) => a.account.id == accountId)
+      .firstOrNull;
   for (final source in record?.sources ?? const <Source>[]) {
     await ref
         .read(invalidatorProvider)
         .invalidate(FilesMediaSource.groupLandedTargets(source.id));
-    unawaited(ref
-        .read(filesScanProvider(source.id).notifier)
-        .rescan()
-        .catchError((Object e) {
-      debugPrint(
-          '[Backup] Scan after restoring a folder failed: ${e.runtimeType}');
-    }));
+    unawaited(
+      ref.read(filesScanProvider(source.id).notifier).rescan().catchError((
+        Object e,
+      ) {
+        debugPrint(
+          '[Backup] Scan after restoring a folder failed: ${e.runtimeType}',
+        );
+      }),
+    );
   }
 }
 
@@ -105,37 +112,39 @@ Future<void> _putRoots(
 /// the active store; screens for the relay read it here.
 final Provider<BackupSyncService> backupSyncServiceProvider =
     Provider<BackupSyncService>((ref) {
-  final device = DeviceInfoService();
-  final service = BackupSyncService(
-    relay: BackupRelayClient(),
-    authStorage: getAuthStorage(),
-    meta: ref.watch(backupMetaStoreProvider),
-    snapshot: ref.watch(backupSnapshotProvider),
-    deviceName: device.getDeviceName,
-    platform: device.getPlatform(),
-    localNodeId: () => ref.read(p2pServiceProvider).nodeId,
-  );
-  ref.onDispose(service.dispose);
-  return service;
-});
+      final device = DeviceInfoService();
+      final service = BackupSyncService(
+        relay: BackupRelayClient(),
+        authStorage: getAuthStorage(),
+        meta: ref.watch(backupMetaStoreProvider),
+        snapshot: ref.watch(backupSnapshotProvider),
+        deviceName: device.getDeviceName,
+        platform: device.getPlatform(),
+        localNodeId: () => ref.read(p2pServiceProvider).nodeId,
+      );
+      ref.onDispose(service.dispose);
+      return service;
+    });
 
 /// The Google account Drive backs up to, null where Drive is not offered
 /// (the web, or a build without this platform's client id).
 final Provider<GoogleAuth?> googleAuthProvider = Provider<GoogleAuth?>(
-    (ref) => kIsWeb ? null : googleAuthForPlatform(getAuthStorage()));
+  (ref) => kIsWeb ? null : googleAuthForPlatform(getAuthStorage()),
+);
 
 /// The one [CloudKitBackend] of the app: its change EventChannel has a
 /// single native sink, so a second instance would steal the first's
 /// events. iOS and macOS only.
 final Provider<CloudKitBackend> cloudKitBackendProvider =
     Provider<CloudKitBackend>(
-        (ref) => CloudKitBackend(meta: ref.watch(backupMetaStoreProvider)));
+      (ref) => CloudKitBackend(meta: ref.watch(backupMetaStoreProvider)),
+    );
 
 /// The active backup store and its triggers. Native only: `app.dart`
 /// starts it after peer sync and forwards `paused` (flush) and `resumed`
 /// (poll).
-final Provider<BackupController> backupControllerProvider =
-    Provider<BackupController>((ref) {
+final Provider<BackupController>
+backupControllerProvider = Provider<BackupController>((ref) {
   final device = DeviceInfoService();
   final auth = getAuthStorage();
   final meta = ref.watch(backupMetaStoreProvider);
@@ -151,10 +160,7 @@ final Provider<BackupController> backupControllerProvider =
     googleAuth: google,
     initialOffered: kIsWeb
         ? const {}
-        : {
-            BackupStoreKind.relay,
-            if (google != null) BackupStoreKind.gdrive,
-          },
+        : {BackupStoreKind.relay, if (google != null) BackupStoreKind.gdrive},
     resolveOffered: () => resolveOfferedStores(
       web: kIsWeb,
       apple: apple,
@@ -164,10 +170,16 @@ final Provider<BackupController> backupControllerProvider =
     buildCloud: (kind) => buildCloudBackupService(
       backend: switch (kind) {
         BackupStoreKind.icloud => cloudKit!,
-        BackupStoreKind.gdrive =>
-          GoogleDriveBackend(auth: google!, client: driveClient, meta: meta),
-        BackupStoreKind.relay =>
-          throw ArgumentError.value(kind, 'kind', 'is not a cloud store'),
+        BackupStoreKind.gdrive => GoogleDriveBackend(
+          auth: google!,
+          client: driveClient,
+          meta: meta,
+        ),
+        BackupStoreKind.relay => throw ArgumentError.value(
+          kind,
+          'kind',
+          'is not a cloud store',
+        ),
       },
       authStorage: auth,
       meta: meta,
@@ -223,6 +235,6 @@ final Provider<BackupController> backupControllerProvider =
 /// `peerSyncServiceProvider`, so reading it here would be a cycle.
 final Provider<BackupPairingHooks> backupPairingHooksProvider =
     Provider<BackupPairingHooks>((ref) {
-  if (kIsWeb) return const BackupPairingHooks();
-  return backupPairingHooksFor(() => ref.read(backupControllerProvider));
-});
+      if (kIsWeb) return const BackupPairingHooks();
+      return backupPairingHooksFor(() => ref.read(backupControllerProvider));
+    });

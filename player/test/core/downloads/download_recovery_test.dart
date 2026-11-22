@@ -70,8 +70,9 @@ void main() {
           maxConcurrent: 2,
           autoStart: true,
         );
-        expect(plan, [const RecoveryDecision('a', RecoveryAction.resume)],
-            reason: 'status $status should resume');
+        expect(plan, [
+          const RecoveryDecision('a', RecoveryAction.resume),
+        ], reason: 'status $status should resume');
       }
     });
 
@@ -81,7 +82,7 @@ void main() {
         'paused',
         'completed',
         'cancelled',
-        'failed'
+        'failed',
       ]) {
         final plan = planRecovery(
           tasks: [task('a', status: status)],
@@ -106,7 +107,7 @@ void main() {
     test('resumes a transcoding orphan that still has a job id', () {
       final plan = planRecovery(
         tasks: [
-          task('a', status: 'transcoding', progressive: true, jobId: 'job-1')
+          task('a', status: 'transcoding', progressive: true, jobId: 'job-1'),
         ],
         liveTaskIds: const {},
         maxConcurrent: 2,

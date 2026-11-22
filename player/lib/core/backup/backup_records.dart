@@ -24,12 +24,12 @@ sealed class BackupRecord {
   Map<String, dynamic> get fields;
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'key': key,
-        'updatedAt': updatedAt,
-        'deleted': deleted,
-        ...fields,
-      };
+    'type': type,
+    'key': key,
+    'updatedAt': updatedAt,
+    'deleted': deleted,
+    ...fields,
+  };
 
   /// Returns null for an unknown `type`, so records written by a newer build
   /// are skipped rather than fatal. Throws a [TypeError] or [FormatException]
@@ -68,9 +68,11 @@ sealed class BackupRecord {
         return AccountBackupRecord(
           key: key,
           recordJson: Map<String, dynamic>.from(
-              json['recordJson'] as Map<dynamic, dynamic>),
+            json['recordJson'] as Map<dynamic, dynamic>,
+          ),
           secrets: Map<String, String>.from(
-              json['secrets'] as Map<dynamic, dynamic>),
+            json['secrets'] as Map<dynamic, dynamic>,
+          ),
           updatedAt: updatedAt,
           deleted: deleted,
         );
@@ -87,7 +89,8 @@ sealed class BackupRecord {
           key: key,
           groupSecretB64: json['groupSecretB64'] as String,
           nodeToSlot: Map<String, String>.from(
-              json['nodeToSlot'] as Map<dynamic, dynamic>),
+            json['nodeToSlot'] as Map<dynamic, dynamic>,
+          ),
           updatedAt: updatedAt,
           deleted: deleted,
         );
@@ -137,10 +140,10 @@ class WatchBackupRecord extends BackupRecord {
 
   @override
   Map<String, dynamic> get fields => {
-        'watched': watched,
-        'positionSeconds': positionSeconds,
-        'durationSeconds': durationSeconds,
-      };
+    'watched': watched,
+    'positionSeconds': positionSeconds,
+    'durationSeconds': durationSeconds,
+  };
 }
 
 /// Same synced fields as `PeerPinRecord`, minus `landedAt`. Key is
@@ -166,11 +169,11 @@ class PinBackupRecord extends BackupRecord {
 
   @override
   Map<String, dynamic> get fields => {
-        'groupKey': groupKey,
-        'isShow': isShow,
-        'tmdbId': tmdbId,
-        'pinned': pinned,
-      };
+    'groupKey': groupKey,
+    'isShow': isShow,
+    'tmdbId': tmdbId,
+    'pinned': pinned,
+  };
 }
 
 /// A source account. Key is `account:<accountId>`. [secrets] keys are storage
@@ -198,12 +201,13 @@ class AccountBackupRecord extends BackupRecord {
 
   @override
   Map<String, dynamic> get fields => {
-        'recordJson': recordJson,
-        'secrets': secrets,
-      };
+    'recordJson': recordJson,
+    'secrets': secrets,
+  };
 
   @override
-  String toString() => 'AccountBackupRecord(key: $key, accountId: $accountId, '
+  String toString() =>
+      'AccountBackupRecord(key: $key, accountId: $accountId, '
       'secrets: <${secrets.length} redacted>, updatedAt: $updatedAt, '
       'deleted: $deleted)';
 }
@@ -225,10 +229,7 @@ class SettingBackupRecord extends BackupRecord {
   String get type => 'setting';
 
   @override
-  Map<String, dynamic> get fields => {
-        'settingKey': settingKey,
-        'value': value,
-      };
+  Map<String, dynamic> get fields => {'settingKey': settingKey, 'value': value};
 }
 
 /// The p2p group secret. Key is `group`. [nodeToSlot] maps p2p node ids to
@@ -250,9 +251,9 @@ class GroupBackupRecord extends BackupRecord {
 
   @override
   Map<String, dynamic> get fields => {
-        'groupSecretB64': groupSecretB64,
-        'nodeToSlot': nodeToSlot,
-      };
+    'groupSecretB64': groupSecretB64,
+    'nodeToSlot': nodeToSlot,
+  };
 
   @override
   String toString() =>
@@ -263,8 +264,10 @@ class GroupBackupRecord extends BackupRecord {
 /// A payload written by a newer app build (`v` above [BackupPayload.version]).
 class NewerBackupVersionException extends FormatException {
   NewerBackupVersionException(int found)
-      : super('backup payload version $found is newer than '
-            '${BackupPayload.version}');
+    : super(
+        'backup payload version $found is newer than '
+        '${BackupPayload.version}',
+      );
 }
 
 class BackupPayload {
@@ -288,14 +291,18 @@ class BackupPayload {
   /// build that predates the field reads the payload unchanged.
   final String? movedTo;
 
-  List<int> encode() => gzipEncode(utf8.encode(jsonEncode({
+  List<int> encode() => gzipEncode(
+    utf8.encode(
+      jsonEncode({
         'v': version,
         'deviceName': deviceName,
         'platform': platform,
         'createdAt': createdAt,
         'records': [for (final r in records) r.toJson()],
         if (movedTo != null) 'movedTo': movedTo,
-      })));
+      }),
+    ),
+  );
 
   /// Throws [FormatException] for bad gzip, bad JSON, a wrong version
   /// ([NewerBackupVersionException] for a newer one) or a malformed record. Records of an unknown type are dropped.
@@ -309,7 +316,8 @@ class BackupPayload {
       if (v is int && v > version) throw NewerBackupVersionException(v);
       if (v != version) {
         throw FormatException(
-            'unsupported backup payload version ${json['v']}');
+          'unsupported backup payload version ${json['v']}',
+        );
       }
       final records = <BackupRecord>[];
       for (final raw in json['records'] as List<dynamic>) {

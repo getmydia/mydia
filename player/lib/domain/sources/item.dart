@@ -17,13 +17,13 @@ ArtworkRef? _art(Object? value) =>
 ItemRef? _refOrNull(Object? value) =>
     value == null ? null : ItemRef.fromJson(value as Map<String, Object?>);
 
-List<String> _strings(Object? value) =>
-    [for (final s in (value as List?) ?? const []) s as String];
+List<String> _strings(Object? value) => [
+  for (final s in (value as List?) ?? const []) s as String,
+];
 
 List<T> _list<T>(Object? value, T Function(Map<String, Object?>) item) => [
-      for (final e in (value as List?) ?? const [])
-        item(e as Map<String, Object?>),
-    ];
+  for (final e in (value as List?) ?? const []) item(e as Map<String, Object?>),
+];
 
 enum ItemKind { movie, show, season, episode, video, folder }
 
@@ -42,16 +42,16 @@ class ItemRef {
   final String externalId;
 
   factory ItemRef.fromJson(Map<String, Object?> json) => ItemRef(
-        sourceId: SourceId(json['sourceId']! as String),
-        kind: ItemKind.values.byName(json['kind']! as String),
-        externalId: json['externalId']! as String,
-      );
+    sourceId: SourceId(json['sourceId']! as String),
+    kind: ItemKind.values.byName(json['kind']! as String),
+    externalId: json['externalId']! as String,
+  );
 
   Map<String, Object?> toJson() => {
-        'sourceId': sourceId.value,
-        'kind': kind.name,
-        'externalId': externalId,
-      };
+    'sourceId': sourceId.value,
+    'kind': kind.name,
+    'externalId': externalId,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -94,13 +94,16 @@ class Person {
   final ArtworkRef? photo;
 
   factory Person.fromJson(Map<String, Object?> json) => Person(
-        name: json['name']! as String,
-        role: json['role'] as String?,
-        photo: _art(json['photo']),
-      );
+    name: json['name']! as String,
+    role: json['role'] as String?,
+    photo: _art(json['photo']),
+  );
 
-  Map<String, Object?> toJson() =>
-      {'name': name, 'role': role, 'photo': photo?.path};
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'role': role,
+    'photo': photo?.path,
+  };
 }
 
 @immutable
@@ -121,16 +124,16 @@ class UserState {
   final int? unwatchedCount;
 
   factory UserState.fromJson(Map<String, Object?> json) => UserState(
-        watched: json['watched'] as bool? ?? false,
-        progressSeconds: json['progressSeconds'] as int?,
-        unwatchedCount: json['unwatchedCount'] as int?,
-      );
+    watched: json['watched'] as bool? ?? false,
+    progressSeconds: json['progressSeconds'] as int?,
+    unwatchedCount: json['unwatchedCount'] as int?,
+  );
 
   Map<String, Object?> toJson() => {
-        'watched': watched,
-        'progressSeconds': progressSeconds,
-        'unwatchedCount': unwatchedCount,
-      };
+    'watched': watched,
+    'progressSeconds': progressSeconds,
+    'unwatchedCount': unwatchedCount,
+  };
 }
 
 /// The catalogue ids a server knows an item by. The All servers views match
@@ -246,52 +249,52 @@ class ItemSummary {
   final DateTime? lastPlayedAt;
 
   factory ItemSummary.fromJson(Map<String, Object?> json) => ItemSummary(
-        ref: ItemRef.fromJson(json['ref']! as Map<String, Object?>),
-        title: json['title']! as String,
-        subtitle: json['subtitle'] as String?,
-        showTitle: json['showTitle'] as String?,
-        year: json['year'] as int?,
-        poster: _art(json['poster']),
-        backdrop: _art(json['backdrop']),
-        durationSeconds: json['durationSeconds'] as int?,
-        userState: json['userState'] == null
-            ? const UserState()
-            : UserState.fromJson(json['userState']! as Map<String, Object?>),
-        childCount: json['childCount'] as int?,
-        index: json['index'] as int?,
-        parentIndex: json['parentIndex'] as int?,
-        overview: json['overview'] as String?,
-        airDate: json['airDate'] as String?,
-        defaultVersionId: json['defaultVersionId'] as String?,
-        sortTitle: json['sortTitle'] as String?,
-        addedAt: _date(json['addedAt']),
-        lastPlayedAt: _date(json['lastPlayedAt']),
-        showRef: _refOrNull(json['showRef']),
-        externalIds: ExternalIds.fromJson(json['externalIds']),
-      );
+    ref: ItemRef.fromJson(json['ref']! as Map<String, Object?>),
+    title: json['title']! as String,
+    subtitle: json['subtitle'] as String?,
+    showTitle: json['showTitle'] as String?,
+    year: json['year'] as int?,
+    poster: _art(json['poster']),
+    backdrop: _art(json['backdrop']),
+    durationSeconds: json['durationSeconds'] as int?,
+    userState: json['userState'] == null
+        ? const UserState()
+        : UserState.fromJson(json['userState']! as Map<String, Object?>),
+    childCount: json['childCount'] as int?,
+    index: json['index'] as int?,
+    parentIndex: json['parentIndex'] as int?,
+    overview: json['overview'] as String?,
+    airDate: json['airDate'] as String?,
+    defaultVersionId: json['defaultVersionId'] as String?,
+    sortTitle: json['sortTitle'] as String?,
+    addedAt: _date(json['addedAt']),
+    lastPlayedAt: _date(json['lastPlayedAt']),
+    showRef: _refOrNull(json['showRef']),
+    externalIds: ExternalIds.fromJson(json['externalIds']),
+  );
 
   Map<String, Object?> toJson() => {
-        'ref': ref.toJson(),
-        'title': title,
-        'externalIds': externalIds.isEmpty ? null : externalIds.toJson(),
-        'subtitle': subtitle,
-        'showTitle': showTitle,
-        'year': year,
-        'poster': poster?.path,
-        'backdrop': backdrop?.path,
-        'durationSeconds': durationSeconds,
-        'userState': userState.toJson(),
-        'childCount': childCount,
-        'index': index,
-        'parentIndex': parentIndex,
-        'overview': overview,
-        'airDate': airDate,
-        'defaultVersionId': defaultVersionId,
-        'sortTitle': sortTitle,
-        'addedAt': addedAt?.toUtc().toIso8601String(),
-        'lastPlayedAt': lastPlayedAt?.toUtc().toIso8601String(),
-        'showRef': showRef?.toJson(),
-      };
+    'ref': ref.toJson(),
+    'title': title,
+    'externalIds': externalIds.isEmpty ? null : externalIds.toJson(),
+    'subtitle': subtitle,
+    'showTitle': showTitle,
+    'year': year,
+    'poster': poster?.path,
+    'backdrop': backdrop?.path,
+    'durationSeconds': durationSeconds,
+    'userState': userState.toJson(),
+    'childCount': childCount,
+    'index': index,
+    'parentIndex': parentIndex,
+    'overview': overview,
+    'airDate': airDate,
+    'defaultVersionId': defaultVersionId,
+    'sortTitle': sortTitle,
+    'addedAt': addedAt?.toUtc().toIso8601String(),
+    'lastPlayedAt': lastPlayedAt?.toUtc().toIso8601String(),
+    'showRef': showRef?.toJson(),
+  };
 }
 
 /// An episode's place in its series, `S1 · E3`, or null without both numbers.
@@ -304,8 +307,10 @@ String? episodeSubtitle(int? season, int? episode) =>
 /// a place in a series), so a poster falls back to the year.
 String? showEpisodeCaption(ItemSummary item) {
   if (item.ref.kind != ItemKind.episode) return null;
-  final caption =
-      [item.showTitle, item.subtitle].whereType<String>().join(' · ');
+  final caption = [
+    item.showTitle,
+    item.subtitle,
+  ].whereType<String>().join(' · ');
   return caption.isEmpty ? null : caption;
 }
 
@@ -347,14 +352,14 @@ class MediaStreamInfo {
       );
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'codec': codec,
-        'language': language,
-        'title': title,
-        'isDefault': isDefault,
-        'externalPath': externalPath,
-      };
+    'id': id,
+    'kind': kind.name,
+    'codec': codec,
+    'language': language,
+    'title': title,
+    'isDefault': isDefault,
+    'externalPath': externalPath,
+  };
 }
 
 /// One playable file of an item.
@@ -398,34 +403,34 @@ class MediaVersion {
   final bool? directPlaySupported;
 
   factory MediaVersion.fromJson(Map<String, Object?> json) => MediaVersion(
-        id: json['id']! as String,
-        container: json['container'] as String?,
-        videoCodec: json['videoCodec'] as String?,
-        audioCodec: json['audioCodec'] as String?,
-        height: json['height'] as int?,
-        bitrateKbps: json['bitrateKbps'] as int?,
-        durationSeconds: json['durationSeconds'] as int?,
-        streamPath: json['streamPath'] as String?,
-        streams: _list(json['streams'], MediaStreamInfo.fromJson),
-        sizeBytes: json['sizeBytes'] as int?,
-        hdrFormat: json['hdrFormat'] as String?,
-        directPlaySupported: json['directPlaySupported'] as bool?,
-      );
+    id: json['id']! as String,
+    container: json['container'] as String?,
+    videoCodec: json['videoCodec'] as String?,
+    audioCodec: json['audioCodec'] as String?,
+    height: json['height'] as int?,
+    bitrateKbps: json['bitrateKbps'] as int?,
+    durationSeconds: json['durationSeconds'] as int?,
+    streamPath: json['streamPath'] as String?,
+    streams: _list(json['streams'], MediaStreamInfo.fromJson),
+    sizeBytes: json['sizeBytes'] as int?,
+    hdrFormat: json['hdrFormat'] as String?,
+    directPlaySupported: json['directPlaySupported'] as bool?,
+  );
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'container': container,
-        'videoCodec': videoCodec,
-        'audioCodec': audioCodec,
-        'height': height,
-        'bitrateKbps': bitrateKbps,
-        'durationSeconds': durationSeconds,
-        'streamPath': streamPath,
-        'streams': [for (final s in streams) s.toJson()],
-        'sizeBytes': sizeBytes,
-        'hdrFormat': hdrFormat,
-        'directPlaySupported': directPlaySupported,
-      };
+    'id': id,
+    'container': container,
+    'videoCodec': videoCodec,
+    'audioCodec': audioCodec,
+    'height': height,
+    'bitrateKbps': bitrateKbps,
+    'durationSeconds': durationSeconds,
+    'streamPath': streamPath,
+    'streams': [for (final s in streams) s.toJson()],
+    'sizeBytes': sizeBytes,
+    'hdrFormat': hdrFormat,
+    'directPlaySupported': directPlaySupported,
+  };
 }
 
 @immutable
@@ -474,40 +479,40 @@ class ItemDetail {
   final ArtworkRef? showPoster;
 
   factory ItemDetail.fromJson(Map<String, Object?> json) => ItemDetail(
-        summary: ItemSummary.fromJson(json['summary']! as Map<String, Object?>),
-        overview: json['overview'] as String?,
-        genres: _strings(json['genres']),
-        people: _strings(json['people']),
-        studio: json['studio'] as String?,
-        tags: _strings(json['tags']),
-        rating: (json['rating'] as num?)?.toDouble(),
-        versions: _list(json['versions'], MediaVersion.fromJson),
-        cast: _list(json['cast'], Person.fromJson),
-        trailerUrl: json['trailerUrl'] as String?,
-        contentRating: json['contentRating'] as String?,
-        isFavorite: json['isFavorite'] as bool? ?? false,
-        show: _refOrNull(json['show']),
-        season: _refOrNull(json['season']),
-        showBackdrop: _art(json['showBackdrop']),
-        showPoster: _art(json['showPoster']),
-      );
+    summary: ItemSummary.fromJson(json['summary']! as Map<String, Object?>),
+    overview: json['overview'] as String?,
+    genres: _strings(json['genres']),
+    people: _strings(json['people']),
+    studio: json['studio'] as String?,
+    tags: _strings(json['tags']),
+    rating: (json['rating'] as num?)?.toDouble(),
+    versions: _list(json['versions'], MediaVersion.fromJson),
+    cast: _list(json['cast'], Person.fromJson),
+    trailerUrl: json['trailerUrl'] as String?,
+    contentRating: json['contentRating'] as String?,
+    isFavorite: json['isFavorite'] as bool? ?? false,
+    show: _refOrNull(json['show']),
+    season: _refOrNull(json['season']),
+    showBackdrop: _art(json['showBackdrop']),
+    showPoster: _art(json['showPoster']),
+  );
 
   Map<String, Object?> toJson() => {
-        'summary': summary.toJson(),
-        'overview': overview,
-        'genres': genres,
-        'people': people,
-        'studio': studio,
-        'tags': tags,
-        'rating': rating,
-        'versions': [for (final v in versions) v.toJson()],
-        'cast': [for (final p in cast) p.toJson()],
-        'trailerUrl': trailerUrl,
-        'contentRating': contentRating,
-        'isFavorite': isFavorite,
-        'show': show?.toJson(),
-        'season': season?.toJson(),
-        'showBackdrop': showBackdrop?.path,
-        'showPoster': showPoster?.path,
-      };
+    'summary': summary.toJson(),
+    'overview': overview,
+    'genres': genres,
+    'people': people,
+    'studio': studio,
+    'tags': tags,
+    'rating': rating,
+    'versions': [for (final v in versions) v.toJson()],
+    'cast': [for (final p in cast) p.toJson()],
+    'trailerUrl': trailerUrl,
+    'contentRating': contentRating,
+    'isFavorite': isFavorite,
+    'show': show?.toJson(),
+    'season': season?.toJson(),
+    'showBackdrop': showBackdrop?.path,
+    'showPoster': showPoster?.path,
+  };
 }

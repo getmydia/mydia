@@ -17,40 +17,46 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 
 final allServersReaderProvider = Provider.autoDispose<MergedLibraryReader>(
-    (ref) => LiveMergedReader(ref.watch(allServersSourcesProvider)));
+  (ref) => LiveMergedReader(ref.watch(allServersSourcesProvider)),
+);
 
 /// Display name per included source.
-final allServersNamesProvider =
-    Provider.autoDispose<Map<SourceId, String>>((ref) => {
-          for (final s in ref.watch(allServersSourcesProvider))
-            s.id: s.displayName,
-        });
+final allServersNamesProvider = Provider.autoDispose<Map<SourceId, String>>(
+  (ref) => {
+    for (final s in ref.watch(allServersSourcesProvider)) s.id: s.displayName,
+  },
+);
 
 /// [items] from servers still included. A merged result outlives a server
 /// leaving the set (relocked, switched off) until its replacement loads, so
 /// screens filter by the current set to drop that server's items at once.
 List<ItemSummary> stillIncluded(
-        Map<SourceId, String> included, List<ItemSummary> items) =>
-    [
-      for (final i in items)
-        if (included.containsKey(i.ref.sourceId)) i
-    ];
+  Map<SourceId, String> included,
+  List<ItemSummary> items,
+) => [
+  for (final i in items)
+    if (included.containsKey(i.ref.sourceId)) i,
+];
 
 final allServersContinueWatchingProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
-        (ref) => ref.watch(allServersReaderProvider).continueWatching());
+      (ref) => ref.watch(allServersReaderProvider).continueWatching(),
+    );
 
 final allServersRecentlyAddedProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
-        (ref) => ref.watch(allServersReaderProvider).recentlyAdded());
+      (ref) => ref.watch(allServersReaderProvider).recentlyAdded(),
+    );
 
 final allServersFavoritesProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
-        (ref) => ref.watch(allServersReaderProvider).favorites());
+      (ref) => ref.watch(allServersReaderProvider).favorites(),
+    );
 
 final allServersCollectionsProvider =
     FutureProvider.autoDispose<MergedResult<List<SourceCollection>>>(
-        (ref) => ref.watch(allServersReaderProvider).collections());
+      (ref) => ref.watch(allServersReaderProvider).collections(),
+    );
 
 /// Recently Added splits on this: movies in one rail, TV in the other.
 bool isMovieRow(ItemSummary i) => i.ref.kind == ItemKind.movie;
@@ -141,7 +147,8 @@ class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
 
 final allServersGridProvider = AsyncNotifierProvider.autoDispose
     .family<AllServersGridNotifier, AllServersGridState, LibraryKind>(
-        AllServersGridNotifier.new);
+      AllServersGridNotifier.new,
+    );
 
 class AllServersSearchNotifier
     extends Notifier<AsyncValue<MergedResult<MergedSearch>>?> {
@@ -193,6 +200,8 @@ class AllServersSearchNotifier
   }
 }
 
-final allServersSearchProvider = NotifierProvider.autoDispose<
-    AllServersSearchNotifier,
-    AsyncValue<MergedResult<MergedSearch>>?>(AllServersSearchNotifier.new);
+final allServersSearchProvider =
+    NotifierProvider.autoDispose<
+      AllServersSearchNotifier,
+      AsyncValue<MergedResult<MergedSearch>>?
+    >(AllServersSearchNotifier.new);

@@ -16,18 +16,18 @@ import 'package:player/presentation/widgets/shell_rail_inset.dart';
 import 'fake_media_source.dart';
 
 ItemSummary _movie({String? showTitle}) => ItemSummary(
-      ref: const ItemRef(
-        sourceId: fakeSourceId,
-        kind: ItemKind.movie,
-        externalId: 'night-ferry',
-      ),
-      title: 'Night Ferry',
-      showTitle: showTitle,
-      year: 2011,
-      overview: 'A ferry crosses the saltmarsh after dark. ' * 8,
-      poster: const ArtworkRef('/art/night-ferry'),
-      backdrop: const ArtworkRef('/backdrop/night-ferry'),
-    );
+  ref: const ItemRef(
+    sourceId: fakeSourceId,
+    kind: ItemKind.movie,
+    externalId: 'night-ferry',
+  ),
+  title: 'Night Ferry',
+  showTitle: showTitle,
+  year: 2011,
+  overview: 'A ferry crosses the saltmarsh after dark. ' * 8,
+  poster: const ArtworkRef('/art/night-ferry'),
+  backdrop: const ArtworkRef('/backdrop/night-ferry'),
+);
 
 Future<ProviderContainer> _pump(
   WidgetTester tester,
@@ -38,28 +38,32 @@ Future<ProviderContainer> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  final container = ProviderContainer(overrides: [
-    mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+    ],
+  );
   addTearDown(container.dispose);
   // The controller is auto-dispose; keep it alive to read what was published.
-  container.listen(ambientBackdropControllerProvider, (_, __) {});
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: SourceHomeHero(
-            sourceId: fakeSourceId,
-            item: item ?? _movie(),
+  container.listen(ambientBackdropControllerProvider, (_, _) {});
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: SourceHomeHero(
+              sourceId: fakeSourceId,
+              item: item ?? _movie(),
+            ),
           ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pump();
   await tester.pump();
   return container;
@@ -71,13 +75,20 @@ void main() {
   const moreKey = Key('source-home-hero-more');
 
   group('on Liquid Glass', () {
-    testWidgets('Play and the secondary action are glass and still tap',
-        (tester) async {
-      await _pump(tester, const Size(1280, 800),
-          liquid: true, item: _movie(showTitle: 'Saltmarsh'));
+    testWidgets('Play and the secondary action are glass and still tap', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const Size(1280, 800),
+        liquid: true,
+        item: _movie(showTitle: 'Saltmarsh'),
+      );
       expect(
         find.descendant(
-            of: find.byKey(playKey), matching: find.byType(GlassSurface)),
+          of: find.byKey(playKey),
+          matching: find.byType(GlassSurface),
+        ),
         findsOneWidget,
       );
       expect(find.byType(FilledButton), findsNothing);
@@ -94,8 +105,12 @@ void main() {
       expect(tester.widget<InkWell>(find.byKey(moreKey)).onTap, isNotNull);
       expect(
         tester
-            .widget<InkWell>(find.descendant(
-                of: find.byKey(playKey), matching: find.byType(InkWell)))
+            .widget<InkWell>(
+              find.descendant(
+                of: find.byKey(playKey),
+                matching: find.byType(InkWell),
+              ),
+            )
             .onTap,
         isNotNull,
       );
@@ -109,17 +124,27 @@ void main() {
     });
 
     testWidgets('the episode chip is a glass badge', (tester) async {
-      await _pump(tester, const Size(1280, 800),
-          liquid: true, item: _movie(showTitle: 'Saltmarsh'));
+      await _pump(
+        tester,
+        const Size(1280, 800),
+        liquid: true,
+        item: _movie(showTitle: 'Saltmarsh'),
+      );
       expect(find.byType(GlassBadge), findsWidgets);
     });
 
-    testWidgets('every glass surface shares one BackdropGroup pass',
-        (tester) async {
-      await _pump(tester, const Size(1280, 800),
-          liquid: true, item: _movie(showTitle: 'Saltmarsh'));
-      final surfaces =
-          tester.widgetList<GlassSurface>(find.byType(GlassSurface)).toList();
+    testWidgets('every glass surface shares one BackdropGroup pass', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const Size(1280, 800),
+        liquid: true,
+        item: _movie(showTitle: 'Saltmarsh'),
+      );
+      final surfaces = tester
+          .widgetList<GlassSurface>(find.byType(GlassSurface))
+          .toList();
       // Chips (subtitle-less item: year), Play and the secondary action.
       expect(surfaces.length, greaterThanOrEqualTo(3));
       expect(surfaces.every((s) => s.live && s.grouped), isTrue);
@@ -142,8 +167,9 @@ void main() {
     expect(find.byType(BackdropGroup), findsNothing);
   });
 
-  testWidgets('wide: a 248x360 poster with the title to its right',
-      (tester) async {
+  testWidgets('wide: a 248x360 poster with the title to its right', (
+    tester,
+  ) async {
     await _pump(tester, const Size(1280, 800));
 
     expect(tester.getSize(find.byKey(posterKey)), const Size(248, 360));
@@ -161,22 +187,28 @@ void main() {
       ),
       findsOneWidget,
     );
-    final overview =
-        tester.widget<Text>(find.textContaining('A ferry crosses'));
+    final overview = tester.widget<Text>(
+      find.textContaining('A ferry crosses'),
+    );
     expect(overview.maxLines, 2);
   });
 
-  testWidgets('an episode offers All episodes and names its series',
-      (tester) async {
-    await _pump(tester, const Size(1280, 800),
-        item: _movie(showTitle: 'Saltmarsh'));
+  testWidgets('an episode offers All episodes and names its series', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const Size(1280, 800),
+      item: _movie(showTitle: 'Saltmarsh'),
+    );
 
     expect(find.text('All episodes'), findsOneWidget);
     expect(find.text('Saltmarsh'), findsOneWidget);
   });
 
-  testWidgets('narrow: a centred 60% poster over full-width buttons',
-      (tester) async {
+  testWidgets('narrow: a centred 60% poster over full-width buttons', (
+    tester,
+  ) async {
     await _pump(tester, const Size(400, 800));
 
     final poster = find.byKey(posterKey);
@@ -190,16 +222,20 @@ void main() {
     expect(more.width, play.width);
   });
 
-  testWidgets('publishes the credentialed artwork as the ambient backdrop',
-      (tester) async {
+  testWidgets('publishes the credentialed artwork as the ambient backdrop', (
+    tester,
+  ) async {
     final container = await _pump(tester, const Size(1280, 800));
     for (var i = 0; i < 3; i++) {
       await tester.pump();
     }
 
     final source = container.read(ambientBackdropControllerProvider);
-    expect(source.id, source.cacheKey,
-        reason: 'ids repeat across servers; the cache key does not');
+    expect(
+      source.id,
+      source.cacheKey,
+      reason: 'ids repeat across servers; the cache key does not',
+    );
     expect(source.imageUrl, contains('/backdrop/night-ferry'));
     expect(source.headers, {'X-Plex-Token': 'tok'});
     expect(source.cacheKey, isNotNull);
@@ -222,51 +258,56 @@ void main() {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      final container = ProviderContainer(overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+        ],
+      );
       addTearDown(container.dispose);
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              disableAnimations: reduceMotion,
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(disableAnimations: reduceMotion),
+              child: child!,
             ),
-            child: child!,
-          ),
-          home: Scaffold(
-            // The page spans the window and publishes the rail's footprint;
-            // the list insets its rows, the hero's backdrop reaches back.
-            body: ShellRailInset(
-              left: inset,
-              child: SingleChildScrollView(
-                padding: EdgeInsets.only(left: inset),
-                child: SourceHomeHero(
-                  sourceId: fakeSourceId,
-                  item: item ?? _movie(),
-                  bleedTop: bleedTop,
+            home: Scaffold(
+              // The page spans the window and publishes the rail's footprint;
+              // the list insets its rows, the hero's backdrop reaches back.
+              body: ShellRailInset(
+                left: inset,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.only(left: inset),
+                  child: SourceHomeHero(
+                    sourceId: fakeSourceId,
+                    item: item ?? _movie(),
+                    bleedTop: bleedTop,
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ));
+      );
       await tester.pump();
       await tester.pump();
     }
 
     ArtworkImage image(WidgetTester tester) => tester.widget<ArtworkImage>(
-          find.descendant(
-            of: find.byKey(backdropKey),
-            matching: find.byType(ArtworkImage),
-          ),
-        );
+      find.descendant(
+        of: find.byKey(backdropKey),
+        matching: find.byType(ArtworkImage),
+      ),
+    );
 
-    testWidgets('wide: runs under the rail to the window edge and top',
-        (tester) async {
+    testWidgets('wide: runs under the rail to the window edge and top', (
+      tester,
+    ) async {
       await pumpInShell(tester, const Size(1280, 800));
 
       final backdrop = tester.getRect(find.byKey(backdropKey));
@@ -286,17 +327,23 @@ void main() {
         matching: find.byType(ShaderMask),
       );
       expect(masks, findsOneWidget, reason: 'the bottom fade only');
-      expect(tester.widget<ShaderMask>(masks).blendMode, BlendMode.dstIn,
-          reason: 'it dissolves the art, it does not tint it');
+      expect(
+        tester.widget<ShaderMask>(masks).blendMode,
+        BlendMode.dstIn,
+        reason: 'it dissolves the art, it does not tint it',
+      );
     });
 
-    testWidgets('wide: the poster and text sit where they did before',
-        (tester) async {
+    testWidgets('wide: the poster and text sit where they did before', (
+      tester,
+    ) async {
       await pumpInShell(tester, const Size(1280, 800));
 
       // 32 padding past the column's left edge, 24 below the top.
-      expect(tester.getRect(find.byKey(posterKey)),
-          const Rect.fromLTWH(railInset + 32, 24, 248, 360));
+      expect(
+        tester.getRect(find.byKey(posterKey)),
+        const Rect.fromLTWH(railInset + 32, 24, 248, 360),
+      );
       expect(
         tester.getTopLeft(find.text('Night Ferry')).dx,
         railInset + 32 + 248 + 36,
@@ -308,24 +355,30 @@ void main() {
 
       expect(
         find.descendant(
-            of: find.byKey(backdropKey), matching: find.byType(ArtworkImage)),
+          of: find.byKey(backdropKey),
+          matching: find.byType(ArtworkImage),
+        ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-            of: find.byKey(backdropKey), matching: find.byType(ImageFiltered)),
+          of: find.byKey(backdropKey),
+          matching: find.byType(ImageFiltered),
+        ),
         findsNothing,
       );
       expect(
         find.ancestor(
-            of: find.byKey(backdropKey),
-            matching: find.byType(RepaintBoundary)),
+          of: find.byKey(backdropKey),
+          matching: find.byType(RepaintBoundary),
+        ),
         findsWidgets,
       );
     });
 
-    testWidgets('paints the backdrop art, credentials included',
-        (tester) async {
+    testWidgets('paints the backdrop art, credentials included', (
+      tester,
+    ) async {
       await pumpInShell(tester, const Size(1280, 800));
 
       final art = image(tester);
@@ -334,8 +387,9 @@ void main() {
       expect(art.cacheKey, isNotNull);
     });
 
-    testWidgets('falls back to the poster only without a backdrop',
-        (tester) async {
+    testWidgets('falls back to the poster only without a backdrop', (
+      tester,
+    ) async {
       await pumpInShell(
         tester,
         const Size(1280, 800),
@@ -389,8 +443,9 @@ void main() {
       expect(image(tester).fadeInDuration, Duration.zero);
     });
 
-    testWidgets('narrow: behind the poster, title on the plain ground',
-        (tester) async {
+    testWidgets('narrow: behind the poster, title on the plain ground', (
+      tester,
+    ) async {
       // No rail below the wide layout.
       await pumpInShell(tester, const Size(400, 800), inset: 0);
 
@@ -400,8 +455,11 @@ void main() {
       expect(backdrop.right, 400);
       expect(backdrop.top, 0);
       expect(backdrop.overlaps(poster), isTrue);
-      expect(backdrop.bottom, poster.bottom + 20,
-          reason: 'it ends where the title block begins');
+      expect(
+        backdrop.bottom,
+        poster.bottom + 20,
+        reason: 'it ends where the title block begins',
+      );
       expect(
         tester.getTopLeft(find.text('Night Ferry')).dy,
         greaterThanOrEqualTo(backdrop.bottom),
@@ -412,9 +470,11 @@ void main() {
     testWidgets('narrow: the backdrop paints under the poster', (tester) async {
       await pumpInShell(tester, const Size(400, 800), inset: 0);
 
-      final stack = tester.widget<Stack>(find
-          .ancestor(of: find.byKey(backdropKey), matching: find.byType(Stack))
-          .first);
+      final stack = tester.widget<Stack>(
+        find
+            .ancestor(of: find.byKey(backdropKey), matching: find.byType(Stack))
+            .first,
+      );
       final backdropIndex = stack.children.indexWhere(
         (w) => w is Positioned && w.child.key == backdropKey,
       );

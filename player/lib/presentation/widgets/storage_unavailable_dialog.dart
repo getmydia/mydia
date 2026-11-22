@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 
@@ -24,10 +25,7 @@ class StorageUnavailableDialog extends StatelessWidget {
         children: [
           Text(l10n.storageUnavailableConnected),
           const SizedBox(height: 12),
-          Text(
-            l10n.storageUnavailableDetail,
-            style: theme.textTheme.bodySmall,
-          ),
+          Text(l10n.storageUnavailableDetail, style: theme.textTheme.bodySmall),
         ],
       ),
       actions: [

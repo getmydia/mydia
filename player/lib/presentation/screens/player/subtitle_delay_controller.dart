@@ -26,7 +26,8 @@ class SubtitleDelayController {
   final Future<WriteOutcome> Function({
     required String trackRef,
     required int offsetMs,
-  }) saveOffset;
+  })
+  saveOffset;
 
   /// Not offline, and the session can write.
   final bool Function() canPersist;
@@ -183,10 +184,7 @@ class SubtitleDelayController {
     // and still contributes to what Save persists, but the OSD must not
     // claim a visible change that has not happened yet.
     toast(
-      subtitleDelayNudgeNotice(
-        totalMs: total,
-        appliesImmediately: !kIsWeb,
-      ),
+      subtitleDelayNudgeNotice(totalMs: total, appliesImmediately: !kIsWeb),
     );
   }
 
@@ -235,8 +233,10 @@ class SubtitleDelayController {
       case WriteOutcome.unavailable:
         return;
       case WriteOutcome.failed:
-        toast(const SubtitleDelayNotice(SubtitleDelayNoticeKind.saveFailed),
-            kind: ToastKind.error);
+        toast(
+          const SubtitleDelayNotice(SubtitleDelayNoticeKind.saveFailed),
+          kind: ToastKind.error,
+        );
         return;
       case WriteOutcome.done:
         break;
@@ -271,8 +271,10 @@ class SubtitleDelayController {
       );
     } catch (e) {
       debugPrint('[PlayerScreen] Could not save subtitle delay: $e');
-      toast(const SubtitleDelayNotice(SubtitleDelayNoticeKind.saveFailed),
-          kind: ToastKind.error);
+      toast(
+        const SubtitleDelayNotice(SubtitleDelayNoticeKind.saveFailed),
+        kind: ToastKind.error,
+      );
     }
   }
 

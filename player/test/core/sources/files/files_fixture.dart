@@ -78,12 +78,16 @@ class FilesFixture {
   /// [inMemory] opens the box in memory, which a `testWidgets` case needs:
   /// a disk write there never completes in the fake-async zone (see
   /// `player/docs/workflow.md`).
-  static Future<FilesFixture> create(
-      {bool seed = true, bool inMemory = false}) async {
+  static Future<FilesFixture> create({
+    bool seed = true,
+    bool inMemory = false,
+  }) async {
     final dir = await Directory.systemTemp.createTemp('files_fixture');
     Hive.init(dir.path);
-    final box = await Hive.openBox<Map<dynamic, dynamic>>('files_${_n++}',
-        bytes: inMemory ? Uint8List(0) : null);
+    final box = await Hive.openBox<Map<dynamic, dynamic>>(
+      'files_${_n++}',
+      bytes: inMemory ? Uint8List(0) : null,
+    );
     final index = FileLibraryIndex(box, accountId: kFilesLocalAccountId);
     final f = FilesFixture._(dir, box, index, InMemoryPlaybackProgressStore());
     addTearDown(() async {
@@ -98,15 +102,22 @@ class FilesFixture {
 
   /// A media info cache over a box of its own, closed with the fixture.
   Future<FilesMediaInfoCache> mediaInfoCache() async => FilesMediaInfoCache(
-      await Hive.openBox<Map<dynamic, dynamic>>('files_media_info_${_n++}'));
+    await Hive.openBox<Map<dynamic, dynamic>>('files_media_info_${_n++}'),
+  );
 
   ItemRef ref(ItemKind kind, String id) =>
       ItemRef(sourceId: sourceId, kind: kind, externalId: id);
 
-  Future<void> addFiles(List<String> paths,
-      {String rootId = rootId, DateTime? firstSeen}) async {
-    final parsed =
-        FakeMediaNames().parseBatch(rootPath, paths, FilesLibraryKind.mixed);
+  Future<void> addFiles(
+    List<String> paths, {
+    String rootId = rootId,
+    DateTime? firstSeen,
+  }) async {
+    final parsed = FakeMediaNames().parseBatch(
+      rootPath,
+      paths,
+      FilesLibraryKind.mixed,
+    );
     await index.putFiles([
       for (final p in parsed)
         IndexedFile(
@@ -126,18 +137,21 @@ class FilesFixture {
   }
 
   Future<void> _seed() async {
-    await index.putRoot(const LibraryRoot(
-      id: rootId,
-      path: rootPath,
-      kind: FilesLibraryKind.mixed,
-      title: 'Mixed',
-    ));
+    await index.putRoot(
+      const LibraryRoot(
+        id: rootId,
+        path: rootPath,
+        kind: FilesLibraryKind.mixed,
+        title: 'Mixed',
+      ),
+    );
     await addFiles([
       'Copper Valley (2018) 1080p.mkv',
       'B/Copper Valley (2018) 2160p.mkv',
     ]);
-    await addFiles(['Harbor Lights (2020).mkv'],
-        firstSeen: filesT0.add(const Duration(days: 2)));
+    await addFiles([
+      'Harbor Lights (2020).mkv',
+    ], firstSeen: filesT0.add(const Duration(days: 2)));
     await addFiles([
       'Glass Orchard/Glass Orchard S01E01.mkv',
       'Glass Orchard/Glass Orchard S01E02.mkv',
@@ -157,60 +171,73 @@ class FilesFixture {
     await match('coppervalley|2018', 101);
     await match('harborlights|2020', 102);
     await match('tv:glassorchard|', 201, isShow: true);
-    await index.putMovie(const MatchedMovie(
-      tmdbId: 101,
-      title: 'Copper Valley',
-      year: 2018,
-      posterPath: '/copper.jpg',
-      backdropPath: '/copper-back.jpg',
-      runtimeMinutes: 100,
-      releaseDate: '2018-03-01',
-    ));
-    await index.putMovie(const MatchedMovie(
-      tmdbId: 102,
-      title: 'The Harbor Lights',
-      year: 2020,
-      releaseDate: '2020-06-01',
-    ));
-    await index.putShow(const MatchedShow(
-      tmdbId: 201,
-      title: 'Glass Orchard',
-      year: 2021,
-      posterPath: '/orchard.jpg',
-      backdropPath: '/orchard-back.jpg',
-      seasons: {
-        1: [
-          MatchedEpisode(
-            season: 1,
-            episode: 1,
-            title: 'Seedlings',
-            stillPath: '/seedlings.jpg',
-          ),
-          MatchedEpisode(season: 1, episode: 2, title: 'Frost'),
-        ],
-        0: [],
-      },
-    ));
+    await index.putMovie(
+      const MatchedMovie(
+        tmdbId: 101,
+        title: 'Copper Valley',
+        year: 2018,
+        posterPath: '/copper.jpg',
+        backdropPath: '/copper-back.jpg',
+        runtimeMinutes: 100,
+        releaseDate: '2018-03-01',
+      ),
+    );
+    await index.putMovie(
+      const MatchedMovie(
+        tmdbId: 102,
+        title: 'The Harbor Lights',
+        year: 2020,
+        releaseDate: '2020-06-01',
+      ),
+    );
+    await index.putShow(
+      const MatchedShow(
+        tmdbId: 201,
+        title: 'Glass Orchard',
+        year: 2021,
+        posterPath: '/orchard.jpg',
+        backdropPath: '/orchard-back.jpg',
+        seasons: {
+          1: [
+            MatchedEpisode(
+              season: 1,
+              episode: 1,
+              title: 'Seedlings',
+              stillPath: '/seedlings.jpg',
+            ),
+            MatchedEpisode(season: 1, episode: 2, title: 'Frost'),
+          ],
+          0: [],
+        },
+      ),
+    );
   }
 
   Future<void> match(String groupKey, int? tmdbId, {bool isShow = false}) =>
-      index.putGroup(GroupMatch(
-        groupKey: groupKey,
-        isShow: isShow,
-        tmdbId: tmdbId,
-        matchedAt: filesT0,
-      ));
+      index.putGroup(
+        GroupMatch(
+          groupKey: groupKey,
+          isShow: isShow,
+          tmdbId: tmdbId,
+          matchedAt: filesT0,
+        ),
+      );
 
-  Future<void> saveProgress(String id, int position, int duration,
-          {DateTime? at}) =>
-      progress.save(LocalPlaybackProgress(
-        sourceId: sourceId.value,
-        mediaId: id,
-        mediaType: 'movie',
-        positionSeconds: position,
-        durationSeconds: duration,
-        updatedAt: at ?? filesT0,
-      ));
+  Future<void> saveProgress(
+    String id,
+    int position,
+    int duration, {
+    DateTime? at,
+  }) => progress.save(
+    LocalPlaybackProgress(
+      sourceId: sourceId.value,
+      mediaId: id,
+      mediaType: 'movie',
+      positionSeconds: position,
+      durationSeconds: duration,
+      updatedAt: at ?? filesT0,
+    ),
+  );
 }
 
 /// A [MediaProbe] that answers [result] (null is a failed read) and records

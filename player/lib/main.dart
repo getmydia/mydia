@@ -1,10 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart' show Hive;
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
+
 import 'app.dart';
 import 'core/auth/auth_storage.dart';
 import 'core/auth/device_info_service.dart';
@@ -24,6 +26,7 @@ import 'core/sources/store/source_store.dart';
 import 'core/crash_reporting/crash_report.dart';
 import 'core/crash_reporting/crash_reporter.dart';
 import 'core/crash_reporting/crash_reporter_provider.dart';
+
 import 'package:flutter/services.dart';
 
 import 'core/diagnostics/diagnostics_provider.dart';
@@ -101,74 +104,90 @@ void main() async {
 
   // Not awaited: the zone's error handler below owns every error from the
   // guarded body, and the returned future would never carry one out.
-  unawaited(runZonedGuarded(
-    () async {
-      WidgetsFlutterBinding.ensureInitialized();
+  unawaited(
+    runZonedGuarded(
+      () async {
+        WidgetsFlutterBinding.ensureInitialized();
 
-      // Register the bundled Inter and Outfit fonts' licenses. Deliberately out here
-      // rather than in `_startApp`: `addLicense` only stores the callback,
-      // and the `rootBundle` read inside it does not run until someone opens
-      // the licenses page. There is no startup step to fail, so it needs
-      // none of `_startApp`'s degraded-mode handling.
-      LicenseRegistry.addLicense(() async* {
-        final license =
-            await rootBundle.loadString('assets/fonts/Inter-LICENSE.txt');
-        yield LicenseEntryWithLineBreaks(<String>['Inter'], license);
-        final outfit =
-            await rootBundle.loadString('assets/fonts/Outfit-LICENSE.txt');
-        yield LicenseEntryWithLineBreaks(<String>['Outfit'], outfit);
-        // Apache-2.0 components inside the macOS video-hdr libmpv build,
-        // which only the macOS app ships.
-        if (PlatformFeatures.isMacOS) {
-          final apache =
-              await rootBundle.loadString('assets/licenses/apache-2.0.txt');
-          yield LicenseEntryWithLineBreaks(
-              <String>['MoltenVK', 'shaderc', 'SPIRV-Tools', 'SPIRV-Cross'],
-              apache);
-        }
-      });
+        // Register the bundled Inter and Outfit fonts' licenses. Deliberately out here
+        // rather than in `_startApp`: `addLicense` only stores the callback,
+        // and the `rootBundle` read inside it does not run until someone opens
+        // the licenses page. There is no startup step to fail, so it needs
+        // none of `_startApp`'s degraded-mode handling.
+        LicenseRegistry.addLicense(() async* {
+          final license = await rootBundle.loadString(
+            'assets/fonts/Inter-LICENSE.txt',
+          );
+          yield LicenseEntryWithLineBreaks(<String>['Inter'], license);
+          final outfit = await rootBundle.loadString(
+            'assets/fonts/Outfit-LICENSE.txt',
+          );
+          yield LicenseEntryWithLineBreaks(<String>['Outfit'], outfit);
+          // Apache-2.0 components inside the macOS video-hdr libmpv build,
+          // which only the macOS app ships.
+          if (PlatformFeatures.isMacOS) {
+            final apache = await rootBundle.loadString(
+              'assets/licenses/apache-2.0.txt',
+            );
+            yield LicenseEntryWithLineBreaks(<String>[
+              'MoltenVK',
+              'shaderc',
+              'SPIRV-Tools',
+              'SPIRV-Cross',
+            ], apache);
+          }
+        });
 
-      await _startApp(crashReporter, logSink);
-    },
-    (error, stack) {
-      // `_startApp` guarantees `runApp` has already run by the time control
-      // reaches here, falling back to a startup-error screen along the way
-      // if a step failed fatally. This handler only logs and reports
-      // whatever slips through afterwards (e.g. an error from deep inside a
-      // running widget tree). It must never again be the sole handler of a
-      // fatal startup failure, silently leaving the window black.
-      debugPrint('Caught error: $error');
-      debugPrint('Stack trace: $stack');
-      logSink?.recordError(error, stack);
-      unawaited(crashReporter.report(error, stack, capture: CrashCapture.zone));
-    },
-  ));
+        await _startApp(crashReporter, logSink);
+      },
+      (error, stack) {
+        // `_startApp` guarantees `runApp` has already run by the time control
+        // reaches here, falling back to a startup-error screen along the way
+        // if a step failed fatally. This handler only logs and reports
+        // whatever slips through afterwards (e.g. an error from deep inside a
+        // running widget tree). It must never again be the sole handler of a
+        // fatal startup failure, silently leaving the window black.
+        debugPrint('Caught error: $error');
+        debugPrint('Stack trace: $stack');
+        logSink?.recordError(error, stack);
+        unawaited(
+          crashReporter.report(error, stack, capture: CrashCapture.zone),
+        );
+      },
+    ),
+  );
 }
 
 /// Moves the single-server sign-in into an ordinary account. Opens the same
 /// boxes the providers do; Hive hands back the already-open box.
 Future<void> _migrateLegacyMydia(
-    SourceCache cache, DownloadDatabase? downloads) async {
+  SourceCache cache,
+  DownloadDatabase? downloads,
+) async {
   final store = await HiveSourceStore.open();
   final progressBox = await Hive.openBox<Map<dynamic, dynamic>>(
-      HivePlaybackProgressStore.boxName);
-  final castBox =
-      await Hive.openBox<Map<dynamic, dynamic>>(HiveCastSessionStore.boxName);
+    HivePlaybackProgressStore.boxName,
+  );
+  final castBox = await Hive.openBox<Map<dynamic, dynamic>>(
+    HiveCastSessionStore.boxName,
+  );
   // The serving instance re-injects a fresh token on every load.
   final webConfig = kIsWeb ? getWebConfig() : null;
   Future<void> migrate() async {
-    await migrateLegacyMydia(LegacyMydiaMigrationDeps(
-      legacy: getAuthStorage(),
-      store: store,
-      secrets: SourceSecrets(getAuthStorage()),
-      rewrite: HiveLegacyDataRewriter(
-        downloads: downloads,
-        progress: HivePlaybackProgressStore(progressBox),
+    await migrateLegacyMydia(
+      LegacyMydiaMigrationDeps(
+        legacy: getAuthStorage(),
         store: store,
-        cache: cache,
-        castSession: HiveCastSessionStore(castBox),
+        secrets: SourceSecrets(getAuthStorage()),
+        rewrite: HiveLegacyDataRewriter(
+          downloads: downloads,
+          progress: HivePlaybackProgressStore(progressBox),
+          store: store,
+          cache: cache,
+          castSession: HiveCastSessionStore(castBox),
+        ),
       ),
-    ));
+    );
     // Only reached when the migration did not throw. Never throws itself.
     await purgeLegacyMydiaStorage(
       storage: getAuthStorage(),
@@ -182,9 +201,13 @@ Future<void> _migrateLegacyMydia(
     return;
   }
   await migrateThenSeed(
-      migrate,
-      () => upsertWebConfigAccount(
-          store, SourceSecrets(getAuthStorage()), webConfig));
+    migrate,
+    () => upsertWebConfigAccount(
+      store,
+      SourceSecrets(getAuthStorage()),
+      webConfig,
+    ),
+  );
 }
 
 /// Hands `runApp` a [StartupGate] immediately, so the first frame is a
@@ -221,62 +244,65 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
   // One instance for the init step and the migration, which reads its boxes.
   final downloadDb = isDownloadSupported ? getDownloadDatabase() : null;
 
-  final startup = runStartup(
-    StartupSteps(
-      rustInit: (!kIsWeb || kWebP2pEnabled)
-          ? () => RustLib.init().timeout(_rustInitTimeout)
-          : null,
-      // Both are one-shot platform probes read synchronously in `build`
-      // afterwards, so they share the step. Neither throws.
-      inputCapabilities: () async {
-        await Future.wait<void>([
-          InputCapabilities.initialize(),
-          NativeTabBarSupport.initialize(),
-          LiquidGlassSupport.initialize(),
-        ]);
-        // Needs the tier answer above; counts the presses that decide
-        // whether a page may still move focus to its landing region.
-        FocusMemory.listenForPresses();
-      },
-      hiveCache: () async {
-        // `initAppHive` sets the Hive base path itself, because
-        // `initHiveForFlutter` hard-wires it to the user's Documents folder.
-        // See `core/storage/app_hive.dart`.
-        await initAppHive();
-        // The player's two static preference facades only use these once
-        // open. Neither throws; a failure costs the feature its memory.
-        await VideoScalingPrefs.open();
-        await SubtitleLanguagePrefs.open();
-        // Files sources build synchronously over these. A failure leaves
-        // files libraries unusable, never the rest of the app.
-        if (!kIsWeb) {
-          try {
-            await openFilesLibraryBoxes();
-          } catch (e) {
-            debugPrint('[Startup] Files library boxes failed to open: $e');
-          }
-          // Never throws; the backup falls back to memory without it.
-          await openBackupMetaBox();
-        }
-      },
-      fetchLog: HiveFetchLog.open,
-      sourceCache: HiveSourceCache.open,
-      downloadDb: downloadDb?.initialize,
-      legacyMigration: (cache) => _migrateLegacyMydia(cache, downloadDb),
-      sidebarLayoutStore: () async {
-        final container = ProviderContainer();
-        try {
-          return await container.read(sidebarLayoutStoreAsyncProvider.future);
-        } finally {
-          container.dispose();
-        }
-      },
-    ),
-    timeline: timeline,
-  ).then((outcome) async {
-    logStore = await logStoreFuture;
-    return outcome;
-  });
+  final startup =
+      runStartup(
+        StartupSteps(
+          rustInit: (!kIsWeb || kWebP2pEnabled)
+              ? () => RustLib.init().timeout(_rustInitTimeout)
+              : null,
+          // Both are one-shot platform probes read synchronously in `build`
+          // afterwards, so they share the step. Neither throws.
+          inputCapabilities: () async {
+            await Future.wait<void>([
+              InputCapabilities.initialize(),
+              NativeTabBarSupport.initialize(),
+              LiquidGlassSupport.initialize(),
+            ]);
+            // Needs the tier answer above; counts the presses that decide
+            // whether a page may still move focus to its landing region.
+            FocusMemory.listenForPresses();
+          },
+          hiveCache: () async {
+            // `initAppHive` sets the Hive base path itself, because
+            // `initHiveForFlutter` hard-wires it to the user's Documents folder.
+            // See `core/storage/app_hive.dart`.
+            await initAppHive();
+            // The player's two static preference facades only use these once
+            // open. Neither throws; a failure costs the feature its memory.
+            await VideoScalingPrefs.open();
+            await SubtitleLanguagePrefs.open();
+            // Files sources build synchronously over these. A failure leaves
+            // files libraries unusable, never the rest of the app.
+            if (!kIsWeb) {
+              try {
+                await openFilesLibraryBoxes();
+              } catch (e) {
+                debugPrint('[Startup] Files library boxes failed to open: $e');
+              }
+              // Never throws; the backup falls back to memory without it.
+              await openBackupMetaBox();
+            }
+          },
+          fetchLog: HiveFetchLog.open,
+          sourceCache: HiveSourceCache.open,
+          downloadDb: downloadDb?.initialize,
+          legacyMigration: (cache) => _migrateLegacyMydia(cache, downloadDb),
+          sidebarLayoutStore: () async {
+            final container = ProviderContainer();
+            try {
+              return await container.read(
+                sidebarLayoutStoreAsyncProvider.future,
+              );
+            } finally {
+              container.dispose();
+            }
+          },
+        ),
+        timeline: timeline,
+      ).then((outcome) async {
+        logStore = await logStoreFuture;
+        return outcome;
+      });
 
   runApp(
     StartupGate(
@@ -286,8 +312,9 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
           crashReporterProvider.overrideWithValue(crashReporter),
           fetchLogProvider.overrideWithValue(ready.fetchLog),
           sourceCacheProvider.overrideWithValue(ready.sourceCache),
-          sidebarLayoutStoreProvider
-              .overrideWithValue(ready.sidebarLayoutStore),
+          sidebarLayoutStoreProvider.overrideWithValue(
+            ready.sidebarLayoutStore,
+          ),
           logUploaderProvider.overrideWithValue(
             _buildLogUploader(logSink, logStore),
           ),
@@ -305,8 +332,9 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
             error,
             report: crashReporter.reportStartupFailure(error, stackTrace),
           ),
-        StartupAlreadyRunning(:final error) =>
-          StartupErrorApp.alreadyRunning(error),
+        StartupAlreadyRunning(:final error) => StartupErrorApp.alreadyRunning(
+          error,
+        ),
         StartupReady() => throw StateError('unreachable'),
       },
     ),

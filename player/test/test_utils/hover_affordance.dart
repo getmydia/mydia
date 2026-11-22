@@ -25,9 +25,9 @@ const playGlyphs = <IconData>[
 
 /// Matches any play-affordance glyph in the tree.
 Finder findPlayGlyph() => find.byWidgetPredicate(
-      (widget) => widget is Icon && playGlyphs.contains(widget.icon),
-      description: 'play affordance glyph',
-    );
+  (widget) => widget is Icon && playGlyphs.contains(widget.icon),
+  description: 'play affordance glyph',
+);
 
 /// The cursor declared by the outermost hover region inside [of].
 ///

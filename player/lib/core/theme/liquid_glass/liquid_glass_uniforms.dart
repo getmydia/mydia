@@ -113,13 +113,13 @@ class LiquidGlassUniforms {
 
   @override
   int get hashCode => Object.hash(
-        devicePixelRatio,
-        radius,
-        tint,
-        light,
-        specularBoost,
-        adaptiveMax,
-        glow,
-        profile,
-      );
+    devicePixelRatio,
+    radius,
+    tint,
+    light,
+    specularBoost,
+    adaptiveMax,
+    glow,
+    profile,
+  );
 }

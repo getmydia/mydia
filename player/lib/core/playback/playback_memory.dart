@@ -28,9 +28,9 @@ class FailureKey {
   const FailureKey({required this.videoCodec, required this.heightBucket});
 
   factory FailureKey.fromShape(FileShape shape) => FailureKey(
-        videoCodec: shape.videoCodec,
-        heightBucket: shape.heightBucket,
-      );
+    videoCodec: shape.videoCodec,
+    heightBucket: shape.heightBucket,
+  );
 
   final String videoCodec;
   final int heightBucket;
@@ -105,10 +105,7 @@ abstract class PlaybackMemory {
 
 /// One server's record, as stored: a map so the Hive box needs no adapter.
 class _ServerRecord {
-  _ServerRecord({
-    required this.failures,
-    required this.stalls,
-  });
+  _ServerRecord({required this.failures, required this.stalls});
 
   factory _ServerRecord.empty() => _ServerRecord(failures: {}, stalls: {});
 
@@ -139,10 +136,7 @@ class _ServerRecord {
         }
       }
     }
-    return _ServerRecord(
-      failures: failures,
-      stalls: stalls,
-    );
+    return _ServerRecord(failures: failures, stalls: stalls);
   }
 
   /// Storage key to the moment it was recorded.
@@ -152,24 +146,24 @@ class _ServerRecord {
   final Map<String, StallRecord> stalls;
 
   Map<String, dynamic> toMap() => {
-        'failures': {
-          for (final entry in failures.entries)
-            entry.key: {'at': entry.value.toUtc().toIso8601String()},
+    'failures': {
+      for (final entry in failures.entries)
+        entry.key: {'at': entry.value.toUtc().toIso8601String()},
+    },
+    'stalls': {
+      for (final entry in stalls.entries)
+        entry.key: {
+          'ceilingKbps': entry.value.ceilingKbps,
+          'at': entry.value.at.toUtc().toIso8601String(),
         },
-        'stalls': {
-          for (final entry in stalls.entries)
-            entry.key: {
-              'ceilingKbps': entry.value.ceilingKbps,
-              'at': entry.value.at.toUtc().toIso8601String(),
-            },
-        },
-      };
+    },
+  };
 
   Set<FailureKey> liveFailures(DateTime now) => {
-        for (final entry in failures.entries)
-          if (now.difference(entry.value) < kFailureMemoryTtl)
-            if (FailureKey.parse(entry.key) case final key?) key,
-      };
+    for (final entry in failures.entries)
+      if (now.difference(entry.value) < kFailureMemoryTtl)
+        ?FailureKey.parse(entry.key),
+  };
 
   StallRecord? liveStall(LinkPath path, DateTime now) {
     final stall = stalls[path.name];
@@ -230,8 +224,7 @@ class HivePlaybackMemory implements PlaybackMemory {
     String serverKey,
     LinkPath path, {
     required DateTime now,
-  }) =>
-      _read(serverKey).liveStall(path, now);
+  }) => _read(serverKey).liveStall(path, now);
 
   @override
   Future<void> recordStall(
@@ -242,8 +235,10 @@ class HivePlaybackMemory implements PlaybackMemory {
   }) async {
     final record = _read(serverKey);
     record.stalls[path.name] = StallRecord(ceilingKbps: ceilingKbps, at: now);
-    debugPrint('[PlaybackMemory] $serverKey: stall on ${path.name}, '
-        'ceiling ${ceilingKbps}kbps');
+    debugPrint(
+      '[PlaybackMemory] $serverKey: stall on ${path.name}, '
+      'ceiling ${ceilingKbps}kbps',
+    );
     await _write(serverKey, record);
   }
 }
@@ -273,8 +268,7 @@ class InMemoryPlaybackMemory implements PlaybackMemory {
     String serverKey,
     LinkPath path, {
     required DateTime now,
-  }) =>
-      _record(serverKey).liveStall(path, now);
+  }) => _record(serverKey).liveStall(path, now);
 
   @override
   Future<void> recordStall(
@@ -283,7 +277,9 @@ class InMemoryPlaybackMemory implements PlaybackMemory {
     int ceilingKbps, {
     required DateTime now,
   }) async {
-    _record(serverKey).stalls[path.name] =
-        StallRecord(ceilingKbps: ceilingKbps, at: now);
+    _record(serverKey).stalls[path.name] = StallRecord(
+      ceilingKbps: ceilingKbps,
+      at: now,
+    );
   }
 }

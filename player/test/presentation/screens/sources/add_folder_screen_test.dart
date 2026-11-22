@@ -30,14 +30,16 @@ import '../../../test_utils/no_downloads.dart';
 void main() {
   group('folder_tile_hidden_on_mobile_and_web', () {
     Future<void> pumpAdd(WidgetTester tester, {bool isWeb = false}) =>
-        tester.pumpWidget(ProviderScope(
-          overrides: [hasMydiaProvider.overrideWithValue(false)],
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: AddSourceScreen(isWeb: isWeb),
+        tester.pumpWidget(
+          ProviderScope(
+            overrides: [hasMydiaProvider.overrideWithValue(false)],
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AddSourceScreen(isWeb: isWeb),
+            ),
           ),
-        ));
+        );
 
     for (final platform in [
       TargetPlatform.linux,
@@ -73,56 +75,72 @@ void main() {
   test('signing a files account in again picks the right form', () {
     expect(filesReauthLocation(kFilesLocalAccountId), '/sources/add/folder');
     expect(filesReauthLocation('wabc'), '/sources/add/webdav?account=wabc');
-    expect(filesReauthLocation('s0123456789abcdef'),
-        '/sources/add/smb?account=s0123456789abcdef');
-    expect(filesReauthLocation('30123456789abcdef'),
-        '/sources/add/s3?account=30123456789abcdef');
+    expect(
+      filesReauthLocation('s0123456789abcdef'),
+      '/sources/add/smb?account=s0123456789abcdef',
+    );
+    expect(
+      filesReauthLocation('30123456789abcdef'),
+      '/sources/add/s3?account=30123456789abcdef',
+    );
   });
 
   testWidgets('picks a folder and adds it with its kind', (tester) async {
-    final box = (await tester.runAsync(() =>
-        Hive.openBox<Map<dynamic, dynamic>>('add_folder_screen',
-            bytes: Uint8List(0))))!;
+    final box = (await tester.runAsync(
+      () => Hive.openBox<Map<dynamic, dynamic>>(
+        'add_folder_screen',
+        bytes: Uint8List(0),
+      ),
+    ))!;
     addTearDown(() => tester.runAsync(box.close));
     final store = InMemorySourceStore();
     final router = GoRouter(
       initialLocation: '/add',
       routes: [
-        GoRoute(path: '/add', builder: (_, __) => const AddFolderScreen()),
+        GoRoute(path: '/add', builder: (_, _) => const AddFolderScreen()),
         GoRoute(
-            path: '/s/:id',
-            builder: (_, s) => Text('opened ${s.pathParameters['id']}')),
+          path: '/s/:id',
+          builder: (_, s) => Text('opened ${s.pathParameters['id']}'),
+        ),
       ],
     );
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ...noHiveOverrides,
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
-        filesIndexBoxProvider.overrideWithValue(box),
-        filesProgressStoreProvider
-            .overrideWithValue(InMemoryPlaybackProgressStore()),
-        mediaNamesProvider.overrideWithValue(FakeMediaNames()),
-        relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
-        filesBackendBuilderProvider
-            .overrideWithValue((ref, source) => FakeBackend({})),
-        directoryPickerProvider
-            .overrideWithValue(() async => '/home/viewer/Films'),
-      ],
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        routerConfig: router,
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...noHiveOverrides,
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(
+            SourceSecrets(MockAuthStorage()),
+          ),
+          filesIndexBoxProvider.overrideWithValue(box),
+          filesProgressStoreProvider.overrideWithValue(
+            InMemoryPlaybackProgressStore(),
+          ),
+          mediaNamesProvider.overrideWithValue(FakeMediaNames()),
+          relayTmdbProvider.overrideWithValue(FakeFilesRelay()),
+          filesBackendBuilderProvider.overrideWithValue(
+            (ref, source) => FakeBackend({}),
+          ),
+          directoryPickerProvider.overrideWithValue(
+            () async => '/home/viewer/Films',
+          ),
+        ],
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     expect(
-        find.descendant(
-            of: find.byKey(const Key('add-folder-experimental')),
-            matching: find.textContaining('very experimental')),
-        findsOneWidget);
+      find.descendant(
+        of: find.byKey(const Key('add-folder-experimental')),
+        matching: find.textContaining('very experimental'),
+      ),
+      findsOneWidget,
+    );
     final save = find.byKey(const Key('add-folder-save'));
     expect(tester.widget<FilledButton>(save).onPressed, isNull);
 
@@ -140,40 +158,49 @@ void main() {
     expect(record.account.id, kFilesLocalAccountId);
     expect(record.account.kind, SourceKind.files);
     expect(record.account.displayName, 'This device');
-    final root =
-        FileLibraryIndex(box, accountId: kFilesLocalAccountId).roots().single;
+    final root = FileLibraryIndex(
+      box,
+      accountId: kFilesLocalAccountId,
+    ).roots().single;
     expect(root.path, '/home/viewer/Films');
     expect(root.id, filesRootId('/home/viewer/Films'));
     expect(root.title, 'Films');
     expect(root.kind, FilesLibraryKind.movies);
-    expect(find.text('opened $kFilesLocalAccountId:owner:$kFilesLocalServerId'),
-        findsOneWidget);
+    expect(
+      find.text('opened $kFilesLocalAccountId:owner:$kFilesLocalServerId'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('selects the folder even when the screen left mid-save',
-      (tester) async {
+  testWidgets('selects the folder even when the screen left mid-save', (
+    tester,
+  ) async {
     final gate = Completer<void>();
     final router = GoRouter(
       initialLocation: '/add',
       routes: [
-        GoRoute(path: '/add', builder: (_, __) => const AddFolderScreen()),
-        GoRoute(path: '/elsewhere', builder: (_, __) => const Text('away')),
-        GoRoute(path: '/s/:id', builder: (_, __) => const Text('opened')),
+        GoRoute(path: '/add', builder: (_, _) => const AddFolderScreen()),
+        GoRoute(path: '/elsewhere', builder: (_, _) => const Text('away')),
+        GoRoute(path: '/s/:id', builder: (_, _) => const Text('opened')),
       ],
     );
-    final container = ProviderContainer(overrides: [
-      filesAccountsProvider.overrideWith((ref) => _GatedAccounts(ref, gate)),
-      directoryPickerProvider.overrideWithValue(() async => '/media/films'),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        filesAccountsProvider.overrideWith((ref) => _GatedAccounts(ref, gate)),
+        directoryPickerProvider.overrideWithValue(() async => '/media/films'),
+      ],
+    );
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        routerConfig: router,
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('add-folder-choose')));
     await tester.pumpAndSettle();

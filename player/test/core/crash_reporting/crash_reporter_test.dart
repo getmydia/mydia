@@ -21,7 +21,8 @@ const _context = CrashAppContext(
 /// A one-frame trace whose top frame is `package:player/<file>:<line>`, so
 /// each distinct (file, line) is a distinct crash site.
 StackTrace _at(String file, int line) => StackTrace.fromString(
-    '#0      Widget.method (package:player/$file:$line)\n');
+  '#0      Widget.method (package:player/$file:$line)\n',
+);
 
 class _Harness {
   _Harness(
@@ -64,39 +65,50 @@ void main() {
       fakeAsync((async) {
         final h = _Harness(async, consent: false);
 
-        h.reporter.report(StateError('x'), _at('a.dart', 1),
-            capture: CrashCapture.zone);
-        async.flushMicrotasks();
-
-        expect(h.requests, isEmpty);
-      });
-    });
-
-    test('a consent read that throws counts as off and is retried next time',
-        () {
-      fakeAsync((async) {
-        var reads = 0;
-        final h = _Harness(
-          async,
-          loadConsent: () async {
-            reads++;
-            if (reads == 1) throw Exception('keyring locked');
-            return true;
-          },
+        h.reporter.report(
+          StateError('x'),
+          _at('a.dart', 1),
+          capture: CrashCapture.zone,
         );
-
-        h.reporter.report(StateError('x'), _at('a.dart', 1),
-            capture: CrashCapture.zone);
         async.flushMicrotasks();
+
         expect(h.requests, isEmpty);
-
-        h.reporter.report(StateError('x'), _at('b.dart', 1),
-            capture: CrashCapture.zone);
-        async.flushMicrotasks();
-        expect(h.requests, hasLength(1));
-        expect(reads, 2);
       });
     });
+
+    test(
+      'a consent read that throws counts as off and is retried next time',
+      () {
+        fakeAsync((async) {
+          var reads = 0;
+          final h = _Harness(
+            async,
+            loadConsent: () async {
+              reads++;
+              if (reads == 1) throw Exception('keyring locked');
+              return true;
+            },
+          );
+
+          h.reporter.report(
+            StateError('x'),
+            _at('a.dart', 1),
+            capture: CrashCapture.zone,
+          );
+          async.flushMicrotasks();
+          expect(h.requests, isEmpty);
+
+          h.reporter.report(
+            StateError('x'),
+            _at('b.dart', 1),
+            capture: CrashCapture.zone,
+          );
+          async.flushMicrotasks();
+          expect(h.requests, hasLength(1));
+          expect(reads, 2);
+        });
+      },
+    );
 
     test('a consent read slower than 2 seconds counts as off', () {
       fakeAsync((async) {
@@ -104,8 +116,11 @@ void main() {
 
         var completed = false;
         h.reporter
-            .report(StateError('x'), _at('a.dart', 1),
-                capture: CrashCapture.zone)
+            .report(
+              StateError('x'),
+              _at('a.dart', 1),
+              capture: CrashCapture.zone,
+            )
             .then((_) => completed = true);
         async.elapse(const Duration(seconds: 3));
 
@@ -126,8 +141,11 @@ void main() {
         );
 
         for (var i = 0; i < 3; i++) {
-          h.reporter.report(StateError('x'), _at('f$i.dart', 1),
-              capture: CrashCapture.zone);
+          h.reporter.report(
+            StateError('x'),
+            _at('f$i.dart', 1),
+            capture: CrashCapture.zone,
+          );
           async.flushMicrotasks();
         }
 
@@ -141,8 +159,11 @@ void main() {
         final h = _Harness(async, consent: false);
 
         h.reporter.applyConsent(true);
-        h.reporter.report(StateError('x'), _at('a.dart', 1),
-            capture: CrashCapture.zone);
+        h.reporter.report(
+          StateError('x'),
+          _at('a.dart', 1),
+          capture: CrashCapture.zone,
+        );
         async.flushMicrotasks();
 
         expect(h.requests, hasLength(1));
@@ -155,8 +176,11 @@ void main() {
 
         h.reporter.applyConsent(true);
         h.reporter.applyConsent(false);
-        h.reporter.report(StateError('x'), _at('a.dart', 1),
-            capture: CrashCapture.zone);
+        h.reporter.report(
+          StateError('x'),
+          _at('a.dart', 1),
+          capture: CrashCapture.zone,
+        );
         async.flushMicrotasks();
 
         expect(h.requests, isEmpty);
@@ -168,16 +192,22 @@ void main() {
         final read = Completer<bool>();
         final h = _Harness(async, loadConsent: () => read.future);
 
-        h.reporter.report(StateError('x'), _at('a.dart', 1),
-            capture: CrashCapture.zone);
+        h.reporter.report(
+          StateError('x'),
+          _at('a.dart', 1),
+          capture: CrashCapture.zone,
+        );
         async.flushMicrotasks();
         h.reporter.applyConsent(false);
         async.flushMicrotasks();
         // The stored value from before the opt-out arrives late.
         read.complete(true);
         async.flushMicrotasks();
-        h.reporter.report(StateError('x'), _at('b.dart', 1),
-            capture: CrashCapture.zone);
+        h.reporter.report(
+          StateError('x'),
+          _at('b.dart', 1),
+          capture: CrashCapture.zone,
+        );
         async.flushMicrotasks();
 
         expect(h.requests, isEmpty);
@@ -192,7 +222,8 @@ void main() {
 
         h.reporter.report(
           StateError(
-              'stream https://mydia.example.org/api/stream/7?token=abc123 closed'),
+            'stream https://mydia.example.org/api/stream/7?token=abc123 closed',
+          ),
           _at('core/player/player_controller.dart', 412),
           capture: CrashCapture.zone,
         );
@@ -223,15 +254,21 @@ void main() {
         final h = _Harness(async);
 
         for (var i = 0; i < 11; i++) {
-          h.reporter.report(StateError('x'), _at('f$i.dart', 1),
-              capture: CrashCapture.zone);
+          h.reporter.report(
+            StateError('x'),
+            _at('f$i.dart', 1),
+            capture: CrashCapture.zone,
+          );
           async.flushMicrotasks();
         }
         expect(h.requests, hasLength(10));
 
         async.elapse(const Duration(seconds: 61));
-        h.reporter.report(StateError('x'), _at('late.dart', 1),
-            capture: CrashCapture.zone);
+        h.reporter.report(
+          StateError('x'),
+          _at('late.dart', 1),
+          capture: CrashCapture.zone,
+        );
         async.flushMicrotasks();
         expect(h.requests, hasLength(11));
       });
@@ -242,8 +279,11 @@ void main() {
         final h = _Harness(async);
 
         for (var i = 0; i < 3; i++) {
-          h.reporter.report(StateError('x$i'), _at('a.dart', 1),
-              capture: CrashCapture.zone);
+          h.reporter.report(
+            StateError('x$i'),
+            _at('a.dart', 1),
+            capture: CrashCapture.zone,
+          );
           async.flushMicrotasks();
         }
 
@@ -274,7 +314,9 @@ void main() {
 
         h.reporter.handleFlutterError(
           FlutterErrorDetails(
-              exception: StateError('x'), stack: _at('a.dart', 1)),
+            exception: StateError('x'),
+            stack: _at('a.dart', 1),
+          ),
         );
         async.flushMicrotasks();
 
@@ -283,31 +325,35 @@ void main() {
       });
     });
 
-    test('handleFlutterError presents silent errors but does not report them',
-        () {
-      fakeAsync((async) {
-        final h = _Harness(async);
+    test(
+      'handleFlutterError presents silent errors but does not report them',
+      () {
+        fakeAsync((async) {
+          final h = _Harness(async);
 
-        h.reporter.handleFlutterError(
-          FlutterErrorDetails(
-            exception: StateError('image failed'),
-            stack: _at('a.dart', 1),
-            silent: true,
-          ),
-        );
-        async.flushMicrotasks();
+          h.reporter.handleFlutterError(
+            FlutterErrorDetails(
+              exception: StateError('image failed'),
+              stack: _at('a.dart', 1),
+              silent: true,
+            ),
+          );
+          async.flushMicrotasks();
 
-        expect(h.presented, hasLength(1));
-        expect(h.requests, isEmpty);
-      });
-    });
+          expect(h.presented, hasLength(1));
+          expect(h.requests, isEmpty);
+        });
+      },
+    );
 
     test('handlePlatformError reports and marks the error handled', () {
       fakeAsync((async) {
         final h = _Harness(async);
 
-        final handled =
-            h.reporter.handlePlatformError(StateError('x'), _at('a.dart', 1));
+        final handled = h.reporter.handlePlatformError(
+          StateError('x'),
+          _at('a.dart', 1),
+        );
         async.flushMicrotasks();
 
         expect(handled, isTrue);
@@ -328,8 +374,10 @@ void main() {
         h.reporter.install();
 
         expect(FlutterError.onError, h.reporter.handleFlutterError);
-        expect(PlatformDispatcher.instance.onError,
-            h.reporter.handlePlatformError);
+        expect(
+          PlatformDispatcher.instance.onError,
+          h.reporter.handlePlatformError,
+        );
       });
     });
 
@@ -342,8 +390,11 @@ void main() {
 
         var completed = false;
         h.reporter
-            .report(StateError('x'), _at('a.dart', 1),
-                capture: CrashCapture.zone)
+            .report(
+              StateError('x'),
+              _at('a.dart', 1),
+              capture: CrashCapture.zone,
+            )
             .then((_) => completed = true);
         async.flushMicrotasks();
 
@@ -352,24 +403,31 @@ void main() {
       });
     });
 
-    test('an unavailable reporter sends nothing and offers no startup report',
-        () {
-      fakeAsync((async) {
-        final h = _Harness(async, isAvailable: false);
+    test(
+      'an unavailable reporter sends nothing and offers no startup report',
+      () {
+        fakeAsync((async) {
+          final h = _Harness(async, isAvailable: false);
 
-        h.reporter.report(StateError('x'), _at('a.dart', 1),
-            capture: CrashCapture.zone);
-        final controller =
-            h.reporter.reportStartupFailure(StateError('x'), _at('a.dart', 1));
-        bool? enabled;
-        h.reporter.isEnabled().then((value) => enabled = value);
-        async.flushMicrotasks();
+          h.reporter.report(
+            StateError('x'),
+            _at('a.dart', 1),
+            capture: CrashCapture.zone,
+          );
+          final controller = h.reporter.reportStartupFailure(
+            StateError('x'),
+            _at('a.dart', 1),
+          );
+          bool? enabled;
+          h.reporter.isEnabled().then((value) => enabled = value);
+          async.flushMicrotasks();
 
-        expect(h.requests, isEmpty);
-        expect(controller, isNull);
-        expect(enabled, isFalse);
-      });
-    });
+          expect(h.requests, isEmpty);
+          expect(controller, isNull);
+          expect(enabled, isFalse);
+        });
+      },
+    );
   });
 
   group('reportStartupFailure', () {
@@ -433,8 +491,11 @@ void main() {
         final h = _Harness(async);
 
         for (var i = 0; i < 11; i++) {
-          h.reporter.report(StateError('x'), _at('f$i.dart', 1),
-              capture: CrashCapture.zone);
+          h.reporter.report(
+            StateError('x'),
+            _at('f$i.dart', 1),
+            capture: CrashCapture.zone,
+          );
           async.flushMicrotasks();
         }
         expect(h.requests, hasLength(10));

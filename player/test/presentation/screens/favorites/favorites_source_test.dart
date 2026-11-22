@@ -10,11 +10,12 @@ import '../sources/fake_media_source.dart';
 import '../sources/listing_harness.dart';
 
 void main() {
-  testWidgets('lists the source favorites and opens an item on that source',
-      (tester) async {
+  testWidgets('lists the source favorites and opens an item on that source', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..favoritePages = [
-        Page(items: [fakeMovie(1), fakeMovie(2)])
+        Page(items: [fakeMovie(1), fakeMovie(2)]),
       ];
     final pushed = await pumpListing(
       tester,
@@ -33,15 +34,16 @@ void main() {
     expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
   });
 
-  testWidgets('shows the listing of the source it is scoped to',
-      (tester) async {
+  testWidgets('shows the listing of the source it is scoped to', (
+    tester,
+  ) async {
     final a = FakeCapableSource()
       ..favoritePages = [
-        Page(items: [fakeMovie(1)])
+        Page(items: [fakeMovie(1)]),
       ];
     final b = FakeCapableSource(id: otherSourceId)
       ..favoritePages = [
-        Page(items: [listingMovie(otherSourceId, 'b1', 'Other Shelf Film')])
+        Page(items: [listingMovie(otherSourceId, 'b1', 'Other Shelf Film')]),
       ];
     await pumpListing(
       tester,

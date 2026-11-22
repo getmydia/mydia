@@ -31,8 +31,10 @@ void main() {
 
   test('truncate cuts long messages and marks the cut', () {
     final long = 'x' * (LogRecord.maxMessageChars + 10);
-    expect(LogRecord.truncate(long),
-        '${'x' * LogRecord.maxMessageChars}${LogRecord.truncationMarker}');
+    expect(
+      LogRecord.truncate(long),
+      '${'x' * LogRecord.maxMessageChars}${LogRecord.truncationMarker}',
+    );
     expect(LogRecord.truncate('short'), 'short');
   });
 

@@ -48,15 +48,22 @@ class HubCardSurface extends StatelessWidget {
     final tap = onTap;
     if (tap == null) return surface;
     return FocusHighlight(
-        onActivate: tap, borderRadius: radius, child: surface);
+      onActivate: tap,
+      borderRadius: radius,
+      child: surface,
+    );
   }
 }
 
 /// A hub section's eyebrow title with an optional hint below and action at
 /// the end.
 class HubSectionHeader extends StatelessWidget {
-  const HubSectionHeader(
-      {super.key, required this.title, this.hint, this.action});
+  const HubSectionHeader({
+    super.key,
+    required this.title,
+    this.hint,
+    this.action,
+  });
 
   final String title;
   final String? hint;
@@ -88,14 +95,16 @@ class HubSectionHeader extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     hintText,
-                    style:
-                        TextStyle(fontSize: 12.5, color: palette.textSecondary),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: palette.textSecondary,
+                    ),
                   ),
                 ],
               ],
             ),
           ),
-          if (trailing != null) trailing,
+          ?trailing,
         ],
       ),
     );
@@ -183,8 +192,10 @@ class HubServerCard extends StatelessWidget {
                   l10n.connectionsServerMeta(kind, detail),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      TextStyle(fontSize: 12.5, color: palette.textSecondary),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: palette.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -209,8 +220,11 @@ class HubServerCard extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Icon(Icons.chevron_right,
-                size: 20, color: palette.textDisabled),
+            child: Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: palette.textDisabled,
+            ),
           ),
         ],
       ),
@@ -245,8 +259,10 @@ class HubChip extends StatelessWidget {
             Container(
               width: 7,
               height: 7,
-              decoration:
-                  BoxDecoration(shape: BoxShape.circle, color: dotColor),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dotColor,
+              ),
             ),
             const SizedBox(width: 6),
           ] else if (glyph != null) ...[
@@ -336,16 +352,23 @@ class HubDeviceCard extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: palette.surfaceHigh,
                   border: Border.all(
-                      color: palette.primary.withValues(alpha: 0.45)),
+                    color: palette.primary.withValues(alpha: 0.45),
+                  ),
                 ),
-                child: Icon(connectionPlatformIcon(device.platform),
-                    size: 18, color: palette.textSecondary),
+                child: Icon(
+                  connectionPlatformIcon(device.platform),
+                  size: 18,
+                  color: palette.textSecondary,
+                ),
               ),
               const Spacer(),
               PopupMenuButton<void>(
                 key: Key('connections-device-menu-${device.nodeId}'),
-                icon: Icon(Icons.more_vert,
-                    size: 20, color: palette.textDisabled),
+                icon: Icon(
+                  Icons.more_vert,
+                  size: 20,
+                  color: palette.textDisabled,
+                ),
                 itemBuilder: (_) => [
                   PopupMenuItem<void>(
                     key: Key('remove-peer-${device.nodeId}'),
@@ -383,7 +406,9 @@ class HubDeviceCard extends StatelessWidget {
               synced == null
                   ? platform
                   : l10n.connectionsDeviceMeta(
-                      platform, l10n.relativeTime(synced)),
+                      platform,
+                      l10n.relativeTime(synced),
+                    ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: palette.textSecondary),
@@ -424,8 +449,11 @@ class HubPairCta extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: palette.primary.withValues(alpha: 0.14),
                 ),
-                child: Icon(Icons.devices_rounded,
-                    size: 19, color: palette.primary),
+                child: Icon(
+                  Icons.devices_rounded,
+                  size: 19,
+                  color: palette.primary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -444,7 +472,9 @@ class HubPairCta extends StatelessWidget {
                     Text(
                       l10n.connectionsPairCtaBody,
                       style: TextStyle(
-                          fontSize: 12.5, color: palette.textSecondary),
+                        fontSize: 12.5,
+                        color: palette.textSecondary,
+                      ),
                     ),
                   ],
                 ),

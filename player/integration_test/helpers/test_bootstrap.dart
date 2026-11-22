@@ -36,12 +36,11 @@ Future<void> _runBootstrap() async {
 /// shell reads it synchronously, so without an override the first frame
 /// throws. An in-memory store is enough here: nothing persists between tests.
 Widget testApp() => ProviderScope(
-      overrides: [
-        sidebarLayoutStoreProvider
-            .overrideWithValue(InMemorySidebarLayoutStore()),
-      ],
-      child: const MyApp(),
-    );
+  overrides: [
+    sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
+  ],
+  child: const MyApp(),
+);
 
 /// Replaces the app with an empty widget, after giving its startup work time
 /// to settle.
@@ -97,8 +96,10 @@ Future<void> unmountApp(
     }
 
     if (_startupLoading(container)) {
-      debugPrint('[unmountApp] startup providers still loading after '
-          '${settle.inSeconds}s; unmounting anyway');
+      debugPrint(
+        '[unmountApp] startup providers still loading after '
+        '${settle.inSeconds}s; unmounting anyway',
+      );
     }
   }
 

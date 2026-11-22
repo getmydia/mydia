@@ -44,10 +44,10 @@ class SegmentSkipper {
   void preferencesLoaded() => _preferencesLoaded = true;
 
   bool _autoSkips(MediaSegment segment) => switch (segment.type) {
-        SegmentType.commercial => autoSkipCommercials,
-        SegmentType.intro || SegmentType.credits => autoSkipIntroCredits,
-        SegmentType.unknown => false,
-      };
+    SegmentType.commercial => autoSkipCommercials,
+    SegmentType.intro || SegmentType.credits => autoSkipIntroCredits,
+    SegmentType.unknown => false,
+  };
 
   List<MediaSegment> get segments => _segments;
 

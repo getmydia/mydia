@@ -61,12 +61,16 @@ void main() {
 
   test('subtitleViewConfigurationFor keeps media_kit style and padding', () {
     const stock = SubtitleViewConfiguration();
-    final config =
-        subtitleViewConfigurationFor(const Size(844, 390), SubtitleSize.large);
+    final config = subtitleViewConfigurationFor(
+      const Size(844, 390),
+      SubtitleSize.large,
+    );
 
     expect(config.style, stock.style);
     expect(config.padding, stock.padding);
     expect(
-        config.textScaler!.scale(kSubtitleBaseFontSize), closeTo(22.5, 0.01));
+      config.textScaler!.scale(kSubtitleBaseFontSize),
+      closeTo(22.5, 0.01),
+    );
   });
 }

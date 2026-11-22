@@ -56,7 +56,8 @@ class ScanState {
 
 final filesScanProvider =
     NotifierProvider.family<FilesScanController, ScanState, SourceId>(
-        FilesScanController.new);
+      FilesScanController.new,
+    );
 
 class FilesScanController extends Notifier<ScanState> {
   FilesScanController(this.sourceId);
@@ -122,9 +123,11 @@ class FilesScanController extends Notifier<ScanState> {
     final clock = Stopwatch()..start();
     try {
       final roots = index.roots();
-      debugPrint('[FilesScan] $sourceId: scanning ${roots.length} folders '
-          '(${roots.map((r) => '${r.id} ${r.kind.name} ${r.path}').join('; ')})'
-          ', last scan ${index.lastScanAt()?.toIso8601String() ?? 'never'}');
+      debugPrint(
+        '[FilesScan] $sourceId: scanning ${roots.length} folders '
+        '(${roots.map((r) => '${r.id} ${r.kind.name} ${r.path}').join('; ')})'
+        ', last scan ${index.lastScanAt()?.toIso8601String() ?? 'never'}',
+      );
       var scanned = 0;
       for (final root in roots) {
         final rootClock = Stopwatch()..start();
@@ -145,14 +148,18 @@ class FilesScanController extends Notifier<ScanState> {
           );
           skipped += delta.skippedPaths.length;
           scanned++;
-          debugPrint('[FilesScan] ${root.id} scanned in '
-              '${rootClock.elapsed.inSeconds}s: ${delta.added.length} added, '
-              '${delta.changed.length} changed, '
-              '${delta.removedKeys.length} removed, '
-              '${delta.skippedPaths.length} skipped');
+          debugPrint(
+            '[FilesScan] ${root.id} scanned in '
+            '${rootClock.elapsed.inSeconds}s: ${delta.added.length} added, '
+            '${delta.changed.length} changed, '
+            '${delta.removedKeys.length} removed, '
+            '${delta.skippedPaths.length} skipped',
+          );
         } on BackendFailure catch (e) {
-          debugPrint('[FilesScan] ${root.id} not scanned after '
-              '${rootClock.elapsed.inSeconds}s: $e');
+          debugPrint(
+            '[FilesScan] ${root.id} not scanned after '
+            '${rootClock.elapsed.inSeconds}s: $e',
+          );
           error = e;
           if (unreachable == null || e is BackendPermissionLost) {
             unreachable = e;
@@ -182,16 +189,20 @@ class FilesScanController extends Notifier<ScanState> {
             .bumpRevision(media.source.account.id);
         await _refreshMediaInfo(media);
       }
-      await invalidator
-          .invalidate(FilesMediaSource.groupLandedTargets(sourceId));
+      await invalidator.invalidate(
+        FilesMediaSource.groupLandedTargets(sourceId),
+      );
       final files = index.files().values;
       final perRoot = {
-        for (final r in roots) r.id: files.where((f) => f.rootId == r.id).length
+        for (final r in roots)
+          r.id: files.where((f) => f.rootId == r.id).length,
       };
-      debugPrint('[FilesScan] $sourceId: done in ${clock.elapsed.inSeconds}s, '
-          '$scanned of ${roots.length} folders scanned, ${files.length} files '
-          'indexed $perRoot, ${files.where((f) => f.parsed == null).length} '
-          'with names that did not parse');
+      debugPrint(
+        '[FilesScan] $sourceId: done in ${clock.elapsed.inSeconds}s, '
+        '$scanned of ${roots.length} folders scanned, ${files.length} files '
+        'indexed $perRoot, ${files.where((f) => f.parsed == null).length} '
+        'with names that did not parse',
+      );
     } catch (e) {
       debugPrint('[FilesScan] Scan failed: $e');
       error ??= e;
@@ -218,7 +229,8 @@ class FilesScanController extends Notifier<ScanState> {
           .read(filesMediaInfoCacheProvider)
           ?.sweep(media.source.account.id, media.index.files().keys.toSet());
       unawaited(
-          ref.read(filesProbeQueueProvider(sourceId).notifier).enqueueStale());
+        ref.read(filesProbeQueueProvider(sourceId).notifier).enqueueStale(),
+      );
     } catch (e) {
       debugPrint('[FilesScan] $sourceId: file details not refreshed: $e');
     }

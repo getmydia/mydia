@@ -19,20 +19,20 @@ Future<void> pumpBackupSection(
   tester.view.physicalSize = const Size(900, 1800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      backupSyncServiceProvider.overrideWithValue(controller.relay),
-      backupControllerProvider.overrideWithValue(controller),
-      googleSignInMethodProvider.overrideWithValue(google?.method),
-    ],
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: Scaffold(
-        body: SingleChildScrollView(child: BackupSection()),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        backupSyncServiceProvider.overrideWithValue(controller.relay),
+        backupControllerProvider.overrideWithValue(controller),
+        googleSignInMethodProvider.overrideWithValue(google?.method),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Scaffold(body: SingleChildScrollView(child: BackupSection())),
       ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }

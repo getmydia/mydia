@@ -5,17 +5,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_providers.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 
-const _night =
-    BackdropSource(imageUrl: 'https://art/night-ferry.jpg', id: 'nf');
+const _night = BackdropSource(
+  imageUrl: 'https://art/night-ferry.jpg',
+  id: 'nf',
+);
 const _salt = BackdropSource(imageUrl: 'https://art/saltmarsh.jpg', id: 'sm');
 
 ProviderContainer _container(List<BackdropSource> calls, {Color? seed}) {
-  final container = ProviderContainer(overrides: [
-    tintExtractorProvider.overrideWithValue((source) async {
-      calls.add(source);
-      return seed;
-    }),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      tintExtractorProvider.overrideWithValue((source) async {
+        calls.add(source);
+        return seed;
+      }),
+    ],
+  );
   addTearDown(container.dispose);
   return container;
 }
@@ -24,8 +28,10 @@ void main() {
   test('no artwork resolves neutral without extracting', () async {
     final calls = <BackdropSource>[];
     final c = _container(calls, seed: const Color(0xFF2F4A9F));
-    expect(await c.read(tintForSourceProvider(BackdropSource.none).future),
-        isNull);
+    expect(
+      await c.read(tintForSourceProvider(BackdropSource.none).future),
+      isNull,
+    );
     expect(calls, isEmpty);
   });
 
@@ -37,7 +43,7 @@ void main() {
   test('a second request for the same id is a cache hit', () async {
     final calls = <BackdropSource>[];
     final c = _container(calls, seed: const Color(0xFF2F4A9F));
-    final sub = c.listen(tintForSourceProvider(_night).future, (_, __) {});
+    final sub = c.listen(tintForSourceProvider(_night).future, (_, _) {});
     await sub.read();
     sub.close();
     await Future<void>.delayed(Duration.zero); // let autoDispose run
@@ -47,14 +53,16 @@ void main() {
 
   test('sources sharing an id but not artwork resolve independently', () async {
     final calls = <BackdropSource>[];
-    final c = ProviderContainer(overrides: [
-      tintExtractorProvider.overrideWithValue((source) async {
-        calls.add(source);
-        return source.imageUrl!.contains('a-server')
-            ? const Color(0xFF2F4A9F)
-            : const Color(0xFF9F2F2F);
-      }),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        tintExtractorProvider.overrideWithValue((source) async {
+          calls.add(source);
+          return source.imageUrl!.contains('a-server')
+              ? const Color(0xFF2F4A9F)
+              : const Color(0xFF9F2F2F);
+        }),
+      ],
+    );
     addTearDown(c.dispose);
     const a = BackdropSource(imageUrl: 'https://a-server/art/7', id: '7');
     const b = BackdropSource(imageUrl: 'https://b-server/art/7', id: '7');
@@ -67,10 +75,13 @@ void main() {
   });
 
   test('an extractor error resolves neutral', () async {
-    final container = ProviderContainer(overrides: [
-      tintExtractorProvider
-          .overrideWithValue((_) async => throw Exception('x')),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        tintExtractorProvider.overrideWithValue(
+          (_) async => throw Exception('x'),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     expect(await container.read(tintForSourceProvider(_night).future), isNull);
   });
@@ -79,7 +90,7 @@ void main() {
     fakeAsync((async) {
       final calls = <BackdropSource>[];
       final c = _container(calls, seed: const Color(0xFF2F4A9F));
-      c.listen(ambientTintControllerProvider, (_, __) {});
+      c.listen(ambientTintControllerProvider, (_, _) {});
       final backdrop = c.read(ambientBackdropControllerProvider.notifier);
       backdrop.setHover(_night);
       async.elapse(const Duration(milliseconds: 50));
@@ -96,7 +107,7 @@ void main() {
   test('no artwork resets to neutral at once with no timer pending', () {
     fakeAsync((async) {
       final c = _container([], seed: const Color(0xFF2F4A9F));
-      c.listen(ambientTintControllerProvider, (_, __) {});
+      c.listen(ambientTintControllerProvider, (_, _) {});
       final backdrop = c.read(ambientBackdropControllerProvider.notifier);
       backdrop.setDefault(_night);
       async.elapse(AmbientTintController.debounce);

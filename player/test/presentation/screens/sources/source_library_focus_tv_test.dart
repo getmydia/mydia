@@ -34,35 +34,41 @@ void main() {
         const SourceLibraryScreen(library: FakeMediaSource.movies),
         overrides: [
           mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
-          coreSettingsServiceProvider
-              .overrideWithValue(SettingsService(storage: MockAuthStorage())),
+          coreSettingsServiceProvider.overrideWithValue(
+            SettingsService(storage: MockAuthStorage()),
+          ),
           sourceArtworkProvider.overrideWith((ref, key) async => null),
         ],
       );
     }
 
     ScrollPosition gridPosition(WidgetTester tester) => tester
-        .state<ScrollableState>(find
-            .ancestor(
-              of: find.byKey(poster(1), skipOffstage: false),
-              matching: find.byType(Scrollable),
-            )
-            .first)
+        .state<ScrollableState>(
+          find
+              .ancestor(
+                of: find.byKey(poster(1), skipOffstage: false),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
         .position;
 
-    testWidgets('the grid entered for the first time lands on its first poster',
-        (tester) async {
-      await pumpLibrary(tester);
-      // The last chip, so the poster below it is not the first one.
-      await focusIn(tester, unwatched);
+    testWidgets(
+      'the grid entered for the first time lands on its first poster',
+      (tester) async {
+        await pumpLibrary(tester);
+        // The last chip, so the poster below it is not the first one.
+        await focusIn(tester, unwatched);
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
+        await press(tester, LogicalKeyboardKey.arrowDown);
 
-      expectFocusIn(poster(1));
-    });
+        expectFocusIn(poster(1));
+      },
+    );
 
-    testWidgets('the chip bar is re-entered on the chip that left it',
-        (tester) async {
+    testWidgets('the chip bar is re-entered on the chip that left it', (
+      tester,
+    ) async {
       await pumpLibrary(tester);
       await focusIn(tester, titleSort);
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -83,31 +89,33 @@ void main() {
     });
 
     testWidgets(
-        'UP then DOWN returns to the poster that left, with the grid scrolled',
-        (tester) async {
-      await pumpLibrary(tester);
-      await focusIn(tester, titleSort);
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      for (var i = 0; i < 2; i++) {
+      'UP then DOWN returns to the poster that left, with the grid scrolled',
+      (tester) async {
+        await pumpLibrary(tester);
+        await focusIn(tester, titleSort);
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        for (var i = 0; i < 2; i++) {
+          await press(tester, LogicalKeyboardKey.arrowRight);
+        }
+        expectFocusIn(poster(3));
+        await press(tester, LogicalKeyboardKey.arrowUp);
+        expectFocusIn(titleSort);
+        // Leave the chip the viewer arrived on, so the next DOWN is not a
+        // replay of Flutter's own up/down history.
         await press(tester, LogicalKeyboardKey.arrowRight);
-      }
-      expectFocusIn(poster(3));
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expectFocusIn(titleSort);
-      // Leave the chip the viewer arrived on, so the next DOWN is not a
-      // replay of Flutter's own up/down history.
-      await press(tester, LogicalKeyboardKey.arrowRight);
 
-      final grid = gridPosition(tester);
-      grid.jumpTo(grid.pixels + 150);
-      await tester.pumpAndSettle();
+        final grid = gridPosition(tester);
+        grid.jumpTo(grid.pixels + 150);
+        await tester.pumpAndSettle();
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expectFocusIn(poster(3));
-    });
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expectFocusIn(poster(3));
+      },
+    );
 
-    testWidgets('the list view is re-entered on the row that left it',
-        (tester) async {
+    testWidgets('the list view is re-entered on the row that left it', (
+      tester,
+    ) async {
       await pumpLibrary(tester);
       await focusIn(tester, const Key('source-view-toggle'));
       await press(tester, LogicalKeyboardKey.enter);

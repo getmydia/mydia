@@ -16,46 +16,28 @@ Future<void> _pump(WidgetTester tester, Widget child) {
 void main() {
   group('MovieWatchedButton', () {
     testWidgets('renders an outline icon when unwatched', (tester) async {
-      await _pump(
-        tester,
-        MovieWatchedButton(watched: false, onPressed: () {}),
-      );
+      await _pump(tester, MovieWatchedButton(watched: false, onPressed: () {}));
 
-      expect(
-        find.byIcon(Icons.check_circle_outline_rounded),
-        findsOneWidget,
-      );
+      expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_rounded), findsNothing);
     });
 
     testWidgets('renders a filled icon when watched', (tester) async {
-      await _pump(
-        tester,
-        MovieWatchedButton(watched: true, onPressed: () {}),
-      );
+      await _pump(tester, MovieWatchedButton(watched: true, onPressed: () {}));
 
       expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
-      expect(
-        find.byIcon(Icons.check_circle_outline_rounded),
-        findsNothing,
-      );
+      expect(find.byIcon(Icons.check_circle_outline_rounded), findsNothing);
     });
 
     testWidgets('offers the opposite action as its tooltip', (tester) async {
-      await _pump(
-        tester,
-        MovieWatchedButton(watched: false, onPressed: () {}),
-      );
+      await _pump(tester, MovieWatchedButton(watched: false, onPressed: () {}));
 
       final tooltip = tester.widget<Tooltip>(find.byType(Tooltip));
       expect(tooltip.message, 'Mark watched');
     });
 
     testWidgets('a watched button offers to unmark', (tester) async {
-      await _pump(
-        tester,
-        MovieWatchedButton(watched: true, onPressed: () {}),
-      );
+      await _pump(tester, MovieWatchedButton(watched: true, onPressed: () {}));
 
       final tooltip = tester.widget<Tooltip>(find.byType(Tooltip));
       expect(tooltip.message, 'Mark unwatched');

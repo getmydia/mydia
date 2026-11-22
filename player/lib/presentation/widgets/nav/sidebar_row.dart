@@ -101,8 +101,9 @@ class _SidebarRowState extends State<SidebarRow> {
       iconBox: FocusHighlight(
         focusNode: widget.focusNode,
         onActivate: widget.isDisabled ? null : widget.onTap,
-        borderRadius:
-            const BorderRadius.all(Radius.circular(AppTheme.radiusNavItem)),
+        borderRadius: const BorderRadius.all(
+          Radius.circular(AppTheme.radiusNavItem),
+        ),
         child: Container(
           decoration: BoxDecoration(
             color: isSelected
@@ -123,8 +124,8 @@ class _SidebarRowState extends State<SidebarRow> {
                 color: widget.isDisabled
                     ? palette.textDisabled
                     : isSelected
-                        ? palette.textPrimary
-                        : palette.textSecondary,
+                    ? palette.textPrimary
+                    : palette.textSecondary,
               ),
               if (widget.badge != null)
                 Positioned(top: 8, right: 8, child: widget.badge!),
@@ -142,8 +143,8 @@ class _SidebarRowState extends State<SidebarRow> {
           color: widget.isDisabled
               ? palette.textDisabled
               : isSelected
-                  ? palette.textPrimary
-                  : palette.textSecondary,
+              ? palette.textPrimary
+              : palette.textSecondary,
         ),
       ),
     );
@@ -166,19 +167,20 @@ class _SidebarRowState extends State<SidebarRow> {
     final iconColor = isDimmed
         ? palette.textDisabled
         : isSelected
-            ? palette.primary
-            : _isHovered
-                ? palette.textPrimary
-                : palette.textSecondary;
+        ? palette.primary
+        : _isHovered
+        ? palette.textPrimary
+        : palette.textSecondary;
     final textColor = isDimmed
         ? palette.textDisabled
         : isSelected
-            ? palette.textPrimary
-            : _isHovered
-                ? palette.textPrimary
-                : palette.textSecondary;
+        ? palette.textPrimary
+        : _isHovered
+        ? palette.textPrimary
+        : palette.textSecondary;
 
-    final showMenu = widget.canCustomise &&
+    final showMenu =
+        widget.canCustomise &&
         !widget.isEditing &&
         (_isHovered || _isLongPressed);
 
@@ -208,8 +210,8 @@ class _SidebarRowState extends State<SidebarRow> {
         cursor: widget.isDisabled
             ? SystemMouseCursors.forbidden
             : isLockedWhileEditing
-                ? SystemMouseCursors.basic
-                : SystemMouseCursors.click,
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.isEditing ? null : widget.onTap,
           onLongPress: widget.canCustomise && !widget.isEditing
@@ -224,10 +226,10 @@ class _SidebarRowState extends State<SidebarRow> {
               color: widget.isDisabled
                   ? Colors.transparent
                   : isSelected
-                      ? palette.primary.withValues(alpha: 0.12)
-                      : _isHovered
-                          ? palette.surfaceVariant.withValues(alpha: 0.3)
-                          : Colors.transparent,
+                  ? palette.primary.withValues(alpha: 0.12)
+                  : _isHovered
+                  ? palette.surfaceVariant.withValues(alpha: 0.3)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -241,11 +243,7 @@ class _SidebarRowState extends State<SidebarRow> {
                       color: iconColor,
                     ),
                     if (widget.badge != null)
-                      Positioned(
-                        top: -3,
-                        right: -3,
-                        child: widget.badge!,
-                      ),
+                      Positioned(top: -3, right: -3, child: widget.badge!),
                   ],
                 ),
                 const SizedBox(width: 14),
@@ -256,11 +254,13 @@ class _SidebarRowState extends State<SidebarRow> {
                     maxLines: 1,
                     style: TextStyle(
                       fontSize: 15,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
                       color: textColor,
-                      decoration:
-                          widget.isHidden ? TextDecoration.lineThrough : null,
+                      decoration: widget.isHidden
+                          ? TextDecoration.lineThrough
+                          : null,
                       decorationColor: palette.textDisabled,
                     ),
                   ),

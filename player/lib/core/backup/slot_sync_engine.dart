@@ -25,21 +25,17 @@ import 'slot_transport.dart';
 class SlotSyncEngine {
   SlotSyncEngine({
     required BackupMetaStore meta,
-    required BackupSnapshot snapshot,
-    required Future<String> Function() deviceName,
-    required String platform,
-    required DateTime Function() clock,
+    required this._snapshot,
+    required this._deviceName,
+    required this._platform,
+    required this._clock,
     this.beforeApply,
     this.filterOwn,
     this.beforeUpload,
     this.afterUpload,
     this.afterPoll,
     this.handleFatal,
-  })  : _meta = meta,
-        _snapshot = snapshot,
-        _deviceName = deviceName,
-        _platform = platform,
-        _clock = clock {
+  }) : _meta = meta {
     // Filled here, not lazily: a lazy notifier could first be created by
     // dispose().
     _offers.value = meta.pendingAccounts();
@@ -229,10 +225,10 @@ class SlotSyncEngine {
   /// runs until [unpause] or [detach]. Operations the owner runs itself
   /// (a moved stub) still reach the store.
   Future<void> pause() => serialise(() async {
-        if (_transport == null) return;
-        _paused = true;
-        _cancelTimers();
-      });
+    if (_transport == null) return;
+    _paused = true;
+    _cancelTimers();
+  });
 
   /// Undoes [pause]: polling again, and a change still waiting to go up
   /// is debounced again.
@@ -274,8 +270,9 @@ class SlotSyncEngine {
     final transport = _transport;
     if (transport == null || _disposed) return;
     if (halted && !_paused) {
-      if (_status.value
-          case BackupError(kind: BackupRelayError.cloudUnavailable)) {
+      if (_status.value case BackupError(
+        kind: BackupRelayError.cloudUnavailable,
+      )) {
         resume();
       }
     }
@@ -343,7 +340,8 @@ class SlotSyncEngine {
       if (filter != null) records = filter(records);
       final hash = sha256
           .convert(
-              utf8.encode(jsonEncode([for (final r in records) r.toJson()])))
+            utf8.encode(jsonEncode([for (final r in records) r.toJson()])),
+          )
           .toString();
       if (!effectiveForce && hash == _uploadedHash) {
         if (_tooLarge) {
@@ -386,7 +384,8 @@ class SlotSyncEngine {
     // into another store's record.
     final store = _mergedStore;
     final listing = await transport.list(
-        cursor: full || !conditional ? null : _currentCursor);
+      cursor: full || !conditional ? null : _currentCursor,
+    );
     if (listing == null) return idle();
     _lastPollOutcome = 'newData';
     final ownSlotId = transport.ownSlotId;
@@ -518,7 +517,9 @@ class SlotSyncEngine {
   // Apply and offers
 
   Future<ApplyResult> apply(
-      Map<String, BackupPayload> payloads, BackupApplyMode mode) async {
+    Map<String, BackupPayload> payloads,
+    BackupApplyMode mode,
+  ) async {
     for (final p in payloads.values) {
       // The newest version wins, whatever order the slots (or polls) come
       // in: an accepted offer gets the credentials the merge chose.
@@ -527,11 +528,12 @@ class SlotSyncEngine {
         final held = _accountRecords[r.accountId];
         if (held == null ||
             identical(
-                lwwMerge([
-                  [held],
-                  [r]
-                ]).single,
-                r)) {
+              lwwMerge([
+                [held],
+                [r],
+              ]).single,
+              r,
+            )) {
           _accountRecords[r.accountId] = r;
         }
       }
@@ -643,10 +645,12 @@ class SlotSyncEngine {
     _retryTimer?.cancel();
     _retryTimer = Timer(delay, () {
       _retryTimer = null;
-      unawaited(background(() async {
-        await pollOnce();
-        await _uploadIfDirty();
-      }));
+      unawaited(
+        background(() async {
+          await pollOnce();
+          await _uploadIfDirty();
+        }),
+      );
     });
   }
 

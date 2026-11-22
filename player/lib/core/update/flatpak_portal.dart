@@ -119,9 +119,8 @@ abstract interface class FlatpakPortal {
 class DBusFlatpakPortal implements FlatpakPortal {
   DBusFlatpakPortal({
     DBusClient? client,
-    String executablePath = '/app/bin/mydia-player',
-  })  : _client = client ?? DBusClient.session(),
-        _executablePath = executablePath;
+    this._executablePath = '/app/bin/mydia-player',
+  }) : _client = client ?? DBusClient.session();
 
   final DBusClient _client;
   final String _executablePath;
@@ -137,22 +136,19 @@ class DBusFlatpakPortal implements FlatpakPortal {
   StreamSubscription<DBusSignal>? _progressSub;
 
   DBusRemoteObject get _portal => DBusRemoteObject(
-        _client,
-        name: _portalName,
-        path: DBusObjectPath(_portalPath),
-      );
+    _client,
+    name: _portalName,
+    path: DBusObjectPath(_portalPath),
+  );
 
   @override
   Stream<FlatpakCommits> get updatesAvailable => _available.stream;
 
   @override
   Future<void> startMonitoring() async {
-    final reply = await _portal.callMethod(
-      _portalName,
-      'CreateUpdateMonitor',
-      [DBusDict.stringVariant({})],
-      replySignature: DBusSignature('o'),
-    );
+    final reply = await _portal.callMethod(_portalName, 'CreateUpdateMonitor', [
+      DBusDict.stringVariant({}),
+    ], replySignature: DBusSignature('o'));
 
     final monitor = DBusRemoteObject(
       _client,
@@ -161,15 +157,16 @@ class DBusFlatpakPortal implements FlatpakPortal {
     );
     _monitor = monitor;
 
-    _availableSub = DBusRemoteObjectSignalStream(
-      object: monitor,
-      interface: _monitorInterface,
-      name: 'UpdateAvailable',
-    ).listen((signal) {
-      _available.add(
-        FlatpakCommits.fromDict(signal.values[0].asStringVariantDict()),
-      );
-    });
+    _availableSub =
+        DBusRemoteObjectSignalStream(
+          object: monitor,
+          interface: _monitorInterface,
+          name: 'UpdateAvailable',
+        ).listen((signal) {
+          _available.add(
+            FlatpakCommits.fromDict(signal.values[0].asStringVariantDict()),
+          );
+        });
   }
 
   @override
@@ -194,35 +191,31 @@ class DBusFlatpakPortal implements FlatpakPortal {
 
     controller.onListen = () async {
       try {
-        _progressSub = DBusRemoteObjectSignalStream(
-          object: monitor,
-          interface: _monitorInterface,
-          name: 'Progress',
-        ).listen(
-          (signal) {
-            try {
-              final progress = FlatpakProgress.fromDict(
-                signal.values[0].asStringVariantDict(),
-              );
-              controller.add(progress);
-              if (progress.status != FlatpakProgressStatus.running) {
-                controller.close();
+        _progressSub =
+            DBusRemoteObjectSignalStream(
+              object: monitor,
+              interface: _monitorInterface,
+              name: 'Progress',
+            ).listen((signal) {
+              try {
+                final progress = FlatpakProgress.fromDict(
+                  signal.values[0].asStringVariantDict(),
+                );
+                controller.add(progress);
+                if (progress.status != FlatpakProgressStatus.running) {
+                  controller.close();
+                }
+              } catch (e) {
+                // A malformed signal must not escape to the zone. Unhandled
+                // there it would leave this stream running forever.
+                fail(e);
               }
-            } catch (e) {
-              // A malformed signal must not escape to the zone. Unhandled
-              // there it would leave this stream running forever.
-              fail(e);
-            }
-          },
-          onError: fail,
-        );
+            }, onError: fail);
 
-        await monitor.callMethod(
-          _monitorInterface,
-          'Update',
-          [const DBusString(''), DBusDict.stringVariant({})],
-          replySignature: DBusSignature(''),
-        );
+        await monitor.callMethod(_monitorInterface, 'Update', [
+          const DBusString(''),
+          DBusDict.stringVariant({}),
+        ], replySignature: DBusSignature(''));
       } on DBusMethodResponseException catch (e) {
         await fail(
           e.response.errorName == 'org.freedesktop.DBus.Error.NotSupported'
@@ -243,21 +236,16 @@ class DBusFlatpakPortal implements FlatpakPortal {
 
   @override
   Future<void> restartIntoLatest() async {
-    await _portal.callMethod(
-      _portalName,
-      'Spawn',
-      [
-        DBusArray.byte(flatpakByteString('/app')),
-        DBusArray(DBusSignature('ay'), [
-          DBusArray.byte(flatpakByteString(_executablePath)),
-        ]),
-        DBusDict(DBusSignature('u'), DBusSignature('h'), {}),
-        DBusDict(DBusSignature('s'), DBusSignature('s'), {}),
-        const DBusUint32(_spawnLatestVersion),
-        DBusDict.stringVariant({}),
-      ],
-      replySignature: DBusSignature('u'),
-    );
+    await _portal.callMethod(_portalName, 'Spawn', [
+      DBusArray.byte(flatpakByteString('/app')),
+      DBusArray(DBusSignature('ay'), [
+        DBusArray.byte(flatpakByteString(_executablePath)),
+      ]),
+      DBusDict(DBusSignature('u'), DBusSignature('h'), {}),
+      DBusDict(DBusSignature('s'), DBusSignature('s'), {}),
+      const DBusUint32(_spawnLatestVersion),
+      DBusDict.stringVariant({}),
+    ], replySignature: DBusSignature('u'));
   }
 
   @override

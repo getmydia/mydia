@@ -44,8 +44,10 @@ class SettingsBadge extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final updatePending =
-        settingsUpdatePending(ref, supportedOverride: supportedOverride);
+    final updatePending = settingsUpdatePending(
+      ref,
+      supportedOverride: supportedOverride,
+    );
 
     return ConnectionStatusDot(
       location: location,

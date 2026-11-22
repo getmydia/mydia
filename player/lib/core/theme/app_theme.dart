@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../player/input_capabilities.dart';
 import 'colors.dart';
 import 'liquid_glass/glass_style.dart';
@@ -39,26 +40,30 @@ class AppTheme {
         : RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusButton),
           );
-    final InteractiveInkFeatureFactory? buttonSplash =
-        liquid ? NoSplash.splashFactory : null;
+    final InteractiveInkFeatureFactory? buttonSplash = liquid
+        ? NoSplash.splashFactory
+        : null;
     // On a television the only cue for where focus is. Material's focus
     // overlay is a faint tint, invisible on the white fills these buttons
     // use, so a focused button gets an accent border. Elsewhere the buttons
     // keep their style; the outlined one keeps its borderless look.
     ButtonStyle withTvFocus(ButtonStyle style, {BorderSide? rest}) =>
         InputCapabilities.directionalPrimary
-            ? style.copyWith(
-                side: WidgetStateProperty.resolveWith(
-                  (states) => states.contains(WidgetState.focused)
-                      ? BorderSide(color: p.primary, width: 3)
-                      : rest,
-                ),
-              )
-            : style;
+        ? style.copyWith(
+            side: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.focused)
+                  ? BorderSide(color: p.primary, width: 3)
+                  : rest,
+            ),
+          )
+        : style;
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      extensions: [p, GlassStyle(liquid: liquid)],
+      extensions: [
+        p,
+        GlassStyle(liquid: liquid),
+      ],
 
       // Font family - matches web app
       fontFamily: 'Inter',
@@ -232,77 +237,82 @@ class AppTheme {
 
       // Elevated Button
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: withTvFocus(ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: p.background,
-          elevation: 0,
-          textStyle: const TextStyle(
-            fontFamily: displayFamily,
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
+        style: withTvFocus(
+          ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: p.background,
+            elevation: 0,
+            textStyle: const TextStyle(
+              fontFamily: displayFamily,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            shape: buttonShape,
+            splashFactory: buttonSplash,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: buttonShape,
-          splashFactory: buttonSplash,
-        )),
+        ),
       ),
 
       // Text Button
       textButtonTheme: TextButtonThemeData(
-        style: withTvFocus(TextButton.styleFrom(
-          foregroundColor: p.textPrimary,
-          textStyle: const TextStyle(
-            fontFamily: displayFamily,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
+        style: withTvFocus(
+          TextButton.styleFrom(
+            foregroundColor: p.textPrimary,
+            textStyle: const TextStyle(
+              fontFamily: displayFamily,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            shape: buttonShape,
+            splashFactory: buttonSplash,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          shape: buttonShape,
-          splashFactory: buttonSplash,
-        )),
+        ),
       ),
 
       // Outlined Button
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: withTvFocus(
-            rest: BorderSide.none,
-            OutlinedButton.styleFrom(
-              foregroundColor: p.textPrimary,
-              backgroundColor: secondaryButtonFill,
-              side: BorderSide.none,
-              textStyle: const TextStyle(
-                fontFamily: displayFamily,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: buttonShape,
-              splashFactory: buttonSplash,
-            )),
+          rest: BorderSide.none,
+          OutlinedButton.styleFrom(
+            foregroundColor: p.textPrimary,
+            backgroundColor: secondaryButtonFill,
+            side: BorderSide.none,
+            textStyle: const TextStyle(
+              fontFamily: displayFamily,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: buttonShape,
+            splashFactory: buttonSplash,
+          ),
+        ),
       ),
 
       // Icon Button
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          foregroundColor: p.textSecondary,
-        ),
+        style: IconButton.styleFrom(foregroundColor: p.textSecondary),
       ),
 
       // Filled Button (for primary actions)
       filledButtonTheme: FilledButtonThemeData(
-        style: withTvFocus(FilledButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: p.background,
-          elevation: 0,
-          textStyle: const TextStyle(
-            fontFamily: displayFamily,
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
+        style: withTvFocus(
+          FilledButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: p.background,
+            elevation: 0,
+            textStyle: const TextStyle(
+              fontFamily: displayFamily,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            shape: buttonShape,
+            splashFactory: buttonSplash,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: buttonShape,
-          splashFactory: buttonSplash,
-        )),
+        ),
       ),
 
       // Input Decoration - uses radiusInput
@@ -325,8 +335,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(radiusInput),
           borderSide: const BorderSide(color: AppColors.error),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
         hintStyle: TextStyle(color: p.textSecondary),
       ),
 
@@ -349,8 +361,9 @@ class AppTheme {
         backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(radiusSheet)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(radiusSheet),
+          ),
         ),
       ),
 
@@ -363,17 +376,10 @@ class AppTheme {
       ),
 
       // Divider
-      dividerTheme: DividerThemeData(
-        color: p.divider,
-        thickness: 1,
-        space: 1,
-      ),
+      dividerTheme: DividerThemeData(color: p.divider, thickness: 1, space: 1),
 
       // Icon
-      iconTheme: IconThemeData(
-        color: p.textSecondary,
-        size: 24,
-      ),
+      iconTheme: IconThemeData(color: p.textSecondary, size: 24),
 
       // Slider (for video controls) - refined track and thumb
       sliderTheme: SliderThemeData(
@@ -397,10 +403,7 @@ class AppTheme {
           color: p.surface,
           borderRadius: BorderRadius.circular(radiusButton),
         ),
-        textStyle: TextStyle(
-          color: p.textPrimary,
-          fontSize: 12,
-        ),
+        textStyle: TextStyle(color: p.textPrimary, fontSize: 12),
       ),
 
       // Popup Menu
@@ -445,9 +448,7 @@ class AppTheme {
         }),
         checkColor: WidgetStateProperty.all(p.onPrimary),
         side: BorderSide(color: p.border, width: 2),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
 
       // Radio

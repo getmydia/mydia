@@ -18,18 +18,21 @@ const _filter = FilterDestination(
 void main() {
   group('defaults', () {
     test('contain every builtin in defaultIndex order', () {
-      final resolved =
-          SidebarLayout.defaults.reconcile(downloadSupported: true);
-      final expected = (List.of(builtinDestinations)
-            ..sort((a, b) => a.defaultIndex.compareTo(b.defaultIndex)))
-          .map((d) => d.id);
+      final resolved = SidebarLayout.defaults.reconcile(
+        downloadSupported: true,
+      );
+      final expected =
+          (List.of(builtinDestinations)
+                ..sort((a, b) => a.defaultIndex.compareTo(b.defaultIndex)))
+              .map((d) => d.id);
 
       expect(resolved.map((d) => d.id), expected);
     });
 
     test('omit Downloads where downloads are unsupported', () {
-      final resolved =
-          SidebarLayout.defaults.reconcile(downloadSupported: false);
+      final resolved = SidebarLayout.defaults.reconcile(
+        downloadSupported: false,
+      );
       expect(resolved.map((d) => d.id), isNot(contains('downloads')));
       expect(resolved.map((d) => d.id), contains('settings'));
     });
@@ -56,18 +59,17 @@ void main() {
         filters: {},
       );
 
-      final ids =
-          layout.reconcile(downloadSupported: true).map((d) => d.id).toList();
+      final ids = layout
+          .reconcile(downloadSupported: true)
+          .map((d) => d.id)
+          .toList();
 
       // defaultIndex 110 sits between home (100) and movies (120).
       expect(
         ids.indexOf('continue_watching'),
         greaterThan(ids.indexOf('home')),
       );
-      expect(
-        ids.indexOf('continue_watching'),
-        lessThan(ids.indexOf('movies')),
-      );
+      expect(ids.indexOf('continue_watching'), lessThan(ids.indexOf('movies')));
     });
 
     test('rule 3: a stored filter missing from order lands in the middle', () {
@@ -77,8 +79,10 @@ void main() {
         filters: {'f_1': _filter},
       );
 
-      final ids =
-          layout.reconcile(downloadSupported: true).map((d) => d.id).toList();
+      final ids = layout
+          .reconcile(downloadSupported: true)
+          .map((d) => d.id)
+          .toList();
 
       // Rule 3 appends to `order`, but anchors are pinned to the edges
       // afterwards, so the filter is last in the *reorderable* region rather
@@ -133,8 +137,10 @@ void main() {
         filters: {},
       );
 
-      final ids =
-          layout.reconcile(downloadSupported: true).map((d) => d.id).toList();
+      final ids = layout
+          .reconcile(downloadSupported: true)
+          .map((d) => d.id)
+          .toList();
 
       expect(ids.first, 'search');
       expect(ids.last, 'settings');
@@ -162,16 +168,18 @@ void main() {
   });
 
   group('mutators', () {
-    test('withFilter adds and withoutFilter removes from both order and map',
-        () {
-      final added = SidebarLayout.defaults.withFilter(_filter);
-      expect(added.filters, contains('f_1'));
-      expect(added.order, contains('f_1'));
+    test(
+      'withFilter adds and withoutFilter removes from both order and map',
+      () {
+        final added = SidebarLayout.defaults.withFilter(_filter);
+        expect(added.filters, contains('f_1'));
+        expect(added.order, contains('f_1'));
 
-      final removed = added.withoutFilter('f_1');
-      expect(removed.filters, isNot(contains('f_1')));
-      expect(removed.order, isNot(contains('f_1')));
-    });
+        final removed = added.withoutFilter('f_1');
+        expect(removed.filters, isNot(contains('f_1')));
+        expect(removed.order, isNot(contains('f_1')));
+      },
+    );
 
     test('withHidden and withUnhidden are inverses', () {
       final hidden = SidebarLayout.defaults.withHidden('movies');
@@ -215,8 +223,9 @@ void main() {
     });
 
     test('excludes anchors', () {
-      final rows =
-          SidebarLayout.defaults.reconcileForEditing(downloadSupported: true);
+      final rows = SidebarLayout.defaults.reconcileForEditing(
+        downloadSupported: true,
+      );
       final ids = rows.map((r) => r.destination.id).toList();
 
       expect(ids, isNot(contains('search')));
@@ -241,10 +250,12 @@ void main() {
     test('is unaffected by download support', () {
       // The only download-gated destination is `downloads`, and it is
       // anchored, so it never reaches the middle list either way.
-      final supported =
-          SidebarLayout.defaults.reconcileForEditing(downloadSupported: true);
-      final unsupported =
-          SidebarLayout.defaults.reconcileForEditing(downloadSupported: false);
+      final supported = SidebarLayout.defaults.reconcileForEditing(
+        downloadSupported: true,
+      );
+      final unsupported = SidebarLayout.defaults.reconcileForEditing(
+        downloadSupported: false,
+      );
 
       expect(
         unsupported.map((r) => r.destination.id).toList(),
@@ -272,7 +283,8 @@ void main() {
 
       final newMiddle = order
           .where(
-              (id) => id != 'search' && id != 'downloads' && id != 'settings')
+            (id) => id != 'search' && id != 'downloads' && id != 'settings',
+          )
           .toList();
       expect(newMiddle.first, 'movies');
     });
@@ -291,7 +303,8 @@ void main() {
 
       final newMiddle = order
           .where(
-              (id) => id != 'search' && id != 'downloads' && id != 'settings')
+            (id) => id != 'search' && id != 'downloads' && id != 'settings',
+          )
           .toList();
 
       final expected = List<String>.from(middle);
@@ -328,7 +341,8 @@ void main() {
 
       final newMiddle = order
           .where(
-              (id) => id != 'search' && id != 'downloads' && id != 'settings')
+            (id) => id != 'search' && id != 'downloads' && id != 'settings',
+          )
           .toList();
 
       expect(newMiddle.first, 'collections');
@@ -375,8 +389,10 @@ void main() {
         filters: {},
       );
 
-      final ids =
-          stored.reconcile(downloadSupported: true).map((d) => d.id).toList();
+      final ids = stored
+          .reconcile(downloadSupported: true)
+          .map((d) => d.id)
+          .toList();
 
       expect(ids.indexOf('calendar'), greaterThan(ids.indexOf('shows')));
       expect(ids.indexOf('calendar'), lessThan(ids.indexOf('recently_added')));
@@ -389,8 +405,10 @@ void main() {
         filters: const {},
       );
 
-      final ids =
-          stored.reconcile(downloadSupported: true).map((d) => d.id).toList();
+      final ids = stored
+          .reconcile(downloadSupported: true)
+          .map((d) => d.id)
+          .toList();
 
       expect(ids, isNot(contains('calendar')));
     });

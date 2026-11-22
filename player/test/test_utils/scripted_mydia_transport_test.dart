@@ -19,8 +19,10 @@ void main() {
   });
 
   test('throws what the handler returns', () {
-    final t = ScriptedMydiaTransport((_, __) => graphqlError('nope'));
+    final t = ScriptedMydiaTransport((_, _) => graphqlError('nope'));
     expect(
-        t.send('query One { x }', const {}), throwsA(isA<SourceException>()));
+      t.send('query One { x }', const {}),
+      throwsA(isA<SourceException>()),
+    );
   });
 }

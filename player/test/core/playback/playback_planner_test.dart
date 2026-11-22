@@ -75,19 +75,18 @@ PlanInputs _inputs({
   int? fileBitrateKbps,
   int? stallCeiling,
   Set<FailureKey> knownFailures = const {},
-}) =>
-    PlanInputs(
-      candidates: candidates,
-      isWeb: isWeb,
-      typeSupported: typeSupported,
-      choice: choice,
-      sourceHeight: sourceHeight,
-      fileBitrateKbps: fileBitrateKbps,
-      recentStall: stallCeiling == null
-          ? null
-          : StallRecord(ceilingKbps: stallCeiling, at: _stallAt),
-      knownFailures: knownFailures,
-    );
+}) => PlanInputs(
+  candidates: candidates,
+  isWeb: isWeb,
+  typeSupported: typeSupported,
+  choice: choice,
+  sourceHeight: sourceHeight,
+  fileBitrateKbps: fileBitrateKbps,
+  recentStall: stallCeiling == null
+      ? null
+      : StallRecord(ceilingKbps: stallCeiling, at: _stallAt),
+  knownFailures: knownFailures,
+);
 
 void main() {
   group('PlanInputs.copyWith', () {
@@ -126,7 +125,9 @@ void main() {
 
     test('a leading REMUX also direct plays', () {
       expect(
-          planPlayback(_inputs(candidates: _remuxList)), isA<DirectPlayPlan>());
+        planPlayback(_inputs(candidates: _remuxList)),
+        isA<DirectPlayPlan>(),
+      );
     });
 
     test('Auto direct plays too', () {
@@ -136,17 +137,18 @@ void main() {
       );
     });
 
-    test(
-        'Auto direct plays a 2160p HEVC file at 11.7 Mb/s when no stall is '
+    test('Auto direct plays a 2160p HEVC file at 11.7 Mb/s when no stall is '
         'remembered', () {
       // The field report behind the stall rule: a running throughput average
       // learned from a 1080p transcode (about 8 Mb/s) kept Auto transcoding
       // this file, although direct play was stable on the same link.
-      final plan = planPlayback(_inputs(
-        choice: QualityChoice.auto,
-        sourceHeight: 2160,
-        fileBitrateKbps: 11700,
-      ));
+      final plan = planPlayback(
+        _inputs(
+          choice: QualityChoice.auto,
+          sourceHeight: 2160,
+          fileBitrateKbps: 11700,
+        ),
+      );
       expect(plan, isA<DirectPlayPlan>());
       expect(plan.reason, PlanReason.directPlayAccepted);
     });
@@ -158,12 +160,14 @@ void main() {
     });
 
     test('a shape known to fail goes to transcode', () {
-      final plan = planPlayback(_inputs(
-        choice: QualityChoice.auto,
-        knownFailures: {
-          const FailureKey(videoCodec: _hevc, heightBucket: 1080),
-        },
-      ));
+      final plan = planPlayback(
+        _inputs(
+          choice: QualityChoice.auto,
+          knownFailures: {
+            const FailureKey(videoCodec: _hevc, heightBucket: 1080),
+          },
+        ),
+      );
       expect(plan, isA<HlsPlan>());
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.shapeKnownToFail);
@@ -172,28 +176,32 @@ void main() {
     test('Original bypasses a known failure and attempts direct play', () {
       // Original is always the viewer's own pick now that Auto is the
       // default, and the viewer can always override the memory.
-      final plan = planPlayback(_inputs(knownFailures: {
-        const FailureKey(videoCodec: _hevc, heightBucket: 1080),
-      }));
+      final plan = planPlayback(
+        _inputs(
+          knownFailures: {
+            const FailureKey(videoCodec: _hevc, heightBucket: 1080),
+          },
+        ),
+      );
       expect(plan, isA<DirectPlayPlan>());
       expect(plan.reason, PlanReason.directPlayAccepted);
     });
 
-    test(
-        'Auto transcodes when the bitrate does not fit a recent stall\'s '
+    test('Auto transcodes when the bitrate does not fit a recent stall\'s '
         'ceiling', () {
       // 20000 * 1.3 = 26000 > 25000
-      final plan = planPlayback(_inputs(
-        choice: QualityChoice.auto,
-        fileBitrateKbps: 20000,
-        stallCeiling: 25000,
-      ));
+      final plan = planPlayback(
+        _inputs(
+          choice: QualityChoice.auto,
+          fileBitrateKbps: 20000,
+          stallCeiling: 25000,
+        ),
+      );
       expect(plan.reason, PlanReason.recentStallOnPath);
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
     });
 
-    test(
-        'Original direct plays even when the bitrate does not fit a recent '
+    test('Original direct plays even when the bitrate does not fit a recent '
         'stall', () {
       // The viewer asked for the file's own bytes: a slow link buffers
       // rather than being swapped for a transcode.
@@ -206,9 +214,7 @@ void main() {
 
     test('a bitrate that fits, or an unknown one, direct plays', () {
       expect(
-        planPlayback(
-          _inputs(fileBitrateKbps: 19000, stallCeiling: 25000),
-        ),
+        planPlayback(_inputs(fileBitrateKbps: 19000, stallCeiling: 25000)),
         isA<DirectPlayPlan>(),
       );
       expect(
@@ -216,7 +222,9 @@ void main() {
         isA<DirectPlayPlan>(),
       );
       expect(
-          planPlayback(_inputs(fileBitrateKbps: 99999)), isA<DirectPlayPlan>());
+        planPlayback(_inputs(fileBitrateKbps: 99999)),
+        isA<DirectPlayPlan>(),
+      );
     });
   });
 
@@ -247,14 +255,16 @@ void main() {
         return false;
       }
 
-      final plan = planPlayback(_inputs(
-        candidates: _remuxList,
-        choice: QualityChoice.auto,
-        typeSupported: countingReject,
-        knownFailures: {
-          const FailureKey(videoCodec: _h264, heightBucket: 1080),
-        },
-      ));
+      final plan = planPlayback(
+        _inputs(
+          candidates: _remuxList,
+          choice: QualityChoice.auto,
+          typeSupported: countingReject,
+          knownFailures: {
+            const FailureKey(videoCodec: _h264, heightBucket: 1080),
+          },
+        ),
+      );
       // The same shape failed to decode, so copy is refused for the same
       // reason, and the reason names the memory rather than the MIME.
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
@@ -263,41 +273,51 @@ void main() {
     });
 
     test('Original bypasses a known failure and attempts copy', () {
-      final plan = planPlayback(_inputs(
-        candidates: _remuxList,
-        isWeb: true,
-        knownFailures: {
-          const FailureKey(videoCodec: _h264, heightBucket: 1080),
-        },
-      ));
+      final plan = planPlayback(
+        _inputs(
+          candidates: _remuxList,
+          isWeb: true,
+          knownFailures: {
+            const FailureKey(videoCodec: _h264, heightBucket: 1080),
+          },
+        ),
+      );
       expect((plan as HlsPlan).strategy, HlsStrategy.copy);
       expect(plan.reason, PlanReason.copyAccepted);
     });
 
     test('Auto respects a known failure and does not copy', () {
-      final plan = planPlayback(_inputs(
-        candidates: _remuxList,
-        isWeb: true,
-        choice: QualityChoice.auto,
-        knownFailures: {
-          const FailureKey(videoCodec: _h264, heightBucket: 1080),
-        },
-      ));
+      final plan = planPlayback(
+        _inputs(
+          candidates: _remuxList,
+          isWeb: true,
+          choice: QualityChoice.auto,
+          knownFailures: {
+            const FailureKey(videoCodec: _h264, heightBucket: 1080),
+          },
+        ),
+      );
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.shapeKnownToFail);
-      expect(plan.rung, QualityRung.original,
-          reason: 'nothing here says the link cannot carry the file, so '
-              'Auto transcodes at the source resolution, like Original');
+      expect(
+        plan.rung,
+        QualityRung.original,
+        reason:
+            'nothing here says the link cannot carry the file, so '
+            'Auto transcodes at the source resolution, like Original',
+      );
     });
 
-    test('a leading HLS_COPY is the needs_transcoding verdict, never taken',
-        () {
-      final plan = planPlayback(_inputs(candidates: _leadingCopyList));
-      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
-      // No DIRECT_PLAY or REMUX led the list, and the only HLS_COPY was the
-      // leading one, so the structural blocker is what gets reported.
-      expect(plan.reason, PlanReason.noDirectPlayCandidate);
-    });
+    test(
+      'a leading HLS_COPY is the needs_transcoding verdict, never taken',
+      () {
+        final plan = planPlayback(_inputs(candidates: _leadingCopyList));
+        expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
+        // No DIRECT_PLAY or REMUX led the list, and the only HLS_COPY was the
+        // leading one, so the structural blocker is what gets reported.
+        expect(plan.reason, PlanReason.noDirectPlayCandidate);
+      },
+    );
 
     test('leading HLS_COPY rejects every copy variant on native', () {
       final plan = planPlayback(_inputs(candidates: _leadingCopyVariantsList));
@@ -307,39 +327,42 @@ void main() {
     });
 
     test('a genuine copy refused for another reason names that reason', () {
-      final plan = planPlayback(_inputs(
-        candidates: _remuxList,
-        isWeb: true,
-        typeSupported: _reject,
-      ));
+      final plan = planPlayback(
+        _inputs(candidates: _remuxList, isWeb: true, typeSupported: _reject),
+      );
       expect(plan.reason, PlanReason.copyRejectedByMime);
     });
 
-    test(
-        'for Auto a bandwidth blocker also blocks copy, which carries the '
+    test('for Auto a bandwidth blocker also blocks copy, which carries the '
         'same bytes', () {
-      final plan = planPlayback(_inputs(
-        candidates: _remuxList,
-        choice: QualityChoice.auto,
-        fileBitrateKbps: 20000,
-        stallCeiling: 20000,
-      ));
+      final plan = planPlayback(
+        _inputs(
+          candidates: _remuxList,
+          choice: QualityChoice.auto,
+          fileBitrateKbps: 20000,
+          stallCeiling: 20000,
+        ),
+      );
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.recentStallOnPath);
     });
 
-    test('Original copies even when the bitrate does not fit a recent stall',
-        () {
-      // Web, so direct play is structurally out and copy is what decides.
-      final plan = planPlayback(_inputs(
-        candidates: _remuxList,
-        isWeb: true,
-        fileBitrateKbps: 20000,
-        stallCeiling: 10000,
-      ));
-      expect((plan as HlsPlan).strategy, HlsStrategy.copy);
-      expect(plan.reason, PlanReason.copyAccepted);
-    });
+    test(
+      'Original copies even when the bitrate does not fit a recent stall',
+      () {
+        // Web, so direct play is structurally out and copy is what decides.
+        final plan = planPlayback(
+          _inputs(
+            candidates: _remuxList,
+            isWeb: true,
+            fileBitrateKbps: 20000,
+            stallCeiling: 10000,
+          ),
+        );
+        expect((plan as HlsPlan).strategy, HlsStrategy.copy);
+        expect(plan.reason, PlanReason.copyAccepted);
+      },
+    );
   });
 
   group('rule 3, transcode', () {
@@ -376,65 +399,76 @@ void main() {
       expect(plan.adaptive, isTrue);
     });
 
-    test('Auto transcodes uncapped on a 4K file when no stall is remembered',
-        () {
-      final plan = planPlayback(_inputs(
-        candidates: _transcodeOnly,
-        sourceHeight: 2160,
-        choice: QualityChoice.auto,
-      ));
-      expect(plan, isA<HlsPlan>());
-      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
-      expect(plan.rung, QualityRung.original);
-      expect(plan.adaptive, isTrue);
-    });
-
     test(
-        'Auto transcodes uncapped when the file fits a recent stall\'s '
+      'Auto transcodes uncapped on a 4K file when no stall is remembered',
+      () {
+        final plan = planPlayback(
+          _inputs(
+            candidates: _transcodeOnly,
+            sourceHeight: 2160,
+            choice: QualityChoice.auto,
+          ),
+        );
+        expect(plan, isA<HlsPlan>());
+        expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
+        expect(plan.rung, QualityRung.original);
+        expect(plan.adaptive, isTrue);
+      },
+    );
+
+    test('Auto transcodes uncapped when the file fits a recent stall\'s '
         'ceiling', () {
       // 5000 * 1.3 = 6500 <= 10000.
-      final plan = planPlayback(_inputs(
-        candidates: _transcodeOnly,
-        choice: QualityChoice.auto,
-        fileBitrateKbps: 5000,
-        stallCeiling: 10000,
-      ));
+      final plan = planPlayback(
+        _inputs(
+          candidates: _transcodeOnly,
+          choice: QualityChoice.auto,
+          fileBitrateKbps: 5000,
+          stallCeiling: 10000,
+        ),
+      );
       expect((plan as HlsPlan).rung, QualityRung.original);
     });
 
-    test('Auto caps to the highest fitting rung when the file does not fit',
-        () {
-      // 1080p needs 8000 * 1.3 = 10400 > 6000; 720p needs 4000 * 1.3 = 5200
-      // <= 6000.
-      final plan = planPlayback(_inputs(
-        candidates: _transcodeOnly,
-        sourceHeight: 2160,
-        choice: QualityChoice.auto,
-        fileBitrateKbps: 20000,
-        stallCeiling: 6000,
-      ));
-      expect((plan as HlsPlan).rung.label, '720p');
-    });
-
     test(
-        'Auto transcodes uncapped when the file has a bitrate but no stall '
+      'Auto caps to the highest fitting rung when the file does not fit',
+      () {
+        // 1080p needs 8000 * 1.3 = 10400 > 6000; 720p needs 4000 * 1.3 = 5200
+        // <= 6000.
+        final plan = planPlayback(
+          _inputs(
+            candidates: _transcodeOnly,
+            sourceHeight: 2160,
+            choice: QualityChoice.auto,
+            fileBitrateKbps: 20000,
+            stallCeiling: 6000,
+          ),
+        );
+        expect((plan as HlsPlan).rung.label, '720p');
+      },
+    );
+
+    test('Auto transcodes uncapped when the file has a bitrate but no stall '
         'is remembered', () {
-      final plan = planPlayback(_inputs(
-        candidates: _transcodeOnly,
-        choice: QualityChoice.auto,
-        fileBitrateKbps: 5000,
-      ));
+      final plan = planPlayback(
+        _inputs(
+          candidates: _transcodeOnly,
+          choice: QualityChoice.auto,
+          fileBitrateKbps: 5000,
+        ),
+      );
       expect((plan as HlsPlan).rung, QualityRung.original);
     });
 
-    test(
-        'Auto transcodes uncapped when a stall is remembered but the file\'s '
+    test('Auto transcodes uncapped when a stall is remembered but the file\'s '
         'bitrate is not known', () {
-      final plan = planPlayback(_inputs(
-        candidates: _transcodeOnly,
-        choice: QualityChoice.auto,
-        stallCeiling: 6000,
-      ));
+      final plan = planPlayback(
+        _inputs(
+          candidates: _transcodeOnly,
+          choice: QualityChoice.auto,
+          stallCeiling: 6000,
+        ),
+      );
       expect((plan as HlsPlan).rung, QualityRung.original);
     });
 
@@ -462,10 +496,7 @@ void main() {
     });
 
     test('a zero or missing reading falls back to the cap', () {
-      expect(
-        stallCeilingKbps(measuredKbps: 0, fileBitrateKbps: 20000),
-        18000,
-      );
+      expect(stallCeilingKbps(measuredKbps: 0, fileBitrateKbps: 20000), 18000);
       expect(
         stallCeilingKbps(measuredKbps: null, fileBitrateKbps: 20000),
         18000,
@@ -473,10 +504,7 @@ void main() {
     });
 
     test('an unknown file bitrate leaves the reading uncapped', () {
-      expect(
-        stallCeilingKbps(measuredKbps: 6000, fileBitrateKbps: null),
-        6000,
-      );
+      expect(stallCeilingKbps(measuredKbps: 6000, fileBitrateKbps: null), 6000);
     });
 
     test('nothing known is null', () {
@@ -484,10 +512,7 @@ void main() {
         stallCeilingKbps(measuredKbps: null, fileBitrateKbps: null),
         isNull,
       );
-      expect(
-        stallCeilingKbps(measuredKbps: 0, fileBitrateKbps: null),
-        isNull,
-      );
+      expect(stallCeilingKbps(measuredKbps: 0, fileBitrateKbps: null), isNull);
     });
   });
 

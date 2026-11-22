@@ -66,12 +66,14 @@ class SourceHomeHero extends ConsumerWidget {
     final request = art == null
         ? null
         : ref
-            .watch(sourceArtworkProvider((
-              sourceId: sourceId,
-              art: art,
-              width: SourceBackdrop.artworkWidth,
-            )))
-            .value;
+              .watch(
+                sourceArtworkProvider((
+                  sourceId: sourceId,
+                  art: art,
+                  width: SourceBackdrop.artworkWidth,
+                )),
+              )
+              .value;
     // The shell's ambient backdrop and tint follow the hero's artwork,
     // credentials included.
     publishBackdropSource(
@@ -91,10 +93,7 @@ class SourceHomeHero extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     void open() => context.push(sourceItemLocation(item.ref));
     final isEpisode = item.showTitle != null;
-    final chips = [
-      if (item.subtitle case final s?) s,
-      if (item.year case final y?) '$y',
-    ];
+    final chips = [?item.subtitle, if (item.year case final y?) '$y'];
 
     final poster = ClipRRect(
       key: const Key('source-home-hero-poster'),
@@ -110,8 +109,9 @@ class SourceHomeHero extends ConsumerWidget {
 
     final glass = GlassStyle.of(context);
     final infoColumn = Column(
-      crossAxisAlignment:
-          wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: wide
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         if (chips.isNotEmpty) ...[
@@ -166,8 +166,13 @@ class SourceHomeHero extends ConsumerWidget {
     final topPad = MediaQuery.paddingOf(context).top + 24;
     final backdrop = request == null
         ? null
-        : _backdrop(context, request,
-            wide: wide, padding: padding, top: topPad);
+        : _backdrop(
+            context,
+            request,
+            wide: wide,
+            padding: padding,
+            top: topPad,
+          );
     return FocusRevealSection(
       child: Stack(
         clipBehavior: Clip.none,
@@ -175,7 +180,7 @@ class SourceHomeHero extends ConsumerWidget {
         // the backdrop, which is only ever a background layer.
         fit: StackFit.passthrough,
         children: [
-          if (backdrop != null) backdrop,
+          ?backdrop,
           _content(
             context,
             wide: wide,
@@ -227,7 +232,8 @@ class SourceHomeHero extends ConsumerWidget {
       left: 0,
       right: 0,
       top: -bleedTop,
-      height: bleedTop +
+      height:
+          bleedTop +
           top +
           posterHeight +
           HomeHeroBackdropTokens.narrowPosterGap,
@@ -244,12 +250,7 @@ class SourceHomeHero extends ConsumerWidget {
     required Widget info,
   }) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        padding,
-        top,
-        padding,
-        32,
-      ),
+      padding: EdgeInsets.fromLTRB(padding, top, padding, 32),
       child: wide
           ? Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -275,8 +276,9 @@ class SourceHomeHero extends ConsumerWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxWidth: _maxTextWidth),
+                      constraints: const BoxConstraints(
+                        maxWidth: _maxTextWidth,
+                      ),
                       child: info,
                     ),
                   ),
@@ -293,9 +295,7 @@ class SourceHomeHero extends ConsumerWidget {
                     child: poster,
                   ),
                 ),
-                const SizedBox(
-                  height: HomeHeroBackdropTokens.narrowPosterGap,
-                ),
+                const SizedBox(height: HomeHeroBackdropTokens.narrowPosterGap),
                 info,
               ],
             ),
@@ -311,17 +311,17 @@ class _HeroChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GlassBadge(
-        grouped: grouped,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        fallbackDecoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-      );
+    grouped: grouped,
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    fallbackDecoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+    ),
+  );
 }
 
 class _HeroActions extends StatelessWidget {
@@ -351,8 +351,9 @@ class _HeroActions extends StatelessWidget {
             grouped: grouped,
           )
         : FocusEmphasis(
-            borderRadius:
-                const BorderRadius.all(Radius.circular(AppTheme.radiusButton)),
+            borderRadius: const BorderRadius.all(
+              Radius.circular(AppTheme.radiusButton),
+            ),
             child: FilledButton.icon(
               key: const Key('source-home-hero-play'),
               onPressed: onPlay,
@@ -415,11 +416,7 @@ class _HeroFallback extends StatelessWidget {
     final palette = context.palette;
     return Container(
       color: palette.surface,
-      child: Icon(
-        Icons.movie_rounded,
-        size: 64,
-        color: palette.textSecondary,
-      ),
+      child: Icon(Icons.movie_rounded, size: 64, color: palette.textSecondary),
     );
   }
 }

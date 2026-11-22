@@ -62,7 +62,7 @@ class _Transport extends InMemorySlotTransport {
 /// One install's stores and an engine over them.
 class _Device {
   _Device(this.name, this.clock, Map<String, List<int>> server)
-      : transport = _Transport(ownSlotId: 'slot-$name', server: server) {
+    : transport = _Transport(ownSlotId: 'slot-$name', server: server) {
     snapshot = BackupSnapshot(
       peerSync: sync,
       authStorage: auth,
@@ -72,9 +72,9 @@ class _Device {
       settings: SettingsService(storage: auth),
       loadSubtitleLanguages: () async => null,
       saveSubtitleLanguages: (_) async {},
-      onRemoteFilesChanges: (_, __) async {},
+      onRemoteFilesChanges: (_, _) async {},
       rootsFor: (_) async => const [],
-      putRoots: (_, __) async {},
+      putRoots: (_, _) async {},
     );
     engine = SlotSyncEngine(
       meta: meta,
@@ -115,11 +115,14 @@ void _settle(FakeAsync async, Future<void> f) {
   var done = false;
   Object? error;
   StackTrace? stack;
-  f.then((_) => done = true, onError: (Object e, StackTrace s) {
-    error = e;
-    stack = s;
-    done = true;
-  });
+  f.then(
+    (_) => done = true,
+    onError: (Object e, StackTrace s) {
+      error = e;
+      stack = s;
+      done = true;
+    },
+  );
   for (var i = 0; i < 1000 && !done; i++) {
     async.flushMicrotasks();
   }
@@ -149,9 +152,11 @@ void main() {
 
   _fake('debounce_coalesces_marks_into_one_upload', (async) {
     final a = device(
-        'a',
-        () => DateTime.fromMillisecondsSinceEpoch(
-            _t0 + async.elapsed.inMilliseconds));
+      'a',
+      () => DateTime.fromMillisecondsSinceEpoch(
+        _t0 + async.elapsed.inMilliseconds,
+      ),
+    );
     for (var i = 0; i < 10; i++) {
       _settle(async, a.watch('tmdb:movie:$i'));
       a.engine.markDirty();
@@ -210,16 +215,21 @@ void main() {
     final delays = <Duration>[];
     for (var i = 0; i < 7; i++) {
       a.engine.reportFailure(BackupRelayError.network);
-      delays
-          .add(async.pendingTimers.singleWhere((t) => !t.isPeriodic).duration);
+      delays.add(
+        async.pendingTimers.singleWhere((t) => !t.isPeriodic).duration,
+      );
     }
     expect(delays, [
       for (final m in [1, 2, 4, 8, 16, 30, 30]) Duration(minutes: m),
     ]);
     expect(
-        a.engine.status.value,
-        isA<BackupError>()
-            .having((e) => e.kind, 'kind', BackupRelayError.network));
+      a.engine.status.value,
+      isA<BackupError>().having(
+        (e) => e.kind,
+        'kind',
+        BackupRelayError.network,
+      ),
+    );
 
     // The retry polls, and a success resets the backoff.
     a.transport.failing = false;
@@ -229,8 +239,10 @@ void main() {
     expect(a.transport.lists, greaterThan(lists));
     expect(a.engine.status.value, isA<BackupIdle>());
     a.engine.reportFailure(BackupRelayError.network);
-    expect(async.pendingTimers.singleWhere((t) => !t.isPeriodic).duration,
-        const Duration(minutes: 1));
+    expect(
+      async.pendingTimers.singleWhere((t) => !t.isPeriodic).duration,
+      const Duration(minutes: 1),
+    );
   });
 
   test('unreadable_slot_not_redownloaded_until_version_moves', () async {
@@ -267,13 +279,17 @@ void main() {
     await a.upload();
     await b.watch('tmdb:movie:20');
     await b.upload();
-    server['slot-b'] = gzipEncode(utf8.encode(jsonEncode({
-      'v': 2,
-      'deviceName': 'b',
-      'platform': 'p',
-      'createdAt': 1,
-      'records': <Object>[],
-    })));
+    server['slot-b'] = gzipEncode(
+      utf8.encode(
+        jsonEncode({
+          'v': 2,
+          'deviceName': 'b',
+          'platform': 'p',
+          'createdAt': 1,
+          'records': <Object>[],
+        }),
+      ),
+    );
     await a.pollOnce();
     expect(a.engine.newerVersionSeen.value, isTrue);
     expect(a.engine.unreadableSlots.value, {'slot-b'});
@@ -299,12 +315,15 @@ void main() {
     await a.upload();
     await b.watch('tmdb:movie:20');
     await b.upload();
-    await b.transport.writeOwn(const BackupPayload(
+    await b.transport.writeOwn(
+      const BackupPayload(
         deviceName: 'b',
         platform: 'p',
         createdAt: 1,
         records: [],
-        movedTo: 'icloud'));
+        movedTo: 'icloud',
+      ),
+    );
     await a.pollOnce();
     expect(a.engine.movedSlots.value, {'slot-b': 'icloud'});
     expect(a.engine.unreadableSlots.value, isEmpty);
@@ -352,8 +371,10 @@ void main() {
     a.transport.failing = false;
     a.engine.reportFailure(BackupRelayError.quotaFull);
     async.flushMicrotasks();
-    expect((a.engine.status.value as BackupError).kind,
-        BackupRelayError.quotaFull);
+    expect(
+      (a.engine.status.value as BackupError).kind,
+      BackupRelayError.quotaFull,
+    );
     expect(async.pendingTimers.where((t) => !t.isPeriodic), isEmpty);
     expect(a.engine.halted, isFalse);
     a.engine.markDirty();
@@ -422,7 +443,9 @@ void main() {
     a.engine.reportFailure(BackupRelayError.tooLarge);
     async.flushMicrotasks();
     expect(
-        (a.engine.status.value as BackupError).kind, BackupRelayError.tooLarge);
+      (a.engine.status.value as BackupError).kind,
+      BackupRelayError.tooLarge,
+    );
 
     _settle(async, a.upload());
     expect(a.engine.status.value, isA<BackupIdle>());

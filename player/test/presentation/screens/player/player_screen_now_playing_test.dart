@@ -84,8 +84,9 @@ ScriptedMydiaTransport _server() {
 }
 
 void main() {
-  testWidgets('reports playing, then paused, then clears on dispose',
-      (tester) async {
+  testWidgets('reports playing, then paused, then clears on dispose', (
+    tester,
+  ) async {
     final fake = _FakePlatformPlayer();
     final container = buildPlayerScreenContainer(
       server: _server(),
@@ -110,23 +111,30 @@ void main() {
         isPlaying: true,
         hasNext: false,
       ),
-      reason: 'autoplay must be reported with the screen title; a movie '
+      reason:
+          'autoplay must be reported with the screen title; a movie '
           'has no next episode',
     );
 
-    expect(container.read(playingSourceProvider).current, isNotNull,
-        reason: 'the screen names the instance that owns what it plays');
+    expect(
+      container.read(playingSourceProvider).current,
+      isNotNull,
+      reason: 'the screen names the instance that owns what it plays',
+    );
 
-    container.read(remoteTargetControllerProvider).submit(
-          const TransportIntent(TransportAction.pause),
-        );
+    container
+        .read(remoteTargetControllerProvider)
+        .submit(const TransportIntent(TransportAction.pause));
     await pumpUntil(tester, () => publisher.current?.isPlaying == false);
     expect(publisher.current?.isPlaying, isFalse);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
     expect(container.read(playingSourceProvider).current, isNull);
-    expect(publisher.current, isNull,
-        reason: 'a disposed player must leave the Dock with no controls');
+    expect(
+      publisher.current,
+      isNull,
+      reason: 'a disposed player must leave the Dock with no controls',
+    );
   });
 }

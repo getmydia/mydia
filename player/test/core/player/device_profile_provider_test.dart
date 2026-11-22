@@ -58,8 +58,11 @@ void main() {
       await fetchLog.record(QueryKeys.home, DateTime(2026, 8, 22));
       await applyDetectedProfile(holder, otherProfile, fetchLog);
 
-      expect(fetchLog.lastFetchedAt(QueryKeys.home), isNotNull,
-          reason: 'a write onto an already-set holder must not clear again');
+      expect(
+        fetchLog.lastFetchedAt(QueryKeys.home),
+        isNotNull,
+        reason: 'a write onto an already-set holder must not clear again',
+      );
       // The second write still lands, even though it did not trigger a clear.
       expect(holder.profile, otherProfile);
     });

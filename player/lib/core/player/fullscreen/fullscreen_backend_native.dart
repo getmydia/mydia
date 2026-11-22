@@ -11,8 +11,7 @@ import 'fullscreen_report.dart';
 FullscreenBackend createFullscreenBackend({
   required ValueChanged<bool> onChange,
   required FullscreenFailureSink onFailure,
-}) =>
-    NativeFullscreenBackend(onChange: onChange);
+}) => NativeFullscreenBackend(onChange: onChange);
 
 /// Native desktop fullscreen. It calls the two media_kit helpers, which drive
 /// the OS window through a method channel (`video_texture.dart:479`). On native
@@ -32,16 +31,13 @@ FullscreenBackend createFullscreenBackend({
 class NativeFullscreenBackend implements FullscreenBackend {
   NativeFullscreenBackend({
     required this.onChange,
-    @visibleForTesting ValueNotifier<bool>? windowSignal,
-    @visibleForTesting bool? isDesktop,
-    @visibleForTesting bool? isWindows,
+    @visibleForTesting this._windowSignal,
+    @visibleForTesting this._isDesktop,
+    @visibleForTesting this._isWindows,
     @visibleForTesting VoidCallback? onEnterNative,
     @visibleForTesting VoidCallback? onExitNative,
-  })  : _windowSignal = windowSignal,
-        _isDesktop = isDesktop,
-        _isWindows = isWindows,
-        _onEnterNative = onEnterNative ?? defaultEnterNativeFullscreen,
-        _onExitNative = onExitNative ?? defaultExitNativeFullscreen;
+  }) : _onEnterNative = onEnterNative ?? defaultEnterNativeFullscreen,
+       _onExitNative = onExitNative ?? defaultExitNativeFullscreen;
 
   final ValueChanged<bool> onChange;
   final ValueNotifier<bool>? _windowSignal;
@@ -59,8 +55,9 @@ class NativeFullscreenBackend implements FullscreenBackend {
   /// fullscreen, and native mobile never has a route. It is a notifier rather
   /// than a constant only because the interface is shaped for web, where
   /// readiness genuinely changes.
-  late final ValueNotifier<bool> _ready =
-      ValueNotifier<bool>(_effectiveIsDesktop);
+  late final ValueNotifier<bool> _ready = ValueNotifier<bool>(
+    _effectiveIsDesktop,
+  );
 
   @override
   ValueListenable<bool> get ready => _ready;

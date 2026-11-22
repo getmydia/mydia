@@ -63,9 +63,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           const SizedBox(height: 2),
           Text(
             media.title,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
+            style: Theme.of(context).textTheme.titleSmall
                 ?.copyWith(fontWeight: FontWeight.w600),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -73,10 +71,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           const SizedBox(height: 2),
           Text(
             media.fileSizeDisplay,
-            style: TextStyle(
-              fontSize: 11,
-              color: palette.textSecondary,
-            ),
+            style: TextStyle(fontSize: 11, color: palette.textSecondary),
           ),
         ],
       ),
@@ -112,11 +107,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
                 child: QualityBadge.resolution(media.quality),
               ),
             _buildResumeBar(context, ref),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: _buildMenu(context, ref),
-            ),
+            Positioned(top: 4, right: 4, child: _buildMenu(context, ref)),
           ],
         ),
       ),
@@ -136,8 +127,8 @@ class DownloadedEpisodeCard extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final fraction =
-        (progress.positionSeconds / progress.durationSeconds).clamp(0.0, 1.0);
+    final fraction = (progress.positionSeconds / progress.durationSeconds)
+        .clamp(0.0, 1.0);
 
     return Positioned(
       key: const ValueKey('downloaded-episode-resume-bar'),
@@ -185,9 +176,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           visualDensity: VisualDensity.compact,
         ),
         color: context.palette.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         onSelected: (value) {
           switch (value) {
             case 'play':
@@ -219,8 +208,10 @@ class DownloadedEpisodeCard extends ConsumerWidget {
                   color: AppColors.error,
                 ),
                 const SizedBox(width: 12),
-                Text(context.l10n.commonDelete,
-                    style: const TextStyle(color: AppColors.error)),
+                Text(
+                  context.l10n.commonDelete,
+                  style: const TextStyle(color: AppColors.error),
+                ),
               ],
             ),
           ),
@@ -234,11 +225,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
     return Container(
       color: palette.surfaceVariant,
       child: Center(
-        child: Icon(
-          Icons.tv_rounded,
-          size: 32,
-          color: palette.textSecondary,
-        ),
+        child: Icon(Icons.tv_rounded, size: 32, color: palette.textSecondary),
       ),
     );
   }

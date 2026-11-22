@@ -56,30 +56,35 @@ Future<void> pumpDetailScreen(
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await mockNetworkImages(() async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
-        sourceArtworkProvider.overrideWith((ref, key) async => null),
-        ...castCapableOverrides(),
-        ...overrides,
-      ],
-      child: routes.isEmpty
-          ? MaterialApp(
-              theme: theme,
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              home: screen,
-            )
-          : MaterialApp.router(
-              theme: theme,
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              routerConfig: GoRouter(routes: [
-                GoRoute(path: '/', builder: (_, __) => screen),
-                ...routes,
-              ]),
-            ),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          for (final s in sources)
+            mediaSourceProvider(s.id).overrideWithValue(s),
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+          ...castCapableOverrides(),
+          ...overrides,
+        ],
+        child: routes.isEmpty
+            ? MaterialApp(
+                theme: theme,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: screen,
+              )
+            : MaterialApp.router(
+                theme: theme,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                routerConfig: GoRouter(
+                  routes: [
+                    GoRoute(path: '/', builder: (_, _) => screen),
+                    ...routes,
+                  ],
+                ),
+              ),
+      ),
+    );
     await tester.pumpAndSettle();
   });
 }

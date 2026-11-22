@@ -121,8 +121,9 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
     var signInAgain = true;
     try {
       final snapshot = await ref.read(sourceRecordsProvider.future);
-      final record =
-          snapshot.accounts.where((a) => a.account.id == accountId).firstOrNull;
+      final record = snapshot.accounts
+          .where((a) => a.account.id == accountId)
+          .firstOrNull;
       signInAgain = record?.account.needsReauth ?? true;
       final uri = record?.servers.firstOrNull?.connections.firstOrNull?.uri;
       stored = uri == null ? null : S3Location.fromConnectionUri(uri);
@@ -201,8 +202,9 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
       _problem = (l10n) => l10n.filesS3ErrorHttpsRequired;
       return null;
     }
-    final region =
-        preset.needsRegion ? _region.text.trim() : preset.defaultRegion ?? '';
+    final region = preset.needsRegion
+        ? _region.text.trim()
+        : preset.defaultRegion ?? '';
     final typed = S3Location(
       endpoint: endpoint,
       bucket: _bucket.text.trim(),
@@ -244,8 +246,9 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         return (l10n) => l10n.filesS3ErrorNoBucket(bucket);
     }
     return switch (e) {
-      BackendUnreachable(:final status?) => (l10n) =>
-          l10n.filesS3ErrorServer('$status'),
+      BackendUnreachable(:final status?) => (l10n) => l10n.filesS3ErrorServer(
+        '$status',
+      ),
       BackendUnreachable() => (l10n) => l10n.filesS3ErrorUnreachable(host),
       BackendUnauthorized() => (l10n) => l10n.filesS3ErrorBadKeys,
       BackendPermissionLost() => (l10n) => l10n.filesS3ErrorCannotList,
@@ -256,9 +259,9 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
   /// Log text for [e]: its type and, for a backend failure, its code. Never
   /// its message, which may name what the viewer typed.
   static String _logText(Object e) => switch (e) {
-        BackendFailure(:final code?) => '${e.runtimeType} $code',
-        _ => '${e.runtimeType}',
-      };
+    BackendFailure(:final code?) => '${e.runtimeType} $code',
+    _ => '${e.runtimeType}',
+  };
 
   Future<void> _connect() async {
     final location = _typedLocation();
@@ -274,8 +277,11 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
       _busy = true;
       _problem = null;
     });
-    final backend =
-        ref.read(s3ConnectorProvider)(location, credentials, _client);
+    final backend = ref.read(s3ConnectorProvider)(
+      location,
+      credentials,
+      _client,
+    );
     try {
       await backend.probe();
       if (!mounted) return;
@@ -299,8 +305,11 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final target = _pickFoldersKey.currentContext;
         if (target == null) return;
-        Scrollable.ensureVisible(target,
-            duration: _revealDuration, curve: Curves.easeOutCubic);
+        Scrollable.ensureVisible(
+          target,
+          duration: _revealDuration,
+          curve: Curves.easeOutCubic,
+        );
       });
     } catch (e) {
       debugPrint('[AddS3] Connect failed: ${_logText(e)}');
@@ -325,9 +334,10 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
       // Signing in again or changing folders: the bucket the screen was
       // opened for, and only while it is still saved.
       final id = await accounts.addS3Account(
-          location: location,
-          credentials: credentials,
-          signInAgain: widget.reauthAccountId != null);
+        location: location,
+        credentials: credentials,
+        signInAgain: widget.reauthAccountId != null,
+      );
       for (final MapEntry(key: path, value: kind) in _chosen.entries) {
         await accounts.addS3Root(id, path: path, kind: kind);
       }
@@ -343,15 +353,19 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
   }
 
   void _toggle(String path, bool on) => setState(() {
-        if (on) {
-          _chosen.putIfAbsent(path, () => FilesLibraryKind.mixed);
-        } else {
-          _chosen.remove(path);
-        }
-      });
+    if (on) {
+      _chosen.putIfAbsent(path, () => FilesLibraryKind.mixed);
+    } else {
+      _chosen.remove(path);
+    }
+  });
 
-  Widget _folderRow(String path, String name,
-      {required bool busy, required VoidCallback? onOpen}) {
+  Widget _folderRow(
+    String path,
+    String name, {
+    required bool busy,
+    required VoidCallback? onOpen,
+  }) {
     // The path as listed: `/Films/` and `/Films` are two folders.
     final key = path;
     final kind = _chosen[key];
@@ -385,20 +399,19 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
     bool obscure = false,
     TextInputType? keyboardType,
     String? hint,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.only(top: 16),
-        child: TextField(
-          key: Key(key),
-          controller: controller,
-          readOnly: fixed,
-          obscureText: obscure,
-          autocorrect: false,
-          enableSuggestions: !obscure,
-          keyboardType: keyboardType,
-          decoration: InputDecoration(labelText: label, hintText: hint),
-        ),
-      );
+  }) => Padding(
+    padding: const EdgeInsets.only(top: 16),
+    child: TextField(
+      key: Key(key),
+      controller: controller,
+      readOnly: fixed,
+      obscureText: obscure,
+      autocorrect: false,
+      enableSuggestions: !obscure,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(labelText: label, hintText: hint),
+    ),
+  );
 
   /// Provider, location, keys and the last problem: the whole screen before
   /// the bucket answers, and the top of the folder list after.
@@ -420,21 +433,38 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         onChanged: fixed ? null : _choosePreset,
       ),
       if (preset.needsEndpoint)
-        _field('s3-endpoint', _endpoint, l10n.filesS3Endpoint,
-            fixed: fixed,
-            keyboardType: TextInputType.url,
-            hint: 'https://minio.lan:9000'), // l10n-ignore: example address
+        _field(
+          's3-endpoint',
+          _endpoint,
+          l10n.filesS3Endpoint,
+          fixed: fixed,
+          keyboardType: TextInputType.url,
+          hint: 'https://minio.lan:9000',
+        ), // l10n-ignore: example address
       if (preset.needsAccountId)
-        _field('s3-account-id', _accountId, l10n.filesS3AccountId,
-            fixed: fixed),
+        _field(
+          's3-account-id',
+          _accountId,
+          l10n.filesS3AccountId,
+          fixed: fixed,
+        ),
       if (preset.needsRegion)
         _field('s3-region', _region, l10n.filesS3Region, fixed: fixed),
       _field('s3-bucket', _bucket, l10n.filesS3Bucket, fixed: fixed),
       _field('s3-prefix', _prefix, l10n.filesS3Prefix, fixed: fixed),
-      _field('s3-access-key', _accessKey, l10n.filesS3AccessKey,
-          fixed: keysFixed),
-      _field('s3-secret-key', _secretKey, l10n.filesS3SecretKey,
-          fixed: keysFixed, obscure: true),
+      _field(
+        's3-access-key',
+        _accessKey,
+        l10n.filesS3AccessKey,
+        fixed: keysFixed,
+      ),
+      _field(
+        's3-secret-key',
+        _secretKey,
+        l10n.filesS3SecretKey,
+        fixed: keysFixed,
+        obscure: true,
+      ),
       const SizedBox(height: 8),
       SwitchListTile(
         key: const Key('s3-style'),
@@ -444,15 +474,18 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         onChanged: fixed
             ? null
             : (on) => setState(
-                () => _chosenStyle = on ? S3Style.path : S3Style.vhost),
+                () => _chosenStyle = on ? S3Style.path : S3Style.vhost,
+              ),
       ),
       // Once connected the form scrolls away, so the folder picker's
       // pinned location bar shows it.
       if (_problem case final p? when !connected) ...[
         const SizedBox(height: 16),
-        Text(p(l10n),
-            key: const Key('s3-error'),
-            style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        Text(
+          p(l10n),
+          key: const Key('s3-error'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
       ],
     ];
   }
@@ -462,11 +495,13 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         key: Key(connected ? 's3-save' : 's3-connect'),
         onPressed:
             _busy || (connected ? _chosen.isEmpty && !_saved : !_complete)
-                ? null
-                : (connected ? _save : _connect),
+            ? null
+            : (connected ? _save : _connect),
         child: _busy
             ? const SizedBox.square(
-                dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : Text(connected ? l10n.commonSave : l10n.loginConnect),
       );
 
@@ -488,19 +523,22 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         footer: _actionButton(l10n, connected: true),
         exactPaths: true,
         onPicked: (path) => _toggle(path, true),
-        rowBuilder: (context,
-                {required path,
-                required title,
-                required busy,
-                required onOpen}) =>
-            _folderRow(path, title, busy: busy, onOpen: onOpen),
+        rowBuilder: (
+          context, {
+          required path,
+          required title,
+          required busy,
+          required onOpen,
+        }) => _folderRow(path, title, busy: busy, onOpen: onOpen),
       );
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    _revealDuration =
-        ReducedMotion.duration(context, const Duration(milliseconds: 250));
+    _revealDuration = ReducedMotion.duration(
+      context,
+      const Duration(milliseconds: 250),
+    );
     final backend = _backend;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.filesS3Title)),
@@ -510,16 +548,16 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
           child: _loading
               ? const CircularProgressIndicator()
               : backend != null
-                  ? _folderBrowser(l10n, backend)
-                  : ListView(
-                      padding: const EdgeInsets.all(24),
-                      shrinkWrap: true,
-                      children: [
-                        ..._form(l10n, connected: false),
-                        const SizedBox(height: 24),
-                        _actionButton(l10n, connected: false),
-                      ],
-                    ),
+              ? _folderBrowser(l10n, backend)
+              : ListView(
+                  padding: const EdgeInsets.all(24),
+                  shrinkWrap: true,
+                  children: [
+                    ..._form(l10n, connected: false),
+                    const SizedBox(height: 24),
+                    _actionButton(l10n, connected: false),
+                  ],
+                ),
         ),
       ),
     );

@@ -10,7 +10,7 @@ import 'package:player/core/backup/slot_transport.dart';
 /// the list cursor.
 class InMemorySlotTransport implements SlotTransport {
   InMemorySlotTransport({required this.ownSlotId, required this.server})
-      : _state = _stores[server] ??= _StoreState();
+    : _state = _stores[server] ??= _StoreState();
 
   static final _stores = Expando<_StoreState>();
 

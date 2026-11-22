@@ -9,7 +9,7 @@ import 'package:crypto/crypto.dart';
 /// Stored in `AuthStorage` under [storageKey] as unpadded base64url.
 class PeerGroupSecret {
   PeerGroupSecret.fromBytes(Uint8List bytes)
-      : _bytes = Uint8List.fromList(bytes) {
+    : _bytes = Uint8List.fromList(bytes) {
     if (_bytes.length != 32) {
       throw ArgumentError.value(
         bytes.length,

@@ -12,17 +12,23 @@ import '../sources/fake_media_source.dart';
 /// sees, so a test can leave it loading by passing a future that never ends.
 class DownloadableFakeSource extends FakeMediaSource implements Downloadable {
   DownloadableFakeSource({Future<List<DownloadOption>>? options})
-      : _options = options ??
-            Future.value(const [
-              DownloadOption(
-                  resolution: 'original', label: 'Original', estimatedSize: 1),
-            ]);
+    : _options =
+          options ??
+          Future.value(const [
+            DownloadOption(
+              resolution: 'original',
+              label: 'Original',
+              estimatedSize: 1,
+            ),
+          ]);
 
   final Future<List<DownloadOption>> _options;
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.downloadable};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.downloadable,
+  };
 
   @override
   Future<List<DownloadOption>> downloadOptions(ItemRef ref) => _options;

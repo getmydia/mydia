@@ -289,12 +289,14 @@ class UpNextController {
 
     final target = _target;
     if (target != null) {
-      unawaited(navigate(
-        target.episodeId,
-        target.fileId,
-        target.routeTitle,
-        seasonNumber: target.seasonNumber,
-      ));
+      unawaited(
+        navigate(
+          target.episodeId,
+          target.fileId,
+          target.routeTitle,
+          seasonNumber: target.seasonNumber,
+        ),
+      );
       return;
     }
 
@@ -305,12 +307,14 @@ class UpNextController {
     if (episodes == null || index == null) return;
     final resolved = resolveInSeasonNext(_candidates(episodes), index);
     if (resolved == null) return;
-    unawaited(navigate(
-      resolved.episodeId,
-      resolved.fileId,
-      resolved.routeTitle,
-      seasonNumber: resolved.seasonNumber,
-    ));
+    unawaited(
+      navigate(
+        resolved.episodeId,
+        resolved.fileId,
+        resolved.routeTitle,
+        seasonNumber: resolved.seasonNumber,
+      ),
+    );
   }
 
   /// Play the previous episode immediately.
@@ -341,12 +345,14 @@ class UpNextController {
 
     final title =
         'S${previousEpisode.seasonNumber}E${previousEpisode.episodeNumber}${previousEpisode.title != null ? ' - ${previousEpisode.title}' : ''}';
-    unawaited(navigate(
-      previousEpisode.id,
-      firstFileId,
-      title,
-      seasonNumber: previousEpisode.seasonNumber,
-    ));
+    unawaited(
+      navigate(
+        previousEpisode.id,
+        firstFileId,
+        title,
+        seasonNumber: previousEpisode.seasonNumber,
+      ),
+    );
   }
 
   /// The viewer did something; resets the countdown's race guard.

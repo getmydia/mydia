@@ -31,15 +31,16 @@ class _ToastLayerState extends State<ToastLayer> {
   @override
   void initState() {
     super.initState();
-    _controller.layerBox =
-        () => _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    _controller.layerBox = () =>
+        _stackKey.currentContext?.findRenderObject() as RenderBox?;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _controller.accessibleNavigation =
-        MediaQuery.accessibleNavigationOf(context);
+    _controller.accessibleNavigation = MediaQuery.accessibleNavigationOf(
+      context,
+    );
   }
 
   @override
@@ -76,13 +77,15 @@ class _ToastLayerState extends State<ToastLayer> {
                   // both gutters degrades to the resting box: a gutter on
                   // each side of the whole layer, overlapping the claim
                   // rather than collapsing under it.
-                  final cleared = constraints.maxWidth -
+                  final cleared =
+                      constraints.maxWidth -
                       insets.left -
                       2 * ToastMetrics.gutter;
                   final entry = _controller.current;
                   return AnimatedPadding(
-                    duration:
-                        reduceMotion ? Duration.zero : DepthTokens.motionMedium,
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : DepthTokens.motionMedium,
                     curve: DepthTokens.curveEmphasized,
                     padding: EdgeInsets.only(
                       left: cleared > 0
@@ -100,16 +103,13 @@ class _ToastLayerState extends State<ToastLayer> {
                           switchOutCurve: DepthTokens.curveStandard,
                           transitionBuilder: (child, animation) =>
                               _ToastTransition(
-                            animation: animation,
-                            reduceMotion: reduceMotion,
-                            child: child,
-                          ),
+                                animation: animation,
+                                reduceMotion: reduceMotion,
+                                child: child,
+                              ),
                           layoutBuilder: (current, previous) => Stack(
                             alignment: Alignment.bottomCenter,
-                            children: [
-                              ...previous,
-                              if (current != null) current,
-                            ],
+                            children: [...previous, ?current],
                           ),
                           child: entry == null
                               ? const SizedBox.shrink()
@@ -162,11 +162,7 @@ class _ToastTransition extends StatelessWidget {
 
 /// One shown toast: hover pauses it, a downward swipe dismisses it.
 class _ToastView extends StatefulWidget {
-  const _ToastView({
-    super.key,
-    required this.entry,
-    required this.controller,
-  });
+  const _ToastView({super.key, required this.entry, required this.controller});
 
   final ToastEntry entry;
   final ToastController controller;

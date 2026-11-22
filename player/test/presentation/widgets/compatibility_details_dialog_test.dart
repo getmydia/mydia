@@ -10,17 +10,16 @@ Future<void> pumpDialog(WidgetTester tester, CompatibilityState state) async {
     MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: CompatibilityDetailsDialog(state: state),
-      ),
+      home: Scaffold(body: CompatibilityDetailsDialog(state: state)),
     ),
   );
   await tester.pump();
 }
 
 void main() {
-  testWidgets('shows all three versions for a player-side mismatch',
-      (tester) async {
+  testWidgets('shows all three versions for a player-side mismatch', (
+    tester,
+  ) async {
     await pumpDialog(
       tester,
       const CompatibilityState(
@@ -36,8 +35,9 @@ void main() {
     expect(find.textContaining('This app'), findsOneWidget);
   });
 
-  testWidgets('names the server as the side behind for a server mismatch',
-      (tester) async {
+  testWidgets('names the server as the side behind for a server mismatch', (
+    tester,
+  ) async {
     await pumpDialog(
       tester,
       const CompatibilityState(

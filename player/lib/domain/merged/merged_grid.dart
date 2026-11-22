@@ -11,8 +11,11 @@ import 'merge_key.dart';
 import 'shared_sort_keys.dart';
 
 class GridStream {
-  GridStream(
-      {required this.source, required this.library, required this.query});
+  GridStream({
+    required this.source,
+    required this.library,
+    required this.query,
+  });
 
   final MediaSource source;
   final LibraryRef library;
@@ -73,8 +76,12 @@ class MergedGrid {
       for (final s in _streams) {
         if (s.buffer.isEmpty) continue;
         if (best == null ||
-            compareForSort(s.buffer.first, best.buffer.first, sort,
-                    descending: descending) <
+            compareForSort(
+                  s.buffer.first,
+                  best.buffer.first,
+                  sort,
+                  descending: descending,
+                ) <
                 0) {
           best = s;
         }
@@ -110,8 +117,10 @@ class MergedGrid {
   Future<void> _ensureHead(GridStream s) async {
     for (var empty = 0; s.buffer.isEmpty && !s.exhausted; empty++) {
       if (empty == maxEmptyPages) {
-        debugPrint('All servers: ${s.source.id.value} sent '
-            '$maxEmptyPages empty pages in a row; giving up on it');
+        debugPrint(
+          'All servers: ${s.source.id.value} sent '
+          '$maxEmptyPages empty pages in a row; giving up on it',
+        );
         _giveUp(s);
         return;
       }

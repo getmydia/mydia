@@ -56,13 +56,17 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
     duration: const Duration(milliseconds: 100),
     vsync: this,
   );
-  late final Animation<double> _scale = Tween<double>(begin: 1.0, end: 0.95)
-      .animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  late final Animation<double> _scale = Tween<double>(
+    begin: 1.0,
+    end: 0.95,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-  static const _radius =
-      BorderRadius.all(Radius.circular(AppTheme.radiusButton));
+  static const _radius = BorderRadius.all(
+    Radius.circular(AppTheme.radiusButton),
+  );
   static const _ringRadius = BorderRadius.all(
-      Radius.circular(AppTheme.radiusButton + PrimaryPlayButton.ringGap));
+    Radius.circular(AppTheme.radiusButton + PrimaryPlayButton.ringGap),
+  );
 
   bool get _enabled => widget.onPressed != null;
 
@@ -79,8 +83,9 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
     final foreground = !_enabled
         ? palette.textDisabled
         : (glass ? Colors.white : palette.background);
-    final height =
-        glass ? LiquidGeometry.buttonLarge : PrimaryPlayButton.height;
+    final height = glass
+        ? LiquidGeometry.buttonLarge
+        : PrimaryPlayButton.height;
     final radius = glass ? BorderRadius.circular(height / 2) : _radius;
     final ringRadius = glass
         ? BorderRadius.circular(height / 2 + PrimaryPlayButton.ringGap)
@@ -100,9 +105,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: height),
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: widget.iconOnly ? 11 : 22,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: widget.iconOnly ? 11 : 22),
           child: Semantics(
             label: widget.iconOnly ? widget.label : null,
             excludeSemantics: widget.iconOnly,
@@ -110,11 +113,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.play_arrow_rounded,
-                  size: 26,
-                  color: foreground,
-                ),
+                Icon(Icons.play_arrow_rounded, size: 26, color: foreground),
                 if (!widget.iconOnly) ...[
                   const SizedBox(width: 8),
                   Text(

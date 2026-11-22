@@ -35,8 +35,9 @@ void main() {
   ProviderContainer makeContainer() {
     final container = ProviderContainer(
       overrides: [
-        sidebarLayoutStoreProvider
-            .overrideWithValue(InMemorySidebarLayoutStore()),
+        sidebarLayoutStoreProvider.overrideWithValue(
+          InMemorySidebarLayoutStore(),
+        ),
       ],
     );
     addTearDown(container.dispose);

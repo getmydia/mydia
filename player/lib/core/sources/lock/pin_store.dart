@@ -30,7 +30,7 @@ final class PinBlocked extends PinCheck {
 
 class PinStore {
   PinStore(this._storage, {DateTime Function()? now, this.iterations = 100000})
-      : _now = now ?? DateTime.now;
+    : _now = now ?? DateTime.now;
 
   static const _hashKey = 'app_lock/pin';
   static const _failuresKey = 'app_lock/pin_failures';
@@ -101,8 +101,11 @@ class PinStore {
       final parts = stored?.split(r'$');
       if (parts == null || parts.length != 4 || parts[0] != 'v1') return false;
       final expected = base64Decode(parts[3]);
-      final actual =
-          await _derive(pin, base64Decode(parts[2]), int.parse(parts[1]));
+      final actual = await _derive(
+        pin,
+        base64Decode(parts[2]),
+        int.parse(parts[1]),
+      );
       if (actual.length != expected.length) return false;
       var diff = 0;
       for (var i = 0; i < actual.length; i++) {
@@ -129,5 +132,6 @@ class PinStore {
   }
 }
 
-final pinStoreProvider =
-    Provider<PinStore>((ref) => PinStore(getAuthStorage()));
+final pinStoreProvider = Provider<PinStore>(
+  (ref) => PinStore(getAuthStorage()),
+);

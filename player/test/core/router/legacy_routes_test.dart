@@ -8,26 +8,34 @@ const _a = SourceId('ma:owner:aa');
 const _b = SourceId('mb:owner:bb');
 const _p = SourceId('plex1:owner:pp');
 
-String? go(String l,
-        {SourceId? legacy,
-        List<SourceId> mydia = const [_a],
-        SourceId? active = _a}) =>
+String? go(
+  String l, {
+  SourceId? legacy,
+  List<SourceId> mydia = const [_a],
+  SourceId? active = _a,
+}) =>
     legacyLocation(Uri.parse(l), legacy: legacy, mydia: mydia, active: active);
 
 void main() {
   test('old movie link lands on the migrated instance', () {
-    expect(go('/movie/123', legacy: _a, mydia: [_a, _b]),
-        '/s/ma:owner:aa/movie/123');
+    expect(
+      go('/movie/123', legacy: _a, mydia: [_a, _b]),
+      '/s/ma:owner:aa/movie/123',
+    );
     expect(go('/show/7', legacy: _a), '/s/ma:owner:aa/show/7');
     expect(go('/episode/8', legacy: _a), '/s/ma:owner:aa/episode/8');
   });
 
   test('offline player link keeps fileId and gains kind', () {
     final moved = Uri.parse(
-        go('/player/episode/55?fileId=offline&title=Low%20Tide', legacy: _a)!);
+      go('/player/episode/55?fileId=offline&title=Low%20Tide', legacy: _a)!,
+    );
     expect(moved.path, '/s/ma:owner:aa/player/55');
-    expect(moved.queryParameters,
-        {'fileId': 'offline', 'title': 'Low Tide', 'kind': 'episode'});
+    expect(moved.queryParameters, {
+      'fileId': 'offline',
+      'title': 'Low Tide',
+      'kind': 'episode',
+    });
   });
 
   test('ambiguous link goes to the source list', () {
@@ -70,7 +78,7 @@ void main() {
       'recently-added',
       'continue-watching',
       'calendar',
-      'collections'
+      'collections',
     ]) {
       expect(go('/$p', legacy: _a), '/s/ma:owner:aa/$p');
     }
@@ -81,8 +89,13 @@ void main() {
   });
 
   test('/ and /search open All servers when it is on', () {
-    String? all(String l, {required bool on}) => legacyLocation(Uri.parse(l),
-        legacy: null, mydia: const [], active: _a, allServers: on);
+    String? all(String l, {required bool on}) => legacyLocation(
+      Uri.parse(l),
+      legacy: null,
+      mydia: const [],
+      active: _a,
+      allServers: on,
+    );
     expect(all('/', on: true), '/all');
     expect(all('/search?q=x', on: true), '/all/search?q=x');
     expect(all('/', on: false), '/s/ma:owner:aa');
@@ -91,21 +104,39 @@ void main() {
 
   test('All servers on does not touch other legacy locations', () {
     expect(
-        legacyLocation(Uri.parse('/movie/1'),
-            legacy: _a, mydia: const [_a], active: _a, allServers: true),
-        '/s/ma:owner:aa/movie/1');
+      legacyLocation(
+        Uri.parse('/movie/1'),
+        legacy: _a,
+        mydia: const [_a],
+        active: _a,
+        allServers: true,
+      ),
+      '/s/ma:owner:aa/movie/1',
+    );
   });
 
   test('/all with fewer than two servers does not loop back to /all', () {
     // The /all route sends it to '/', which resolves with allServers false.
     expect(allServersRedirect(0), '/');
     expect(
-        legacyLocation(Uri.parse('/'),
-            legacy: null, mydia: const [], active: _a, allServers: false),
-        '/s/ma:owner:aa');
+      legacyLocation(
+        Uri.parse('/'),
+        legacy: null,
+        mydia: const [],
+        active: _a,
+        allServers: false,
+      ),
+      '/s/ma:owner:aa',
+    );
     expect(
-        legacyLocation(Uri.parse('/'),
-            legacy: null, mydia: const [], active: null, allServers: false),
-        isNull);
+      legacyLocation(
+        Uri.parse('/'),
+        legacy: null,
+        mydia: const [],
+        active: null,
+        allServers: false,
+      ),
+      isNull,
+    );
   });
 }

@@ -5,12 +5,12 @@ import 'package:player/l10n/locale_names.dart';
 
 void main() {
   Widget app(Locale locale) => MaterialApp(
-        locale: locale,
-        localizationsDelegates: appLocalizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        localeListResolutionCallback: resolveAppLocale,
-        home: Builder(builder: (context) => Text(context.l10n.appLoading)),
-      );
+    locale: locale,
+    localizationsDelegates: appLocalizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    localeListResolutionCallback: resolveAppLocale,
+    home: Builder(builder: (context) => Text(context.l10n.appLoading)),
+  );
 
   testWidgets('English is the template', (tester) async {
     await tester.pumpWidget(app(const Locale('en')));

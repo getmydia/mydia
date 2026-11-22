@@ -155,26 +155,29 @@ bool _down(HomeFeeds f) =>
 
 HomeRows buildHomeRows(List<HomeFeeds> feeds) {
   final names = {for (final f in feeds) f.id: f.name};
-  if (feeds.any((f) =>
-      !_settled(f.libraries) ||
-      !_settled(f.continueWatching) ||
-      !_settled(f.recentlyAdded))) {
+  if (feeds.any(
+    (f) =>
+        !_settled(f.libraries) ||
+        !_settled(f.continueWatching) ||
+        !_settled(f.recentlyAdded),
+  )) {
     return HomeRows(loading: true, names: names);
   }
   final up = [
     for (final f in feeds)
-      if (!_down(f)) f
+      if (!_down(f)) f,
   ];
   final unavailable = [
     for (final f in feeds)
-      if (_down(f)) f.id
+      if (_down(f)) f.id,
   ];
   if (feeds.isNotEmpty && up.isEmpty) {
     final first = feeds.first;
     return HomeRows(
       names: names,
       unavailable: unavailable,
-      error: (_failed(first.libraries) ? first.libraries.error : null) ??
+      error:
+          (_failed(first.libraries) ? first.libraries.error : null) ??
           (_failed(first.continueWatching)
               ? first.continueWatching.error
               : null) ??
@@ -183,29 +186,38 @@ HomeRows buildHomeRows(List<HomeFeeds> feeds) {
   }
 
   final order = [for (final f in up) f.id];
-  final resuming = mergeNewest([
-    for (final f in up) _valueOf(f.continueWatching)
-  ], order, (i) => i.lastPlayedAt, limit: homeContinueLimit);
+  final resuming = mergeNewest(
+    [for (final f in up) _valueOf(f.continueWatching)],
+    order,
+    (i) => i.lastPlayedAt,
+    limit: homeContinueLimit,
+  );
   final recent = mergeNewest(
-      [for (final f in up) _valueOf(f.recentlyAdded)], order, (i) => i.addedAt,
-      limit: homeRecentLimit);
-  final favorites =
-      mergeAlphabetical([for (final f in up) _valueOf(f.favorites)], order);
+    [for (final f in up) _valueOf(f.recentlyAdded)],
+    order,
+    (i) => i.addedAt,
+    limit: homeRecentLimit,
+  );
+  final favorites = mergeAlphabetical([
+    for (final f in up) _valueOf(f.favorites),
+  ], order);
   final movies = [
     for (final i in recent.items)
-      if (isMovieRow(i)) i
+      if (isMovieRow(i)) i,
   ];
   final shows = [
     for (final i in recent.items)
-      if (!isMovieRow(i)) i
+      if (!isMovieRow(i)) i,
   ];
-  final trendingMovies =
-      _trending([for (final f in up) f.trendingMovies], order);
+  final trendingMovies = _trending([
+    for (final f in up) f.trendingMovies,
+  ], order);
   final trendingShows = _trending([for (final f in up) f.trendingShows], order);
   final labelled = feeds.length > 1;
 
   return HomeRows(
-    hero: resuming.items.firstOrNull ??
+    hero:
+        resuming.items.firstOrNull ??
         movies.firstOrNull ??
         recent.items.firstOrNull,
     continueWatching: resuming.items,
@@ -217,7 +229,7 @@ HomeRows buildHomeRows(List<HomeFeeds> feeds) {
     libraries: [
       for (final f in up)
         for (final library in _valueOf(f.libraries))
-          if (_libraryRow(f, library, labelled: labelled) case final row?) row,
+          ?_libraryRow(f, library, labelled: labelled),
     ],
     unavailable: unavailable,
     extraCopies: {
@@ -233,17 +245,25 @@ HomeRows buildHomeRows(List<HomeFeeds> feeds) {
 
 /// Empty below [homeTrendingMinimum]. A failed or loading feed counts as empty.
 Deduped _trending(
-    List<AsyncValue<List<RankedItem>>> feeds, List<SourceId> order) {
-  final merged = mergeRanked([for (final f in feeds) _valueOf(f)], order,
-      limit: homeTrendingLimit);
+  List<AsyncValue<List<RankedItem>>> feeds,
+  List<SourceId> order,
+) {
+  final merged = mergeRanked(
+    [for (final f in feeds) _valueOf(f)],
+    order,
+    limit: homeTrendingLimit,
+  );
   return merged.items.length < homeTrendingMinimum
       ? const Deduped([], {})
       : merged;
 }
 
 /// Null once the preview has loaded empty: an empty library has no row.
-HomeLibraryRow? _libraryRow(HomeFeeds f, Library library,
-    {required bool labelled}) {
+HomeLibraryRow? _libraryRow(
+  HomeFeeds f,
+  Library library, {
+  required bool labelled,
+}) {
   final preview = f.previews[library.ref];
   final items = preview == null ? const <ItemSummary>[] : _valueOf(preview);
   if (preview != null && preview.hasValue && items.isEmpty) return null;

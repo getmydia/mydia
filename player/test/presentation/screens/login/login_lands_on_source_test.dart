@@ -29,8 +29,7 @@ class _FakePairing extends PairingService {
     required String deviceName,
     String? platform,
     void Function(PairingStep step)? onStatusUpdate,
-  }) async =>
-      PairingResult.success(credentials, isP2PMode: true);
+  }) async => PairingResult.success(credentials, isP2PMode: true);
 }
 
 class _FakeDeviceInfo extends DeviceInfoService {
@@ -43,52 +42,63 @@ class _FakeDeviceInfo extends DeviceInfoService {
 }
 
 PairingCredentials _credentials(String instanceId) => PairingCredentials(
-      serverUrl: 'p2p://node-$instanceId',
-      deviceId: 'dev-12345678',
-      mediaToken: 'media',
-      accessToken: 'access',
-      deviceToken: 'device',
-      serverPublicKey: Uint8List(32),
-      directUrls: const [],
-      instanceName: 'Friends',
-      instanceId: instanceId,
-      serverNodeAddr: '{"id":"node-$instanceId","addrs":[]}',
-    );
+  serverUrl: 'p2p://node-$instanceId',
+  deviceId: 'dev-12345678',
+  mediaToken: 'media',
+  accessToken: 'access',
+  deviceToken: 'device',
+  serverPublicKey: Uint8List(32),
+  directUrls: const [],
+  instanceName: 'Friends',
+  instanceId: instanceId,
+  serverNodeAddr: '{"id":"node-$instanceId","addrs":[]}',
+);
 
 void main() {
-  testWidgets('adding the first server lands on its own source home',
-      (tester) async {
+  testWidgets('adding the first server lands on its own source home', (
+    tester,
+  ) async {
     final store = InMemorySourceStore();
-    final container = ProviderContainer(overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-      loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),
-      pairingServiceProvider
-          .overrideWithValue(_FakePairing(_credentials('inst-2'))),
-      authServiceProvider
-          .overrideWithValue(AuthService(storage: MockAuthStorage())),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(
+          SourceSecrets(MockAuthStorage()),
+        ),
+        loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),
+        pairingServiceProvider.overrideWithValue(
+          _FakePairing(_credentials('inst-2')),
+        ),
+        authServiceProvider.overrideWithValue(
+          AuthService(storage: MockAuthStorage()),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
     await container.read(sourceRecordsProvider.future);
 
-    final router = GoRouter(routes: [
-      GoRoute(path: '/', builder: (_, __) => const LoginScreen()),
-      GoRoute(
-        path: '/s/:id',
-        builder: (_, state) => Text('home ${state.pathParameters['id']}'),
-      ),
-    ]);
+    final router = GoRouter(
+      routes: [
+        GoRoute(path: '/', builder: (_, _) => const LoginScreen()),
+        GoRoute(
+          path: '/s/:id',
+          builder: (_, state) => Text('home ${state.pathParameters['id']}'),
+        ),
+      ],
+    );
     addTearDown(router.dispose);
 
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        routerConfig: router,
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).first, 'ABC123');

@@ -9,21 +9,20 @@ NextUpEpisode _episode({
   int? runtimeMinutes,
   int? positionSeconds,
   int? durationSeconds,
-}) =>
-    NextUpEpisode(
-      id: '1',
-      seasonNumber: 2,
-      episodeNumber: 5,
-      runtimeMinutes: runtimeMinutes,
-      progress: positionSeconds == null
-          ? null
-          : Progress(
-              positionSeconds: positionSeconds,
-              durationSeconds: durationSeconds,
-              percentage: 0,
-              watched: false,
-            ),
-    );
+}) => NextUpEpisode(
+  id: '1',
+  seasonNumber: 2,
+  episodeNumber: 5,
+  runtimeMinutes: runtimeMinutes,
+  progress: positionSeconds == null
+      ? null
+      : Progress(
+          positionSeconds: positionSeconds,
+          durationSeconds: durationSeconds,
+          percentage: 0,
+          watched: false,
+        ),
+);
 
 final _en = lookupAppLocalizations(const Locale('en'));
 
@@ -34,7 +33,9 @@ void main() {
   group('nextUpLabel', () {
     test('matches the web UI wording', () {
       expect(
-          nextUpLabel(_en, NextUpState.continueWatching), 'Continue Watching');
+        nextUpLabel(_en, NextUpState.continueWatching),
+        'Continue Watching',
+      );
       expect(nextUpLabel(_en, NextUpState.next), 'Play Next Episode');
       expect(nextUpLabel(_en, NextUpState.start), 'Start Watching');
       expect(nextUpLabel(_en, NextUpState.unknown), 'Play');
@@ -78,8 +79,12 @@ void main() {
       );
 
       expect(
-        nextUpCueLine(_en, episode, NextUpState.continueWatching,
-            resolution: '1080p'),
+        nextUpCueLine(
+          _en,
+          episode,
+          NextUpState.continueWatching,
+          resolution: '1080p',
+        ),
         'S02E05 · 1080p · 35 min left',
       );
       expect(
@@ -89,10 +94,7 @@ void main() {
     });
 
     test('omits the resolution when none is known', () {
-      expect(
-        nextUpCueLine(_en, _episode(), NextUpState.start),
-        'S02E05',
-      );
+      expect(nextUpCueLine(_en, _episode(), NextUpState.start), 'S02E05');
     });
   });
 }

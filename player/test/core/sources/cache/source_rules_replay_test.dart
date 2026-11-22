@@ -7,15 +7,14 @@ import 'package:player/core/sources/source.dart';
 const _a = SourceId('acc1:owner:srv1');
 
 Set<String> _ops(Set<InvalidationTarget> t) => {
-      for (final x in t)
-        if (x case FamilyTarget(:final operationName))
-          operationName.split('/').last,
-    };
+  for (final x in t)
+    if (x case FamilyTarget(:final operationName))
+      operationName.split('/').last,
+};
 
 void main() {
   group('InvalidationRules replayed against the Mydia source ops', () {
-    test(
-        'watchedChanged (episode): shows grid, unwatched, favorites, '
+    test('watchedChanged (episode): shows grid, unwatched, favorites, '
         'continue watching, recently added, collections, show, season', () {
       expect(
         _ops(SourceRules.watchedChanged(_a)),
@@ -32,38 +31,42 @@ void main() {
       );
     });
 
-    test('movieWatchedChanged: the movie, its grids, rails and collections',
-        () {
-      expect(
-        _ops(SourceRules.watchedChanged(_a)),
-        containsAll(<String>{
-          SourceOps.continueWatching,
-          SourceOps.browse,
-          SourceOps.unwatched,
-          SourceOps.favorites,
-          SourceOps.recentlyAdded,
-          SourceOps.collectionItems,
-          SourceOps.item,
-        }),
-      );
-    });
+    test(
+      'movieWatchedChanged: the movie, its grids, rails and collections',
+      () {
+        expect(
+          _ops(SourceRules.watchedChanged(_a)),
+          containsAll(<String>{
+            SourceOps.continueWatching,
+            SourceOps.browse,
+            SourceOps.unwatched,
+            SourceOps.favorites,
+            SourceOps.recentlyAdded,
+            SourceOps.collectionItems,
+            SourceOps.item,
+          }),
+        );
+      },
+    );
 
-    test('playbackFinished: everything legacy refreshed, via the offline sync',
-        () {
-      expect(
-        _ops(SourceRules.offlineProgressSynced(_a)),
-        containsAll(<String>{
-          SourceOps.continueWatching,
-          SourceOps.browse,
-          SourceOps.unwatched,
-          SourceOps.favorites,
-          SourceOps.recentlyAdded,
-          SourceOps.collectionItems,
-          SourceOps.item,
-          SourceOps.children,
-        }),
-      );
-    });
+    test(
+      'playbackFinished: everything legacy refreshed, via the offline sync',
+      () {
+        expect(
+          _ops(SourceRules.offlineProgressSynced(_a)),
+          containsAll(<String>{
+            SourceOps.continueWatching,
+            SourceOps.browse,
+            SourceOps.unwatched,
+            SourceOps.favorites,
+            SourceOps.recentlyAdded,
+            SourceOps.collectionItems,
+            SourceOps.item,
+            SourceOps.children,
+          }),
+        );
+      },
+    );
 
     test('favoriteToggled: favorites, home, grid, and the item itself', () {
       expect(
@@ -77,8 +80,9 @@ void main() {
     });
 
     test('continueWatchingRemoved: the rail and home only', () {
-      expect(_ops(SourceRules.continueWatchingRemoved(_a)),
-          {SourceOps.continueWatching});
+      expect(_ops(SourceRules.continueWatchingRemoved(_a)), {
+        SourceOps.continueWatching,
+      });
     });
 
     test('nothing reaches another source', () {

@@ -24,12 +24,15 @@ void main() {
   }
 
   group('ResumeDialog', () {
-    testWidgets('reports the real percentage for a mid-movie position',
-        (tester) async {
+    testWidgets('reports the real percentage for a mid-movie position', (
+      tester,
+    ) async {
       await pumpDialog(tester, position: 2700, duration: 5400);
 
-      expect(find.text('You previously watched 50% of this video.'),
-          findsOneWidget);
+      expect(
+        find.text('You previously watched 50% of this video.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('does not claim 100% for an early position', (tester) async {
@@ -37,13 +40,16 @@ void main() {
       // as the duration, so any saved position read as 100%.
       await pumpDialog(tester, position: 300, duration: 5400);
 
-      expect(find.text('You previously watched 6% of this video.'),
-          findsOneWidget);
+      expect(
+        find.text('You previously watched 6% of this video.'),
+        findsOneWidget,
+      );
       expect(find.textContaining('100%'), findsNothing);
     });
 
-    testWidgets('formats the resume point as hours, minutes and seconds',
-        (tester) async {
+    testWidgets('formats the resume point as hours, minutes and seconds', (
+      tester,
+    ) async {
       await pumpDialog(tester, position: 3725, duration: 5400);
 
       expect(find.textContaining('1:02:05'), findsWidgets);

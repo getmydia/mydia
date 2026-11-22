@@ -21,7 +21,9 @@ void main() {
 
   test('password sign-in returns token and user', () async {
     final s = await auth.withPassword(
-        FakeJellyfinServer.username, FakeJellyfinServer.password);
+      FakeJellyfinServer.username,
+      FakeJellyfinServer.password,
+    );
     expect(s.accessToken, FakeJellyfinServer.token);
     expect(s.userId, FakeJellyfinServer.userId);
     expect(s.userName, FakeJellyfinServer.username);
@@ -34,8 +36,13 @@ void main() {
   test('a wrong password is unauthorized', () async {
     await expectLater(
       auth.withPassword(FakeJellyfinServer.username, 'nope'),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unauthorized,
+        ),
+      ),
     );
   });
 
@@ -54,8 +61,13 @@ void main() {
     server.quickConnectExpired = true;
     await expectLater(
       auth.quickConnectApproved('qc-secret'),
-      throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.notFound)),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.notFound,
+        ),
+      ),
     );
   });
 

@@ -30,11 +30,7 @@ class QualityRung {
   /// 1000x error that presents as the cap being ignored.
   final int? maxBitrateKbps;
 
-  const QualityRung({
-    required this.label,
-    this.height,
-    this.maxBitrateKbps,
-  });
+  const QualityRung({required this.label, this.height, this.maxBitrateKbps});
 
   /// No caps at all, which preserves the copy-when-compatible path and is the
   /// cheapest option for the server.
@@ -57,8 +53,8 @@ class QualityRung {
   String get storageKey => isAuto
       ? 'auto'
       : isOriginal
-          ? 'original'
-          : label;
+      ? 'original'
+      : label;
 
   /// Parses a stored key, returning null if it is unrecognised.
   ///

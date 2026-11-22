@@ -60,8 +60,10 @@ void main() {
   test('copyWith changes only the named switch', () {
     const state = DiagnosticsState(crashes: true, logs: false);
 
-    expect(state.copyWith(logs: true),
-        const DiagnosticsState(crashes: true, logs: true));
+    expect(
+      state.copyWith(logs: true),
+      const DiagnosticsState(crashes: true, logs: true),
+    );
     expect(state.copyWith(crashes: false), DiagnosticsState.off);
   });
 
@@ -82,14 +84,19 @@ void main() {
         await storage.write(DiagnosticsSettings.legacyUntilKey, '123');
 
         expect(await settingsWith(storage).load(), state);
-        expect(storage.contents[DiagnosticsSettings.crashesKey],
-            '${state.crashes}');
+        expect(
+          storage.contents[DiagnosticsSettings.crashesKey],
+          '${state.crashes}',
+        );
         expect(storage.contents[DiagnosticsSettings.logsKey], '${state.logs}');
         expect(
-            storage.contents.containsKey(DiagnosticsSettings.legacyChoiceKey),
-            isFalse);
-        expect(storage.contents.containsKey(DiagnosticsSettings.legacyUntilKey),
-            isFalse);
+          storage.contents.containsKey(DiagnosticsSettings.legacyChoiceKey),
+          isFalse,
+        );
+        expect(
+          storage.contents.containsKey(DiagnosticsSettings.legacyUntilKey),
+          isFalse,
+        );
       });
     }
   });
@@ -98,8 +105,10 @@ void main() {
     final storage = MockAuthStorage();
     await storage.write(DiagnosticsSettings.legacyCrashKey, 'true');
 
-    expect(await settingsWith(storage).load(),
-        const DiagnosticsState(crashes: true, logs: false));
+    expect(
+      await settingsWith(storage).load(),
+      const DiagnosticsState(crashes: true, logs: false),
+    );
     expect(await storage.read(DiagnosticsSettings.legacyCrashKey), isNull);
     expect(await storage.read(DiagnosticsSettings.crashesKey), 'true');
   });

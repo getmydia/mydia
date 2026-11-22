@@ -11,8 +11,9 @@ import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 
 void main() {
   group('WindowButtonWidget', () {
-    testWidgets('renders 46x40 rectangle with BorderRadius.zero on Windows',
-        (tester) async {
+    testWidgets('renders 46x40 rectangle with BorderRadius.zero on Windows', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         await tester.pumpWidget(
@@ -33,8 +34,10 @@ void main() {
         );
         expect(container.constraints?.maxWidth, equals(46.0));
         expect(container.constraints?.maxHeight, equals(40.0));
-        expect(tester.getSize(find.byType(WindowButtonWidget)),
-            equals(const Size(46.0, 40.0)));
+        expect(
+          tester.getSize(find.byType(WindowButtonWidget)),
+          equals(const Size(46.0, 40.0)),
+        );
 
         final decoration = container.decoration as BoxDecoration;
         expect(decoration.borderRadius, equals(BorderRadius.zero));
@@ -43,8 +46,9 @@ void main() {
       }
     });
 
-    testWidgets('renders 28x28 square with rounded corners on Linux',
-        (tester) async {
+    testWidgets('renders 28x28 square with rounded corners on Linux', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       try {
         await tester.pumpWidget(
@@ -65,8 +69,10 @@ void main() {
         );
         expect(container.constraints?.maxWidth, equals(28.0));
         expect(container.constraints?.maxHeight, equals(28.0));
-        expect(tester.getSize(find.byType(WindowButtonWidget)),
-            equals(const Size(28.0, 28.0)));
+        expect(
+          tester.getSize(find.byType(WindowButtonWidget)),
+          equals(const Size(28.0, 28.0)),
+        );
 
         final decoration = container.decoration as BoxDecoration;
         expect(decoration.borderRadius, equals(BorderRadius.circular(6)));
@@ -114,8 +120,9 @@ void main() {
       }
     });
 
-    testWidgets('icon size is 13 for maximize on Windows and 15 for others',
-        (tester) async {
+    testWidgets('icon size is 13 for maximize on Windows and 15 for others', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         await tester.pumpWidget(
@@ -152,8 +159,9 @@ void main() {
       }
     });
 
-    testWidgets('Windows Close button turns #E81123 on hover with white icon',
-        (tester) async {
+    testWidgets('Windows Close button turns #E81123 on hover with white icon', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         await tester.pumpWidget(
@@ -169,8 +177,9 @@ void main() {
           ),
         );
 
-        final gesture =
-            await tester.createGesture(kind: PointerDeviceKind.mouse);
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
         await gesture.addPointer(location: Offset.zero);
         await tester.pump();
 
@@ -190,8 +199,9 @@ void main() {
       }
     });
 
-    testWidgets('Windows Minimize button turns 0x1AFFFFFF on hover',
-        (tester) async {
+    testWidgets('Windows Minimize button turns 0x1AFFFFFF on hover', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         await tester.pumpWidget(
@@ -207,8 +217,9 @@ void main() {
           ),
         );
 
-        final gesture =
-            await tester.createGesture(kind: PointerDeviceKind.mouse);
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
         await gesture.addPointer(location: Offset.zero);
         await tester.pump();
 
@@ -226,43 +237,47 @@ void main() {
     });
 
     testWidgets(
-        'Linux Close button turns AppColors.error on hover with textPrimary icon',
-        (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      try {
-        await tester.pumpWidget(
-          MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(
-              body: WindowButtonWidget(
-                button: WindowButton.close,
-                onPressed: () {},
+      'Linux Close button turns AppColors.error on hover with textPrimary icon',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+        try {
+          await tester.pumpWidget(
+            MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: WindowButtonWidget(
+                  button: WindowButton.close,
+                  onPressed: () {},
+                ),
               ),
             ),
-          ),
-        );
+          );
 
-        final gesture =
-            await tester.createGesture(kind: PointerDeviceKind.mouse);
-        await gesture.addPointer(location: Offset.zero);
-        await tester.pump();
+          final gesture = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          await gesture.addPointer(location: Offset.zero);
+          await tester.pump();
 
-        await gesture.moveTo(tester.getCenter(find.byType(WindowButtonWidget)));
-        await tester.pumpAndSettle();
+          await gesture.moveTo(
+            tester.getCenter(find.byType(WindowButtonWidget)),
+          );
+          await tester.pumpAndSettle();
 
-        final container = tester.widget<AnimatedContainer>(
-          find.byType(AnimatedContainer),
-        );
-        final decoration = container.decoration as BoxDecoration;
-        expect(decoration.color, equals(AppColors.error));
+          final container = tester.widget<AnimatedContainer>(
+            find.byType(AnimatedContainer),
+          );
+          final decoration = container.decoration as BoxDecoration;
+          expect(decoration.color, equals(AppColors.error));
 
-        final icon = tester.widget<Icon>(find.byType(Icon));
-        expect(icon.color, equals(Palettes.projectionBooth.textPrimary));
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
-    });
+          final icon = tester.widget<Icon>(find.byType(Icon));
+          expect(icon.color, equals(Palettes.projectionBooth.textPrimary));
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
 
     testWidgets('fires onPressed callback on tap', (tester) async {
       var pressed = false;

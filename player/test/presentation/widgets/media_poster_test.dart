@@ -24,47 +24,53 @@ void main() {
 
   group('MediaPoster behavior', () {
     testWidgets(
-        'offers no play affordance at rest or on hover, because tapping a '
-        'poster opens the title rather than playing it', (tester) async {
-      await tester.pumpWidget(
-        posterHost(const MediaPoster(title: 'Show'), size: _posterHost),
-      );
-      await tester.pumpAndSettle();
+      'offers no play affordance at rest or on hover, because tapping a '
+      'poster opens the title rather than playing it',
+      (tester) async {
+        await tester.pumpWidget(
+          posterHost(const MediaPoster(title: 'Show'), size: _posterHost),
+        );
+        await tester.pumpAndSettle();
 
-      expect(findPlayGlyph(), findsNothing);
+        expect(findPlayGlyph(), findsNothing);
 
-      await hoverOver(tester, find.byType(MediaPoster));
+        await hoverOver(tester, find.byType(MediaPoster));
 
-      expect(findPlayGlyph(), findsNothing);
-    });
+        expect(findPlayGlyph(), findsNothing);
+      },
+    );
 
     testWidgets(
-        'the click cursor covers the title, which shares the poster\'s tap '
-        'target', (tester) async {
-      await tester.pumpWidget(
-        posterHost(
-          MediaPoster(title: 'Show', onTap: () {}),
-          size: _posterHost,
-        ),
-      );
-      await tester.pumpAndSettle();
+      'the click cursor covers the title, which shares the poster\'s tap '
+      'target',
+      (tester) async {
+        await tester.pumpWidget(
+          posterHost(
+            MediaPoster(title: 'Show', onTap: () {}),
+            size: _posterHost,
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // The region carrying the cursor has to enclose the title label, since
-      // the GestureDetector beneath it navigates from there too.
-      final region = find
-          .descendant(
-            of: find.byType(MediaPoster),
-            matching: find.byType(MouseRegion),
-          )
-          .first;
+        // The region carrying the cursor has to enclose the title label, since
+        // the GestureDetector beneath it navigates from there too.
+        final region = find
+            .descendant(
+              of: find.byType(MediaPoster),
+              matching: find.byType(MouseRegion),
+            )
+            .first;
 
-      expect(
-          tester.widget<MouseRegion>(region).cursor, SystemMouseCursors.click);
-      expect(
-        tester.getRect(region).contains(tester.getCenter(find.text('Show'))),
-        isTrue,
-      );
-    });
+        expect(
+          tester.widget<MouseRegion>(region).cursor,
+          SystemMouseCursors.click,
+        );
+        expect(
+          tester.getRect(region).contains(tester.getCenter(find.text('Show'))),
+          isTrue,
+        );
+      },
+    );
 
     testWidgets('an inert poster defers its cursor', (tester) async {
       await tester.pumpWidget(
@@ -114,8 +120,9 @@ void main() {
       expect(find.byType(RatingBadge), findsNothing);
     });
 
-    testWidgets('renders no chip for 0.0, which TMDB uses for "no votes yet"',
-        (tester) async {
+    testWidgets('renders no chip for 0.0, which TMDB uses for "no votes yet"', (
+      tester,
+    ) async {
       // The server passes vote_average through unchanged, so an unvoted title
       // is indistinguishable from an unrated one and both must show nothing.
       await tester.pumpWidget(
@@ -158,8 +165,9 @@ void main() {
   );
 
   group('MediaPoster watch indicators', () {
-    testWidgets('keeps the favourite heart alongside the indicator',
-        (tester) async {
+    testWidgets('keeps the favourite heart alongside the indicator', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         posterHost(
           const MediaPoster(

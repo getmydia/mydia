@@ -148,9 +148,9 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
   /// the root (a WebDAV href elsewhere on the host) does not get a row:
   /// opening it would strand back outside the root, where it never stops.
   List<FileEntry> _sortedFolders(List<FileEntry> entries) => [
-        for (final e in entries)
-          if (e.isDir && !e.unreadable && _withinRoot(e.path)) e,
-      ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    for (final e in entries)
+      if (e.isDir && !e.unreadable && _withinRoot(e.path)) e,
+  ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   /// Opens the folder above the current one.
   Future<void> _climb() => _open(_parent(_dir), climb: true);
@@ -217,15 +217,24 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
 
   Key _key(String suffix) => Key('${widget.keyPrefix}-$suffix');
 
-  Widget _row(BuildContext context, String path, String title,
-      {required bool open}) {
+  Widget _row(
+    BuildContext context,
+    String path,
+    String title, {
+    required bool open,
+  }) {
     final onOpen = open && !_busy ? () => _open(path) : null;
     // The open folder's own row waits for its listing.
     final busy = _busy || (!open && !_listed);
     final builder = widget.rowBuilder;
     if (builder != null) {
-      return builder(context,
-          path: path, title: title, busy: busy, onOpen: onOpen);
+      return builder(
+        context,
+        path: path,
+        title: title,
+        busy: busy,
+        onOpen: onOpen,
+      );
     }
     return ListTile(
       key: ValueKey('folder-picker-row-${trimRootPath(path)}'),
@@ -270,8 +279,11 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
                   onPressed: _busy || _atRoot ? null : _climb,
                 ),
                 Expanded(
-                  child: Text(_dir,
-                      key: _key('dir'), overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    _dir,
+                    key: _key('dir'),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -280,10 +292,13 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Align(
                   alignment: AlignmentDirectional.centerStart,
-                  child: Text(problem,
-                      key: _key('error'),
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error)),
+                  child: Text(
+                    problem,
+                    key: _key('error'),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 ),
               ),
             _row(context, _dir, l10n.filesPickThisFolder, open: false),
@@ -323,15 +338,20 @@ class _RemoteFolderPickerState extends State<RemoteFolderPicker> {
                       ? SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(l10n.filesPickNoFolders,
-                                key: _key('empty')),
+                            child: Text(
+                              l10n.filesPickNoFolders,
+                              key: _key('empty'),
+                            ),
                           ),
                         )
                       : SliverList.builder(
                           itemCount: _folders.length,
                           itemBuilder: (context, i) => _row(
-                              context, _folders[i].path, _folders[i].name,
-                              open: true),
+                            context,
+                            _folders[i].path,
+                            _folders[i].name,
+                            open: true,
+                          ),
                         ),
                 ),
               ],

@@ -87,11 +87,11 @@ Future<_Harness> _pump(
           child: child,
         ),
         routes: [
-          GoRoute(path: '/', builder: (_, __) => const Text('home')),
-          GoRoute(path: '/movies', builder: (_, __) => const Text('movies')),
+          GoRoute(path: '/', builder: (_, _) => const Text('home')),
+          GoRoute(path: '/movies', builder: (_, _) => const Text('movies')),
         ],
       ),
-      GoRoute(path: '/player', builder: (_, __) => const Text('player')),
+      GoRoute(path: '/player', builder: (_, _) => const Text('player')),
     ],
   );
   addTearDown(router.dispose);
@@ -109,8 +109,9 @@ void main() {
       expect(h.covered, isFalse);
     });
 
-    testWidgets('moving between shell children stays uncovered',
-        (tester) async {
+    testWidgets('moving between shell children stays uncovered', (
+      tester,
+    ) async {
       final h = await _pump(tester, notifyRootObserver: false);
 
       h.router.go('/movies');
@@ -124,8 +125,9 @@ void main() {
       expect(h.covered, isFalse);
     });
 
-    testWidgets('a page over the shell covers it, popping uncovers',
-        (tester) async {
+    testWidgets('a page over the shell covers it, popping uncovers', (
+      tester,
+    ) async {
       final h = await _pump(tester, notifyRootObserver: false);
 
       unawaited(h.router.push<void>('/player'));
@@ -141,12 +143,18 @@ void main() {
   });
 
   testWidgets(
-      'control: notifyRootObserver: true reports a plain shell child as '
-      'covered', (tester) async {
-    final h = await _pump(tester, notifyRootObserver: true);
-    expect(find.text('home'), findsOneWidget);
-    expect(h.covered, isTrue,
-        reason: 'the bug the app fix removes: shell pages reach the root '
-            'observer and look like pages over the shell');
-  });
+    'control: notifyRootObserver: true reports a plain shell child as '
+    'covered',
+    (tester) async {
+      final h = await _pump(tester, notifyRootObserver: true);
+      expect(find.text('home'), findsOneWidget);
+      expect(
+        h.covered,
+        isTrue,
+        reason:
+            'the bug the app fix removes: shell pages reach the root '
+            'observer and look like pages over the shell',
+      );
+    },
+  );
 }

@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 
@@ -94,18 +95,18 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
   }
 
   Widget _key(String digit, {bool autofocus = false}) => Padding(
-        padding: const EdgeInsets.all(4),
-        child: SizedBox(
-          width: 64,
-          height: 52,
-          child: OutlinedButton(
-            key: Key('plex-pin-key-$digit'),
-            autofocus: autofocus,
-            onPressed: () => _add(digit),
-            child: Text(digit, style: const TextStyle(fontSize: 20)),
-          ),
-        ),
-      );
+    padding: const EdgeInsets.all(4),
+    child: SizedBox(
+      width: 64,
+      height: 52,
+      child: OutlinedButton(
+        key: Key('plex-pin-key-$digit'),
+        autofocus: autofocus,
+        onPressed: () => _add(digit),
+        child: Text(digit, style: const TextStyle(fontSize: 20)),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -143,16 +144,18 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
                 child: _busy
                     ? const Center(
                         child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2)))
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
                     : _error == null
-                        ? null
-                        : Text(
-                            _error!,
-                            key: const Key('plex-pin-error'),
-                            style: TextStyle(color: theme.colorScheme.error),
-                          ),
+                    ? null
+                    : Text(
+                        _error!,
+                        key: const Key('plex-pin-error'),
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
               ),
               for (final row in const [
                 ['1', '2', '3'],
@@ -161,9 +164,7 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
               ])
                 Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final d in row) _key(d, autofocus: d == '1'),
-                  ],
+                  children: [for (final d in row) _key(d, autofocus: d == '1')],
                 ),
               Row(
                 mainAxisSize: MainAxisSize.min,

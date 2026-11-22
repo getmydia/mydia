@@ -16,28 +16,32 @@ final _showTarget = SourceTarget(fakeShow.ref);
 final _movieTarget = SourceTarget(fakeMovie(1).ref);
 
 Future<void> _pump(WidgetTester tester, Widget rail, ItemRef item) async {
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      sourceSimilarProvider(item)
-          .overrideWith((_) => Stream.value([fakeMovie(2), fakeMovie(3)])),
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SingleChildScrollView(child: rail)),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sourceSimilarProvider(item)
+            .overrideWith((_) => Stream.value([fakeMovie(2), fakeMovie(3)])),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: SingleChildScrollView(child: rail)),
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('a show starts collapsed under its old title and opens on tap',
-      (tester) async {
+  testWidgets('a show starts collapsed under its old title and opens on tap', (
+    tester,
+  ) async {
     await _pump(
       tester,
       DetailSimilarRail(
-          show: ShowView(target: _showTarget, title: 'Invented Series')),
+        show: ShowView(target: _showTarget, title: 'Invented Series'),
+      ),
       fakeShow.ref,
     );
 
@@ -59,7 +63,8 @@ void main() {
     await _pump(
       tester,
       DetailSimilarRail(
-          movie: MovieView(target: _movieTarget, title: 'Invented Film 1')),
+        movie: MovieView(target: _movieTarget, title: 'Invented Film 1'),
+      ),
       fakeMovie(1).ref,
     );
 

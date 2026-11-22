@@ -19,8 +19,11 @@ const _missingId = SourceId('missing');
 const _brokenId = SourceId('broken');
 
 MydiaSource _mydia(MydiaCredentials creds, String accountId) =>
-    testMydiaSourceOver(FakeMydiaTransport(),
-        creds: creds, accountId: accountId);
+    testMydiaSourceOver(
+      FakeMydiaTransport(),
+      creds: creds,
+      accountId: accountId,
+    );
 
 ProviderContainer _container() {
   final broken = MydiaSource(
@@ -32,21 +35,33 @@ ProviderContainer _container() {
       onUnauthorized: () {},
     ),
   );
-  final container = ProviderContainer(overrides: [
-    mediaSourceProvider(_p2pId).overrideWithValue(_mydia(
-      const MydiaCredentials(
-          instanceId: 'i', accessToken: 'a', nodeAddr: 'node-1'),
-      'a1',
-    )),
-    mediaSourceProvider(_urlId).overrideWithValue(_mydia(
-      const MydiaCredentials(
-          instanceId: 'i', accessToken: 'a', serverUrl: 'http://box.test'),
-      'a2',
-    )),
-    mediaSourceProvider(_plexId).overrideWithValue(FakeMediaSource()),
-    mediaSourceProvider(_missingId).overrideWithValue(null),
-    mediaSourceProvider(_brokenId).overrideWithValue(broken),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      mediaSourceProvider(_p2pId).overrideWithValue(
+        _mydia(
+          const MydiaCredentials(
+            instanceId: 'i',
+            accessToken: 'a',
+            nodeAddr: 'node-1',
+          ),
+          'a1',
+        ),
+      ),
+      mediaSourceProvider(_urlId).overrideWithValue(
+        _mydia(
+          const MydiaCredentials(
+            instanceId: 'i',
+            accessToken: 'a',
+            serverUrl: 'http://box.test',
+          ),
+          'a2',
+        ),
+      ),
+      mediaSourceProvider(_plexId).overrideWithValue(FakeMediaSource()),
+      mediaSourceProvider(_missingId).overrideWithValue(null),
+      mediaSourceProvider(_brokenId).overrideWithValue(broken),
+    ],
+  );
   addTearDown(container.dispose);
   return container;
 }
@@ -70,8 +85,10 @@ void main() {
   group('sourceServerUrlProvider', () {
     test('is the direct URL, and null over p2p or for other sources', () async {
       final c = _container();
-      expect(await c.read(sourceServerUrlProvider(_urlId).future),
-          'http://box.test');
+      expect(
+        await c.read(sourceServerUrlProvider(_urlId).future),
+        'http://box.test',
+      );
       expect(await c.read(sourceServerUrlProvider(_p2pId).future), isNull);
       expect(await c.read(sourceServerUrlProvider(_plexId).future), isNull);
       expect(await c.read(sourceServerUrlProvider(_missingId).future), isNull);

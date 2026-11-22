@@ -44,18 +44,27 @@ class _FakeHost {
 
   /// Answers an index page in place of [pages] when it returns non-null.
   FlutterPeerFilesResponse? Function(FlutterPeerFilesRequest_IndexPage)?
-      pageOverride;
+  pageOverride;
 
-  void lend(String accountId, String name, int revision, List<String> files,
-      {String kind = 'local', String? dedupeKey, int pageCount = 1}) {
+  void lend(
+    String accountId,
+    String name,
+    int revision,
+    List<String> files, {
+    String kind = 'local',
+    String? dedupeKey,
+    int pageCount = 1,
+  }) {
     accounts.removeWhere((a) => a.accountId == accountId);
-    accounts.add(FlutterWireSharedAccount(
-      accountId: accountId,
-      kind: kind,
-      name: name,
-      dedupeKey: dedupeKey,
-      revision: BigInt.from(revision),
-    ));
+    accounts.add(
+      FlutterWireSharedAccount(
+        accountId: accountId,
+        kind: kind,
+        name: name,
+        dedupeKey: dedupeKey,
+        revision: BigInt.from(revision),
+      ),
+    );
     final records = [
       for (final f in files)
         IndexedFile(
@@ -80,13 +89,10 @@ class _FakeHost {
                   ),
                 ], (r) => r.toMap())
               : const [],
-          files: encodeJsonRecords(
-            [
-              for (var i = 0; i < records.length; i++)
-                if (i % pageCount == p) records[i],
-            ],
-            (f) => f.toMap(),
-          ),
+          files: encodeJsonRecords([
+            for (var i = 0; i < records.length; i++)
+              if (i % pageCount == p) records[i],
+          ], (f) => f.toMap()),
           groups: const [],
           movies: const [],
           shows: const [],
@@ -113,7 +119,9 @@ class _FakeFilesTransport implements PeerFilesTransport {
 
   @override
   Future<FlutterPeerFilesResponse> sendPeerFiles(
-      String peer, FlutterPeerFilesRequest request) async {
+    String peer,
+    FlutterPeerFilesRequest request,
+  ) async {
     final host = hosts[peer];
     if (host == null || host.offline) throw Exception('$peer unreachable');
     switch (request) {
@@ -124,16 +132,18 @@ class _FakeFilesTransport implements PeerFilesTransport {
           return const FlutterPeerFilesResponse.notAuthorized();
         }
         return FlutterPeerFilesResponse.manifest(
-            accounts: List.of(host.accounts));
+          accounts: List.of(host.accounts),
+        );
       case FlutterPeerFilesRequest_IndexPage(
-          :final accountId,
-          :final revision,
-          :final cursor,
-        ):
+        :final accountId,
+        :final revision,
+        :final cursor,
+      ):
         pageCalls.add('$peer/$accountId');
         if (host.pageOverride?.call(request) case final r?) return r;
-        final current =
-            host.accounts.where((a) => a.accountId == accountId).firstOrNull;
+        final current = host.accounts
+            .where((a) => a.accountId == accountId)
+            .firstOrNull;
         if (current == null || current.revision != revision) {
           return const FlutterPeerFilesResponse.staleRevision();
         }
@@ -154,12 +164,14 @@ class _FakeFilesTransport implements PeerFilesTransport {
       const Stream.empty();
   @override
   Future<void> respondToPeerFiles(
-          String requestId, FlutterPeerFilesResponse response) =>
-      throw UnimplementedError();
+    String requestId,
+    FlutterPeerFilesResponse response,
+  ) => throw UnimplementedError();
   @override
   Future<void> respondPeerFileGrant(
-          String requestId, FlutterPeerFileGrantAnswer answer) =>
-      throw UnimplementedError();
+    String requestId,
+    FlutterPeerFileGrantAnswer answer,
+  ) => throw UnimplementedError();
   @override
   Future<void> dial(String endpointAddrJson) => throw UnimplementedError();
   @override
@@ -176,8 +188,7 @@ class _FakeFilesTransport implements PeerFilesTransport {
     int? rangeStart,
     int? rangeEnd,
     String? authToken,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 }
 
 /// PeerSync transport that never reaches anyone.
@@ -204,11 +215,14 @@ class _QuietSyncTransport implements PeerSyncTransport {
   Future<void> addAddressHint(String endpointAddrJson) async {}
   @override
   Future<FlutterPeerSyncResponse> sendPeerSync(
-          String peer, FlutterPeerSyncRequest req) =>
-      Future.error(Exception('unreachable'));
+    String peer,
+    FlutterPeerSyncRequest req,
+  ) => Future.error(Exception('unreachable'));
   @override
   Future<void> respondToPeerSync(
-      String requestId, FlutterPeerSyncResponse res) async {}
+    String requestId,
+    FlutterPeerSyncResponse res,
+  ) async {}
   @override
   bool isConnectedToPeer(String peer) => false;
 
@@ -218,8 +232,11 @@ class _QuietSyncTransport implements PeerSyncTransport {
   }
 }
 
-SourceAccountRecord _filesRecord(String id, String name,
-    {List<ServerConnection> connections = const []}) {
+SourceAccountRecord _filesRecord(
+  String id,
+  String name, {
+  List<ServerConnection> connections = const [],
+}) {
   return SourceAccountRecord(
     account: ProviderAccount(
       id: id,
@@ -230,7 +247,11 @@ SourceAccountRecord _filesRecord(String id, String name,
     ),
     profiles: [
       SourceProfile(
-          id: kOwnerProfileId, accountId: id, name: 'Owner', isOwner: true),
+        id: kOwnerProfileId,
+        accountId: id,
+        name: 'Owner',
+        isOwner: true,
+      ),
     ],
     servers: [
       SourceServer(
@@ -266,37 +287,34 @@ void main() {
   _FakeHost desk() => transport.hosts[_desk]!;
 
   PeerFilesClient newClient() => PeerFilesClient(
-        transport: transport,
-        sync: sync,
-        store: store,
-        localAccounts: () => local,
-        localAccountsReady: localReady,
-        localAccountsChanged: localChanges.stream,
-        peerConnected: connected.stream,
-      );
+    transport: transport,
+    sync: sync,
+    store: store,
+    localAccounts: () => local,
+    localAccountsReady: localReady,
+    localAccountsChanged: localChanges.stream,
+    peerConnected: connected.stream,
+  );
 
   PeerSyncService newSync(MockAuthStorage storage) => PeerSyncService(
-        store: syncStore,
-        authStorage: storage,
-        transport: syncTransport,
-        relayClient: RelayApiClient(),
-        deviceName: 'Viewer',
-        platform: 'linux',
-        resolveDeviceName: () async => 'Viewer',
-      );
+    store: syncStore,
+    authStorage: storage,
+    transport: syncTransport,
+    relayClient: RelayApiClient(),
+    deviceName: 'Viewer',
+    platform: 'linux',
+    resolveDeviceName: () async => 'Viewer',
+  );
 
   List<String> shown() => [
-        for (final a in client.accounts.value)
-          '${a.deviceName} · ${a.wire.name}',
-      ];
+    for (final a in client.accounts.value) '${a.deviceName} · ${a.wire.name}',
+  ];
 
   List<String> indexed(String nodeId, String accountId) => [
-        for (final f in store
-            .index(peerFilesAccountId(nodeId, accountId))
-            .files()
-            .values)
-          f.path,
-      ]..sort();
+    for (final f
+        in store.index(peerFilesAccountId(nodeId, accountId)).files().values)
+      f.path,
+  ]..sort();
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('peer_files_client_test');
@@ -314,12 +332,14 @@ void main() {
       (_tv, 'Living Room TV'),
       (_desk, 'Desk'),
     ]) {
-      await syncStore.putMember(PeerMember(
-        nodeId: id,
-        deviceName: name,
-        platform: 'linux',
-        updatedAt: 1,
-      ));
+      await syncStore.putMember(
+        PeerMember(
+          nodeId: id,
+          deviceName: name,
+          platform: 'linux',
+          updatedAt: 1,
+        ),
+      );
     }
     sync = newSync(auth);
     await sync.start();
@@ -328,8 +348,14 @@ void main() {
     transport.hosts[_tv] = _FakeHost()
       ..lend(kFilesLocalAccountId, 'Films', 1, ['Paper Moon Harbor.mkv']);
     transport.hosts[_desk] = _FakeHost()
-      ..lend(_smbId, 'NAS', 3, ['Glass Orchard.mkv'],
-          kind: 'smb', dedupeKey: 'smb://nas.local/media');
+      ..lend(
+        _smbId,
+        'NAS',
+        3,
+        ['Glass Orchard.mkv'],
+        kind: 'smb',
+        dedupeKey: 'smb://nas.local/media',
+      );
     local = [_filesRecord(kFilesLocalAccountId, 'This device')];
     localReady = null;
     localChanges = StreamController<void>.broadcast();
@@ -360,22 +386,48 @@ void main() {
   });
 
   test('skips_peer_smb_matching_local_smb', () async {
-    final nas = _filesRecord(_smbId, 'My NAS', connections: [
-      ServerConnection(uri: Uri.parse('smb://192.168.1.20/Media')),
-      ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
-    ]);
-    final dav = _filesRecord(_webdavId, 'Cloud', connections: [
-      ServerConnection(uri: Uri.parse('https://dav.example.test/files/')),
-    ]);
+    final nas = _filesRecord(
+      _smbId,
+      'My NAS',
+      connections: [
+        ServerConnection(uri: Uri.parse('smb://192.168.1.20/Media')),
+        ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
+      ],
+    );
+    final dav = _filesRecord(
+      _webdavId,
+      'Cloud',
+      connections: [
+        ServerConnection(uri: Uri.parse('https://dav.example.test/files/')),
+      ],
+    );
     local = [...?local, nas, dav];
     desk()
       ..drop(_smbId)
-      ..lend('s1111111111111111', 'NAS', 1, ['Glass Orchard.mkv'],
-          kind: 'smb', dedupeKey: filesDedupeKey(nas))
-      ..lend('w1111111111111111', 'Cloud', 1, ['Fern Clock.mkv'],
-          kind: 'webdav', dedupeKey: filesDedupeKey(dav))
-      ..lend('s2222222222222222', 'Attic', 1, ['Tin Comet.mkv'],
-          kind: 'smb', dedupeKey: 'smb://attic.local/share');
+      ..lend(
+        's1111111111111111',
+        'NAS',
+        1,
+        ['Glass Orchard.mkv'],
+        kind: 'smb',
+        dedupeKey: filesDedupeKey(nas),
+      )
+      ..lend(
+        'w1111111111111111',
+        'Cloud',
+        1,
+        ['Fern Clock.mkv'],
+        kind: 'webdav',
+        dedupeKey: filesDedupeKey(dav),
+      )
+      ..lend(
+        's2222222222222222',
+        'Attic',
+        1,
+        ['Tin Comet.mkv'],
+        kind: 'smb',
+        dedupeKey: 'smb://attic.local/share',
+      );
 
     await client.start();
 
@@ -394,15 +446,25 @@ void main() {
   });
 
   test('skips_peer_s3_matching_local_s3', () async {
-    final connection =
-        Uri.parse('s3+https://s3.example.test/bkt/media/?region=r&style=path');
-    final bucket = _filesRecord(s3AccountId(connection), 'bkt/media',
-        connections: [ServerConnection(uri: connection)]);
+    final connection = Uri.parse(
+      's3+https://s3.example.test/bkt/media/?region=r&style=path',
+    );
+    final bucket = _filesRecord(
+      s3AccountId(connection),
+      'bkt/media',
+      connections: [ServerConnection(uri: connection)],
+    );
     local = [...?local, bucket];
     desk()
       ..drop(_smbId)
-      ..lend('31111111111111111', 'Bucket', 1, ['Fern Clock.mkv'],
-          kind: 's3', dedupeKey: filesDedupeKey(bucket));
+      ..lend(
+        '31111111111111111',
+        'Bucket',
+        1,
+        ['Fern Clock.mkv'],
+        kind: 's3',
+        dedupeKey: filesDedupeKey(bucket),
+      );
 
     await client.start();
 
@@ -415,14 +477,17 @@ void main() {
   });
 
   test('never_skips_flocal', () async {
-    final nas = _filesRecord(_smbId, 'My NAS', connections: [
-      ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
-    ]);
+    final nas = _filesRecord(
+      _smbId,
+      'My NAS',
+      connections: [ServerConnection(uri: Uri.parse('smb://NAS.local/Media'))],
+    );
     local = [...?local, nas];
     // Even a local-folders entry carrying a key that matches a local share
     // names folders on the host, never that share.
-    tv().lend(kFilesLocalAccountId, 'Films', 1, ['Paper Moon Harbor.mkv'],
-        dedupeKey: filesDedupeKey(nas));
+    tv().lend(kFilesLocalAccountId, 'Films', 1, [
+      'Paper Moon Harbor.mkv',
+    ], dedupeKey: filesDedupeKey(nas));
 
     await client.start();
 
@@ -439,12 +504,16 @@ void main() {
     expect(transport.manifestsFrom(_tv), 3);
     expect(transport.pageCalls, hasLength(2));
 
-    tv().lend(kFilesLocalAccountId, 'Films', 2,
-        ['Paper Moon Harbor.mkv', 'Cedar Signal.mkv']);
+    tv().lend(kFilesLocalAccountId, 'Films', 2, [
+      'Paper Moon Harbor.mkv',
+      'Cedar Signal.mkv',
+    ]);
     await client.refresh();
     expect(transport.pageCalls, hasLength(3));
-    expect(indexed(_tv, kFilesLocalAccountId),
-        ['Cedar Signal.mkv', 'Paper Moon Harbor.mkv']);
+    expect(indexed(_tv, kFilesLocalAccountId), [
+      'Cedar Signal.mkv',
+      'Paper Moon Harbor.mkv',
+    ]);
     expect(store.revision(peerFilesAccountId(_tv, kFilesLocalAccountId)), 2);
   });
 
@@ -453,9 +522,11 @@ void main() {
     final id = peerFilesAccountId(_tv, kFilesLocalAccountId);
 
     tv()
-      ..lend(kFilesLocalAccountId, 'Films', 2,
-          ['Cedar Signal.mkv', 'Wren Lighthouse.mkv', 'Velvet Ferry.mkv'],
-          pageCount: 3)
+      ..lend(kFilesLocalAccountId, 'Films', 2, [
+        'Cedar Signal.mkv',
+        'Wren Lighthouse.mkv',
+        'Velvet Ferry.mkv',
+      ], pageCount: 3)
       ..pageOverride = (r) => r.cursor == '2' ? throw Exception('cut') : null;
     await client.refresh();
     expect(store.revision(id), 1);
@@ -472,8 +543,11 @@ void main() {
     tv().pageOverride = null;
     await client.refresh();
     expect(store.revision(id), 2);
-    expect(indexed(_tv, kFilesLocalAccountId),
-        ['Cedar Signal.mkv', 'Velvet Ferry.mkv', 'Wren Lighthouse.mkv']);
+    expect(indexed(_tv, kFilesLocalAccountId), [
+      'Cedar Signal.mkv',
+      'Velvet Ferry.mkv',
+      'Wren Lighthouse.mkv',
+    ]);
   });
 
   test('stale_revision_restarts_at_most_twice', () async {
@@ -503,8 +577,14 @@ void main() {
   });
 
   test('removed_on_manifest_drop_revocation_and_leave', () async {
-    tv().lend('w2222222222222222', 'Concerts', 1, ['Brass Tide.mkv'],
-        kind: 'webdav', dedupeKey: 'https://dav.tv.test/');
+    tv().lend(
+      'w2222222222222222',
+      'Concerts',
+      1,
+      ['Brass Tide.mkv'],
+      kind: 'webdav',
+      dedupeKey: 'https://dav.tv.test/',
+    );
     await client.start();
     expect(shown(), [
       'Desk · NAS',
@@ -534,19 +614,21 @@ void main() {
   });
 
   test('a dropped copy also clears its cached media info', () async {
-    final infoBox =
-        await Hive.openBox<Map<dynamic, dynamic>>('pfc_info_${n++}');
+    final infoBox = await Hive.openBox<Map<dynamic, dynamic>>(
+      'pfc_info_${n++}',
+    );
     final cache = FilesMediaInfoCache(infoBox);
     final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
     final nas = peerFilesAccountId(_desk, _smbId);
     final at = DateTime.fromMillisecondsSinceEpoch(1700000000000);
     final item = IndexedFile(
-        key: 'k1',
-        rootId: 'r',
-        path: 'a.mkv',
-        size: 1,
-        modified: at,
-        firstSeen: at);
+      key: 'k1',
+      rootId: 'r',
+      path: 'a.mkv',
+      size: 1,
+      modified: at,
+      firstSeen: at,
+    );
     await cache.put(films, item, const ProbeResult(container: 'matroska'));
     await cache.put(nas, item, const ProbeResult(container: 'matroska'));
 
@@ -669,29 +751,37 @@ void main() {
     expect(store.revision(peerFilesAccountId(_desk, _smbId)), isNull);
   });
 
-  test('a host answering Revoked tears down its copies, NotAuthorized does not',
-      () async {
-    await client.start();
-    final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
+  test(
+    'a host answering Revoked tears down its copies, NotAuthorized does not',
+    () async {
+      await client.start();
+      final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
 
-    // Refusing proves nothing: the host's secret may not have loaded.
-    tv().manifestOverride = const FlutterPeerFilesResponse.notAuthorized();
-    await client.refresh();
-    expect(shown(), ['Desk · NAS', 'Living Room TV · Films']);
+      // Refusing proves nothing: the host's secret may not have loaded.
+      tv().manifestOverride = const FlutterPeerFilesResponse.notAuthorized();
+      await client.refresh();
+      expect(shown(), ['Desk · NAS', 'Living Room TV · Films']);
 
-    // This device's own roster still holds the TV, active: only the host
-    // knows it revoked this device.
-    tv().manifestOverride = const FlutterPeerFilesResponse.revoked();
-    await client.refresh();
-    expect(shown(), ['Desk · NAS']);
-    expect(store.revision(films), isNull);
-    expect(store.storedAccounts().map((a) => a.nodeId), [_desk]);
-    expect(sync.member(_tv)!.revoked, isFalse);
-  });
+      // This device's own roster still holds the TV, active: only the host
+      // knows it revoked this device.
+      tv().manifestOverride = const FlutterPeerFilesResponse.revoked();
+      await client.refresh();
+      expect(shown(), ['Desk · NAS']);
+      expect(store.revision(films), isNull);
+      expect(store.storedAccounts().map((a) => a.nodeId), [_desk]);
+      expect(sync.member(_tv)!.revoked, isFalse);
+    },
+  );
 
   test('an index page answered Revoked tears down that host', () async {
-    tv().lend('w2222222222222222', 'Concerts', 1, ['Brass Tide.mkv'],
-        kind: 'webdav', dedupeKey: 'https://dav.tv.test/');
+    tv().lend(
+      'w2222222222222222',
+      'Concerts',
+      1,
+      ['Brass Tide.mkv'],
+      kind: 'webdav',
+      dedupeKey: 'https://dav.tv.test/',
+    );
     await client.start();
     expect(shown(), hasLength(3));
 
@@ -705,13 +795,15 @@ void main() {
   test('a failing delete of a revoked copy does not stop start', () async {
     await client.start();
     client.dispose();
-    await syncStore.putMember(const PeerMember(
-      nodeId: _tv,
-      deviceName: 'Living Room TV',
-      platform: 'linux',
-      updatedAt: 99,
-      revoked: true,
-    ));
+    await syncStore.putMember(
+      const PeerMember(
+        nodeId: _tv,
+        deviceName: 'Living Room TV',
+        platform: 'linux',
+        updatedAt: 99,
+        revoked: true,
+      ),
+    );
     store = _UnremovableStore(box);
     client = newClient();
     await client.start();
@@ -720,42 +812,46 @@ void main() {
     expect(transport.manifestsFrom(_desk), 2);
   });
 
-  test('a refused delete hides that copy, removes the rest and is retried',
-      () async {
-    final flaky = _FlakyRemoveStore(box);
-    store = flaky;
-    client.dispose();
-    client = newClient();
-    await client.start();
-    expect(shown(), hasLength(2));
-    final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
-    final nas = peerFilesAccountId(_desk, _smbId);
-    flaky.refusing.add(films);
+  test(
+    'a refused delete hides that copy, removes the rest and is retried',
+    () async {
+      final flaky = _FlakyRemoveStore(box);
+      store = flaky;
+      client.dispose();
+      client = newClient();
+      await client.start();
+      expect(shown(), hasLength(2));
+      final films = peerFilesAccountId(_tv, kFilesLocalAccountId);
+      final nas = peerFilesAccountId(_desk, _smbId);
+      flaky.refusing.add(films);
 
-    await sync.leaveGroup();
-    await client.refresh();
+      await sync.leaveGroup();
+      await client.refresh();
 
-    // The refused copy is not shown, and the other one still went.
-    expect(client.accounts.value, isEmpty);
-    expect(store.revision(nas), isNull);
-    expect(store.revision(films), 1);
+      // The refused copy is not shown, and the other one still went.
+      expect(client.accounts.value, isEmpty);
+      expect(store.revision(nas), isNull);
+      expect(store.revision(films), 1);
 
-    flaky.refusing.clear();
-    await client.refresh();
-    expect(store.revision(films), isNull);
-    expect(store.storedAccounts(), isEmpty);
-  });
+      flaky.refusing.clear();
+      await client.refresh();
+      expect(store.revision(films), isNull);
+      expect(store.storedAccounts(), isEmpty);
+    },
+  );
 
   test('host_revoked_while_closed_never_shows', () async {
     await client.start();
     client.dispose();
-    await syncStore.putMember(const PeerMember(
-      nodeId: _tv,
-      deviceName: 'Living Room TV',
-      platform: 'linux',
-      updatedAt: 99,
-      revoked: true,
-    ));
+    await syncStore.putMember(
+      const PeerMember(
+        nodeId: _tv,
+        deviceName: 'Living Room TV',
+        platform: 'linux',
+        updatedAt: 99,
+        revoked: true,
+      ),
+    );
     tv().offline = true;
 
     client = newClient();
@@ -766,15 +862,25 @@ void main() {
     expect(seen.expand((s) => s), isNot(contains('Living Room TV · Films')));
     expect(shown(), ['Desk · NAS']);
     expect(
-        store.revision(peerFilesAccountId(_tv, kFilesLocalAccountId)), isNull);
+      store.revision(peerFilesAccountId(_tv, kFilesLocalAccountId)),
+      isNull,
+    );
   });
 
   test('waits_for_local_accounts_before_deciding_dedupe', () async {
-    final nas = _filesRecord(_smbId, 'My NAS', connections: [
-      ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
-    ]);
-    desk().lend(_smbId, 'NAS', 3, ['Glass Orchard.mkv'],
-        kind: 'smb', dedupeKey: filesDedupeKey(nas));
+    final nas = _filesRecord(
+      _smbId,
+      'My NAS',
+      connections: [ServerConnection(uri: Uri.parse('smb://NAS.local/Media'))],
+    );
+    desk().lend(
+      _smbId,
+      'NAS',
+      3,
+      ['Glass Orchard.mkv'],
+      kind: 'smb',
+      dedupeKey: filesDedupeKey(nas),
+    );
     local = null;
     final ready = Completer<void>();
     localReady = () => ready.future;
@@ -815,11 +921,19 @@ void main() {
   });
 
   test('local_account_change_refreshes_dedupe', () async {
-    final nas = _filesRecord(_smbId, 'My NAS', connections: [
-      ServerConnection(uri: Uri.parse('smb://NAS.local/Media')),
-    ]);
-    desk().lend(_smbId, 'NAS', 3, ['Glass Orchard.mkv'],
-        kind: 'smb', dedupeKey: filesDedupeKey(nas));
+    final nas = _filesRecord(
+      _smbId,
+      'My NAS',
+      connections: [ServerConnection(uri: Uri.parse('smb://NAS.local/Media'))],
+    );
+    desk().lend(
+      _smbId,
+      'NAS',
+      3,
+      ['Glass Orchard.mkv'],
+      kind: 'smb',
+      dedupeKey: filesDedupeKey(nas),
+    );
     await client.start();
     expect(shown(), ['Desk · NAS', 'Living Room TV · Films']);
     final manifests = transport.manifestCalls.length;

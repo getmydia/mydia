@@ -59,7 +59,7 @@ Future<void> _openDialog(WidgetTester tester, List<MediaFileInfo> files) async {
             context: context,
             barrierDismissible: true,
             barrierLabel: 'Media Info',
-            pageBuilder: (_, __, ___) => Align(
+            pageBuilder: (_, _, _) => Align(
               alignment: Alignment.centerRight,
               child: MediaInfoPanel(files: files),
             ),
@@ -81,8 +81,9 @@ void _setViewport(WidgetTester tester, Size size) {
 }
 
 void main() {
-  testWidgets('renders no debug text decorations outside a Scaffold',
-      (tester) async {
+  testWidgets('renders no debug text decorations outside a Scaffold', (
+    tester,
+  ) async {
     _setViewport(tester, const Size(1280, 900));
 
     await _openDialog(tester, const [_file]);
@@ -91,8 +92,9 @@ void main() {
     expectNoDebugTextDecorations(tester);
   });
 
-  testWidgets('opens with multiple versions without a Material assert',
-      (tester) async {
+  testWidgets('opens with multiple versions without a Material assert', (
+    tester,
+  ) async {
     _setViewport(tester, const Size(1280, 900));
 
     await _openDialog(tester, const [_file, _secondFile]);
@@ -106,21 +108,16 @@ void main() {
 
     await _openDialog(tester, const [_file]);
 
-    expect(
-      tester.getSize(find.byKey(const Key('media-info-side'))).width,
-      512,
-    );
+    expect(tester.getSize(find.byKey(const Key('media-info-side'))).width, 512);
   });
 
-  testWidgets('side panel never drops below the 420 it shipped with',
-      (tester) async {
+  testWidgets('side panel never drops below the 420 it shipped with', (
+    tester,
+  ) async {
     _setViewport(tester, const Size(900, 800));
 
     await _openDialog(tester, const [_file]);
 
-    expect(
-      tester.getSize(find.byKey(const Key('media-info-side'))).width,
-      420,
-    );
+    expect(tester.getSize(find.byKey(const Key('media-info-side'))).width, 420);
   });
 }

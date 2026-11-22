@@ -36,10 +36,14 @@ Future<void> _pumpRow(
 }
 
 /// The row's own box: the pill the selection and hover fills paint.
-Size _rowSize(WidgetTester tester) => tester.getSize(find
-    .descendant(
-        of: find.byType(SidebarRow), matching: find.byType(AnimatedContainer))
-    .first);
+Size _rowSize(WidgetTester tester) => tester.getSize(
+  find
+      .descendant(
+        of: find.byType(SidebarRow),
+        matching: find.byType(AnimatedContainer),
+      )
+      .first,
+);
 
 void main() {
   testWidgets('an anchored row is 44pt tall', (tester) async {
@@ -47,8 +51,9 @@ void main() {
     expect(_rowSize(tester).height, 44);
   });
 
-  testWidgets('the overflow menu does not make a customisable row taller',
-      (tester) async {
+  testWidgets('the overflow menu does not make a customisable row taller', (
+    tester,
+  ) async {
     await _pumpRow(tester, canCustomise: true);
     expect(_rowSize(tester).height, 44);
   });
@@ -64,8 +69,9 @@ void main() {
     expect(_rowSize(tester).height, greaterThan(44));
   });
 
-  testWidgets('the overflow menu hit area spans the row height',
-      (tester) async {
+  testWidgets('the overflow menu hit area spans the row height', (
+    tester,
+  ) async {
     await _pumpRow(tester, canCustomise: true);
     expect(tester.getSize(find.byType(PopupMenuButton<String>)).height, 44);
   });

@@ -33,7 +33,8 @@ class SourceAccountRecord {
   factory SourceAccountRecord.fromJson(Map<String, dynamic> json) =>
       SourceAccountRecord(
         account: ProviderAccount.fromJson(
-            (json['account'] as Map).cast<String, dynamic>()),
+          (json['account'] as Map).cast<String, dynamic>(),
+        ),
         profiles: [
           for (final p in json['profiles'] as List)
             SourceProfile.fromJson((p as Map).cast<String, dynamic>()),
@@ -77,12 +78,12 @@ class SourceAccountRecord {
 
   /// Every server the account still lists, as a [Source].
   List<Source> get sources => [
-        for (final server in servers)
-          if (!server.gone)
-            for (final profile in profiles)
-              if (profile.id == server.profileId)
-                Source(account: account, profile: profile, server: server),
-      ];
+    for (final server in servers)
+      if (!server.gone)
+        for (final profile in profiles)
+          if (profile.id == server.profileId)
+            Source(account: account, profile: profile, server: server),
+  ];
 
   SourceAccountRecord copyWith({
     ProviderAccount? account,
@@ -90,27 +91,24 @@ class SourceAccountRecord {
     List<SourceServer>? servers,
     List<String>? chosenServerIds,
     Map<String, SourceLock>? serverLocks,
-  }) =>
-      SourceAccountRecord(
-        account: account ?? this.account,
-        profiles: profiles ?? this.profiles,
-        servers: servers ?? this.servers,
-        addedAtMs: addedAtMs,
-        chosenServerIds: chosenServerIds ?? this.chosenServerIds,
-        serverLocks: serverLocks ?? this.serverLocks,
-      );
+  }) => SourceAccountRecord(
+    account: account ?? this.account,
+    profiles: profiles ?? this.profiles,
+    servers: servers ?? this.servers,
+    addedAtMs: addedAtMs,
+    chosenServerIds: chosenServerIds ?? this.chosenServerIds,
+    serverLocks: serverLocks ?? this.serverLocks,
+  );
 
   Map<String, dynamic> toJson() => {
-        'account': account.toJson(),
-        'profiles': [for (final p in profiles) p.toJson()],
-        'servers': [for (final s in servers) s.toJson()],
-        'addedAtMs': addedAtMs,
-        if (chosenServerIds != null) 'chosenServerIds': chosenServerIds,
-        if (serverLocks.isNotEmpty)
-          'serverLocks': {
-            for (final e in serverLocks.entries) e.key: e.value.name,
-          },
-      };
+    'account': account.toJson(),
+    'profiles': [for (final p in profiles) p.toJson()],
+    'servers': [for (final s in servers) s.toJson()],
+    'addedAtMs': addedAtMs,
+    if (chosenServerIds != null) 'chosenServerIds': chosenServerIds,
+    if (serverLocks.isNotEmpty)
+      'serverLocks': {for (final e in serverLocks.entries) e.key: e.value.name},
+  };
 }
 
 @immutable

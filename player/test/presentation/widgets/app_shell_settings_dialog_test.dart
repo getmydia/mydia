@@ -49,10 +49,10 @@ import '../screens/sources/fake_media_source.dart';
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   @override
   P2pStatus build() => const P2pStatus(
-        isInitialized: true,
-        isRelayConnected: false,
-        connectedPeersCount: 0,
-      );
+    isInitialized: true,
+    isRelayConnected: false,
+    connectedPeersCount: 0,
+  );
 }
 
 class _FakeUpdateNotifier extends UpdateNotifier {
@@ -64,10 +64,10 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 class _FakeSettingsController extends SettingsController {
   @override
   Future<UserSettings> build() async => const UserSettings(
-        serverUrl: 'mydia.local:4000',
-        username: 'admin',
-        defaultQuality: '1080p',
-      );
+    serverUrl: 'mydia.local:4000',
+    username: 'admin',
+    defaultQuality: '1080p',
+  );
 }
 
 /// The shell starts collection auto-sync, which opens a Hive box.
@@ -112,8 +112,10 @@ void main() {
   setUp(() async {
     resetSettingsDialogForTest();
     boxCounter += 1;
-    box = await Hive.openBox<dynamic>('shell_settings_$boxCounter',
-        bytes: Uint8List(0));
+    box = await Hive.openBox<dynamic>(
+      'shell_settings_$boxCounter',
+      bytes: Uint8List(0),
+    );
   });
   tearDown(() async => box.close());
 
@@ -132,13 +134,14 @@ void main() {
     final secrets = SourceSecrets(MockAuthStorage());
     await store.putAccount(recordA);
     await writeMydiaCredentials(
-        secrets,
-        recordA.account,
-        MydiaCredentials(
-          instanceId: recordA.servers.single.id,
-          accessToken: 'tok',
-          serverUrl: 'https://${recordA.account.id}.example.test',
-        ));
+      secrets,
+      recordA.account,
+      MydiaCredentials(
+        instanceId: recordA.servers.single.id,
+        accessToken: 'tok',
+        serverUrl: 'https://${recordA.account.id}.example.test',
+      ),
+    );
 
     final rootKey = GlobalKey<NavigatorState>();
     final shellKey = GlobalKey<NavigatorState>();
@@ -148,76 +151,80 @@ void main() {
       // Stands in for the app's "no sources -> add-a-server" redirect.
       redirect: (_, state) =>
           (noServers?.value ?? false) && state.matchedLocation != '/sources/add'
-              ? '/sources/add'
-              : null,
+          ? '/sources/add'
+          : null,
       routes: [
         ShellRoute(
           navigatorKey: shellKey,
           builder: (context, state, child) =>
               AppShell(location: state.matchedLocation, child: child),
           routes: [
-            GoRoute(
-              path: '/',
-              builder: (_, __) => const SizedBox.expand(),
-            ),
+            GoRoute(path: '/', builder: (_, _) => const SizedBox.expand()),
             GoRoute(
               path: '/settings',
-              builder: (_, __) => const Center(child: Text('settings page')),
+              builder: (_, _) => const Center(child: Text('settings page')),
             ),
           ],
         ),
         GoRoute(
           path: '/unlock',
           parentNavigatorKey: rootKey,
-          builder: (_, __) => const Scaffold(body: Text('at /unlock')),
+          builder: (_, _) => const Scaffold(body: Text('at /unlock')),
         ),
         GoRoute(
           path: '/sources/add',
           parentNavigatorKey: rootKey,
-          builder: (_, __) => const Scaffold(body: Text('at /sources/add')),
+          builder: (_, _) => const Scaffold(body: Text('at /sources/add')),
         ),
       ],
     );
     addTearDown(router.dispose);
     shellRouter = router;
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        settingsDialogEnabledProvider.overrideWithValue(dialog),
-        sidebarLayoutStoreProvider.overrideWithValue(pinnedStore()),
-        sourceProgressFlushProvider.overrideWith((ref) {}),
-        orphanDownloadSweepProvider.overrideWith((ref) {}),
-        settingsControllerProvider.overrideWith(_FakeSettingsController.new),
-        p2pStatusNotifierProvider.overrideWith(_FakeP2pStatusNotifier.new),
-        updateProvider.overrideWith(_FakeUpdateNotifier.new),
-        noDownloadsOverride,
-        collectionAutoSyncProvider.overrideWithValue((_) => _NoAutoSync()),
-        updateDismissalProvider.overrideWith(_NoDismissals.new),
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(secrets),
-        remoteControlSettingsProvider
-            .overrideWith((ref) async => RemoteControlSettings(box: box)),
-        nodeRegistrationsProvider.overrideWith(_StubRegistration.new),
-        activeSourceIdProvider.overrideWithValue(testMydiaSourceId),
-        mediaSourceProvider.overrideWith((ref, id) => null),
-        mediaSourceProvider(testMydiaSourceId)
-            .overrideWithValue(_Src(testMydiaSource)),
-        serverCompatibilityProvider.overrideWith((ref, id) async =>
-            const ServerCompatibility(
-                info: null, verdict: CompatibilityVerdict.unknown)),
-      ],
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        routerConfig: router,
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsDialogEnabledProvider.overrideWithValue(dialog),
+          sidebarLayoutStoreProvider.overrideWithValue(pinnedStore()),
+          sourceProgressFlushProvider.overrideWith((ref) {}),
+          orphanDownloadSweepProvider.overrideWith((ref) {}),
+          settingsControllerProvider.overrideWith(_FakeSettingsController.new),
+          p2pStatusNotifierProvider.overrideWith(_FakeP2pStatusNotifier.new),
+          updateProvider.overrideWith(_FakeUpdateNotifier.new),
+          noDownloadsOverride,
+          collectionAutoSyncProvider.overrideWithValue((_) => _NoAutoSync()),
+          updateDismissalProvider.overrideWith(_NoDismissals.new),
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(secrets),
+          remoteControlSettingsProvider.overrideWith(
+            (ref) async => RemoteControlSettings(box: box),
+          ),
+          nodeRegistrationsProvider.overrideWith(_StubRegistration.new),
+          activeSourceIdProvider.overrideWithValue(testMydiaSourceId),
+          mediaSourceProvider.overrideWith((ref, id) => null),
+          mediaSourceProvider(testMydiaSourceId)
+              .overrideWithValue(_Src(testMydiaSource)),
+          serverCompatibilityProvider.overrideWith(
+            (ref, id) async => const ServerCompatibility(
+              info: null,
+              verdict: CompatibilityVerdict.unknown,
+            ),
+          ),
+        ],
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          routerConfig: router,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sidebar Settings item opens the dialog on desktop',
-      (tester) async {
+  testWidgets('the sidebar Settings item opens the dialog on desktop', (
+    tester,
+  ) async {
     await pumpShell(tester, dialog: true);
     await tester.tap(find.byKey(const ValueKey('sidebar-row-settings')));
     await tester.pumpAndSettle();
@@ -254,8 +261,9 @@ void main() {
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
   });
 
-  testWidgets('the unlock route sits above the dialog and returns to it',
-      (tester) async {
+  testWidgets('the unlock route sits above the dialog and returns to it', (
+    tester,
+  ) async {
     await pumpShell(tester, dialog: true);
     expect(openSettingsFromHost('/sources/manage'), isTrue);
     await tester.pumpAndSettle();
@@ -273,9 +281,11 @@ void main() {
   });
 
   SettingsCategory selectedCategory(WidgetTester tester) =>
-      SettingsCategory.values.singleWhere((c) => tester
-          .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
-          .selected);
+      SettingsCategory.values.singleWhere(
+        (c) => tester
+            .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
+            .selected,
+      );
 
   Future<void> pressCtrlComma(WidgetTester tester) async {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -284,8 +294,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the dialog closes when the shell is replaced by add-a-server',
-      (tester) async {
+  testWidgets('the dialog closes when the shell is replaced by add-a-server', (
+    tester,
+  ) async {
     final noServers = ValueNotifier<bool>(false);
     addTearDown(noServers.dispose);
     await pumpShell(tester, dialog: true, noServers: noServers);

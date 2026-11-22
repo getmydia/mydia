@@ -39,12 +39,11 @@ class NodeRegistrationService {
   final Future<void> Function(Duration) _delay;
 
   NodeRegistrationService({
-    required RegisterNode register,
+    required this._register,
     DateTime Function()? now,
     Future<void> Function(Duration)? delay,
-  })  : _register = register,
-        _now = now ?? DateTime.now,
-        _delay = delay ?? Future.delayed;
+  }) : _now = now ?? DateTime.now,
+       _delay = delay ?? Future.delayed;
 
   RegistrationStatus _status = const RegistrationIdle();
   final _controller = StreamController<RegistrationStatus>.broadcast();
@@ -200,8 +199,9 @@ class NodeRegistrationService {
         }
 
         if (!_clientReady) {
-          _emit(const RegistrationWaiting(
-              RegistrationDependency.serverConnection));
+          _emit(
+            const RegistrationWaiting(RegistrationDependency.serverConnection),
+          );
           return;
         }
 

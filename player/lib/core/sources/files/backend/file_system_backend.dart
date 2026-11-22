@@ -32,7 +32,8 @@ class FileEntry {
   final DateTime modified;
 
   @override
-  String toString() => 'FileEntry($path, dir: $isDir, size: $size'
+  String toString() =>
+      'FileEntry($path, dir: $isDir, size: $size'
       '${unreadable ? ', unreadable' : ''})';
 }
 

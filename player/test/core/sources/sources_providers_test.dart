@@ -33,9 +33,7 @@ const _plexSource = Source(
 
 ProviderContainer _container({List<Source> sources = const []}) {
   final container = ProviderContainer(
-    overrides: [
-      thirdPartySourcesProvider.overrideWithValue(sources),
-    ],
+    overrides: [thirdPartySourcesProvider.overrideWithValue(sources)],
   );
   addTearDown(container.dispose);
   return container;
@@ -61,10 +59,7 @@ void main() {
 
     test('lists every source once there are two', () {
       final c = _container(sources: [testMydiaSource, _plexSource]);
-      expect(
-        c.read(switchableSourcesProvider),
-        [testMydiaSource, _plexSource],
-      );
+      expect(c.read(switchableSourcesProvider), [testMydiaSource, _plexSource]);
     });
   });
 
@@ -113,14 +108,18 @@ void main() {
     test('is a live Plex source for a Plex source', () {
       final c = _container(sources: [_plexSource]);
       expect(
-          c.read(mediaSourceProvider(_plexSource.id)), isA<PlexMediaSource>());
+        c.read(mediaSourceProvider(_plexSource.id)),
+        isA<PlexMediaSource>(),
+      );
     });
   });
 
   group('sourceRootRedirect', () {
     test('leaves a Mydia source on its own screen, not on /', () {
-      expect(sourceRootRedirect(testMydiaSourceId.value, [testMydiaSource]),
-          isNull);
+      expect(
+        sourceRootRedirect(testMydiaSourceId.value, [testMydiaSource]),
+        isNull,
+      );
     });
 
     test('sends an unknown source home', () {
@@ -129,10 +128,10 @@ void main() {
 
     test('leaves a third-party source on its own screen', () {
       expect(
-        sourceRootRedirect(
-          _plexSource.id.value,
-          [testMydiaSource, _plexSource],
-        ),
+        sourceRootRedirect(_plexSource.id.value, [
+          testMydiaSource,
+          _plexSource,
+        ]),
         isNull,
       );
     });

@@ -16,9 +16,7 @@ const _file = MediaFileInfo(
   fileName: 'Movie.2160p.mkv',
   resolution: '2160p',
   codec: 'hevc',
-  streams: [
-    MediaStream(index: 0, type: MediaStreamType.video, codec: 'hevc'),
-  ],
+  streams: [MediaStream(index: 0, type: MediaStreamType.video, codec: 'hevc')],
 );
 
 Widget _harness(Size size) {
@@ -27,16 +25,15 @@ Widget _harness(Size size) {
     child: const MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: MediaInfoPanel(files: [_file]),
-      ),
+      home: Scaffold(body: MediaInfoPanel(files: [_file])),
     ),
   );
 }
 
 void main() {
-  testWidgets('lays out as a bottom sheet below the desktop breakpoint',
-      (tester) async {
+  testWidgets('lays out as a bottom sheet below the desktop breakpoint', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -48,8 +45,9 @@ void main() {
     expect(find.byKey(const Key('media-info-side')), findsNothing);
   });
 
-  testWidgets('lays out as a side panel at or above the desktop breakpoint',
-      (tester) async {
+  testWidgets('lays out as a side panel at or above the desktop breakpoint', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -73,26 +71,28 @@ void main() {
   });
 
   group('MediaInfoSheet', () {
-    const item =
-        ItemRef(sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm1');
+    const item = ItemRef(
+      sourceId: fakeSourceId,
+      kind: ItemKind.movie,
+      externalId: 'm1',
+    );
 
-    Future<void> pumpSheet(
-      WidgetTester tester,
-      FakeMediaSource source,
-    ) async {
+    Future<void> pumpSheet(WidgetTester tester, FakeMediaSource source) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-        ],
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: MediaInfoSheet(item: item)),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+          ],
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: MediaInfoSheet(item: item)),
+          ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
     }
 
@@ -118,17 +118,21 @@ void main() {
       expect(find.text('EAC3'), findsOneWidget);
     });
 
-    testWidgets('a source without the capability shows the retry state',
-        (tester) async {
+    testWidgets('a source without the capability shows the retry state', (
+      tester,
+    ) async {
       await pumpSheet(tester, FakeMediaSource());
 
       expect(find.byKey(const Key('media-info-retry')), findsOneWidget);
     });
 
-    testWidgets('a source failure names it instead of the generic line',
-        (tester) async {
+    testWidgets('a source failure names it instead of the generic line', (
+      tester,
+    ) async {
       await pumpSheet(
-          tester, _FailingMediaInfoSource(const SourceException.unreachable()));
+        tester,
+        _FailingMediaInfoSource(const SourceException.unreachable()),
+      );
 
       expect(find.text(_en.sourceErrorUnreachable), findsOneWidget);
       expect(find.text(_en.mediaInfoLoadFailed), findsNothing);

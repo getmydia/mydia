@@ -26,27 +26,35 @@ void main() {
     ]);
   });
 
-  testWidgets('the library screen shows the stale banner for its key',
-      (tester) async {
-    final container = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
-      // No artwork requests: see source_library_screen_test.dart.
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-      coreSettingsServiceProvider
-          .overrideWithValue(SettingsService(storage: MockAuthStorage())),
-    ]);
+  testWidgets('the library screen shows the stale banner for its key', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+        // No artwork requests: see source_library_screen_test.dart.
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        coreSettingsServiceProvider.overrideWithValue(
+          SettingsService(storage: MockAuthStorage()),
+        ),
+      ],
+    );
     addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: SourceLibraryScreen(library: FakeMediaSource.movies),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SourceLibraryScreen(library: FakeMediaSource.movies),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
-    container.read(freshnessRegistryProvider.notifier).publish(
+    container
+        .read(freshnessRegistryProvider.notifier)
+        .publish(
           SourceKeys.browse(FakeMediaSource.movies, const BrowseQuery()),
           Freshness(
             fetchedAt: DateTime.now().subtract(const Duration(hours: 3)),

@@ -22,10 +22,7 @@ class TapToPlayOverlay extends StatelessWidget {
   /// the failure this overlay exists to recover from.
   final VoidCallback onPlay;
 
-  const TapToPlayOverlay({
-    super.key,
-    required this.onPlay,
-  });
+  const TapToPlayOverlay({super.key, required this.onPlay});
 
   @override
   Widget build(BuildContext context) {
@@ -64,9 +61,9 @@ class TapToPlayOverlay extends StatelessWidget {
                 Text(
                   context.l10n.tapToPlayTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Padding(
@@ -74,9 +71,8 @@ class TapToPlayOverlay extends StatelessWidget {
                   child: Text(
                     context.l10n.tapToPlayHint,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: Colors.white70),
                   ),
                 ),
               ],

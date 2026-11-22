@@ -29,9 +29,9 @@ class BackupTestDevice {
       settings: SettingsService(storage: auth),
       loadSubtitleLanguages: () async => null,
       saveSubtitleLanguages: (_) async {},
-      onRemoteFilesChanges: (_, __) async {},
+      onRemoteFilesChanges: (_, _) async {},
       rootsFor: (_) async => const [],
-      putRoots: (_, __) async {},
+      putRoots: (_, _) async {},
     );
     service = BackupSyncService(
       relay: relay.relayClient(),
@@ -84,11 +84,14 @@ class BackupTestDevice {
 
 /// Lets the real engine's work (started by a tap) run, a slice of real time
 /// and a frame at a time, until [until] holds.
-Future<void> settleEngine(WidgetTester tester,
-    {required bool Function() until}) async {
+Future<void> settleEngine(
+  WidgetTester tester, {
+  required bool Function() until,
+}) async {
   for (var i = 0; i < 200 && !until(); i++) {
-    await tester
-        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
     await tester.pump();
   }
   await tester.pump();
@@ -106,14 +109,19 @@ SourceAccountRecord testPlexAccount(String id, String name) =>
       ),
       profiles: [
         SourceProfile(
-            id: kOwnerProfileId, accountId: id, name: 'Ana', isOwner: true),
+          id: kOwnerProfileId,
+          accountId: id,
+          name: 'Ana',
+          isOwner: true,
+        ),
       ],
       servers: [
         SourceServer(
-            id: 'srv-$id',
-            accountId: id,
-            profileId: kOwnerProfileId,
-            name: name),
+          id: 'srv-$id',
+          accountId: id,
+          profileId: kOwnerProfileId,
+          name: name,
+        ),
       ],
       addedAtMs: 1000,
     );

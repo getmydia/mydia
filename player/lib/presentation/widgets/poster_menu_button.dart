@@ -29,11 +29,7 @@ class PosterMenuButton extends StatelessWidget {
   /// Null means the localized "More actions".
   final String? tooltip;
 
-  const PosterMenuButton({
-    super.key,
-    required this.onPressed,
-    this.tooltip,
-  });
+  const PosterMenuButton({super.key, required this.onPressed, this.tooltip});
 
   @override
   Widget build(BuildContext context) {

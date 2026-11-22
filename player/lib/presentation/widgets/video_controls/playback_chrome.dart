@@ -567,10 +567,10 @@ class _ChromeToastObstructionState extends State<ChromeToastObstruction> {
 
   @override
   Widget build(BuildContext context) => ToastObstruction(
-        edge: ToastEdge.bottom,
-        active: _shown,
-        child: widget.child,
-      );
+    edge: ToastEdge.bottom,
+    active: _shown,
+    child: widget.child,
+  );
 }
 
 /// Places the player's top bar. On a windowed desktop it sits in the
@@ -882,8 +882,9 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
               // Double-click stays available in fullscreen, since that is how
               // you get back out. The window drag does not: there is no
               // window to move.
-              onDoubleTap:
-                  PlatformFeatures.isDesktop ? widget.onFullscreenTap : null,
+              onDoubleTap: PlatformFeatures.isDesktop
+                  ? widget.onFullscreenTap
+                  : null,
               onWindowDrag: PlatformFeatures.isDesktop && !widget.isFullscreen
                   ? startWindowDrag
                   : null,
@@ -949,9 +950,11 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                         playPauseFocusNode:
                                             widget.playPauseFocusNode,
                                         onBack10: () => _seekBy(
-                                            const Duration(seconds: -10)),
+                                          const Duration(seconds: -10),
+                                        ),
                                         onForward10: () => _seekBy(
-                                            const Duration(seconds: 10)),
+                                          const Duration(seconds: 10),
+                                        ),
                                         onPreviousEpisode:
                                             widget.onPreviousEpisode,
                                         onNextEpisode: widget.onNextEpisode,
@@ -992,7 +995,8 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                       volume: remote
                                           ? null
                                           : VolumeCluster(
-                                              player: widget.player),
+                                              player: widget.player,
+                                            ),
                                       secondary: SecondaryCluster(
                                         onSubtitleTap: widget.onSubtitleTap,
                                         onAudioTap: widget.onAudioTap,
@@ -1009,14 +1013,15 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                             : widget.onFullscreenTap,
                                         onAlwaysOnTopTap:
                                             PlatformFeatures.isDesktop &&
-                                                    metrics.showAlwaysOnTop
-                                                ? widget.onAlwaysOnTopTap
-                                                : null,
+                                                metrics.showAlwaysOnTop
+                                            ? widget.onAlwaysOnTopTap
+                                            : null,
                                         // TV only: the top bar takes no focus
                                         // there, and remote never shows
                                         // fullscreen, so scaling takes its slot.
-                                        onScalingTap:
-                                            remote ? widget.onScalingTap : null,
+                                        onScalingTap: remote
+                                            ? widget.onScalingTap
+                                            : null,
                                         scaling: widget.scaling,
                                         audioTrackCount: widget.audioTrackCount,
                                         selectedAudioLabel:
@@ -1086,9 +1091,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
             // which is exactly where people tap. `BufferingIndicator`
             // already centres itself and collapses to `SizedBox.shrink()`
             // when not buffering, so no extra `Center` is needed here.
-            IgnorePointer(
-              child: BufferingIndicator(player: widget.player),
-            ),
+            IgnorePointer(child: BufferingIndicator(player: widget.player)),
           ],
         );
         // Wraps the entire OSD so its owner can ask whether focus is anywhere
@@ -1158,22 +1161,24 @@ class _ScrubberRow extends StatelessWidget {
 
   /// [_timeStyle] at television size. Same colour and shadow, so the
   /// contrast reasoning above still holds.
-  static final TextStyle _remoteTimeStyle =
-      _timeStyle.copyWith(fontSize: PlaybackChrome.remoteTimeFontSize);
+  static final TextStyle _remoteTimeStyle = _timeStyle.copyWith(
+    fontSize: PlaybackChrome.remoteTimeFontSize,
+  );
 
   Widget _bar() {
-    VideoProgressBar progressBar(
-            {ScrubController? scrub, bool focused = false}) =>
-        VideoProgressBar(
-          player: player,
-          timeline: timeline,
-          onSeekToReal: onSeekToReal,
-          touchTarget: touchTargets,
-          onSeekStart: onSeekStart,
-          onSeekEnd: onSeekEnd,
-          scrub: scrub,
-          focused: focused,
-        );
+    VideoProgressBar progressBar({
+      ScrubController? scrub,
+      bool focused = false,
+    }) => VideoProgressBar(
+      player: player,
+      timeline: timeline,
+      onSeekToReal: onSeekToReal,
+      touchTarget: touchTargets,
+      onSeekStart: onSeekStart,
+      onSeekEnd: onSeekEnd,
+      scrub: scrub,
+      focused: focused,
+    );
 
     final scrub = this.scrub;
     final focusNode = scrubberFocusNode;

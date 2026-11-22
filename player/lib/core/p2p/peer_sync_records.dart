@@ -76,13 +76,13 @@ class PeerMember {
   }
 
   Map<String, dynamic> toMap() => {
-        'nodeId': nodeId,
-        'deviceName': deviceName,
-        'platform': platform,
-        'endpointAddrJson': endpointAddrJson,
-        'updatedAt': updatedAt,
-        'revoked': revoked,
-      };
+    'nodeId': nodeId,
+    'deviceName': deviceName,
+    'platform': platform,
+    'endpointAddrJson': endpointAddrJson,
+    'updatedAt': updatedAt,
+    'revoked': revoked,
+  };
 
   factory PeerMember.fromMap(Map<dynamic, dynamic> map) {
     return PeerMember(
@@ -96,22 +96,22 @@ class PeerMember {
   }
 
   FlutterWirePeerMember toWire() => FlutterWirePeerMember(
-        nodeId: nodeId,
-        deviceName: deviceName,
-        platform: platform,
-        endpointAddrJson: endpointAddrJson,
-        updatedAtMs: PlatformInt64Util.from(updatedAt),
-        revoked: revoked,
-      );
+    nodeId: nodeId,
+    deviceName: deviceName,
+    platform: platform,
+    endpointAddrJson: endpointAddrJson,
+    updatedAtMs: PlatformInt64Util.from(updatedAt),
+    revoked: revoked,
+  );
 
   factory PeerMember.fromWire(FlutterWirePeerMember wire) => PeerMember(
-        nodeId: wire.nodeId,
-        deviceName: wire.deviceName,
-        platform: wire.platform,
-        endpointAddrJson: wire.endpointAddrJson,
-        updatedAt: wire.updatedAtMs.toInt(),
-        revoked: wire.revoked,
-      );
+    nodeId: wire.nodeId,
+    deviceName: wire.deviceName,
+    platform: wire.platform,
+    endpointAddrJson: wire.endpointAddrJson,
+    updatedAt: wire.updatedAtMs.toInt(),
+    revoked: wire.revoked,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -156,13 +156,13 @@ class PeerWatchRecord {
   final int landedAt;
 
   Map<String, dynamic> toMap() => {
-        'key': key,
-        'watched': watched,
-        'positionSeconds': positionSeconds,
-        'durationSeconds': durationSeconds,
-        'updatedAt': updatedAt,
-        'landedAt': landedAt,
-      };
+    'key': key,
+    'watched': watched,
+    'positionSeconds': positionSeconds,
+    'durationSeconds': durationSeconds,
+    'updatedAt': updatedAt,
+    'landedAt': landedAt,
+  };
 
   factory PeerWatchRecord.fromMap(Map<dynamic, dynamic> map) {
     return PeerWatchRecord(
@@ -183,16 +183,16 @@ class PeerWatchRecord {
       wire.updatedAtMs.toInt() == updatedAt;
 
   FlutterWireWatchRecord toWire() => FlutterWireWatchRecord(
-        key: key,
-        watched: watched,
-        positionSeconds: positionSeconds != null
-            ? PlatformInt64Util.from(positionSeconds!)
-            : null,
-        durationSeconds: durationSeconds != null
-            ? PlatformInt64Util.from(durationSeconds!)
-            : null,
-        updatedAtMs: PlatformInt64Util.from(updatedAt),
-      );
+    key: key,
+    watched: watched,
+    positionSeconds: positionSeconds != null
+        ? PlatformInt64Util.from(positionSeconds!)
+        : null,
+    durationSeconds: durationSeconds != null
+        ? PlatformInt64Util.from(durationSeconds!)
+        : null,
+    updatedAtMs: PlatformInt64Util.from(updatedAt),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -239,14 +239,14 @@ class PeerPinRecord {
   final int landedAt;
 
   Map<String, dynamic> toMap() => {
-        'key': key,
-        'groupKey': groupKey,
-        'isShow': isShow,
-        'tmdbId': tmdbId,
-        'pinned': pinned,
-        'updatedAt': updatedAt,
-        'landedAt': landedAt,
-      };
+    'key': key,
+    'groupKey': groupKey,
+    'isShow': isShow,
+    'tmdbId': tmdbId,
+    'pinned': pinned,
+    'updatedAt': updatedAt,
+    'landedAt': landedAt,
+  };
 
   factory PeerPinRecord.fromMap(Map<dynamic, dynamic> map) {
     return PeerPinRecord(
@@ -267,13 +267,13 @@ class PeerPinRecord {
       wire.updatedAtMs.toInt() == updatedAt;
 
   FlutterWirePinRecord toWire() => FlutterWirePinRecord(
-        key: key,
-        groupKey: groupKey,
-        isShow: isShow,
-        tmdbId: tmdbId != null ? PlatformInt64Util.from(tmdbId!) : null,
-        pinned: pinned,
-        updatedAtMs: PlatformInt64Util.from(updatedAt),
-      );
+    key: key,
+    groupKey: groupKey,
+    isShow: isShow,
+    tmdbId: tmdbId != null ? PlatformInt64Util.from(tmdbId!) : null,
+    pinned: pinned,
+    updatedAtMs: PlatformInt64Util.from(updatedAt),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -326,10 +326,10 @@ class PeerWatermark {
   }
 
   Map<String, dynamic> toMap() => {
-        'lastSentLandedAt': lastSentLandedAt,
-        'lastPeerNowMs': lastPeerNowMs,
-        'lastSyncedAt': lastSyncedAt,
-      };
+    'lastSentLandedAt': lastSentLandedAt,
+    'lastPeerNowMs': lastPeerNowMs,
+    'lastSyncedAt': lastSyncedAt,
+  };
 
   factory PeerWatermark.fromMap(Map<dynamic, dynamic> map) {
     return PeerWatermark(

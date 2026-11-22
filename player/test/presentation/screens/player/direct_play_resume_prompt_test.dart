@@ -73,7 +73,8 @@ void main() {
     expect(
       find.text('Resume'),
       findsOneWidget,
-      reason: 'direct play holds the whole file locally and resumes with a '
+      reason:
+          'direct play holds the whole file locally and resumes with a '
           'plain seek — but it still has to ask',
     );
     expect(find.text('Start Over'), findsOneWidget);
@@ -84,8 +85,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('direct play does not ask when there is nothing to resume',
-      (tester) async {
+  testWidgets('direct play does not ask when there is nothing to resume', (
+    tester,
+  ) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 

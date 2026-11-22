@@ -24,11 +24,10 @@ Future<void> _open(WidgetTester tester) async {
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(
-            onPressed: () => showAudioTrackSelector(
-              context,
-              const [_english, _commentary],
+            onPressed: () => showAudioTrackSelector(context, const [
               _english,
-            ),
+              _commentary,
+            ], _english),
             child: const Text('open'),
           ),
         ),
@@ -62,8 +61,10 @@ void main() {
   testWidgets('every glyph holds 4.5:1 on the OSD material', (tester) async {
     await _open(tester);
 
-    final colors =
-        osdParagraphColors(tester, find.byType(AudioTrackSelectorSheet));
+    final colors = osdParagraphColors(
+      tester,
+      find.byType(AudioTrackSelectorSheet),
+    );
     expect(colors, isNotEmpty);
     for (final color in colors) {
       expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');

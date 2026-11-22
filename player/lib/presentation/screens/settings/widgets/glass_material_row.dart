@@ -10,16 +10,20 @@ import 'settings_row.dart';
 /// The Appearance section's Liquid Glass switch. Device-local like the theme
 /// row. Absent where only Frosted is offered (TV).
 class GlassMaterialSettingsRow extends ConsumerWidget {
-  const GlassMaterialSettingsRow(
-      {super.key, @visibleForTesting this.debugIsTv});
+  const GlassMaterialSettingsRow({
+    super.key,
+    @visibleForTesting this.debugIsTv,
+  });
 
   /// Forces the TV answer in tests; null asks `InputCapabilities`.
   final bool? debugIsTv;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!GlassMaterial.liquid
-        .isAvailableOn(defaultTargetPlatform, isTv: debugIsTv)) {
+    if (!GlassMaterial.liquid.isAvailableOn(
+      defaultTargetPlatform,
+      isTv: debugIsTv,
+    )) {
       return const SizedBox.shrink();
     }
     final material = ref.watch(glassMaterialSettingProvider);

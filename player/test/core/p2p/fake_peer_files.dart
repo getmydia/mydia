@@ -43,13 +43,16 @@ class FakePeerRangeTransport implements PeerFilesTransport {
   FakePeerRangeTransport(this.answer);
 
   Object answer;
-  final opens = <({
-    String peer,
-    String sessionId,
-    String path,
-    int? rangeStart,
-    int? rangeEnd
-  })>[];
+  final opens =
+      <
+        ({
+          String peer,
+          String sessionId,
+          String path,
+          int? rangeStart,
+          int? rangeEnd,
+        })
+      >[];
   final streams = <FakeRangeStream>[];
 
   /// Every call in order: `dial <address>` and `open <peer>`.
@@ -96,6 +99,6 @@ class FakePeerRangeTransport implements PeerFilesTransport {
 
 /// A range stream whose header carries [status].
 FakeRangeStream fakeStatusStream(int status) => FakeRangeStream(
-      header: fakeRangeHeader(status: status, contentLength: 1),
-      totalBytes: 1,
-    );
+  header: fakeRangeHeader(status: status, contentLength: 1),
+  totalBytes: 1,
+);

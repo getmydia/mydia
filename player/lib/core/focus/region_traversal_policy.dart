@@ -40,10 +40,7 @@ class RegionTraversalPolicy extends ReadingOrderTraversalPolicy {
   /// left and right when the focused node's row has nothing that way.
   final RegionExitCallback? onExit;
 
-  RegionTraversalPolicy({
-    this.onExit,
-    super.requestFocusCallback,
-  });
+  RegionTraversalPolicy({this.onExit, super.requestFocusCallback});
 
   @override
   bool inDirection(FocusNode currentNode, TraversalDirection direction) {

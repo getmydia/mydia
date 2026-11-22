@@ -18,13 +18,13 @@ class _FakeLoginController extends LoginController {
 
   @override
   LoginState build() => const LoginState(
-        mode: ConnectionMode.direct,
-        totpChallenge: TotpChallenge(
-          serverUrl: 'https://mydia.test',
-          challengeToken: 'challenge',
-          username: 'someone',
-        ),
-      );
+    mode: ConnectionMode.direct,
+    totpChallenge: TotpChallenge(
+      serverUrl: 'https://mydia.test',
+      challengeToken: 'challenge',
+      username: 'someone',
+    ),
+  );
 
   @override
   Future<void> submitTotpCode(String code, {String? reauthAccountId}) async =>
@@ -42,13 +42,13 @@ class _FakeLoginController extends LoginController {
 class _ExpiringLoginController extends LoginController {
   @override
   LoginState build() => const LoginState(
-        mode: ConnectionMode.direct,
-        totpChallenge: TotpChallenge(
-          serverUrl: 'https://mydia.test',
-          challengeToken: 'challenge',
-          username: 'someone',
-        ),
-      );
+    mode: ConnectionMode.direct,
+    totpChallenge: TotpChallenge(
+      serverUrl: 'https://mydia.test',
+      challengeToken: 'challenge',
+      username: 'someone',
+    ),
+  );
 
   @override
   Future<void> submitTotpCode(String code, {String? reauthAccountId}) async {
@@ -72,17 +72,18 @@ class _ExpiringLoginController extends LoginController {
 }
 
 Widget _buildTestWidget(LoginController controller) => ProviderScope(
-      overrides: [
-        authServiceProvider
-            .overrideWithValue(AuthService(storage: MockAuthStorage())),
-        loginControllerProvider.overrideWith(() => controller),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: LoginScreen(),
-      ),
-    );
+  overrides: [
+    authServiceProvider.overrideWithValue(
+      AuthService(storage: MockAuthStorage()),
+    ),
+    loginControllerProvider.overrideWith(() => controller),
+  ],
+  child: const MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: LoginScreen(),
+  ),
+);
 
 /// Both the credential form and the code form live behind the Direct Server
 /// tab; the tab selection is local widget state, not [LoginState.mode].
@@ -92,8 +93,9 @@ Future<void> _switchToDirectServerTab(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('shows only the code field while a challenge is pending',
-      (tester) async {
+  testWidgets('shows only the code field while a challenge is pending', (
+    tester,
+  ) async {
     await tester.pumpWidget(_buildTestWidget(_FakeLoginController()));
     await tester.pumpAndSettle();
     await _switchToDirectServerTab(tester);
@@ -132,8 +134,9 @@ void main() {
     expect(find.text('Password'), findsOneWidget);
   });
 
-  testWidgets('clears the code field when the challenge expires mid-submit',
-      (tester) async {
+  testWidgets('clears the code field when the challenge expires mid-submit', (
+    tester,
+  ) async {
     final controller = _ExpiringLoginController();
     await tester.pumpWidget(_buildTestWidget(controller));
     await tester.pumpAndSettle();
@@ -151,8 +154,9 @@ void main() {
     controller.reissueChallenge();
     await tester.pumpAndSettle();
 
-    final field =
-        tester.widget<TextFormField>(find.byKey(const Key('totp-code-field')));
+    final field = tester.widget<TextFormField>(
+      find.byKey(const Key('totp-code-field')),
+    );
     expect(field.controller!.text, isEmpty);
   });
 }

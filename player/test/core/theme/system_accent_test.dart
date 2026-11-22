@@ -16,16 +16,20 @@ void main() {
   Future<void> fromNative(String method, Object? arguments) =>
       messenger.handlePlatformMessage(
         _name,
-        const StandardMethodCodec()
-            .encodeMethodCall(MethodCall(method, arguments)),
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall(method, arguments),
+        ),
         (_) {},
       );
 
   ProviderContainer container() {
-    final c = ProviderContainer(overrides: [
-      nativeTabBarChannelProvider
-          .overrideWith((ref) => NativeTabBarChannel(channel: _channel)),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        nativeTabBarChannelProvider.overrideWith(
+          (ref) => NativeTabBarChannel(channel: _channel),
+        ),
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
@@ -54,7 +58,7 @@ void main() {
       return call.method == 'systemAccent' ? 0xFF30D158 : null;
     });
     final c = container();
-    final sub = c.listen(systemAccentProvider, (_, __) {});
+    final sub = c.listen(systemAccentProvider, (_, _) {});
     addTearDown(sub.close);
     expect(c.read(systemAccentProvider), Palettes.macosDefaultAccent);
     await Future<void>.delayed(Duration.zero);

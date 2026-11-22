@@ -35,55 +35,65 @@ class _RecordingNav implements SettingsNav {
   void switchedTo(SourceId id) => calls.add('switched ${id.value}');
 }
 
-ConnectionServer _server(String id, String name, ConnectionStatus status,
-        {SourceKind kind = SourceKind.mydia}) =>
-    ConnectionServer(
-      record: SourceAccountRecord(
-        account: ProviderAccount(
-          id: id,
-          kind: kind,
-          displayName: name,
-          storageNamespace: 'source/$id',
-          activeProfileId: 'owner',
-        ),
-        profiles: const [],
-        servers: const [],
-        addedAtMs: 0,
-      ),
+ConnectionServer _server(
+  String id,
+  String name,
+  ConnectionStatus status, {
+  SourceKind kind = SourceKind.mydia,
+}) => ConnectionServer(
+  record: SourceAccountRecord(
+    account: ProviderAccount(
+      id: id,
       kind: kind,
-      name: name,
-      host: null,
-      serverCount: 1,
-      status: status,
-      locked: false,
-      inAllServers: true,
-    );
+      displayName: name,
+      storageNamespace: 'source/$id',
+      activeProfileId: 'owner',
+    ),
+    profiles: const [],
+    servers: const [],
+    addedAtMs: 0,
+  ),
+  kind: kind,
+  name: name,
+  host: null,
+  serverCount: 1,
+  status: status,
+  locked: false,
+  inAllServers: true,
+);
 
 ConnectionDevice _device(String id, String name, String platform) =>
     ConnectionDevice(
-        nodeId: id, name: name, platform: platform, lastSyncedAt: null);
+      nodeId: id,
+      name: name,
+      platform: platform,
+      lastSyncedAt: null,
+    );
 
 ConnectionsOverview _overview({
   List<ConnectionServer> servers = const [],
   List<ConnectionDevice> devices = const [],
   bool serversFailed = false,
   bool serversLoading = false,
-}) =>
-    ConnectionsOverview(
-      localName: 'Living room TV',
-      localPlatform: 'linux',
-      servers: servers,
-      devices: devices,
-      isPaired: devices.isNotEmpty,
-      serversFailed: serversFailed,
-      serversLoading: serversLoading,
-    );
+}) => ConnectionsOverview(
+  localName: 'Living room TV',
+  localPlatform: 'linux',
+  servers: servers,
+  devices: devices,
+  isPaired: devices.isNotEmpty,
+  serversFailed: serversFailed,
+  serversLoading: serversLoading,
+);
 
 final _populated = _overview(
   servers: [
     _server('a', 'Home Mydia', ConnectionStatus.online),
-    _server('b', 'Basement Plex', ConnectionStatus.online,
-        kind: SourceKind.plex),
+    _server(
+      'b',
+      'Basement Plex',
+      ConnectionStatus.online,
+      kind: SourceKind.plex,
+    ),
     _server('c', 'NAS', ConnectionStatus.offline, kind: SourceKind.jellyfin),
   ],
   devices: [
@@ -93,24 +103,28 @@ final _populated = _overview(
 );
 
 Future<_RecordingNav> _pump(
-    WidgetTester tester, ConnectionsOverview overview) async {
+  WidgetTester tester,
+  ConnectionsOverview overview,
+) async {
   final nav = _RecordingNav();
-  await tester.pumpWidget(ProviderScope(
-    overrides: [connectionsOverviewProvider.overrideWithValue(overview)],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: SettingsNavScope(
-          nav: nav,
-          child: const SingleChildScrollView(
-            padding: EdgeInsets.all(16),
-            child: ConnectionsConstellationCard(),
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [connectionsOverviewProvider.overrideWithValue(overview)],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SettingsNavScope(
+            nav: nav,
+            child: const SingleChildScrollView(
+              padding: EdgeInsets.all(16),
+              child: ConnectionsConstellationCard(),
+            ),
           ),
         ),
       ),
     ),
-  ));
+  );
   await tester.pump();
   return nav;
 }
@@ -120,8 +134,10 @@ void main() {
     await _pump(tester, _overview());
     expect(find.text('Add a server'), findsOneWidget);
     expect(find.text('Sync a device'), findsOneWidget);
-    expect(find.text('Add your other servers and sync progress across devices'),
-        findsOneWidget);
+    expect(
+      find.text('Add your other servers and sync progress across devices'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('footer counts', (tester) async {
@@ -132,8 +148,9 @@ void main() {
     expect(find.text('Pixel phone'), findsOneWidget);
   });
 
-  testWidgets('the footer wraps on a narrow phone at large text',
-      (tester) async {
+  testWidgets('the footer wraps on a narrow phone at large text', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(320, 900);
     tester.view.devicePixelRatio = 1;
     tester.platformDispatcher.textScaleFactorTestValue = 2;
@@ -152,7 +169,8 @@ void main() {
     expect(
       tester.getSemantics(find.byKey(const Key('connections-card'))),
       matchesSemantics(
-        label: 'Servers and devices. 2 of 3 servers online. '
+        label:
+            'Servers and devices. 2 of 3 servers online. '
             'Synced with 2 devices.',
         isButton: true,
         isFocusable: true,
@@ -169,18 +187,22 @@ void main() {
     expect(nav.calls, ['connections']);
   });
 
-  testWidgets('loading records show no ghosts and no empty footer',
-      (tester) async {
+  testWidgets('loading records show no ghosts and no empty footer', (
+    tester,
+  ) async {
     await _pump(
-        tester,
-        _overview(
-          serversLoading: true,
-          devices: [_device('p', 'Pixel phone', 'android')],
-        ));
+      tester,
+      _overview(
+        serversLoading: true,
+        devices: [_device('p', 'Pixel phone', 'android')],
+      ),
+    );
     expect(find.text('Add a server'), findsNothing);
     expect(find.text('Sync a device'), findsNothing);
-    expect(find.text('Add your other servers and sync progress across devices'),
-        findsNothing);
+    expect(
+      find.text('Add your other servers and sync progress across devices'),
+      findsNothing,
+    );
     expect(find.textContaining('servers online'), findsNothing);
     expect(find.text('Living room TV'), findsOneWidget);
     expect(find.text('Pixel phone'), findsOneWidget);
@@ -191,8 +213,10 @@ void main() {
     await _pump(tester, _overview(serversLoading: true));
     expect(find.text('Add a server'), findsNothing);
     expect(find.text('Sync a device'), findsNothing);
-    expect(find.text('Add your other servers and sync progress across devices'),
-        findsNothing);
+    expect(
+      find.text('Add your other servers and sync progress across devices'),
+      findsNothing,
+    );
     expect(find.text('Living room TV'), findsOneWidget);
   });
 

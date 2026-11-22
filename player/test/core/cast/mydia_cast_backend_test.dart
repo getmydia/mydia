@@ -78,8 +78,7 @@ class _SlowTransport implements MydiaControlTransport {
   Future<FlutterRemoteControlResponse> send(
     String nodeId,
     FlutterRemoteControlRequest request,
-  ) =>
-      Future.delayed(delay, () => response);
+  ) => Future.delayed(delay, () => response);
 }
 
 /// A transport that answers `Hello` with [_welcome] immediately, but every
@@ -110,25 +109,24 @@ FlutterPlaybackSnapshot _snapshot({
   BigInt? durationMs,
   double? volume,
   BigInt? sequence,
-}) =>
-    FlutterPlaybackSnapshot(
-      state: state,
-      mediaItemId: mediaItemId,
-      episodeId: episodeId,
-      title: title,
-      positionMs: positionMs ?? BigInt.zero,
-      durationMs: durationMs ?? BigInt.from(60000),
-      volume: volume,
-      muted: false,
-      audioTracks: const [],
-      subtitleTracks: const [],
-      capabilities: const FlutterTargetCapabilities(
-        volume: true,
-        trackSelection: true,
-        nextPrevious: false,
-      ),
-      sequence: sequence ?? BigInt.one,
-    );
+}) => FlutterPlaybackSnapshot(
+  state: state,
+  mediaItemId: mediaItemId,
+  episodeId: episodeId,
+  title: title,
+  positionMs: positionMs ?? BigInt.zero,
+  durationMs: durationMs ?? BigInt.from(60000),
+  volume: volume,
+  muted: false,
+  audioTracks: const [],
+  subtitleTracks: const [],
+  capabilities: const FlutterTargetCapabilities(
+    volume: true,
+    trackSelection: true,
+    nextPrevious: false,
+  ),
+  sequence: sequence ?? BigInt.one,
+);
 
 const _connectedDevice = CastDevice(
   id: 'node-tv',
@@ -138,22 +136,24 @@ const _connectedDevice = CastDevice(
 );
 
 RemoteRoster rosterOf(List<(String, String)> devices) => RemoteRoster(
-      client: fakeMydiaClient(ScriptedMydiaTransport.responses([
-        {
-          'devices': [
-            for (final (id, nodeId) in devices)
-              {
-                '__typename': 'RemoteDevice',
-                'id': id,
-                'deviceName': 'Device $id',
-                'platform': 'linux',
-                'nodeId': nodeId,
-              }
-          ],
-        },
-      ])),
-      now: () => DateTime(2026, 8, 20, 12, 0),
-    );
+  client: fakeMydiaClient(
+    ScriptedMydiaTransport.responses([
+      {
+        'devices': [
+          for (final (id, nodeId) in devices)
+            {
+              '__typename': 'RemoteDevice',
+              'id': id,
+              'deviceName': 'Device $id',
+              'platform': 'linux',
+              'nodeId': nodeId,
+            },
+        ],
+      },
+    ]),
+  ),
+  now: () => DateTime(2026, 8, 20, 12, 0),
+);
 
 const _welcome = FlutterRemoteControlResponse_Welcome(
   targetName: 'Living Room',
@@ -168,14 +168,16 @@ const _welcome = FlutterRemoteControlResponse_Welcome(
 void main() {
   group('MydiaCastBackend discovery', () {
     test('lists reachable devices and omits this one', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          _welcome,
-          FlutterRemoteControlResponse_State(
-            _snapshot(state: FlutterPlaybackState.playing, title: 'Dune'),
-          ),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            _welcome,
+            FlutterRemoteControlResponse_State(
+              _snapshot(state: FlutterPlaybackState.playing, title: 'Dune'),
+            ),
+          ],
+        },
+      );
 
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv'), ('d2', 'node-self')]),
@@ -189,50 +191,66 @@ void main() {
 
       expect(devices.map((d) => d.id), ['node-tv']);
       expect(devices.single.protocol, CastProtocolKind.mydia);
-      expect(devices.single.name, 'Living Room',
-          reason: 'the name comes from the target itself, not the roster row');
-      expect(devices.single.metadata['nowPlayingTitle'], 'Dune',
-          reason: 'the discovery GetState follow-up succeeded while playing');
-    });
-
-    test('lists the instances that know a device in metadata sources',
-        () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [_welcome, const FlutterRemoteControlResponse_NotPlaying()],
-      });
-      final merged = MergedRoster({
-        const SourceId('mydia-a'): rosterOf([('d1', 'node-tv')]),
-        const SourceId('mydia-b'): rosterOf([('d7', 'NODE-TV')]),
-      });
-
-      final backend = MydiaCastBackend(
-        roster: merged,
-        instancesOf: merged.instancesOf,
-        transport: transport,
-        selfNodeId: 'node-self',
+      expect(
+        devices.single.name,
+        'Living Room',
+        reason: 'the name comes from the target itself, not the roster row',
       );
-
-      final devices = await backend
-          .startDiscovery(capabilities: const CastCapabilities.full())
-          .first;
-
-      expect(devices, hasLength(1));
-      expect(devices.single.metadata['sources'], 'mydia-a,mydia-b');
-      expect(sourceIdsOfCastDevice(devices.single),
-          [const SourceId('mydia-a'), const SourceId('mydia-b')]);
+      expect(
+        devices.single.metadata['nowPlayingTitle'],
+        'Dune',
+        reason: 'the discovery GetState follow-up succeeded while playing',
+      );
     });
 
     test(
-        'omits nowPlayingTitle when the GetState follow-up confirms the '
+      'lists the instances that know a device in metadata sources',
+      () async {
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              const FlutterRemoteControlResponse_NotPlaying(),
+            ],
+          },
+        );
+        final merged = MergedRoster({
+          const SourceId('mydia-a'): rosterOf([('d1', 'node-tv')]),
+          const SourceId('mydia-b'): rosterOf([('d7', 'NODE-TV')]),
+        });
+
+        final backend = MydiaCastBackend(
+          roster: merged,
+          instancesOf: merged.instancesOf,
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+
+        final devices = await backend
+            .startDiscovery(capabilities: const CastCapabilities.full())
+            .first;
+
+        expect(devices, hasLength(1));
+        expect(devices.single.metadata['sources'], 'mydia-a,mydia-b');
+        expect(sourceIdsOfCastDevice(devices.single), [
+          const SourceId('mydia-a'),
+          const SourceId('mydia-b'),
+        ]);
+      },
+    );
+
+    test('omits nowPlayingTitle when the GetState follow-up confirms the '
         'target genuinely idle', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          _welcome,
-          FlutterRemoteControlResponse_State(
-            _snapshot(state: FlutterPlaybackState.idle),
-          ),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            _welcome,
+            FlutterRemoteControlResponse_State(
+              _snapshot(state: FlutterPlaybackState.idle),
+            ),
+          ],
+        },
+      );
 
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
@@ -244,27 +262,32 @@ void main() {
           .startDiscovery(capabilities: const CastCapabilities.full())
           .first;
 
-      expect(devices.single.metadata.containsKey('nowPlayingTitle'), isFalse,
-          reason: 'GetState succeeded and confirmed nothing is loaded at '
-              'all, so the fallback title never applies');
+      expect(
+        devices.single.metadata.containsKey('nowPlayingTitle'),
+        isFalse,
+        reason:
+            'GetState succeeded and confirmed nothing is loaded at '
+            'all, so the fallback title never applies',
+      );
     });
 
-    test(
-        'sets nowPlayingTitle for a paused target too, so adopting it does '
+    test('sets nowPlayingTitle for a paused target too, so adopting it does '
         'not clobber a resumable session', () async {
       // Picking a device from the list dials `connectTo`, which restarts
       // playback outright for anything this probe does not flag as
       // adoptable (see `isPlayingMydiaTarget`). A paused target is just as
       // mid-watch as a playing one — only a target confirmed genuinely idle
       // (see the sibling test above) should read that way.
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          _welcome,
-          FlutterRemoteControlResponse_State(
-            _snapshot(state: FlutterPlaybackState.paused, title: 'Arrival'),
-          ),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            _welcome,
+            FlutterRemoteControlResponse_State(
+              _snapshot(state: FlutterPlaybackState.paused, title: 'Arrival'),
+            ),
+          ],
+        },
+      );
 
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
@@ -279,8 +302,7 @@ void main() {
       expect(devices.single.metadata['nowPlayingTitle'], 'Arrival');
     });
 
-    test(
-        'flags statusUnavailable when Hello succeeds but the GetState '
+    test('flags statusUnavailable when Hello succeeds but the GetState '
         'follow-up fails', () async {
       // Different from "omits a device that does not answer" below: this
       // target IS reachable (Hello worked, so it stays listed), but its
@@ -328,13 +350,14 @@ void main() {
   });
 
   group('MydiaCastBackend connect', () {
-    test(
-        'throws and clears connectedDevice when Hello is answered with '
+    test('throws and clears connectedDevice when Hello is answered with '
         'NotAuthorized, and never starts a poll timer', () {
       fakeAsync((async) {
-        final transport = FakeTransport(scripted: {
-          'node-tv': [const FlutterRemoteControlResponse_NotAuthorized()],
-        });
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [const FlutterRemoteControlResponse_NotAuthorized()],
+          },
+        );
         final backend = MydiaCastBackend(
           roster: rosterOf([('d1', 'node-tv')]),
           transport: transport,
@@ -342,21 +365,31 @@ void main() {
         );
 
         Object? caught;
-        unawaited(backend.connect(_connectedDevice).catchError((Object e) {
-          caught = e;
-        }));
+        unawaited(
+          backend.connect(_connectedDevice).catchError((Object e) {
+            caught = e;
+          }),
+        );
         async.flushMicrotasks();
 
-        expect(caught, isA<CastBackendException>(),
-            reason: 'a refused Hello must fail connect(), not silently '
-                'commit a connected session');
+        expect(
+          caught,
+          isA<CastBackendException>(),
+          reason:
+              'a refused Hello must fail connect(), not silently '
+              'commit a connected session',
+        );
         expect(
           (caught as CastBackendException).kind,
           CastFailureKind.notAuthorized,
         );
-        expect(backend.connectedDevice, isNull,
-            reason: 'a refused Hello must not leave connectedDevice naming '
-                'a target that refused this device');
+        expect(
+          backend.connectedDevice,
+          isNull,
+          reason:
+              'a refused Hello must not leave connectedDevice naming '
+              'a target that refused this device',
+        );
 
         // No poll timer was ever armed against the refusing target:
         // elapsing well past both poll cadences (1s visible, 5s background)
@@ -372,47 +405,59 @@ void main() {
       });
     });
 
-    test('throws CastBackendException for any other non-Welcome answer too',
-        () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [const FlutterRemoteControlResponse_Error('boom')],
-      });
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-tv')]),
-        transport: transport,
-        selfNodeId: 'node-self',
-      );
+    test(
+      'throws CastBackendException for any other non-Welcome answer too',
+      () async {
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [const FlutterRemoteControlResponse_Error('boom')],
+          },
+        );
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
 
-      await expectLater(
-        backend.connect(_connectedDevice),
-        throwsA(isA<CastBackendException>()),
-      );
-      expect(backend.connectedDevice, isNull);
-    });
+        await expectLater(
+          backend.connect(_connectedDevice),
+          throwsA(isA<CastBackendException>()),
+        );
+        expect(backend.connectedDevice, isNull);
+      },
+    );
 
-    test('clears connectedDevice when the transport itself throws on Hello',
-        () async {
-      final transport = FakeTransport(unreachable: {'node-tv'});
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-tv')]),
-        transport: transport,
-        selfNodeId: 'node-self',
-      );
+    test(
+      'clears connectedDevice when the transport itself throws on Hello',
+      () async {
+        final transport = FakeTransport(unreachable: {'node-tv'});
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
 
-      await expectLater(
-        backend.connect(_connectedDevice),
-        throwsA(isA<CastBackendException>()),
-      );
-      expect(backend.connectedDevice, isNull,
-          reason: 'a target the transport never reached must not be named '
-              'as connected');
-    });
+        await expectLater(
+          backend.connect(_connectedDevice),
+          throwsA(isA<CastBackendException>()),
+        );
+        expect(
+          backend.connectedDevice,
+          isNull,
+          reason:
+              'a target the transport never reached must not be named '
+              'as connected',
+        );
+      },
+    );
 
     test('succeeds and starts polling when Hello answers Welcome', () {
       fakeAsync((async) {
-        final transport = FakeTransport(scripted: {
-          'node-tv': [_welcome],
-        });
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [_welcome],
+          },
+        );
         final backend = MydiaCastBackend(
           roster: rosterOf([('d1', 'node-tv')]),
           transport: transport,
@@ -435,25 +480,26 @@ void main() {
       });
     });
 
-    test(
-        'throws and clears connectedDevice when Welcome reports an '
+    test('throws and clears connectedDevice when Welcome reports an '
         'incompatible protocol version', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          const FlutterRemoteControlResponse_Welcome(
-            targetName: 'Living Room',
-            // One past whatever this build actually speaks — not hardcoded
-            // to a literal, so this stays a mismatch even if
-            // `remoteControlProtocolVersion` is ever bumped.
-            protocolVersion: remoteControlProtocolVersion + 1,
-            capabilities: FlutterTargetCapabilities(
-              volume: true,
-              trackSelection: true,
-              nextPrevious: false,
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            const FlutterRemoteControlResponse_Welcome(
+              targetName: 'Living Room',
+              // One past whatever this build actually speaks — not hardcoded
+              // to a literal, so this stays a mismatch even if
+              // `remoteControlProtocolVersion` is ever bumped.
+              protocolVersion: remoteControlProtocolVersion + 1,
+              capabilities: FlutterTargetCapabilities(
+                volume: true,
+                trackSelection: true,
+                nextPrevious: false,
+              ),
             ),
-          ),
-        ],
-      });
+          ],
+        },
+      );
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
         transport: transport,
@@ -464,27 +510,32 @@ void main() {
         backend.connect(_connectedDevice),
         throwsA(isA<CastBackendException>()),
       );
-      expect(backend.connectedDevice, isNull,
-          reason: 'a protocol mismatch must not be recorded as a live, '
-              'connected session');
+      expect(
+        backend.connectedDevice,
+        isNull,
+        reason:
+            'a protocol mismatch must not be recorded as a live, '
+            'connected session',
+      );
     });
 
-    test(
-        'discovery does not offer a target reporting an incompatible '
+    test('discovery does not offer a target reporting an incompatible '
         'protocol version', () async {
-      final transport = FakeTransport(scripted: {
-        'node-old': [
-          const FlutterRemoteControlResponse_Welcome(
-            targetName: 'Old Build',
-            protocolVersion: remoteControlProtocolVersion + 1,
-            capabilities: FlutterTargetCapabilities(
-              volume: true,
-              trackSelection: true,
-              nextPrevious: false,
+      final transport = FakeTransport(
+        scripted: {
+          'node-old': [
+            const FlutterRemoteControlResponse_Welcome(
+              targetName: 'Old Build',
+              protocolVersion: remoteControlProtocolVersion + 1,
+              capabilities: FlutterTargetCapabilities(
+                volume: true,
+                trackSelection: true,
+                nextPrevious: false,
+              ),
             ),
-          ),
-        ],
-      });
+          ],
+        },
+      );
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-old')]),
         transport: transport,
@@ -500,8 +551,7 @@ void main() {
   });
 
   group('MydiaCastBackend dispose', () {
-    test(
-        'a command answer landing after dispose does not throw on the '
+    test('a command answer landing after dispose does not throw on the '
         'closed streams', () async {
       final transport = _StallingTransport();
       final backend = MydiaCastBackend(
@@ -526,46 +576,51 @@ void main() {
       // events after calling close` — which surfaces as an error on
       // `playFuture` since `_handleResponse` runs outside `_sendCommand`'s
       // own try/catch.
-      transport.pending.complete(FlutterRemoteControlResponse_State(
-        _snapshot(),
-      ));
+      transport.pending.complete(
+        FlutterRemoteControlResponse_State(_snapshot()),
+      );
 
       await expectLater(playFuture, completes);
     });
   });
 
   group('MydiaCastBackend commands', () {
-    test(
-        'sends the load-content payload with real field values, not just '
+    test('sends the load-content payload with real field values, not just '
         'the right envelope', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [_welcome]
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [_welcome],
+        },
+      );
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
         transport: transport,
         selfNodeId: 'node-self',
       );
 
-      await backend.connect(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv'},
-      ));
-
-      await backend.loadMedia(const CastMediaRequest(
-        url: '',
-        kind: CastMediaKind.hls,
-        title: 'Blade Runner',
-        startPosition: Duration(seconds: 30),
-        contentRef: MydiaContentRef(
-          mediaItemId: 'item-1',
-          episodeId: 'ep-4',
-          audioTrack: 'audio-eng',
-          subtitleTrack: 'sub-fre',
+      await backend.connect(
+        const CastDevice(
+          id: 'node-tv',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-tv'},
         ),
-      ));
+      );
+
+      await backend.loadMedia(
+        const CastMediaRequest(
+          url: '',
+          kind: CastMediaKind.hls,
+          title: 'Blade Runner',
+          startPosition: Duration(seconds: 30),
+          contentRef: MydiaContentRef(
+            mediaItemId: 'item-1',
+            episodeId: 'ep-4',
+            audioTrack: 'audio-eng',
+            subtitleTrack: 'sub-fre',
+          ),
+        ),
+      );
 
       final loadRequests = transport.requests
           .whereType<FlutterRemoteControlRequest_LoadContent>();
@@ -580,64 +635,77 @@ void main() {
       expect(payload.serverInstanceId, isNull);
     });
 
-    test('LoadContent names the Mydia server the content ref carries',
-        () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [_welcome]
-      });
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-tv')]),
-        transport: transport,
-        selfNodeId: 'node-self',
-      );
-
-      await backend.connect(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv'},
-      ));
-
-      await backend.loadMedia(const CastMediaRequest(
-        url: '',
-        kind: CastMediaKind.hls,
-        title: 'Copper Weather',
-        contentRef: MydiaContentRef(
-          mediaItemId: 'item-1',
-          episodeId: null,
-          audioTrack: null,
-          subtitleTrack: null,
-          serverInstanceId: 'inst-b',
-        ),
-      ));
-
-      final load = transport.requests
-          .whereType<FlutterRemoteControlRequest_LoadContent>()
-          .single
-          .field0;
-      expect(load.serverInstanceId, 'inst-b');
-    });
-
     test(
-        'discards a stale sequence number so a slower poll cannot regress '
+      'LoadContent names the Mydia server the content ref carries',
+      () async {
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [_welcome],
+          },
+        );
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+
+        await backend.connect(
+          const CastDevice(
+            id: 'node-tv',
+            name: 'Living Room',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-tv'},
+          ),
+        );
+
+        await backend.loadMedia(
+          const CastMediaRequest(
+            url: '',
+            kind: CastMediaKind.hls,
+            title: 'Copper Weather',
+            contentRef: MydiaContentRef(
+              mediaItemId: 'item-1',
+              episodeId: null,
+              audioTrack: null,
+              subtitleTrack: null,
+              serverInstanceId: 'inst-b',
+            ),
+          ),
+        );
+
+        final load = transport.requests
+            .whereType<FlutterRemoteControlRequest_LoadContent>()
+            .single
+            .field0;
+        expect(load.serverInstanceId, 'inst-b');
+      },
+    );
+
+    test('discards a stale sequence number so a slower poll cannot regress '
         'state', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          _welcome,
-          FlutterRemoteControlResponse_State(_snapshot(
-            state: FlutterPlaybackState.playing,
-            positionMs: BigInt.from(10000),
-            durationMs: BigInt.from(60000),
-            sequence: BigInt.from(5),
-          )),
-          FlutterRemoteControlResponse_State(_snapshot(
-            state: FlutterPlaybackState.playing,
-            positionMs: BigInt.from(1000),
-            durationMs: BigInt.from(60000),
-            sequence: BigInt.from(3), // stale: lower than the seq-5 above
-          )),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            _welcome,
+            FlutterRemoteControlResponse_State(
+              _snapshot(
+                state: FlutterPlaybackState.playing,
+                positionMs: BigInt.from(10000),
+                durationMs: BigInt.from(60000),
+                sequence: BigInt.from(5),
+              ),
+            ),
+            FlutterRemoteControlResponse_State(
+              _snapshot(
+                state: FlutterPlaybackState.playing,
+                positionMs: BigInt.from(1000),
+                durationMs: BigInt.from(60000),
+                sequence: BigInt.from(3), // stale: lower than the seq-5 above
+              ),
+            ),
+          ],
+        },
+      );
 
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
@@ -662,187 +730,228 @@ void main() {
       await backend.play();
       await Future<void>.delayed(Duration.zero);
 
-      expect(positions, isNot(contains(const Duration(milliseconds: 1000))),
-          reason:
-              'the stale, lower-sequence snapshot must never reach the stream');
+      expect(
+        positions,
+        isNot(contains(const Duration(milliseconds: 1000))),
+        reason:
+            'the stale, lower-sequence snapshot must never reach the stream',
+      );
     });
 
     test('refuses a request with no content reference', () async {
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
-        transport: FakeTransport(scripted: {
-          'node-tv': [_welcome]
-        }),
+        transport: FakeTransport(
+          scripted: {
+            'node-tv': [_welcome],
+          },
+        ),
         selfNodeId: 'node-self',
       );
 
-      await backend.connect(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv'},
-      ));
+      await backend.connect(
+        const CastDevice(
+          id: 'node-tv',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-tv'},
+        ),
+      );
 
       expect(
-        () => backend.loadMedia(const CastMediaRequest(
-          url: 'https://example.test/index.m3u8',
-          kind: CastMediaKind.hls,
-          title: 'Blade Runner',
-        )),
+        () => backend.loadMedia(
+          const CastMediaRequest(
+            url: 'https://example.test/index.m3u8',
+            kind: CastMediaKind.hls,
+            title: 'Blade Runner',
+          ),
+        ),
         throwsA(isA<CastBackendException>()),
       );
     });
 
-    test('maps a NotAuthorized answer onto the notAuthorized failure',
-        () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          _welcome,
-          const FlutterRemoteControlResponse_NotAuthorized(),
-        ],
-      });
+    test(
+      'maps a NotAuthorized answer onto the notAuthorized failure',
+      () async {
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              const FlutterRemoteControlResponse_NotAuthorized(),
+            ],
+          },
+        );
 
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-tv')]),
-        transport: transport,
-        selfNodeId: 'node-self',
-      );
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
 
-      await backend.connect(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv'},
-      ));
+        await backend.connect(
+          const CastDevice(
+            id: 'node-tv',
+            name: 'Living Room',
+            protocol: CastProtocolKind.mydia,
+            metadata: {'nodeId': 'node-tv'},
+          ),
+        );
 
-      final failures = <CastFailureKind>[];
-      backend.failureStream.listen(failures.add);
+        final failures = <CastFailureKind>[];
+        backend.failureStream.listen(failures.add);
 
-      await backend.play();
-      await Future<void>.delayed(Duration.zero);
+        await backend.play();
+        await Future<void>.delayed(Duration.zero);
 
-      expect(failures, contains(CastFailureKind.notAuthorized));
-    });
+        expect(failures, contains(CastFailureKind.notAuthorized));
+      },
+    );
 
     test('reports capabilities from the target Welcome', () async {
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
-        transport: FakeTransport(scripted: {
-          'node-tv': [_welcome]
-        }),
+        transport: FakeTransport(
+          scripted: {
+            'node-tv': [_welcome],
+          },
+        ),
         selfNodeId: 'node-self',
       );
 
-      await backend.connect(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
-        protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv'},
-      ));
+      await backend.connect(
+        const CastDevice(
+          id: 'node-tv',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-tv'},
+        ),
+      );
 
       expect(backend.capabilities.volume, isTrue);
-      expect(backend.capabilities.nextPrevious, isFalse,
-          reason: 'the target said it cannot step episodes');
-    });
-
-    test('treats a decode failure on Hello as a target that is too old',
-        () async {
-      final transport = FakeTransport(unreachable: {'node-old'});
-
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-old')]),
-        transport: transport,
-        selfNodeId: 'node-self',
+      expect(
+        backend.capabilities.nextPrevious,
+        isFalse,
+        reason: 'the target said it cannot step episodes',
       );
-
-      final devices = await backend
-          .startDiscovery(capabilities: const CastCapabilities.full())
-          .first;
-
-      // An old build cannot decode the new outer variant at all, so Hello
-      // fails. The device is simply not offered.
-      expect(devices, isEmpty);
     });
+
+    test(
+      'treats a decode failure on Hello as a target that is too old',
+      () async {
+        final transport = FakeTransport(unreachable: {'node-old'});
+
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-old')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+
+        final devices = await backend
+            .startDiscovery(capabilities: const CastCapabilities.full())
+            .first;
+
+        // An old build cannot decode the new outer variant at all, so Hello
+        // fails. The device is simply not offered.
+        expect(devices, isEmpty);
+      },
+    );
   });
 
   group('MydiaCastBackend snapshot bridge', () {
-    test('lastSnapshot exposes what the generic streams collapse away',
-        () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          _welcome,
-          FlutterRemoteControlResponse_State(_snapshot(
-            state: FlutterPlaybackState.playing,
-            mediaItemId: 'item-1',
-            episodeId: 'ep-2',
-            title: 'Blade Runner',
-          )),
-        ],
-      });
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-tv')]),
-        transport: transport,
-        selfNodeId: 'node-self',
-      );
+    test(
+      'lastSnapshot exposes what the generic streams collapse away',
+      () async {
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              FlutterRemoteControlResponse_State(
+                _snapshot(
+                  state: FlutterPlaybackState.playing,
+                  mediaItemId: 'item-1',
+                  episodeId: 'ep-2',
+                  title: 'Blade Runner',
+                ),
+              ),
+            ],
+          },
+        );
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
 
-      expect(backend.lastSnapshot, isNull,
-          reason: 'nothing has been polled yet');
+        expect(
+          backend.lastSnapshot,
+          isNull,
+          reason: 'nothing has been polled yet',
+        );
 
-      await backend.connect(_connectedDevice);
-      await backend.play();
+        await backend.connect(_connectedDevice);
+        await backend.play();
 
-      // `positionStream`/`durationStream`/`stateStream` only ever carry a
-      // `Duration` or an enum value — mediaItemId and episodeId have no
-      // channel of their own on `CastBackend` at all. This is the seam that
-      // closes that gap.
-      expect(backend.lastSnapshot?.mediaItemId, 'item-1');
-      expect(backend.lastSnapshot?.episodeId, 'ep-2');
-    });
+        // `positionStream`/`durationStream`/`stateStream` only ever carry a
+        // `Duration` or an enum value — mediaItemId and episodeId have no
+        // channel of their own on `CastBackend` at all. This is the seam that
+        // closes that gap.
+        expect(backend.lastSnapshot?.mediaItemId, 'item-1');
+        expect(backend.lastSnapshot?.episodeId, 'ep-2');
+      },
+    );
 
-    test('a stale, lower-sequence snapshot never overwrites lastSnapshot',
-        () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          _welcome,
-          FlutterRemoteControlResponse_State(_snapshot(
-            mediaItemId: 'item-fresh',
-            sequence: BigInt.from(5),
-          )),
-          FlutterRemoteControlResponse_State(_snapshot(
-            mediaItemId: 'item-stale',
-            sequence: BigInt.from(3),
-          )),
-        ],
-      });
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-tv')]),
-        transport: transport,
-        selfNodeId: 'node-self',
-      );
+    test(
+      'a stale, lower-sequence snapshot never overwrites lastSnapshot',
+      () async {
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              FlutterRemoteControlResponse_State(
+                _snapshot(mediaItemId: 'item-fresh', sequence: BigInt.from(5)),
+              ),
+              FlutterRemoteControlResponse_State(
+                _snapshot(mediaItemId: 'item-stale', sequence: BigInt.from(3)),
+              ),
+            ],
+          },
+        );
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
 
-      await backend.connect(_connectedDevice);
-      // Same trigger `_applySnapshot`'s own sequence test uses: `play()`
-      // consumes the fresh snapshot as its own response, then its follow-up
-      // poll (`_sendCommand`) consumes the stale one.
-      await backend.play();
+        await backend.connect(_connectedDevice);
+        // Same trigger `_applySnapshot`'s own sequence test uses: `play()`
+        // consumes the fresh snapshot as its own response, then its follow-up
+        // poll (`_sendCommand`) consumes the stale one.
+        await backend.play();
 
-      expect(backend.lastSnapshot?.mediaItemId, 'item-fresh',
-          reason: 'the same ordering guard `_applySnapshot` uses for the '
+        expect(
+          backend.lastSnapshot?.mediaItemId,
+          'item-fresh',
+          reason:
+              'the same ordering guard `_applySnapshot` uses for the '
               'generic streams also protects this seam — it is the same '
               'cached field, not a second one a stale poll could desync '
-              'from the first');
-    });
+              'from the first',
+        );
+      },
+    );
   });
 
   group('MydiaCastBackend probeReceiverContentUrl', () {
     test('reports mediaItemId:episodeId when an episode is loaded', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          FlutterRemoteControlResponse_State(
-            _snapshot(mediaItemId: 'item-1', episodeId: 'ep-2'),
-          ),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            FlutterRemoteControlResponse_State(
+              _snapshot(mediaItemId: 'item-1', episodeId: 'ep-2'),
+            ),
+          ],
+        },
+      );
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
         transport: transport,
@@ -854,28 +963,36 @@ void main() {
       expect(url, 'item-1:ep-2');
     });
 
-    test('reports just the mediaItemId when nothing episodic is loaded',
-        () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          FlutterRemoteControlResponse_State(_snapshot(mediaItemId: 'item-1')),
-        ],
-      });
-      final backend = MydiaCastBackend(
-        roster: rosterOf([('d1', 'node-tv')]),
-        transport: transport,
-        selfNodeId: 'node-self',
-      );
+    test(
+      'reports just the mediaItemId when nothing episodic is loaded',
+      () async {
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              FlutterRemoteControlResponse_State(
+                _snapshot(mediaItemId: 'item-1'),
+              ),
+            ],
+          },
+        );
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
 
-      final url = await backend.probeReceiverContentUrl(_connectedDevice);
+        final url = await backend.probeReceiverContentUrl(_connectedDevice);
 
-      expect(url, 'item-1');
-    });
+        expect(url, 'item-1');
+      },
+    );
 
     test('cannot tell what is loaded when nothing is mounted', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [const FlutterRemoteControlResponse_NotPlaying()],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [const FlutterRemoteControlResponse_NotPlaying()],
+        },
+      );
       final backend = MydiaCastBackend(
         roster: rosterOf([('d1', 'node-tv')]),
         transport: transport,
@@ -902,32 +1019,37 @@ void main() {
 
   group('probeMydiaNodeState', () {
     test('answers the snapshot for a node that is playing', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          FlutterRemoteControlResponse_State(
-            _snapshot(state: FlutterPlaybackState.playing, title: 'Arrival'),
-          ),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            FlutterRemoteControlResponse_State(
+              _snapshot(state: FlutterPlaybackState.playing, title: 'Arrival'),
+            ),
+          ],
+        },
+      );
 
       final snapshot = await probeMydiaNodeState(transport, 'node-tv');
 
       expect(snapshot?.title, 'Arrival');
-      expect(transport.sent, ['node-tv:FlutterRemoteControlRequest_GetState'],
-          reason: 'no Hello, no connect — just the one GetState');
+      expect(transport.sent, [
+        'node-tv:FlutterRemoteControlRequest_GetState',
+      ], reason: 'no Hello, no connect — just the one GetState');
     });
 
     test('answers the snapshot for a node that is paused too', () async {
       // Matches `isPlayingMydiaTarget`'s own reasoning: a paused-but-
       // resumable session is exactly the kind of thing ambient awareness
       // exists to surface, not something to treat as idle.
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          FlutterRemoteControlResponse_State(
-            _snapshot(state: FlutterPlaybackState.paused, title: 'Arrival'),
-          ),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            FlutterRemoteControlResponse_State(
+              _snapshot(state: FlutterPlaybackState.paused, title: 'Arrival'),
+            ),
+          ],
+        },
+      );
 
       final snapshot = await probeMydiaNodeState(transport, 'node-tv');
 
@@ -935,21 +1057,25 @@ void main() {
     });
 
     test('answers null for a node that is genuinely idle', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [
-          FlutterRemoteControlResponse_State(
-            _snapshot(state: FlutterPlaybackState.idle),
-          ),
-        ],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [
+            FlutterRemoteControlResponse_State(
+              _snapshot(state: FlutterPlaybackState.idle),
+            ),
+          ],
+        },
+      );
 
       expect(await probeMydiaNodeState(transport, 'node-tv'), isNull);
     });
 
     test('answers null when the node has nothing mounted at all', () async {
-      final transport = FakeTransport(scripted: {
-        'node-tv': [const FlutterRemoteControlResponse_NotPlaying()],
-      });
+      final transport = FakeTransport(
+        scripted: {
+          'node-tv': [const FlutterRemoteControlResponse_NotPlaying()],
+        },
+      );
 
       expect(await probeMydiaNodeState(transport, 'node-tv'), isNull);
     });
@@ -971,14 +1097,16 @@ void main() {
 
         FlutterPlaybackSnapshot? result;
         var completed = false;
-        unawaited(probeMydiaNodeState(
-          transport,
-          'node-tv',
-          timeout: const Duration(seconds: 3),
-        ).then((snapshot) {
-          result = snapshot;
-          completed = true;
-        }));
+        unawaited(
+          probeMydiaNodeState(
+            transport,
+            'node-tv',
+            timeout: const Duration(seconds: 3),
+          ).then((snapshot) {
+            result = snapshot;
+            completed = true;
+          }),
+        );
 
         async.elapse(const Duration(seconds: 3));
 
@@ -989,13 +1117,14 @@ void main() {
   });
 
   group('MydiaCastBackend poll cadence', () {
-    test(
-        'polls at 1 Hz while the remote UI is visible; hiding it moves the '
+    test('polls at 1 Hz while the remote UI is visible; hiding it moves the '
         'next tick to 5s', () {
       fakeAsync((async) {
-        final transport = FakeTransport(scripted: {
-          'node-tv': [_welcome],
-        });
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [_welcome],
+          },
+        );
         final backend = MydiaCastBackend(
           roster: rosterOf([('d1', 'node-tv')]),
           transport: transport,
@@ -1008,8 +1137,11 @@ void main() {
         int getStateCount() =>
             transport.sent.where((s) => s.contains('GetState')).length;
 
-        expect(getStateCount(), 0,
-            reason: 'only the connect Hello has gone out so far');
+        expect(
+          getStateCount(),
+          0,
+          reason: 'only the connect Hello has gone out so far',
+        );
 
         async.elapse(const Duration(seconds: 1));
         expect(getStateCount(), 1);
@@ -1036,17 +1168,21 @@ void main() {
     test('advances the published position while playing, between polls', () {
       fakeAsync((async) {
         DateTime now = DateTime(2026, 8, 20, 12, 0);
-        final transport = FakeTransport(scripted: {
-          'node-tv': [
-            _welcome,
-            FlutterRemoteControlResponse_State(_snapshot(
-              state: FlutterPlaybackState.playing,
-              positionMs: BigInt.from(10000),
-              durationMs: BigInt.from(60000),
-              sequence: BigInt.from(1),
-            )),
-          ],
-        });
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              FlutterRemoteControlResponse_State(
+                _snapshot(
+                  state: FlutterPlaybackState.playing,
+                  positionMs: BigInt.from(10000),
+                  durationMs: BigInt.from(60000),
+                  sequence: BigInt.from(1),
+                ),
+              ),
+            ],
+          },
+        );
         final backend = MydiaCastBackend(
           roster: rosterOf([('d1', 'node-tv')]),
           transport: transport,
@@ -1078,17 +1214,21 @@ void main() {
     test('freezes the published position once the target is paused', () {
       fakeAsync((async) {
         DateTime now = DateTime(2026, 8, 20, 12, 0);
-        final transport = FakeTransport(scripted: {
-          'node-tv': [
-            _welcome,
-            FlutterRemoteControlResponse_State(_snapshot(
-              state: FlutterPlaybackState.paused,
-              positionMs: BigInt.from(12000),
-              durationMs: BigInt.from(60000),
-              sequence: BigInt.from(1),
-            )),
-          ],
-        });
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              FlutterRemoteControlResponse_State(
+                _snapshot(
+                  state: FlutterPlaybackState.paused,
+                  positionMs: BigInt.from(12000),
+                  durationMs: BigInt.from(60000),
+                  sequence: BigInt.from(1),
+                ),
+              ),
+            ],
+          },
+        );
         final backend = MydiaCastBackend(
           roster: rosterOf([('d1', 'node-tv')]),
           transport: transport,
@@ -1116,22 +1256,25 @@ void main() {
       });
     });
 
-    test(
-        'clamps the published position at duration rather than running '
+    test('clamps the published position at duration rather than running '
         'past it', () {
       fakeAsync((async) {
         DateTime now = DateTime(2026, 8, 20, 12, 0);
-        final transport = FakeTransport(scripted: {
-          'node-tv': [
-            _welcome,
-            FlutterRemoteControlResponse_State(_snapshot(
-              state: FlutterPlaybackState.playing,
-              positionMs: BigInt.from(59000),
-              durationMs: BigInt.from(60000),
-              sequence: BigInt.from(1),
-            )),
-          ],
-        });
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              FlutterRemoteControlResponse_State(
+                _snapshot(
+                  state: FlutterPlaybackState.playing,
+                  positionMs: BigInt.from(59000),
+                  durationMs: BigInt.from(60000),
+                  sequence: BigInt.from(1),
+                ),
+              ),
+            ],
+          },
+        );
         final backend = MydiaCastBackend(
           roster: rosterOf([('d1', 'node-tv')]),
           transport: transport,
@@ -1153,29 +1296,35 @@ void main() {
         now = now.add(const Duration(seconds: 5));
         async.elapse(const Duration(seconds: 5));
 
-        expect(positions.last, const Duration(milliseconds: 60000),
-            reason: 'clamped at duration, never running past it');
+        expect(
+          positions.last,
+          const Duration(milliseconds: 60000),
+          reason: 'clamped at duration, never running past it',
+        );
 
         backend.dispose();
       });
     });
 
-    test(
-        'never goes negative when the clock moves backward under the '
+    test('never goes negative when the clock moves backward under the '
         'captured snapshot time', () {
       fakeAsync((async) {
         DateTime now = DateTime(2026, 8, 20, 12, 0);
-        final transport = FakeTransport(scripted: {
-          'node-tv': [
-            _welcome,
-            FlutterRemoteControlResponse_State(_snapshot(
-              state: FlutterPlaybackState.playing,
-              positionMs: BigInt.from(5000),
-              durationMs: BigInt.from(60000),
-              sequence: BigInt.from(1),
-            )),
-          ],
-        });
+        final transport = FakeTransport(
+          scripted: {
+            'node-tv': [
+              _welcome,
+              FlutterRemoteControlResponse_State(
+                _snapshot(
+                  state: FlutterPlaybackState.playing,
+                  positionMs: BigInt.from(5000),
+                  durationMs: BigInt.from(60000),
+                  sequence: BigInt.from(1),
+                ),
+              ),
+            ],
+          },
+        );
         final backend = MydiaCastBackend(
           roster: rosterOf([('d1', 'node-tv')]),
           transport: transport,
@@ -1199,9 +1348,13 @@ void main() {
         now = now.subtract(const Duration(milliseconds: 200));
         async.elapse(const Duration(milliseconds: 500));
 
-        expect(positions.last, const Duration(milliseconds: 5000),
-            reason: 'a negative elapsed must never subtract from the base '
-                'position');
+        expect(
+          positions.last,
+          const Duration(milliseconds: 5000),
+          reason:
+              'a negative elapsed must never subtract from the base '
+              'position',
+        );
 
         backend.dispose();
       });
@@ -1212,8 +1365,7 @@ void main() {
     // What an app coming back from suspension looks like from in here: no
     // timer fired while it was away, so the wall clock jumps and the first
     // tick afterwards finds an answer far older than any poll allows.
-    test(
-        'flags syncing once the last answer is overdue, and clears it when '
+    test('flags syncing once the last answer is overdue, and clears it when '
         'the target answers again', () {
       fakeAsync((async) {
         var skew = Duration.zero;
@@ -1240,9 +1392,9 @@ void main() {
         expect(backend.isSyncing, isTrue);
         expect(syncing, [true]);
 
-        resumed.complete(FlutterRemoteControlResponse_State(
-          _snapshot(sequence: BigInt.two),
-        ));
+        resumed.complete(
+          FlutterRemoteControlResponse_State(_snapshot(sequence: BigInt.two)),
+        );
         async.flushMicrotasks();
         expect(backend.isSyncing, isFalse);
         expect(syncing, [true, false]);
@@ -1271,8 +1423,7 @@ void main() {
       });
     });
 
-    test(
-        'one failed poll keeps the session and retries; a second in a row '
+    test('one failed poll keeps the session and retries; a second in a row '
         'reports the connection lost', () {
       fakeAsync((async) {
         final transport = _GetStateTransport();

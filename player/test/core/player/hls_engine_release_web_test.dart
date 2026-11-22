@@ -24,7 +24,8 @@ JSAny? _eval(String source) =>
 /// A stand-in for hls.js. Defined in JS because the patch under test wraps a
 /// prototype method, which a Dart object has no way to offer.
 JSFunction _installStubHls() {
-  final hls = _eval('''
+  final hls =
+      _eval('''
 (function () {
   function Hls() { this.destroyed = 0; this.media = null; }
   Hls.isSupported = function () { return true; };
@@ -35,7 +36,8 @@ JSFunction _installStubHls() {
   };
   return Hls;
 })()
-''')! as JSFunction;
+''')!
+          as JSFunction;
   _window.setProperty('Hls'.toJS, hls);
   return hls;
 }
@@ -100,10 +102,11 @@ void main() {
     final video = _video();
     var pauses = 0;
     video.setProperty(
-        'pause'.toJS,
-        (() {
-          pauses++;
-        }).toJS);
+      'pause'.toJS,
+      (() {
+        pauses++;
+      }).toJS,
+    );
 
     releaseHlsOnElement(video);
 
@@ -140,10 +143,11 @@ void main() {
     final healthy = _attach(hls, video);
     var pauses = 0;
     video.setProperty(
-        'pause'.toJS,
-        (() {
-          pauses++;
-        }).toJS);
+      'pause'.toJS,
+      (() {
+        pauses++;
+      }).toJS,
+    );
 
     expect(() => releaseHlsOnElement(video), returnsNormally);
     expect(_destroyed(healthy), 1);
@@ -154,10 +158,11 @@ void main() {
     final video = _video();
     var pauses = 0;
     video.setProperty(
-        'pause'.toJS,
-        (() {
-          pauses++;
-        }).toJS);
+      'pause'.toJS,
+      (() {
+        pauses++;
+      }).toJS,
+    );
 
     expect(() => releaseHlsOnElement(video), returnsNormally);
     expect(pauses, 1);
@@ -169,10 +174,11 @@ void main() {
     final video = _video();
     var pauses = 0;
     video.setProperty(
-        'pause'.toJS,
-        (() {
-          pauses++;
-        }).toJS);
+      'pause'.toJS,
+      (() {
+        pauses++;
+      }).toJS,
+    );
 
     expect(() => releaseHlsOnElement(video), returnsNormally);
     expect(pauses, 1);

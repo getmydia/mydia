@@ -22,18 +22,21 @@ Future<(BackupTestDevice, BackupTestDevice)> _offered() async {
 }
 
 Future<void> _pump(WidgetTester tester, BackupTestDevice device) async {
-  await tester.pumpWidget(MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    builder: toastLayerBuilder,
-    home: Scaffold(body: PendingSourcesRow(service: device.service)),
-  ));
+  await tester.pumpWidget(
+    MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: toastLayerBuilder,
+      home: Scaffold(body: PendingSourcesRow(service: device.service)),
+    ),
+  );
   await tester.pump();
 }
 
 void main() {
-  testWidgets('lists the device the sources came from; Add adds them',
-      (tester) async {
+  testWidgets('lists the device the sources came from; Add adds them', (
+    tester,
+  ) async {
     final (tv, laptop) = (await tester.runAsync(_offered))!;
     addTearDown(() {
       tv.dispose();
@@ -45,12 +48,16 @@ void main() {
     expect(find.text('Night Harbor Plex'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('backup-pending-add')));
-    await settleEngine(tester,
-        until: () => laptop.service.pendingOffers.value.isEmpty);
+    await settleEngine(
+      tester,
+      until: () => laptop.service.pendingOffers.value.isEmpty,
+    );
 
     expect(laptop.putAccounts, ['p1']);
     expect(
-        find.byKey(const Key('backup-pending-Living Room TV')), findsNothing);
+      find.byKey(const Key('backup-pending-Living Room TV')),
+      findsNothing,
+    );
   });
 
   testWidgets('Dismiss forgets the offer', (tester) async {
@@ -62,12 +69,16 @@ void main() {
     await _pump(tester, laptop);
 
     await tester.tap(find.byKey(const Key('backup-pending-dismiss')));
-    await settleEngine(tester,
-        until: () => laptop.service.pendingOffers.value.isEmpty);
+    await settleEngine(
+      tester,
+      until: () => laptop.service.pendingOffers.value.isEmpty,
+    );
 
     expect(laptop.putAccounts, isEmpty);
     expect(
-        find.byKey(const Key('backup-pending-Living Room TV')), findsNothing);
+      find.byKey(const Key('backup-pending-Living Room TV')),
+      findsNothing,
+    );
     expect(laptop.meta.pendingAccounts(), isEmpty);
   });
 }

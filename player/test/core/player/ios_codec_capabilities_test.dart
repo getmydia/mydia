@@ -32,10 +32,10 @@ void main() {
     calls = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      calls++;
-      expect(call.method, 'hardwareVideoDecoders');
-      return respond();
-    });
+          calls++;
+          expect(call.method, 'hardwareVideoDecoders');
+          return respond();
+        });
   }
 
   tearDown(() {
@@ -47,17 +47,25 @@ void main() {
       applyIosHardwareDecode(full, isIos: isIos, channel: channel);
 
   group('applyIosHardwareDecode', () {
-    test('unsupported HEVC removes all four aliases and nothing else',
-        () async {
-      stub(() => {'hevc': false, 'av1': true});
+    test(
+      'unsupported HEVC removes all four aliases and nothing else',
+      () async {
+        stub(() => {'hevc': false, 'av1': true});
 
-      final profile = await apply();
+        final profile = await apply();
 
-      expect(
-          profile.videoCodecs, ['h264', 'vp9', 'vp09', 'av1', 'av01', 'mpeg2']);
-      expect(profile.audioCodecs, full.audioCodecs);
-      expect(profile.containers, full.containers);
-    });
+        expect(profile.videoCodecs, [
+          'h264',
+          'vp9',
+          'vp09',
+          'av1',
+          'av01',
+          'mpeg2',
+        ]);
+        expect(profile.audioCodecs, full.audioCodecs);
+        expect(profile.containers, full.containers);
+      },
+    );
 
     test('unsupported AV1 removes its aliases', () async {
       stub(() => {'hevc': true, 'av1': false});
@@ -132,7 +140,8 @@ void main() {
         return {'hevc': false, 'av1': true};
       });
       addTearDown(
-          () => messenger.setMockMethodCallHandler(defaultChannel, null));
+        () => messenger.setMockMethodCallHandler(defaultChannel, null),
+      );
 
       final profile = await applyIosHardwareDecode(full, isIos: true);
 

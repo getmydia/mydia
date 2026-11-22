@@ -62,7 +62,10 @@ Future<void> _pump(
   final source = testMydiaSourceOver(
     FakeMydiaTransport(),
     creds: const MydiaCredentials(
-        instanceId: 'i', accessToken: 'a', nodeAddr: 'node-1'),
+      instanceId: 'i',
+      accessToken: 'a',
+      nodeAddr: 'node-1',
+    ),
   );
   await tester.pumpWidget(
     ProviderScope(
@@ -103,8 +106,9 @@ void main() {
     expect(find.text('Connected through a relay'), findsOneWidget);
   });
 
-  testWidgets('omits the relay row entirely when there is no url',
-      (tester) async {
+  testWidgets('omits the relay row entirely when there is no url', (
+    tester,
+  ) async {
     await _pump(
       tester,
       status: const P2pStatus(
@@ -118,8 +122,9 @@ void main() {
     expect(find.text('Relay server'), findsNothing);
   });
 
-  testWidgets('reads zero peers as words rather than a bare zero',
-      (tester) async {
+  testWidgets('reads zero peers as words rather than a bare zero', (
+    tester,
+  ) async {
     await _pump(
       tester,
       status: const P2pStatus(
@@ -134,8 +139,9 @@ void main() {
     expect(find.text('0'), findsNothing);
   });
 
-  testWidgets('shows the node address when the peer link is up',
-      (tester) async {
+  testWidgets('shows the node address when the peer link is up', (
+    tester,
+  ) async {
     await _pump(
       tester,
       status: const P2pStatus(
@@ -150,8 +156,9 @@ void main() {
     expect(find.text('k51qzi5uqu5dabc'), findsOneWidget);
   });
 
-  testWidgets('copy diagnostics puts the details on the clipboard',
-      (tester) async {
+  testWidgets('copy diagnostics puts the details on the clipboard', (
+    tester,
+  ) async {
     final written = <String>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
@@ -224,8 +231,9 @@ void main() {
       expect(find.text('Last failure'), findsOneWidget);
     });
 
-    testWidgets('the copy button carries every row the screen shows',
-        (tester) async {
+    testWidgets('the copy button carries every row the screen shows', (
+      tester,
+    ) async {
       final written = <String>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -276,32 +284,45 @@ void main() {
     testWidgets('is present on macOS', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       try {
-        await _pump(tester,
-            status: const P2pStatus.initial(),
-            settings: SettingsService(storage: MockAuthStorage()));
+        await _pump(
+          tester,
+          status: const P2pStatus.initial(),
+          settings: SettingsService(storage: MockAuthStorage()),
+        );
         await tester.pump();
 
         expect(
-            find.byKey(const Key('legacy-mac-video-output')), findsOneWidget);
+          find.byKey(const Key('legacy-mac-video-output')),
+          findsOneWidget,
+        );
         expect(
-            find.byKey(const Key('mac-video-output-status')), findsOneWidget);
+          find.byKey(const Key('mac-video-output-status')),
+          findsOneWidget,
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
     });
 
-    testWidgets('waits for both reads before reporting an output',
-        (tester) async {
+    testWidgets('waits for both reads before reporting an output', (
+      tester,
+    ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       try {
         final settings = _HeldOutputReads();
-        await _pump(tester,
-            status: const P2pStatus.initial(), settings: settings);
+        await _pump(
+          tester,
+          status: const P2pStatus.initial(),
+          settings: settings,
+        );
 
         final toggle = find.byKey(const Key('legacy-mac-video-output'));
         expect(toggle, findsOneWidget);
-        expect(tester.widget<SettingsRow>(toggle).onChanged, isNull,
-            reason: 'the switch cannot be trusted before its value loads');
+        expect(
+          tester.widget<SettingsRow>(toggle).onChanged,
+          isNull,
+          reason: 'the switch cannot be trusted before its value loads',
+        );
         expect(find.byKey(const Key('mac-video-output-status')), findsNothing);
 
         settings.releaseHatch.complete();
@@ -309,15 +330,20 @@ void main() {
         await tester.pump();
 
         expect(tester.widget<SettingsRow>(toggle).onChanged, isNotNull);
-        expect(find.byKey(const Key('mac-video-output-status')), findsNothing,
-            reason: 'the failure marker has not been read yet');
+        expect(
+          find.byKey(const Key('mac-video-output-status')),
+          findsNothing,
+          reason: 'the failure marker has not been read yet',
+        );
 
         settings.releaseMarker.complete();
         await tester.pump();
         await tester.pump();
 
         expect(
-            find.byKey(const Key('mac-video-output-status')), findsOneWidget);
+          find.byKey(const Key('mac-video-output-status')),
+          findsOneWidget,
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -336,8 +362,9 @@ void main() {
     });
   });
 
-  testWidgets('hides the sharing section with the inert crash reporter',
-      (tester) async {
+  testWidgets('hides the sharing section with the inert crash reporter', (
+    tester,
+  ) async {
     await _pump(
       tester,
       status: const P2pStatus(

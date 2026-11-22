@@ -41,7 +41,7 @@ void main() {
         realDuration: const Duration(seconds: 5400),
         resumeOverride: null,
         mounted: true,
-        ask: (_, __) async => false,
+        ask: (_, _) async => false,
       );
 
       expect(plan, isNotNull);
@@ -73,22 +73,24 @@ void main() {
       expect(plan!.position, Duration.zero);
     });
 
-    test('an override of zero suppresses the dialog and starts at zero',
-        () async {
-      // A seek-driven restart targeting real position 0 sets the override to
-      // exactly 0, which must not be confused with "no override was set".
-      // Confusing them lets the dialog prompt about a stale saved position
-      // and silently overwrite the user's explicit seek to the start.
-      final plan = await resolveResumePlan(
-        savedPositionSeconds: 2700,
-        realDuration: const Duration(seconds: 5400),
-        resumeOverride: 0,
-        mounted: true,
-        ask: never,
-      );
+    test(
+      'an override of zero suppresses the dialog and starts at zero',
+      () async {
+        // A seek-driven restart targeting real position 0 sets the override to
+        // exactly 0, which must not be confused with "no override was set".
+        // Confusing them lets the dialog prompt about a stale saved position
+        // and silently overwrite the user's explicit seek to the start.
+        final plan = await resolveResumePlan(
+          savedPositionSeconds: 2700,
+          realDuration: const Duration(seconds: 5400),
+          resumeOverride: 0,
+          mounted: true,
+          ask: never,
+        );
 
-      expect(plan!.position, Duration.zero);
-    });
+        expect(plan!.position, Duration.zero);
+      },
+    );
 
     test('a non-zero override is used verbatim, without asking', () async {
       final plan = await resolveResumePlan(
@@ -123,7 +125,7 @@ void main() {
         realDuration: const Duration(seconds: 5400),
         resumeOverride: null,
         mounted: true,
-        ask: (_, __) async => null,
+        ask: (_, _) async => null,
       );
 
       expect(plan, isNull);
@@ -135,10 +137,8 @@ void main() {
   // `resumeOverride != null` early return is now the only place this
   // presence-not-value gate lives, so its coverage moves here with it.
   group('resolveResumePlan (override presence, not value, gates the ask)', () {
-    test(
-        'an override of exactly 0 is honored as a real target, not treated '
-        'as unset — the exact collision a value-based check would miss',
-        () async {
+    test('an override of exactly 0 is honored as a real target, not treated '
+        'as unset — the exact collision a value-based check would miss', () async {
       // `resumeOverride: 0` is a real target a caller can hand in (the route's
       // own `resumeSeconds`, seeking back to the very start). A regression
       // that checked `resumeOverride != 0` instead of `resumeOverride != null`
@@ -156,8 +156,7 @@ void main() {
       expect(plan.resumes, isFalse);
     });
 
-    test(
-        'a non-zero override is honored verbatim without asking, distinct '
+    test('a non-zero override is honored verbatim without asking, distinct '
         'from unset', () async {
       final plan = await resolveResumePlan(
         savedPositionSeconds: 2700,

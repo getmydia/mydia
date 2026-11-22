@@ -7,29 +7,33 @@ import 'calendar_test_items.dart';
 final today = DateTime(2026, 10, 16);
 
 List<DateTime> daysOf(List<TimelineItem> items) => [
-      for (final i in items)
-        if (i is TimelineDay) i.day,
-    ];
+  for (final i in items)
+    if (i is TimelineDay) i.day,
+];
 
 void main() {
   group('buildTimeline', () {
-    test('one day per date with entries, in server order, empty days skipped',
-        () {
-      final items = buildTimeline([
-        calendarEntry('a', DateTime(2026, 10, 14)),
-        calendarEntry('b', today),
-        calendarEntry('c', today),
-        calendarEntry('d', DateTime(2026, 10, 20)),
-      ], today);
+    test(
+      'one day per date with entries, in server order, empty days skipped',
+      () {
+        final items = buildTimeline([
+          calendarEntry('a', DateTime(2026, 10, 14)),
+          calendarEntry('b', today),
+          calendarEntry('c', today),
+          calendarEntry('d', DateTime(2026, 10, 20)),
+        ], today);
 
-      expect(
-        daysOf(items),
-        [DateTime(2026, 10, 14), today, DateTime(2026, 10, 20)],
-      );
-      final todayItem =
-          items.whereType<TimelineDay>().firstWhere((d) => d.day == today);
-      expect(todayItem.entries.map((e) => e.ref.externalId), ['b', 'c']);
-    });
+        expect(daysOf(items), [
+          DateTime(2026, 10, 14),
+          today,
+          DateTime(2026, 10, 20),
+        ]);
+        final todayItem = items.whereType<TimelineDay>().firstWhere(
+          (d) => d.day == today,
+        );
+        expect(todayItem.entries.map((e) => e.ref.externalId), ['b', 'c']);
+      },
+    );
 
     test('inserts today, empty, when nothing airs today', () {
       final items = buildTimeline([
@@ -37,10 +41,11 @@ void main() {
         calendarEntry('d', DateTime(2026, 10, 20)),
       ], today);
 
-      expect(
-        daysOf(items),
-        [DateTime(2026, 10, 14), today, DateTime(2026, 10, 20)],
-      );
+      expect(daysOf(items), [
+        DateTime(2026, 10, 14),
+        today,
+        DateTime(2026, 10, 20),
+      ]);
       expect(
         items
             .whereType<TimelineDay>()
@@ -51,8 +56,9 @@ void main() {
     });
 
     test('puts an empty today last when every entry is past', () {
-      final items =
-          buildTimeline([calendarEntry('a', DateTime(2026, 10, 1))], today);
+      final items = buildTimeline([
+        calendarEntry('a', DateTime(2026, 10, 1)),
+      ], today);
       expect(daysOf(items).last, today);
     });
 
@@ -64,8 +70,10 @@ void main() {
       ], today);
 
       expect(items.first, isA<TimelineDay>());
-      final dividers =
-          items.whereType<MonthDivider>().map((m) => m.month).toList();
+      final dividers = items
+          .whereType<MonthDivider>()
+          .map((m) => m.month)
+          .toList();
       expect(dividers, [DateTime(2026, 10), DateTime(2026, 11)]);
       expect(
         items[items.indexWhere(
@@ -137,9 +145,9 @@ void main() {
     ], today);
     final layout = TimelineLayout(width: 400);
     final geometry = TimelineGeometry(items, layout);
-    double heightBefore(int index) => [
-          for (var i = 0; i < index; i++) layout.heightOf(items[i]),
-        ].fold(0.0, (a, b) => a + b);
+    double heightBefore(int index) =>
+        [for (var i = 0; i < index; i++) layout.heightOf(items[i])]
+            .fold(0.0, (a, b) => a + b);
     int indexOfDay(DateTime day) =>
         items.indexWhere((i) => i is TimelineDay && i.day == day);
 

@@ -17,17 +17,16 @@ Tracks probedTracks({
     SubtitleTrack('auto', null, null),
     SubtitleTrack('no', null, null),
   ],
-}) =>
-    Tracks(
-      video: const [
-        VideoTrack('auto', null, null),
-        VideoTrack('no', null, null),
-        VideoTrack('1', null, null),
-      ],
-      audio: const [
-        AudioTrack('auto', null, null),
-        AudioTrack('no', null, null),
-        AudioTrack('1', null, 'eng'),
-      ],
-      subtitle: subtitle,
-    );
+}) => Tracks(
+  video: const [
+    VideoTrack('auto', null, null),
+    VideoTrack('no', null, null),
+    VideoTrack('1', null, null),
+  ],
+  audio: const [
+    AudioTrack('auto', null, null),
+    AudioTrack('no', null, null),
+    AudioTrack('1', null, 'eng'),
+  ],
+  subtitle: subtitle,
+);

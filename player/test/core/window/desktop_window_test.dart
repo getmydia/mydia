@@ -19,17 +19,14 @@ void main() {
       await expectLater(initDesktopWindow(), completes);
     });
 
-    test(
-      'initDesktopWindow completes without throwing on Windows',
-      () async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-        try {
-          await expectLater(initDesktopWindow(), completes);
-        } finally {
-          debugDefaultTargetPlatformOverride = null;
-        }
-      },
-    );
+    test('initDesktopWindow completes without throwing on Windows', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await expectLater(initDesktopWindow(), completes);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
 
     test('startWindowDrag does not throw', () {
       expect(startWindowDrag, returnsNormally);

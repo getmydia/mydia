@@ -29,9 +29,7 @@ Future<void> _pumpEditor(
 }) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        sidebarLayoutStoreProvider.overrideWithValue(store),
-      ],
+      overrides: [sidebarLayoutStoreProvider.overrideWithValue(store)],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -83,35 +81,37 @@ void main() {
     expect(filter.id.startsWith('f_'), isTrue);
   });
 
-  testWidgets('the category picker only offers categories for the chosen kind',
-      (tester) async {
-    final store = InMemorySidebarLayoutStore();
-    await store.save(SidebarLayout.defaults);
+  testWidgets(
+    'the category picker only offers categories for the chosen kind',
+    (tester) async {
+      final store = InMemorySidebarLayoutStore();
+      await store.save(SidebarLayout.defaults);
 
-    await _pumpEditor(
-      tester,
-      store: store,
-      initialFilter: const MediaFilter(
-        kind: MediaKind.movies,
-        category: MediaCategoryFilter.animeMovie,
-        watch: WatchScope.all,
-        sort: LibrarySort.defaultSort,
-      ),
-    );
+      await _pumpEditor(
+        tester,
+        store: store,
+        initialFilter: const MediaFilter(
+          kind: MediaKind.movies,
+          category: MediaCategoryFilter.animeMovie,
+          watch: WatchScope.all,
+          sort: LibrarySort.defaultSort,
+        ),
+      );
 
-    expect(find.text('Anime Movies'), findsOneWidget);
+      expect(find.text('Anime Movies'), findsOneWidget);
 
-    await tester.tap(find.text('TV Shows'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('TV Shows'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Anime Movies'), findsNothing);
+      expect(find.text('Anime Movies'), findsNothing);
 
-    await tester.tap(find.byKey(const Key('filter-editor-category')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-editor-category')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Anime Series'), findsOneWidget);
-    expect(find.text('Anime Movies'), findsNothing);
-  });
+      expect(find.text('Anime Series'), findsOneWidget);
+      expect(find.text('Anime Movies'), findsNothing);
+    },
+  );
 
   testWidgets('editing an existing filter preserves its id', (tester) async {
     final store = InMemorySidebarLayoutStore();

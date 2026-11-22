@@ -19,7 +19,9 @@ class MediaInfoSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ref.watch(sourceMediaInfoProvider(item)).when(
+    return ref
+        .watch(sourceMediaInfoProvider(item))
+        .when(
           loading: () => const _PanelShell(
             child: Padding(
               padding: EdgeInsets.all(32),
@@ -111,8 +113,9 @@ class _PanelSurface extends StatelessWidget {
 
     return Material(
       color: palette.surface,
-      borderRadius:
-          isWide ? null : const BorderRadius.vertical(top: Radius.circular(16)),
+      borderRadius: isWide
+          ? null
+          : const BorderRadius.vertical(top: Radius.circular(16)),
       // Only the bottom sheet has corners to clip. The side panel is a plain
       // rectangle, so clipping there is pure rasterization cost.
       clipBehavior: isWide ? Clip.none : Clip.antiAlias,
@@ -200,7 +203,7 @@ Future<void> showMediaInfo({
     barrierLabel: context.l10n.mediaInfoTitle,
     barrierColor: isWide ? Colors.black26 : Colors.black54,
     transitionDuration: const Duration(milliseconds: 220),
-    pageBuilder: (dialogContext, _, __) {
+    pageBuilder: (dialogContext, _, _) {
       return FocusScope(
         autofocus: true,
         child: Align(
@@ -209,7 +212,7 @@ Future<void> showMediaInfo({
         ),
       );
     },
-    transitionBuilder: (_, animation, __, child) {
+    transitionBuilder: (_, animation, _, child) {
       final begin = isWide ? const Offset(1, 0) : const Offset(0, 1);
       return SlideTransition(
         position: Tween<Offset>(begin: begin, end: Offset.zero).animate(
@@ -260,9 +263,10 @@ class _ErrorBody extends StatelessWidget {
                 ? l10n.sourceError(e)
                 : l10n.mediaInfoLoadFailed,
             style: TextStyle(
-                color: context.palette.textSecondary,
-                fontSize: 13,
-                height: 1.5),
+              color: context.palette.textSecondary,
+              fontSize: 13,
+              height: 1.5,
+            ),
           ),
           const SizedBox(height: 14),
           TextButton(

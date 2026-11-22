@@ -39,11 +39,13 @@ class SettingsDialogSidebar extends StatelessWidget {
                 // Icon-only: centre the 20px icon in the 48px tile. The icon
                 // must stay narrower than the tile minus padding, or ListTile
                 // asserts that it consumes the whole width.
-                contentPadding:
-                    compact ? const EdgeInsets.symmetric(horizontal: 13) : null,
+                contentPadding: compact
+                    ? const EdgeInsets.symmetric(horizontal: 13)
+                    : null,
                 minLeadingWidth: compact ? 0 : null,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 leading: SizedBox(
                   width: 20,
                   child: compact
@@ -55,8 +57,10 @@ class SettingsDialogSidebar extends StatelessWidget {
                 ),
                 title: compact
                     ? null
-                    : Text(c.label(l10n),
-                        key: Key('settings-category-label-${c.name}')),
+                    : Text(
+                        c.label(l10n),
+                        key: Key('settings-category-label-${c.name}'),
+                      ),
                 onTap: () => onSelect(c),
               ),
             ),

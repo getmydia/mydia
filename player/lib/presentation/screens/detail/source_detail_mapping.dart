@@ -12,17 +12,17 @@ import '../../../domain/models/watch_status.dart';
 import '../../../domain/sources/item.dart';
 
 Set<DetailFeature> sourceFeatures(MediaSource source) => {
-      if (source.capabilities.contains(SourceCapability.watchedState))
-        DetailFeature.watched,
-      if (source.capabilities.contains(SourceCapability.favorites))
-        DetailFeature.favorite,
-      if (source.capabilities.contains(SourceCapability.mediaInfo))
-        DetailFeature.mediaInfo,
-      if (source.capabilities.contains(SourceCapability.downloadable)) ...[
-        DetailFeature.download,
-        DetailFeature.seasonDownload,
-      ],
-    };
+  if (source.capabilities.contains(SourceCapability.watchedState))
+    DetailFeature.watched,
+  if (source.capabilities.contains(SourceCapability.favorites))
+    DetailFeature.favorite,
+  if (source.capabilities.contains(SourceCapability.mediaInfo))
+    DetailFeature.mediaInfo,
+  if (source.capabilities.contains(SourceCapability.downloadable)) ...[
+    DetailFeature.download,
+    DetailFeature.seasonDownload,
+  ],
+};
 
 DetailArt? _art(SourceId sourceId, ArtworkRef? ref) =>
     ref == null ? null : SourceArt(sourceId, ref);
@@ -47,10 +47,9 @@ Progress? progressFromUserState(
 }
 
 List<CastView> _cast(SourceId sourceId, List<Person> people) => [
-      for (final p in people)
-        CastView(
-            name: p.name, character: p.role, photo: _art(sourceId, p.photo)),
-    ];
+  for (final p in people)
+    CastView(name: p.name, character: p.role, photo: _art(sourceId, p.photo)),
+];
 
 int? _minutes(int? seconds) => seconds == null ? null : (seconds / 60).round();
 
@@ -87,11 +86,11 @@ MovieView movieViewFromSource(
 /// Null when the server says nothing, so the chip shows no indicator.
 WatchStatus? _seasonWatchStatus(UserState state) =>
     state.watched || state.unwatchedCount != null
-        ? WatchStatus(
-            watched: state.watched,
-            unwatchedEpisodeCount: state.unwatchedCount,
-          )
-        : null;
+    ? WatchStatus(
+        watched: state.watched,
+        unwatchedEpisodeCount: state.unwatchedCount,
+      )
+    : null;
 
 ShowView showViewFromSource(
   ItemDetail d,
@@ -136,31 +135,30 @@ EpisodeView episodeViewFromSource(
   ArtworkRef? showPoster,
   int? fallbackSeasonNumber,
   required Set<DetailFeature> features,
-}) =>
-    EpisodeView(
-      target: SourceTarget(e.ref),
-      showTarget: showTarget,
-      showTitle: e.showTitle ?? showTitle,
-      seasonNumber: e.parentIndex ?? fallbackSeasonNumber ?? 0,
-      episodeNumber: e.index ?? 0,
-      title: e.title,
-      overview: e.overview,
-      airDate: e.airDate,
-      runtime: _minutes(e.durationSeconds),
-      still: _art(e.ref.sourceId, e.backdrop),
-      showPoster: _art(e.ref.sourceId, showPoster),
-      progress: progressFromUserState(
-        e.userState,
-        e.durationSeconds,
-        lastPlayedAt: e.lastPlayedAt,
-      ),
-      files: [
-        if (e.defaultVersionId case final v?)
-          MediaFile(id: v, directPlaySupported: true),
-      ],
-      hasFile: e.defaultVersionId != null,
-      features: features,
-    );
+}) => EpisodeView(
+  target: SourceTarget(e.ref),
+  showTarget: showTarget,
+  showTitle: e.showTitle ?? showTitle,
+  seasonNumber: e.parentIndex ?? fallbackSeasonNumber ?? 0,
+  episodeNumber: e.index ?? 0,
+  title: e.title,
+  overview: e.overview,
+  airDate: e.airDate,
+  runtime: _minutes(e.durationSeconds),
+  still: _art(e.ref.sourceId, e.backdrop),
+  showPoster: _art(e.ref.sourceId, showPoster),
+  progress: progressFromUserState(
+    e.userState,
+    e.durationSeconds,
+    lastPlayedAt: e.lastPlayedAt,
+  ),
+  files: [
+    if (e.defaultVersionId case final v?)
+      MediaFile(id: v, directPlaySupported: true),
+  ],
+  hasFile: e.defaultVersionId != null,
+  features: features,
+);
 
 EpisodeView episodeViewFromSourceDetail(
   ItemDetail d, {

@@ -23,19 +23,22 @@ const _sample = StatsSample(
 );
 
 StatsSample sampleWithHistory() => StatsSample(
-      bufferedAhead: const Duration(milliseconds: 18400),
-      position: const Duration(minutes: 24, seconds: 11),
-      droppedFrames: 0,
-      droppedFramesTotal: 0,
-      throughputKbps: 6200,
-      sourceColor:
-          const ColorParams(primaries: 'bt.2020', gamma: 'pq', peakNits: 1000),
-      outputColor: const ColorParams(primaries: 'bt.709', gamma: 'bt.1886'),
-      history: List.generate(
-        30,
-        (i) => StatsPoint(bufferedMs: 18000 + i * 40, throughputKbps: 6200),
-      ),
-    );
+  bufferedAhead: const Duration(milliseconds: 18400),
+  position: const Duration(minutes: 24, seconds: 11),
+  droppedFrames: 0,
+  droppedFramesTotal: 0,
+  throughputKbps: 6200,
+  sourceColor: const ColorParams(
+    primaries: 'bt.2020',
+    gamma: 'pq',
+    peakNits: 1000,
+  ),
+  outputColor: const ColorParams(primaries: 'bt.709', gamma: 'bt.1886'),
+  history: List.generate(
+    30,
+    (i) => StatsPoint(bufferedMs: 18000 + i * 40, throughputKbps: 6200),
+  ),
+);
 
 const _context = StatsContext(
   mode: PlaybackMode.transcode,
@@ -111,8 +114,9 @@ ScrollableState panelScrollable(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('the full panel draws every row and the sparkline',
-      (tester) async {
+  testWidgets('the full panel draws every row and the sparkline', (
+    tester,
+  ) async {
     await pumpPanel(
       tester,
       viewport: const Size(1280, 720),
@@ -208,8 +212,9 @@ void main() {
   // the panel never draws past the room `StatsMetrics.resolve` measured out
   // for it: it either shrinks to its content or scrolls to stay inside
   // `metrics.maxHeight`, and never throws a layout exception doing either.
-  testWidgets('each variant never exceeds its available height',
-      (tester) async {
+  testWidgets('each variant never exceeds its available height', (
+    tester,
+  ) async {
     for (final probe in const [
       (Size(1280, 720), false),
       (Size(844, 390), false),
@@ -229,7 +234,8 @@ void main() {
       expect(
         height,
         lessThanOrEqualTo(metrics.maxHeight),
-        reason: 'panel at ${probe.$1} rendered ${height}px against '
+        reason:
+            'panel at ${probe.$1} rendered ${height}px against '
             '${metrics.maxHeight}px available',
       );
     }
@@ -264,12 +270,14 @@ void main() {
   // the viewport where available height equals `tvMinHeight` precisely,
   // derived from the same constants `StatsMetrics.resolve` itself reads
   // rather than a hardcoded number, and asserts there is nothing to scroll.
-  testWidgets('the tv panel needs no scrolling at its minimum height',
-      (tester) async {
+  testWidgets('the tv panel needs no scrolling at its minimum height', (
+    tester,
+  ) async {
     const width = 1920.0;
-    final cornerInsetBottom =
-        PanelMetrics.resolve(width: width, touchPrimary: false)
-            .cornerInsetBottom;
+    final cornerInsetBottom = PanelMetrics.resolve(
+      width: width,
+      touchPrimary: false,
+    ).cornerInsetBottom;
     final viewport = Size(
       width,
       StatsMetrics.tvMinHeight + StatsMetrics.topInset + cornerInsetBottom,
@@ -301,8 +309,9 @@ void main() {
     expect(surface.shadows, DepthTokens.osdShadowPanel);
   });
 
-  testWidgets('every glyph holds 4.5:1 on the OSD material at every density',
-      (tester) async {
+  testWidgets('every glyph holds 4.5:1 on the OSD material at every density', (
+    tester,
+  ) async {
     for (final probe in const [
       (Size(1280, 720), false),
       (Size(844, 390), false),
@@ -317,8 +326,10 @@ void main() {
         onClose: () {},
       );
 
-      final colors =
-          osdParagraphColors(tester, find.byKey(StatsPanel.panelKey));
+      final colors = osdParagraphColors(
+        tester,
+        find.byKey(StatsPanel.panelKey),
+      );
       expect(colors, isNotEmpty);
       for (final color in colors) {
         expect(

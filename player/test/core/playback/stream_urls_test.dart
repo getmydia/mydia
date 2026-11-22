@@ -42,29 +42,34 @@ void main() {
   });
 
   group('HttpStreamUrls', () {
-    test('direct play carries a media token in the query when one exists',
-        () async {
-      final urls = HttpStreamUrls(
-        serverUrl: 'https://mydia.example',
-        bearerToken: 'jwt',
-        mediaToken: () async => 'mt',
-      );
-      final source = await urls.directPlay('file-1');
-      expect(source.url,
-          'https://mydia.example/api/v1/stream/file/file-1?strategy=DIRECT_PLAY&token=mt');
-      expect(source.headers, isEmpty);
-    });
+    test(
+      'direct play carries a media token in the query when one exists',
+      () async {
+        final urls = HttpStreamUrls(
+          serverUrl: 'https://mydia.example',
+          bearerToken: 'jwt',
+          mediaToken: () async => 'mt',
+        );
+        final source = await urls.directPlay('file-1');
+        expect(
+          source.url,
+          'https://mydia.example/api/v1/stream/file/file-1?strategy=DIRECT_PLAY&token=mt',
+        );
+        expect(source.headers, isEmpty);
+      },
+    );
 
-    test('direct play falls back to the bearer header without a media token',
-        () async {
+    test('direct play falls back to the bearer header without a media token', () async {
       final urls = HttpStreamUrls(
         serverUrl: 'https://mydia.example',
         bearerToken: 'jwt',
         mediaToken: () async => null,
       );
       final source = await urls.directPlay('file-1');
-      expect(source.url,
-          'https://mydia.example/api/v1/stream/file/file-1?strategy=DIRECT_PLAY');
+      expect(
+        source.url,
+        'https://mydia.example/api/v1/stream/file/file-1?strategy=DIRECT_PLAY',
+      );
       expect(source.headers, {'Authorization': 'Bearer jwt'});
     });
 

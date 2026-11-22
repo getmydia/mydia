@@ -21,9 +21,9 @@ import 'package:player/presentation/screens/sources/source_browse_providers.dart
 import '../sources/fake_media_source.dart';
 
 ProviderContainer _container(FakeMediaSource source) {
-  final c = ProviderContainer(overrides: [
-    mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-  ]);
+  final c = ProviderContainer(
+    overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(source)],
+  );
   addTearDown(c.dispose);
   return c;
 }
@@ -35,7 +35,7 @@ void main() {
   test('a source movie loads into a MovieView', () async {
     final c = _container(FakeDetailSource());
     final target = SourceTarget(fakeMovie(1).ref);
-    final sub = c.listen(movieViewProvider(target), (_, __) {});
+    final sub = c.listen(movieViewProvider(target), (_, _) {});
     await _settle();
     expect(sub.read().value?.title, 'Invented Film 1');
   });
@@ -45,7 +45,7 @@ void main() {
     final c = _container(source);
     final DetailTarget show = SourceTarget(fakeShow.ref);
     final key = (show: show, seasonNumber: 1);
-    final sub = c.listen(seasonEpisodesViewProvider(key), (_, __) {});
+    final sub = c.listen(seasonEpisodesViewProvider(key), (_, _) {});
     await _settle();
     expect(sub.read().value, hasLength(2));
     await c.read(seasonActionsProvider(key)).setSeasonWatched(true);
@@ -58,7 +58,7 @@ void main() {
     final c = _container(source);
     final DetailTarget show = SourceTarget(fakeShow.ref);
     final key = (show: show, seasonNumber: 1);
-    final sub = c.listen(seasonEpisodesViewProvider(key), (_, __) {});
+    final sub = c.listen(seasonEpisodesViewProvider(key), (_, _) {});
     await _settle();
     final second = sub.read().value![1];
     await c
@@ -75,7 +75,7 @@ void main() {
     final c = _container(source);
     final DetailTarget show = SourceTarget(fakeShow.ref);
     final key = (show: show, seasonNumber: 1);
-    final sub = c.listen(seasonEpisodesViewProvider(key), (_, __) {});
+    final sub = c.listen(seasonEpisodesViewProvider(key), (_, _) {});
     await _settle();
     final first = sub.read().value!.first;
     await expectLater(
@@ -92,7 +92,7 @@ void main() {
     final c = _container(source);
     final DetailTarget show = SourceTarget(fakeShow.ref);
     final key = (show: show, seasonNumber: 1);
-    final sub = c.listen(seasonEpisodesViewProvider(key), (_, __) {});
+    final sub = c.listen(seasonEpisodesViewProvider(key), (_, _) {});
     await _settle();
     final second = sub.read().value![1];
     final loads = source.seasonChildrenCalls;
@@ -110,7 +110,7 @@ void main() {
   test('a missing capability fails the future instead of throwing', () async {
     final c = _container(FakeMediaSource());
     final target = SourceTarget(fakeMovie(1).ref);
-    c.listen(movieViewProvider(target), (_, __) {});
+    c.listen(movieViewProvider(target), (_, _) {});
     await _settle();
     final future = c.read(movieActionsProvider(target)).toggleFavorite();
     await expectLater(future, throwsStateError);
@@ -120,7 +120,7 @@ void main() {
     final source = _SlowNextUpSource();
     final c = _container(source);
     final target = SourceTarget(fakeShow.ref);
-    final sub = c.listen(showViewProvider(target), (_, __) {});
+    final sub = c.listen(showViewProvider(target), (_, _) {});
     await _settle();
     // The favorite write stays pending, so the show has not been refetched
     // when next up lands.
@@ -137,7 +137,7 @@ void main() {
     final c = _container(_NoParentIndexSource());
     final DetailTarget show = SourceTarget(fakeShow.ref);
     final key = (show: show, seasonNumber: 1);
-    final sub = c.listen(seasonEpisodesViewProvider(key), (_, __) {});
+    final sub = c.listen(seasonEpisodesViewProvider(key), (_, _) {});
     await _settle();
     expect(sub.read().value?.map((e) => e.seasonNumber), [1, 1]);
   });
@@ -148,17 +148,13 @@ void main() {
     final target = SourceTarget(fakeShow.ref);
     final seen = <String?>[];
     final nextUpLoaded = Completer<void>();
-    c.listen(
-      showViewProvider(target),
-      (_, next) {
-        final id = next.value?.nextUpEpisodeId;
-        seen.add(id);
-        if (id != null && !nextUpLoaded.isCompleted) {
-          nextUpLoaded.complete();
-        }
-      },
-      fireImmediately: true,
-    );
+    c.listen(showViewProvider(target), (_, next) {
+      final id = next.value?.nextUpEpisodeId;
+      seen.add(id);
+      if (id != null && !nextUpLoaded.isCompleted) {
+        nextUpLoaded.complete();
+      }
+    }, fireImmediately: true);
     await nextUpLoaded.future.timeout(const Duration(seconds: 5));
     expect(seen.whereType<String>().last, 'e2');
   });
@@ -167,7 +163,7 @@ void main() {
     final source = FakeDetailSource()..nextUpError = Exception('down');
     final c = _container(source);
     final target = SourceTarget(fakeShow.ref);
-    final sub = c.listen(showViewProvider(target), (_, __) {});
+    final sub = c.listen(showViewProvider(target), (_, _) {});
     await _settle();
     expect(sub.read().value?.title, 'Invented Series');
     expect(sub.read().value?.nextUpEpisodeId, isNull);
@@ -177,7 +173,7 @@ void main() {
     final source = FakeDetailSource()..favoriteError = Exception('down');
     final c = _container(source);
     final target = SourceTarget(fakeMovie(1).ref);
-    final sub = c.listen(movieViewProvider(target), (_, __) {});
+    final sub = c.listen(movieViewProvider(target), (_, _) {});
     await _settle();
     await expectLater(
       c.read(movieActionsProvider(target)).toggleFavorite(),
@@ -190,7 +186,7 @@ void main() {
     final source = FakeDetailSource();
     final c = _container(source);
     final target = SourceTarget(fakeMovie(1).ref);
-    c.listen(movieViewProvider(target), (_, __) {});
+    c.listen(movieViewProvider(target), (_, _) {});
     await _settle();
     await c.read(movieActionsProvider(target)).toggleFavorite();
     expect(source.favoriteCalls, [(fakeMovie(1).ref, true)]);
@@ -200,7 +196,7 @@ void main() {
     final source = FakeDetailSource();
     final c = _container(source);
     final target = SourceTarget(fakeMovie(1).ref);
-    final sub = c.listen(movieViewProvider(target), (_, __) {});
+    final sub = c.listen(movieViewProvider(target), (_, _) {});
     await _settle();
     final write = c.read(movieActionsProvider(target)).setWatched(true);
     expect(sub.read().value?.isWatched, isTrue);
@@ -211,15 +207,16 @@ void main() {
   test('similar is empty without the capability and lists with it', () async {
     // A listener keeps the stream provider alive until its first value.
     final plain = _container(FakeMediaSource());
-    plain.listen(sourceSimilarProvider(fakeMovie(1).ref), (_, __) {});
+    plain.listen(sourceSimilarProvider(fakeMovie(1).ref), (_, _) {});
     expect(
       await plain.read(sourceSimilarProvider(fakeMovie(1).ref).future),
       isEmpty,
     );
     final rich = _container(FakeDetailSource());
-    rich.listen(sourceSimilarProvider(fakeMovie(1).ref), (_, __) {});
-    final items =
-        await rich.read(sourceSimilarProvider(fakeMovie(1).ref).future);
+    rich.listen(sourceSimilarProvider(fakeMovie(1).ref), (_, _) {});
+    final items = await rich.read(
+      sourceSimilarProvider(fakeMovie(1).ref).future,
+    );
     expect(items.single.title, 'Invented Film 2');
   });
 
@@ -227,7 +224,7 @@ void main() {
     final c = _container(FakeDetailSource());
     final DetailTarget show = SourceTarget(fakeShow.ref);
     final key = (show: show, seasonNumber: 1);
-    final sub = c.listen(seasonEpisodesViewProvider(key), (_, __) {});
+    final sub = c.listen(seasonEpisodesViewProvider(key), (_, _) {});
     await _settle();
     final episode = sub.read().value!.first;
     const file = MediaFile(id: 'part-1', directPlaySupported: true);
@@ -245,145 +242,167 @@ void main() {
     });
   });
 
-  test('leaving a show before its first load finishes raises no error',
-      () async {
-    final source = FakeDetailSource()..itemHold = Completer<void>();
-    final c = ProviderContainer(overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-    ]);
-    c.listen(showViewProvider(SourceTarget(fakeShow.ref)), (_, __) {});
-    await _settle();
-    // The item fetch is still held: disposing now completes the provider
-    // futures the show build awaits with a disposed-during-loading error.
-    c.dispose();
-    await pumpEventQueue();
-    source.itemHold!.complete();
-    await pumpEventQueue();
-  });
+  test(
+    'leaving a show before its first load finishes raises no error',
+    () async {
+      final source = FakeDetailSource()..itemHold = Completer<void>();
+      final c = ProviderContainer(
+        overrides: [
+          mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        ],
+      );
+      c.listen(showViewProvider(SourceTarget(fakeShow.ref)), (_, _) {});
+      await _settle();
+      // The item fetch is still held: disposing now completes the provider
+      // futures the show build awaits with a disposed-during-loading error.
+      c.dispose();
+      await pumpEventQueue();
+      source.itemHold!.complete();
+      await pumpEventQueue();
+    },
+  );
 
   test('a real server error still reaches the show view', () async {
     final source = FakeDetailSource()
       ..itemError = const SourceException.notFound();
     // No automatic retry, which would report the failure as a loading state.
     final c = ProviderContainer(
-      retry: (_, __) => null,
+      retry: (_, _) => null,
       overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(source)],
     );
     addTearDown(c.dispose);
-    final sub =
-        c.listen(showViewProvider(SourceTarget(fakeShow.ref)), (_, __) {});
+    final sub = c.listen(
+      showViewProvider(SourceTarget(fakeShow.ref)),
+      (_, _) {},
+    );
     await _settle();
     final state = sub.read();
-    expect(state, isA<AsyncError<ShowView>>(),
-        reason: 'the build is current, so the error is not swallowed');
+    expect(
+      state,
+      isA<AsyncError<ShowView>>(),
+      reason: 'the build is current, so the error is not swallowed',
+    );
     // The record `.wait` wraps the failure: (item error, children error).
     final wait = state.error! as ParallelWaitError;
     final (itemFailure, childrenFailure) = wait.errors as (Object?, Object?);
-    expect((itemFailure! as dart_async.AsyncError).error,
-        same(const SourceException.notFound()));
+    expect(
+      (itemFailure! as dart_async.AsyncError).error,
+      same(const SourceException.notFound()),
+    );
     expect(childrenFailure, isNull, reason: 'children were fetched fine');
   });
 
   test(
-      'a warm show mount whose fresh answers equal the cache asks next up once',
-      () async {
-    final cache = InMemorySourceCache();
-    final log = InMemoryFetchLog();
-    final source = _CountingNextUpSource();
-    ProviderContainer mount() {
-      final c = ProviderContainer(overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-        sourceCacheProvider.overrideWithValue(cache),
-        fetchLogProvider.overrideWithValue(log),
-      ]);
-      addTearDown(c.dispose);
-      return c;
-    }
+    'a warm show mount whose fresh answers equal the cache asks next up once',
+    () async {
+      final cache = InMemorySourceCache();
+      final log = InMemoryFetchLog();
+      final source = _CountingNextUpSource();
+      ProviderContainer mount() {
+        final c = ProviderContainer(
+          overrides: [
+            mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+            sourceCacheProvider.overrideWithValue(cache),
+            fetchLogProvider.overrideWithValue(log),
+          ],
+        );
+        addTearDown(c.dispose);
+        return c;
+      }
 
-    final target = SourceTarget(fakeShow.ref);
-    mount().listen(showViewProvider(target), (_, __) {});
-    await _settle();
-    source.nextUpCalls = 0;
+      final target = SourceTarget(fakeShow.ref);
+      mount().listen(showViewProvider(target), (_, _) {});
+      await _settle();
+      source.nextUpCalls = 0;
 
-    // The fresh item is held back so the cached one paints and next up runs
-    // before it lands.
-    source.itemHold = Completer<void>();
-    final sub = mount().listen(showViewProvider(target), (_, __) {});
-    await _settle();
-    expect(source.nextUpCalls, 1);
-    source.itemHold!.complete();
-    await _settle();
-    expect(source.nextUpCalls, 1);
-    expect(sub.read().value?.nextUpEpisodeId, 'e2');
-  });
+      // The fresh item is held back so the cached one paints and next up runs
+      // before it lands.
+      source.itemHold = Completer<void>();
+      final sub = mount().listen(showViewProvider(target), (_, _) {});
+      await _settle();
+      expect(source.nextUpCalls, 1);
+      source.itemHold!.complete();
+      await _settle();
+      expect(source.nextUpCalls, 1);
+      expect(sub.read().value?.nextUpEpisodeId, 'e2');
+    },
+  );
 
-  test('a rebuilt show keeps its Continue target until next up answers',
-      () async {
-    final source = _SlowNextUpSource();
-    final c = _container(source);
-    final target = SourceTarget(fakeShow.ref);
-    final seen = <String?>[];
-    c.listen(
-      showViewProvider(target),
-      (_, next) {
+  test(
+    'a rebuilt show keeps its Continue target until next up answers',
+    () async {
+      final source = _SlowNextUpSource();
+      final c = _container(source);
+      final target = SourceTarget(fakeShow.ref);
+      final seen = <String?>[];
+      c.listen(showViewProvider(target), (_, next) {
         if (next.hasValue) seen.add(next.value?.nextUpEpisodeId);
-      },
-    );
-    source.release.complete();
-    await _settle();
-    expect(seen.last, 'e2');
+      });
+      source.release.complete();
+      await _settle();
+      expect(seen.last, 'e2');
 
-    seen.clear();
-    c.invalidate(sourceItemProvider(fakeShow.ref));
-    await _settle();
-    expect(seen, isNotEmpty);
-    expect(seen, everyElement('e2'));
-  });
+      seen.clear();
+      c.invalidate(sourceItemProvider(fakeShow.ref));
+      await _settle();
+      expect(seen, isNotEmpty);
+      expect(seen, everyElement('e2'));
+    },
+  );
 
-  test('a watched write ends at the server answer, not the optimistic one',
-      () async {
-    final source = _ChangingItemSource();
-    final c = _container(source);
-    final target = SourceTarget(fakeMovie(1).ref);
-    final sub = c.listen(movieViewProvider(target), (_, __) {});
-    await _settle();
-    await c.read(movieActionsProvider(target)).setWatched(true);
-    await _settle();
-    expect(source.itemCalls, greaterThan(1));
-    expect(sub.read().value?.title, endsWith('(server)'));
-  });
+  test(
+    'a watched write ends at the server answer, not the optimistic one',
+    () async {
+      final source = _ChangingItemSource();
+      final c = _container(source);
+      final target = SourceTarget(fakeMovie(1).ref);
+      final sub = c.listen(movieViewProvider(target), (_, _) {});
+      await _settle();
+      await c.read(movieActionsProvider(target)).setWatched(true);
+      await _settle();
+      expect(source.itemCalls, greaterThan(1));
+      expect(sub.read().value?.title, endsWith('(server)'));
+    },
+  );
 
-  test('a movie view updates when the fresh item lands after the cached one',
-      () async {
-    final cache = InMemorySourceCache();
-    final log = InMemoryFetchLog();
-    final source = FakeDetailSource();
-    ProviderContainer mount() {
-      final c = ProviderContainer(overrides: [
-        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
-        sourceCacheProvider.overrideWithValue(cache),
-        fetchLogProvider.overrideWithValue(log),
-      ]);
-      addTearDown(c.dispose);
-      return c;
-    }
+  test(
+    'a movie view updates when the fresh item lands after the cached one',
+    () async {
+      final cache = InMemorySourceCache();
+      final log = InMemoryFetchLog();
+      final source = FakeDetailSource();
+      ProviderContainer mount() {
+        final c = ProviderContainer(
+          overrides: [
+            mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+            sourceCacheProvider.overrideWithValue(cache),
+            fetchLogProvider.overrideWithValue(log),
+          ],
+        );
+        addTearDown(c.dispose);
+        return c;
+      }
 
-    final target = SourceTarget(fakeMovie(1).ref);
-    final first = mount();
-    first.listen(movieViewProvider(target), (_, __) {});
-    await _settle();
+      final target = SourceTarget(fakeMovie(1).ref);
+      final first = mount();
+      first.listen(movieViewProvider(target), (_, _) {});
+      await _settle();
 
-    source.titleSuffix = ' (remastered)';
-    final second = mount();
-    final views = <String>[];
-    second.listen(movieViewProvider(target), (_, next) {
-      if (next.value case final v?) views.add(v.title);
-    }, fireImmediately: true);
-    await _settle();
-    expect(views.first, isNot(endsWith('(remastered)')),
-        reason: 'the cached item paints first');
-    expect(views.last, endsWith('(remastered)'));
-  });
+      source.titleSuffix = ' (remastered)';
+      final second = mount();
+      final views = <String>[];
+      second.listen(movieViewProvider(target), (_, next) {
+        if (next.value case final v?) views.add(v.title);
+      }, fireImmediately: true);
+      await _settle();
+      expect(
+        views.first,
+        isNot(endsWith('(remastered)')),
+        reason: 'the cached item paints first',
+      );
+      expect(views.last, endsWith('(remastered)'));
+    },
+  );
 }
 
 class _FailingWatchedSource extends FakeDetailSource {
@@ -396,16 +415,18 @@ class _NoParentIndexSource extends FakeDetailSource {
   @override
   Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async =>
       parent.kind == ItemKind.season
-          ? Page(items: [
-              for (final n in [1, 2])
-                ItemSummary(
-                  ref: fakeEpisode(n).ref,
-                  title: 'Invented Episode $n',
-                  index: n,
-                  defaultVersionId: 'v$n',
-                ),
-            ])
-          : super.children(parent, cursor: cursor);
+      ? Page(
+          items: [
+            for (final n in [1, 2])
+              ItemSummary(
+                ref: fakeEpisode(n).ref,
+                title: 'Invented Episode $n',
+                index: n,
+                defaultVersionId: 'v$n',
+              ),
+          ],
+        )
+      : super.children(parent, cursor: cursor);
 }
 
 class _SecondWriteFailsSource extends FakeDetailSource {

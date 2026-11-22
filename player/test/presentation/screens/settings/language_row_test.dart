@@ -15,26 +15,27 @@ class _Host extends ConsumerWidget {
   const _Host();
   @override
   Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
-        theme: AppTheme.build(ref.watch(paletteProvider), liquid: false),
-        locale: ref.watch(localeSettingProvider),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: const Scaffold(body: LanguageSettingsRow()),
-      );
+    theme: AppTheme.build(ref.watch(paletteProvider), liquid: false),
+    locale: ref.watch(localeSettingProvider),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: const Scaffold(body: LanguageSettingsRow()),
+  );
 }
 
 Widget _host(MockAuthStorage storage) => ProviderScope(
-      overrides: [
-        coreSettingsServiceProvider
-            .overrideWithValue(SettingsService(storage: storage)),
-      ],
-      child: const _Host(),
-    );
+  overrides: [
+    coreSettingsServiceProvider.overrideWithValue(
+      SettingsService(storage: storage),
+    ),
+  ],
+  child: const _Host(),
+);
 
 Finder _inRow(String text) => find.descendant(
-      of: find.byKey(const Key('language-row')),
-      matching: find.text(text),
-    );
+  of: find.byKey(const Key('language-row')),
+  matching: find.text(text),
+);
 
 Future<void> _openPicker(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('language-row')));
@@ -46,16 +47,18 @@ void main() {
   // choice made here cannot leak into later tests in the same isolate.
   tearDown(() => rememberInterfaceLocale(null));
 
-  testWidgets('shows Language with System default when nothing is stored',
-      (tester) async {
+  testWidgets('shows Language with System default when nothing is stored', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(MockAuthStorage()));
     await tester.pumpAndSettle();
     expect(_inRow('Language'), findsOneWidget);
     expect(_inRow('System default'), findsOneWidget);
   });
 
-  testWidgets('the picker lists system default and each shipped language',
-      (tester) async {
+  testWidgets('the picker lists system default and each shipped language', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(MockAuthStorage()));
     await tester.pumpAndSettle();
     await _openPicker(tester);
@@ -65,8 +68,9 @@ void main() {
     expect(find.text('Español'), findsOneWidget);
   });
 
-  testWidgets('the picker offers pt-BR but not the empty pt stub',
-      (tester) async {
+  testWidgets('the picker offers pt-BR but not the empty pt stub', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(MockAuthStorage()));
     await tester.pumpAndSettle();
     await _openPicker(tester);
@@ -74,8 +78,9 @@ void main() {
     expect(find.byKey(const Key('language-option-pt')), findsNothing);
   });
 
-  testWidgets('only the current language tile is marked selected',
-      (tester) async {
+  testWidgets('only the current language tile is marked selected', (
+    tester,
+  ) async {
     final storage = MockAuthStorage()..seedData({'interface_locale': 'es'});
     await tester.pumpWidget(_host(storage));
     await tester.pumpAndSettle();
@@ -87,8 +92,9 @@ void main() {
     expect(selected('language-option-system'), isFalse);
   });
 
-  testWidgets('picking Spanish stores it and re-localizes the row',
-      (tester) async {
+  testWidgets('picking Spanish stores it and re-localizes the row', (
+    tester,
+  ) async {
     final storage = MockAuthStorage();
     await tester.pumpWidget(_host(storage));
     await tester.pumpAndSettle();
@@ -99,8 +105,9 @@ void main() {
     expect(storage.contents['interface_locale'], 'es');
   });
 
-  testWidgets('choosing System default clears the stored language',
-      (tester) async {
+  testWidgets('choosing System default clears the stored language', (
+    tester,
+  ) async {
     final storage = MockAuthStorage()..seedData({'interface_locale': 'es'});
     await tester.pumpWidget(_host(storage));
     await tester.pumpAndSettle();
@@ -112,8 +119,9 @@ void main() {
     expect(storage.contents.containsKey('interface_locale'), isFalse);
   });
 
-  testWidgets('dismissing the picker leaves the stored language alone',
-      (tester) async {
+  testWidgets('dismissing the picker leaves the stored language alone', (
+    tester,
+  ) async {
     final storage = MockAuthStorage()..seedData({'interface_locale': 'es'});
     await tester.pumpWidget(_host(storage));
     await tester.pumpAndSettle();

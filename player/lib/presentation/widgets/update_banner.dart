@@ -104,7 +104,8 @@ class UpdateBanner extends ConsumerWidget {
       isMacOS: PlatformFeatures.isMacOS,
       availableVersion: update?.version,
       dismissedVersions: ref.watch(updateDismissalProvider).value,
-      compatibilityBannerShowing: compatibility != null &&
+      compatibilityBannerShowing:
+          compatibility != null &&
           compatibility.showBanner &&
           compatibility.verdict.isPlayerBehind,
       compatibilityUnresolved: compatibilityUnresolved,
@@ -155,8 +156,9 @@ class UpdateBanner extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
             BannerButton(
-              label:
-                  failed ? context.l10n.commonRetry : context.l10n.commonUpdate,
+              label: failed
+                  ? context.l10n.commonRetry
+                  : context.l10n.commonUpdate,
               color: color,
               isLoading: updateState.isApplying,
               onPressed: () => startUpdate(context, ref),

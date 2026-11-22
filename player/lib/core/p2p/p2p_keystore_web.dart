@@ -21,8 +21,9 @@ class _WebKeystore implements P2pKeystore {
   Future<Uint8List?> read() async {
     final db = await _openDb();
     try {
-      final store =
-          db.transaction(_storeName.toJS, 'readonly').objectStore(_storeName);
+      final store = db
+          .transaction(_storeName.toJS, 'readonly')
+          .objectStore(_storeName);
       final value = await _await(store.get(_keyName.toJS));
       if (value.isUndefinedOrNull) return null;
       return (value as JSUint8Array).toDart;
@@ -85,8 +86,10 @@ class _WebKeystore implements P2pKeystore {
     request.onerror = (web.Event _) {
       if (!completer.isCompleted) {
         completer.completeError(
-          StateError('Failed to open IndexedDB "$_dbName": '
-              '${_describe(request.error)}'),
+          StateError(
+            'Failed to open IndexedDB "$_dbName": '
+            '${_describe(request.error)}',
+          ),
         );
       }
     }.toJS;
@@ -141,8 +144,10 @@ class _WebKeystore implements P2pKeystore {
     void fail(web.Event _) {
       if (!completer.isCompleted) {
         completer.completeError(
-          StateError('IndexedDB transaction did not commit: '
-              '${_describe(transaction.error)}'),
+          StateError(
+            'IndexedDB transaction did not commit: '
+            '${_describe(transaction.error)}',
+          ),
         );
       }
     }

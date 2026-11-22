@@ -70,7 +70,12 @@ Future<QualityRung?> showQualityPicker(
                   ),
                 for (final rung in rungs)
                   _rungTile(
-                      context, rung, current, autoSubtitle, originalDelivery),
+                    context,
+                    rung,
+                    current,
+                    autoSubtitle,
+                    originalDelivery,
+                  ),
                 if (statsEnabled != null && onStatsChanged != null) ...[
                   const Divider(height: 17, color: DepthTokens.osdDivider),
                   StatefulBuilder(
@@ -134,8 +139,8 @@ Widget _rungTile(
   final subtitle = rung.isAuto
       ? autoSubtitle
       : rung.isOriginal
-          ? context.l10n.originalDeliveryText(originalDelivery)
-          : context.l10n.cappedRungDeliveryText(rung.maxBitrateKbps);
+      ? context.l10n.originalDeliveryText(originalDelivery)
+      : context.l10n.cappedRungDeliveryText(rung.maxBitrateKbps);
   return ListTile(
     key: isSelected
         ? Key('quality-rung-selected-${rung.label}')

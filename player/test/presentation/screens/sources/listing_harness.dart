@@ -16,18 +16,21 @@ import 'fake_media_source.dart';
 const otherSourceId = SourceId('acc2:owner:bb22');
 
 ItemSummary listingMovie(SourceId sid, String id, String title) => ItemSummary(
-      ref: ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: id),
-      title: title,
-      year: 2001,
-    );
+  ref: ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: id),
+  title: title,
+  year: 2001,
+);
 
-ItemSummary listingShow(SourceId sid, String id, String title,
-        {int? unwatched}) =>
-    ItemSummary(
-      ref: ItemRef(sourceId: sid, kind: ItemKind.show, externalId: id),
-      title: title,
-      userState: UserState(unwatchedCount: unwatched),
-    );
+ItemSummary listingShow(
+  SourceId sid,
+  String id,
+  String title, {
+  int? unwatched,
+}) => ItemSummary(
+  ref: ItemRef(sourceId: sid, kind: ItemKind.show, externalId: id),
+  title: title,
+  userState: UserState(unwatchedCount: unwatched),
+);
 
 /// Every location the screen under test pushed, in order.
 class PushedLocations {
@@ -50,36 +53,40 @@ Future<PushedLocations> pumpListing(
     return const SizedBox();
   }
 
-  final router = GoRouter(routes: [
-    GoRoute(path: '/', builder: (_, __) => screen),
-    for (final path in const [
-      '/s/:id/movie/:item',
-      '/s/:id/show/:item',
-      '/s/:id/episode/:item',
-      '/s/:id/collection/:collection',
-      '/s/:id/search',
-      '/s/:id/player/:item',
-    ])
-      GoRoute(path: path, builder: recorder),
-  ]);
+  final router = GoRouter(
+    routes: [
+      GoRoute(path: '/', builder: (_, _) => screen),
+      for (final path in const [
+        '/s/:id/movie/:item',
+        '/s/:id/show/:item',
+        '/s/:id/episode/:item',
+        '/s/:id/collection/:collection',
+        '/s/:id/search',
+        '/s/:id/player/:item',
+      ])
+        GoRoute(path: path, builder: recorder),
+    ],
+  );
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      for (final source in sources)
-        mediaSourceProvider(source.id).overrideWithValue(source),
-      // No artwork requests: a poster with a URL spins until the blocked
-      // test HTTP client answers, which pumpAndSettle never outlasts.
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-      ...overrides,
-    ],
-    child: MaterialApp.router(
-      routerConfig: router,
-      builder: toastLayerBuilder,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        for (final source in sources)
+          mediaSourceProvider(source.id).overrideWithValue(source),
+        // No artwork requests: a poster with a URL spins until the blocked
+        // test HTTP client answers, which pumpAndSettle never outlasts.
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        ...overrides,
+      ],
+      child: MaterialApp.router(
+        routerConfig: router,
+        builder: toastLayerBuilder,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ),
-  ));
+  );
   await tester.pumpAndSettle();
   return pushed;
 }

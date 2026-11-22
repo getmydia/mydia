@@ -49,8 +49,11 @@ class CrashFrame {
 
   final int line;
 
-  Map<String, Object?> toJson() =>
-      {'function': function, 'file': file, 'line': line};
+  Map<String, Object?> toJson() => {
+    'function': function,
+    'file': file,
+    'line': line,
+  };
 }
 
 /// Most frames sent. This is the player's own cap; the relay enforces no

@@ -42,8 +42,8 @@ BackendFailure mapLocalFailure(
 /// Reads media straight from a folder on this device. Every path it returns
 /// uses `/` (see [portableLocalPath]).
 class LocalPathBackend implements FileSystemBackend {
-  /// [root], when given, is the folder [probe] checks.
-  LocalPathBackend({String? root}) : _root = root;
+  /// [_root], when given, is the folder [probe] checks.
+  LocalPathBackend({this._root});
 
   final String? _root;
 
@@ -123,11 +123,10 @@ class LocalPathBackend implements FileSystemBackend {
     FileSystemException e,
     String path, {
     BackendFailure? missing,
-  }) =>
-      mapLocalFailure(
-        e.osError?.errorCode,
-        '${e.message} ${e.osError?.message ?? ''}',
-        path,
-        missing: missing,
-      );
+  }) => mapLocalFailure(
+    e.osError?.errorCode,
+    '${e.message} ${e.osError?.message ?? ''}',
+    path,
+    missing: missing,
+  );
 }

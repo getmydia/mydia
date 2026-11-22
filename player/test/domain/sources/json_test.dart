@@ -69,8 +69,11 @@ final _detail = ItemDetail(
   contentRating: 'TV-14',
   isFavorite: true,
   show: const ItemRef(sourceId: _id, kind: ItemKind.show, externalId: 's1'),
-  season:
-      const ItemRef(sourceId: _id, kind: ItemKind.season, externalId: 'se2'),
+  season: const ItemRef(
+    sourceId: _id,
+    kind: ItemKind.season,
+    externalId: 'se2',
+  ),
 );
 
 /// Through a real JSON string, as the cache stores it.
@@ -113,11 +116,13 @@ void main() {
         ),
       ],
       filterOptions: [
-        FilterOption(id: 'unwatched', name: FilterName.unwatched)
+        FilterOption(id: 'unwatched', name: FilterName.unwatched),
       ],
     );
-    expect(Library.fromJson(_viaString(library.toJson())).toJson(),
-        library.toJson());
+    expect(
+      Library.fromJson(_viaString(library.toJson())).toJson(),
+      library.toJson(),
+    );
 
     const page = Page(items: [_episode], nextCursor: Cursor('60'), total: 130);
     final json = page.toJson((i) => i.toJson());

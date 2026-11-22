@@ -42,13 +42,15 @@ Future<void> _pumpList(
               child: Row(
                 children: [
                   Expanded(
-                      child: Text(AppLocalizationsEn()
-                          .navDestinationLabel(row.destination))),
-                  if (editingTrailing != null) editingTrailing,
+                    child: Text(
+                      AppLocalizationsEn().navDestinationLabel(row.destination),
+                    ),
+                  ),
+                  ?editingTrailing,
                 ],
               ),
             ),
-            onReorder: onReorder ?? (_, __) {},
+            onReorder: onReorder ?? (_, _) {},
             onRestore: onRestore ?? (_) {},
           ),
         ),
@@ -109,8 +111,9 @@ void main() {
     expect(find.byType(ReorderableDragStartListener), findsWidgets);
   });
 
-  testWidgets('edit mode gives a hidden row a restore control, not a grip',
-      (tester) async {
+  testWidgets('edit mode gives a hidden row a restore control, not a grip', (
+    tester,
+  ) async {
     var restored = <String>[];
     await _pumpList(
       tester,
@@ -126,8 +129,7 @@ void main() {
     expect(restored, ['movies']);
   });
 
-  testWidgets(
-      'edit mode passes the ReorderableListView onReorderItem indices '
+  testWidgets('edit mode passes the ReorderableListView onReorderItem indices '
       'straight through, unmodified', (tester) async {
     // `_rows()` (no hidden ids) puts Home at index 0, Continue Watching at
     // 1, Movies at 2 — see SidebarLayout.defaults' builtin ordering.

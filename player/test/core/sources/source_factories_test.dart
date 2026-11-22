@@ -74,16 +74,28 @@ Future<ProviderContainer> containerFor({
   for (final e in secrets.entries) {
     await storage.write(e.key, e.value);
   }
-  final container = ProviderContainer(overrides: [
-    ...noHiveOverrides,
-    sourceStoreProvider.overrideWith((ref) async => store),
-    sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-    sourceHttpProvider.overrideWithValue(http),
-    plexIdentityProvider.overrideWith((ref) async => const PlexIdentity(
-        clientIdentifier: 'cid', version: '1', platform: 'Linux')),
-    jellyfinIdentityProvider.overrideWith((ref) async => const JellyfinIdentity(
-        deviceId: 'dev1', version: '1', deviceName: 'Mydia Player on Linux')),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      ...noHiveOverrides,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      sourceHttpProvider.overrideWithValue(http),
+      plexIdentityProvider.overrideWith(
+        (ref) async => const PlexIdentity(
+          clientIdentifier: 'cid',
+          version: '1',
+          platform: 'Linux',
+        ),
+      ),
+      jellyfinIdentityProvider.overrideWith(
+        (ref) async => const JellyfinIdentity(
+          deviceId: 'dev1',
+          version: '1',
+          deviceName: 'Mydia Player on Linux',
+        ),
+      ),
+    ],
+  );
   addTearDown(container.dispose);
   await container.read(sourceRecordsProvider.future);
   return container;
@@ -131,10 +143,14 @@ void main() {
     plex.status = 401;
     await expectLater(media.libraries(), throwsA(isA<SourceException>()));
     await settle();
-    expect(container.read(thirdPartySourcesProvider).single.account.needsReauth,
-        isTrue);
     expect(
-        identical(container.read(mediaSourceProvider(atticId)), media), isTrue);
+      container.read(thirdPartySourcesProvider).single.account.needsReauth,
+      isTrue,
+    );
+    expect(
+      identical(container.read(mediaSourceProvider(atticId)), media),
+      isTrue,
+    );
   });
 
   test('a resume ping makes the source look again', () async {
@@ -151,7 +167,7 @@ void main() {
   });
 
   test('removing the account removes the source', () async {
-    container.listen(mediaSourceProvider(atticId), (_, __) {});
+    container.listen(mediaSourceProvider(atticId), (_, _) {});
     await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
     expect(container.read(mediaSourceProvider(atticId)), isNull);
   });
@@ -167,8 +183,9 @@ void main() {
     expect(media, isA<StashMediaSource>());
     expect(
       (await media!.browse(
-              (await media.libraries()).single.ref, const BrowseQuery()))
-          .items,
+        (await media.libraries()).single.ref,
+        const BrowseQuery(),
+      )).items,
       hasLength(5),
     );
   });
@@ -179,16 +196,19 @@ void main() {
     await store.putAccount(stashRecord);
     final storage = _FlakyStorage('source/st1/account_token');
     await storage.write('source/st1/account_token', FakeStashServer.apiKey);
-    final c = ProviderContainer(overrides: [
-      ...noHiveOverrides,
-      sourceStoreProvider.overrideWith((ref) async => store),
-      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      sourceHttpProvider.overrideWithValue(SourceHttp(client: stash.client)),
-    ]);
+    final c = ProviderContainer(
+      overrides: [
+        ...noHiveOverrides,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        sourceHttpProvider.overrideWithValue(SourceHttp(client: stash.client)),
+      ],
+    );
     addTearDown(c.dispose);
     await c.read(sourceRecordsProvider.future);
-    final media =
-        c.read(mediaSourceProvider(const SourceId('st1:owner:main')))!;
+    final media = c.read(
+      mediaSourceProvider(const SourceId('st1:owner:main')),
+    )!;
 
     final library = (await media.libraries()).single.ref;
     // The first read may fail wherever it lands (the probe or the request).
@@ -222,7 +242,7 @@ void main() {
           name: "Cousin's Box",
           machineIdentifier: 'bb22',
           connections: [
-            ServerConnection(uri: FakePlexServer.base, local: true)
+            ServerConnection(uri: FakePlexServer.base, local: true),
           ],
         ),
       ],
@@ -237,9 +257,8 @@ void main() {
         'source/acc1/owner/bb22/token': FakePlexServer.token,
       },
     );
-    c.listen(mediaSourceProvider(atticId), (_, __) {});
-    c.listen(
-        mediaSourceProvider(const SourceId('acc1:owner:bb22')), (_, __) {});
+    c.listen(mediaSourceProvider(atticId), (_, _) {});
+    c.listen(mediaSourceProvider(const SourceId('acc1:owner:bb22')), (_, _) {});
     c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
     await settle();
     expect(resourceCalls, 1);
@@ -259,7 +278,11 @@ void main() {
       account: atticRecord.account.copyWith(activeProfileId: 'kid0001'),
       profiles: const [
         SourceProfile(
-            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+          id: 'kid0001',
+          accountId: 'acc1',
+          name: 'Pip',
+          isOwner: false,
+        ),
       ],
       servers: [
         SourceServer(
@@ -269,7 +292,7 @@ void main() {
           name: 'Attic',
           machineIdentifier: FakePlexServer.machineId,
           connections: [
-            ServerConnection(uri: FakePlexServer.base, local: true)
+            ServerConnection(uri: FakePlexServer.base, local: true),
           ],
         ),
       ],
@@ -285,79 +308,89 @@ void main() {
       },
     );
     c.listen(
-        mediaSourceProvider(const SourceId('acc1:kid0001:aa11')), (_, __) {});
+      mediaSourceProvider(const SourceId('acc1:kid0001:aa11')),
+      (_, _) {},
+    );
     c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
     await settle();
     expect(resourceTokens, isNotEmpty);
     expect(resourceTokens, everyElement('kid-token'));
   });
 
-  test('a re-read begun before a switch does not touch the new profile',
-      () async {
-    final release = Completer<void>();
-    var resourceCalls = 0;
-    final inner = plex.client;
-    final client = MockClient((request) async {
-      if (request.url.path == '/api/v2/resources') {
-        resourceCalls++;
-        await release.future;
-        return http.Response(resourcesJson, 200);
-      }
-      return http.Response.fromStream(await inner.send(request));
-    });
-    SourceServer server(String id, String profileId) => SourceServer(
-          id: id,
-          accountId: 'acc1',
-          profileId: profileId,
-          name: id,
-          machineIdentifier: id,
-          connections: [
-            ServerConnection(uri: FakePlexServer.base, local: true)
-          ],
-        );
-    final kidRecord = SourceAccountRecord(
-      account: atticRecord.account.copyWith(activeProfileId: 'kid0001'),
-      profiles: const [
-        SourceProfile(
-            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
-      ],
-      servers: [server(FakePlexServer.machineId, 'kid0001')],
-      addedAtMs: 0,
-    );
-    final c = await containerFor(
-      record: kidRecord,
-      http: SourceHttp(client: client),
-      secrets: {
-        'source/acc1/account_token': 'acct',
-        'source/acc1/kid0001/user_token': 'kid-token',
-        'source/acc1/kid0001/aa11/token': FakePlexServer.token,
-      },
-    );
-    c.listen(
-        mediaSourceProvider(const SourceId('acc1:kid0001:aa11')), (_, __) {});
-    c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
-    await settle();
-    expect(resourceCalls, 1, reason: 'the kid re-read is in flight');
-
-    // The viewer switches back to the owner meanwhile; cc33 is a server the
-    // reply below does not list.
-    await c.read(sourceRecordsProvider.notifier).updateRecord(
-          'acc1',
-          (current) async => current.copyWith(
-            account: current.account.copyWith(activeProfileId: 'owner'),
-            servers: [
-              server(FakePlexServer.machineId, 'owner'),
-              server('cc33', 'owner'),
-            ],
+  test(
+    'a re-read begun before a switch does not touch the new profile',
+    () async {
+      final release = Completer<void>();
+      var resourceCalls = 0;
+      final inner = plex.client;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v2/resources') {
+          resourceCalls++;
+          await release.future;
+          return http.Response(resourcesJson, 200);
+        }
+        return http.Response.fromStream(await inner.send(request));
+      });
+      SourceServer server(String id, String profileId) => SourceServer(
+        id: id,
+        accountId: 'acc1',
+        profileId: profileId,
+        name: id,
+        machineIdentifier: id,
+        connections: [ServerConnection(uri: FakePlexServer.base, local: true)],
+      );
+      final kidRecord = SourceAccountRecord(
+        account: atticRecord.account.copyWith(activeProfileId: 'kid0001'),
+        profiles: const [
+          SourceProfile(
+            id: 'kid0001',
+            accountId: 'acc1',
+            name: 'Pip',
+            isOwner: false,
           ),
-        );
-    release.complete();
-    await settle();
+        ],
+        servers: [server(FakePlexServer.machineId, 'kid0001')],
+        addedAtMs: 0,
+      );
+      final c = await containerFor(
+        record: kidRecord,
+        http: SourceHttp(client: client),
+        secrets: {
+          'source/acc1/account_token': 'acct',
+          'source/acc1/kid0001/user_token': 'kid-token',
+          'source/acc1/kid0001/aa11/token': FakePlexServer.token,
+        },
+      );
+      c.listen(
+        mediaSourceProvider(const SourceId('acc1:kid0001:aa11')),
+        (_, _) {},
+      );
+      c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
+      await settle();
+      expect(resourceCalls, 1, reason: 'the kid re-read is in flight');
 
-    final record = c.read(sourceRecordsProvider).requireValue.accounts.single;
-    expect(record.account.activeProfileId, 'owner');
-    expect(record.servers.where((s) => s.gone), isEmpty);
-  });
+      // The viewer switches back to the owner meanwhile; cc33 is a server the
+      // reply below does not list.
+      await c
+          .read(sourceRecordsProvider.notifier)
+          .updateRecord(
+            'acc1',
+            (current) async => current.copyWith(
+              account: current.account.copyWith(activeProfileId: 'owner'),
+              servers: [
+                server(FakePlexServer.machineId, 'owner'),
+                server('cc33', 'owner'),
+              ],
+            ),
+          );
+      release.complete();
+      await settle();
+
+      final record = c.read(sourceRecordsProvider).requireValue.accounts.single;
+      expect(record.account.activeProfileId, 'owner');
+      expect(record.servers.where((s) => s.gone), isEmpty);
+    },
+  );
 
   group('Jellyfin', () {
     late FakeJellyfinServer jellyfin;
@@ -396,8 +429,10 @@ void main() {
       jellyfin.status = 401;
       await expectLater(media.libraries(), throwsA(isA<SourceException>()));
       await settle();
-      expect(jf.read(thirdPartySourcesProvider).single.account.needsReauth,
-          isTrue);
+      expect(
+        jf.read(thirdPartySourcesProvider).single.account.needsReauth,
+        isTrue,
+      );
     });
   });
 }

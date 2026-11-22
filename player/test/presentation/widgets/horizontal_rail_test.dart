@@ -51,8 +51,9 @@ void main() {
     expect(find.byKey(_leftKey), findsNothing);
   });
 
-  testWidgets('shows the left fade once scrolled away from the start',
-      (tester) async {
+  testWidgets('shows the left fade once scrolled away from the start', (
+    tester,
+  ) async {
     await _pump(tester, 12);
 
     await tester.drag(find.byType(ListView), const Offset(-400, 0));

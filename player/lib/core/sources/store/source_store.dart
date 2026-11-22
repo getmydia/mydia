@@ -41,10 +41,10 @@ class InMemorySourceStore implements SourceStore {
 
   @override
   Future<SourceSnapshot> load() async => SourceSnapshot(
-        accounts: _sorted(_accounts.values),
-        activeId: _active,
-        allServers: Map.unmodifiable(_allServers),
-      );
+    accounts: _sorted(_accounts.values),
+    activeId: _active,
+    allServers: Map.unmodifiable(_allServers),
+  );
 
   @override
   Future<void> setAllServers(Map<SourceId, bool> choices) async =>
@@ -104,9 +104,7 @@ class HiveSourceStore implements SourceStore {
     if (raw == null) return const {};
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      return {
-        for (final e in json.entries) SourceId(e.key): e.value as bool,
-      };
+      return {for (final e in json.entries) SourceId(e.key): e.value as bool};
     } catch (e) {
       // Like an unreadable account: the choices reset, nothing else fails.
       debugPrint('[Sources] Skipping unreadable All servers choices: $e');
@@ -116,13 +114,15 @@ class HiveSourceStore implements SourceStore {
 
   @override
   Future<void> setAllServers(Map<SourceId, bool> choices) => _box.put(
-        _allServersKey,
-        jsonEncode({for (final e in choices.entries) e.key.value: e.value}),
-      );
+    _allServersKey,
+    jsonEncode({for (final e in choices.entries) e.key.value: e.value}),
+  );
 
   @override
   Future<void> putAccount(SourceAccountRecord record) => _box.put(
-      '$_accountPrefix${record.account.id}', jsonEncode(record.toJson()));
+    '$_accountPrefix${record.account.id}',
+    jsonEncode(record.toJson()),
+  );
 
   @override
   Future<void> removeAccount(String accountId) =>

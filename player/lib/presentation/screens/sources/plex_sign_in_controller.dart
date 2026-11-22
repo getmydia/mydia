@@ -17,8 +17,9 @@ import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
 import 'sign_in_problem.dart';
 
-final plexPinPollIntervalProvider =
-    Provider<Duration>((ref) => const Duration(seconds: 2));
+final plexPinPollIntervalProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 2),
+);
 
 sealed class PlexSignInState {
   const PlexSignInState();
@@ -108,8 +109,9 @@ class PlexSignInController extends Notifier<PlexSignInState> {
     try {
       if (DateTime.now().isAfter(_deadline!)) {
         _poll?.cancel();
-        state =
-            const PlexSignInFailed(SignInProblem(SignInIssue.plexCodeExpired));
+        state = const PlexSignInFailed(
+          SignInProblem(SignInIssue.plexCodeExpired),
+        );
         return;
       }
       final token = await tv.checkPin(pinId);
@@ -168,11 +170,12 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       final existing = reauthAccountId == null
           ? null
           : snapshot.accounts
-              .where((a) => a.account.id == reauthAccountId)
-              .firstOrNull;
+                .where((a) => a.account.id == reauthAccountId)
+                .firstOrNull;
       final accountId =
           existing?.account.id ?? const Uuid().v4().replaceAll('-', '');
-      final account = existing?.account.copyWith(
+      final account =
+          existing?.account.copyWith(
             displayName: user.username,
             needsReauth: false,
             // Signing in again always starts as the owner.
@@ -213,7 +216,7 @@ class PlexSignInController extends Notifier<PlexSignInState> {
             isOwner: true,
             protected:
                 _homeUsers.where((u) => u.admin).firstOrNull?.protected ??
-                    false,
+                false,
           ),
           for (final u in _homeUsers)
             if (!u.admin) u.toProfile(accountId),
@@ -241,7 +244,9 @@ class PlexSignInController extends Notifier<PlexSignInState> {
         // The owner too: a leftover owner user token (from a switch back to
         // the owner) would shadow the fresh account token.
         await secrets.deleteUserToken(
-            account, existing.account.activeProfileId);
+          account,
+          existing.account.activeProfileId,
+        );
       }
       // A live source caches its token; rebuild it so it reads the new one.
       for (final source in record.sources) {
@@ -258,8 +263,9 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       }
     } catch (_) {
       if (ref.mounted) {
-        state =
-            const PlexSignInFailed(SignInProblem(SignInIssue.plexSaveFailed));
+        state = const PlexSignInFailed(
+          SignInProblem(SignInIssue.plexSaveFailed),
+        );
       }
     }
   }
@@ -267,4 +273,5 @@ class PlexSignInController extends Notifier<PlexSignInState> {
 
 final plexSignInProvider = NotifierProvider.autoDispose
     .family<PlexSignInController, PlexSignInState, String?>(
-        PlexSignInController.new);
+      PlexSignInController.new,
+    );

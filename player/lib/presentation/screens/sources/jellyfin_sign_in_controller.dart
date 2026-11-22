@@ -131,9 +131,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       }
     } on SourceException catch (e) {
       if (ref.mounted) {
-        state = JellyfinEnterAddress(
-          error: SignInProblem.fromError(e),
-        );
+        state = JellyfinEnterAddress(error: SignInProblem.fromError(e));
       }
     } catch (_) {
       if (ref.mounted) {
@@ -171,11 +169,10 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
 
   JellyfinPassword _signInFailed([
     SignInIssue issue = SignInIssue.jellyfinSignInFailed,
-  ]) =>
-      JellyfinPassword(
-        error: SignInProblem(issue),
-        quickConnectAvailable: _quickConnect,
-      );
+  ]) => JellyfinPassword(
+    error: SignInProblem(issue),
+    quickConnectAvailable: _quickConnect,
+  );
 
   Future<void> _check(JellyfinAuth auth, QuickConnectCode code) async {
     if (_checking || !ref.mounted) return;
@@ -258,7 +255,8 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
         id: accountId,
         kind: SourceKind.jellyfin,
         displayName: session.userName,
-        storageNamespace: existing?.account.storageNamespace ??
+        storageNamespace:
+            existing?.account.storageNamespace ??
             SourceSecrets.newStorageNamespace(accountId),
         activeProfileId: session.userId,
       );
@@ -303,5 +301,5 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
 
 final jellyfinSignInProvider = NotifierProvider.autoDispose
     .family<JellyfinSignInController, JellyfinSignInState, String?>(
-  JellyfinSignInController.new,
-);
+      JellyfinSignInController.new,
+    );

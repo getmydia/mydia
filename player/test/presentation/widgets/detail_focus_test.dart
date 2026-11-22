@@ -22,10 +22,10 @@ import 'package:player/presentation/widgets/play_button.dart';
 import 'package:player/presentation/widgets/primary_play_button.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: Center(child: child)),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: Center(child: child)),
+);
 
 void main() {
   // FocusHighlight's ring is gated on FocusManager.highlightMode, which
@@ -45,9 +45,7 @@ void main() {
 
   group('PlayButton', () {
     testWidgets('paints a visible ring when focused', (tester) async {
-      await tester.pumpWidget(
-        _host(PlayButton(onPressed: () {})),
-      );
+      await tester.pumpWidget(_host(PlayButton(onPressed: () {})));
 
       final scope = FocusScope.of(tester.element(find.byType(PlayButton)));
       scope.nextFocus();
@@ -59,13 +57,12 @@ void main() {
       expect((decorated.decoration as BoxDecoration).border, isNotNull);
     });
 
-    testWidgets('Enter on the focused play button starts playback',
-        (tester) async {
+    testWidgets('Enter on the focused play button starts playback', (
+      tester,
+    ) async {
       var presses = 0;
 
-      await tester.pumpWidget(
-        _host(PlayButton(onPressed: () => presses++)),
-      );
+      await tester.pumpWidget(_host(PlayButton(onPressed: () => presses++)));
 
       final scope = FocusScope.of(tester.element(find.byType(PlayButton)));
       scope.nextFocus();
@@ -77,9 +74,7 @@ void main() {
     });
 
     testWidgets('a disabled play button is not a focus stop', (tester) async {
-      await tester.pumpWidget(
-        _host(const PlayButton()),
-      );
+      await tester.pumpWidget(_host(const PlayButton()));
 
       final scope = FocusScope.of(tester.element(find.byType(PlayButton)));
       scope.nextFocus();
@@ -89,18 +84,18 @@ void main() {
     });
 
     testWidgets(
-        'contributes exactly one focus stop, not two nested inside each '
-        'other (regression: InkWell defaults canRequestFocus to true, which '
-        'would register a second, invisible stop under FocusHighlight\'s '
-        'own stop)', (tester) async {
-      await tester.pumpWidget(
-        _host(PlayButton(onPressed: () {})),
-      );
+      'contributes exactly one focus stop, not two nested inside each '
+      'other (regression: InkWell defaults canRequestFocus to true, which '
+      'would register a second, invisible stop under FocusHighlight\'s '
+      'own stop)',
+      (tester) async {
+        await tester.pumpWidget(_host(PlayButton(onPressed: () {})));
 
-      final scope = FocusScope.of(tester.element(find.byType(PlayButton)));
+        final scope = FocusScope.of(tester.element(find.byType(PlayButton)));
 
-      expect(scope.traversalDescendants.length, 1);
-    });
+        expect(scope.traversalDescendants.length, 1);
+      },
+    );
   });
 
   group('PrimaryPlayButton', () {
@@ -145,8 +140,9 @@ void main() {
     testWidgets('a disabled button is not a focus stop', (tester) async {
       await tester.pumpWidget(_host(const PrimaryPlayButton(onPressed: null)));
 
-      final scope =
-          FocusScope.of(tester.element(find.byType(PrimaryPlayButton)));
+      final scope = FocusScope.of(
+        tester.element(find.byType(PrimaryPlayButton)),
+      );
       scope.nextFocus();
       await tester.pump();
 
@@ -156,8 +152,9 @@ void main() {
     testWidgets('contributes exactly one focus stop', (tester) async {
       await tester.pumpWidget(_host(PrimaryPlayButton(onPressed: () {})));
 
-      final scope =
-          FocusScope.of(tester.element(find.byType(PrimaryPlayButton)));
+      final scope = FocusScope.of(
+        tester.element(find.byType(PrimaryPlayButton)),
+      );
 
       expect(scope.traversalDescendants.length, 1);
     });
@@ -168,14 +165,14 @@ void main() {
     // false and onShowMediaInfo is null, so the row is exactly two chips
     // wide and the stop count below is unambiguous.
     Widget buildRow() => DetailActionRow(
-          watched: false,
-          onToggleWatched: () {},
-          isFavorite: false,
-          onToggleFavorite: () {},
-          onDownload: () {},
-          trailerUrl: null,
-          showDownload: false,
-        );
+      watched: false,
+      onToggleWatched: () {},
+      isFavorite: false,
+      onToggleFavorite: () {},
+      onDownload: () {},
+      trailerUrl: null,
+      showDownload: false,
+    );
 
     testWidgets('paints a visible ring when focused', (tester) async {
       await tester.pumpWidget(_host(buildRow()));
@@ -193,8 +190,9 @@ void main() {
       );
     });
 
-    testWidgets('Enter on the focused chip activates its callback',
-        (tester) async {
+    testWidgets('Enter on the focused chip activates its callback', (
+      tester,
+    ) async {
       var toggles = 0;
 
       await tester.pumpWidget(
@@ -220,8 +218,7 @@ void main() {
       expect(toggles, 1);
     });
 
-    testWidgets(
-        'each chip contributes exactly one focus stop, not two nested '
+    testWidgets('each chip contributes exactly one focus stop, not two nested '
         'inside each other (regression: InkWell defaults canRequestFocus to '
         'true, which would double the stop count below)', (tester) async {
       await tester.pumpWidget(_host(buildRow()));

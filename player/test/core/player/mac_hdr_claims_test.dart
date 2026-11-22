@@ -11,8 +11,11 @@ void main() {
     });
 
     test('the surface claims the native list while unverified', () {
-      expect(
-          macHdrFormats(VideoOutputPath.surface), ['hdr10+', 'hdr10', 'hlg']);
+      expect(macHdrFormats(VideoOutputPath.surface), [
+        'hdr10+',
+        'hdr10',
+        'hlg',
+      ]);
     });
 
     test('the surface adds dolby_vision first once verified', () {
@@ -36,7 +39,9 @@ void main() {
       for (final path in VideoOutputPath.values) {
         expect(
           await nativeProfileHdrFormats(
-              isMacOS: true, resolvePath: () async => path),
+            isMacOS: true,
+            resolvePath: () async => path,
+          ),
           macHdrFormats(path),
         );
       }
@@ -75,14 +80,13 @@ void main() {
       bool legacy = false,
       String? failed,
       String version = '1.5.0',
-    }) =>
-        resolveVideoOutputChoice(
-          readLegacyHatch: () async => legacy,
-          readFailedVersion: () async => failed,
-          appVersion: version,
-          platform: TargetPlatform.macOS,
-          isWeb: false,
-        );
+    }) => resolveVideoOutputChoice(
+      readLegacyHatch: () async => legacy,
+      readFailedVersion: () async => failed,
+      appVersion: version,
+      platform: TargetPlatform.macOS,
+      isWeb: false,
+    );
 
     test('uses the surface with nothing against it', () async {
       expect((await resolve()).path, VideoOutputPath.surface);

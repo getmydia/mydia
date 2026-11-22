@@ -11,15 +11,19 @@ import '../../../../core/sources/stash/stash_media_source_test.dart' show build;
 
 void main() {
   const scene = ItemRef(
-      sourceId: SourceId('st1:owner:main'),
-      kind: ItemKind.video,
-      externalId: '2');
+    sourceId: SourceId('st1:owner:main'),
+    kind: ItemKind.video,
+    externalId: '2',
+  );
 
   ({StashPlaybackSession session, FakeStashServer server}) open() {
     final b = build();
     return (
-      session:
-          StashPlaybackSession(source: b.source, item: scene, fileId: '92'),
+      session: StashPlaybackSession(
+        source: b.source,
+        item: scene,
+        fileId: '92',
+      ),
       server: b.server,
     );
   }
@@ -28,10 +32,16 @@ void main() {
     var now = DateTime(2026, 1, 1, 12);
     final b = build();
     final reporter = StashProgressReporter(
-        client: b.source.client, sceneId: '2', clock: () => now);
+      client: b.source.client,
+      sceneId: '2',
+      clock: () => now,
+    );
     Future<double> report({required bool paused}) async {
       await reporter.sendProgress(
-          positionSeconds: 10, durationSeconds: 1200, paused: paused);
+        positionSeconds: 10,
+        durationSeconds: 1200,
+        paused: paused,
+      );
       return b.server.operations.last.$2['playDuration'] as double;
     }
 
@@ -57,8 +67,10 @@ void main() {
 
   test('offers direct play and transcode, no copy', () async {
     final offer = (await open().session.candidates(CandidateScope.file)).offer!;
-    expect(
-        offer.candidates.map((c) => c.strategy), ['DIRECT_PLAY', 'TRANSCODE']);
+    expect(offer.candidates.map((c) => c.strategy), [
+      'DIRECT_PLAY',
+      'TRANSCODE',
+    ]);
     expect(offer.fileId, '92');
   });
 
@@ -71,10 +83,10 @@ void main() {
   test('streams with the key in a header and never in the URL', () async {
     final o = open();
     final setup = ((await o.session.prepareStreaming(
-            owner: Object(),
-            onProgress: (_) {},
-            isCurrent: () => true)) as StreamingReady)
-        .setup;
+      owner: Object(),
+      onProgress: (_) {},
+      isCurrent: () => true,
+    )) as StreamingReady).setup;
     final transport = setup.createTransport(relayed: false);
     final direct = await transport.open(
       const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
@@ -94,21 +106,27 @@ void main() {
       fileId: '92',
       startAt: Duration.zero,
     );
-    expect(hls.url,
-        'http://192.168.1.20:9999/scene/2/stream.m3u8?resolution=STANDARD_HD');
+    expect(
+      hls.url,
+      'http://192.168.1.20:9999/scene/2/stream.m3u8?resolution=STANDARD_HD',
+    );
     expect(hls.url, isNot(contains('apikey')));
   });
 
   test('progress saves activity; watched adds a play', () async {
     final o = open();
-    final reporter = ((await o.session.prepareStreaming(
-            owner: Object(),
-            onProgress: (_) {},
-            isCurrent: () => true)) as StreamingReady)
-        .setup
-        .progress as StashProgressReporter;
+    final reporter =
+        ((await o.session.prepareStreaming(
+              owner: Object(),
+              onProgress: (_) {},
+              isCurrent: () => true,
+            )) as StreamingReady).setup.progress
+            as StashProgressReporter;
     await reporter.sendProgress(
-        positionSeconds: 90, durationSeconds: 1200, paused: false);
+      positionSeconds: 90,
+      durationSeconds: 1200,
+      paused: false,
+    );
     final (name, vars) = o.server.operations.last;
     expect(name, 'SaveActivity');
     expect(vars['id'], '2');
@@ -119,12 +137,16 @@ void main() {
 
   test('receiver mode puts apikey on the direct stream', () async {
     final o = open();
-    final stream = await StashStreamResolver(
-      client: o.session.stashClient,
-      sceneId: '2',
-      forReceiver: true,
-    ).resolve(const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
-        fileId: '92', startAt: Duration.zero);
+    final stream =
+        await StashStreamResolver(
+          client: o.session.stashClient,
+          sceneId: '2',
+          forReceiver: true,
+        ).resolve(
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+          fileId: '92',
+          startAt: Duration.zero,
+        );
 
     final url = Uri.parse(stream.url);
     expect(url.path, '/scene/2/stream');
@@ -134,19 +156,21 @@ void main() {
 
   test('receiver mode keeps the resolution on the HLS stream', () async {
     final o = open();
-    final stream = await StashStreamResolver(
-      client: o.session.stashClient,
-      sceneId: '2',
-      forReceiver: true,
-    ).resolve(
-        const HlsPlan(
-          strategy: HlsStrategy.transcode,
-          rung: QualityRung.original,
-          adaptive: false,
-          reason: PlanReason.fallbackFromFailure,
-        ),
-        fileId: '92',
-        startAt: Duration.zero);
+    final stream =
+        await StashStreamResolver(
+          client: o.session.stashClient,
+          sceneId: '2',
+          forReceiver: true,
+        ).resolve(
+          const HlsPlan(
+            strategy: HlsStrategy.transcode,
+            rung: QualityRung.original,
+            adaptive: false,
+            reason: PlanReason.fallbackFromFailure,
+          ),
+          fileId: '92',
+          startAt: Duration.zero,
+        );
 
     final url = Uri.parse(stream.url);
     expect(url.path, '/scene/2/stream.m3u8');

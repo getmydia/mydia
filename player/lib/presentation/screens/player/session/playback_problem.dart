@@ -38,17 +38,13 @@ enum PlaybackIssue {
 /// A playback failure: one of the app's own [PlaybackIssue]s, or text from
 /// somewhere else.
 class PlaybackProblem {
-  const PlaybackProblem(PlaybackIssue this.issue)
-      : text = null,
-        error = null;
-  const PlaybackProblem.fromText(String this.text)
-      : issue = null,
-        error = null;
+  const PlaybackProblem(PlaybackIssue this.issue) : text = null, error = null;
+  const PlaybackProblem.fromText(String this.text) : issue = null, error = null;
 
   /// A failure the player screen words with `AppLocalizations.sourceError`.
   const PlaybackProblem.fromError(Object this.error)
-      : issue = null,
-        text = null;
+    : issue = null,
+      text = null;
 
   final PlaybackIssue? issue;
   final String? text;
@@ -82,15 +78,15 @@ class PlaybackIssueException implements Exception {
 
 extension PlaybackProblemText on AppLocalizations {
   String playbackIssueText(PlaybackIssue issue) => switch (issue) {
-        PlaybackIssue.noPlayableFile => playbackIssueNoPlayableFile,
-        PlaybackIssue.serverUrlMissing => playbackIssueServerUrlMissing,
-        PlaybackIssue.p2pUnsupported => playbackIssueP2pUnsupported,
-        PlaybackIssue.noFileOffered => playbackIssueNoFileOffered,
-        PlaybackIssue.notAvailableOffline => playbackIssueNotAvailableOffline,
-        PlaybackIssue.downloadMissing => playbackIssueDownloadMissing,
-        PlaybackIssue.browserUnsupported => playbackIssueBrowserUnsupported,
-        PlaybackIssue.proxyMoved => playbackIssueProxyMoved,
-      };
+    PlaybackIssue.noPlayableFile => playbackIssueNoPlayableFile,
+    PlaybackIssue.serverUrlMissing => playbackIssueServerUrlMissing,
+    PlaybackIssue.p2pUnsupported => playbackIssueP2pUnsupported,
+    PlaybackIssue.noFileOffered => playbackIssueNoFileOffered,
+    PlaybackIssue.notAvailableOffline => playbackIssueNotAvailableOffline,
+    PlaybackIssue.downloadMissing => playbackIssueDownloadMissing,
+    PlaybackIssue.browserUnsupported => playbackIssueBrowserUnsupported,
+    PlaybackIssue.proxyMoved => playbackIssueProxyMoved,
+  };
 
   String playbackProblemText(PlaybackProblem problem) {
     final issue = problem.issue;
@@ -103,8 +99,8 @@ extension PlaybackProblemText on AppLocalizations {
   /// The text for whatever a load threw: the app's own issue, a source
   /// failure, or the exception's own text.
   String playbackFailureText(Object error) => switch (error) {
-        PlaybackIssueException(:final issue) => playbackIssueText(issue),
-        SourceException() => sourceError(error),
-        _ => error.toString(),
-      };
+    PlaybackIssueException(:final issue) => playbackIssueText(issue),
+    SourceException() => sourceError(error),
+    _ => error.toString(),
+  };
 }

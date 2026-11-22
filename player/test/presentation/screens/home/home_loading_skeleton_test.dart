@@ -27,23 +27,29 @@ Future<void> _pump(WidgetTester tester, Size size) async {
 
 void main() {
   group('HomeLoadingSkeleton', () {
-    testWidgets('the hero starts at the top of the scroll view',
-        (tester) async {
+    testWidgets('the hero starts at the top of the scroll view', (
+      tester,
+    ) async {
       await _pump(tester, const Size(390, 844));
 
       // .first: each rail's horizontal card strip is itself a ListView, so
       // the finder is ambiguous once a rail is built. The outer, vertical one
       // is first in traversal order.
       final listTop = tester.getTopLeft(find.byType(ListView).first).dy;
-      final heroTop =
-          tester.getTopLeft(find.byKey(HomeLoadingSkeleton.heroKey)).dy;
+      final heroTop = tester
+          .getTopLeft(find.byKey(HomeLoadingSkeleton.heroKey))
+          .dy;
 
-      expect(heroTop, listTop,
-          reason: 'the loaded CustomScrollView has no top padding either');
+      expect(
+        heroTop,
+        listTop,
+        reason: 'the loaded CustomScrollView has no top padding either',
+      );
     });
 
-    testWidgets('the hero sits at y=0 under a transparent app bar',
-        (tester) async {
+    testWidgets('the hero sits at y=0 under a transparent app bar', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -67,24 +73,24 @@ void main() {
 
       // Inside extendBodyBehindAppBar a ListView with null padding inherits
       // the bar's height as top padding, which pushed the hero under the bar.
-      expect(
-        tester.getTopLeft(find.byKey(HomeLoadingSkeleton.heroKey)).dy,
-        0,
-      );
+      expect(tester.getTopLeft(find.byKey(HomeLoadingSkeleton.heroKey)).dy, 0);
     });
 
-    testWidgets('the hero placeholder is the loaded poster card at its offset',
-        (tester) async {
-      await _pump(tester, const Size(1280, 800));
+    testWidgets(
+      'the hero placeholder is the loaded poster card at its offset',
+      (tester) async {
+        await _pump(tester, const Size(1280, 800));
 
-      final poster = find.byKey(HomeLoadingSkeleton.heroPosterKey);
-      expect(tester.getSize(poster), const Size(248, 360));
-      // The loaded hero pads its top by the safe area plus 24.
-      expect(tester.getTopLeft(poster).dy, 24);
-    });
+        final poster = find.byKey(HomeLoadingSkeleton.heroPosterKey);
+        expect(tester.getSize(poster), const Size(248, 360));
+        // The loaded hero pads its top by the safe area plus 24.
+        expect(tester.getTopLeft(poster).dy, 24);
+      },
+    );
 
-    testWidgets('narrow, the placeholder poster is 60% wide and centred',
-        (tester) async {
+    testWidgets('narrow, the placeholder poster is 60% wide and centred', (
+      tester,
+    ) async {
       await _pump(tester, const Size(400, 800));
 
       final poster = find.byKey(HomeLoadingSkeleton.heroPosterKey);
@@ -92,8 +98,9 @@ void main() {
       expect(tester.getCenter(poster).dx, 200);
     });
 
-    testWidgets('the first rail draws 280-wide landscape cards',
-        (tester) async {
+    testWidgets('the first rail draws 280-wide landscape cards', (
+      tester,
+    ) async {
       await _pump(tester, const Size(1280, 3000));
 
       final first = find.byKey(HomeLoadingSkeleton.railKey).first;
@@ -128,8 +135,9 @@ void main() {
       );
     });
 
-    testWidgets('the sizing text never reaches the semantics tree',
-        (tester) async {
+    testWidgets('the sizing text never reaches the semantics tree', (
+      tester,
+    ) async {
       final handle = tester.ensureSemantics();
       await _pump(tester, const Size(1400, 3000));
 

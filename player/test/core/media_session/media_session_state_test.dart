@@ -57,9 +57,13 @@ void main() {
       MediaSessionStatus statusOf(FlutterPlaybackState s) =>
           mediaSessionStateFrom(buildSnapshot(state: s)).status;
       expect(
-          statusOf(FlutterPlaybackState.playing), MediaSessionStatus.playing);
+        statusOf(FlutterPlaybackState.playing),
+        MediaSessionStatus.playing,
+      );
       expect(
-          statusOf(FlutterPlaybackState.buffering), MediaSessionStatus.playing);
+        statusOf(FlutterPlaybackState.buffering),
+        MediaSessionStatus.playing,
+      );
       expect(statusOf(FlutterPlaybackState.paused), MediaSessionStatus.paused);
       expect(statusOf(FlutterPlaybackState.loading), MediaSessionStatus.paused);
       expect(statusOf(FlutterPlaybackState.idle), MediaSessionStatus.stopped);
@@ -68,16 +72,21 @@ void main() {
     });
 
     test('no duration means not seekable', () {
-      final state =
-          mediaSessionStateFrom(buildSnapshot(duration: Duration.zero));
+      final state = mediaSessionStateFrom(
+        buildSnapshot(duration: Duration.zero),
+      );
       expect(state.canSeek, isFalse);
     });
 
     test('value equality', () {
-      expect(mediaSessionStateFrom(buildSnapshot()),
-          mediaSessionStateFrom(buildSnapshot()));
-      expect(mediaSessionStateFrom(buildSnapshot()),
-          isNot(mediaSessionStateFrom(buildSnapshot(title: 'Other'))));
+      expect(
+        mediaSessionStateFrom(buildSnapshot()),
+        mediaSessionStateFrom(buildSnapshot()),
+      );
+      expect(
+        mediaSessionStateFrom(buildSnapshot()),
+        isNot(mediaSessionStateFrom(buildSnapshot(title: 'Other'))),
+      );
     });
   });
 }

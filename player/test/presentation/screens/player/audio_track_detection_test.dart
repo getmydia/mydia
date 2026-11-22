@@ -57,10 +57,10 @@ void main() {
       ]);
 
       expect(detection.tracks.map((t) => t.language), ['ita', 'eng']);
-      expect(
-        detection.tracks.map(AppLocalizationsEn().audioTrackName),
-        ['Italian', 'English'],
-      );
+      expect(detection.tracks.map(AppLocalizationsEn().audioTrackName), [
+        'Italian',
+        'English',
+      ]);
     });
 
     test('resolves each app track back to its media_kit track', () {
@@ -102,30 +102,32 @@ void main() {
   });
 
   group('watchTracks', () {
-    test('reports tracks that media_kit only discovers after playback opens',
-        () async {
-      final controller = StreamController<Tracks>();
-      addTearDown(controller.close);
+    test(
+      'reports tracks that media_kit only discovers after playback opens',
+      () async {
+        final controller = StreamController<Tracks>();
+        addTearDown(controller.close);
 
-      final seen = <Tracks>[];
-      final subscription = watchTracks(controller.stream, seen.add);
-      addTearDown(subscription.cancel);
+        final seen = <Tracks>[];
+        final subscription = watchTracks(controller.stream, seen.add);
+        addTearDown(subscription.cancel);
 
-      // The probe has not finished: this is exactly the state the old fixed
-      // 500ms sample could land in.
-      controller.add(_sentinelsOnly);
-      await pumpEventQueue();
-      expect(detectAudioTracks(seen.last.audio).tracks, isEmpty);
+        // The probe has not finished: this is exactly the state the old fixed
+        // 500ms sample could land in.
+        controller.add(_sentinelsOnly);
+        await pumpEventQueue();
+        expect(detectAudioTracks(seen.last.audio).tracks, isEmpty);
 
-      // mpv finishes probing and revises the list.
-      controller.add(const Tracks(audio: [_italian, _english]));
-      await pumpEventQueue();
+        // mpv finishes probing and revises the list.
+        controller.add(const Tracks(audio: [_italian, _english]));
+        await pumpEventQueue();
 
-      expect(
-        detectAudioTracks(seen.last.audio).tracks.map((t) => t.language),
-        ['ita', 'eng'],
-      );
-    });
+        expect(
+          detectAudioTracks(seen.last.audio).tracks.map((t) => t.language),
+          ['ita', 'eng'],
+        );
+      },
+    );
 
     test('carries the subtitle tracks too, not only the audio ones', () async {
       // The whole point of widening this from `watchTracks`. Subtitle

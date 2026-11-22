@@ -31,10 +31,7 @@ class ConnectionSummary {
 
   final ConnectionTone tone;
 
-  const ConnectionSummary({
-    required this.kind,
-    required this.tone,
-  });
+  const ConnectionSummary({required this.kind, required this.tone});
 
   /// Takes the three primitives rather than a whole `P2pStatus`, so a test can
   /// reach every state without constructing a status object.
@@ -52,26 +49,27 @@ class ConnectionSummary {
 
     return switch (type) {
       P2pConnectionType.direct => const ConnectionSummary(
-          kind: ConnectionKind.direct,
-          tone: ConnectionTone.good,
-        ),
+        kind: ConnectionKind.direct,
+        tone: ConnectionTone.good,
+      ),
       P2pConnectionType.relay => const ConnectionSummary(
-          kind: ConnectionKind.relay,
-          tone: ConnectionTone.caution,
-        ),
+        kind: ConnectionKind.relay,
+        tone: ConnectionTone.caution,
+      ),
       P2pConnectionType.mixed => const ConnectionSummary(
-          kind: ConnectionKind.mixed,
-          tone: ConnectionTone.caution,
-        ),
-      P2pConnectionType.none => isInitialized
-          ? const ConnectionSummary(
-              kind: ConnectionKind.reconnecting,
-              tone: ConnectionTone.pending,
-            )
-          : const ConnectionSummary(
-              kind: ConnectionKind.connecting,
-              tone: ConnectionTone.pending,
-            ),
+        kind: ConnectionKind.mixed,
+        tone: ConnectionTone.caution,
+      ),
+      P2pConnectionType.none =>
+        isInitialized
+            ? const ConnectionSummary(
+                kind: ConnectionKind.reconnecting,
+                tone: ConnectionTone.pending,
+              )
+            : const ConnectionSummary(
+                kind: ConnectionKind.connecting,
+                tone: ConnectionTone.pending,
+              ),
     };
   }
 }

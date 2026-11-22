@@ -64,8 +64,10 @@ void main() {
   /// before it ever reaches the progress service, so how many event-loop
   /// turns separate emitting a position from observing the sync is an
   /// implementation detail. A fixed delay would be a guess at it.
-  Future<void> until(bool Function() condition,
-      {required String describe}) async {
+  Future<void> until(
+    bool Function() condition, {
+    required String describe,
+  }) async {
     final deadline = DateTime.now().add(const Duration(seconds: 5));
     while (!condition()) {
       if (DateTime.now().isAfter(deadline)) fail('never observed: $describe');
@@ -122,29 +124,36 @@ void main() {
     return manager;
   }
 
-  test('a receiver at position zero syncs the real position, not zero',
-      () async {
-    await resumedCast();
+  test(
+    'a receiver at position zero syncs the real position, not zero',
+    () async {
+      await resumedCast();
 
-    backend.emitPosition(Duration.zero);
-    await until(() => progress.movies.isNotEmpty,
-        describe: 'the first position event reaching the server');
+      backend.emitPosition(Duration.zero);
+      await until(
+        () => progress.movies.isNotEmpty,
+        describe: 'the first position event reaching the server',
+      );
 
-    expect(
-      progress.movies.single.position,
-      2394,
-      reason: 'syncing the raw receiver position would overwrite the user\'s '
-          'real watch position with zero',
-    );
-    expect(progress.movies.single.duration, 5400);
-  });
+      expect(
+        progress.movies.single.position,
+        2394,
+        reason:
+            'syncing the raw receiver position would overwrite the user\'s '
+            'real watch position with zero',
+      );
+      expect(progress.movies.single.duration, 5400);
+    },
+  );
 
   test('a receiver part-way in syncs offset plus receiver position', () async {
     await resumedCast();
 
     backend.emitPosition(const Duration(seconds: 60));
-    await until(() => progress.movies.isNotEmpty,
-        describe: 'a synced position');
+    await until(
+      () => progress.movies.isNotEmpty,
+      describe: 'a synced position',
+    );
 
     expect(
       progress.movies.single.position,
@@ -167,7 +176,8 @@ void main() {
     expect(
       manager.currentSession!.mediaInfo!.position,
       const Duration(seconds: 2454),
-      reason: 'the mini controller must not read 1:00 for a cast resumed 40 '
+      reason:
+          'the mini controller must not read 1:00 for a cast resumed 40 '
           'minutes in',
     );
   });
@@ -178,56 +188,65 @@ void main() {
     backend.emitPosition(const Duration(seconds: 60));
     // `_syncProgress` saves before it syncs, so a recorded sync proves the
     // save already landed.
-    await until(() => progress.movies.isNotEmpty,
-        describe: 'a synced position');
+    await until(
+      () => progress.movies.isNotEmpty,
+      describe: 'a synced position',
+    );
 
     final stored = await store.load();
     expect(
       stored!.position,
       const Duration(seconds: 2454),
-      reason: 'reconnectStoredSession feeds this back as startPosition, so a '
+      reason:
+          'reconnectStoredSession feeds this back as startPosition, so a '
           'receiver-relative value would compound the offset every reconnect',
     );
   });
 
-  test('the receiver is asked only for the residual above the baked-in offset',
-      () async {
-    await resumedCast();
+  test(
+    'the receiver is asked only for the residual above the baked-in offset',
+    () async {
+      await resumedCast();
 
-    expect(
-      backend.loadedRequests.single.startPosition,
-      const Duration(seconds: 6),
-      reason: '2394s of the requested 2400s is already in the stream, so only '
-          'the 6s the keyframe snap gave away is left for the receiver',
-    );
-    expect(
-      backend.loadedRequests.single.startPosition,
-      isNot(const Duration(seconds: 2400)),
-      reason: 'seeking to the absolute position on top of the offset would '
-          'land at very nearly twice it',
-    );
-  });
+      expect(
+        backend.loadedRequests.single.startPosition,
+        const Duration(seconds: 6),
+        reason:
+            '2394s of the requested 2400s is already in the stream, so only '
+            'the 6s the keyframe snap gave away is left for the receiver',
+      );
+      expect(
+        backend.loadedRequests.single.startPosition,
+        isNot(const Duration(seconds: 2400)),
+        reason:
+            'seeking to the absolute position on top of the offset would '
+            'land at very nearly twice it',
+      );
+    },
+  );
 
-  test('an exactly honored offset leaves the receiver nothing to seek',
-      () async {
-    sessions.echoedStartOffset = const Duration(seconds: 2400);
-    final manager = build();
+  test(
+    'an exactly honored offset leaves the receiver nothing to seek',
+    () async {
+      sessions.echoedStartOffset = const Duration(seconds: 2400);
+      final manager = build();
 
-    await manager.startCast(
-      device: device,
-      request: CastLaunchRequest(
-        sourceId: const SourceId('macct'),
-        fileId: 'file-1',
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        title: 'Arrival',
-        startPosition: const Duration(seconds: 2400),
-        duration: const Duration(seconds: 5400),
-      ),
-    );
+      await manager.startCast(
+        device: device,
+        request: CastLaunchRequest(
+          sourceId: const SourceId('macct'),
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'Arrival',
+          startPosition: const Duration(seconds: 2400),
+          duration: const Duration(seconds: 5400),
+        ),
+      );
 
-    expect(backend.loadedRequests.single.startPosition, Duration.zero);
-  });
+      expect(backend.loadedRequests.single.startPosition, Duration.zero);
+    },
+  );
 
   test('a zero-offset session translates nothing', () async {
     sessions.echoedStartOffset = Duration.zero;
@@ -245,8 +264,10 @@ void main() {
     );
 
     backend.emitPosition(const Duration(seconds: 60));
-    await until(() => progress.movies.isNotEmpty,
-        describe: 'a synced position');
+    await until(
+      () => progress.movies.isNotEmpty,
+      describe: 'a synced position',
+    );
 
     expect(progress.movies.single.position, 60);
   });
@@ -280,8 +301,10 @@ void main() {
     );
 
     backend.emitPosition(const Duration(seconds: 2460));
-    await until(() => progress.movies.isNotEmpty,
-        describe: 'a synced position');
+    await until(
+      () => progress.movies.isNotEmpty,
+      describe: 'a synced position',
+    );
 
     expect(progress.movies.single.position, 2460);
   });

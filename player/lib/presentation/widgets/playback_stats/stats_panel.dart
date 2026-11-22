@@ -126,10 +126,7 @@ class StatsPanel extends StatelessWidget {
       ),
     );
     if (!metrics.showButtons) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 13),
-        child: title,
-      );
+      return Padding(padding: const EdgeInsets.only(bottom: 13), child: title);
     }
     return Row(
       children: [
@@ -229,24 +226,22 @@ class StatsPanel extends StatelessWidget {
   }
 
   Widget _pill(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-        decoration: BoxDecoration(
-          color: AppColors.warning.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: AppColors.warning.withValues(alpha: 0.42),
-          ),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: metrics.density == StatsDensity.tv ? 11.5 : 9.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.7,
-            color: AppColors.warningText,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+    decoration: BoxDecoration(
+      color: AppColors.warning.withValues(alpha: 0.18),
+      borderRadius: BorderRadius.circular(4),
+      border: Border.all(color: AppColors.warning.withValues(alpha: 0.42)),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: metrics.density == StatsDensity.tv ? 11.5 : 9.5,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.7,
+        color: AppColors.warningText,
+      ),
+    ),
+  );
 
   Widget _sparkline(AppLocalizations l10n, bool tv, MydiaPalette palette) =>
       Padding(
@@ -261,11 +256,19 @@ class StatsPanel extends StatelessWidget {
             ),
             Row(
               children: [
-                _legend(l10n.statsLegendThroughput,
-                    StatsSparkline.throughputColor, tv, palette),
+                _legend(
+                  l10n.statsLegendThroughput,
+                  StatsSparkline.throughputColor,
+                  tv,
+                  palette,
+                ),
                 const SizedBox(width: 12),
-                _legend(l10n.statsLegendBuffer, StatsSparkline.bufferColor, tv,
-                    palette),
+                _legend(
+                  l10n.statsLegendBuffer,
+                  StatsSparkline.bufferColor,
+                  tv,
+                  palette,
+                ),
                 const Spacer(),
                 Text(
                   l10n.statsLast60Seconds,
@@ -315,41 +318,36 @@ class StatsPanel extends StatelessWidget {
       );
 
   Widget _remoteHint(AppLocalizations l10n, MydiaPalette palette) => Padding(
-        padding: const EdgeInsets.only(top: 16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.24),
-                ),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: Text(
-                l10n.statsRemoteOk,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.72),
-                ),
-              ),
+    padding: const EdgeInsets.only(top: 16),
+    child: Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Text(
+            l10n.statsRemoteOk,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.72),
             ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                l10n.statsRemoteHint(l10n.settingsStatsOverlayTitle),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: palette.textSecondary,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      );
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            l10n.statsRemoteHint(l10n.settingsStatsOverlayTitle),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 13.5, color: palette.textSecondary),
+          ),
+        ),
+      ],
+    ),
+  );
 }

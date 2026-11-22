@@ -5,8 +5,9 @@ import 'package:player/presentation/widgets/storage_unavailable_dialog.dart';
 
 void main() {
   group('showStorageUnavailableDialog', () {
-    testWidgets('tells the user the pairing will not survive a restart',
-        (tester) async {
+    testWidgets('tells the user the pairing will not survive a restart', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,

@@ -3,9 +3,9 @@ import 'package:player/core/cache/query_key.dart';
 
 QueryKey _showDetail(String id) => QueryKey('TvShowDetail', {'id': id});
 QueryKey _seasonEpisodes(String showId, int seasonNumber) => QueryKey(
-      'SeasonEpisodes',
-      {'showId': showId, 'seasonNumber': seasonNumber},
-    );
+  'SeasonEpisodes',
+  {'showId': showId, 'seasonNumber': seasonNumber},
+);
 
 void main() {
   test('keys with the same operation and variables are equal', () {
@@ -21,10 +21,14 @@ void main() {
 
   test('variable order does not change identity', () {
     expect(
-      QueryKey('SeasonEpisodes', const {'showId': '1', 'seasonNumber': 2})
-          .canonical,
-      QueryKey('SeasonEpisodes', const {'seasonNumber': 2, 'showId': '1'})
-          .canonical,
+      QueryKey('SeasonEpisodes', const {
+        'showId': '1',
+        'seasonNumber': 2,
+      }).canonical,
+      QueryKey('SeasonEpisodes', const {
+        'seasonNumber': 2,
+        'showId': '1',
+      }).canonical,
     );
   });
 
@@ -37,10 +41,7 @@ void main() {
   });
 
   test('different operations produce different keys', () {
-    expect(
-      QueryKey('Favorites') == QueryKey('Unwatched'),
-      isFalse,
-    );
+    expect(QueryKey('Favorites') == QueryKey('Unwatched'), isFalse);
   });
 
   test('canonical form is a stable string usable as a persisted store key', () {
@@ -54,10 +55,10 @@ void main() {
   test('nested variables are canonicalized too', () {
     expect(
       QueryKey('X', const {
-        'filter': {'b': 1, 'a': 2}
+        'filter': {'b': 1, 'a': 2},
       }).canonical,
       QueryKey('X', const {
-        'filter': {'a': 2, 'b': 1}
+        'filter': {'a': 2, 'b': 1},
       }).canonical,
     );
   });
@@ -65,9 +66,6 @@ void main() {
   test('the catalog builds distinct keys per entity id', () {
     expect(_showDetail('1') == _showDetail('2'), isFalse);
     expect(_showDetail('1'), _showDetail('1'));
-    expect(
-      _seasonEpisodes('1', 2),
-      _seasonEpisodes('1', 2),
-    );
+    expect(_seasonEpisodes('1', 2), _seasonEpisodes('1', 2));
   });
 }

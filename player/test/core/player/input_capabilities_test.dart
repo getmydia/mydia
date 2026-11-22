@@ -21,8 +21,7 @@ void main() {
       );
     });
 
-    test(
-        'true on web with a coarse pointer, the actual defect this fixes: '
+    test('true on web with a coarse pointer, the actual defect this fixes: '
         'PlatformFeatures.isMobile returns false on web, so a phone browser '
         'was classified as neither mobile nor desktop and lost gestures', () {
       expect(
@@ -36,18 +35,20 @@ void main() {
       );
     });
 
-    test('false on web with a fine pointer, so desktop browsers are unchanged',
-        () {
-      expect(
-        InputCapabilities.computeTouchPrimary(
-          isNativeMobile: false,
-          isWeb: true,
-          coarsePointer: false,
-          directionalPrimary: false,
-        ),
-        isFalse,
-      );
-    });
+    test(
+      'false on web with a fine pointer, so desktop browsers are unchanged',
+      () {
+        expect(
+          InputCapabilities.computeTouchPrimary(
+            isNativeMobile: false,
+            isWeb: true,
+            coarsePointer: false,
+            directionalPrimary: false,
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('false on native desktop', () {
       expect(
@@ -61,8 +62,7 @@ void main() {
       );
     });
 
-    test(
-        'a coarse pointer off web is ignored, since native already answers '
+    test('a coarse pointer off web is ignored, since native already answers '
         'through isNativeMobile and a touchscreen laptop keeps its desktop '
         'chrome', () {
       expect(
@@ -76,8 +76,7 @@ void main() {
       );
     });
 
-    test(
-        'false on Android TV, which reports isNativeMobile true and would '
+    test('false on Android TV, which reports isNativeMobile true and would '
         'otherwise wire up tap and double-tap gestures for a remote', () {
       expect(
         InputCapabilities.computeTouchPrimary(
@@ -90,18 +89,20 @@ void main() {
       );
     });
 
-    test('the real getter matches the pure predicate on this (non-web) host',
-        () {
-      expect(
-        InputCapabilities.touchPrimary,
-        InputCapabilities.computeTouchPrimary(
-          isNativeMobile: PlatformFeatures.isMobile,
-          isWeb: PlatformFeatures.isWeb,
-          coarsePointer: false,
-          directionalPrimary: InputCapabilities.directionalPrimary,
-        ),
-      );
-    });
+    test(
+      'the real getter matches the pure predicate on this (non-web) host',
+      () {
+        expect(
+          InputCapabilities.touchPrimary,
+          InputCapabilities.computeTouchPrimary(
+            isNativeMobile: PlatformFeatures.isMobile,
+            isWeb: PlatformFeatures.isWeb,
+            coarsePointer: false,
+            directionalPrimary: InputCapabilities.directionalPrimary,
+          ),
+        );
+      },
+    );
 
     test('supportsGestureControls tracks touchPrimary', () {
       expect(
@@ -145,8 +146,7 @@ void main() {
       );
     });
 
-    test(
-        'the developer override forces the mode on without Android, so the '
+    test('the developer override forces the mode on without Android, so the '
         'TV path can be exercised on a desktop host or an emulator', () {
       expect(
         InputCapabilities.computeDirectionalPrimary(

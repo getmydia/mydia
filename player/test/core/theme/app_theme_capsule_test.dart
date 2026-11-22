@@ -23,7 +23,9 @@ void main() {
   test('Frosted: the buttons keep their rounded rectangle', () {
     final theme = AppTheme.build(Palettes.projectionBooth, liquid: false);
     expect(
-        shapeOf(theme.filledButtonTheme.style), isA<RoundedRectangleBorder>());
+      shapeOf(theme.filledButtonTheme.style),
+      isA<RoundedRectangleBorder>(),
+    );
     expect(theme.filledButtonTheme.style?.splashFactory, isNull);
   });
 }

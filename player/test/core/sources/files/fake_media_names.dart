@@ -8,8 +8,10 @@ class FakeMediaNames implements MediaNames {
   /// Every path ever passed to [parseBatch], in order.
   final List<String> parsedPaths = [];
 
-  static final _episode =
-      RegExp(r'^(.*?)[\s._-]*S(\d+)E(\d+)', caseSensitive: false);
+  static final _episode = RegExp(
+    r'^(.*?)[\s._-]*S(\d+)E(\d+)',
+    caseSensitive: false,
+  );
   static final _year = RegExp(r'\((\d{4})\)');
 
   static String _alnum(String s) =>

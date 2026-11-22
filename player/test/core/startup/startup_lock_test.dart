@@ -48,8 +48,7 @@ void main() {
       expect(isLockContentionError(error), isTrue);
     });
 
-    test('ignores another platform\'s code on a path without a .lock suffix',
-        () {
+    test('ignores another platform\'s code on a path without a .lock suffix', () {
       // The same number means something unrelated here (e.g. 35 is EDEADLK on
       // Linux, 11 is EDEADLK on Darwin), so it must not be read as contention.
       final error = FileSystemException(

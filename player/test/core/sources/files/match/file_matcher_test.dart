@@ -52,18 +52,20 @@ class FakeRelay extends RelayTmdb {
   Future<List<TmdbCandidate>> searchMovies(String query, {int? year}) =>
       _search(query, year);
 
-  Future<List<TmdbCandidate>> _search(String query, int? year,
-          {String label = ''}) =>
-      _call(() {
-        searches.add(query);
-        searchYears['$label$query'] = year;
-        final id = ids[query];
-        return [
-          if (id != null) TmdbCandidate(id: id, title: query, year: year),
-          for (final e in extra.entries)
-            TmdbCandidate(id: e.value, title: e.key, year: year),
-        ];
-      });
+  Future<List<TmdbCandidate>> _search(
+    String query,
+    int? year, {
+    String label = '',
+  }) => _call(() {
+    searches.add(query);
+    searchYears['$label$query'] = year;
+    final id = ids[query];
+    return [
+      if (id != null) TmdbCandidate(id: id, title: query, year: year),
+      for (final e in extra.entries)
+        TmdbCandidate(id: e.value, title: e.key, year: year),
+    ];
+  });
 
   @override
   Future<List<TmdbCandidate>> searchShows(String query, {int? year}) =>
@@ -77,9 +79,13 @@ class FakeRelay extends RelayTmdb {
   Future<MatchedShow> show(int id, {required Iterable<int> seasons}) =>
       _call(() {
         showSeasons.add(seasons.toList()..sort());
-        return MatchedShow(tmdbId: id, title: 'S$id', seasons: {
-          for (final s in seasons) s: [MatchedEpisode(season: s, episode: 1)],
-        });
+        return MatchedShow(
+          tmdbId: id,
+          title: 'S$id',
+          seasons: {
+            for (final s in seasons) s: [MatchedEpisode(season: s, episode: 1)],
+          },
+        );
       });
 }
 
@@ -119,8 +125,11 @@ void main() {
   });
 
   Future<void> addFiles(List<String> paths) async {
-    final parsed =
-        FakeMediaNames().parseBatch('', paths, FilesLibraryKind.mixed);
+    final parsed = FakeMediaNames().parseBatch(
+      '',
+      paths,
+      FilesLibraryKind.mixed,
+    );
     await index.putFiles([
       for (final p in parsed)
         IndexedFile(
@@ -139,14 +148,16 @@ void main() {
       ItemRef(sourceId: source, kind: kind, externalId: id);
 
   Future<void> saveProgress(ItemKind kind, String id, String type) =>
-      progress.save(LocalPlaybackProgress(
-        sourceId: source.value,
-        mediaId: id,
-        mediaType: type,
-        positionSeconds: 60,
-        durationSeconds: 600,
-        updatedAt: t0,
-      ));
+      progress.save(
+        LocalPlaybackProgress(
+          sourceId: source.value,
+          mediaId: id,
+          mediaType: type,
+          positionSeconds: 60,
+          durationSeconds: 600,
+          updatedAt: t0,
+        ),
+      );
 
   test('two_files_of_one_movie_make_one_group', () async {
     relay.ids['Copper Valley'] = 7;
@@ -188,13 +199,15 @@ void main() {
   test('pinned_group_is_not_searched_again', () async {
     relay.ids['Copper Valley'] = 7;
     await addFiles(['Copper Valley (2018).mkv']);
-    await index.putGroup(GroupMatch(
-      groupKey: 'coppervalley|2018',
-      isShow: false,
-      tmdbId: 99,
-      pinned: true,
-      matchedAt: t0.subtract(const Duration(days: 5)),
-    ));
+    await index.putGroup(
+      GroupMatch(
+        groupKey: 'coppervalley|2018',
+        isShow: false,
+        tmdbId: 99,
+        pinned: true,
+        matchedAt: t0.subtract(const Duration(days: 5)),
+      ),
+    );
     await matcher.matchPending();
     expect(relay.searches, isEmpty);
     expect(index.group('coppervalley|2018')!.tmdbId, 99);
@@ -202,13 +215,15 @@ void main() {
 
   test('pinned show still fetches seasons it lacks', () async {
     await addFiles(['Moon Harbor S02E01.mkv']);
-    await index.putGroup(GroupMatch(
-      groupKey: 'tv:moonharbor|',
-      isShow: true,
-      tmdbId: 3,
-      pinned: true,
-      matchedAt: t0,
-    ));
+    await index.putGroup(
+      GroupMatch(
+        groupKey: 'tv:moonharbor|',
+        isShow: true,
+        tmdbId: 3,
+        pinned: true,
+        matchedAt: t0,
+      ),
+    );
     await matcher.matchPending();
     expect(relay.searches, isEmpty);
     expect(relay.showSeasons, [
@@ -264,49 +279,61 @@ void main() {
     expect(g.pinned, isFalse);
   });
 
-  test('onPinned fires after each pin write, not for automatic matches',
-      () async {
-    var pinned = 0;
-    final m = FileMatcher(
-      tmdb: relay,
-      names: FakeMediaNames(),
-      index: index,
-      progress: progress,
-      sourceId: source,
-      onPinned: () => pinned++,
-      now: () => t0.add(const Duration(days: 1)),
-    );
-    relay.ids['Copper Valley'] = 7;
-    await addFiles(['Copper Valley (2018).mkv']);
-    await m.matchPending();
-    expect(pinned, 0);
-    await m.pin('coppervalley|2018', isShow: false);
-    expect(pinned, 1);
-    await m.applyRemotePin('coppervalley|2018', isShow: false, tmdbId: 7);
-    expect(index.group('coppervalley|2018')!.tmdbId, 7);
-    expect(pinned, 2);
+  test(
+    'onPinned fires after each pin write, not for automatic matches',
+    () async {
+      var pinned = 0;
+      final m = FileMatcher(
+        tmdb: relay,
+        names: FakeMediaNames(),
+        index: index,
+        progress: progress,
+        sourceId: source,
+        onPinned: () => pinned++,
+        now: () => t0.add(const Duration(days: 1)),
+      );
+      relay.ids['Copper Valley'] = 7;
+      await addFiles(['Copper Valley (2018).mkv']);
+      await m.matchPending();
+      expect(pinned, 0);
+      await m.pin('coppervalley|2018', isShow: false);
+      expect(pinned, 1);
+      await m.applyRemotePin('coppervalley|2018', isShow: false, tmdbId: 7);
+      expect(index.group('coppervalley|2018')!.tmdbId, 7);
+      expect(pinned, 2);
 
-    expect(
-        await m.applyRemoteUnpin('coppervalley|2018', pinRevision: 99), isTrue);
-    final g = index.group('coppervalley|2018')!;
-    expect((g.pinned, g.pinRevision), (false, 99));
-    expect(pinned, 3);
+      expect(
+        await m.applyRemoteUnpin('coppervalley|2018', pinRevision: 99),
+        isTrue,
+      );
+      final g = index.group('coppervalley|2018')!;
+      expect((g.pinned, g.pinRevision), (false, 99));
+      expect(pinned, 3);
 
-    // Nothing pinned: nothing written, nothing reported.
-    expect(await m.applyRemoteUnpin('coppervalley|2018', pinRevision: 100),
-        isFalse);
-    expect(pinned, 3);
-  });
+      // Nothing pinned: nothing written, nothing reported.
+      expect(
+        await m.applyRemoteUnpin('coppervalley|2018', pinRevision: 100),
+        isFalse,
+      );
+      expect(pinned, 3);
+    },
+  );
 
   test('a remote unpin older than the applied pin leaves it pinned', () async {
     relay.ids['Copper Valley'] = 7;
     await addFiles(['Copper Valley (2018).mkv']);
     await matcher.matchPending();
     // A newer pin queued ahead of an older unpin lands first.
-    final pin = matcher.applyRemotePin('coppervalley|2018',
-        isShow: false, tmdbId: 7, pinRevision: 200);
-    final unpin =
-        matcher.applyRemoteUnpin('coppervalley|2018', pinRevision: 150);
+    final pin = matcher.applyRemotePin(
+      'coppervalley|2018',
+      isShow: false,
+      tmdbId: 7,
+      pinRevision: 200,
+    );
+    final unpin = matcher.applyRemoteUnpin(
+      'coppervalley|2018',
+      pinRevision: 150,
+    );
     await pin;
 
     expect(await unpin, isFalse);
@@ -315,8 +342,9 @@ void main() {
 
     // A newer unpin still releases it.
     expect(
-        await matcher.applyRemoteUnpin('coppervalley|2018', pinRevision: 300),
-        isTrue);
+      await matcher.applyRemoteUnpin('coppervalley|2018', pinRevision: 300),
+      isTrue,
+    );
     expect(index.group('coppervalley|2018')!.pinned, isFalse);
   });
 
@@ -391,15 +419,17 @@ void main() {
 
   test('unmatching copies movie progress to every file id', () async {
     relay.ids['Copper Valley'] = 7;
-    await addFiles(
-        ['A/Copper Valley (2018).mkv', 'B/Copper Valley (2018).mkv']);
+    await addFiles([
+      'A/Copper Valley (2018).mkv',
+      'B/Copper Valley (2018).mkv',
+    ]);
     await matcher.matchPending();
     await saveProgress(ItemKind.movie, '7', 'movie');
     await index.setWatched('7', true);
     await matcher.pin('coppervalley|2018', isShow: false);
     for (final p in [
       'A/Copper Valley (2018).mkv',
-      'B/Copper Valley (2018).mkv'
+      'B/Copper Valley (2018).mkv',
     ]) {
       final id = unmatchedFileId(fkey(p));
       expect(progress.get(progressKey(ref(ItemKind.video, id))), isNotNull);
@@ -445,9 +475,13 @@ void main() {
     await saveProgress(ItemKind.episode, episodeId(p, 1, 2), 'episode');
     await matcher.matchPending();
     expect(
-        progress.get(progressKey(ref(ItemKind.episode, '3-1-1'))), isNotNull);
+      progress.get(progressKey(ref(ItemKind.episode, '3-1-1'))),
+      isNotNull,
+    );
     expect(
-        progress.get(progressKey(ref(ItemKind.episode, '3-1-2'))), isNotNull);
+      progress.get(progressKey(ref(ItemKind.episode, '3-1-2'))),
+      isNotNull,
+    );
   });
 
   test('migration keeps the newer record at the target', () async {
@@ -455,14 +489,16 @@ void main() {
     await addFiles(['Copper Valley (2018).mkv']);
     final p = provisionalKey('coppervalley|2018');
     await saveProgress(ItemKind.movie, p, 'movie');
-    await progress.save(LocalPlaybackProgress(
-      sourceId: source.value,
-      mediaId: '7',
-      mediaType: 'movie',
-      positionSeconds: 500,
-      durationSeconds: 600,
-      updatedAt: t0.add(const Duration(hours: 1)),
-    ));
+    await progress.save(
+      LocalPlaybackProgress(
+        sourceId: source.value,
+        mediaId: '7',
+        mediaType: 'movie',
+        positionSeconds: 500,
+        durationSeconds: 600,
+        updatedAt: t0.add(const Duration(hours: 1)),
+      ),
+    );
     await matcher.matchPending();
     expect(
       progress.get(progressKey(ref(ItemKind.movie, '7')))!.positionSeconds,
@@ -486,24 +522,26 @@ void main() {
     expect(index.show(3)!.seasons.keys, unorderedEquals([0, 1]));
   });
 
-  test('rematching a show leaves the movie with its TMDB number alone',
-      () async {
-    relay.ids['Copper Valley'] = 7;
-    relay.ids['Moon Harbor'] = 7;
-    await addFiles(['Copper Valley (2018).mkv', 'Moon Harbor S01E01.mkv']);
-    await matcher.matchPending();
-    expect(index.group('coppervalley|2018')!.tmdbId, 7);
-    expect(index.group('tv:moonharbor|')!.tmdbId, 7);
-    await saveProgress(ItemKind.movie, '7', 'movie');
-    await index.setWatched('7', true);
+  test(
+    'rematching a show leaves the movie with its TMDB number alone',
+    () async {
+      relay.ids['Copper Valley'] = 7;
+      relay.ids['Moon Harbor'] = 7;
+      await addFiles(['Copper Valley (2018).mkv', 'Moon Harbor S01E01.mkv']);
+      await matcher.matchPending();
+      expect(index.group('coppervalley|2018')!.tmdbId, 7);
+      expect(index.group('tv:moonharbor|')!.tmdbId, 7);
+      await saveProgress(ItemKind.movie, '7', 'movie');
+      await index.setWatched('7', true);
 
-    await matcher.pin('tv:moonharbor|', isShow: true, tmdbId: 8);
+      await matcher.pin('tv:moonharbor|', isShow: true, tmdbId: 8);
 
-    expect(progress.get(progressKey(ref(ItemKind.movie, '7'))), isNotNull);
-    expect(progress.get(progressKey(ref(ItemKind.show, '8'))), isNull);
-    expect(index.watched(), contains('7'));
-    expect(index.watched(), isNot(contains('8')));
-  });
+      expect(progress.get(progressKey(ref(ItemKind.movie, '7'))), isNotNull);
+      expect(progress.get(progressKey(ref(ItemKind.show, '8'))), isNull);
+      expect(index.watched(), contains('7'));
+      expect(index.watched(), isNot(contains('8')));
+    },
+  );
 
   test('candidates_below_the_threshold_leave_the_group_unmatched', () async {
     relay.extra['Some Other Film'] = 41;
@@ -515,67 +553,78 @@ void main() {
     expect(index.movie(41), isNull);
   });
 
-  test('a provisional group searched with no winner hands its state to files',
-      () async {
-    await addFiles(['Copper Valley (2018).mkv']);
-    final p = provisionalKey('coppervalley|2018');
-    await saveProgress(ItemKind.movie, movieId(p), 'movie');
-    await index.setWatched(movieId(p), true);
+  test(
+    'a provisional group searched with no winner hands its state to files',
+    () async {
+      await addFiles(['Copper Valley (2018).mkv']);
+      final p = provisionalKey('coppervalley|2018');
+      await saveProgress(ItemKind.movie, movieId(p), 'movie');
+      await index.setWatched(movieId(p), true);
 
-    await matcher.matchPending();
+      await matcher.matchPending();
 
-    final fid = unmatchedFileId(fkey('Copper Valley (2018).mkv'));
-    expect(index.group('coppervalley|2018')!.tmdbId, isNull);
-    expect(progress.get(progressKey(ref(ItemKind.video, fid)))!.positionSeconds,
-        60);
-    expect(progress.get(progressKey(ref(ItemKind.movie, p))), isNull);
-    expect(index.watched(), contains(fid));
-    expect(index.watched(), isNot(contains(p)));
-  });
+      final fid = unmatchedFileId(fkey('Copper Valley (2018).mkv'));
+      expect(index.group('coppervalley|2018')!.tmdbId, isNull);
+      expect(
+        progress.get(progressKey(ref(ItemKind.video, fid)))!.positionSeconds,
+        60,
+      );
+      expect(progress.get(progressKey(ref(ItemKind.movie, p))), isNull);
+      expect(index.watched(), contains(fid));
+      expect(index.watched(), isNot(contains(p)));
+    },
+  );
 
-  test('a multi-episode file hands its state to every episode on match',
-      () async {
-    const parsed = ParsedName(
-      path: 'Moon Harbor S01E01E02.mkv',
-      isEpisode: true,
-      title: 'Moon Harbor',
-      groupKey: 'tv:moonharbor|',
-      season: 1,
-      episode: 1,
-      episodeEnd: 2,
-    );
-    await index.putFiles([
-      IndexedFile(
-        key: fkey(parsed.path),
-        rootId: 'r',
-        path: parsed.path,
-        size: 1,
-        modified: t0,
-        firstSeen: t0,
-        parsed: parsed,
-      ),
-    ]);
-    await matcher.matchPending();
-    expect(index.group('tv:moonharbor|')!.tmdbId, isNull);
-    final fid = unmatchedFileId(fkey(parsed.path));
-    await saveProgress(ItemKind.video, fid, 'episode');
-    await index.setWatched(fid, true);
+  test(
+    'a multi-episode file hands its state to every episode on match',
+    () async {
+      const parsed = ParsedName(
+        path: 'Moon Harbor S01E01E02.mkv',
+        isEpisode: true,
+        title: 'Moon Harbor',
+        groupKey: 'tv:moonharbor|',
+        season: 1,
+        episode: 1,
+        episodeEnd: 2,
+      );
+      await index.putFiles([
+        IndexedFile(
+          key: fkey(parsed.path),
+          rootId: 'r',
+          path: parsed.path,
+          size: 1,
+          modified: t0,
+          firstSeen: t0,
+          parsed: parsed,
+        ),
+      ]);
+      await matcher.matchPending();
+      expect(index.group('tv:moonharbor|')!.tmdbId, isNull);
+      final fid = unmatchedFileId(fkey(parsed.path));
+      await saveProgress(ItemKind.video, fid, 'episode');
+      await index.setWatched(fid, true);
 
-    await matcher.pin('tv:moonharbor|', isShow: true, tmdbId: 3);
+      await matcher.pin('tv:moonharbor|', isShow: true, tmdbId: 3);
 
-    for (final id in ['3-1-1', '3-1-2']) {
-      expect(progress.get(progressKey(ref(ItemKind.episode, id))), isNotNull,
-          reason: id);
-      expect(index.watched(), contains(id));
-    }
-    expect(progress.get(progressKey(ref(ItemKind.video, fid))), isNull);
-  });
+      for (final id in ['3-1-1', '3-1-2']) {
+        expect(
+          progress.get(progressKey(ref(ItemKind.episode, id))),
+          isNotNull,
+          reason: id,
+        );
+        expect(index.watched(), contains(id));
+      }
+      expect(progress.get(progressKey(ref(ItemKind.video, fid))), isNull);
+    },
+  );
 
   test('a show search leaves the year to the scorer', () async {
     relay.ids['Moon Harbor'] = 3;
     relay.ids['Copper Valley'] = 7;
-    await addFiles(
-        ['Moon Harbor (2019) S02E01.mkv', 'Copper Valley (2018).mkv']);
+    await addFiles([
+      'Moon Harbor (2019) S02E01.mkv',
+      'Copper Valley (2018).mkv',
+    ]);
     await matcher.matchPending();
     expect(relay.searchYears['tv:Moon Harbor'], isNull);
     expect(relay.searchYears['Copper Valley'], 2018);
@@ -610,14 +659,16 @@ void main() {
       now: () => t0.add(const Duration(days: 1)),
     );
     final p = provisionalKey('coppervalley|2018');
-    await gated.save(LocalPlaybackProgress(
-      sourceId: source.value,
-      mediaId: p,
-      mediaType: 'movie',
-      positionSeconds: 60,
-      durationSeconds: 600,
-      updatedAt: t0,
-    ));
+    await gated.save(
+      LocalPlaybackProgress(
+        sourceId: source.value,
+        mediaId: p,
+        mediaType: 'movie',
+        positionSeconds: 60,
+        durationSeconds: 600,
+        updatedAt: t0,
+      ),
+    );
     gated.holdNext();
 
     final pending = m.matchPending();
@@ -663,8 +714,11 @@ void main() {
     expect(progress.get(progressKey(ref(ItemKind.movie, '8'))), isNotNull);
     expect(index.watched(), contains('8'));
     for (final stale in [p, '7']) {
-      expect(progress.get(progressKey(ref(ItemKind.movie, stale))), isNull,
-          reason: stale);
+      expect(
+        progress.get(progressKey(ref(ItemKind.movie, stale))),
+        isNull,
+        reason: stale,
+      );
       expect(index.watched(), isNot(contains(stale)), reason: stale);
     }
   });
@@ -686,45 +740,51 @@ void main() {
     expect(index.watched(), contains('8'));
   });
 
-  test('applyRemotePin updates index without sync mutation or sync store write',
-      () async {
-    final syncStore = InMemoryPeerSyncStore();
-    var syncMutationCalls = 0;
-    final m = FileMatcher(
-      tmdb: relay,
-      names: FakeMediaNames(),
-      index: index,
-      progress: progress,
-      sourceId: source,
-      syncStore: syncStore,
-      onSyncMutation: () => syncMutationCalls++,
-      now: () => t0.add(const Duration(days: 1)),
-    );
+  test(
+    'applyRemotePin updates index without sync mutation or sync store write',
+    () async {
+      final syncStore = InMemoryPeerSyncStore();
+      var syncMutationCalls = 0;
+      final m = FileMatcher(
+        tmdb: relay,
+        names: FakeMediaNames(),
+        index: index,
+        progress: progress,
+        sourceId: source,
+        syncStore: syncStore,
+        onSyncMutation: () => syncMutationCalls++,
+        now: () => t0.add(const Duration(days: 1)),
+      );
 
-    relay.ids['Harbor of Echoes'] = 99908;
-    await addFiles(['A/Harbor of Echoes (2024).mkv']);
+      relay.ids['Harbor of Echoes'] = 99908;
+      await addFiles(['A/Harbor of Echoes (2024).mkv']);
 
-    await m.applyRemotePin('harborofechoes|2024', isShow: false, tmdbId: 99908);
+      await m.applyRemotePin(
+        'harborofechoes|2024',
+        isShow: false,
+        tmdbId: 99908,
+      );
 
-    // Group is pinned and matched in index
-    expect(index.group('harborofechoes|2024')?.pinned, isTrue);
-    expect(index.group('harborofechoes|2024')?.tmdbId, 99908);
+      // Group is pinned and matched in index
+      expect(index.group('harborofechoes|2024')?.pinned, isTrue);
+      expect(index.group('harborofechoes|2024')?.tmdbId, 99908);
 
-    // BUT sync mutation is not triggered and nothing is written to syncStore
-    expect(syncMutationCalls, 0);
-    expect(
-      syncStore.pinRecord(isShow: false, groupKey: 'harborofechoes|2024'),
-      isNull,
-    );
+      // BUT sync mutation is not triggered and nothing is written to syncStore
+      expect(syncMutationCalls, 0);
+      expect(
+        syncStore.pinRecord(isShow: false, groupKey: 'harborofechoes|2024'),
+        isNull,
+      );
 
-    // Compare with regular pin which DOES record and notify
-    await m.pin('harborofechoes|2024', isShow: false, tmdbId: 99908);
-    expect(syncMutationCalls, 1);
-    expect(
-      syncStore.pinRecord(isShow: false, groupKey: 'harborofechoes|2024'),
-      isNotNull,
-    );
-  });
+      // Compare with regular pin which DOES record and notify
+      await m.pin('harborofechoes|2024', isShow: false, tmdbId: 99908);
+      expect(syncMutationCalls, 1);
+      expect(
+        syncStore.pinRecord(isShow: false, groupKey: 'harborofechoes|2024'),
+        isNotNull,
+      );
+    },
+  );
 }
 
 /// Holds the next save after [holdNext] until [release]; [held] completes
@@ -792,8 +852,12 @@ class _EmptySeason extends RelayTmdb {
   @override
   Future<MatchedShow> show(int id, {required Iterable<int> seasons}) async {
     final s = await inner.show(id, seasons: seasons);
-    return MatchedShow(tmdbId: id, title: s.title, seasons: {
-      for (final e in s.seasons.entries) e.key: e.key == empty ? [] : e.value,
-    });
+    return MatchedShow(
+      tmdbId: id,
+      title: s.title,
+      seasons: {
+        for (final e in s.seasons.entries) e.key: e.key == empty ? [] : e.value,
+      },
+    );
   }
 }

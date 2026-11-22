@@ -77,8 +77,7 @@ class PlaybackSource {
 Future<void> awaitFirstAdvance(
   Stream<Duration> positions, {
   required Duration timeout,
-}) =>
-    _awaitFirstAdvance(positions, timeout: timeout);
+}) => _awaitFirstAdvance(positions, timeout: timeout);
 
 Future<T> _untilEnded<T>(Future<T> pending, Future<void>? ended) {
   if (ended == null) return pending;
@@ -115,17 +114,13 @@ Future<void> _awaitFirstAdvance(
 
 class PlaybackController implements PlaybackTransport {
   PlaybackController({
-    required MydiaClient client,
-    required StreamUrls urls,
-    required bool relayed,
-    PlaylistProbe probe = httpPlaylistProbe,
-    Future<void> Function(Duration) wait = Future.delayed,
+    required this._client,
+    required this._urls,
+    required this._relayed,
+    this._probe = httpPlaylistProbe,
+    this._wait = Future.delayed,
     this.firstAdvanceTimeout = const Duration(seconds: 60),
-  })  : _client = client,
-        _urls = urls,
-        _relayed = relayed,
-        _probe = probe,
-        _wait = wait;
+  });
 
   final MydiaClient _client;
   final StreamUrls _urls;
@@ -170,8 +165,10 @@ class PlaybackController implements PlaybackTransport {
     final lifetime = _lifetime;
     switch (plan) {
       case DirectPlayPlan():
-        final resolved =
-            await _untilEnded(_urls.directPlay(fileId), lifetime.future);
+        final resolved = await _untilEnded(
+          _urls.directPlay(fileId),
+          lifetime.future,
+        );
         _requireActive(lifetime);
         debugPrint('[PlaybackController] Direct play for file_id=$fileId');
         return PlaybackSource(
@@ -183,13 +180,16 @@ class PlaybackController implements PlaybackTransport {
         );
       case HlsPlan():
         return _untilEnded(
-            _openHls(plan,
-                fileId: fileId,
-                startAt: startAt,
-                totalDuration: totalDuration,
-                onProgress: onProgress,
-                lifetime: lifetime),
-            lifetime.future);
+          _openHls(
+            plan,
+            fileId: fileId,
+            startAt: startAt,
+            totalDuration: totalDuration,
+            onProgress: onProgress,
+            lifetime: lifetime,
+          ),
+          lifetime.future,
+        );
     }
   }
 
@@ -205,23 +205,31 @@ class PlaybackController implements PlaybackTransport {
     onProgress?.call(const LoadingStep(LoadingStepKind.startingStream));
     // Do not abandon the mutation itself on teardown: a late response can
     // still create a server session, and must be observed and ended here.
-    final session = await _startSession(plan,
-        fileId: fileId, startAt: startAt, lifetime: lifetime);
+    final session = await _startSession(
+      plan,
+      fileId: fileId,
+      startAt: startAt,
+      lifetime: lifetime,
+    );
     _ownedSessions.add(session.sessionId);
     try {
       _requireActive(lifetime);
       _sessionId = session.sessionId;
       debugPrint(
-          '[PlaybackController] HLS session started: ${session.sessionId}');
+        '[PlaybackController] HLS session started: ${session.sessionId}',
+      );
 
       final claimsFull = session.playlistMode == Enum$PlaylistMode.FULL;
       final echoedDuration = session.duration;
-      final duration = totalDuration ??
+      final duration =
+          totalDuration ??
           (echoedDuration == null
               ? null
               : Duration(milliseconds: (echoedDuration * 1000).round()));
       final effective = effectiveRungLabel(
-          maxHeight: session.maxHeight, maxBitrateKbps: session.maxBitrate);
+        maxHeight: session.maxHeight,
+        maxBitrateKbps: session.maxBitrate,
+      );
 
       final resolved = _urls.hls(session.sessionId);
       debugPrint('[PlaybackController] HLS URL: ${resolved.url}');
@@ -231,10 +239,12 @@ class PlaybackController implements PlaybackTransport {
       // hard errors. A dead session is ended here rather than surfacing downstream.
       // The probe's body is also what tells a genuinely full playlist from one
       // that only claims to be: whether it ends.
-      final terminated = await _awaitPlaylist(resolved.url,
-          headers: resolved.probeHeaders,
-          onProgress: onProgress,
-          lifetime: lifetime);
+      final terminated = await _awaitPlaylist(
+        resolved.url,
+        headers: resolved.probeHeaders,
+        onProgress: onProgress,
+        lifetime: lifetime,
+      );
       _requireActive(lifetime);
 
       // A full playlist covers the whole file and ends. Some servers answer
@@ -244,9 +254,11 @@ class PlaybackController implements PlaybackTransport {
       // resume point and saved that over the real position.
       final full = claimsFull && terminated;
       if (claimsFull && !terminated) {
-        debugPrint('[PlaybackController] Session ${session.sessionId} answered '
-            'FULL but its playlist does not end; treating it as a window at '
-            '$startAt');
+        debugPrint(
+          '[PlaybackController] Session ${session.sessionId} answered '
+          'FULL but its playlist does not end; treating it as a window at '
+          '$startAt',
+        );
       }
       // The echoed offset, not the requested one: the server clamps it, and a
       // copied stream can only begin on a keyframe, which the server finds and
@@ -313,15 +325,19 @@ class PlaybackController implements PlaybackTransport {
     final Map<String, dynamic> response;
     try {
       response = await _client.request(
-          documentNodeMutationStartStreamingSession, variables);
+        documentNodeMutationStartStreamingSession,
+        variables,
+      );
     } on SourceException catch (e) {
       // Rethrown unchanged so the screen can word the failure by kind.
       debugPrint(
-          '[PlaybackController] Failed to start streaming session: ${e.logText}');
+        '[PlaybackController] Failed to start streaming session: ${e.logText}',
+      );
       rethrow;
     }
-    final data =
-        Mutation$StartStreamingSession.fromJson(rootMutation(response));
+    final data = Mutation$StartStreamingSession.fromJson(
+      rootMutation(response),
+    );
     final session = data.startStreamingSession;
     if (session == null) {
       throw Exception('No session data returned from server');
@@ -346,8 +362,10 @@ class PlaybackController implements PlaybackTransport {
     for (var i = 0; i < maxRetries; i++) {
       _requireActive(lifetime);
       try {
-        final response =
-            await _untilEnded(_probe(url, headers), lifetime.future);
+        final response = await _untilEnded(
+          _probe(url, headers),
+          lifetime.future,
+        );
         _requireActive(lifetime);
         if (response.status == 200) {
           final segments = '.ts'.allMatches(response.body).length;
@@ -355,18 +373,31 @@ class PlaybackController implements PlaybackTransport {
             return response.body.contains('#EXT-X-ENDLIST');
           }
           final percentage = (segments / minSegments * 100).round();
-          onProgress?.call(LoadingStep(LoadingStepKind.preparingStream,
-              percent: percentage));
+          onProgress?.call(
+            LoadingStep(LoadingStepKind.preparingStream, percent: percentage),
+          );
         } else {
-          onProgress?.call(LoadingStep(LoadingStepKind.startingTranscode,
-              attempt: i + 1, maxAttempts: maxRetries));
+          onProgress?.call(
+            LoadingStep(
+              LoadingStepKind.startingTranscode,
+              attempt: i + 1,
+              maxAttempts: maxRetries,
+            ),
+          );
         }
       } catch (e) {
         if (lifetime.isCompleted) rethrow;
-        debugPrint('[PlaybackController] Playlist probe failed '
-            '(attempt ${i + 1}/$maxRetries): $e');
-        onProgress?.call(LoadingStep(LoadingStepKind.startingTranscode,
-            attempt: i + 1, maxAttempts: maxRetries));
+        debugPrint(
+          '[PlaybackController] Playlist probe failed '
+          '(attempt ${i + 1}/$maxRetries): $e',
+        );
+        onProgress?.call(
+          LoadingStep(
+            LoadingStepKind.startingTranscode,
+            attempt: i + 1,
+            maxAttempts: maxRetries,
+          ),
+        );
       }
       final delay = Duration(
         milliseconds: (baseDelay.inMilliseconds * (1.5 * i + 1))
@@ -401,16 +432,21 @@ class PlaybackController implements PlaybackTransport {
     _sessionId = null;
     PlaybackSource? source;
     try {
-      source = await open(plan,
-          fileId: fileId,
-          startAt: realPosition,
-          totalDuration: totalDuration,
-          onProgress: onProgress);
+      source = await open(
+        plan,
+        fileId: fileId,
+        startAt: realPosition,
+        totalDuration: totalDuration,
+        onProgress: onProgress,
+      );
       _requireActive(lifetime);
       final positions = await _untilEnded(attach(source), lifetime.future);
       _requireActive(lifetime);
-      await _awaitFirstAdvance(positions,
-          timeout: firstAdvanceTimeout, ended: lifetime.future);
+      await _awaitFirstAdvance(
+        positions,
+        timeout: firstAdvanceTimeout,
+        ended: lifetime.future,
+      );
       _requireActive(lifetime);
       if (previous != null) await _endOwned(previous);
       _requireActive(lifetime);
@@ -456,8 +492,9 @@ class PlaybackController implements PlaybackTransport {
   Future<void> _end(String sessionId) async {
     debugPrint('[PlaybackController] Terminating HLS session: $sessionId');
     try {
-      await _client.request(
-          documentNodeMutationEndStreamingSession, {'sessionId': sessionId});
+      await _client.request(documentNodeMutationEndStreamingSession, {
+        'sessionId': sessionId,
+      });
     } catch (e) {
       debugPrint('[PlaybackController] Could not end session $sessionId: $e');
     }

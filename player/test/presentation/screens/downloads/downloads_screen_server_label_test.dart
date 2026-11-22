@@ -19,33 +19,41 @@ import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 import '../../../test_utils/mock_network_images.dart';
 
 Source _source(String account, String name) => Source(
-      account: ProviderAccount(
-        id: account,
-        kind: SourceKind.mydia,
-        displayName: name,
-        storageNamespace: 'source/$account',
-        activeProfileId: 'owner',
-      ),
-      profile: SourceProfile(
-          id: 'owner', accountId: account, name: 'Owner', isOwner: true),
-      server: SourceServer(
-          id: 'inst', accountId: account, profileId: 'owner', name: name),
-    );
+  account: ProviderAccount(
+    id: account,
+    kind: SourceKind.mydia,
+    displayName: name,
+    storageNamespace: 'source/$account',
+    activeProfileId: 'owner',
+  ),
+  profile: SourceProfile(
+    id: 'owner',
+    accountId: account,
+    name: 'Owner',
+    isOwner: true,
+  ),
+  server: SourceServer(
+    id: 'inst',
+    accountId: account,
+    profileId: 'owner',
+    name: name,
+  ),
+);
 
 final _a = _source('acca', 'Instance A');
 final _b = _source('accb', 'Instance B');
 
 DownloadedMedia _movie(String id, Source source) => DownloadedMedia(
-      id: 'd-$id',
-      mediaId: id,
-      sourceId: source.id.value,
-      title: 'Quill Harbor $id',
-      quality: 'original',
-      filePath: '/tmp/$id.mp4',
-      fileSize: 1024,
-      mediaType: 'movie',
-      downloadedAt: DateTime(2026, 1, 1),
-    );
+  id: 'd-$id',
+  mediaId: id,
+  sourceId: source.id.value,
+  title: 'Quill Harbor $id',
+  quality: 'original',
+  filePath: '/tmp/$id.mp4',
+  fileSize: 1024,
+  mediaType: 'movie',
+  downloadedAt: DateTime(2026, 1, 1),
+);
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -58,18 +66,23 @@ Future<void> _pump(
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          downloadedMediaProvider
-              .overrideWith((ref) => Stream.value(downloaded)),
-          downloadQueueProvider
-              .overrideWith((ref) => Stream.value(<DownloadTask>[])),
-          failedDownloadsProvider
-              .overrideWith((ref) => Stream.value(<DownloadTask>[])),
+          downloadedMediaProvider.overrideWith(
+            (ref) => Stream.value(downloaded),
+          ),
+          downloadQueueProvider.overrideWith(
+            (ref) => Stream.value(<DownloadTask>[]),
+          ),
+          failedDownloadsProvider.overrideWith(
+            (ref) => Stream.value(<DownloadTask>[]),
+          ),
           downloadSpeedInfoProvider.overrideWith((ref) => Stream.value({})),
-          storageQuotaStatusProvider
-              .overrideWith((ref) => Completer<StorageQuotaStatus>().future),
+          storageQuotaStatusProvider.overrideWith(
+            (ref) => Completer<StorageQuotaStatus>().future,
+          ),
           sourcesProvider.overrideWithValue(sources),
-          castCapabilitiesProvider
-              .overrideWithValue(const CastCapabilities.full()),
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
         ],
         child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -84,8 +97,9 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('names each card\'s server when two servers have downloads',
-      (tester) async {
+  testWidgets('names each card\'s server when two servers have downloads', (
+    tester,
+  ) async {
     await _pump(
       tester,
       downloaded: [_movie('10', _a), _movie('10', _b)],
@@ -94,12 +108,15 @@ void main() {
 
     expect(find.text('Instance A'), findsOneWidget);
     expect(find.text('Instance B'), findsOneWidget);
-    expect(find.byKey(Key('download-group-source-${_a.id.value}')),
-        findsOneWidget);
+    expect(
+      find.byKey(Key('download-group-source-${_a.id.value}')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('shows no server label when only one server has downloads',
-      (tester) async {
+  testWidgets('shows no server label when only one server has downloads', (
+    tester,
+  ) async {
     await _pump(
       tester,
       downloaded: [_movie('10', _a), _movie('11', _a)],

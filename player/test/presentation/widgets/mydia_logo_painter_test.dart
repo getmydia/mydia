@@ -66,19 +66,18 @@ void main() {
       final canvas = _RecordingCanvas();
       painter.paint(canvas, const Size(48, 48));
 
-      expect(canvas.colors, isNotEmpty,
-          reason: 'paint() drew nothing, so this test proves nothing');
+      expect(
+        canvas.colors,
+        isNotEmpty,
+        reason: 'paint() drew nothing, so this test proves nothing',
+      );
       final drawnArgb = canvas.colors.map((c) => c.toARGB32()).toSet();
       expect(drawnArgb, isNot(contains(palette.primary.toARGB32())));
       expect(drawnArgb, isNot(contains(palette.primaryFocus.toARGB32())));
-      expect(
-        drawnArgb,
-        <int>{
-          painter.markColor.toARGB32(),
-          painter.cutoutColor.toARGB32(),
-        },
-        reason: 'paint() must draw only the declared mark and cutout colours',
-      );
+      expect(drawnArgb, <int>{
+        painter.markColor.toARGB32(),
+        painter.cutoutColor.toARGB32(),
+      }, reason: 'paint() must draw only the declared mark and cutout colours');
     });
 
     test('the recording canvas refuses draw calls it does not record', () {

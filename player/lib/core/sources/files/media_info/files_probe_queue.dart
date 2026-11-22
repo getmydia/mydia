@@ -29,17 +29,20 @@ class ProbeProgress {
 
 /// Whether this platform reads file details in the background. Overridden
 /// in tests.
-final filesProbeDesktopProvider =
-    Provider<bool>((_) => PlatformFeatures.isDesktop);
+final filesProbeDesktopProvider = Provider<bool>(
+  (_) => PlatformFeatures.isDesktop,
+);
 
 /// How often a waiting queue checks whether playback has ended. Overridden
 /// in tests.
-final filesProbeIdlePollProvider =
-    Provider<Duration>((_) => const Duration(seconds: 5));
+final filesProbeIdlePollProvider = Provider<Duration>(
+  (_) => const Duration(seconds: 5),
+);
 
 final filesProbeQueueProvider =
     NotifierProvider.family<FilesProbeQueue, ProbeProgress, SourceId>(
-        FilesProbeQueue.new);
+      FilesProbeQueue.new,
+    );
 
 class FilesProbeQueue extends Notifier<ProbeProgress> {
   FilesProbeQueue(this.sourceId);
@@ -119,11 +122,7 @@ class FilesProbeQueue extends Notifier<ProbeProgress> {
 
   void _report() {
     if (!ref.mounted) return;
-    state = ProbeProgress(
-      running: _looping,
-      done: _done,
-      total: _total,
-    );
+    state = ProbeProgress(running: _looping, done: _done, total: _total);
   }
 
   Future<void> _run() async {
@@ -132,8 +131,10 @@ class FilesProbeQueue extends Notifier<ProbeProgress> {
         while (ref.mounted && ref.read(playingSourceProvider).current != null) {
           // A source removed during playback ends the run now, not after it.
           if (_activeMedia() == null) {
-            debugPrint('[FilesProbeQueue] $sourceId: source gone while '
-                'waiting, ${_pending.length} files left unread');
+            debugPrint(
+              '[FilesProbeQueue] $sourceId: source gone while '
+              'waiting, ${_pending.length} files left unread',
+            );
             _pending.clear();
             return;
           }
@@ -142,8 +143,10 @@ class FilesProbeQueue extends Notifier<ProbeProgress> {
         if (!ref.mounted) return;
         final media = _activeMedia();
         if (media == null) {
-          debugPrint('[FilesProbeQueue] $sourceId: source gone, '
-              '${_pending.length} files left unread');
+          debugPrint(
+            '[FilesProbeQueue] $sourceId: source gone, '
+            '${_pending.length} files left unread',
+          );
           _pending.clear();
           return;
         }

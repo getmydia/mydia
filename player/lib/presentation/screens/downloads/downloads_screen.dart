@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/dock_insets.dart';
@@ -104,7 +105,11 @@ class DownloadsScreen extends ConsumerWidget {
     // Helper to safely get show ID/Title
     // Ids are only unique within a source, so the key carries the source.
     String getGroupKey(
-        SourceId source, bool isEpisode, String? showId, String mediaId) {
+      SourceId source,
+      bool isEpisode,
+      String? showId,
+      String mediaId,
+    ) {
       return '${source.value}|${isEpisode && showId != null ? showId : mediaId}';
     }
 
@@ -115,8 +120,12 @@ class DownloadsScreen extends ConsumerWidget {
     if (downloadQueueAsync.hasValue) {
       for (final task in downloadQueueAsync.value!) {
         final isEpisode = task.mediaType == 'episode';
-        final key =
-            getGroupKey(task.source, isEpisode, task.showId, task.mediaId);
+        final key = getGroupKey(
+          task.source,
+          isEpisode,
+          task.showId,
+          task.mediaId,
+        );
 
         if (!items.containsKey(key)) {
           items[key] = DownloadGroup(
@@ -145,8 +154,12 @@ class DownloadsScreen extends ConsumerWidget {
     if (downloadedMediaAsync.hasValue) {
       for (final media in downloadedMediaAsync.value!) {
         final isEpisode = media.mediaType == 'episode';
-        final key =
-            getGroupKey(media.source, isEpisode, media.showId, media.mediaId);
+        final key = getGroupKey(
+          media.source,
+          isEpisode,
+          media.showId,
+          media.mediaId,
+        );
 
         if (!items.containsKey(key)) {
           items[key] = DownloadGroup(
@@ -180,10 +193,10 @@ class DownloadsScreen extends ConsumerWidget {
     final labelled = items.values.map((g) => g.sourceId).toSet().length > 1;
     String? serverLabel(DownloadGroup group) => labelled
         ? sources
-                .where((s) => s.id == group.sourceId)
-                .firstOrNull
-                ?.displayName ??
-            context.l10n.downloadsRemovedServer
+                  .where((s) => s.id == group.sourceId)
+                  .firstOrNull
+                  ?.displayName ??
+              context.l10n.downloadsRemovedServer
         : null;
 
     // This screen's own `WindowTitleRow` (built by `header`) draws into the
@@ -214,7 +227,7 @@ class DownloadsScreen extends ConsumerWidget {
                 child: storageQuotaAsync.when(
                   data: (status) => _buildStorageHeader(context, ref, status),
                   loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
               ),
 
@@ -226,7 +239,7 @@ class DownloadsScreen extends ConsumerWidget {
                     return _buildFailedSection(context, ref, failed);
                   },
                   loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
               ),
 
@@ -234,14 +247,13 @@ class DownloadsScreen extends ConsumerWidget {
               if (sortedItems.isEmpty &&
                   !downloadQueueAsync.isLoading &&
                   !downloadedMediaAsync.isLoading)
-                SliverFillRemaining(
-                  child: _buildEmptyState(context),
-                )
+                SliverFillRemaining(child: _buildEmptyState(context))
               else
                 SliverLayoutBuilder(
                   builder: (context, constraints) {
-                    final crossAxisCount =
-                        _calculateCrossAxisCount(constraints.crossAxisExtent);
+                    final crossAxisCount = _calculateCrossAxisCount(
+                      constraints.crossAxisExtent,
+                    );
                     final grid = SliverGrid(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: crossAxisCount,
@@ -249,17 +261,18 @@ class DownloadsScreen extends ConsumerWidget {
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 16,
                       ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final group = sortedItems[index];
-                          final item = _buildGridItem(context, ref, group,
-                              serverLabel: serverLabel(group));
-                          return directional
-                              ? _tvGridItem(context, ref, group, index, item)
-                              : item;
-                        },
-                        childCount: sortedItems.length,
-                      ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final group = sortedItems[index];
+                        final item = _buildGridItem(
+                          context,
+                          ref,
+                          group,
+                          serverLabel: serverLabel(group),
+                        );
+                        return directional
+                            ? _tvGridItem(context, ref, group, index, item)
+                            : item;
+                      }, childCount: sortedItems.length),
                     );
                     return SliverPadding(
                       padding: const EdgeInsets.all(16),
@@ -285,7 +298,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Widget _buildFailedSection(
-      BuildContext context, WidgetRef ref, List<DownloadTask> failed) {
+    BuildContext context,
+    WidgetRef ref,
+    List<DownloadTask> failed,
+  ) {
     final palette = context.palette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,40 +315,50 @@ class DownloadsScreen extends ConsumerWidget {
               Text(
                 context.l10n.downloadsFailedTitle(failed.length),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.error,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: AppColors.error,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const Spacer(),
               TextButton.icon(
                 onPressed: () async {
-                  final manager =
-                      await ref.read(downloadManagerProvider.future);
+                  final manager = await ref.read(
+                    downloadManagerProvider.future,
+                  );
                   await manager.retryAllFailed();
                 },
                 icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: Text(context.l10n.downloadsRetryAll,
-                    style: const TextStyle(fontSize: 12)),
+                label: Text(
+                  context.l10n.downloadsRetryAll,
+                  style: const TextStyle(fontSize: 12),
+                ),
                 style: TextButton.styleFrom(
                   foregroundColor: palette.primary,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   minimumSize: const Size(0, 32),
                 ),
               ),
               TextButton.icon(
                 onPressed: () async {
-                  final manager =
-                      await ref.read(downloadManagerProvider.future);
+                  final manager = await ref.read(
+                    downloadManagerProvider.future,
+                  );
                   await manager.dismissAllFailed();
                 },
                 icon: const Icon(Icons.clear_rounded, size: 16),
-                label: Text(context.l10n.downloadsDismissAll,
-                    style: const TextStyle(fontSize: 12)),
+                label: Text(
+                  context.l10n.downloadsDismissAll,
+                  style: const TextStyle(fontSize: 12),
+                ),
                 style: TextButton.styleFrom(
                   foregroundColor: palette.textSecondary,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   minimumSize: const Size(0, 32),
                 ),
               ),
@@ -366,7 +392,9 @@ class DownloadsScreen extends ConsumerWidget {
               // that left it.
               return directional
                   ? FocusMemoryRegion(
-                      debugLabel: 'downloads-failed', child: list)
+                      debugLabel: 'downloads-failed',
+                      child: list,
+                    )
                   : list;
             },
           ),
@@ -378,7 +406,10 @@ class DownloadsScreen extends ConsumerWidget {
   /// What a tap on a grid title does: a series opens its episodes, an active
   /// movie offers to cancel, a downloaded movie plays.
   Future<void> _openGroup(
-      BuildContext context, WidgetRef ref, DownloadGroup group) async {
+    BuildContext context,
+    WidgetRef ref,
+    DownloadGroup group,
+  ) async {
     final activeTask = group.activeTasks.firstOrNull;
     if (group.type == GroupType.series) {
       Navigator.of(context).push(
@@ -403,22 +434,29 @@ class DownloadsScreen extends ConsumerWidget {
   /// `GestureDetector` alone takes no focus, so a remote could not reach the
   /// grid at all) and an item of the grid's [FocusMemoryRegion], keyed by the
   /// download group.
-  Widget _tvGridItem(BuildContext context, WidgetRef ref, DownloadGroup group,
-          int index, Widget child) =>
-      FocusMemoryItem(
-        key: ValueKey('download-group-${group.id}'),
-        id: group.id,
-        index: index,
-        child: FocusHighlight(
-          onActivate: () => _openGroup(context, ref, group),
-          borderRadius: BorderRadius.circular(12),
-          child: child,
-        ),
-      );
+  Widget _tvGridItem(
+    BuildContext context,
+    WidgetRef ref,
+    DownloadGroup group,
+    int index,
+    Widget child,
+  ) => FocusMemoryItem(
+    key: ValueKey('download-group-${group.id}'),
+    id: group.id,
+    index: index,
+    child: FocusHighlight(
+      onActivate: () => _openGroup(context, ref, group),
+      borderRadius: BorderRadius.circular(12),
+      child: child,
+    ),
+  );
 
   Widget _buildGridItem(
-      BuildContext context, WidgetRef ref, DownloadGroup group,
-      {String? serverLabel}) {
+    BuildContext context,
+    WidgetRef ref,
+    DownloadGroup group, {
+    String? serverLabel,
+  }) {
     final palette = context.palette;
     final isActive = group.activeTasks.isNotEmpty;
     final DownloadTask? activeTask = isActive ? group.activeTasks.first : null;
@@ -481,8 +519,9 @@ class DownloadsScreen extends ConsumerWidget {
                           child: CircularProgressIndicator(
                             value: progress,
                             color: palette.primary,
-                            backgroundColor:
-                                Colors.white.withValues(alpha: 0.15),
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.15,
+                            ),
                             strokeWidth: 4,
                             strokeCap: StrokeCap.round,
                           ),
@@ -513,7 +552,9 @@ class DownloadsScreen extends ConsumerWidget {
                       ),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
@@ -545,7 +586,9 @@ class DownloadsScreen extends ConsumerWidget {
                     right: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: palette.primary,
                         borderRadius: BorderRadius.circular(6),
@@ -625,8 +668,9 @@ class DownloadsScreen extends ConsumerWidget {
                         builder: (context, ref, _) => DownloadRecoveryBanner(
                           task: task,
                           onResume: () async {
-                            final manager =
-                                await ref.read(downloadManagerProvider.future);
+                            final manager = await ref.read(
+                              downloadManagerProvider.future,
+                            );
                             await manager.resumeDownload(task.id);
                           },
                         ),
@@ -641,13 +685,15 @@ class DownloadsScreen extends ConsumerWidget {
                   Builder(
                     builder: (context) {
                       final task = activeTask;
-                      final bytesText = task.progressBytesDisplay ??
+                      final bytesText =
+                          task.progressBytesDisplay ??
                           context.l10n.downloadTaskSize(task);
 
                       return Consumer(
                         builder: (context, ref, _) {
-                          final speedAsync =
-                              ref.watch(downloadSpeedInfoProvider);
+                          final speedAsync = ref.watch(
+                            downloadSpeedInfoProvider,
+                          );
                           String? speedText;
                           speedAsync.when(
                             data: (speedMap) {
@@ -657,7 +703,7 @@ class DownloadsScreen extends ConsumerWidget {
                               }
                             },
                             loading: () {},
-                            error: (_, __) {},
+                            error: (_, _) {},
                           );
 
                           final parts = <String>[bytesText];
@@ -682,8 +728,9 @@ class DownloadsScreen extends ConsumerWidget {
                 if (!isActive && group.downloads.isNotEmpty)
                   Text(
                     group.type == GroupType.series
-                        ? context.l10n
-                            .downloadsEpisodeCount(group.downloads.length)
+                        ? context.l10n.downloadsEpisodeCount(
+                            group.downloads.length,
+                          )
                         : group.downloads.first.fileSizeDisplay,
                     maxLines: 1,
                     style: TextStyle(
@@ -700,7 +747,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Future<void> _showCancelDialog(
-      BuildContext context, WidgetRef ref, DownloadTask task) async {
+    BuildContext context,
+    WidgetRef ref,
+    DownloadTask task,
+  ) async {
     final manager = await ref.read(downloadManagerProvider.future);
 
     if (!context.mounted) return;
@@ -715,8 +765,10 @@ class DownloadsScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(context.l10n.downloadsKeep,
-                style: TextStyle(color: context.palette.textSecondary)),
+            child: Text(
+              context.l10n.downloadsKeep,
+              style: TextStyle(color: context.palette.textSecondary),
+            ),
           ),
           FilledButton(
             onPressed: () {
@@ -732,7 +784,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   void _showItemOptions(
-      BuildContext context, WidgetRef ref, DownloadGroup group) {
+    BuildContext context,
+    WidgetRef ref,
+    DownloadGroup group,
+  ) {
     final isActive = group.activeTasks.isNotEmpty;
 
     showGlassSheet<void>(
@@ -753,20 +808,22 @@ class DownloadsScreen extends ConsumerWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color:
-                      sheetContext.palette.textSecondary.withValues(alpha: 0.3),
+                  color: sheetContext.palette.textSecondary.withValues(
+                    alpha: 0.3,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               // Title
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 4,
+                ),
                 child: Text(
                   group.title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -774,54 +831,66 @@ class DownloadsScreen extends ConsumerWidget {
               const SizedBox(height: 8),
 
               if (isActive) ...[
-                Builder(builder: (_) {
-                  final task = group.activeTasks.first;
-                  return activeDownloadSheetActions(
-                    context: context,
-                    status: task.status,
-                    onPause: () async {
-                      Navigator.pop(sheetContext);
-                      final manager =
-                          await ref.read(downloadManagerProvider.future);
-                      await manager.pauseDownload(task.id);
-                    },
-                    onResume: () async {
-                      Navigator.pop(sheetContext);
-                      final manager =
-                          await ref.read(downloadManagerProvider.future);
-                      await manager.resumeDownload(task.id);
-                    },
-                    onRestart: () async {
-                      Navigator.pop(sheetContext);
-                      final manager =
-                          await ref.read(downloadManagerProvider.future);
-                      await manager.restartDownload(task.id);
-                    },
-                    onCancel: () {
-                      Navigator.pop(sheetContext);
-                      _showCancelDialog(context, ref, task);
-                    },
-                  );
-                }),
+                Builder(
+                  builder: (_) {
+                    final task = group.activeTasks.first;
+                    return activeDownloadSheetActions(
+                      context: context,
+                      status: task.status,
+                      onPause: () async {
+                        Navigator.pop(sheetContext);
+                        final manager = await ref.read(
+                          downloadManagerProvider.future,
+                        );
+                        await manager.pauseDownload(task.id);
+                      },
+                      onResume: () async {
+                        Navigator.pop(sheetContext);
+                        final manager = await ref.read(
+                          downloadManagerProvider.future,
+                        );
+                        await manager.resumeDownload(task.id);
+                      },
+                      onRestart: () async {
+                        Navigator.pop(sheetContext);
+                        final manager = await ref.read(
+                          downloadManagerProvider.future,
+                        );
+                        await manager.restartDownload(task.id);
+                      },
+                      onCancel: () {
+                        Navigator.pop(sheetContext);
+                        _showCancelDialog(context, ref, task);
+                      },
+                    );
+                  },
+                ),
               ] else if (group.type == GroupType.movie) ...[
                 // Completed movie: play + delete
                 ListTile(
-                  leading: Icon(Icons.play_arrow_rounded,
-                      color: sheetContext.palette.primary),
+                  leading: Icon(
+                    Icons.play_arrow_rounded,
+                    color: sheetContext.palette.primary,
+                  ),
                   title: Text(context.l10n.commonPlay),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     if (group.downloads.isNotEmpty) {
                       context.push<void>(
-                          downloadedPlayLocation(group.downloads.first));
+                        downloadedPlayLocation(group.downloads.first),
+                      );
                     }
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded,
-                      color: AppColors.error),
-                  title: Text(context.l10n.commonDelete,
-                      style: const TextStyle(color: AppColors.error)),
+                  leading: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.error,
+                  ),
+                  title: Text(
+                    context.l10n.commonDelete,
+                    style: const TextStyle(color: AppColors.error),
+                  ),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _showDeleteMovieDialog(context, ref, group);
@@ -830,8 +899,10 @@ class DownloadsScreen extends ConsumerWidget {
               ] else if (group.type == GroupType.series) ...[
                 // Completed series: view episodes + delete all
                 ListTile(
-                  leading: Icon(Icons.list_rounded,
-                      color: sheetContext.palette.primary),
+                  leading: Icon(
+                    Icons.list_rounded,
+                    color: sheetContext.palette.primary,
+                  ),
                   title: Text(context.l10n.downloadsViewEpisodes),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -849,10 +920,14 @@ class DownloadsScreen extends ConsumerWidget {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded,
-                      color: AppColors.error),
-                  title: Text(context.l10n.downloadsDeleteAllEpisodesTitle,
-                      style: const TextStyle(color: AppColors.error)),
+                  leading: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.error,
+                  ),
+                  title: Text(
+                    context.l10n.downloadsDeleteAllEpisodesTitle,
+                    style: const TextStyle(color: AppColors.error),
+                  ),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _showDeleteSeriesDialog(context, ref, group);
@@ -867,7 +942,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Future<void> _showDeleteMovieDialog(
-      BuildContext context, WidgetRef ref, DownloadGroup group) async {
+    BuildContext context,
+    WidgetRef ref,
+    DownloadGroup group,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => GlassDialog(
@@ -878,8 +956,10 @@ class DownloadsScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text(context.l10n.commonCancel,
-                style: TextStyle(color: context.palette.textSecondary)),
+            child: Text(
+              context.l10n.commonCancel,
+              style: TextStyle(color: context.palette.textSecondary),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -899,7 +979,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Future<void> _showDeleteSeriesDialog(
-      BuildContext context, WidgetRef ref, DownloadGroup group) async {
+    BuildContext context,
+    WidgetRef ref,
+    DownloadGroup group,
+  ) async {
     final episodeCount = group.downloads.length + group.activeTasks.length;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -908,14 +991,18 @@ class DownloadsScreen extends ConsumerWidget {
         destructive: true,
         title: Text(context.l10n.downloadsDeleteAllEpisodesTitle),
         content: Text(
-          context.l10n
-              .downloadsDeleteAllEpisodesBody(episodeCount, group.title),
+          context.l10n.downloadsDeleteAllEpisodesBody(
+            episodeCount,
+            group.title,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text(context.l10n.commonCancel,
-                style: TextStyle(color: context.palette.textSecondary)),
+            child: Text(
+              context.l10n.commonCancel,
+              style: TextStyle(color: context.palette.textSecondary),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -933,7 +1020,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   static Future<void> _showCancelAllQueuedDialog(
-      BuildContext context, WidgetRef ref, int queuedCount) async {
+    BuildContext context,
+    WidgetRef ref,
+    int queuedCount,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => GlassDialog(
@@ -944,8 +1034,10 @@ class DownloadsScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text(context.l10n.downloadsKeep,
-                style: TextStyle(color: context.palette.textSecondary)),
+            child: Text(
+              context.l10n.downloadsKeep,
+              style: TextStyle(color: context.palette.textSecondary),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -992,8 +1084,10 @@ class DownloadsScreen extends ConsumerWidget {
   /// screen's own chrome math.
   @visibleForTesting
   static double topSpacerHeight(BuildContext context) =>
-      freshnessTopInset(context,
-          appBarHeight: WindowTitleRow.heightOf(context)) +
+      freshnessTopInset(
+        context,
+        appBarHeight: WindowTitleRow.heightOf(context),
+      ) +
       storageSectionGap;
 
   /// Builds the screen's title-bar header.
@@ -1009,7 +1103,8 @@ class DownloadsScreen extends ConsumerWidget {
   static PreferredSizeWidget header(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final queueAsync = ref.watch(downloadQueueProvider);
-    final queuedCount = queueAsync.whenOrNull(
+    final queuedCount =
+        queueAsync.whenOrNull(
           data: (tasks) => tasks
               .where((t) => t.status == 'queued' || t.status == 'pending')
               .length,
@@ -1024,18 +1119,14 @@ class DownloadsScreen extends ConsumerWidget {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.download_rounded,
-                color: palette.primary,
-                size: 24,
-              ),
+              Icon(Icons.download_rounded, color: palette.primary, size: 24),
               const SizedBox(width: 10),
               Text(
                 context.l10n.navDownloads,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.3,
-                    ),
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.3,
+                ),
               ),
             ],
           ),
@@ -1059,7 +1150,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Widget _buildStorageHeader(
-      BuildContext context, WidgetRef ref, StorageQuotaStatus status) {
+    BuildContext context,
+    WidgetRef ref,
+    StorageQuotaStatus status,
+  ) {
     final palette = context.palette;
     // Determine colors based on status
     final isWarning = status.isWarningExceeded;
@@ -1108,8 +1202,8 @@ class DownloadsScreen extends ConsumerWidget {
                   isFull
                       ? Icons.storage_rounded
                       : (isWarning
-                          ? Icons.warning_amber_rounded
-                          : Icons.storage_rounded),
+                            ? Icons.warning_amber_rounded
+                            : Icons.storage_rounded),
                   color: iconColor,
                   size: 28,
                 ),
@@ -1121,19 +1215,16 @@ class DownloadsScreen extends ConsumerWidget {
                   children: [
                     Text(
                       context.l10n.downloadsStorageUsed,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: palette.textSecondary,
-                          ),
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: palette.textSecondary),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       status.settings.hasLimit
                           ? '${status.usedDisplay} / ${status.maxDisplay}'
                           : status.usedDisplay,
-                      style:
-                          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -1184,12 +1275,16 @@ class DownloadsScreen extends ConsumerWidget {
   }) {
     final maxBytes = status.maxBytes ?? 1;
     final completedFrac = (status.usedBytes / maxBytes).clamp(0.0, 1.0);
-    final inProgressFrac =
-        (status.inProgressBytes / maxBytes).clamp(0.0, 1.0 - completedFrac);
-    final queuedFrac = (status.queuedBytes / maxBytes)
-        .clamp(0.0, 1.0 - completedFrac - inProgressFrac);
-    final remainingFrac =
-        (1.0 - completedFrac - inProgressFrac - queuedFrac).clamp(0.0, 1.0);
+    final inProgressFrac = (status.inProgressBytes / maxBytes).clamp(
+      0.0,
+      1.0 - completedFrac,
+    );
+    final queuedFrac = (status.queuedBytes / maxBytes).clamp(
+      0.0,
+      1.0 - completedFrac - inProgressFrac,
+    );
+    final remainingFrac = (1.0 - completedFrac - inProgressFrac - queuedFrac)
+        .clamp(0.0, 1.0);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
@@ -1205,16 +1300,12 @@ class DownloadsScreen extends ConsumerWidget {
             if (inProgressFrac > 0)
               Flexible(
                 flex: (inProgressFrac * 1000).round(),
-                child: Container(
-                  color: completedColor.withValues(alpha: 0.45),
-                ),
+                child: Container(color: completedColor.withValues(alpha: 0.45)),
               ),
             if (queuedFrac > 0)
               Flexible(
                 flex: (queuedFrac * 1000).round(),
-                child: Container(
-                  color: completedColor.withValues(alpha: 0.2),
-                ),
+                child: Container(color: completedColor.withValues(alpha: 0.2)),
               ),
             if (remainingFrac > 0)
               Flexible(
@@ -1228,7 +1319,10 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Widget _buildStorageBreakdown(
-      BuildContext context, StorageQuotaStatus status, Color baseColor) {
+    BuildContext context,
+    StorageQuotaStatus status,
+    Color baseColor,
+  ) {
     return Wrap(
       spacing: 16,
       runSpacing: 4,
@@ -1237,8 +1331,9 @@ class DownloadsScreen extends ConsumerWidget {
           _buildBreakdownChip(
             context,
             color: baseColor.withValues(alpha: 0.45),
-            label: context.l10n
-                .downloadsBreakdownDownloading(status.inProgressDisplay),
+            label: context.l10n.downloadsBreakdownDownloading(
+              status.inProgressDisplay,
+            ),
           ),
         if (status.queuedBytes > 0)
           _buildBreakdownChip(
@@ -1269,17 +1364,18 @@ class DownloadsScreen extends ConsumerWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: context.palette.textSecondary,
-                fontSize: 11,
-              ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: context.palette.textSecondary, fontSize: 11),
         ),
       ],
     );
   }
 
   void _showStorageSettings(
-      BuildContext context, WidgetRef ref, StorageQuotaStatus status) {
+    BuildContext context,
+    WidgetRef ref,
+    StorageQuotaStatus status,
+  ) {
     showGlassSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1327,17 +1423,15 @@ class DownloadsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             Text(
               context.l10n.downloadsEmptyTitle,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               context.l10n.downloadsEmptySubtitle,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1361,9 +1455,7 @@ class DownloadsScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: palette.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.error.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -1393,25 +1485,33 @@ class DownloadsScreen extends ConsumerWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 13),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.error_outline_rounded,
-                          color: AppColors.error, size: 14),
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        color: AppColors.error,
+                        size: 14,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           switch (task.failure) {
-                            final failure? =>
-                              context.l10n.downloadFailureText(failure),
+                            final failure? => context.l10n.downloadFailureText(
+                              failure,
+                            ),
                             null => context.l10n.downloadsFailedFallback,
                           },
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              color: AppColors.error, fontSize: 12),
+                            color: AppColors.error,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
@@ -1422,32 +1522,40 @@ class DownloadsScreen extends ConsumerWidget {
                     children: [
                       TextButton(
                         onPressed: () async {
-                          final manager =
-                              await ref.read(downloadManagerProvider.future);
+                          final manager = await ref.read(
+                            downloadManagerProvider.future,
+                          );
                           await manager.cancelDownload(task.id);
                         },
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           minimumSize: const Size(0, 32),
                         ),
-                        child: Text(context.l10n.commonDismiss,
-                            style: const TextStyle(fontSize: 12)),
+                        child: Text(
+                          context.l10n.commonDismiss,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                       const SizedBox(width: 4),
                       FilledButton(
                         onPressed: () async {
-                          final manager =
-                              await ref.read(downloadManagerProvider.future);
+                          final manager = await ref.read(
+                            downloadManagerProvider.future,
+                          );
                           await manager.retryDownload(task.id);
                         },
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 0),
+                            horizontal: 12,
+                            vertical: 0,
+                          ),
                           backgroundColor: palette.primary,
                           minimumSize: const Size(0, 32),
                         ),
-                        child: Text(context.l10n.commonRetry,
-                            style: const TextStyle(fontSize: 12)),
+                        child: Text(
+                          context.l10n.commonRetry,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
@@ -1565,13 +1673,16 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
         title: Text(context.l10n.downloadsCleanupTitle),
         content: Text(
           context.l10n.downloadsCleanupBody(
-              StorageSettings.formatBytes(totalCleanable)),
+            StorageSettings.formatBytes(totalCleanable),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.l10n.commonCancel,
-                style: TextStyle(color: context.palette.textSecondary)),
+            child: Text(
+              context.l10n.commonCancel,
+              style: TextStyle(color: context.palette.textSecondary),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -1590,8 +1701,9 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
       if (mounted) {
         showToast(
           context,
-          context.l10n
-              .downloadsCleanupFreed(StorageSettings.formatBytes(freedBytes)),
+          context.l10n.downloadsCleanupFreed(
+            StorageSettings.formatBytes(freedBytes),
+          ),
           kind: ToastKind.success,
         );
         Navigator.of(context).pop();
@@ -1622,15 +1734,16 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                   color: palette.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.settings_rounded,
-                    color: palette.primary, size: 20),
+                child: Icon(
+                  Icons.settings_rounded,
+                  color: palette.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
                 context.l10n.downloadsSettingsTitle,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
+                style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
             ],
@@ -1640,9 +1753,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
           // Storage limit dropdown
           Text(
             context.l10n.downloadsSettingsMaxStorage,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
+            style: Theme.of(context).textTheme.titleSmall
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
@@ -1691,9 +1802,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
           // Concurrent downloads
           Text(
             context.l10n.downloadsSettingsConcurrent,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
+            style: Theme.of(context).textTheme.titleSmall
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
@@ -1708,10 +1817,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                 isExpanded: true,
                 value: _maxConcurrentDownloads,
                 items: _concurrentOptions.map((count) {
-                  return DropdownMenuItem(
-                    value: count,
-                    child: Text('$count'),
-                  );
+                  return DropdownMenuItem(value: count, child: Text('$count'));
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -1730,9 +1836,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
             children: [
               Text(
                 context.l10n.downloadsSettingsAutoStart,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
+                style: Theme.of(context).textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
               Switch(
@@ -1751,9 +1855,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
             children: [
               Text(
                 context.l10n.downloadsSettingsAutoCleanup,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
+                style: Theme.of(context).textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
               Switch(
@@ -1769,9 +1871,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
             const SizedBox(height: 16),
             Text(
               context.l10n.downloadsSettingsCleanupPolicy,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleSmall
+              style: Theme.of(context).textTheme.titleSmall
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
@@ -1812,7 +1912,8 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                     side: const BorderSide(color: AppColors.error),
                     foregroundColor: AppColors.error,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: Text(context.l10n.downloadsSettingsCleanUpNow),
                 ),
@@ -1825,7 +1926,8 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: palette.primary,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: Text(context.l10n.commonSave),
                 ),

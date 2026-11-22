@@ -59,8 +59,9 @@ CastSession _session({
   return CastSession(
     device: device,
     playbackState: CastPlaybackState.playing,
-    connectionState:
-        isStale ? CastConnectionState.lost : CastConnectionState.connected,
+    connectionState: isStale
+        ? CastConnectionState.lost
+        : CastConnectionState.connected,
     mediaInfo: CastMediaInfo(
       title: 'Silo - S02E01',
       duration: duration,
@@ -102,22 +103,26 @@ Future<ProviderContainer> _pump(
 }) async {
   await tester.pumpWidget(const SizedBox.shrink());
 
-  final container = ProviderContainer(overrides: [
-    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    hasMydiaProvider.overrideWithValue(true),
-    castSessionProvider.overrideWith((ref) => Stream.value(session)),
-    ...extraOverrides,
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      hasMydiaProvider.overrideWithValue(true),
+      castSessionProvider.overrideWith((ref) => Stream.value(session)),
+      ...extraOverrides,
+    ],
+  );
   addTearDown(container.dispose);
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: CastMiniController()),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: CastMiniController()),
+      ),
     ),
-  ));
+  );
   await tester.pump();
   return container;
 }
@@ -210,33 +215,32 @@ FlutterPlaybackSnapshot _snapshot({
   String? mediaItemId,
   String? episodeId,
   BigInt? positionMs,
-}) =>
-    FlutterPlaybackSnapshot(
-      state: FlutterPlaybackState.playing,
-      mediaItemId: mediaItemId,
-      episodeId: episodeId,
-      title: title,
-      positionMs: positionMs ?? BigInt.zero,
-      durationMs: BigInt.from(6000000),
-      muted: false,
-      audioTracks: const [],
-      subtitleTracks: const [],
-      capabilities: const FlutterTargetCapabilities(
-        volume: true,
-        trackSelection: true,
-        nextPrevious: false,
-      ),
-      sequence: BigInt.one,
-    );
+}) => FlutterPlaybackSnapshot(
+  state: FlutterPlaybackState.playing,
+  mediaItemId: mediaItemId,
+  episodeId: episodeId,
+  title: title,
+  positionMs: positionMs ?? BigInt.zero,
+  durationMs: BigInt.from(6000000),
+  muted: false,
+  audioTracks: const [],
+  subtitleTracks: const [],
+  capabilities: const FlutterTargetCapabilities(
+    volume: true,
+    trackSelection: true,
+    nextPrevious: false,
+  ),
+  sequence: BigInt.one,
+);
 
 AmbientTarget _ambient(String nodeId, String title) => AmbientTarget(
-      device: CastDevice(
-        id: nodeId,
-        name: nodeId,
-        protocol: CastProtocolKind.mydia,
-      ),
-      snapshot: _snapshot(title: title),
-    );
+  device: CastDevice(
+    id: nodeId,
+    name: nodeId,
+    protocol: CastProtocolKind.mydia,
+  ),
+  snapshot: _snapshot(title: title),
+);
 
 /// Like [_pump], but backs `castSessionManagerProvider` with a real manager
 /// over a [FakeCastBackend] and lets the caller push more than one session
@@ -248,27 +252,31 @@ Future<ProviderContainer> _pumpWithManager(
   required Stream<CastSession?> sessionStream,
   List<Override> extraOverrides = const [],
 }) async {
-  final container = ProviderContainer(overrides: [
-    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    hasMydiaProvider.overrideWithValue(true),
-    castSessionManagerProvider.overrideWith((ref) async {
-      ref.onDispose(harness.manager.dispose);
-      return harness.manager;
-    }),
-    castSessionProvider.overrideWith((ref) => sessionStream),
-    ...extraOverrides,
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      hasMydiaProvider.overrideWithValue(true),
+      castSessionManagerProvider.overrideWith((ref) async {
+        ref.onDispose(harness.manager.dispose);
+        return harness.manager;
+      }),
+      castSessionProvider.overrideWith((ref) => sessionStream),
+      ...extraOverrides,
+    ],
+  );
   addTearDown(container.dispose);
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: const MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: toastLayerBuilder,
-      home: Scaffold(body: CastMiniController()),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: Scaffold(body: CastMiniController()),
+      ),
     ),
-  ));
+  );
   await tester.pump();
   return container;
 }
@@ -288,44 +296,49 @@ Future<bool Function()> _pumpLayer(
 }) async {
   var tappedBelow = false;
 
-  final container = ProviderContainer(overrides: [
-    castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    hasMydiaProvider.overrideWithValue(true),
-    castSessionProvider.overrideWith((ref) => Stream.value(null)),
-  ]);
+  final container = ProviderContainer(
+    overrides: [
+      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
+      hasMydiaProvider.overrideWithValue(true),
+      castSessionProvider.overrideWith((ref) => Stream.value(null)),
+    ],
+  );
   addTearDown(container.dispose);
 
   // Wired as `app_router.dart` wires it, so the layer sees popups.
-  final router = GoRouter(observers: [
-    container.read(pageCoverObserverProvider),
-  ], routes: [
-    GoRoute(
-      path: '/',
-      builder: (context, state) =>
-          screen?.call(context) ??
-          Scaffold(
-            body: Center(
-              child: ElevatedButton(
-                key: const Key('below-the-bar'),
-                onPressed: () => tappedBelow = true,
-                child: const Text('Underneath'),
+  final router = GoRouter(
+    observers: [container.read(pageCoverObserverProvider)],
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) =>
+            screen?.call(context) ??
+            Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  key: const Key('below-the-bar'),
+                  onPressed: () => tappedBelow = true,
+                  child: const Text('Underneath'),
+                ),
               ),
             ),
-          ),
-    ),
-  ]);
+      ),
+    ],
+  );
   addTearDown(router.dispose);
 
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp.router(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routerConfig: router,
-      builder: (context, child) =>
-          CastBarLayer(child: child ?? const SizedBox.shrink()),
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+        builder: (context, child) =>
+            CastBarLayer(child: child ?? const SizedBox.shrink()),
+      ),
     ),
-  ));
+  );
   container.read(castTargetProvider.notifier).set(target);
   await tester.pump();
 
@@ -357,48 +370,53 @@ class _DrawerScreenState extends State<_DrawerScreen> {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-        valueListenable: widget.present,
-        builder: (context, present, _) => !present
-            ? const SizedBox.expand()
-            : ReportedDrawer(
-                open: _open,
-                child: Scaffold(
-                  key: widget.scaffoldKey,
-                  onDrawerChanged: (isOpen) => setState(() => _open = isOpen),
-                  drawer: Drawer(
-                    child: GestureDetector(
-                      key: const Key('drawer-surface'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: widget.onDrawerTap,
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                  body: const SizedBox.expand(),
+    valueListenable: widget.present,
+    builder: (context, present, _) => !present
+        ? const SizedBox.expand()
+        : ReportedDrawer(
+            open: _open,
+            child: Scaffold(
+              key: widget.scaffoldKey,
+              onDrawerChanged: (isOpen) => setState(() => _open = isOpen),
+              drawer: Drawer(
+                child: GestureDetector(
+                  key: const Key('drawer-surface'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onDrawerTap,
+                  child: const SizedBox.expand(),
                 ),
               ),
-      );
+              body: const SizedBox.expand(),
+            ),
+          ),
+  );
 }
 
 /// The fade [CastBarLayer] wraps the bar in: the nearest one above it.
-AnimatedOpacity _barFade(WidgetTester tester) => tester.widget(find
-    .ancestor(
-      of: find.byType(CastMiniController),
-      matching: find.byType(AnimatedOpacity),
-    )
-    .first);
+AnimatedOpacity _barFade(WidgetTester tester) => tester.widget(
+  find
+      .ancestor(
+        of: find.byType(CastMiniController),
+        matching: find.byType(AnimatedOpacity),
+      )
+      .first,
+);
 
 /// The pointer gate [CastBarLayer] wraps the bar in: the nearest one above it.
-IgnorePointer _barGate(WidgetTester tester) => tester.widget(find
-    .ancestor(
-      of: find.byType(CastMiniController),
-      matching: find.byType(IgnorePointer),
-    )
-    .first);
+IgnorePointer _barGate(WidgetTester tester) => tester.widget(
+  find
+      .ancestor(
+        of: find.byType(CastMiniController),
+        matching: find.byType(IgnorePointer),
+      )
+      .first,
+);
 
 void main() {
   group('CastBarLayer', () {
-    testWidgets('gives the bar an Overlay, so its tooltips render',
-        (tester) async {
+    testWidgets('gives the bar an Overlay, so its tooltips render', (
+      tester,
+    ) async {
       await _pumpLayer(tester, target: _device);
 
       final clear = find.byKey(const Key('cast-bar-offline-clear'));
@@ -408,68 +426,77 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Forget Cottage Chromecast'), findsOneWidget,
-          reason: 'without an Overlay in the layer the tooltip asserts and '
-              'renders as an error box instead');
+      expect(
+        find.text('Forget Cottage Chromecast'),
+        findsOneWidget,
+        reason:
+            'without an Overlay in the layer the tooltip asserts and '
+            'renders as an error box instead',
+      );
     });
 
     testWidgets(
-        'keeps the bar full-width and floating clear of the bottom edge',
-        (tester) async {
-      await _pumpLayer(tester, target: _device);
+      'keeps the bar full-width and floating clear of the bottom edge',
+      (tester) async {
+        await _pumpLayer(tester, target: _device);
 
-      final bar = tester.getRect(find.byType(CastMiniController));
-      final layer = tester.getRect(find.byType(CastBarLayer));
+        final bar = tester.getRect(find.byType(CastMiniController));
+        final layer = tester.getRect(find.byType(CastBarLayer));
 
-      expect(bar.width, layer.width);
-      // With no dock reporting into DockExtents (this harness mounts no
-      // AppShell), the bar floats 12 above the window edge rather than
-      // sitting flush against it. See CastBarLayer's own dartdoc.
-      expect(bar.bottom, layer.bottom - 12);
-    });
+        expect(bar.width, layer.width);
+        // With no dock reporting into DockExtents (this harness mounts no
+        // AppShell), the bar floats 12 above the window edge rather than
+        // sitting flush against it. See CastBarLayer's own dartdoc.
+        expect(bar.bottom, layer.bottom - 12);
+      },
+    );
 
-    testWidgets('does not swallow taps meant for the screen below',
-        (tester) async {
+    testWidgets('does not swallow taps meant for the screen below', (
+      tester,
+    ) async {
       final tappedBelow = await _pumpLayer(tester, target: _device);
 
       await tester.tap(find.byKey(const Key('below-the-bar')));
       await tester.pump();
 
-      expect(tappedBelow(), isTrue,
-          reason: 'the bar is a full-screen layer; only the bar itself may '
-              'take pointer events');
+      expect(
+        tappedBelow(),
+        isTrue,
+        reason:
+            'the bar is a full-screen layer; only the bar itself may '
+            'take pointer events',
+      );
     });
 
-    testWidgets('the native bar takes the cast bar off the layer',
-        (tester) async {
+    testWidgets('the native bar takes the cast bar off the layer', (
+      tester,
+    ) async {
       await _pumpLayer(
         tester,
         target: _device,
-        screen: (context) => const ReportedNativeBar(
-          shown: true,
-          child: SizedBox.expand(),
-        ),
+        screen: (context) =>
+            const ReportedNativeBar(shown: true, child: SizedBox.expand()),
       );
       await tester.pump();
       expect(find.byType(CastMiniController), findsNothing);
     });
 
-    testWidgets('without the native bar the layer still shows it',
-        (tester) async {
+    testWidgets('without the native bar the layer still shows it', (
+      tester,
+    ) async {
       await _pumpLayer(
         tester,
         target: _device,
-        screen: (context) => const ReportedNativeBar(
-          shown: false,
-          child: SizedBox.expand(),
-        ),
+        screen: (context) =>
+            const ReportedNativeBar(shown: false, child: SizedBox.expand()),
       );
       await tester.pump();
       expect(find.byType(CastMiniController), findsOneWidget);
     });
 
-    testWidgets('hides the bar under a bottom sheet and brings it back',
-        (tester) async {
+    testWidgets('hides the bar under a bottom sheet and brings it back', (
+      tester,
+    ) async {
       late BuildContext screenContext;
       await _pumpLayer(
         tester,
@@ -482,15 +509,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(_barFade(tester).opacity, 1);
 
-      unawaited(showModalBottomSheet<void>(
-        context: screenContext,
-        builder: (_) => const SizedBox(height: 200),
-      ));
+      unawaited(
+        showModalBottomSheet<void>(
+          context: screenContext,
+          builder: (_) => const SizedBox(height: 200),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      expect(_barFade(tester).opacity, 0,
-          reason: 'the bar paints above every route, so it would cover the '
-              'sheet\'s bottom rows (the server picker\'s, say)');
+      expect(
+        _barFade(tester).opacity,
+        0,
+        reason:
+            'the bar paints above every route, so it would cover the '
+            'sheet\'s bottom rows (the server picker\'s, say)',
+      );
       expect(_barGate(tester).ignoring, isTrue);
 
       Navigator.of(screenContext).pop();
@@ -500,24 +533,31 @@ void main() {
       expect(_barGate(tester).ignoring, isFalse);
     });
 
-    testWidgets('raises a page\'s bottom padding to clear the bar',
-        (tester) async {
+    testWidgets('raises a page\'s bottom padding to clear the bar', (
+      tester,
+    ) async {
       var padding = -1.0;
       await _pumpLayer(
         tester,
         target: _device,
-        screen: (context) => Builder(builder: (context) {
-          padding = MediaQuery.paddingOf(context).bottom;
-          return const SizedBox.expand();
-        }),
+        screen: (context) => Builder(
+          builder: (context) {
+            padding = MediaQuery.paddingOf(context).bottom;
+            return const SizedBox.expand();
+          },
+        ),
       );
       await tester.pumpAndSettle();
 
       final bar = tester.getRect(find.byType(CastMiniController));
       final layer = tester.getRect(find.byType(CastBarLayer));
-      expect(padding, layer.bottom - bar.top + DockExtents.gap,
-          reason: 'a SafeArea on a page pushed over the shell (the iOS menu '
-              'page) must keep its last row out from under the bar');
+      expect(
+        padding,
+        layer.bottom - bar.top + DockExtents.gap,
+        reason:
+            'a SafeArea on a page pushed over the shell (the iOS menu '
+            'page) must keep its last row out from under the bar',
+      );
     });
 
     testWidgets('the shell opts out of the raised padding', (tester) async {
@@ -526,16 +566,21 @@ void main() {
         tester,
         target: _device,
         screen: (context) => ExcludeCastBarPageInset(
-          child: Builder(builder: (context) {
-            padding = MediaQuery.paddingOf(context).bottom;
-            return const SizedBox.expand();
-          }),
+          child: Builder(
+            builder: (context) {
+              padding = MediaQuery.paddingOf(context).bottom;
+              return const SizedBox.expand();
+            },
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(padding, 0,
-          reason: 'DockInsets already adds the bar to the shell\'s padding');
+      expect(
+        padding,
+        0,
+        reason: 'DockInsets already adds the bar to the shell\'s padding',
+      );
     });
 
     group('with the mobile nav drawer', () {
@@ -567,8 +612,9 @@ void main() {
         expect(_barGate(tester).ignoring, isFalse);
       });
 
-      testWidgets('fades the bar and lets taps reach the open drawer',
-          (tester) async {
+      testWidgets('fades the bar and lets taps reach the open drawer', (
+        tester,
+      ) async {
         await pumpWithDrawer(tester);
         final bar = tester.getRect(find.byType(CastMiniController));
 
@@ -599,8 +645,9 @@ void main() {
         expect(_barGate(tester).ignoring, isFalse);
       });
 
-      testWidgets('brings the bar back when the shell goes away mid-open',
-          (tester) async {
+      testWidgets('brings the bar back when the shell goes away mid-open', (
+        tester,
+      ) async {
         await pumpWithDrawer(tester);
         scaffoldKey.currentState!.openDrawer();
         await tester.pumpAndSettle();
@@ -618,69 +665,81 @@ void main() {
   });
 
   testWidgets('shows title and device while casting', (tester) async {
-    await _pump(tester,
-        session: _session(duration: const Duration(minutes: 44)));
+    await _pump(
+      tester,
+      session: _session(duration: const Duration(minutes: 44)),
+    );
 
     expect(find.text('Silo - S02E01'), findsOneWidget);
     expect(find.textContaining('Cottage Chromecast'), findsOneWidget);
   });
 
   testWidgets(
-      'renders --:-- and disables the scrubber when duration is unknown',
-      (tester) async {
-    await _pump(tester, session: _session(duration: Duration.zero));
+    'renders --:-- and disables the scrubber when duration is unknown',
+    (tester) async {
+      await _pump(tester, session: _session(duration: Duration.zero));
 
-    expect(
-      find.byKey(const Key('cast-bar-duration')),
-      findsOneWidget,
-    );
-    expect(
-      (tester.widget<Text>(find.byKey(const Key('cast-bar-duration')))).data,
-      '--:--',
-    );
+      expect(find.byKey(const Key('cast-bar-duration')), findsOneWidget);
+      expect(
+        (tester.widget<Text>(find.byKey(const Key('cast-bar-duration')))).data,
+        '--:--',
+      );
 
-    final slider =
-        tester.widget<GlassSlider>(find.byKey(const Key('cast-bar-scrubber')));
-    expect(slider.onChanged, isNull,
-        reason: 'an unknown duration must make the scrubber inert rather than '
-            'seeking to fraction * -1s');
-  });
+      final slider = tester.widget<GlassSlider>(
+        find.byKey(const Key('cast-bar-scrubber')),
+      );
+      expect(
+        slider.onChanged,
+        isNull,
+        reason:
+            'an unknown duration must make the scrubber inert rather than '
+            'seeking to fraction * -1s',
+      );
+    },
+  );
 
   testWidgets(
-      'holds the transport controls back while the session is catching up '
-      'with the receiver', (tester) async {
-    await _pump(
-      tester,
-      session: _session(duration: const Duration(minutes: 44))
-          .copyWith(isSyncing: true),
-    );
+    'holds the transport controls back while the session is catching up '
+    'with the receiver',
+    (tester) async {
+      await _pump(
+        tester,
+        session: _session(duration: const Duration(minutes: 44))
+            .copyWith(isSyncing: true),
+      );
 
-    expect(find.textContaining('Reconnecting to'), findsOneWidget);
+      expect(find.textContaining('Reconnecting to'), findsOneWidget);
 
-    final slider =
-        tester.widget<GlassSlider>(find.byKey(const Key('cast-bar-scrubber')));
-    expect(slider.onChanged, isNull);
+      final slider = tester.widget<GlassSlider>(
+        find.byKey(const Key('cast-bar-scrubber')),
+      );
+      expect(slider.onChanged, isNull);
 
-    for (final key in const [
-      Key('cast-bar-play-pause'),
-      Key('cast-bar-rewind'),
-      Key('cast-bar-forward'),
-    ]) {
-      expect(tester.widget<IconButton>(find.byKey(key)).onPressed, isNull,
-          reason: '$key would act on a position that may be minutes old');
-    }
+      for (final key in const [
+        Key('cast-bar-play-pause'),
+        Key('cast-bar-rewind'),
+        Key('cast-bar-forward'),
+      ]) {
+        expect(
+          tester.widget<IconButton>(find.byKey(key)).onPressed,
+          isNull,
+          reason: '$key would act on a position that may be minutes old',
+        );
+      }
 
-    // Stopping does not depend on what the receiver is doing.
-    expect(
-      tester
-          .widget<IconButton>(find.byKey(const Key('cast-bar-stop')))
-          .onPressed,
-      isNotNull,
-    );
-  });
+      // Stopping does not depend on what the receiver is doing.
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('cast-bar-stop')))
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
 
-  testWidgets('renders the stale state with reconnect and stop',
-      (tester) async {
+  testWidgets('renders the stale state with reconnect and stop', (
+    tester,
+  ) async {
     await _pump(
       tester,
       session: _session(duration: const Duration(minutes: 44), isStale: true),
@@ -691,16 +750,18 @@ void main() {
     expect(find.byKey(const Key('cast-bar-scrubber')), findsNothing);
   });
 
-  testWidgets('renders nothing when there is no session and no target',
-      (tester) async {
+  testWidgets('renders nothing when there is no session and no target', (
+    tester,
+  ) async {
     await _pump(tester);
 
     expect(find.byKey(const Key('cast-bar-scrubber')), findsNothing);
     expect(find.textContaining('Cottage Chromecast'), findsNothing);
   });
 
-  testWidgets('renders the offline state for a target with no session at all',
-      (tester) async {
+  testWidgets('renders the offline state for a target with no session at all', (
+    tester,
+  ) async {
     final container = await _pump(tester);
 
     container.read(castTargetProvider.notifier).set(_device);
@@ -734,118 +795,182 @@ void main() {
   });
 
   testWidgets(
-      'seeks once on release, not during the drag, and the thumb holds the '
-      'dragged position against a stale mid-drag update', (tester) async {
-    final harness = _buildManagerHarness();
-    addTearDown(harness.manager.dispose);
+    'seeks once on release, not during the drag, and the thumb holds the '
+    'dragged position against a stale mid-drag update',
+    (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
 
-    final sessionController = StreamController<CastSession?>();
-    addTearDown(sessionController.close);
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
 
-    final initialSession = _session(
-      duration: const Duration(minutes: 44),
-      position: const Duration(seconds: 60),
-    );
+      final initialSession = _session(
+        duration: const Duration(minutes: 44),
+        position: const Duration(seconds: 60),
+      );
 
-    await _pumpWithManager(
-      tester,
-      harness: harness,
-      sessionStream: sessionController.stream,
-    );
-    sessionController.add(initialSession);
-    await tester.pump();
-    await tester.pump();
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+      );
+      sessionController.add(initialSession);
+      await tester.pump();
+      await tester.pump();
 
-    final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
-    expect(sliderFinder, findsOneWidget);
-    final startValue = tester.widget<GlassSlider>(sliderFinder).value;
+      final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
+      expect(sliderFinder, findsOneWidget);
+      final startValue = tester.widget<GlassSlider>(sliderFinder).value;
 
-    // Press down and drag right, but do not release yet.
-    final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
-    await tester.pump();
-    await gesture.moveBy(const Offset(120, 0));
-    await tester.pump();
+      // Press down and drag right, but do not release yet.
+      final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
+      await tester.pump();
+      await gesture.moveBy(const Offset(120, 0));
+      await tester.pump();
 
-    final draggedValue = tester.widget<GlassSlider>(sliderFinder).value;
-    expect(draggedValue, isNot(closeTo(startValue, 0.01)),
-        reason: 'the thumb must follow the drag');
-    expect(harness.backend.seeks, isEmpty,
-        reason: 'dragging must not seek on every frame, only on release');
+      final draggedValue = tester.widget<GlassSlider>(sliderFinder).value;
+      expect(
+        draggedValue,
+        isNot(closeTo(startValue, 0.01)),
+        reason: 'the thumb must follow the drag',
+      );
+      expect(
+        harness.backend.seeks,
+        isEmpty,
+        reason: 'dragging must not seek on every frame, only on release',
+      );
 
-    // The receiver's own position stream keeps ticking during a drag; a new
-    // session update carrying the pre-drag position must not snap the thumb
-    // back to it.
-    sessionController.add(initialSession);
-    await tester.pump();
+      // The receiver's own position stream keeps ticking during a drag; a new
+      // session update carrying the pre-drag position must not snap the thumb
+      // back to it.
+      sessionController.add(initialSession);
+      await tester.pump();
 
-    final midDragValue = tester.widget<GlassSlider>(sliderFinder).value;
-    expect(midDragValue, draggedValue,
-        reason: 'a position event mid-drag must not override the local '
-            'drag position');
-    expect(harness.backend.seeks, isEmpty);
+      final midDragValue = tester.widget<GlassSlider>(sliderFinder).value;
+      expect(
+        midDragValue,
+        draggedValue,
+        reason:
+            'a position event mid-drag must not override the local '
+            'drag position',
+      );
+      expect(harness.backend.seeks, isEmpty);
 
-    await gesture.up();
-    await tester.pump();
+      await gesture.up();
+      await tester.pump();
 
-    expect(harness.backend.seeks, hasLength(1),
-        reason: 'release must seek exactly once');
-    final expectedTarget =
-        seekTargetForFraction(draggedValue, initialSession.mediaInfo!.duration);
-    expect(harness.backend.seeks.single, expectedTarget);
-  });
+      expect(
+        harness.backend.seeks,
+        hasLength(1),
+        reason: 'release must seek exactly once',
+      );
+      final expectedTarget = seekTargetForFraction(
+        draggedValue,
+        initialSession.mediaInfo!.duration,
+      );
+      expect(harness.backend.seeks.single, expectedTarget);
+    },
+  );
 
   testWidgets(
-      'a drag that syncing interrupts leaves the thumb on the real position '
-      'and never seeks', (tester) async {
-    final harness = _buildManagerHarness();
-    addTearDown(harness.manager.dispose);
+    'a drag that syncing interrupts leaves the thumb on the real position '
+    'and never seeks',
+    (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
 
-    final sessionController = StreamController<CastSession?>();
-    addTearDown(sessionController.close);
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
 
-    final initialSession = _session(
-      duration: const Duration(minutes: 44),
-      position: const Duration(seconds: 60),
-    );
+      final initialSession = _session(
+        duration: const Duration(minutes: 44),
+        position: const Duration(seconds: 60),
+      );
 
-    await _pumpWithManager(
-      tester,
-      harness: harness,
-      sessionStream: sessionController.stream,
-    );
-    sessionController.add(initialSession);
-    await tester.pump();
-    await tester.pump();
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+      );
+      sessionController.add(initialSession);
+      await tester.pump();
+      await tester.pump();
 
-    final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
-    final startValue = tester.widget<GlassSlider>(sliderFinder).value;
+      final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
+      final startValue = tester.widget<GlassSlider>(sliderFinder).value;
 
-    final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
-    await tester.pump();
-    await gesture.moveBy(const Offset(120, 0));
-    await tester.pump();
-    expect(tester.widget<GlassSlider>(sliderFinder).value,
-        isNot(closeTo(startValue, 0.01)));
+      final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
+      await tester.pump();
+      await gesture.moveBy(const Offset(120, 0));
+      await tester.pump();
+      expect(
+        tester.widget<GlassSlider>(sliderFinder).value,
+        isNot(closeTo(startValue, 0.01)),
+      );
 
-    // The session starts catching up while the finger is still down, and the
-    // release lands on a scrubber that no longer reports it.
-    sessionController.add(initialSession.copyWith(isSyncing: true));
-    await tester.pump();
-    await gesture.up();
-    await tester.pump();
+      // The session starts catching up while the finger is still down, and the
+      // release lands on a scrubber that no longer reports it.
+      sessionController.add(initialSession.copyWith(isSyncing: true));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
 
-    sessionController.add(initialSession);
-    await tester.pump();
+      sessionController.add(initialSession);
+      await tester.pump();
 
-    expect(tester.widget<GlassSlider>(sliderFinder).value,
+      expect(
+        tester.widget<GlassSlider>(sliderFinder).value,
         closeTo(startValue, 1e-9),
-        reason: 'the interrupted drag must not outlive the sync');
-    expect(harness.backend.seeks, isEmpty);
-  });
+        reason: 'the interrupted drag must not outlive the sync',
+      );
+      expect(harness.backend.seeks, isEmpty);
+    },
+  );
 
   testWidgets(
-      'confirming stop clears a target set while the session was already '
-      'live', (tester) async {
+    'confirming stop clears a target set while the session was already '
+    'live',
+    (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
+
+      final container = await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+      );
+      sessionController.add(_session(duration: const Duration(minutes: 44)));
+      await tester.pump();
+      await tester.pump();
+
+      // Mirrors cast_actions.dart's re-target fallback: a target can be set
+      // while a session is already live, when nothing is persisted behind it
+      // to re-cast. The idle "x" does not render in that state, so stopping
+      // the session must be the path that clears it.
+      container.read(castTargetProvider.notifier).set(_device);
+
+      await tester.tap(find.byKey(const Key('cast-bar-stop')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Stop'));
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(castTargetProvider),
+        isNull,
+        reason:
+            'stopping a cast must clear castTargetProvider, or the '
+            'next playback would silently cast again',
+      );
+    },
+  );
+
+  testWidgets('the stale-session stop button clears the target', (
+    tester,
+  ) async {
     final harness = _buildManagerHarness();
     addTearDown(harness.manager.dispose);
 
@@ -857,44 +982,9 @@ void main() {
       harness: harness,
       sessionStream: sessionController.stream,
     );
-    sessionController.add(_session(duration: const Duration(minutes: 44)));
-    await tester.pump();
-    await tester.pump();
-
-    // Mirrors cast_actions.dart's re-target fallback: a target can be set
-    // while a session is already live, when nothing is persisted behind it
-    // to re-cast. The idle "x" does not render in that state, so stopping
-    // the session must be the path that clears it.
-    container.read(castTargetProvider.notifier).set(_device);
-
-    await tester.tap(find.byKey(const Key('cast-bar-stop')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(TextButton, 'Stop'));
-    await tester.pumpAndSettle();
-
-    expect(container.read(castTargetProvider), isNull,
-        reason: 'stopping a cast must clear castTargetProvider, or the '
-            'next playback would silently cast again');
-  });
-
-  testWidgets('the stale-session stop button clears the target',
-      (tester) async {
-    final harness = _buildManagerHarness();
-    addTearDown(harness.manager.dispose);
-
-    final sessionController = StreamController<CastSession?>();
-    addTearDown(sessionController.close);
-
-    final container = await _pumpWithManager(
-      tester,
-      harness: harness,
-      sessionStream: sessionController.stream,
+    sessionController.add(
+      _session(duration: const Duration(minutes: 44), isStale: true),
     );
-    sessionController.add(_session(
-      duration: const Duration(minutes: 44),
-      isStale: true,
-    ));
     await tester.pump();
     await tester.pump();
 
@@ -906,8 +996,9 @@ void main() {
     expect(container.read(castTargetProvider), isNull);
   });
 
-  testWidgets('an idle connection says it is ready, not that it will play',
-      (tester) async {
+  testWidgets('an idle connection says it is ready, not that it will play', (
+    tester,
+  ) async {
     await _pump(
       tester,
       session: const CastSession(
@@ -935,8 +1026,9 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
-  testWidgets('a lost connection with no media offers a plain reconnect',
-      (tester) async {
+  testWidgets('a lost connection with no media offers a plain reconnect', (
+    tester,
+  ) async {
     await _pump(
       tester,
       session: const CastSession(
@@ -950,13 +1042,18 @@ void main() {
     expect(find.text('Not connected'), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
-    expect(find.byKey(const Key('cast-stale-reconnect')), findsNothing,
-        reason: 'the media reconnect re-casts what was playing, and there is '
-            'nothing here to re-cast');
+    expect(
+      find.byKey(const Key('cast-stale-reconnect')),
+      findsNothing,
+      reason:
+          'the media reconnect re-casts what was playing, and there is '
+          'nothing here to re-cast',
+    );
   });
 
-  testWidgets('a lost connection with media keeps the existing stale row',
-      (tester) async {
+  testWidgets('a lost connection with media keeps the existing stale row', (
+    tester,
+  ) async {
     await _pump(
       tester,
       session: _session(duration: const Duration(minutes: 44), isStale: true),
@@ -974,39 +1071,50 @@ void main() {
     // regressions that gutted what the button actually did.
 
     testWidgets(
-        'the idle clear button runs the manager\'s real stopCast, not merely '
-        'clears the target', (tester) async {
-      final harness = _buildManagerHarness();
-      addTearDown(harness.manager.dispose);
-      await harness.manager.connectTo(_device);
+      'the idle clear button runs the manager\'s real stopCast, not merely '
+      'clears the target',
+      (tester) async {
+        final harness = _buildManagerHarness();
+        addTearDown(harness.manager.dispose);
+        await harness.manager.connectTo(_device);
 
-      final container = await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: Stream.value(harness.manager.currentSession),
-      );
+        final container = await _pumpWithManager(
+          tester,
+          harness: harness,
+          sessionStream: Stream.value(harness.manager.currentSession),
+        );
 
-      container.read(castTargetProvider.notifier).set(_device);
-      await tester.pump();
+        container.read(castTargetProvider.notifier).set(_device);
+        await tester.pump();
 
-      expect(find.byKey(const Key('cast-bar-idle-clear')), findsOneWidget);
+        expect(find.byKey(const Key('cast-bar-idle-clear')), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('cast-bar-idle-clear')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('cast-bar-idle-clear')));
+        await tester.pumpAndSettle();
 
-      expect(harness.manager.currentSession, isNull,
-          reason: 'tapping idle-clear must run the manager\'s real '
+        expect(
+          harness.manager.currentSession,
+          isNull,
+          reason:
+              'tapping idle-clear must run the manager\'s real '
               'stopCast — reverting it to a bare castTargetProvider.clear() '
-              'would leave this non-null');
-      expect(harness.backend.connectedDevice, isNull,
-          reason: 'stopCast must disconnect the backend; a bare target '
+              'would leave this non-null',
+        );
+        expect(
+          harness.backend.connectedDevice,
+          isNull,
+          reason:
+              'stopCast must disconnect the backend; a bare target '
               'clear would leave the receiver connected with no way to '
-              'stop it from this bar');
-      expect(container.read(castTargetProvider), isNull);
-    });
+              'stop it from this bar',
+        );
+        expect(container.read(castTargetProvider), isNull);
+      },
+    );
 
-    testWidgets('the offline reconnect button calls the manager\'s connectTo',
-        (tester) async {
+    testWidgets('the offline reconnect button calls the manager\'s connectTo', (
+      tester,
+    ) async {
       final harness = _buildManagerHarness();
       addTearDown(harness.manager.dispose);
 
@@ -1020,17 +1128,19 @@ void main() {
       await tester.pump();
 
       expect(
-          find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
+        find.byKey(const Key('cast-bar-offline-reconnect')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('cast-bar-offline-reconnect')));
       await tester.pumpAndSettle();
 
-      expect(harness.backend.connectAttempts, [_device],
-          reason: 'gutting _reconnectIdle\'s body would leave this empty');
+      expect(harness.backend.connectAttempts, [
+        _device,
+      ], reason: 'gutting _reconnectIdle\'s body would leave this empty');
     });
 
-    testWidgets(
-        'the offline reconnect button says so in Mydia terms, not LAN '
+    testWidgets('the offline reconnect button says so in Mydia terms, not LAN '
         'firewall terms, when the reconnect fails', (tester) async {
       final harness = _buildMydiaManagerHarness();
       final mydiaBackend = harness.backend as FakeMydiaCastBackend;
@@ -1047,7 +1157,9 @@ void main() {
       await tester.pump();
 
       expect(
-          find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
+        find.byKey(const Key('cast-bar-offline-reconnect')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('cast-bar-offline-reconnect')));
       await tester.pump();
@@ -1057,10 +1169,10 @@ void main() {
       expect(find.textContaining('firewall'), findsNothing);
     });
 
-    testWidgets(
-        'the connecting cancel button tears down the in-flight connect '
-        'instead of leaving it to resurrect a connected session',
-        (tester) async {
+    testWidgets('the connecting cancel button tears down the in-flight connect '
+        'instead of leaving it to resurrect a connected session', (
+      tester,
+    ) async {
       final harness = _buildManagerHarness();
       addTearDown(harness.manager.dispose);
       harness.backend.holdNextConnect();
@@ -1082,16 +1194,20 @@ void main() {
       // decoupled from `harness.manager.sessionStream` so the test can drive
       // the widget without `CircularProgressIndicator`'s perpetual animation
       // forcing `pumpAndSettle` to hang.
-      sessionController.add(const CastSession(
-        device: _device,
-        playbackState: CastPlaybackState.idle,
-        connectionState: CastConnectionState.connecting,
-      ));
+      sessionController.add(
+        const CastSession(
+          device: _device,
+          playbackState: CastPlaybackState.idle,
+          connectionState: CastConnectionState.connecting,
+        ),
+      );
       await tester.pump();
       await tester.pump();
 
       expect(
-          find.byKey(const Key('cast-bar-connecting-cancel')), findsOneWidget);
+        find.byKey(const Key('cast-bar-connecting-cancel')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('cast-bar-connecting-cancel')));
       await tester.pump();
@@ -1104,13 +1220,21 @@ void main() {
       harness.backend.releaseConnect();
       await connecting;
 
-      expect(harness.manager.currentSession, isNull,
-          reason: 'the connect that resolved after the cancel must not '
-              'resurrect a "connected" session');
-      expect(harness.backend.connectedDevice, isNull,
-          reason: 'cancelling mid-connect must tear down whatever the '
-              'in-flight connect established on the TV, not merely forget '
-              'the device');
+      expect(
+        harness.manager.currentSession,
+        isNull,
+        reason:
+            'the connect that resolved after the cancel must not '
+            'resurrect a "connected" session',
+      );
+      expect(
+        harness.backend.connectedDevice,
+        isNull,
+        reason:
+            'cancelling mid-connect must tear down whatever the '
+            'in-flight connect established on the TV, not merely forget '
+            'the device',
+      );
     });
   });
 
@@ -1128,16 +1252,20 @@ void main() {
       language: 'spa',
     );
 
-    testWidgets('is absent when the session has no subtitle tracks',
-        (tester) async {
-      await _pump(tester,
-          session: _session(duration: const Duration(minutes: 44)));
+    testWidgets('is absent when the session has no subtitle tracks', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        session: _session(duration: const Duration(minutes: 44)),
+      );
 
       expect(find.byKey(const Key('cast-bar-subtitles')), findsNothing);
     });
 
-    testWidgets('the icon reflects whether a track is selected',
-        (tester) async {
+    testWidgets('the icon reflects whether a track is selected', (
+      tester,
+    ) async {
       await _pump(
         tester,
         session: _session(
@@ -1145,8 +1273,9 @@ void main() {
           subtitles: const [trackA],
         ),
       );
-      var button = tester
-          .widget<IconButton>(find.byKey(const Key('cast-bar-subtitles')));
+      var button = tester.widget<IconButton>(
+        find.byKey(const Key('cast-bar-subtitles')),
+      );
       expect((button.icon as Icon).icon, Icons.closed_caption_off);
 
       await _pump(
@@ -1157,48 +1286,57 @@ void main() {
           selectedSubtitle: trackA,
         ),
       );
-      button = tester
-          .widget<IconButton>(find.byKey(const Key('cast-bar-subtitles')));
+      button = tester.widget<IconButton>(
+        find.byKey(const Key('cast-bar-subtitles')),
+      );
       expect((button.icon as Icon).icon, Icons.closed_caption);
     });
 
     testWidgets(
-        'picking a track in the sheet reaches the manager with the exact '
-        "session instance, not a reconstruction", (tester) async {
-      final harness = _buildManagerHarness();
-      addTearDown(harness.manager.dispose);
+      'picking a track in the sheet reaches the manager with the exact '
+      "session instance, not a reconstruction",
+      (tester) async {
+        final harness = _buildManagerHarness();
+        addTearDown(harness.manager.dispose);
 
-      final sessionController = StreamController<CastSession?>();
-      addTearDown(sessionController.close);
+        final sessionController = StreamController<CastSession?>();
+        addTearDown(sessionController.close);
 
-      await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: sessionController.stream,
-      );
-      sessionController.add(_session(
-        duration: const Duration(minutes: 44),
-        subtitles: const [trackA, trackB],
-      ));
-      await tester.pump();
-      await tester.pump();
+        await _pumpWithManager(
+          tester,
+          harness: harness,
+          sessionStream: sessionController.stream,
+        );
+        sessionController.add(
+          _session(
+            duration: const Duration(minutes: 44),
+            subtitles: const [trackA, trackB],
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
 
-      await tester.tap(find.byKey(const Key('cast-bar-subtitles')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('cast-bar-subtitles')));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('cast-subtitle-track-2')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('cast-subtitle-track-2')));
+        await tester.pumpAndSettle();
 
-      expect(harness.backend.subtitleSelections, hasLength(1));
-      expect(
-          identical(harness.backend.subtitleSelections.single, trackB), isTrue,
-          reason: 'dart_cast keys receiver track ids by URL, so '
+        expect(harness.backend.subtitleSelections, hasLength(1));
+        expect(
+          identical(harness.backend.subtitleSelections.single, trackB),
+          isTrue,
+          reason:
+              'dart_cast keys receiver track ids by URL, so '
               'selectSubtitle must receive the very instance the session '
-              'held, not one rebuilt from an id');
-    });
+              'held, not one rebuilt from an id',
+        );
+      },
+    );
 
-    testWidgets('picking Off in the sheet turns subtitles off on the manager',
-        (tester) async {
+    testWidgets('picking Off in the sheet turns subtitles off on the manager', (
+      tester,
+    ) async {
       final harness = _buildManagerHarness();
       addTearDown(harness.manager.dispose);
 
@@ -1210,11 +1348,13 @@ void main() {
         harness: harness,
         sessionStream: sessionController.stream,
       );
-      sessionController.add(_session(
-        duration: const Duration(minutes: 44),
-        subtitles: const [trackA],
-        selectedSubtitle: trackA,
-      ));
+      sessionController.add(
+        _session(
+          duration: const Duration(minutes: 44),
+          subtitles: const [trackA],
+          selectedSubtitle: trackA,
+        ),
+      );
       await tester.pump();
       await tester.pump();
 
@@ -1227,95 +1367,119 @@ void main() {
       expect(harness.backend.subtitleSelections, [null]);
     });
 
-    testWidgets('dismissing the sheet with a barrier tap issues no call at all',
-        (tester) async {
-      final harness = _buildManagerHarness();
-      addTearDown(harness.manager.dispose);
+    testWidgets(
+      'dismissing the sheet with a barrier tap issues no call at all',
+      (tester) async {
+        final harness = _buildManagerHarness();
+        addTearDown(harness.manager.dispose);
 
-      final sessionController = StreamController<CastSession?>();
-      addTearDown(sessionController.close);
+        final sessionController = StreamController<CastSession?>();
+        addTearDown(sessionController.close);
 
-      await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: sessionController.stream,
-      );
-      sessionController.add(_session(
-        duration: const Duration(minutes: 44),
-        subtitles: const [trackA],
-      ));
-      await tester.pump();
-      await tester.pump();
+        await _pumpWithManager(
+          tester,
+          harness: harness,
+          sessionStream: sessionController.stream,
+        );
+        sessionController.add(
+          _session(
+            duration: const Duration(minutes: 44),
+            subtitles: const [trackA],
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
 
-      await tester.tap(find.byKey(const Key('cast-bar-subtitles')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('cast-bar-subtitles')));
+        await tester.pumpAndSettle();
 
-      await tester.tapAt(const Offset(10, 10));
-      await tester.pumpAndSettle();
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pumpAndSettle();
 
-      expect(harness.backend.subtitleSelections, isEmpty,
-          reason: 'backing out of the sheet must leave the receiver alone, '
-              'not silently turn subtitles off');
-    });
+        expect(
+          harness.backend.subtitleSelections,
+          isEmpty,
+          reason:
+              'backing out of the sheet must leave the receiver alone, '
+              'not silently turn subtitles off',
+        );
+      },
+    );
   });
 
   group('cast bar pull button', () {
-    testWidgets('shown for a Mydia session, not a chromecast one',
-        (tester) async {
+    testWidgets('shown for a Mydia session, not a chromecast one', (
+      tester,
+    ) async {
       final harness = _buildManagerHarness();
       addTearDown(harness.manager.dispose);
 
       await _pumpWithManager(
         tester,
         harness: harness,
-        sessionStream: Stream.value(_session(
-          duration: const Duration(minutes: 44),
-        )),
+        sessionStream: Stream.value(
+          _session(duration: const Duration(minutes: 44)),
+        ),
       );
 
-      expect(find.byKey(const Key('cast-bar-pull')), findsNothing,
-          reason: 'only a Mydia target runs this app; a Chromecast/DLNA '
-              'receiver has nothing to hand playback back from');
+      expect(
+        find.byKey(const Key('cast-bar-pull')),
+        findsNothing,
+        reason:
+            'only a Mydia target runs this app; a Chromecast/DLNA '
+            'receiver has nothing to hand playback back from',
+      );
     });
 
     testWidgets(
-        'tapping it runs the manager\'s real pullToLocal, which pauses and '
-        'stops the target', (tester) async {
-      final harness = _buildMydiaManagerHarness();
-      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
-      addTearDown(harness.manager.dispose);
+      'tapping it runs the manager\'s real pullToLocal, which pauses and '
+      'stops the target',
+      (tester) async {
+        final harness = _buildMydiaManagerHarness();
+        final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+        addTearDown(harness.manager.dispose);
 
-      await harness.manager.connectTo(_mydiaDevice);
-      mydiaBackend.lastSnapshot = _snapshot(mediaItemId: 'movie-42');
+        await harness.manager.connectTo(_mydiaDevice);
+        mydiaBackend.lastSnapshot = _snapshot(mediaItemId: 'movie-42');
 
-      await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: Stream.value(harness.manager.currentSession),
-      );
+        await _pumpWithManager(
+          tester,
+          harness: harness,
+          sessionStream: Stream.value(harness.manager.currentSession),
+        );
 
-      expect(find.byKey(const Key('cast-bar-pull')), findsOneWidget);
+        expect(find.byKey(const Key('cast-bar-pull')), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('cast-bar-pull')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('cast-bar-pull')));
+        await tester.pumpAndSettle();
 
-      expect(mydiaBackend.disconnectCallCount, 1,
-          reason: 'pullToLocal pauses the target then runs stopCast, which '
+        expect(
+          mydiaBackend.disconnectCallCount,
+          1,
+          reason:
+              'pullToLocal pauses the target then runs stopCast, which '
               'disconnects — gutting the button\'s call to pullToLocal '
-              'would leave this at 0');
-      expect(harness.manager.currentSession, isNull,
-          reason: 'pullToLocal ends this manager\'s own session once the '
-              'target has been read and told to stand down');
-      // This harness mounts no GoRouter (see `_pumpWithManager`), so the
-      // "open locally" half of the button can never resolve a route here —
-      // the assertion that matters is that this does not escape as an
-      // unhandled exception; `_pullToLocal`'s own try/catch is what a real
-      // GoRouter.of() failure would otherwise crash through.
-      expect(tester.takeException(), isNull);
-    });
+              'would leave this at 0',
+        );
+        expect(
+          harness.manager.currentSession,
+          isNull,
+          reason:
+              'pullToLocal ends this manager\'s own session once the '
+              'target has been read and told to stand down',
+        );
+        // This harness mounts no GoRouter (see `_pumpWithManager`), so the
+        // "open locally" half of the button can never resolve a route here —
+        // the assertion that matters is that this does not escape as an
+        // unhandled exception; `_pullToLocal`'s own try/catch is what a real
+        // GoRouter.of() failure would otherwise crash through.
+        expect(tester.takeException(), isNull);
+      },
+    );
 
-    testWidgets('does nothing destructive when there is nothing to pull',
-        (tester) async {
+    testWidgets('does nothing destructive when there is nothing to pull', (
+      tester,
+    ) async {
       final harness = _buildMydiaManagerHarness();
       final mydiaBackend = harness.backend as FakeMydiaCastBackend;
       addTearDown(harness.manager.dispose);
@@ -1333,10 +1497,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Nothing to bring over yet.'), findsOneWidget);
-      expect(mydiaBackend.disconnectCallCount, 0,
-          reason: 'pullToLocal itself already refuses to touch anything '
-              'when nothing has been polled; this pins the button honors '
-              'that null rather than plowing ahead into navigation');
+      expect(
+        mydiaBackend.disconnectCallCount,
+        0,
+        reason:
+            'pullToLocal itself already refuses to touch anything '
+            'when nothing has been polled; this pins the button honors '
+            'that null rather than plowing ahead into navigation',
+      );
     });
   });
 
@@ -1364,8 +1532,9 @@ void main() {
       final sessionController = StreamController<CastSession?>();
       addTearDown(sessionController.close);
       sessionController.add(harness.manager.currentSession);
-      final forward =
-          harness.manager.sessionStream.listen(sessionController.add);
+      final forward = harness.manager.sessionStream.listen(
+        sessionController.add,
+      );
       addTearDown(forward.cancel);
 
       final container = await _pumpWithManager(
@@ -1376,8 +1545,10 @@ void main() {
           if (targets != null)
             ambientTargetsProvider.overrideWithValue(targets)
           else
-            ambientPlayingProvider.overrideWith((ref) =>
-                Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+            ambientPlayingProvider.overrideWith(
+              (ref) =>
+                  Stream.value([_ambient('node-tv', 'The Lantern Keepers')]),
+            ),
         ],
       );
       container.read(castTargetProvider.notifier).set(lanternDevice);
@@ -1385,22 +1556,27 @@ void main() {
       return container;
     }
 
-    testWidgets('a chromecast keeps the confirm-and-stop close button',
-        (tester) async {
+    testWidgets('a chromecast keeps the confirm-and-stop close button', (
+      tester,
+    ) async {
       final harness = _buildManagerHarness();
       addTearDown(harness.manager.dispose);
 
       await _pumpWithManager(
         tester,
         harness: harness,
-        sessionStream: Stream.value(_session(
-          duration: const Duration(minutes: 44),
-        )),
+        sessionStream: Stream.value(
+          _session(duration: const Duration(minutes: 44)),
+        ),
       );
 
-      expect(find.byKey(const Key('cast-bar-dismiss')), findsNothing,
-          reason: 'detaching ends the stream a Chromecast is playing, so '
-              'there is nothing to dismiss to');
+      expect(
+        find.byKey(const Key('cast-bar-dismiss')),
+        findsNothing,
+        reason:
+            'detaching ends the stream a Chromecast is playing, so '
+            'there is nothing to dismiss to',
+      );
       expect(find.byKey(const Key('cast-bar-detach')), findsNothing);
 
       await tester.tap(find.byKey(const Key('cast-bar-stop')));
@@ -1410,74 +1586,102 @@ void main() {
     });
 
     testWidgets(
-        'on a Mydia target it leaves the target playing, clears the target '
-        'and folds back to the banner, without asking', (tester) async {
-      final harness = _buildMydiaManagerHarness();
-      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
-      addTearDown(harness.manager.dispose);
+      'on a Mydia target it leaves the target playing, clears the target '
+      'and folds back to the banner, without asking',
+      (tester) async {
+        final harness = _buildMydiaManagerHarness();
+        final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+        addTearDown(harness.manager.dispose);
 
-      final container = await pumpLantern(tester, harness);
+        final container = await pumpLantern(tester, harness);
 
-      expect(find.byKey(const Key('cast-bar-detach')), findsNothing,
-          reason: 'the close button owns this action now');
-      expect(find.byKey(const Key('cast-bar-dismiss')), findsOneWidget);
+        expect(
+          find.byKey(const Key('cast-bar-detach')),
+          findsNothing,
+          reason: 'the close button owns this action now',
+        );
+        expect(find.byKey(const Key('cast-bar-dismiss')), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('cast-bar-dismiss')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('cast-bar-dismiss')));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Stop playback?'), findsNothing,
-          reason: 'dismissing interrupts nobody, so it needs no confirm');
-      expect(mydiaBackend.stopCallCount, 0,
-          reason: 'closing the bar must never stop the other device');
-      expect(mydiaBackend.disconnectCallCount, 1);
-      expect(harness.manager.currentSession, isNull);
-      expect(container.read(castTargetProvider), isNull,
-          reason: 'the next play must stay on this device');
-      expect(container.read(ambientDismissalsProvider), isEmpty,
-          reason: 'hiding the banner is its own close button\'s job');
-      expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget,
-          reason: 'the other device is still playing, so the bar folds back '
-              'to the Playing on banner it was opened from');
-      expect(find.byKey(const Key('cast-bar-transport')), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
+        expect(
+          find.text('Stop playback?'),
+          findsNothing,
+          reason: 'dismissing interrupts nobody, so it needs no confirm',
+        );
+        expect(
+          mydiaBackend.stopCallCount,
+          0,
+          reason: 'closing the bar must never stop the other device',
+        );
+        expect(mydiaBackend.disconnectCallCount, 1);
+        expect(harness.manager.currentSession, isNull);
+        expect(
+          container.read(castTargetProvider),
+          isNull,
+          reason: 'the next play must stay on this device',
+        );
+        expect(
+          container.read(ambientDismissalsProvider),
+          isEmpty,
+          reason: 'hiding the banner is its own close button\'s job',
+        );
+        expect(
+          find.byKey(const Key('cast-bar-ambient-open')),
+          findsOneWidget,
+          reason:
+              'the other device is still playing, so the bar folds back '
+              'to the Playing on banner it was opened from',
+        );
+        expect(find.byKey(const Key('cast-bar-transport')), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets(
-        'the banner comes back through the real ambient provider, with no '
-        'app resume', (tester) async {
-      final harness = _buildMydiaManagerHarness();
-      addTearDown(harness.manager.dispose);
-      final targets = AmbientTargets(
-        rosterSource: () async => const ['node-tv'],
-        // A real probe is a network round trip. An instant one answers
-        // before `ambientPlayingProvider` has subscribed to the updates.
-        probe: (nodeId) async {
-          await Future<void>.delayed(const Duration(milliseconds: 20));
-          return _snapshot(title: 'The Lantern Keepers');
-        },
-      );
+      'the banner comes back through the real ambient provider, with no '
+      'app resume',
+      (tester) async {
+        final harness = _buildMydiaManagerHarness();
+        addTearDown(harness.manager.dispose);
+        final targets = AmbientTargets(
+          rosterSource: () async => const ['node-tv'],
+          // A real probe is a network round trip. An instant one answers
+          // before `ambientPlayingProvider` has subscribed to the updates.
+          probe: (nodeId) async {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            return _snapshot(title: 'The Lantern Keepers');
+          },
+        );
 
-      final container = await pumpLantern(tester, harness, targets: targets);
-      expect(find.byKey(const Key('cast-bar-transport')), findsOneWidget);
+        final container = await pumpLantern(tester, harness, targets: targets);
+        expect(find.byKey(const Key('cast-bar-transport')), findsOneWidget);
 
-      // The session held the bar, so nothing listened to the ambient
-      // provider and it was disposed. That must not leave the targets
-      // unable to sweep for the listener the detach brings back.
-      await tester.tap(find.byKey(const Key('cast-bar-dismiss')));
-      await tester.pumpAndSettle();
+        // The session held the bar, so nothing listened to the ambient
+        // provider and it was disposed. That must not leave the targets
+        // unable to sweep for the listener the detach brings back.
+        await tester.tap(find.byKey(const Key('cast-bar-dismiss')));
+        await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget,
-          reason: 'the other device is still playing; the banner must not '
-              'wait for the app to be backgrounded and resumed');
+        expect(
+          find.byKey(const Key('cast-bar-ambient-open')),
+          findsOneWidget,
+          reason:
+              'the other device is still playing; the banner must not '
+              'wait for the app to be backgrounded and resumed',
+        );
 
-      // Its poll and resweep timers go with the tree, inside the test.
-      await tester.pumpWidget(const SizedBox.shrink());
-      container.dispose();
-      await targets.dispose();
-    });
+        // Its poll and resweep timers go with the tree, inside the test.
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+        await targets.dispose();
+      },
+    );
 
-    testWidgets('the Mydia transport stop button confirms, then stops',
-        (tester) async {
+    testWidgets('the Mydia transport stop button confirms, then stops', (
+      tester,
+    ) async {
       final harness = _buildMydiaManagerHarness();
       final mydiaBackend = harness.backend as FakeMydiaCastBackend;
       addTearDown(harness.manager.dispose);
@@ -1488,8 +1692,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Stop playback?'), findsOneWidget);
-      expect(mydiaBackend.stopCallCount, 0,
-          reason: 'nothing stops until the dialog is confirmed');
+      expect(
+        mydiaBackend.stopCallCount,
+        0,
+        reason: 'nothing stops until the dialog is confirmed',
+      );
 
       await tester.tap(find.widgetWithText(TextButton, 'Stop'));
       await tester.pumpAndSettle();
@@ -1500,8 +1707,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('cancelling the Mydia stop confirm changes nothing',
-        (tester) async {
+    testWidgets('cancelling the Mydia stop confirm changes nothing', (
+      tester,
+    ) async {
       final harness = _buildMydiaManagerHarness();
       final mydiaBackend = harness.backend as FakeMydiaCastBackend;
       addTearDown(harness.manager.dispose);
@@ -1531,295 +1739,372 @@ void main() {
     for (final withSubtitles in [false, true]) {
       for (final mydia in [false, true]) {
         testWidgets(
-            'centers play/pause (subtitles: $withSubtitles, mydia: $mydia)',
-            (tester) async {
-          await _pump(
-            tester,
-            session: _session(
-              duration: const Duration(minutes: 44),
-              device: mydia ? _mydiaDevice : _device,
-              subtitles: withSubtitles ? const [track] : const [],
-            ),
-          );
+          'centers play/pause (subtitles: $withSubtitles, mydia: $mydia)',
+          (tester) async {
+            await _pump(
+              tester,
+              session: _session(
+                duration: const Duration(minutes: 44),
+                device: mydia ? _mydiaDevice : _device,
+                subtitles: withSubtitles ? const [track] : const [],
+              ),
+            );
 
-          expect(find.byKey(const Key('cast-bar-subtitles')),
-              withSubtitles ? findsOneWidget : findsNothing);
-          expect(find.byKey(const Key('cast-bar-pull')),
-              mydia ? findsOneWidget : findsNothing);
+            expect(
+              find.byKey(const Key('cast-bar-subtitles')),
+              withSubtitles ? findsOneWidget : findsNothing,
+            );
+            expect(
+              find.byKey(const Key('cast-bar-pull')),
+              mydia ? findsOneWidget : findsNothing,
+            );
 
-          final row =
-              tester.getRect(find.byKey(const Key('cast-bar-transport')));
-          final play =
-              tester.getRect(find.byKey(const Key('cast-bar-play-pause')));
-          expect(play.center.dx, closeTo(row.center.dx, 0.5),
-              reason: 'the optional CC and Pull slots keep their width when '
-                  'empty, so play/pause never drifts off center');
-        });
+            final row = tester.getRect(
+              find.byKey(const Key('cast-bar-transport')),
+            );
+            final play = tester.getRect(
+              find.byKey(const Key('cast-bar-play-pause')),
+            );
+            expect(
+              play.center.dx,
+              closeTo(row.center.dx, 0.5),
+              reason:
+                  'the optional CC and Pull slots keep their width when '
+                  'empty, so play/pause never drifts off center',
+            );
+          },
+        );
       }
     }
 
-    testWidgets('a chromecast has stop in the header row, not the transport',
-        (tester) async {
-      await _pump(tester,
-          session: _session(duration: const Duration(minutes: 44)));
-
-      expect(
-        find.descendant(
-          of: find.byType(CastBarRow),
-          matching: find.byKey(const Key('cast-bar-stop')),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byKey(const Key('cast-bar-transport')),
-          matching: find.byKey(const Key('cast-bar-stop')),
-        ),
-        findsNothing,
-      );
-    });
-
-    testWidgets('a Mydia target has stop in the transport row, not the header',
-        (tester) async {
+    testWidgets('a chromecast has stop in the header row, not the transport', (
+      tester,
+    ) async {
       await _pump(
         tester,
-        session: _session(
-          duration: const Duration(minutes: 44),
-          device: _mydiaDevice,
-        ),
+        session: _session(duration: const Duration(minutes: 44)),
       );
 
+      expect(
+        find.descendant(
+          of: find.byType(CastBarRow),
+          matching: find.byKey(const Key('cast-bar-stop')),
+        ),
+        findsOneWidget,
+      );
       expect(
         find.descendant(
           of: find.byKey(const Key('cast-bar-transport')),
           matching: find.byKey(const Key('cast-bar-stop')),
         ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(CastBarRow),
-          matching: find.byKey(const Key('cast-bar-stop')),
-        ),
         findsNothing,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(CastBarRow),
-          matching: find.byKey(const Key('cast-bar-dismiss')),
-        ),
-        findsOneWidget,
       );
     });
 
     testWidgets(
-        'the full Mydia transport row fits a 360px phone with play/pause '
-        'centered', (tester) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+      'a Mydia target has stop in the transport row, not the header',
+      (tester) async {
+        await _pump(
+          tester,
+          session: _session(
+            duration: const Duration(minutes: 44),
+            device: _mydiaDevice,
+          ),
+        );
 
-      await _pump(
-        tester,
-        session: _session(
-          duration: const Duration(minutes: 44),
-          device: _mydiaDevice,
-          subtitles: const [track],
-        ),
-      );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('cast-bar-transport')),
+            matching: find.byKey(const Key('cast-bar-stop')),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(CastBarRow),
+            matching: find.byKey(const Key('cast-bar-stop')),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(CastBarRow),
+            matching: find.byKey(const Key('cast-bar-dismiss')),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
 
-      expect(tester.takeException(), isNull,
-          reason: 'six outer controls plus play/pause must not overflow the '
-              'narrowest phone the app targets');
-      for (final key in [
-        'cast-bar-subtitles',
-        'cast-bar-stop',
-        'cast-bar-rewind',
-        'cast-bar-play-pause',
-        'cast-bar-forward',
-        'cast-bar-pull',
-      ]) {
-        expect(find.byKey(Key(key)), findsOneWidget, reason: key);
-      }
+    testWidgets(
+      'the full Mydia transport row fits a 360px phone with play/pause '
+      'centered',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-      final row = tester.getRect(find.byKey(const Key('cast-bar-transport')));
-      final play = tester.getRect(find.byKey(const Key('cast-bar-play-pause')));
-      expect(play.center.dx, closeTo(row.center.dx, 0.5));
-    });
+        await _pump(
+          tester,
+          session: _session(
+            duration: const Duration(minutes: 44),
+            device: _mydiaDevice,
+            subtitles: const [track],
+          ),
+        );
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason:
+              'six outer controls plus play/pause must not overflow the '
+              'narrowest phone the app targets',
+        );
+        for (final key in [
+          'cast-bar-subtitles',
+          'cast-bar-stop',
+          'cast-bar-rewind',
+          'cast-bar-play-pause',
+          'cast-bar-forward',
+          'cast-bar-pull',
+        ]) {
+          expect(find.byKey(Key(key)), findsOneWidget, reason: key);
+        }
+
+        final row = tester.getRect(find.byKey(const Key('cast-bar-transport')));
+        final play = tester.getRect(
+          find.byKey(const Key('cast-bar-play-pause')),
+        );
+        expect(play.center.dx, closeTo(row.center.dx, 0.5));
+      },
+    );
   });
 
   group('capability gate', () {
     testWidgets(
-        'renders nothing on a build with no Chromecast/DLNA capability and '
-        'no Mydia backend either', (tester) async {
-      final container = ProviderContainer(overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.web()),
-        hasMydiaProvider.overrideWithValue(true),
-        castSessionProvider.overrideWith((ref) => Stream.value(null)),
-        ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
-      ]);
+      'renders nothing on a build with no Chromecast/DLNA capability and '
+      'no Mydia backend either',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            castCapabilitiesProvider.overrideWithValue(
+              const CastCapabilities.web(),
+            ),
+            hasMydiaProvider.overrideWithValue(true),
+            castSessionProvider.overrideWith((ref) => Stream.value(null)),
+            ambientPlayingProvider.overrideWith(
+              (ref) => Stream.value(const []),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: CastMiniController()),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byType(CastMiniController),
+          findsOneWidget,
+          reason: 'the widget itself always mounts',
+        );
+        expect(
+          tester.getSize(find.byType(CastMiniController)),
+          Size.zero,
+          reason:
+              'with no capability and no Mydia backend, it renders '
+              'nothing — the pre-fix baseline this test pins',
+        );
+      },
+    );
+
+    testWidgets('renders nothing without a stored Mydia account', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+          hasMydiaProvider.overrideWithValue(false),
+          castSessionProvider.overrideWith((ref) => Stream.value(null)),
+          ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
+        ],
+      );
       addTearDown(container.dispose);
 
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: CastMiniController()),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: CastMiniController()),
+          ),
         ),
-      ));
-      await tester.pump();
-
-      expect(find.byType(CastMiniController), findsOneWidget,
-          reason: 'the widget itself always mounts');
-      expect(tester.getSize(find.byType(CastMiniController)), Size.zero,
-          reason: 'with no capability and no Mydia backend, it renders '
-              'nothing — the pre-fix baseline this test pins');
-    });
-
-    testWidgets('renders nothing without a stored Mydia account',
-        (tester) async {
-      final container = ProviderContainer(overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-        hasMydiaProvider.overrideWithValue(false),
-        castSessionProvider.overrideWith((ref) => Stream.value(null)),
-        ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
-      ]);
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: CastMiniController()),
-        ),
-      ));
+      );
       await tester.pump();
 
       expect(tester.getSize(find.byType(CastMiniController)), Size.zero);
     });
 
     testWidgets(
-        'still mounts on a build with no Chromecast/DLNA capability when a '
-        'Mydia backend is available (e.g. Flutter Web)', (tester) async {
-      final ambientTarget = AmbientTarget(
-        device: const CastDevice(
-          id: 'node-tv',
-          name: 'node-tv',
-          protocol: CastProtocolKind.mydia,
-        ),
-        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
-      );
+      'still mounts on a build with no Chromecast/DLNA capability when a '
+      'Mydia backend is available (e.g. Flutter Web)',
+      (tester) async {
+        final ambientTarget = AmbientTarget(
+          device: const CastDevice(
+            id: 'node-tv',
+            name: 'node-tv',
+            protocol: CastProtocolKind.mydia,
+          ),
+          snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+        );
 
-      final container = ProviderContainer(overrides: [
-        // A Mydia target needs no Chromecast/DLNA entitlement — this is
-        // exactly the web build `ambient_lifecycle.dart` names as this
-        // app's primary deployment.
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.web()),
-        mydiaCastBackendProvider.overrideWithValue(FakeMydiaCastBackend()),
-        hasMydiaProvider.overrideWithValue(true),
-        castSessionProvider.overrideWith((ref) => Stream.value(null)),
-        ambientPlayingProvider
-            .overrideWith((ref) => Stream.value([ambientTarget])),
-        remoteDeviceNamesProvider
-            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
-      ]);
-      addTearDown(container.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            // A Mydia target needs no Chromecast/DLNA entitlement — this is
+            // exactly the web build `ambient_lifecycle.dart` names as this
+            // app's primary deployment.
+            castCapabilitiesProvider.overrideWithValue(
+              const CastCapabilities.web(),
+            ),
+            mydiaCastBackendProvider.overrideWithValue(FakeMydiaCastBackend()),
+            hasMydiaProvider.overrideWithValue(true),
+            castSessionProvider.overrideWith((ref) => Stream.value(null)),
+            ambientPlayingProvider.overrideWith(
+              (ref) => Stream.value([ambientTarget]),
+            ),
+            remoteDeviceNamesProvider.overrideWith(
+              (ref) async => {'node-tv': 'Living Room'},
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: CastMiniController()),
-        ),
-      ));
-      await tester.pump();
-      await tester.pump();
-      // The banner comes through castBarStateProvider, one rebuild after ambientPlayingProvider.
-      await tester.pump();
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: CastMiniController()),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        // The banner comes through castBarStateProvider, one rebuild after ambientPlayingProvider.
+        await tester.pump();
 
-      expect(find.text('Playing on Living Room'), findsOneWidget,
-          reason: 'the ambient banner must be reachable on a build with no '
+        expect(
+          find.text('Playing on Living Room'),
+          findsOneWidget,
+          reason:
+              'the ambient banner must be reachable on a build with no '
               'platform cast capability at all, since Mydia targets do not '
-              'need one');
-    });
+              'need one',
+        );
+      },
+    );
   });
 
   group('cast bar ambient banner', () {
-    testWidgets('shows nothing when nothing is playing ambiently',
-        (tester) async {
-      final container = ProviderContainer(overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-        hasMydiaProvider.overrideWithValue(true),
-        castSessionProvider.overrideWith((ref) => Stream.value(null)),
-        ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
-      ]);
+    testWidgets('shows nothing when nothing is playing ambiently', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+          hasMydiaProvider.overrideWithValue(true),
+          castSessionProvider.overrideWith((ref) => Stream.value(null)),
+          ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
+        ],
+      );
       addTearDown(container.dispose);
 
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: CastMiniController()),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: CastMiniController()),
+          ),
         ),
-      ));
+      );
       await tester.pump();
 
       expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
     });
 
     testWidgets(
-        'resolves the bare node id against the roster before showing the '
-        'banner', (tester) async {
-      final ambientTarget = AmbientTarget(
-        device: const CastDevice(
-          id: 'node-tv',
-          name: 'node-tv',
-          protocol: CastProtocolKind.mydia,
-        ),
-        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
-      );
+      'resolves the bare node id against the roster before showing the '
+      'banner',
+      (tester) async {
+        final ambientTarget = AmbientTarget(
+          device: const CastDevice(
+            id: 'node-tv',
+            name: 'node-tv',
+            protocol: CastProtocolKind.mydia,
+          ),
+          snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+        );
 
-      final container = ProviderContainer(overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-        hasMydiaProvider.overrideWithValue(true),
-        castSessionProvider.overrideWith((ref) => Stream.value(null)),
-        ambientPlayingProvider
-            .overrideWith((ref) => Stream.value([ambientTarget])),
-        remoteDeviceNamesProvider
-            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
-      ]);
-      addTearDown(container.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            castCapabilitiesProvider.overrideWithValue(
+              const CastCapabilities.full(),
+            ),
+            hasMydiaProvider.overrideWithValue(true),
+            castSessionProvider.overrideWith((ref) => Stream.value(null)),
+            ambientPlayingProvider.overrideWith(
+              (ref) => Stream.value([ambientTarget]),
+            ),
+            remoteDeviceNamesProvider.overrideWith(
+              (ref) async => {'node-tv': 'Living Room'},
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: CastMiniController()),
-        ),
-      ));
-      await tester.pump();
-      await tester.pump();
-      // The banner comes through castBarStateProvider, one rebuild after ambientPlayingProvider.
-      await tester.pump();
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: CastMiniController()),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        // The banner comes through castBarStateProvider, one rebuild after ambientPlayingProvider.
+        await tester.pump();
 
-      expect(find.text('Playing on Living Room'), findsOneWidget,
-          reason: 'AmbientTarget.device.name is the bare node id; the '
+        expect(
+          find.text('Playing on Living Room'),
+          findsOneWidget,
+          reason:
+              'AmbientTarget.device.name is the bare node id; the '
               'banner must resolve the real name before it ever renders, '
-              'not fall back to showing the id itself');
-    });
+              'not fall back to showing the id itself',
+        );
+      },
+    );
 
-    testWidgets(
-        'tapping View adopts the target rather than reconnecting '
+    testWidgets('tapping View adopts the target rather than reconnecting '
         'media-less', (tester) async {
       final harness = _buildMydiaManagerHarness();
       final mydiaBackend = harness.backend as FakeMydiaCastBackend;
@@ -1839,10 +2124,12 @@ void main() {
         harness: harness,
         sessionStream: Stream.value(null),
         extraOverrides: [
-          ambientPlayingProvider
-              .overrideWith((ref) => Stream.value([ambientTarget])),
-          remoteDeviceNamesProvider
-              .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+          ambientPlayingProvider.overrideWith(
+            (ref) => Stream.value([ambientTarget]),
+          ),
+          remoteDeviceNamesProvider.overrideWith(
+            (ref) async => {'node-tv': 'Living Room'},
+          ),
         ],
       );
       await tester.pump();
@@ -1851,22 +2138,28 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-          mydiaBackend.connectAttempts,
-          [
-            isA<CastDevice>()
-                .having((d) => d.id, 'id', 'node-tv')
-                .having((d) => d.protocol, 'protocol', CastProtocolKind.mydia)
-                .having((d) => d.metadata['nowPlayingTitle'],
-                    'metadata[nowPlayingTitle]', 'Arrival'),
-          ],
-          reason: 'without nowPlayingTitle in the connected device\'s own '
-              'metadata, isPlayingMydiaTarget reads it as idle and connectTo '
-              'reconnects media-less instead of adopting the session already on '
-              'the receiver');
+        mydiaBackend.connectAttempts,
+        [
+          isA<CastDevice>()
+              .having((d) => d.id, 'id', 'node-tv')
+              .having((d) => d.protocol, 'protocol', CastProtocolKind.mydia)
+              .having(
+                (d) => d.metadata['nowPlayingTitle'],
+                'metadata[nowPlayingTitle]',
+                'Arrival',
+              ),
+        ],
+        reason:
+            'without nowPlayingTitle in the connected device\'s own '
+            'metadata, isPlayingMydiaTarget reads it as idle and connectTo '
+            'reconnects media-less instead of adopting the session already on '
+            'the receiver',
+      );
     });
 
-    testWidgets('tapping the banner row itself takes control in one tap',
-        (tester) async {
+    testWidgets('tapping the banner row itself takes control in one tap', (
+      tester,
+    ) async {
       final harness = _buildMydiaManagerHarness();
       final mydiaBackend = harness.backend as FakeMydiaCastBackend;
       addTearDown(harness.manager.dispose);
@@ -1876,17 +2169,21 @@ void main() {
         harness: harness,
         sessionStream: Stream.value(null),
         extraOverrides: [
-          ambientPlayingProvider.overrideWith((ref) => Stream.value([
-                AmbientTarget(
-                  device: const CastDevice(
-                    id: 'node-tv',
-                    name: 'node-tv',
-                    protocol: CastProtocolKind.mydia,
-                  ),
-                  snapshot: _snapshot(
-                      title: 'The Lantern Keepers', mediaItemId: 'movie-9'),
+          ambientPlayingProvider.overrideWith(
+            (ref) => Stream.value([
+              AmbientTarget(
+                device: const CastDevice(
+                  id: 'node-tv',
+                  name: 'node-tv',
+                  protocol: CastProtocolKind.mydia,
                 ),
-              ])),
+                snapshot: _snapshot(
+                  title: 'The Lantern Keepers',
+                  mediaItemId: 'movie-9',
+                ),
+              ),
+            ]),
+          ),
         ],
       );
       await tester.pump();
@@ -1898,115 +2195,136 @@ void main() {
     });
 
     testWidgets(
-        'does not show ambient playing bar when local playback is active',
-        (tester) async {
-      final ambientTarget = AmbientTarget(
-        device: const CastDevice(
-          id: 'node-tv',
-          name: 'node-tv',
-          protocol: CastProtocolKind.mydia,
-        ),
-        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
-      );
+      'does not show ambient playing bar when local playback is active',
+      (tester) async {
+        final ambientTarget = AmbientTarget(
+          device: const CastDevice(
+            id: 'node-tv',
+            name: 'node-tv',
+            protocol: CastProtocolKind.mydia,
+          ),
+          snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+        );
 
-      final harness = _buildManagerHarness();
-      await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: Stream.value(null),
-        extraOverrides: [
-          localPlaybackActiveProvider
-              .overrideWith(() => LocalPlaybackNotifier(true)),
-          ambientPlayingProvider
-              .overrideWith((ref) => Stream.value([ambientTarget])),
-          remoteDeviceNamesProvider
-              .overrideWith((ref) async => {'node-tv': 'Living Room'}),
-        ],
-      );
-      await tester.pump();
+        final harness = _buildManagerHarness();
+        await _pumpWithManager(
+          tester,
+          harness: harness,
+          sessionStream: Stream.value(null),
+          extraOverrides: [
+            localPlaybackActiveProvider.overrideWith(
+              () => LocalPlaybackNotifier(true),
+            ),
+            ambientPlayingProvider.overrideWith(
+              (ref) => Stream.value([ambientTarget]),
+            ),
+            remoteDeviceNamesProvider.overrideWith(
+              (ref) async => {'node-tv': 'Living Room'},
+            ),
+          ],
+        );
+        await tester.pump();
 
-      expect(find.text('Playing on Living Room'), findsNothing);
-      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
-    });
-
-    testWidgets(
-        'does not show offline target bar when local playback is active',
-        (tester) async {
-      final harness = _buildManagerHarness();
-      final container = await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: Stream.value(null),
-        extraOverrides: [
-          localPlaybackActiveProvider
-              .overrideWith(() => LocalPlaybackNotifier(true)),
-        ],
-      );
-      container.read(castTargetProvider.notifier).set(_device);
-      await tester.pump();
-
-      expect(
-          find.textContaining('Cottage Chromecast is offline'), findsNothing);
-    });
+        expect(find.text('Playing on Living Room'), findsNothing);
+        expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
+      },
+    );
 
     testWidgets(
-        'still shows active cast session even if localPlaybackActiveProvider is true',
-        (tester) async {
-      await _pump(
-        tester,
-        session: _session(duration: const Duration(minutes: 44)),
-        extraOverrides: [
-          localPlaybackActiveProvider
-              .overrideWith(() => LocalPlaybackNotifier(true)),
-        ],
-      );
+      'does not show offline target bar when local playback is active',
+      (tester) async {
+        final harness = _buildManagerHarness();
+        final container = await _pumpWithManager(
+          tester,
+          harness: harness,
+          sessionStream: Stream.value(null),
+          extraOverrides: [
+            localPlaybackActiveProvider.overrideWith(
+              () => LocalPlaybackNotifier(true),
+            ),
+          ],
+        );
+        container.read(castTargetProvider.notifier).set(_device);
+        await tester.pump();
 
-      expect(find.text('Silo - S02E01'), findsOneWidget);
-    });
+        expect(
+          find.textContaining('Cottage Chromecast is offline'),
+          findsNothing,
+        );
+      },
+    );
 
     testWidgets(
-        'a View that cannot reach the player says so in Mydia terms, not '
-        'LAN firewall terms', (tester) async {
-      final harness = _buildMydiaManagerHarness();
-      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
-      addTearDown(harness.manager.dispose);
-      mydiaBackend.failNextConnect(CastFailureKind.unreachable);
+      'still shows active cast session even if localPlaybackActiveProvider is true',
+      (tester) async {
+        await _pump(
+          tester,
+          session: _session(duration: const Duration(minutes: 44)),
+          extraOverrides: [
+            localPlaybackActiveProvider.overrideWith(
+              () => LocalPlaybackNotifier(true),
+            ),
+          ],
+        );
 
-      final ambientTarget = AmbientTarget(
-        device: const CastDevice(
-          id: 'node-tv',
-          name: 'node-tv',
-          protocol: CastProtocolKind.mydia,
-        ),
-        snapshot: _snapshot(title: 'The Lantern Keepers'),
-      );
+        expect(find.text('Silo - S02E01'), findsOneWidget);
+      },
+    );
 
-      await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: Stream.value(null),
-        extraOverrides: [
-          ambientPlayingProvider
-              .overrideWith((ref) => Stream.value([ambientTarget])),
-          remoteDeviceNamesProvider
-              .overrideWith((ref) async => {'node-tv': 'Living Room'}),
-        ],
-      );
-      await tester.pump();
+    testWidgets(
+      'a View that cannot reach the player says so in Mydia terms, not '
+      'LAN firewall terms',
+      (tester) async {
+        final harness = _buildMydiaManagerHarness();
+        final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+        addTearDown(harness.manager.dispose);
+        mydiaBackend.failNextConnect(CastFailureKind.unreachable);
 
-      await tester.tap(find.byKey(const Key('cast-bar-ambient-open')));
-      await tester.pump();
-      await tester.pump();
+        final ambientTarget = AmbientTarget(
+          device: const CastDevice(
+            id: 'node-tv',
+            name: 'node-tv',
+            protocol: CastProtocolKind.mydia,
+          ),
+          snapshot: _snapshot(title: 'The Lantern Keepers'),
+        );
 
-      expect(find.textContaining('Could not reach the device'), findsOneWidget);
-      expect(find.textContaining('firewall'), findsNothing);
-    });
+        await _pumpWithManager(
+          tester,
+          harness: harness,
+          sessionStream: Stream.value(null),
+          extraOverrides: [
+            ambientPlayingProvider.overrideWith(
+              (ref) => Stream.value([ambientTarget]),
+            ),
+            remoteDeviceNamesProvider.overrideWith(
+              (ref) async => {'node-tv': 'Living Room'},
+            ),
+          ],
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('cast-bar-ambient-open')));
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          find.textContaining('Could not reach the device'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('firewall'), findsNothing);
+      },
+    );
 
     testWidgets('the close button hides the banner', (tester) async {
-      await _pump(tester, extraOverrides: [
-        ambientPlayingProvider.overrideWith((ref) =>
-            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
-      ]);
+      await _pump(
+        tester,
+        extraOverrides: [
+          ambientPlayingProvider.overrideWith(
+            (ref) => Stream.value([_ambient('node-tv', 'The Lantern Keepers')]),
+          ),
+        ],
+      );
       await tester.pump();
 
       await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
@@ -2015,13 +2333,17 @@ void main() {
       expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
     });
 
-    testWidgets('comes back when that player moves on to something else',
-        (tester) async {
+    testWidgets('comes back when that player moves on to something else', (
+      tester,
+    ) async {
       final playing = StreamController<List<AmbientTarget>>();
       addTearDown(playing.close);
-      await _pump(tester, extraOverrides: [
-        ambientPlayingProvider.overrideWith((ref) => playing.stream),
-      ]);
+      await _pump(
+        tester,
+        extraOverrides: [
+          ambientPlayingProvider.overrideWith((ref) => playing.stream),
+        ],
+      );
       playing.add([_ambient('node-tv', 'The Lantern Keepers')]);
       await tester.pump();
       await tester.pump();
@@ -2036,13 +2358,17 @@ void main() {
       expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget);
     });
 
-    testWidgets('a dismissed player does not hide a different one',
-        (tester) async {
+    testWidgets('a dismissed player does not hide a different one', (
+      tester,
+    ) async {
       final playing = StreamController<List<AmbientTarget>>();
       addTearDown(playing.close);
-      await _pump(tester, extraOverrides: [
-        ambientPlayingProvider.overrideWith((ref) => playing.stream),
-      ]);
+      await _pump(
+        tester,
+        extraOverrides: [
+          ambientPlayingProvider.overrideWith((ref) => playing.stream),
+        ],
+      );
       playing.add([_ambient('node-tv', 'The Lantern Keepers')]);
       await tester.pump();
       await tester.pump();
@@ -2056,8 +2382,11 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.textContaining('node-den'), findsOneWidget,
-          reason: 'the second player is shown once the first is dismissed');
+      expect(
+        find.textContaining('node-den'),
+        findsOneWidget,
+        reason: 'the second player is shown once the first is dismissed',
+      );
     });
   });
 
@@ -2071,61 +2400,82 @@ void main() {
     }
 
     testWidgets('idle, connecting and offline rows are pills', (tester) async {
-      await _pump(tester,
-          session: const CastSession(
-              device: _device, playbackState: CastPlaybackState.idle));
+      await _pump(
+        tester,
+        session: const CastSession(
+          device: _device,
+          playbackState: CastPlaybackState.idle,
+        ),
+      );
       await expectPill(tester, const Key('cast-bar-idle-clear'));
 
-      await _pump(tester,
-          session: const CastSession(
-              device: _device,
-              playbackState: CastPlaybackState.idle,
-              connectionState: CastConnectionState.connecting));
+      await _pump(
+        tester,
+        session: const CastSession(
+          device: _device,
+          playbackState: CastPlaybackState.idle,
+          connectionState: CastConnectionState.connecting,
+        ),
+      );
       await expectPill(tester, const Key('cast-bar-connecting-cancel'));
 
-      await _pump(tester,
-          session: const CastSession(
-              device: _device,
-              playbackState: CastPlaybackState.idle,
-              connectionState: CastConnectionState.lost));
+      await _pump(
+        tester,
+        session: const CastSession(
+          device: _device,
+          playbackState: CastPlaybackState.idle,
+          connectionState: CastConnectionState.lost,
+        ),
+      );
       await expectPill(tester, const Key('cast-bar-offline-reconnect'));
     });
 
     testWidgets('playing and stale rows are pills', (tester) async {
-      await _pump(tester,
-          session: _session(duration: const Duration(minutes: 40)));
+      await _pump(
+        tester,
+        session: _session(duration: const Duration(minutes: 40)),
+      );
       await expectPill(tester, const Key('cast-bar-play-pause'));
       expect(find.text('Casting to ${_device.name}'), findsOneWidget);
 
-      await _pump(tester,
-          session:
-              _session(duration: const Duration(minutes: 40), isStale: true));
+      await _pump(
+        tester,
+        session: _session(duration: const Duration(minutes: 40), isStale: true),
+      );
       await expectPill(tester, const Key('cast-stale-reconnect'));
     });
 
-    testWidgets('inside an already framed host the pill draws no glass',
-        (tester) async {
+    testWidgets('inside an already framed host the pill draws no glass', (
+      tester,
+    ) async {
       await tester.pumpWidget(const SizedBox.shrink());
-      final container = ProviderContainer(overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-        hasMydiaProvider.overrideWithValue(true),
-        castSessionProvider.overrideWith((ref) =>
-            Stream.value(_session(duration: const Duration(minutes: 40)))),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+          hasMydiaProvider.overrideWithValue(true),
+          castSessionProvider.overrideWith(
+            (ref) =>
+                Stream.value(_session(duration: const Duration(minutes: 40))),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: CastPillBare(
-              child: CastMiniController(reportsExtent: false),
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: CastPillBare(
+                child: CastMiniController(reportsExtent: false),
+              ),
             ),
           ),
         ),
-      ));
+      );
       await tester.pump();
 
       expect(find.byKey(const Key('cast-bar-play-pause')), findsOneWidget);
@@ -2135,7 +2485,8 @@ void main() {
           matching: find.byType(GlassSurface),
         ),
         findsNothing,
-        reason: 'the native accessory\'s sheet is the frame; a glass pill '
+        reason:
+            'the native accessory\'s sheet is the frame; a glass pill '
             'inside it draws a frame on a frame',
       );
     });
@@ -2145,27 +2496,40 @@ void main() {
         target: _ambient('node-tv', 'The Lantern Keepers'),
         deviceName: 'Living Room',
       );
-      final playing =
-          CastBarPlaying(_session(duration: const Duration(minutes: 40)));
+      final playing = CastBarPlaying(
+        _session(duration: const Duration(minutes: 40)),
+      );
       const connecting = CastBarConnecting(_device);
 
-      expect(CastControlsSheet.closesOn(playing, ambient), isTrue,
-          reason: 'a detach leaves nothing to control');
+      expect(
+        CastControlsSheet.closesOn(playing, ambient),
+        isTrue,
+        reason: 'a detach leaves nothing to control',
+      );
       expect(CastControlsSheet.closesOn(playing, null), isTrue);
-      expect(CastControlsSheet.closesOn(ambient, connecting), isFalse,
-          reason: 'tapping the banner opens the sheet onto the connect');
+      expect(
+        CastControlsSheet.closesOn(ambient, connecting),
+        isFalse,
+        reason: 'tapping the banner opens the sheet onto the connect',
+      );
       expect(CastControlsSheet.closesOn(connecting, playing), isFalse);
       expect(CastControlsSheet.closesOn(ambient, ambient), isFalse);
     });
 
-    testWidgets('the ambient row shows the title and where it plays',
-        (tester) async {
-      await _pump(tester, extraOverrides: [
-        ambientPlayingProvider.overrideWith((ref) =>
-            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
-        remoteDeviceNamesProvider
-            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
-      ]);
+    testWidgets('the ambient row shows the title and where it plays', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        extraOverrides: [
+          ambientPlayingProvider.overrideWith(
+            (ref) => Stream.value([_ambient('node-tv', 'The Lantern Keepers')]),
+          ),
+          remoteDeviceNamesProvider.overrideWith(
+            (ref) async => {'node-tv': 'Living Room'},
+          ),
+        ],
+      );
       await tester.pump();
       await tester.pump();
 
@@ -2205,53 +2569,62 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      final container = ProviderContainer(overrides: [
-        castCapabilitiesProvider
-            .overrideWithValue(const CastCapabilities.full()),
-        hasMydiaProvider.overrideWithValue(true),
-        castSessionProvider.overrideWith((ref) => Stream.value(null)),
-        ambientPlayingProvider.overrideWith((ref) =>
-            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          castCapabilitiesProvider.overrideWithValue(
+            const CastCapabilities.full(),
+          ),
+          hasMydiaProvider.overrideWithValue(true),
+          castSessionProvider.overrideWith((ref) => Stream.value(null)),
+          ambientPlayingProvider.overrideWith(
+            (ref) => Stream.value([_ambient('node-tv', 'The Lantern Keepers')]),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
 
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) => CastBarLayer(child: child!),
-          home: Scaffold(
-            extendBody: true,
-            bottomNavigationBar: withDock
-                ? AppShell.dockChrome(
-                    drawerOpen: false,
-                    child: KeyedSubtree(
-                      key: dockKey,
-                      child: BottomNav(
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => CastBarLayer(child: child!),
+            home: Scaffold(
+              extendBody: true,
+              bottomNavigationBar: withDock
+                  ? AppShell.dockChrome(
+                      drawerOpen: false,
+                      child: KeyedSubtree(
+                        key: dockKey,
+                        child: BottomNav(
                           location: '/',
                           onNavigate: (_) {},
-                          entries: kDockNavEntries),
+                          entries: kDockNavEntries,
+                        ),
+                      ),
+                    )
+                  : null,
+              body: Row(
+                children: [
+                  if (withSidebar)
+                    AppShell.sidebarChrome(
+                      child: const SizedBox(key: sidebarKey, width: 260),
                     ),
-                  )
-                : null,
-            body: Row(
-              children: [
-                if (withSidebar)
-                  AppShell.sidebarChrome(
-                    child: const SizedBox(key: sidebarKey, width: 260),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        onInset(DockInsets.bottomOf(context));
+                        return const SizedBox.expand();
+                      },
+                    ),
                   ),
-                Expanded(
-                  child: Builder(builder: (context) {
-                    onInset(DockInsets.bottomOf(context));
-                    return const SizedBox.expand();
-                  }),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ));
+      );
       // Stream delivery, then the post-frame height reports, then the
       // rebuild they trigger.
       for (var i = 0; i < 4; i++) {
@@ -2261,21 +2634,35 @@ void main() {
 
     testWidgets('floats above the dock on a phone', (tester) async {
       late double inset;
-      await pumpShell(tester,
-          size: phoneSize, withDock: true, onInset: (v) => inset = v);
+      await pumpShell(
+        tester,
+        size: phoneSize,
+        withDock: true,
+        onInset: (v) => inset = v,
+      );
 
       final bar = tester.getRect(find.byType(CastPill));
       final dock = tester.getRect(find.byKey(dockKey));
-      expect(bar.bottom, lessThanOrEqualTo(dock.top),
-          reason: 'the bar must not cover the dock');
-      expect(inset, greaterThanOrEqualTo(dock.height + bar.height),
-          reason: 'scrollables must clear both the dock and the bar');
+      expect(
+        bar.bottom,
+        lessThanOrEqualTo(dock.top),
+        reason: 'the bar must not cover the dock',
+      );
+      expect(
+        inset,
+        greaterThanOrEqualTo(dock.height + bar.height),
+        reason: 'scrollables must clear both the dock and the bar',
+      );
     });
 
     testWidgets('releases the reserved room once dismissed', (tester) async {
       late double inset;
-      await pumpShell(tester,
-          size: phoneSize, withDock: true, onInset: (v) => inset = v);
+      await pumpShell(
+        tester,
+        size: phoneSize,
+        withDock: true,
+        onInset: (v) => inset = v,
+      );
       final withBar = inset;
 
       await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
@@ -2286,41 +2673,63 @@ void main() {
       expect(inset, lessThan(withBar));
     });
 
-    testWidgets('sits at the window bottom when there is no dock',
-        (tester) async {
-      await pumpShell(tester,
-          size: desktopSize, withDock: false, onInset: (_) {});
+    testWidgets('sits at the window bottom when there is no dock', (
+      tester,
+    ) async {
+      await pumpShell(
+        tester,
+        size: desktopSize,
+        withDock: false,
+        onInset: (_) {},
+      );
 
       final bar = tester.getRect(find.byType(CastPill));
       expect(bar.bottom, closeTo(900 - 12, 1));
-      expect(bar.width, desktopSize.width,
-          reason: 'with no sidebar reported the bar keeps its full width');
+      expect(
+        bar.width,
+        desktopSize.width,
+        reason: 'with no sidebar reported the bar keeps its full width',
+      );
     });
 
-    testWidgets('sits beside the desktop sidebar, capped and centered',
-        (tester) async {
-      await pumpShell(tester,
-          size: desktopSize,
-          withDock: false,
-          withSidebar: true,
-          onInset: (_) {});
+    testWidgets('sits beside the desktop sidebar, capped and centered', (
+      tester,
+    ) async {
+      await pumpShell(
+        tester,
+        size: desktopSize,
+        withDock: false,
+        withSidebar: true,
+        onInset: (_) {},
+      );
 
       final bar = tester.getRect(find.byType(CastPill));
       final sidebar = tester.getRect(find.byKey(sidebarKey));
-      expect(bar.left, greaterThanOrEqualTo(sidebar.right),
-          reason: 'the bar must not cover the sidebar (Settings lives at '
-              'its bottom)');
+      expect(
+        bar.left,
+        greaterThanOrEqualTo(sidebar.right),
+        reason:
+            'the bar must not cover the sidebar (Settings lives at '
+            'its bottom)',
+      );
       expect(bar.width, CastPill.maxWidth);
-      expect(bar.center.dx,
-          closeTo(sidebar.right + (desktopSize.width - sidebar.right) / 2, 1),
-          reason: 'centered in the content column, not the window');
+      expect(
+        bar.center.dx,
+        closeTo(sidebar.right + (desktopSize.width - sidebar.right) / 2, 1),
+        reason: 'centered in the content column, not the window',
+      );
       expect(bar.bottom, closeTo(desktopSize.height - 12, 1));
     });
 
     testWidgets('fills a content column narrower than the cap', (tester) async {
       const narrow = Size(900, 900);
-      await pumpShell(tester,
-          size: narrow, withDock: false, withSidebar: true, onInset: (_) {});
+      await pumpShell(
+        tester,
+        size: narrow,
+        withDock: false,
+        withSidebar: true,
+        onInset: (_) {},
+      );
 
       final bar = tester.getRect(find.byType(CastPill));
       expect(bar.left, closeTo(260, 1));
@@ -2328,62 +2737,88 @@ void main() {
     });
 
     testWidgets(
-        'takes the full width back once a route covers the sidebar, and '
-        'returns beside it once popped', (tester) async {
-      await pumpShell(tester,
+      'takes the full width back once a route covers the sidebar, and '
+      'returns beside it once popped',
+      (tester) async {
+        await pumpShell(
+          tester,
           size: desktopSize,
           withDock: false,
           withSidebar: true,
-          onInset: (_) {});
+          onInset: (_) {},
+        );
 
-      // The immersive player, in production: the shell stays mounted
-      // underneath but is no longer the current route.
-      final navigator = Navigator.of(tester.element(find.byKey(sidebarKey)));
-      navigator.push(MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(body: SizedBox.expand()),
-      ));
-      await tester.pumpAndSettle();
+        // The immersive player, in production: the shell stays mounted
+        // underneath but is no longer the current route.
+        final navigator = Navigator.of(tester.element(find.byKey(sidebarKey)));
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: SizedBox.expand()),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      expect(tester.getRect(find.byType(CastPill)).width, desktopSize.width,
-          reason: 'no sidebar is visible, so no gap may be left for it');
+        expect(
+          tester.getRect(find.byType(CastPill)).width,
+          desktopSize.width,
+          reason: 'no sidebar is visible, so no gap may be left for it',
+        );
 
-      navigator.pop();
-      await tester.pumpAndSettle();
+        navigator.pop();
+        await tester.pumpAndSettle();
 
-      final bar = tester.getRect(find.byType(CastPill));
-      expect(bar.left, greaterThanOrEqualTo(260));
-      expect(bar.width, CastPill.maxWidth);
-    });
+        final bar = tester.getRect(find.byType(CastPill));
+        expect(bar.left, greaterThanOrEqualTo(260));
+        expect(bar.width, CastPill.maxWidth);
+      },
+    );
 
     testWidgets(
-        'stops floating at dock height once a route covers the dock, and '
-        'resumes once popped', (tester) async {
-      await pumpShell(tester, size: phoneSize, withDock: true, onInset: (_) {});
+      'stops floating at dock height once a route covers the dock, and '
+      'resumes once popped',
+      (tester) async {
+        await pumpShell(
+          tester,
+          size: phoneSize,
+          withDock: true,
+          onInset: (_) {},
+        );
 
-      // A route pushed on top of the shell (the immersive player, in
-      // production) keeps the dock mounted underneath but no longer current.
-      // `CastBarLayer` sits above this Navigator entirely, so the ambient bar
-      // stays visible; only the dock's own reported height should drop.
-      final navigator = Navigator.of(tester.element(find.byKey(dockKey)));
-      navigator.push(MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(body: SizedBox.expand()),
-      ));
-      await tester.pumpAndSettle();
+        // A route pushed on top of the shell (the immersive player, in
+        // production) keeps the dock mounted underneath but no longer current.
+        // `CastBarLayer` sits above this Navigator entirely, so the ambient bar
+        // stays visible; only the dock's own reported height should drop.
+        final navigator = Navigator.of(tester.element(find.byKey(dockKey)));
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: SizedBox.expand()),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      final coveredBar = tester.getRect(find.byType(CastPill));
-      expect(coveredBar.bottom, closeTo(phoneSize.height - 12, 2),
-          reason: 'the dock is covered, so the bar must fall back to '
+        final coveredBar = tester.getRect(find.byType(CastPill));
+        expect(
+          coveredBar.bottom,
+          closeTo(phoneSize.height - 12, 2),
+          reason:
+              'the dock is covered, so the bar must fall back to '
               'floating clear of the window edge rather than hovering at '
-              'the now-invisible dock\'s height');
+              'the now-invisible dock\'s height',
+        );
 
-      navigator.pop();
-      await tester.pumpAndSettle();
+        navigator.pop();
+        await tester.pumpAndSettle();
 
-      final bar = tester.getRect(find.byType(CastPill));
-      final dock = tester.getRect(find.byKey(dockKey));
-      expect(bar.bottom, lessThanOrEqualTo(dock.top),
-          reason: 'popping the covering route must restore the bar above '
-              'the dock');
-    });
+        final bar = tester.getRect(find.byType(CastPill));
+        final dock = tester.getRect(find.byKey(dockKey));
+        expect(
+          bar.bottom,
+          lessThanOrEqualTo(dock.top),
+          reason:
+              'popping the covering route must restore the bar above '
+              'the dock',
+        );
+      },
+    );
   });
 }

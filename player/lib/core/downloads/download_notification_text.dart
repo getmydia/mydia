@@ -69,8 +69,8 @@ DownloadNotificationText buildDownloadNotificationText(
       t.status == 'transcoding' ? t.transcodeProgress : t.progress;
   DownloadNotificationLine progressLine(DownloadTask t, int percent) =>
       isDiscreet(t.source)
-          ? const NotificationDownloading()
-          : NotificationProgress(t.title, percent);
+      ? const NotificationDownloading()
+      : NotificationProgress(t.title, percent);
 
   if (active.length == 1) {
     final task = active.first;
@@ -108,14 +108,17 @@ DownloadNotificationText buildDownloadNotificationText(
       indeterminate: true,
     );
   }
-  final average = running.fold<double>(0.0, (sum, t) => sum + fractionOf(t)) /
+  final average =
+      running.fold<double>(0.0, (sum, t) => sum + fractionOf(t)) /
       running.length;
   // Name a visible task when there is one; otherwise name nothing.
   final named = running.where((t) => !isDiscreet(t.source)).toList();
   final shown = named.isEmpty
       ? null
-      : named.firstWhere((t) => t.status == 'downloading',
-          orElse: () => named.first);
+      : named.firstWhere(
+          (t) => t.status == 'downloading',
+          orElse: () => named.first,
+        );
   return DownloadNotificationText(
     count: active.length,
     line: shown == null

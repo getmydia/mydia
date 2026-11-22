@@ -98,10 +98,9 @@ class MydiaSource extends MediaSource
     required this.source,
     required this.client,
     this.proxy,
-    ValueListenable<SourceConnectionStatus>? status,
-    void Function()? onDispose,
-  })  : _status = status,
-        _onDispose = onDispose;
+    this._status,
+    this._onDispose,
+  });
 
   @override
   final Source source;
@@ -117,26 +116,26 @@ class MydiaSource extends MediaSource
 
   @override
   Set<SourceCapability> get capabilities => const {
-        SourceCapability.downloadable,
-        SourceCapability.progressReporting,
-        SourceCapability.watchedState,
-        SourceCapability.searchable,
-        SourceCapability.continueWatching,
-        SourceCapability.recentlyAdded,
-        SourceCapability.trending,
-        SourceCapability.favorites,
-        SourceCapability.nextUp,
-        SourceCapability.similar,
-        SourceCapability.skipSegments,
-        SourceCapability.progressSync,
-        SourceCapability.collections,
-        SourceCapability.calendar,
-        SourceCapability.savedFilters,
-        SourceCapability.unwatchedListing,
-        SourceCapability.favoritesListing,
-        SourceCapability.mediaInfo,
-        SourceCapability.remoteTargets,
-      };
+    SourceCapability.downloadable,
+    SourceCapability.progressReporting,
+    SourceCapability.watchedState,
+    SourceCapability.searchable,
+    SourceCapability.continueWatching,
+    SourceCapability.recentlyAdded,
+    SourceCapability.trending,
+    SourceCapability.favorites,
+    SourceCapability.nextUp,
+    SourceCapability.similar,
+    SourceCapability.skipSegments,
+    SourceCapability.progressSync,
+    SourceCapability.collections,
+    SourceCapability.calendar,
+    SourceCapability.savedFilters,
+    SourceCapability.unwatchedListing,
+    SourceCapability.favoritesListing,
+    SourceCapability.mediaInfo,
+    SourceCapability.remoteTargets,
+  };
 
   /// `request` throws a `SourceException` on a transport failure, an auth
   /// failure it cannot refresh past and a GraphQL error, so a refused push
@@ -182,8 +181,7 @@ class MydiaSource extends MediaSource
   Future<Map<String, dynamic>> _q(
     DocumentNode doc, [
     Map<String, dynamic> vars = const {},
-  ]) =>
-      client.request(doc, vars);
+  ]) => client.request(doc, vars);
 
   Future<Map<String, dynamic>> _payload(
     DocumentNode doc,
@@ -199,26 +197,26 @@ class MydiaSource extends MediaSource
       _payload(documentNodeQueryTvShowDetail, {'id': showId}, 'tvShow');
 
   List<Map<String, dynamic>> _maps(Object? value) => [
-        if (value is List)
-          for (final v in value)
-            if (v is Map<String, dynamic>) v,
-      ];
+    if (value is List)
+      for (final v in value)
+        if (v is Map<String, dynamic>) v,
+  ];
 
   @override
   Future<List<Library>> libraries() async => [
-        Library(
-          ref: LibraryRef(sourceId: id, id: _moviesLibrary),
-          kind: LibraryKind.movies,
-          sortOptions: mydiaSortOptions,
-          filterOptions: mydiaFilterOptions(LibraryKind.movies),
-        ),
-        Library(
-          ref: LibraryRef(sourceId: id, id: _showsLibrary),
-          kind: LibraryKind.shows,
-          sortOptions: mydiaSortOptions,
-          filterOptions: mydiaFilterOptions(LibraryKind.shows),
-        ),
-      ];
+    Library(
+      ref: LibraryRef(sourceId: id, id: _moviesLibrary),
+      kind: LibraryKind.movies,
+      sortOptions: mydiaSortOptions,
+      filterOptions: mydiaFilterOptions(LibraryKind.movies),
+    ),
+    Library(
+      ref: LibraryRef(sourceId: id, id: _showsLibrary),
+      kind: LibraryKind.shows,
+      sortOptions: mydiaSortOptions,
+      filterOptions: mydiaFilterOptions(LibraryKind.shows),
+    ),
+  ];
 
   @override
   Future<Page<ItemSummary>> browse(
@@ -231,11 +229,20 @@ class MydiaSource extends MediaSource
       _showsLibrary => false,
       _ => throw const SourceException.notFound(),
     };
-    final plan =
-        mydiaBrowsePlan(movies: isMovies, query: query, cursor: cursor);
+    final plan = mydiaBrowsePlan(
+      movies: isMovies,
+      query: query,
+      cursor: cursor,
+    );
     if (plan.noIds case final noIds?) {
-      return _flatPage(plan.doc, noIds, plan.field, plan.vars, cursor,
-          pageSize: query.pageSize);
+      return _flatPage(
+        plan.doc,
+        noIds,
+        plan.field,
+        plan.vars,
+        cursor,
+        pageSize: query.pageSize,
+      );
     }
     final data = await _q(plan.doc, plan.vars);
     final conn = data[plan.field];
@@ -248,14 +255,16 @@ class MydiaSource extends MediaSource
               : showSummary(id, edge['node'] as Map<String, dynamic>),
     ];
     final info = map['pageInfo'];
-    final pageInfo =
-        info is Map<String, dynamic> ? info : const <String, dynamic>{};
+    final pageInfo = info is Map<String, dynamic>
+        ? info
+        : const <String, dynamic>{};
     final end = pageInfo['endCursor'];
     return Page(
       items: items,
       total: map['totalCount'] as int?,
-      nextCursor:
-          pageInfo['hasNextPage'] == true && end is String ? Cursor(end) : null,
+      nextCursor: pageInfo['hasNextPage'] == true && end is String
+          ? Cursor(end)
+          : null,
     );
   }
 
@@ -276,10 +285,7 @@ class MydiaSource extends MediaSource
     );
     final raw = _maps(data[field]);
     return Page(
-      items: [
-        for (final m in raw)
-          if (listingSummary(id, m) case final s?) s,
-      ],
+      items: [for (final m in raw) ?listingSummary(id, m)],
       nextCursor: raw.length == pageSize
           ? Cursor(offsetCursor(offsetOf(cursor) + pageSize))
           : null,
@@ -291,21 +297,28 @@ class MydiaSource extends MediaSource
     switch (ref.kind) {
       case ItemKind.movie:
         return movieDetail(
-            id,
-            await _payload(
-                documentNodeQueryMovieDetail, {'id': ref.externalId}, 'movie'));
+          id,
+          await _payload(documentNodeQueryMovieDetail, {
+            'id': ref.externalId,
+          }, 'movie'),
+        );
       case ItemKind.show:
         return showDetail(id, await _show(ref.externalId));
       case ItemKind.season:
         final season = parseSeasonExternalId(ref.externalId);
         if (season == null) throw const SourceException.notFound();
         return seasonDetail(
-            id, await _show(season.showId), season.seasonNumber);
+          id,
+          await _show(season.showId),
+          season.seasonNumber,
+        );
       case ItemKind.episode:
         return episodeDetail(
-            id,
-            await _payload(documentNodeQueryEpisodeDetail,
-                {'id': ref.externalId}, 'episode'));
+          id,
+          await _payload(documentNodeQueryEpisodeDetail, {
+            'id': ref.externalId,
+          }, 'episode'),
+        );
       default:
         throw const SourceException.notFound();
     }
@@ -352,8 +365,12 @@ class MydiaSource extends MediaSource
       // would never be released and would keep the proxy running.
       if (_disposed) return null;
       _holdsProxy = true;
-      final base = await mydiaProxyBase(_proxy(), credentials,
-          owner: this, target: source.account.id);
+      final base = await mydiaProxyBase(
+        _proxy(),
+        credentials,
+        owner: this,
+        target: source.account.id,
+      );
       url = MediaRoutes.artwork(base, file);
     } else {
       final server = credentials.serverUrl?.replaceFirst(RegExp(r'/+$'), '');
@@ -382,16 +399,18 @@ class MydiaSource extends MediaSource
     switch (ref.kind) {
       case ItemKind.movie:
         await _q(
-            watched
-                ? documentNodeMutationMarkMovieWatched
-                : documentNodeMutationMarkMovieUnwatched,
-            {'movieId': ref.externalId});
+          watched
+              ? documentNodeMutationMarkMovieWatched
+              : documentNodeMutationMarkMovieUnwatched,
+          {'movieId': ref.externalId},
+        );
       case ItemKind.episode:
         await _q(
-            watched
-                ? documentNodeMutationMarkEpisodeWatched
-                : documentNodeMutationMarkEpisodeUnwatched,
-            {'episodeId': ref.externalId});
+          watched
+              ? documentNodeMutationMarkEpisodeWatched
+              : documentNodeMutationMarkEpisodeUnwatched,
+          {'episodeId': ref.externalId},
+        );
       case ItemKind.season:
         final season = parseSeasonExternalId(ref.externalId);
         if (season == null) throw const SourceException.notFound();
@@ -410,10 +429,11 @@ class MydiaSource extends MediaSource
   }
 
   Future<void> _markSeason(String showId, int seasonNumber, bool watched) => _q(
-      watched
-          ? documentNodeMutationMarkSeasonWatched
-          : documentNodeMutationMarkSeasonUnwatched,
-      {'showId': showId, 'seasonNumber': seasonNumber});
+    watched
+        ? documentNodeMutationMarkSeasonWatched
+        : documentNodeMutationMarkSeasonUnwatched,
+    {'showId': showId, 'seasonNumber': seasonNumber},
+  );
 
   @override
   Future<List<ItemSummary>> search(String query) async {
@@ -448,8 +468,10 @@ class MydiaSource extends MediaSource
   /// Its own request: an unknown field fails the whole document, so a server
   /// predating segments must cost only the skip button.
   @override
-  Future<List<MediaSegment>> skipSegments(ItemRef ref,
-      {String? versionId}) async {
+  Future<List<MediaSegment>> skipSegments(
+    ItemRef ref, {
+    String? versionId,
+  }) async {
     final (doc, root) = switch (ref.kind) {
       ItemKind.movie => (documentNodeQueryMovieSegments, 'movie'),
       ItemKind.episode => (documentNodeQueryEpisodeSegments, 'episode'),
@@ -471,13 +493,16 @@ class MydiaSource extends MediaSource
     return MediaSegment.forFile(data, root: root, fileId: fileId);
   }
 
-  late final MydiaDownloadJobService _jobs =
-      MydiaDownloadJobService(request: client.request);
+  late final MydiaDownloadJobService _jobs = MydiaDownloadJobService(
+    request: client.request,
+  );
 
   @override
   Future<List<DownloadOption>> downloadOptions(ItemRef ref) async =>
-      (await _jobs.getOptions(mydiaContentType(ref.kind), ref.externalId))
-          .options;
+      (await _jobs.getOptions(
+        mydiaContentType(ref.kind),
+        ref.externalId,
+      )).options;
 
   @override
   Future<DownloadPlan> resolve(ItemRef ref, String optionId) async =>
@@ -502,10 +527,16 @@ class MydiaSource extends MediaSource
       // The hold lasts as long as the source: nothing observes a download
       // finishing, so [dispose] is where it is let go.
       _holdsProxy = true;
-      final base = await mydiaProxyBase(_proxy(), credentials,
-          owner: this, target: source.account.id);
+      final base = await mydiaProxyBase(
+        _proxy(),
+        credentials,
+        owner: this,
+        target: source.account.id,
+      );
       return DirectFile(
-          url: MediaRoutes.download(base, jobId), extension: 'mp4');
+        url: MediaRoutes.download(base, jobId),
+        extension: 'mp4',
+      );
     }
     final server = credentials.serverUrl?.replaceFirst(RegExp(r'/+$'), '');
     if (server == null) throw const SourceException.unreachable();
@@ -523,9 +554,10 @@ class MydiaSource extends MediaSource
       fallback: documentNodeQueryRecentlyAddedFullNoIds,
       variables: const {'first': _rowLimit},
     );
-    return [
-      for (final r in _maps(data['recentlyAdded'])) listingSummary(id, r),
-    ].whereType<ItemSummary>().take(_rowLimit).toList();
+    return [for (final r in _maps(data['recentlyAdded'])) listingSummary(id, r)]
+        .whereType<ItemSummary>()
+        .take(_rowLimit)
+        .toList();
   }
 
   @override
@@ -537,8 +569,10 @@ class MydiaSource extends MediaSource
     };
     final Map<String, dynamic> data;
     try {
-      data = await _q(documentNodeQueryTrendingInLibrary,
-          {'type': type, 'first': _rowLimit});
+      data = await _q(documentNodeQueryTrendingInLibrary, {
+        'type': type,
+        'first': _rowLimit,
+      });
     } catch (e) {
       // A server from before trendingInLibrary rejects the whole document.
       if (isUnknownFieldError(e)) return const [];
@@ -563,24 +597,29 @@ class MydiaSource extends MediaSource
   /// The server's `collectionItems` takes no `after`, so a collection is one
   /// page of up to 50 items, as the legacy screen showed.
   @override
-  Future<Page<ItemSummary>> collectionItems(String collectionId,
-      {Cursor? cursor}) async {
+  Future<Page<ItemSummary>> collectionItems(
+    String collectionId, {
+    Cursor? cursor,
+  }) async {
     if (cursor != null) return const Page(items: []);
     final data = await client.query(
       documentNodeQueryCollectionItems,
       fallback: documentNodeQueryCollectionItemsNoIds,
       variables: {'collectionId': collectionId, 'first': _collectionLimit},
     );
-    return Page(items: [
-      for (final m in _maps(data['collectionItems']))
-        if (listingSummary(id, m) case final s?) s,
-    ]);
+    return Page(
+      items: [
+        for (final m in _maps(data['collectionItems'])) ?listingSummary(id, m),
+      ],
+    );
   }
 
   @override
   Future<List<ItemSummary>> calendar(DateTime start, DateTime end) async {
-    final data = await _q(documentNodeQueryCalendar,
-        {'start': isoDate(start), 'end': isoDate(end)});
+    final data = await _q(documentNodeQueryCalendar, {
+      'start': isoDate(start),
+      'end': isoDate(end),
+    });
     return [for (final e in _maps(data['calendar'])) calendarSummary(id, e)]
       ..sort((a, b) => (a.airDate ?? '').compareTo(b.airDate ?? ''));
   }
@@ -591,19 +630,21 @@ class MydiaSource extends MediaSource
 
   @override
   Future<Page<ItemSummary>> unwatched({Cursor? cursor}) => _flatPage(
-      documentNodeQueryUnwatchedListing,
-      documentNodeQueryUnwatchedListingNoIds,
-      'unwatched',
-      const {},
-      cursor);
+    documentNodeQueryUnwatchedListing,
+    documentNodeQueryUnwatchedListingNoIds,
+    'unwatched',
+    const {},
+    cursor,
+  );
 
   @override
   Future<Page<ItemSummary>> favorites({Cursor? cursor}) => _flatPage(
-      documentNodeQueryFavoritesListing,
-      documentNodeQueryFavoritesListingNoIds,
-      'favorites',
-      const {},
-      cursor);
+    documentNodeQueryFavoritesListing,
+    documentNodeQueryFavoritesListingNoIds,
+    'favorites',
+    const {},
+    cursor,
+  );
 
   @override
   Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async {
@@ -674,8 +715,9 @@ class MydiaSource extends MediaSource
     if (ref.kind == ItemKind.episode) {
       throw const SourceException.unsupported();
     }
-    await _q(documentNodeMutationRemoveFromContinueWatching,
-        {'mediaItemId': ref.externalId});
+    await _q(documentNodeMutationRemoveFromContinueWatching, {
+      'mediaItemId': ref.externalId,
+    });
   }
 
   @override
@@ -698,8 +740,9 @@ class MydiaSource extends MediaSource
   Future<void> _setFavorite(ItemRef ref, bool favorite) async {
     final current = (await item(ref)).isFavorite;
     if (current == favorite) return;
-    await _q(
-        documentNodeMutationToggleFavorite, {'mediaItemId': ref.externalId});
+    await _q(documentNodeMutationToggleFavorite, {
+      'mediaItemId': ref.externalId,
+    });
   }
 
   @override
@@ -716,9 +759,7 @@ class MydiaSource extends MediaSource
   Future<List<ItemSummary>> similar(ItemRef ref) async {
     if (ref.kind != ItemKind.show) return const [];
     final show = await _show(ref.externalId);
-    return [
-      for (final r in _maps(show['similar'])) searchResultSummary(id, r),
-    ]
+    return [for (final r in _maps(show['similar'])) searchResultSummary(id, r)]
         .whereType<ItemSummary>()
         .where((s) => s.ref != ref)
         .take(_rowLimit)

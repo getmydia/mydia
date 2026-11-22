@@ -41,7 +41,9 @@ void main() {
   group('formatScrubDelta', () {
     test('forward', () {
       expect(
-          formatScrubDelta(const Duration(minutes: 2, seconds: 30)), '+02:30');
+        formatScrubDelta(const Duration(minutes: 2, seconds: 30)),
+        '+02:30',
+      );
     });
 
     test('backward', () {
@@ -57,32 +59,47 @@ void main() {
   });
 
   group('ScrubBubble', () {
-    Widget host(Widget child) =>
-        MaterialApp(home: Scaffold(body: Center(child: child)));
+    Widget host(Widget child) => MaterialApp(
+      home: Scaffold(body: Center(child: child)),
+    );
 
     testWidgets('shows the target and the delta', (tester) async {
-      await tester.pumpWidget(host(const ScrubBubble(
-        target: Duration(hours: 1, minutes: 2, seconds: 3),
-        delta: Duration(minutes: 2, seconds: 30),
-      )));
+      await tester.pumpWidget(
+        host(
+          const ScrubBubble(
+            target: Duration(hours: 1, minutes: 2, seconds: 3),
+            delta: Duration(minutes: 2, seconds: 30),
+          ),
+        ),
+      );
 
-      expect(tester.widget<Text>(find.byKey(ScrubBubble.targetKey)).data,
-          '01:02:03');
       expect(
-          tester.widget<Text>(find.byKey(ScrubBubble.deltaKey)).data, '+02:30');
+        tester.widget<Text>(find.byKey(ScrubBubble.targetKey)).data,
+        '01:02:03',
+      );
+      expect(
+        tester.widget<Text>(find.byKey(ScrubBubble.deltaKey)).data,
+        '+02:30',
+      );
       expect(find.byKey(ScrubBubble.frameKey), findsNothing);
       expect(tester.getSize(find.byType(ScrubBubble)).width, ScrubBubble.width);
     });
 
     testWidgets('shows a frame when given one', (tester) async {
-      await tester.pumpWidget(host(const ScrubBubble(
-        target: Duration(minutes: 5),
-        delta: Duration(seconds: 10),
-        thumbnail: ColoredBox(color: Colors.red),
-      )));
+      await tester.pumpWidget(
+        host(
+          const ScrubBubble(
+            target: Duration(minutes: 5),
+            delta: Duration(seconds: 10),
+            thumbnail: ColoredBox(color: Colors.red),
+          ),
+        ),
+      );
 
-      expect(tester.getSize(find.byKey(ScrubBubble.frameKey)),
-          const Size(ScrubBubble.frameWidth, ScrubBubble.frameHeight));
+      expect(
+        tester.getSize(find.byKey(ScrubBubble.frameKey)),
+        const Size(ScrubBubble.frameWidth, ScrubBubble.frameHeight),
+      );
     });
   });
 
@@ -103,28 +120,31 @@ void main() {
     });
 
     Future<void> pump(WidgetTester tester, {ScrubThumbnails? thumbnails}) =>
-        tester.pumpWidget(MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 600,
-                child: ScrubBubbleAnchor(
-                  scrub: scrub,
-                  thumbnails: thumbnails,
-                  child: const SizedBox(key: Key('bar'), height: 32),
+        tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 600,
+                  child: ScrubBubbleAnchor(
+                    scrub: scrub,
+                    thumbnails: thumbnails,
+                    child: const SizedBox(key: Key('bar'), height: 32),
+                  ),
                 ),
               ),
             ),
           ),
-        ));
+        );
 
     Future<void> finish(WidgetTester tester) async {
       await tester.pumpWidget(const SizedBox());
       scrub.dispose();
     }
 
-    testWidgets('floats over the cursor only while a scrub is active',
-        (tester) async {
+    testWidgets('floats over the cursor only while a scrub is active', (
+      tester,
+    ) async {
       await pump(tester);
       expect(find.byType(ScrubBubble), findsNothing);
 
@@ -134,17 +154,22 @@ void main() {
       expect(find.byType(ScrubBubble), findsOneWidget);
       final bar = tester.getRect(find.byKey(const Key('bar')));
       final bubble = tester.getRect(find.byType(ScrubBubble));
-      final expectedLeft = bar.left +
+      final expectedLeft =
+          bar.left +
           scrubBubbleLeft(
             trackWidth: bar.width,
             bubbleWidth: ScrubBubble.width,
             fraction: scrub.displayFraction!,
           );
       expect(bubble.left, moreOrLessEquals(expectedLeft, epsilon: 0.5));
-      expect(bubble.bottom,
-          moreOrLessEquals(bar.top - ScrubBubbleAnchor.gap, epsilon: 0.5));
       expect(
-          tester.widget<Text>(find.byKey(ScrubBubble.targetKey)).data, '30:10');
+        bubble.bottom,
+        moreOrLessEquals(bar.top - ScrubBubbleAnchor.gap, epsilon: 0.5),
+      );
+      expect(
+        tester.widget<Text>(find.byKey(ScrubBubble.targetKey)).data,
+        '30:10',
+      );
 
       await scrub.commit();
       await tester.pump();
@@ -154,8 +179,9 @@ void main() {
       await finish(tester);
     });
 
-    testWidgets('fetches thumbnails on the first scrub, not before',
-        (tester) async {
+    testWidgets('fetches thumbnails on the first scrub, not before', (
+      tester,
+    ) async {
       var requests = 0;
       final thumbnails = ScrubThumbnails(
         service: ThumbnailService(

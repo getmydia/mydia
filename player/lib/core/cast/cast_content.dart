@@ -20,29 +20,30 @@ sealed class CastContent {
   static CastContent fromMap(
     Map<dynamic, dynamic> map, {
     SourceId? legacyMydia,
-  }) =>
-      switch (map['contentKind']) {
-        'source' => SourceCastContent(
-            item: ItemRef(
-              sourceId: SourceId(map['sourceId'] as String),
-              kind: ItemKind.values.byName(map['itemKind'] as String),
-              externalId: map['externalId'] as String,
-            ),
-            versionId: map['versionId'] as String,
-          ),
-        _ => MydiaCastContent(
-            sourceId: switch (map['sourceId']) {
-              final String id => SourceId(id),
-              _ => legacyMydia ??
-                  (throw const FormatException(
-                      'Mydia cast record has no instance')),
-            },
-            fileId: map['fileId'] as String,
-            mediaId: map['mediaId'] as String,
-            mediaType: map['mediaType'] as String,
-            showId: map['showId'] as String?,
-          ),
-      };
+  }) => switch (map['contentKind']) {
+    'source' => SourceCastContent(
+      item: ItemRef(
+        sourceId: SourceId(map['sourceId'] as String),
+        kind: ItemKind.values.byName(map['itemKind'] as String),
+        externalId: map['externalId'] as String,
+      ),
+      versionId: map['versionId'] as String,
+    ),
+    _ => MydiaCastContent(
+      sourceId: switch (map['sourceId']) {
+        final String id => SourceId(id),
+        _ =>
+          legacyMydia ??
+              (throw const FormatException(
+                'Mydia cast record has no instance',
+              )),
+      },
+      fileId: map['fileId'] as String,
+      mediaId: map['mediaId'] as String,
+      mediaType: map['mediaType'] as String,
+      showId: map['showId'] as String?,
+    ),
+  };
 }
 
 @immutable
@@ -65,22 +66,22 @@ final class MydiaCastContent extends CastContent {
   bool get isEpisode => mediaType == 'episode';
 
   MydiaCastContent withShowId(String? showId) => MydiaCastContent(
-        sourceId: sourceId,
-        fileId: fileId,
-        mediaId: mediaId,
-        mediaType: mediaType,
-        showId: showId ?? this.showId,
-      );
+    sourceId: sourceId,
+    fileId: fileId,
+    mediaId: mediaId,
+    mediaType: mediaType,
+    showId: showId ?? this.showId,
+  );
 
   @override
   Map<String, dynamic> toMap() => {
-        'contentKind': 'mydia',
-        'sourceId': sourceId.value,
-        'mediaId': mediaId,
-        'mediaType': mediaType,
-        'fileId': fileId,
-        'showId': showId,
-      };
+    'contentKind': 'mydia',
+    'sourceId': sourceId.value,
+    'mediaId': mediaId,
+    'mediaType': mediaType,
+    'fileId': fileId,
+    'showId': showId,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -107,12 +108,12 @@ final class SourceCastContent extends CastContent {
 
   @override
   Map<String, dynamic> toMap() => {
-        'contentKind': 'source',
-        'sourceId': item.sourceId.value,
-        'itemKind': item.kind.name,
-        'externalId': item.externalId,
-        'versionId': versionId,
-      };
+    'contentKind': 'source',
+    'sourceId': item.sourceId.value,
+    'itemKind': item.kind.name,
+    'externalId': item.externalId,
+    'versionId': versionId,
+  };
 
   @override
   bool operator ==(Object other) =>

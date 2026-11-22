@@ -17,7 +17,7 @@ typedef AppImageDownload = Future<void> Function(
 /// The download is not an AppImage: truncated, or an error page.
 class AppImageUpdateException extends UpdateStepFailed {
   AppImageUpdateException(UpdateIssue issue, {String? detail})
-      : super(UpdateProblem(issue, detail: detail));
+    : super(UpdateProblem(issue, detail: detail));
 
   @override
   String toString() => 'AppImageUpdateException(${problem.issue})';
@@ -31,19 +31,18 @@ class AppImageUpdateException extends UpdateStepFailed {
 /// which keeps desktop entries from AppImageLauncher or Gear Lever working.
 class AppImageUpdater extends PlatformUpdater {
   AppImageUpdater({
-    required String appImagePath,
+    required this._appImagePath,
     AppImageDownload? download,
     Future<void> Function(String path)? launch,
     Future<void> Function(String url)? openInBrowser,
     void Function()? exitApp,
-  })  : _appImagePath = appImagePath,
-        _download = download ?? _dioDownload,
-        _launch = launch ??
-            ((path) =>
-                Process.start(path, [], mode: ProcessStartMode.detached)),
-        _openInBrowser =
-            openInBrowser ?? ((url) async => Process.run('xdg-open', [url])),
-        _exitApp = exitApp ?? (() => exit(0));
+  }) : _download = download ?? _dioDownload,
+       _launch =
+           launch ??
+           ((path) => Process.start(path, [], mode: ProcessStartMode.detached)),
+       _openInBrowser =
+           openInBrowser ?? ((url) async => Process.run('xdg-open', [url])),
+       _exitApp = exitApp ?? (() => exit(0));
 
   final String _appImagePath;
   final AppImageDownload _download;
@@ -91,8 +90,10 @@ class AppImageUpdater extends PlatformUpdater {
       _requireAppImage(temp);
       final chmod = await Process.run('chmod', ['755', temp.path]);
       if (chmod.exitCode != 0) {
-        throw AppImageUpdateException(UpdateIssue.chmodFailed,
-            detail: '${chmod.stderr}');
+        throw AppImageUpdateException(
+          UpdateIssue.chmodFailed,
+          detail: '${chmod.stderr}',
+        );
       }
       temp.renameSync(_appImagePath);
     } catch (_) {
@@ -112,7 +113,8 @@ class AppImageUpdater extends PlatformUpdater {
     final raf = file.openSync();
     try {
       final head = raf.readSync(11);
-      final ok = head.length == 11 &&
+      final ok =
+          head.length == 11 &&
           List.generate(4, (i) => head[i] == magic[i]).every((b) => b) &&
           List.generate(3, (i) => head[8 + i] == marker[i]).every((b) => b);
       if (!ok) {
@@ -127,12 +129,11 @@ class AppImageUpdater extends PlatformUpdater {
     String url,
     String destination,
     void Function(double progress)? onProgress,
-  ) =>
-      Dio().download(
-        url,
-        destination,
-        onReceiveProgress: (received, total) {
-          if (total > 0) onProgress?.call(received / total);
-        },
-      );
+  ) => Dio().download(
+    url,
+    destination,
+    onReceiveProgress: (received, total) {
+      if (total > 0) onProgress?.call(received / total);
+    },
+  );
 }

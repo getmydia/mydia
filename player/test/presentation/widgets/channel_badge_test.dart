@@ -4,8 +4,10 @@ import 'package:player/core/build_channel.dart';
 import 'package:player/presentation/widgets/channel_badge.dart';
 
 Widget _host(BuildChannel channel) => MaterialApp(
-      home: Scaffold(body: Center(child: ChannelBadge(channel: channel))),
-    );
+  home: Scaffold(
+    body: Center(child: ChannelBadge(channel: channel)),
+  ),
+);
 
 void main() {
   testWidgets('renders nothing on stable', (tester) async {

@@ -46,13 +46,13 @@ class LogRecord {
   final LogSource source;
 
   Map<String, Object?> toJson() => {
-        't': time.millisecondsSinceEpoch,
-        'l': level.name,
-        'tag': tag,
-        'msg': message,
-        'sid': sessionId,
-        'src': source.name,
-      };
+    't': time.millisecondsSinceEpoch,
+    'l': level.name,
+    'tag': tag,
+    'msg': message,
+    'sid': sessionId,
+    'src': source.name,
+  };
 
   String toNdjsonLine() => '${jsonEncode(toJson())}\n';
 

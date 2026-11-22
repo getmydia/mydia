@@ -44,8 +44,9 @@ void main() {
     });
   });
 
-  testWidgets('reserves the caller scrollTopPadding above the first item',
-      (tester) async {
+  testWidgets('reserves the caller scrollTopPadding above the first item', (
+    tester,
+  ) async {
     await pumpGrid(tester, size: const Size(1200, 900));
 
     final grid = tester.widget<GridView>(find.byType(GridView));
@@ -54,8 +55,9 @@ void main() {
     expect(padding.top, 120);
   });
 
-  testWidgets('uses Breakpoints gutters rather than a hardcoded value',
-      (tester) async {
+  testWidgets('uses Breakpoints gutters rather than a hardcoded value', (
+    tester,
+  ) async {
     await pumpGrid(tester, size: const Size(1200, 900));
 
     final grid = tester.widget<GridView>(find.byType(GridView));
@@ -66,8 +68,9 @@ void main() {
     expect(padding.right, 32);
   });
 
-  testWidgets('lays out the app-wide column count for its width',
-      (tester) async {
+  testWidgets('lays out the app-wide column count for its width', (
+    tester,
+  ) async {
     await pumpGrid(tester, size: const Size(1200, 900));
 
     final grid = tester.widget<GridView>(find.byType(GridView));

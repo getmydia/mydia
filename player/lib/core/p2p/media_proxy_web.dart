@@ -357,8 +357,11 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
     };
   }
 
-  Map<String, Object?> _head(int status, Map<String, String> headers) =>
-      {'type': 'head', 'status': status, 'headers': headers};
+  Map<String, Object?> _head(int status, Map<String, String> headers) => {
+    'type': 'head',
+    'status': status,
+    'headers': headers,
+  };
 
   void _post(_Exchange exchange, Map<String, Object?> message) {
     if (exchange.closed) return;

@@ -8,9 +8,9 @@ import '../glass_surface.dart';
 /// The glyph for the mode in effect, shared by the top-bar pill and the TV
 /// cluster button so the two never disagree.
 IconData scalingIcon(VideoScaling scaling) => switch (scaling) {
-      VideoScaling.fit => Icons.fit_screen_rounded,
-      VideoScaling.fill => Icons.crop_free_rounded,
-    };
+  VideoScaling.fit => Icons.fit_screen_rounded,
+  VideoScaling.fill => Icons.crop_free_rounded,
+};
 
 /// The tooltip naming the mode in effect, shown on both scaling controls.
 String scalingTooltip(AppLocalizations l10n, VideoScaling scaling) =>
@@ -58,10 +58,7 @@ class GlassPill extends StatelessWidget {
               color: Color(0xCCFFFFFF), // white @ 0.80
             ),
             child: IconTheme.merge(
-              data: const IconThemeData(
-                size: 18,
-                color: Color(0xCCFFFFFF),
-              ),
+              data: const IconThemeData(size: 18, color: Color(0xCCFFFFFF)),
               child: child,
             ),
           ),
@@ -240,11 +237,7 @@ class ChromeTopBar extends StatelessWidget {
                     if (onScalingTap != null && cast != null)
                       const SizedBox(width: 8),
                     if (cast != null)
-                      GlassPill(
-                        key: castKey,
-                        onTap: onCastTap,
-                        child: cast,
-                      ),
+                      GlassPill(key: castKey, onTap: onCastTap, child: cast),
                   ],
                 ),
               ),

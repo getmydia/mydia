@@ -24,10 +24,14 @@ class _FailingStore extends InMemorySourceStore {
 
 void main() {
   test('parses what people type', () {
-    expect(parseStashUrl('192.168.1.20:9999').toString(),
-        'http://192.168.1.20:9999');
-    expect(parseStashUrl(' https://stash.example.test/ ').toString(),
-        'https://stash.example.test');
+    expect(
+      parseStashUrl('192.168.1.20:9999').toString(),
+      'http://192.168.1.20:9999',
+    );
+    expect(
+      parseStashUrl(' https://stash.example.test/ ').toString(),
+      'https://stash.example.test',
+    );
     expect(parseStashUrl(''), isNull);
     expect(parseStashUrl('ftp://x'), isNull);
   });
@@ -40,49 +44,68 @@ void main() {
       initialLocation: '/sources/add/stash',
       routes: [
         GoRoute(
-            path: '/sources/add/stash',
-            builder: (_, __) => const StashConnectScreen()),
+          path: '/sources/add/stash',
+          builder: (_, _) => const StashConnectScreen(),
+        ),
         GoRoute(
-            path: '/s/:id',
-            builder: (_, s) => Text('opened ${s.pathParameters['id']}')),
+          path: '/s/:id',
+          builder: (_, s) => Text('opened ${s.pathParameters['id']}'),
+        ),
       ],
     );
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-        sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
-      ],
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        routerConfig: router,
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+          sourceHttpProvider.overrideWithValue(
+            SourceHttp(client: server.client),
+          ),
+        ],
+        child: MaterialApp.router(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
       ),
-    ));
+    );
 
     await tester.enterText(
-        find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
+      find.byKey(const Key('stash-url-field')),
+      '192.168.1.20:9999',
+    );
     await tester.enterText(
-        find.byKey(const Key('stash-key-field')), FakeStashServer.apiKey);
+      find.byKey(const Key('stash-key-field')),
+      FakeStashServer.apiKey,
+    );
     await tester.tap(find.byKey(const Key('stash-connect-button')));
     await tester.pumpAndSettle();
 
     final record = (await store.load()).accounts.single;
-    expect(record.servers.single.connections.single.uri,
-        Uri.parse('http://192.168.1.20:9999'));
+    expect(
+      record.servers.single.connections.single.uri,
+      Uri.parse('http://192.168.1.20:9999'),
+    );
     expect(record.servers.single.connections.single.local, isTrue);
     expect(
-        await storage.read('${record.account.storageNamespace}/account_token'),
-        FakeStashServer.apiKey);
-    expect(find.textContaining('opened ${record.account.id}:owner:main'),
-        findsOneWidget);
+      await storage.read('${record.account.storageNamespace}/account_token'),
+      FakeStashServer.apiKey,
+    );
+    expect(
+      find.textContaining('opened ${record.account.id}:owner:main'),
+      findsOneWidget,
+    );
   });
 
   test('keeps a reverse-proxy subpath', () {
-    expect(parseStashUrl('https://host.example.test/stash/').toString(),
-        'https://host.example.test/stash');
-    expect(parseStashUrl('host.example.test:9999/a/b').toString(),
-        'http://host.example.test:9999/a/b');
+    expect(
+      parseStashUrl('https://host.example.test/stash/').toString(),
+      'https://host.example.test/stash',
+    );
+    expect(
+      parseStashUrl('host.example.test:9999/a/b').toString(),
+      'http://host.example.test:9999/a/b',
+    );
   });
 
   group('the API key and plain HTTP', () {
@@ -92,24 +115,31 @@ void main() {
     // is "the request went out".
     Future<int> submit(WidgetTester tester, String url, String key) async {
       var requests = 0;
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          sourceStoreProvider
-              .overrideWith((ref) async => InMemorySourceStore()),
-          sourceSecretsProvider
-              .overrideWithValue(SourceSecrets(MockAuthStorage())),
-          sourceHttpProvider
-              .overrideWithValue(SourceHttp(client: MockClient((_) async {
-            requests++;
-            return http.Response('', 401);
-          }))),
-        ],
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: StashConnectScreen(),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sourceStoreProvider.overrideWith(
+              (ref) async => InMemorySourceStore(),
+            ),
+            sourceSecretsProvider.overrideWithValue(
+              SourceSecrets(MockAuthStorage()),
+            ),
+            sourceHttpProvider.overrideWithValue(
+              SourceHttp(
+                client: MockClient((_) async {
+                  requests++;
+                  return http.Response('', 401);
+                }),
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: StashConnectScreen(),
+          ),
         ),
-      ));
+      );
       await tester.enterText(find.byKey(const Key('stash-url-field')), url);
       await tester.enterText(find.byKey(const Key('stash-key-field')), key);
       await tester.tap(find.byKey(const Key('stash-connect-button')));
@@ -117,8 +147,9 @@ void main() {
       return requests;
     }
 
-    testWidgets('refuses a key over http to a host outside the network',
-        (tester) async {
+    testWidgets('refuses a key over http to a host outside the network', (
+      tester,
+    ) async {
       final requests = await submit(tester, 'http://stash.example.test', 'k');
       expect(requests, 0);
       expect(find.textContaining(refusal), findsOneWidget);
@@ -144,113 +175,156 @@ void main() {
     });
   });
 
-  testWidgets('says so when the server cannot be saved on this device',
-      (tester) async {
+  testWidgets('says so when the server cannot be saved on this device', (
+    tester,
+  ) async {
     final server = FakeStashServer();
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sourceStoreProvider.overrideWith((ref) async => _FailingStore()),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
-        sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: StashConnectScreen(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceStoreProvider.overrideWith((ref) async => _FailingStore()),
+          sourceSecretsProvider.overrideWithValue(
+            SourceSecrets(MockAuthStorage()),
+          ),
+          sourceHttpProvider.overrideWithValue(
+            SourceHttp(client: server.client),
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: StashConnectScreen(),
+        ),
       ),
-    ));
+    );
     await tester.enterText(
-        find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
+      find.byKey(const Key('stash-url-field')),
+      '192.168.1.20:9999',
+    );
     await tester.enterText(
-        find.byKey(const Key('stash-key-field')), FakeStashServer.apiKey);
+      find.byKey(const Key('stash-key-field')),
+      FakeStashServer.apiKey,
+    );
     await tester.tap(find.byKey(const Key('stash-connect-button')));
     await tester.pumpAndSettle();
-    expect(find.text('Could not save this server on this device.'),
-        findsOneWidget);
+    expect(
+      find.text('Could not save this server on this device.'),
+      findsOneWidget,
+    );
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('a rejected key says where to find the right one',
-      (tester) async {
+  testWidgets('a rejected key says where to find the right one', (
+    tester,
+  ) async {
     final server = FakeStashServer();
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
-        sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: StashConnectScreen(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceStoreProvider.overrideWith(
+            (ref) async => InMemorySourceStore(),
+          ),
+          sourceSecretsProvider.overrideWithValue(
+            SourceSecrets(MockAuthStorage()),
+          ),
+          sourceHttpProvider.overrideWithValue(
+            SourceHttp(client: server.client),
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: StashConnectScreen(),
+        ),
       ),
-    ));
+    );
     await tester.enterText(
-        find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
+      find.byKey(const Key('stash-url-field')),
+      '192.168.1.20:9999',
+    );
     await tester.enterText(find.byKey(const Key('stash-key-field')), 'wrong');
     await tester.tap(find.byKey(const Key('stash-connect-button')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Settings, Security'), findsOneWidget);
   });
 
-  testWidgets('re-saving an account with an empty key removes the old key',
-      (tester) async {
+  testWidgets('re-saving an account with an empty key removes the old key', (
+    tester,
+  ) async {
     final server = FakeStashServer();
     final storage = MockAuthStorage();
     final store = InMemorySourceStore();
 
     // First, save with an API key
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-        sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: StashConnectScreen(),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+          sourceHttpProvider.overrideWithValue(
+            SourceHttp(client: server.client),
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: StashConnectScreen(),
+        ),
       ),
-    ));
+    );
 
     await tester.enterText(
-        find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
+      find.byKey(const Key('stash-url-field')),
+      '192.168.1.20:9999',
+    );
     await tester.enterText(
-        find.byKey(const Key('stash-key-field')), FakeStashServer.apiKey);
+      find.byKey(const Key('stash-key-field')),
+      FakeStashServer.apiKey,
+    );
     await tester.tap(find.byKey(const Key('stash-connect-button')));
     await tester.pumpAndSettle();
 
     final record = (await store.load()).accounts.single;
-    final accountToken =
-        await storage.read('${record.account.storageNamespace}/account_token');
+    final accountToken = await storage.read(
+      '${record.account.storageNamespace}/account_token',
+    );
     expect(accountToken, FakeStashServer.apiKey);
 
     // Now re-auth with an empty key using a mock client that accepts no key
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-        sourceHttpProvider.overrideWithValue(SourceHttp(
-          client: MockClient((_) async => http.Response(
-              '{"data":{"systemStatus":{"status":"OK"}}}', 200,
-              headers: {'content-type': 'application/json'})),
-        )),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: StashConnectScreen(reauthAccountId: record.account.id),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceStoreProvider.overrideWith((ref) async => store),
+          sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+          sourceHttpProvider.overrideWithValue(
+            SourceHttp(
+              client: MockClient(
+                (_) async => http.Response(
+                  '{"data":{"systemStatus":{"status":"OK"}}}',
+                  200,
+                  headers: {'content-type': 'application/json'},
+                ),
+              ),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: StashConnectScreen(reauthAccountId: record.account.id),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     // The URL field should be pre-populated
-    expect(find.byWidgetPredicate((w) {
-      return w is TextField &&
-          w.controller?.text.contains('192.168.1.20') == true;
-    }), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) {
+        return w is TextField &&
+            w.controller?.text.contains('192.168.1.20') == true;
+      }),
+      findsOneWidget,
+    );
 
     // Clear the key field (which should be empty) and submit
     await tester.enterText(find.byKey(const Key('stash-key-field')), '');
@@ -258,8 +332,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify the old key is deleted
-    final updatedToken =
-        await storage.read('${record.account.storageNamespace}/account_token');
+    final updatedToken = await storage.read(
+      '${record.account.storageNamespace}/account_token',
+    );
     expect(updatedToken, isNull);
   });
 }

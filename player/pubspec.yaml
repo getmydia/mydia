@@ -7,7 +7,7 @@ environment:
   # The floor is 3.6.0 because `toJSCaptureThis`, used by hls_engine_web.dart,
   # arrived in Dart 3.6. The Flutter pinned in player/.fvmrc ships a much newer
   # Dart, and nothing below the floor is tested.
-  sdk: '>=3.6.0 <4.0.0'
+  sdk: '>=3.14.0 <4.0.0'
   # Chooses the Flutter that Dependabot resolves pubspec.lock with. Dependabot
   # never reads .fvmrc; it takes the newest stable release this range allows.
   # Each Flutter release pins meta, matcher, test_api, vector_math and intl to
@@ -110,6 +110,8 @@ dependencies:
   file_selector: ^1.1.0
   # Keeps qr on 3.x: qr_flutter 4.1.0, the latest, requires qr ^3.0.1.
   qr_flutter: ^4.1.0
+  material_ui: ^1.11.1
+  cupertino_ui: ^1.1.7
 
 # macOS ships getmydia's video-hdr libmpv (mpv 0.42, libplacebo, MoltenVK)
 # instead of media_kit's prebuilt one. Other platforms are untouched. See

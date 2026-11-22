@@ -79,8 +79,9 @@ Future<void> _pumpCalendar(
 
 void main() {
   group('DockInsets under a real BottomNav', () {
-    testWidgets('reserves more than the 100.0 screens used to hardcode',
-        (tester) async {
+    testWidgets('reserves more than the 100.0 screens used to hardcode', (
+      tester,
+    ) async {
       // 600 wide, not 400. Setting `view.physicalSize` genuinely constrains
       // layout, unlike `app_shell_dock_inset_test.dart`, which only wraps a
       // `MediaQueryData` and so leaves the default ~800 view in place. At 400
@@ -142,12 +143,10 @@ void main() {
   });
 
   group('calendar', () {
-    testWidgets('scrolls the timeline footer clear of the dock',
-        (tester) async {
-      await _pumpCalendar(
-        tester,
-        entries: _tenDays(),
-      );
+    testWidgets('scrolls the timeline footer clear of the dock', (
+      tester,
+    ) async {
+      await _pumpCalendar(tester, entries: _tenDays());
 
       expectClearsDock(
         tester,
@@ -155,12 +154,10 @@ void main() {
       );
     });
 
-    testWidgets('scrolls the last row of a busy day clear of the dock',
-        (tester) async {
-      await _pumpCalendar(
-        tester,
-        entries: _busyDay(),
-      );
+    testWidgets('scrolls the last row of a busy day clear of the dock', (
+      tester,
+    ) async {
+      await _pumpCalendar(tester, entries: _busyDay());
 
       expectClearsDock(
         tester,

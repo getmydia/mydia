@@ -30,8 +30,10 @@ class _Targets extends FakeMediaSource implements RemoteTargets {
   var listCalls = 0;
 
   @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.remoteTargets};
+  Set<SourceCapability> get capabilities => {
+    ...super.capabilities,
+    SourceCapability.remoteTargets,
+  };
 
   @override
   Future<List<RemoteDevice>> devices() async {
@@ -62,13 +64,18 @@ void main() {
   setUp(() {
     a = _Targets(idA, 'Hall Screen');
     b = _Targets(idB, 'Attic Tablet');
-    container = ProviderContainer(retry: (_, __) => null, overrides: [
-      mediaSourceProvider.overrideWith((ref, id) => switch (id) {
+    container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [
+        mediaSourceProvider.overrideWith(
+          (ref, id) => switch (id) {
             idA => a,
             idB => b,
             _ => null,
-          }),
-    ]);
+          },
+        ),
+      ],
+    );
     addTearDown(container.dispose);
   });
 
@@ -77,10 +84,11 @@ void main() {
 
     expect(devices.single.deviceName, 'Hall Screen');
     expect(
-        (await container.read(devicesControllerProvider(idB).future))
-            .single
-            .deviceName,
-        'Attic Tablet');
+      (await container.read(devicesControllerProvider(idB).future))
+          .single
+          .deviceName,
+      'Attic Tablet',
+    );
   });
 
   test('fails when the instance has no source', () async {
@@ -104,11 +112,13 @@ void main() {
     expect(a.listCalls, 2, reason: 'a successful revoke refreshes A');
     expect(b.listCalls, 1);
     expect(
-        container.read(devicesControllerProvider(idA)).value!.single.isRevoked,
-        isTrue);
+      container.read(devicesControllerProvider(idA)).value!.single.isRevoked,
+      isTrue,
+    );
     expect(
-        container.read(devicesControllerProvider(idB)).value!.single.isRevoked,
-        isFalse);
+      container.read(devicesControllerProvider(idB)).value!.single.isRevoked,
+      isFalse,
+    );
   });
 
   test('a refused revoke reports false and does not reload', () async {

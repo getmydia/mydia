@@ -114,10 +114,12 @@ class _VolumeSurfaceState extends State<VolumeSurface> {
                 return SliderTheme(
                   data: SliderThemeData(
                     trackHeight: trackHeight,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 12),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 6,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 12,
+                    ),
                     activeTrackColor: Colors.white,
                     inactiveTrackColor: Colors.white.withValues(
                       alpha: VolumeSurface.inactiveTrackAlpha,
@@ -250,8 +252,9 @@ class SecondaryCluster extends StatelessWidget {
   static const Key fullscreenKey = Key('secondary-fullscreen');
   static const Key scalingKey = Key('secondary-scaling');
   static const Key alwaysOnTopKey = Key('secondary-always-on-top');
-  static const Key alwaysOnTopRotationKey =
-      Key('secondary-always-on-top-rotation');
+  static const Key alwaysOnTopRotationKey = Key(
+    'secondary-always-on-top-rotation',
+  );
 
   /// Horizontal gap between this cluster's buttons.
   ///

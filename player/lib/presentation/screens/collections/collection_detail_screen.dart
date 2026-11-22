@@ -1,7 +1,9 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../widgets/source_artwork.dart';
@@ -67,8 +69,9 @@ class CollectionDetailScreen extends ConsumerWidget {
           if (context.canPop()) {
             context.pop();
           } else {
-            context
-                .go(sourceListingLocation(sourceId, SourceListing.collections));
+            context.go(
+              sourceListingLocation(sourceId, SourceListing.collections),
+            );
           }
         },
       ),
@@ -138,8 +141,10 @@ class CollectionDetailScreen extends ConsumerWidget {
   /// `DownloadsScreen.topSpacerHeight`.
   @visibleForTesting
   static double gridTopPadding(BuildContext context) =>
-      freshnessTopInset(context,
-          appBarHeight: WindowTitleRow.heightOf(context)) +
+      freshnessTopInset(
+        context,
+        appBarHeight: WindowTitleRow.heightOf(context),
+      ) +
       gridTopGap;
 
   @override
@@ -173,14 +178,17 @@ class CollectionDetailScreen extends ConsumerWidget {
                 ),
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: () => ref
-                        .read(invalidatorProvider)
-                        .invalidate([pages.key.target]),
+                    onRefresh: () => ref.read(invalidatorProvider).invalidate([
+                      pages.key.target,
+                    ]),
                     child: itemsData.when(
                       loading: () =>
                           const Center(child: CircularProgressIndicator()),
                       error: (error, _) => _buildErrorView(
-                          context, error, () => ref.invalidate(provider)),
+                        context,
+                        error,
+                        () => ref.invalidate(provider),
+                      ),
                       data: (items) {
                         if (items.isEmpty) {
                           return _buildEmptyState(context);
@@ -207,7 +215,10 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildErrorView(
-      BuildContext context, Object error, VoidCallback onRetry) {
+    BuildContext context,
+    Object error,
+    VoidCallback onRetry,
+  ) {
     final palette = context.palette;
     return Center(
       child: Padding(
@@ -230,17 +241,15 @@ class CollectionDetailScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             Text(
               context.l10n.collectionDetailLoadFailed,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               error.toString(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -249,8 +258,10 @@ class CollectionDetailScreen extends ConsumerWidget {
               icon: const Icon(Icons.refresh_rounded),
               label: Text(context.l10n.commonTryAgain),
               style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
               ),
             ),
           ],
@@ -282,17 +293,15 @@ class CollectionDetailScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             Text(
               context.l10n.collectionDetailEmptyTitle,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               context.l10n.collectionDetailEmptySubtitle,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.textSecondary,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -302,7 +311,10 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildGridView(
-      BuildContext context, List<ItemSummary> items, double topPadding) {
+    BuildContext context,
+    List<ItemSummary> items,
+    double topPadding,
+  ) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final bottomPadding = DockInsets.bottomOf(context);
@@ -318,8 +330,12 @@ class CollectionDetailScreen extends ConsumerWidget {
           final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
 
           return GridView.builder(
-            padding: EdgeInsets.fromLTRB(horizontalPadding, topPadding,
-                horizontalPadding, bottomPadding),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              topPadding,
+              horizontalPadding,
+              bottomPadding,
+            ),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: crossAxisCount,
               childAspectRatio: 0.58,
@@ -363,7 +379,9 @@ class CollectionDetailScreen extends ConsumerWidget {
 /// "skipped" message.
 @visibleForTesting
 String collectionSyncResultMessage(
-    AppLocalizations l10n, CollectionSyncResult result) {
+  AppLocalizations l10n,
+  CollectionSyncResult result,
+) {
   final movies = result.moviesQueued;
   final episodes = result.episodesQueued;
   final skipped = result.skipped;
@@ -404,8 +422,9 @@ class _CollectionDownloadButtonState
 
   /// Look up the collection name from the cached collections list.
   String _getCollectionName() {
-    final collectionsAsync =
-        ref.read(sourceCollectionsProvider(widget.sourceId));
+    final collectionsAsync = ref.read(
+      sourceCollectionsProvider(widget.sourceId),
+    );
     if (collectionsAsync.hasValue) {
       for (final c in collectionsAsync.requireValue) {
         if (c.id == widget.collectionId) return c.name;
@@ -461,20 +480,26 @@ class _CollectionDownloadButtonState
     } catch (e) {
       debugPrint('Collection sync failed: $e');
       if (!mounted) return;
-      showToast(context,
-          context.l10n.collectionSyncFailed(context.l10n.failureDetail(e)),
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.collectionSyncFailed(context.l10n.failureDetail(e)),
+        kind: ToastKind.error,
+      );
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
   }
 
   Future<void> _handleDownloadTap() async {
-    final downloadable =
-        ref.read(mediaSourceProvider(widget.sourceId))?.as<Downloadable>();
+    final downloadable = ref
+        .read(mediaSourceProvider(widget.sourceId))
+        ?.as<Downloadable>();
     if (downloadable == null) {
-      showToast(context, context.l10n.commonDownloadServerUnavailable,
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.commonDownloadServerUnavailable,
+        kind: ToastKind.error,
+      );
       return;
     }
 
@@ -484,16 +509,21 @@ class _CollectionDownloadButtonState
     } catch (e) {
       if (!mounted) return;
       showToast(
-          context,
-          context.l10n
-              .collectionDownloadOptionsFailed(context.l10n.failureDetail(e)),
-          kind: ToastKind.error);
+        context,
+        context.l10n.collectionDownloadOptionsFailed(
+          context.l10n.failureDetail(e),
+        ),
+        kind: ToastKind.error,
+      );
       return;
     }
     if (!mounted) return;
     if (options.isEmpty) {
-      showToast(context, context.l10n.collectionNothingDownloadable,
-          kind: ToastKind.error);
+      showToast(
+        context,
+        context.l10n.collectionNothingDownloadable,
+        kind: ToastKind.error,
+      );
       return;
     }
 
@@ -512,8 +542,10 @@ class _CollectionDownloadButtonState
 
   Future<void> _handleSyncNow() async {
     final config = await ref.read(
-      collectionSyncConfigProvider(widget.sourceId.value, widget.collectionId)
-          .future,
+      collectionSyncConfigProvider(
+        widget.sourceId.value,
+        widget.collectionId,
+      ).future,
     );
     if (config == null || !mounted) return;
     await _startSync(config['resolution']!);
@@ -528,7 +560,8 @@ class _CollectionDownloadButtonState
   Widget build(BuildContext context) {
     final palette = context.palette;
     final isSyncedAsync = ref.watch(
-        isCollectionSyncedProvider(widget.sourceId.value, widget.collectionId));
+      isCollectionSyncedProvider(widget.sourceId.value, widget.collectionId),
+    );
 
     if (_isSyncing) {
       return const Padding(
@@ -548,11 +581,7 @@ class _CollectionDownloadButtonState
 
     if (isSynced) {
       return PopupMenuButton<String>(
-        icon: Icon(
-          Icons.sync_rounded,
-          color: palette.primary,
-          size: 22,
-        ),
+        icon: Icon(Icons.sync_rounded, color: palette.primary, size: 22),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(),
         style: const ButtonStyle(
@@ -560,9 +589,7 @@ class _CollectionDownloadButtonState
           visualDensity: VisualDensity.compact,
         ),
         color: palette.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         onSelected: (value) {
           if (value == 'sync_now') {
             _handleSyncNow();

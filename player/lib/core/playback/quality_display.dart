@@ -20,7 +20,8 @@ bool qualityControlAvailable({
   required int? sourceHeight,
 }) {
   if (localFile || plan == null) return false;
-  final lossless = plan is DirectPlayPlan ||
+  final lossless =
+      plan is DirectPlayPlan ||
       (plan is HlsPlan && plan.strategy == HlsStrategy.copy);
   return lossless ||
       deriveAdaptiveLadder(sourceHeight: sourceHeight).isNotEmpty;
@@ -33,8 +34,7 @@ bool qualityControlAvailable({
 QualityRung qualityControlRung({
   required QualityRung selected,
   QualityRung? effective,
-}) =>
-    selected.isAuto ? selected : (effective ?? selected);
+}) => selected.isAuto ? selected : (effective ?? selected);
 
 /// The rung a server-side limit landed on, or null when the stream got what
 /// was asked. The picker words it with `AppLocalizations.qualityClampNote`.

@@ -5,24 +5,26 @@ import 'package:player/graphql/mutations/download_subtitle.graphql.dart';
 
 void main() {
   group('SubtitleTrack.fromGraphQL', () {
-    test('carries the fragment\'s deliverable flag through, even when false',
-        () {
-      final sub = Fragment$MediaFileFragment$subtitles(
-        trackId: 'trk-1',
-        language: 'eng',
-        title: 'English (PGS)',
-        format: 'pgs',
-        embedded: true,
-        deliverable: false,
-        forced: false,
-        hearingImpaired: false,
-        url: null,
-      );
+    test(
+      'carries the fragment\'s deliverable flag through, even when false',
+      () {
+        final sub = Fragment$MediaFileFragment$subtitles(
+          trackId: 'trk-1',
+          language: 'eng',
+          title: 'English (PGS)',
+          format: 'pgs',
+          embedded: true,
+          deliverable: false,
+          forced: false,
+          hearingImpaired: false,
+          url: null,
+        );
 
-      final track = SubtitleTrack.fromGraphQL(sub);
+        final track = SubtitleTrack.fromGraphQL(sub);
 
-      expect(track.deliverable, isFalse);
-    });
+        expect(track.deliverable, isFalse);
+      },
+    );
 
     test('carries the fragment\'s forced and hearing-impaired flags', () {
       final sub = Fragment$MediaFileFragment$subtitles(
@@ -92,11 +94,9 @@ void main() {
     });
 
     test('carries every descriptive field the mutation returns', () {
-      final track = SubtitleTrack.fromDownload(result(
-        language: 'es',
-        title: 'Spanish',
-        format: 'vtt',
-      ));
+      final track = SubtitleTrack.fromDownload(
+        result(language: 'es', title: 'Spanish', format: 'vtt'),
+      );
 
       expect(track.language, 'es');
       expect(track.title, 'Spanish');
@@ -116,10 +116,9 @@ void main() {
     });
 
     test('carries the mutation\'s forced and hearing-impaired flags', () {
-      final track = SubtitleTrack.fromDownload(result(
-        forced: true,
-        hearingImpaired: true,
-      ));
+      final track = SubtitleTrack.fromDownload(
+        result(forced: true, hearingImpaired: true),
+      );
 
       expect(track.forced, isTrue);
       expect(track.hearingImpaired, isTrue);
