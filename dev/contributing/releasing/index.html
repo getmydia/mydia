@@ -3274,6 +3274,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#fixed-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#dispatch-inputs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3647,6 +3658,17 @@
     <span class="md-ellipsis">
       
         Cutting a release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed issues
       
     </span>
   </a>
@@ -4036,6 +4058,29 @@ architectures, builds and signs the player for Android, iOS, macOS, Windows and
 Linux, uploads the assets to the draft, and publishes it.</p>
 <p>For a stable release it then deploys versioned documentation. Prereleases skip
 the docs deploy.</p>
+<h3 id="fixed-issues">Fixed issues</h3>
+<p>Once the release is published, the workflow finds every issue it fixes and
+marks it. "Fixes" means an issue closed as completed by a PR merged since the
+previous release. For a beta or rc that is the previous release of any kind; for
+a stable release it is the previous stable one, so the range covers all of its
+betas. Each issue:</p>
+<ul>
+<li>goes on milestone <code>vX.Y.Z</code>, which is created by the first beta and closed by
+  the stable release</li>
+<li>gets a comment, which notifies its subscribers: "Fixed in v0.19.0-beta.3"
+  from the first beta that carries the fix, then "Now in the stable release"
+  from the stable one</li>
+</ul>
+<p>Only issues linked to a PR are found, through a closing keyword or the
+Development sidebar. Add anything closed by a direct commit to the milestone by
+hand.</p>
+<p>To backfill a release or re-run a failed attempt (nothing is posted twice):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release-mark-fixed-issues.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">tag</span><span class="o">=</span>v0.19.0-beta.3
+</code></pre></div>
+<p>Add <code>-f dry_run=true</code> to print the plan without writing anything.</p>
+<p>Locally, <code>scripts/release-mark-fixed-issues.sh --dry-run &lt;tag&gt;</code> prints the same
+plan.</p>
 <h3 id="dispatch-inputs">Dispatch inputs</h3>
 <table>
 <thead>
@@ -4073,19 +4118,19 @@ the docs deploy.</p>
 someone reading the release page sees the whole story. The bundled file still
 holds only the patch's own changes, so the app never shows the same content
 twice. Concatenate at release time:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>cat<span class="w"> </span>priv/changelog/0.13.1.md<span class="w"> </span>priv/changelog/0.13.0.md<span class="w"> </span>&gt;<span class="w"> </span>/tmp/notes.md
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>gh<span class="w"> </span>release<span class="w"> </span>create<span class="w"> </span>v0.13.1<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--target<span class="w"> </span><span class="s2">"</span><span class="nv">$SHA</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--draft<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>--notes-file<span class="w"> </span>/tmp/notes.md
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>cat<span class="w"> </span>priv/changelog/0.13.1.md<span class="w"> </span>priv/changelog/0.13.0.md<span class="w"> </span>&gt;<span class="w"> </span>/tmp/notes.md
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>gh<span class="w"> </span>release<span class="w"> </span>create<span class="w"> </span>v0.13.1<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>--target<span class="w"> </span><span class="s2">"</span><span class="nv">$SHA</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>--draft<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span>--notes-file<span class="w"> </span>/tmp/notes.md
 </code></pre></div>
 <h3 id="rehearsing">Rehearsing</h3>
 <p>Signing, notarization, the Sparkle appcast, and the Windows installer only
 execute during a release, which historically meant discovering breakage while
 shipping. A rehearsal runs all of it against master without side effects:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
 </code></pre></div>
 <p>A rehearsal builds every image without pushing to ghcr, builds and signs and
 notarizes every player artifact, and generates and validates the appcast. It
@@ -4127,7 +4172,7 @@ assume a single item and must not be rewritten.</p>
 <p>The second is rebuilt by <code>deploy-appcast.yml</code>, which <code>release.yml</code> calls after a
 successful publish. It is regenerated from scratch each time, so re-running it is
 always safe:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>deploy-appcast.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>deploy-appcast.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
 </code></pre></div>
 <p>Run that after any release where the appcast job failed, and after manually
 editing or deleting a release.</p>
@@ -4144,8 +4189,8 @@ change in a prerelease migrates nobody.</p>
 release that ships an <code>SUFeedURL</code> pointing at <code>updates.mydia.dev</code>, dispatch
 <code>deploy-appcast.yml</code> manually and confirm <code>https://updates.mydia.dev/appcast.xml</code>
 serves a feed:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>deploy-appcast.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://updates.mydia.dev/appcast.xml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>deploy-appcast.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://updates.mydia.dev/appcast.xml
 </code></pre></div>
 <p>Doing this after that release ships instead of before it means every app that
 updates in the meantime starts polling a URL serving nothing, and has no
@@ -4153,23 +4198,23 @@ recovery path until the feed exists.</p>
 <h3 id="when-the-workflow-refuses">When the workflow refuses</h3>
 <p><strong>"Draft targets 'master', which is a branch, not a commit."</strong></p>
 <p>The draft was created without <code>--target &lt;sha&gt;</code>. Pin it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">"</span>
 </code></pre></div>
 <p><strong>"N commit(s) landed on master after this draft was cut."</strong></p>
 <p>Someone merged while the release was being prepared, so the notes no longer
 describe what would ship. The run summary lists the commits. Either fold them in:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">"</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># then update the notes to cover the new commits</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">"</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># then update the notes to cover the new commits</span>
 </code></pre></div>
 <p>Or ship the pinned commit as-is and leave the rest for the next release:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">accept_drift</span><span class="o">=</span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">accept_drift</span><span class="o">=</span><span class="nb">true</span>
 </code></pre></div>
 <p><strong>"v0.13.0 has no bundled release notes at priv/changelog/0.13.0.md in commit ab12cd34ef56."</strong></p>
 <p>The notes PR from step 1 never got merged, or was merged after this draft was
 already pinned. Write <code>priv/changelog/0.13.0.md</code>, merge it, then re-pin the
 draft to the new commit and dispatch again:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">"</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>gh<span class="w"> </span>release<span class="w"> </span>edit<span class="w"> </span>v0.13.0<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>--target<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>origin/master<span class="k">)</span><span class="s2">"</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0
 </code></pre></div>
 <p><strong>"Refusing to publish: windows (failure) did not succeed."</strong></p>
 <p>A platform build failed. The release stays a draft and nothing was published.
@@ -4177,7 +4222,7 @@ Re-run the failed jobs from the Actions UI, which reuses the same run and
 therefore the same build number.</p>
 <p>If the failure is external and you need to ship without that platform, name it
 explicitly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">allow_missing</span><span class="o">=</span>windows
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>release.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">version</span><span class="o">=</span>v0.13.0<span class="w"> </span>-f<span class="w"> </span><span class="nv">allow_missing</span><span class="o">=</span>windows
 </code></pre></div>
 <p>The published release then carries a note saying which assets are absent.</p>
 <h3 id="recovering-from-a-failed-release">Recovering from a failed release</h3>
@@ -4279,10 +4324,10 @@ runtime declares itself and flatpak installs automatically. The older
 <h3 id="building-one-locally">Building one locally</h3>
 <p><code>./dev player flatpak build</code> runs the same <code>flatpak-builder</code> invocation as the
 <code>flatpak-build</code> CI job, then <code>install</code> and <code>run</code> deploy and launch it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>build<span class="w">      </span><span class="c1"># 30-90 minutes cold</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>install<span class="w">    </span><span class="c1"># installs --user from the staged repo</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>run
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>clean<span class="w">      </span><span class="c1"># reclaims ~270M when you are done</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>build<span class="w">      </span><span class="c1"># 30-90 minutes cold</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>install<span class="w">    </span><span class="c1"># installs --user from the staged repo</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>run
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>./dev<span class="w"> </span>player<span class="w"> </span>flatpak<span class="w"> </span>clean<span class="w">      </span><span class="c1"># reclaims ~270M when you are done</span>
 </code></pre></div>
 <p>Two things the bare <code>flatpak-builder</code> command does not do for you, and which
 the wrapper handles:</p>
@@ -4310,12 +4355,12 @@ the wrapper handles:</p>
    <code>--pinentry-mode loopback</code> flag is required even for an unprotected key, or
    gpg fails with "No pinentry" on a headless machine:</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>gpg<span class="w"> </span>--batch<span class="w"> </span>--pinentry-mode<span class="w"> </span>loopback<span class="w"> </span>--passphrase<span class="w"> </span><span class="s1">''</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>--quick-generate-key<span class="w"> </span><span class="s2">"Mydia Flatpak Signing &lt;releases@mydia.dev&gt;"</span><span class="w"> </span>rsa4096<span class="w"> </span>sign<span class="w"> </span>never
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nv">KEYID</span><span class="o">=</span><span class="k">$(</span>gpg<span class="w"> </span>--list-keys<span class="w"> </span>--with-colons<span class="w"> </span>releases@mydia.dev<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F:<span class="w"> </span><span class="s1">'/^fpr:/ {print $10; exit}'</span><span class="k">)</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>gpg<span class="w"> </span>--export-secret-keys<span class="w"> </span>--armor<span class="w"> </span><span class="s2">"</span><span class="nv">$KEYID</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">'\n'</span><span class="w"> </span>&gt;<span class="w"> </span>flatpak-signing-key.b64
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>gpg<span class="w"> </span>--export<span class="w"> </span>--armor<span class="w"> </span><span class="s2">"</span><span class="nv">$KEYID</span><span class="s2">"</span><span class="w"> </span>&gt;<span class="w"> </span>player/flatpak/flatpak-signing-key.pub.asc
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$KEYID</span><span class="s2">"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>gpg<span class="w"> </span>--batch<span class="w"> </span>--pinentry-mode<span class="w"> </span>loopback<span class="w"> </span>--passphrase<span class="w"> </span><span class="s1">''</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>--quick-generate-key<span class="w"> </span><span class="s2">"Mydia Flatpak Signing &lt;releases@mydia.dev&gt;"</span><span class="w"> </span>rsa4096<span class="w"> </span>sign<span class="w"> </span>never
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nv">KEYID</span><span class="o">=</span><span class="k">$(</span>gpg<span class="w"> </span>--list-keys<span class="w"> </span>--with-colons<span class="w"> </span>releases@mydia.dev<span class="w"> </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span>-F:<span class="w"> </span><span class="s1">'/^fpr:/ {print $10; exit}'</span><span class="k">)</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>gpg<span class="w"> </span>--export-secret-keys<span class="w"> </span>--armor<span class="w"> </span><span class="s2">"</span><span class="nv">$KEYID</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span><span class="p">|</span><span class="w"> </span>tr<span class="w"> </span>-d<span class="w"> </span><span class="s1">'\n'</span><span class="w"> </span>&gt;<span class="w"> </span>flatpak-signing-key.b64
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>gpg<span class="w"> </span>--export<span class="w"> </span>--armor<span class="w"> </span><span class="s2">"</span><span class="nv">$KEYID</span><span class="s2">"</span><span class="w"> </span>&gt;<span class="w"> </span>player/flatpak/flatpak-signing-key.pub.asc
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$KEYID</span><span class="s2">"</span>
 </code></pre></div>
 <ol>
 <li>Back up <code>flatpak-signing-key.b64</code> somewhere other than GitHub. See below.</li>
@@ -4330,11 +4375,11 @@ auth against R2.</p>
 <h3 id="rolling-back-a-bad-flatpak-publish">Rolling back a bad Flatpak publish</h3>
 <p>Pruning keeps previous commits, so a bad publish is recoverable. From a machine
 with the signing key and R2 credentials:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>rclone<span class="w"> </span>sync<span class="w"> </span>r2:mydia-flatpak/stable<span class="w"> </span>./live-repo<span class="w"> </span>--create-empty-src-dirs
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>ostree<span class="w"> </span>log<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>ostree<span class="w"> </span>reset<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable<span class="w"> </span>&lt;previous-commit&gt;
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>flatpak<span class="w"> </span>build-update-repo<span class="w"> </span>--gpg-sign<span class="o">=</span><span class="nv">$GPG_KEY_ID</span><span class="w"> </span>live-repo
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>./player/flatpak/sync-repo.sh<span class="w"> </span>./live-repo<span class="w"> </span>r2:mydia-flatpak/stable
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>rclone<span class="w"> </span>sync<span class="w"> </span>r2:mydia-flatpak/stable<span class="w"> </span>./live-repo<span class="w"> </span>--create-empty-src-dirs
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>ostree<span class="w"> </span>log<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>ostree<span class="w"> </span>reset<span class="w"> </span>--repo<span class="o">=</span>live-repo<span class="w"> </span>app/dev.mydia.player/x86_64/stable<span class="w"> </span>&lt;previous-commit&gt;
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>flatpak<span class="w"> </span>build-update-repo<span class="w"> </span>--gpg-sign<span class="o">=</span><span class="nv">$GPG_KEY_ID</span><span class="w"> </span>live-repo
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>./player/flatpak/sync-repo.sh<span class="w"> </span>./live-repo<span class="w"> </span>r2:mydia-flatpak/stable
 </code></pre></div>
 <p>Anyone who already updated moves back on their next <code>flatpak update</code>.</p>
 <h3 id="if-the-signing-key-is-lost">If the signing key is lost</h3>
@@ -4533,20 +4578,20 @@ release, <code>.github/workflows/player-ondemand.yml</code> allows building, sig
 distributing player binaries on demand across any combination of supported platforms.</p>
 <h3 id="dispatching">Dispatching</h3>
 <p>Trigger the workflow from the GitHub Actions UI ("Player / On-Demand Build") or via the GitHub CLI:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Build default mobile platforms (iOS &amp; Android) from master and upload to internal store tracks</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Build a branch: dispatch on the branch itself (see "Branch builds")</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span>--ref<span class="w"> </span>feat/my-feature<span class="w"> </span>-f<span class="w"> </span><span class="nv">ref</span><span class="o">=</span>feat/my-feature
-<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
-<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="c1"># Build all platforms without uploading to stores</span>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_macos</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_windows</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_linux</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_flatpak</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">upload_to_stores</span><span class="o">=</span><span class="nb">false</span>
-<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>
-<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="c1"># Test build and sign pipeline without uploading (dry run)</span>
-<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Build default mobile platforms (iOS &amp; Android) from master and upload to internal store tracks</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># Build a branch: dispatch on the branch itself (see "Branch builds")</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">  </span>--ref<span class="w"> </span>feat/my-feature<span class="w"> </span>-f<span class="w"> </span><span class="nv">ref</span><span class="o">=</span>feat/my-feature
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="c1"># Build all platforms without uploading to stores</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_macos</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_windows</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_linux</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_flatpak</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">upload_to_stores</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="c1"># Test build and sign pipeline without uploading (dry run)</span>
+<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
 </code></pre></div>
 <h3 id="dispatch-inputs_1">Dispatch inputs</h3>
 <table>
@@ -4763,8 +4808,8 @@ itself for anyone who skipped one.</p>
 <h2 id="metadata-relay">Metadata relay</h2>
 <p>The relay releases on a pushed tag rather than a dispatched draft.
 <code>deploy-relay.yml</code> triggers on tags matching <code>metadata-relay-v*</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">"Metadata Relay v0.12.0"</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">"Metadata Relay v0.12.0"</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
 </code></pre></div>
 <p>The relay lives in this repository at <code>metadata-relay/</code> but deploys entirely
 separately, so its version is independent of mydia's.</p>
