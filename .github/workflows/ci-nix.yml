@@ -96,7 +96,7 @@ jobs:
           set -euo pipefail
           hits="$(
             git ls-files -z \
-                '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
+                '*.nix' '.github/workflows/*' '.github/actions/*' '*Dockerfile*' '*compose*.yml' \
                 'scripts/*' 'dev' 'player/flatpak/*' 'player/appimage/*' \
               | xargs -0 grep -HnIiE 'flutter' \
               | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \

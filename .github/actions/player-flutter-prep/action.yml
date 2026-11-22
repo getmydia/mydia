@@ -1,0 +1,69 @@
+name: Player Flutter prep
+description: >-
+  Install the Flutter SDK from player/.fvmrc, stamp the pubspec version,
+  fetch dependencies, run code generation and brand the release channel.
+  Shared by the player release workflows (android, ios, linux, macos,
+  windows).
+
+inputs:
+  version:
+    description: >-
+      The full release version, prerelease suffix included. apply-channel.sh
+      reads the channel from it and exports MYDIA_CHANNEL to later steps.
+    required: true
+  pubspec-version:
+    description: >-
+      Value for pubspec.yaml's `version:` line, as <name>+<build>. Empty
+      leaves pubspec.yaml alone, for a caller that stamps it itself (iOS
+      derives its marketing version and build number first).
+    default: ''
+  working-directory:
+    description: The Flutter project.
+    default: player
+
+runs:
+  using: composite
+  steps:
+    # No `cache: true`: an SDK cache entry is about 2 GB, and they crowded
+    # ci.yml's caches out of GitHub's 10 GB Actions cache budget
+    # (2026-10-15). Downloading the SDK costs about a minute.
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version-file: player/.fvmrc
+        channel: 'stable'
+
+    # -i.bak rather than -i: GNU sed (Linux, Windows) and BSD sed (macOS)
+    # disagree on a bare -i, and both accept an attached suffix.
+    - name: Update version
+      if: inputs.pubspec-version != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PUBSPEC_VERSION: ${{ inputs.pubspec-version }}
+      run: |
+        sed -i.bak "s/^version: .*/version: ${PUBSPEC_VERSION}/" pubspec.yaml
+        rm pubspec.yaml.bak
+
+    # --enforce-lockfile fails the job when pubspec.lock does not resolve on
+    # the .fvmrc SDK, instead of quietly re-resolving and building a
+    # different tree.
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: flutter pub get --enforce-lockfile
+
+    - name: Run code generation
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: flutter pub run build_runner build
+
+    # Beta and dev builds get their own name and a ribboned icon. Stable is
+    # untouched. Uses the full version: iOS strips the prerelease suffix from
+    # pubspec, so the channel has to be read before that matters.
+    - name: Brand the channel
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        VERSION: ${{ inputs.version }}
+      run: ./tool/apply-channel.sh "$VERSION"

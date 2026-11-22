@@ -807,7 +807,8 @@ about 0.7 GB for everything `ci.yml` needs. Warm PR CI measured about 8 minutes
 and cold about 20, so the cure was to get the big entries out of the budget:
 
 - No workflow caches the Flutter SDK (`subosito/flutter-action` without
-  `cache: true`). Once the Docker blobs were gone, `ci-player.yml` took their
+  `cache: true`; the release builds set it up once, in
+  `.github/actions/player-flutter-prep`). Once the Docker blobs were gone, `ci-player.yml` took their
   place: about 2 GB per platform per player PR. The SDK download costs about a
   minute. Pub caches are small and stay on the Windows and macOS legs; the
   Linux, web and Android player builds keep none (the Nix checks read pub
