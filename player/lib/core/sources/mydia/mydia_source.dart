@@ -366,11 +366,12 @@ class MydiaSource extends MediaSource
 
   static const _hostedPosterPrefix = '/generated/posters/';
 
-  /// The file name of a server-hosted poster path, or null for any other path.
+  /// The file name of a server-hosted poster path, or null for any other
+  /// path, including one whose name breaks the server's naming scheme.
   static String? _hostedPosterFile(String path) {
     if (!path.startsWith(_hostedPosterPrefix)) return null;
     final file = path.substring(_hostedPosterPrefix.length);
-    return file.isEmpty || file.contains('/') ? null : file;
+    return MediaRoutes.hostedPosterName.hasMatch(file) ? file : null;
   }
 
   @override

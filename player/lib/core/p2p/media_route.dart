@@ -94,6 +94,12 @@ abstract final class MediaRoutes {
   /// URL that proxies a server-hosted poster, named by its file name.
   static String artwork(String base, String file) => '$base/artwork/$file';
 
+  /// The server's hosted poster naming scheme, `<item id>-<sha8>.<ext>`,
+  /// exactly as `Mydia.Media.PosterStore` matches it. Anything else is never
+  /// a hosted poster, so it is refused before it reaches a URL or the host.
+  static final hostedPosterName =
+      RegExp(r'^[0-9a-f-]+-[0-9a-f]{8}\.(jpg|png|webp)$');
+
   /// How a paired player's file path travels in a URL and to its host:
   /// base64url of its UTF-8, without padding. A path holds spaces, `#`, `?`,
   /// backslashes and non-ASCII letters, none of which survive a URL segment
@@ -170,7 +176,7 @@ abstract final class MediaRoutes {
 
     if (path.startsWith('/artwork/')) {
       final file = path.substring('/artwork/'.length);
-      if (file.isEmpty || file.contains('/')) {
+      if (!hostedPosterName.hasMatch(file)) {
         return const MediaRouteFailure(
           _badRequest,
           'Invalid artwork path format. Expected: /artwork/{file}',

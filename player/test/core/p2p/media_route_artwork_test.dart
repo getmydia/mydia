@@ -17,4 +17,19 @@ void main() {
     expect((MediaRoutes.resolve('/artwork/') as MediaRouteFailure).statusCode,
         400);
   });
+
+  test('an artwork name outside the poster naming scheme is a 400', () {
+    for (final path in const [
+      '/artwork/a/b.png',
+      '/artwork/..',
+      '/artwork/x?y.png',
+      '/artwork/abc-0123abcd.gif',
+      '/artwork/ABC-0123ABCD.png',
+      '/artwork/abc-0123abcd.png\n',
+    ]) {
+      final route = MediaRoutes.resolve(path);
+      expect(route, isA<MediaRouteFailure>(), reason: path);
+      expect((route as MediaRouteFailure).statusCode, 400, reason: path);
+    }
+  });
 }

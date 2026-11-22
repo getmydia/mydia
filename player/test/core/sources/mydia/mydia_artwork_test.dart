@@ -71,6 +71,10 @@ void main() {
       '/generated/avatars/a.png',
       '/generated/posters/',
       '/generated/posters/a/b.png',
+      '/generated/posters/..',
+      '/generated/posters/x?y.png',
+      '/generated/posters/abc-0123abcd.gif',
+      '/generated/posters/abc-0123abcd.png\n',
     ]) {
       expect(await source(_http).artwork(ArtworkRef(path), width: 300), isNull,
           reason: path);
