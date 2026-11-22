@@ -67,6 +67,34 @@ Linux, uploads the assets to the draft, and publishes it.
 For a stable release it then deploys versioned documentation. Prereleases skip
 the docs deploy.
 
+### Fixed issues
+
+Once the release is published, the workflow finds every issue it fixes and
+marks it. "Fixes" means an issue closed as completed by a PR merged since the
+previous release. For a beta that is the previous release of either kind; for
+a stable release it is the previous stable one, so the range covers all of its
+betas. Each issue:
+
+- goes on milestone `vX.Y.Z`, which is created by the first beta and closed by
+  the stable release
+- gets a comment, which notifies its subscribers: "Fixed in v0.19.0-beta.3"
+  from the first beta that carries the fix, then "Now in the stable release"
+  from the stable one
+
+Only issues linked to a PR are found, through a closing keyword or the
+Development sidebar. Add anything closed by a direct commit to the milestone by
+hand.
+
+To backfill a release or re-run a failed attempt (nothing is posted twice):
+
+```bash
+gh workflow run release-mark-fixed-issues.yml --repo getmydia/mydia \
+  -f tag=v0.19.0-beta.3 [-f dry_run=true]
+```
+
+Locally, `scripts/release-mark-fixed-issues.sh --dry-run <tag>` prints the same
+plan.
+
 ### Dispatch inputs
 
 | Input | Default | Effect |

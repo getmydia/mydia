@@ -1,0 +1,59 @@
+name: Release / Mark Fixed Issues
+
+# Puts every issue a release fixes on milestone vX.Y.Z and tells its
+# subscribers which release carries the fix. See
+# scripts/release-mark-fixed-issues.sh for the rules.
+#
+# Called by release.yml once a release is published. A separate
+# `release: published` workflow would never fire: release.yml publishes with
+# GITHUB_TOKEN, and events caused by that token start no workflows.
+#
+# Dispatch by hand to backfill or re-run (re-running posts nothing twice):
+#
+#   gh workflow run release-mark-fixed-issues.yml -f tag=v0.19.0-beta.3
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag (e.g., v0.19.0-beta.3)'
+        required: true
+      dry_run:
+        description: 'Print what would change without writing anything'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-mark-fixed-issues
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  mark:
+    name: Mark fixed issues
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - name: Mark issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          # shellcheck disable=SC2086 # DRY_RUN is empty or one flag
+          scripts/release-mark-fixed-issues.sh $DRY_RUN "$TAG"
