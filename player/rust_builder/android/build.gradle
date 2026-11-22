@@ -3,17 +3,8 @@
 group 'com.flutter_rust_bridge.mydia_player_p2p'
 version '1.0'
 
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-
-    dependencies {
-        // The Android Gradle Plugin knows how to build native code with the NDK.
-        classpath 'com.android.tools.build:gradle:7.3.0'
-    }
-}
+// No buildscript classpath: the app's settings.gradle.kts supplies the
+// Android Gradle Plugin, and a library may not pin an older one under AGP 9.
 
 rootProject.allprojects {
     repositories {
@@ -29,9 +20,8 @@ android {
         namespace 'com.flutter_rust_bridge.mydia_player_p2p'
     }
 
-    // Bumping the plugin compileSdkVersion requires all clients of this plugin
-    // to bump the version in their app.
-    compileSdkVersion 34
+    // Flutter 3.50's default compileSdkVersion (FlutterExtension.kt).
+    compileSdkVersion 36
 
     // Use the NDK version
     // declared in /android/app/build.gradle file of the Flutter project.
@@ -40,12 +30,12 @@ android {
     ndkVersion android.ndkVersion
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     defaultConfig {
-        minSdkVersion 19
+        minSdkVersion 24
     }
 }
 
