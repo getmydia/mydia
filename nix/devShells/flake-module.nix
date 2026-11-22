@@ -187,6 +187,26 @@
           # Delete stale local.properties that may have wrong SDK paths
           rm -f player/android/local.properties 2>/dev/null || true
 
+          # Gradle 9 refuses to configure a project whose directory it cannot
+          # write ("Configuring project ':integration_test' without an existing
+          # directory is not allowed ... can't be written to"), and Flutter's
+          # plugin loader adds SDK plugins such as integration_test as projects
+          # rooted inside FLUTTER_ROOT, which is the read-only Nix store. The
+          # nixpkgs SDK is a tree of directories holding symlinks, so copying it
+          # with symlinks kept (-P) gives writable directories for a few MB.
+          # One copy per store path; the wrapper honours an exported
+          # FLUTTER_ROOT, and local.properties' flutter.sdk follows it.
+          flutterStoreRoot="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
+          flutterRoot="''${XDG_CACHE_HOME:-$HOME/.cache}/mydia/flutter-sdk/$(basename "$flutterStoreRoot")"
+          if [ ! -d "$flutterRoot" ]; then
+            mkdir -p "$(dirname "$flutterRoot")"
+            flutterTmp="$(mktemp -d "$flutterRoot.XXXXXX")"
+            cp -rP "$flutterStoreRoot/." "$flutterTmp/"
+            chmod -R u+w "$flutterTmp"
+            mv "$flutterTmp" "$flutterRoot"
+          fi
+          export FLUTTER_ROOT="$flutterRoot"
+
           # flutter_rust_bridge_codegen must match the flutter_rust_bridge
           # version pinned in player/rust/mydia_player_p2p/Cargo.toml. A
           # mismatch regenerates every binding at the wrong version without

@@ -10,9 +10,9 @@
     # nix/checks, and does not silently move the Android SDK, NDK or Flutter.
     # It moves deliberately and together with the main nixpkgs when Flutter
     # must: player/.fvmrc is resolved against both, so they must ship the same
-    # Flutter. Last moved to the main nixpkgs rev of 2026-11-13.
+    # Flutter. Last moved to the main nixpkgs rev of 2026-11-21.
     nixpkgs-android.url =
-      "github:NixOS/nixpkgs/d5cc6833999746cffdfe0598f7bc801a57b887a9";
+      "github:NixOS/nixpkgs/2786a2a72088ecf32aea5b3ec52099e6a7cff78f";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";

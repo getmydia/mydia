@@ -7,7 +7,7 @@ environment:
   # The floor is 3.6.0 because `toJSCaptureThis`, used by hls_engine_web.dart,
   # arrived in Dart 3.6. The Flutter pinned in player/.fvmrc ships a much newer
   # Dart, and nothing below the floor is tested.
-  sdk: '>=3.6.0 <4.0.0'
+  sdk: '>=3.14.0 <4.0.0'
   # Chooses the Flutter that Dependabot resolves pubspec.lock with. Dependabot
   # never reads .fvmrc; it takes the newest stable release this range allows.
   # Each Flutter release pins meta, matcher, test_api, vector_math and intl to
@@ -20,7 +20,7 @@ environment:
   # ci-nix.yml's "Check / Flutter Pin" job requires exactly
   # `>=MAJOR.MINOR.0 <MAJOR.NEXT_MINOR.0` for the .fvmrc minor: bump it
   # with .fvmrc.
-  flutter: '>=3.47.0 <3.48.0'
+  flutter: '>=3.50.0 <3.51.0'
 
 dependencies:
   flutter:
