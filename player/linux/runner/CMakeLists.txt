@@ -23,4 +23,16 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
+# Flutter 3.50's libflutter_linux_gtk.so exports libunwind's _Unwind_* symbols
+# (flutter/flutter#196402). The runner listed it ahead of libgcc_s, so the
+# dynamic linker bound every C++ throw to the engine's unwinder, which cannot
+# find libstdc++ catch handlers: a plugin catching its own exception aborted
+# the app instead (flutter_secure_storage_linux with no keyring died at launch
+# with "terminate called after throwing an instance of 'LibsecretError'"), and
+# so does a Rust panic in the p2p library. Linking libgcc_s first puts its
+# unwinder ahead in symbol lookup. Remove this once .fvmrc pins a Flutter that
+# includes flutter/flutter#196451, which hides those symbols in the engine.
+target_link_options(${BINARY_NAME} PRIVATE
+  "LINKER:--push-state,--no-as-needed,-lgcc_s,--pop-state")
+
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

@@ -85,6 +85,15 @@ means checking for them with the line temporarily removed.
 Fix each 3.50 break analysis reports (for example the removal of
 `ignoringSemantics` from `IgnorePointer` and `AbsorbPointer`).
 
+### Linux engine unwinder (found in CI)
+
+Flutter 3.50's `libflutter_linux_gtk.so` exports libunwind's `_Unwind_*`
+symbols (flutter/flutter#196402), so a C++ exception a plugin throws and
+catches aborts the app, and a Rust panic through `dart:ffi` does too. The fix,
+flutter/flutter#196451, is on Flutter master and in no 3.50 release. Until
+`.fvmrc` pins one that has it, `player/linux/runner/CMakeLists.txt` links
+`libgcc_s` ahead of the engine so its unwinder wins symbol lookup.
+
 ### Other platforms
 
 Refresh `ios/Podfile.lock` and `macos/Podfile.lock` if pods change. Linux,
