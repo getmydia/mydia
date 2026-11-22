@@ -53,6 +53,10 @@ on:
       # the gate.
       - Dependabot fixup
     types: [completed]
+    # The run's head branch. Without this every listed workflow on every
+    # branch woke the gate only for it to find no Dependabot pull request,
+    # which was nearly half of all Actions runs in the repository.
+    branches: ['dependabot/**']
 
 permissions:
   contents: write
