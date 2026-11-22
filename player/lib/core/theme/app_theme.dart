@@ -9,6 +9,11 @@ import 'palette.dart';
 ///
 /// Deep cinematic theme optimized for media browsing.
 /// See docs/architecture/design.md for complete design guidelines.
+
+/// The app's typeface, bundled under this family name. Text drawn outside
+/// material_ui's theme (media_kit's subtitles) names it explicitly.
+const String kAppFontFamily = 'Inter';
+
 class AppTheme {
   // Design system constants
   static const String displayFamily = 'Outfit';
@@ -66,7 +71,7 @@ class AppTheme {
       ],
 
       // Font family - matches web app
-      fontFamily: 'Inter',
+      fontFamily: kAppFontFamily,
 
       // Color scheme - Full Material 3 surface hierarchy.
       // The surface tones come from the palette, so each preset keeps its own

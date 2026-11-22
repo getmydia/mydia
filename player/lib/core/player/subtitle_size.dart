@@ -16,6 +16,8 @@ import 'package:flutter/painting.dart';
 import 'package:media_kit_video/media_kit_video.dart'
     show SubtitleViewConfiguration;
 
+import '../theme/app_theme.dart' show kAppFontFamily;
+
 /// media_kit's default subtitle font size, which the player keeps.
 const double kSubtitleBaseFontSize = 32;
 
@@ -61,10 +63,19 @@ TextScaler subtitleTextScaler(Size viewport, SubtitleSize size) {
   return TextScaler.linear(base * size.multiplier / kSubtitleBaseFontSize);
 }
 
-/// media_kit's stock configuration with only the scaler replaced. Style and
-/// padding stay at their defaults: `chrome_subtitle_lift.dart` animates the
-/// padding and `subtitle_position.dart` assumes its default bottom inset.
+/// media_kit's stock configuration with the scaler replaced and the app font
+/// named. Padding stays at its default: `chrome_subtitle_lift.dart` animates
+/// it and `subtitle_position.dart` assumes its default bottom inset.
+///
+/// The family is explicit because media_kit wraps the text in Flutter's own
+/// `Material`, which reads flutter/material's `Theme`, not the app's
+/// material_ui one, and so would otherwise fall back to Roboto.
 SubtitleViewConfiguration subtitleViewConfigurationFor(
   Size viewport,
   SubtitleSize size,
-) => SubtitleViewConfiguration(textScaler: subtitleTextScaler(viewport, size));
+) => SubtitleViewConfiguration(
+  style: _stockStyle.copyWith(fontFamily: kAppFontFamily),
+  textScaler: subtitleTextScaler(viewport, size),
+);
+
+final TextStyle _stockStyle = const SubtitleViewConfiguration().style;
