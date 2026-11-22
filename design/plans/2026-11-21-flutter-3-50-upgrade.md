@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - `player/.fvmrc` is the only file that names a Flutter version; "Check / Flutter Pin" rejects version literals in any build or CI file, including comments.
-- The nixpkgs pin does not move; `flutter350` in it is 3.50.1.
+- Both nixpkgs pins move to one nixos-unstable revision that ships `flutter350` 3.50.1; `devenv.lock` follows via `scripts/sync-devenv-nixpkgs.sh`.
 - `android.builtInKotlin=false` and `android.newDsl=false` stay as they are (already present in `player/android/gradle.properties`).
 - No user-side environment setup: any Nix-store SDK fix lives in `nix/devShells/flake-module.nix`, `devenv.nix` or the `./dev` wrapper.
 - Package holds recorded in `player/pubspec.yaml` stay unless 3.50 removes their stated reason.
@@ -104,7 +104,7 @@
 - Modify: `player/rust_builder/pubspec.yaml`, `player/packages/media_kit_libs_macos_video_hdr/pubspec.yaml` only if they import Material/Cupertino
 - Modify: ~643 Dart files under `player/lib`, `player/test`, `player/integration_test`, `player/packages`
 
-- [ ] **Step 1:** `flutter pub add material_ui cupertino_ui` in each package that needs them.
+- [ ] **Step 1:** `flutter pub add material_ui cupertino_ui` in each package that needs them. Raise `player/pubspec.yaml`'s Dart floor to `'>=3.14.0 <4.0.0'`, run `dart format lib test integration_test` and commit that alone (`style(player): Dart 3.14 tall formatting`); then `dart fix --apply --code=unnecessary_underscores --code=prefer_initializing_formals --code=use_null_aware_elements`, committed alone.
 - [ ] **Step 2:** Run `dart fix --apply --code=migrate_design_widgets` in `player/` and each local package. Run `dart format` on the result.
 - [ ] **Step 3:** Commit this mechanical output alone: `refactor(player): dart fix migrate_design_widgets`.
 

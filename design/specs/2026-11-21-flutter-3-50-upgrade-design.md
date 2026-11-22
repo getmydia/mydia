@@ -16,8 +16,9 @@ packages. 3.50 deprecates the old libraries; it does not remove them.
   version literal anywhere else. `player/flutter-version.nix` resolves
   `flutter<major><minor>` from nixpkgs and throws if its version disagrees with
   `.fvmrc`.
-- The pinned nixos-unstable already ships `flutter350` at 3.50.1, so the nixpkgs
-  pin does not move.
+- Neither nixpkgs pin (the main one and `nixpkgs-android`) shipped `flutter350`;
+  both move to the same nixos-unstable revision that does, and `devenv.lock`
+  follows via `scripts/sync-devenv-nixpkgs.sh`.
 - `ee838f6dc` held Flutter at 3.47.4 and named the blockers: 3.50 needs Gradle 9,
   AGP 9 and Kotlin 2.4 on Android, Gradle 9 rejects the read-only Nix-store SDK
   as a project directory, and 3.50 makes `material_ui` the Material library.
@@ -35,12 +36,13 @@ skips, so it gets an omp review.
 
 ### Nix-store SDK under Gradle 9 (first task)
 
-Reproduce the failure in the `.#android` dev shell before anything else. The
-expected cause is Gradle 9 writing into the Flutter SDK's
-`packages/flutter_tools/gradle` included build, which lives in the read-only
-Nix store. The fix belongs in `nix/devShells/flake-module.nix` or the
-`./dev player android` wrapper, for example by pointing Flutter at a writable
-copy or overlay of the SDK. It must not ask the user to configure anything.
+Reproduce the failure in the `.#android` dev shell before anything else. Gradle
+9 refuses to configure a project whose directory it cannot write, and Flutter's
+plugin loader roots SDK plugins such as `integration_test` inside
+`FLUTTER_ROOT`, the read-only Nix store. The fix lives in the Android shell hook
+in `nix/devShells/flake-module.nix`: copy the SDK's symlink farm (directories
+plus symlinks, a few MB) once per store path into a cache directory and export
+`FLUTTER_ROOT` to it. It must not ask the user to configure anything.
 
 If no fix holds, PR 1 stops and the decision goes back to the user. A broken
 Android build does not ship.
@@ -48,15 +50,19 @@ Android build does not ship.
 ### Version
 
 - `player/.fvmrc`: `3.50.1`.
-- `player/pubspec.yaml`: `flutter: '>=3.50.0 <3.51.0'`, Dart SDK floor to the
-  3.50 Dart (3.14).
+- `player/pubspec.yaml`: `flutter: '>=3.50.0 <3.51.0'`. The Dart language floor
+  stays at 3.6: raising it switches the formatter to the tall style (1553 of
+  1979 files change) and enables three lints with 619 hits, so PR 2 raises it.
 - Re-resolve `pubspec.lock` and `pubspec.lock.json`, keeping the holds recorded
   in `pubspec.yaml` unless 3.50 lifts their reason.
 
 ### Android
 
-- Gradle wrapper and AGP to the versions `flutter create` generates on 3.50.1
-  (at least AGP 9.1.1), Kotlin Gradle Plugin to 2.4.x.
+- Gradle wrapper and Kotlin Gradle Plugin to what `flutter create` generates on
+  3.50.1 (Gradle 9.5.0, KGP 2.4.20). AGP goes to 9.3.3 rather than the
+  template's 9.3.1, whose lint crashes on JDK 17 (fixed in 9.3.2).
+- cargokit's build task injects `ExecOperations`, since Gradle 9 removed
+  `Project.exec()`.
 - `kotlinOptions` becomes `kotlin { compilerOptions { jvmTarget } }`, since AGP 9
   drops `kotlinOptions`.
 - `gradle.properties`: `android.builtInKotlin=false`, `android.newDsl=false`.
@@ -102,6 +108,9 @@ Branches from master after PR 1 merges.
   `integration_test/` and the local packages, then finish what it misses by hand.
 - Regenerate build_runner output. If a generator still emits the old import,
   leave the generated file alone and say so in the PR.
+- Raise the Dart floor to 3.14, run `dart format` over the tree (tall style), and
+  `dart fix --apply` for `unnecessary_underscores`, `prefer_initializing_formals`
+  and `use_null_aware_elements`, each as its own mechanical commit.
 - Guard: remove PR 1's `deprecated_member_use: ignore`. `--fatal-infos` in CI
   and the pre-commit hook then rejects any new `package:flutter/material.dart`
   or `cupertino.dart` import, with no custom script.
