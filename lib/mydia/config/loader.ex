@@ -268,7 +268,7 @@ defmodule Mydia.Config.Loader do
       proxy: Mydia.Config.Env.ProxyEnv.load(),
       built_in_torrent: Mydia.Config.Env.BuiltInTorrentEnv.load(),
       cardigann: Mydia.Config.Env.CardigannEnv.load(),
-      remote_access: load_remote_access_env(),
+      remote_access: Mydia.Config.Env.RemoteAccessEnv.load(),
       download_clients: Mydia.Config.Loader.DownloadClientEnv.load(),
       indexers: load_indexers_env(),
       media_servers: load_media_servers_env(),
@@ -414,13 +414,6 @@ defmodule Mydia.Config.Loader do
     Enum.reduce(specs, %{}, fn {key, {var, parser}}, acc ->
       put_if_present(acc, key, System.get_env(var), parser)
     end)
-  end
-
-  # parse_boolean_or_invalid/1, not parse_boolean/1: this switch puts a network
-  # listener on the internet, so a typo has to fail validation by name instead
-  # of falling back to the default, which is on.
-  defp load_remote_access_env do
-    load_env_table(enabled: {"ENABLE_REMOTE_ACCESS", &parse_boolean_or_invalid/1})
   end
 
   defp load_indexers_env do
@@ -838,16 +831,6 @@ defmodule Mydia.Config.Loader do
   def parse_boolean("1"), do: {:ok, true}
   def parse_boolean("0"), do: {:ok, false}
   def parse_boolean(_), do: :error
-
-  # Keeps a value it cannot read instead of dropping it. :invalid does not cast
-  # to a boolean, so config validation rejects the field by name. The config
-  # README explains why a dropped value is worse than a rejected one.
-  defp parse_boolean_or_invalid(value) do
-    case parse_boolean(value) do
-      {:ok, boolean} -> {:ok, boolean}
-      :error -> {:ok, :invalid}
-    end
-  end
 
   defp parse_json(value) when is_map(value), do: {:ok, value}
 

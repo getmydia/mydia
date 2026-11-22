@@ -162,5 +162,78 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
       refute Enum.any?(query(html, "#remote-access-toggle[disabled]"))
       refute Enum.any?(query(html, "#remote-access-env-note"))
     end
+
+    test "the custom relay field is read-only and explained under IROH_RELAY_URL" do
+      html =
+        panel(
+          relay_urls: ["https://relay.example.test"],
+          relay_source: :env,
+          relay_locked: true
+        )
+
+      assert Enum.any?(query(html, "#relay-urls-form input[name=relay_urls][disabled]"))
+      assert Enum.any?(query(html, "#relay-urls-env-note"))
+      refute Enum.any?(query(html, "#relay-urls-save"))
+    end
+
+    test "the custom relay field is editable otherwise" do
+      html = panel(relay_urls: ["https://relay.example.test"])
+
+      assert [input] = query(html, "#relay-urls-form input[name=relay_urls]") |> Enum.to_list()
+      refute Enum.any?(query(html, "#relay-urls-form input[disabled]"))
+      assert LazyHTML.attribute(input, "value") == ["https://relay.example.test"]
+      assert Enum.any?(query(html, "#relay-urls-save"))
+    end
+  end
+
+  describe "custom relay" do
+    setup %{conn: conn, token: token} do
+      on_exit(fn ->
+        case Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") do
+          nil -> :ok
+          setting -> Mydia.Settings.delete_config_setting(setting)
+        end
+
+        Mydia.Config.Loader.reload()
+      end)
+
+      start_supervised!(Mydia.Indexers.Health)
+      {:ok, _config} = RemoteAccess.initialize_config()
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "saving a relay persists it, and clearing it removes the row", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/remote-access")
+
+      view
+      |> form("#relay-urls-form", %{relay_urls: "https://relay.example.test"})
+      |> render_submit()
+
+      assert %{value: "https://relay.example.test"} =
+               Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls")
+
+      view |> form("#relay-urls-form", %{relay_urls: ""}) |> render_submit()
+
+      assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
+    end
+
+    test "a non-https relay is refused with a message", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/remote-access")
+
+      html =
+        view
+        |> form("#relay-urls-form", %{relay_urls: "http://relay.example.test"})
+        |> render_submit()
+
+      assert html =~ "http://relay.example.test is not an https URL."
+      assert Mydia.Settings.get_config_setting_by_key("remote_access.relay_urls") == nil
+    end
   end
 end

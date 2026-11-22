@@ -60,7 +60,8 @@ defmodule Mydia.Config.LoaderTest do
         "DEFAULT_SEASON_MONITORING",
         "HWACCEL",
         "HWACCEL_DEVICE",
-        "ENABLE_REMOTE_ACCESS"
+        "ENABLE_REMOTE_ACCESS",
+        "IROH_RELAY_URL"
       ] ++ download_client_vars ++ library_path_vars ++ indexer_vars
 
     # Store original values
@@ -1496,6 +1497,29 @@ defmodule Mydia.Config.LoaderTest do
 
       assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
       assert config.remote_access.enabled == true
+    end
+
+    test "relay_urls defaults to empty" do
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.remote_access.relay_urls == []
+    end
+
+    test "IROH_RELAY_URL sets relay_urls, comma-separated" do
+      System.put_env("IROH_RELAY_URL", "https://a.example.test, https://b.example.test")
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.remote_access.relay_urls == [
+               "https://a.example.test",
+               "https://b.example.test"
+             ]
+    end
+
+    test "a non-https IROH_RELAY_URL fails validation" do
+      System.put_env("IROH_RELAY_URL", "http://relay.example.test")
+
+      assert {:error, %Ecto.Changeset{valid?: false}} =
+               Loader.load(config_file: "nonexistent.yml")
     end
   end
 

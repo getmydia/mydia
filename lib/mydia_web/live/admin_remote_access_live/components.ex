@@ -9,6 +9,9 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
   attr :remote_access_setting, :boolean, required: true
   attr :remote_access_source, :atom, default: :default
   attr :remote_access_locked, :boolean, default: false
+  attr :relay_urls, :list, default: []
+  attr :relay_source, :atom, default: :default
+  attr :relay_locked, :boolean, default: false
 
   def remote_access_panel(assigns) do
     # Check if P2P is running
@@ -230,6 +233,35 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
           </:row>
           <:empty>{gettext("No URLs detected. Check the server's network configuration.")}</:empty>
         </.admin_list>
+      </.admin_section>
+
+      <.admin_section id="custom-relay" title={gettext("Custom relay")} icon="hero-server-stack">
+        <:actions>
+          <.config_source_badge source={@relay_source} size="xs" />
+        </:actions>
+        <p class="text-xs text-base-content/60">
+          {gettext(
+            "Use your own iroh relay instead of Mydia's. Separate several with commas. Leave empty for the default. iroh's public relays stay in the list, and the lowest-latency relay is used."
+          )}
+        </p>
+        <.form for={%{}} id="relay-urls-form" phx-submit="save_relay_urls" class="flex gap-2">
+          <div class="flex-1">
+            <.input
+              type="text"
+              name="relay_urls"
+              value={Enum.join(@relay_urls, ", ")}
+              placeholder="https://relay.example.com"
+              disabled={@relay_locked}
+              autocomplete="off"
+            />
+          </div>
+          <button :if={!@relay_locked} id="relay-urls-save" type="submit" class="btn btn-primary">
+            {gettext("Save")}
+          </button>
+        </.form>
+        <p :if={@relay_locked} id="relay-urls-env-note" class="text-xs text-base-content/60">
+          {gettext("Set by %{var}. Remove the variable to change it here.", var: "IROH_RELAY_URL")}
+        </p>
       </.admin_section>
 
       <div class="alert bg-info/10 border-info/20 py-2.5">

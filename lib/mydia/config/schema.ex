@@ -315,14 +315,7 @@ defmodule Mydia.Config.Schema do
     embeds_one :cardigann, Mydia.Config.Schema.Cardigann, on_replace: :update
     embeds_one :ui, Mydia.Config.Schema.Ui, on_replace: :update
 
-    # Whether this server runs its p2p node and accepts pairing. It only counts
-    # while the player is on, and that switch (ENABLE_PLAYER) is not part of
-    # this schema on purpose: see Mydia.Player. ENABLE_REMOTE_ACCESS overrides
-    # the admin toggle that writes this.
-    embeds_one :remote_access, RemoteAccess, on_replace: :update, primary_key: false do
-      @type t :: %__MODULE__{}
-      field :enabled, :boolean, default: true
-    end
+    embeds_one :remote_access, Mydia.Config.Schema.RemoteAccess, on_replace: :update
 
     embeds_many :download_clients, DownloadClient, on_replace: :delete, primary_key: false do
       @type t :: %__MODULE__{}
@@ -486,7 +479,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:proxy)
     |> cast_embed(:built_in_torrent)
     |> cast_embed(:cardigann)
-    |> cast_embed(:remote_access, with: &remote_access_changeset/2)
+    |> cast_embed(:remote_access)
     |> cast_embed(:download_clients, with: &DownloadClientChangeset.changeset/2)
     |> cast_embed(:indexers, with: &indexer_changeset/2)
     |> cast_embed(:subtitle_providers, with: &subtitle_provider_changeset/2)
@@ -764,8 +757,6 @@ defmodule Mydia.Config.Schema do
 
   defp https?(url) when is_binary(url), do: URI.parse(url).scheme == "https"
   defp https?(_), do: false
-
-  defp remote_access_changeset(schema, attrs), do: cast(schema, attrs, [:enabled])
 
   defp validate_positive(changeset, fields),
     do: Enum.reduce(fields, changeset, &validate_number(&2, &1, greater_than: 0))

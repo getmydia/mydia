@@ -101,25 +101,33 @@ defmodule Mydia.Settings.RuntimeConfig do
   Creates or updates a `ConfigSetting` by key.
 
   Accepts an attrs map (or struct) carrying `:key`, `:value`, `:category`, and
-  optionally `:updated_by_id`. The caller supplies `:category` directly (e.g.
-  `:flaresolverr`); this function does not derive it from a display string.
+  optionally `:updated_by_id` and `:description`. The caller supplies
+  `:category` directly (e.g. `:flaresolverr`); this function does not derive
+  it from a display string. A missing `:description` leaves a stored one alone.
   """
   def upsert_config_setting(attrs) do
     attrs_map = if is_struct(attrs), do: Map.from_struct(attrs), else: attrs
-    key = Map.get(attrs_map, :key) || Map.get(attrs_map, "key")
+    key = attr(attrs_map, :key)
 
-    string_attrs = %{
-      "key" => key,
-      "value" => Map.get(attrs_map, :value) || Map.get(attrs_map, "value"),
-      "category" => Map.get(attrs_map, :category) || Map.get(attrs_map, "category"),
-      "updated_by_id" => Map.get(attrs_map, :updated_by_id) || Map.get(attrs_map, "updated_by_id")
-    }
+    string_attrs =
+      %{
+        "key" => key,
+        "value" => attr(attrs_map, :value),
+        "category" => attr(attrs_map, :category),
+        "updated_by_id" => attr(attrs_map, :updated_by_id)
+      }
+      |> put_present("description", attr(attrs_map, :description))
 
     case get_config_setting_by_key(key) do
       nil -> create_config_setting(string_attrs)
       existing -> update_config_setting(existing, string_attrs)
     end
   end
+
+  defp attr(map, key), do: Map.get(map, key) || Map.get(map, Atom.to_string(key))
+
+  defp put_present(map, _key, nil), do: map
+  defp put_present(map, key, value), do: Map.put(map, key, value)
 
   @doc """
   Parses a stored or submitted config-setting value into a boolean.
