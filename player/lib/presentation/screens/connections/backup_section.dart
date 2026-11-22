@@ -16,6 +16,7 @@ import '../../../core/theme/palette.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
+import '../backup/backup_manage_disclosure.dart';
 import '../backup/cloud_backup_body.dart';
 import '../backup/google_device_code_sheet.dart';
 import '../backup/pending_sources_row.dart';
@@ -299,6 +300,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           for (final k in offered)
             if (k != active && !(unavailable && k == BackupStoreKind.relay)) k,
         };
+        final move = active != null && others.isNotEmpty ? _move(others) : null;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -356,6 +358,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                       key: ValueKey(active),
                       kind: active,
                       service: c.cloud(active),
+                      move: move,
                     ),
                   ] else if (!unavailable) ...[
                     SwitchListTile(
@@ -376,39 +379,10 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                             ? null
                             : (to) => _switch(to, ask: false),
                       ),
-                      ..._enabledBody(l10n),
-                    ],
+                      ..._enabledBody(l10n, move),
+                    ] else
+                      _idleNotice(l10n),
                   ],
-                  if (active != null && others.isNotEmpty) ...[
-                    const Divider(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                      child: Text(
-                        l10n.backupSwitchStoreHeader,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: context.palette.textSecondary,
-                        ),
-                      ),
-                    ),
-                    StorePicker(
-                      stores: others,
-                      enabled: !_busy,
-                      onPick: _switch,
-                    ),
-                  ],
-                  if (!unavailable && !cloud && !picking)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Text(
-                        l10n.backupIdleNotice,
-                        key: const Key('backup-idle-notice'),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.palette.textDisabled,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -417,6 +391,36 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       },
     );
   }
+
+  /// The other stores to move the backup to, under Manage backup.
+  Widget _move(Set<BackupStoreKind> others) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Divider(height: 20),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+        child: Text(
+          context.l10n.backupSwitchStoreHeader,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: context.palette.textSecondary,
+          ),
+        ),
+      ),
+      StorePicker(stores: others, enabled: !_busy, onPick: _switch),
+    ],
+  );
+
+  /// The relay's retention: under the switch while off, under Manage
+  /// backup while on.
+  Widget _idleNotice(AppLocalizations l10n) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+    child: Text(
+      l10n.backupIdleNotice,
+      key: const Key('backup-idle-notice'),
+      style: TextStyle(fontSize: 12, color: context.palette.textDisabled),
+    ),
+  );
 
   /// Pairing said the group backs up to a cloud store this device offers
   /// and does not use: join it, or dismiss.
@@ -482,7 +486,10 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     );
   }
 
-  List<Widget> _enabledBody(AppLocalizations l10n) {
+  /// The relay's body while on: what needs acting on stays in view, the
+  /// rest goes under Manage backup, followed by [move] when other stores
+  /// are offered.
+  List<Widget> _enabledBody(AppLocalizations l10n, Widget? move) {
     final s = _service;
     final names = s.slotDeviceNames;
     final keyText = s.recoveryKeyText;
@@ -535,70 +542,85 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           text: l10n.backupUnreadable(names[slot] ?? l10n.backupUnknownDevice),
           warning: true,
         ),
-      for (final m in s.members.value)
-        ListTile(
-          key: Key('backup-member-${m.slotId}'),
-          dense: true,
-          leading: Icon(
-            m.isThisDevice
-                ? Icons.smartphone_rounded
-                : Icons.devices_other_rounded,
-          ),
-          title: Text(nameOf(m)),
-          subtitle: Text(switch (m.lastUploadMs) {
-            null => l10n.backupStatusNever,
-            final ms => l10n.backupMemberLastUpload(backupAgo(l10n, ms)),
-          }),
-          trailing: m.isThisDevice
-              ? HubChip(label: l10n.backupThisDevice)
-              : IconButton(
-                  key: Key('backup-member-remove-${m.slotId}'),
-                  tooltip: l10n.commonRemove,
-                  icon: const Icon(Icons.remove_circle_outline_rounded),
+      PendingSourcesRow(service: s),
+      BackupManageDisclosure(
+        deviceCount: s.members.value.length,
+        children: [
+          for (final m in s.members.value) _member(l10n, m, nameOf(m)),
+          const Divider(height: 20),
+          if (keyText == null)
+            BackupLine(
+              key: const Key('backup-no-key'),
+              icon: Icons.key_off_rounded,
+              text: l10n.backupNoKeyOnDevice,
+            ),
+          Wrap(
+            spacing: 4,
+            children: [
+              if (keyText != null)
+                TextButton.icon(
+                  key: const Key('backup-show-key'),
+                  icon: const Icon(Icons.key_rounded, size: 18),
+                  label: Text(l10n.backupShowRecoveryKey),
                   onPressed: _busy
                       ? null
-                      : () => _removeMember(m.slotId, nameOf(m)),
+                      : () => showRecoveryKeySheet(context, keyText),
                 ),
-        ),
-      PendingSourcesRow(service: s),
-      const Divider(height: 20),
-      if (keyText == null)
-        BackupLine(
-          key: const Key('backup-no-key'),
-          icon: Icons.key_off_rounded,
-          text: l10n.backupNoKeyOnDevice,
-        ),
-      Wrap(
-        spacing: 4,
-        children: [
-          if (keyText != null)
-            TextButton.icon(
-              key: const Key('backup-show-key'),
-              icon: const Icon(Icons.key_rounded, size: 18),
-              label: Text(l10n.backupShowRecoveryKey),
-              onPressed: _busy
-                  ? null
-                  : () => showRecoveryKeySheet(context, keyText),
-            ),
-          TextButton.icon(
-            key: const Key('backup-regenerate-key'),
-            icon: const Icon(Icons.autorenew_rounded, size: 18),
-            label: Text(l10n.backupRegenerateKey),
-            onPressed: _busy ? null : _regenerate,
+              TextButton.icon(
+                key: const Key('backup-regenerate-key'),
+                icon: const Icon(Icons.autorenew_rounded, size: 18),
+                label: Text(l10n.backupRegenerateKey),
+                onPressed: _busy ? null : _regenerate,
+              ),
+            ],
           ),
-          TextButton.icon(
-            key: const Key('backup-delete'),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
+          ?move,
+          const Divider(height: 20),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              key: const Key('backup-delete'),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: Text(l10n.backupDelete),
+              onPressed: _busy ? null : _delete,
             ),
-            icon: const Icon(Icons.delete_outline_rounded, size: 18),
-            label: Text(l10n.backupDelete),
-            onPressed: _busy ? null : _delete,
           ),
+          _idleNotice(l10n),
         ],
       ),
     ];
   }
+
+  /// One device in the relay backup. This device's chip is left out when
+  /// [name] already says "This device".
+  Widget _member(AppLocalizations l10n, BackupMemberInfo m, String name) =>
+      ListTile(
+        key: Key('backup-member-${m.slotId}'),
+        dense: true,
+        leading: Icon(
+          m.isThisDevice
+              ? Icons.smartphone_rounded
+              : Icons.devices_other_rounded,
+        ),
+        title: Text(name),
+        subtitle: Text(switch (m.lastUploadMs) {
+          null => l10n.backupStatusNever,
+          final ms => l10n.backupMemberLastUpload(backupAgo(l10n, ms)),
+        }),
+        trailing: m.isThisDevice
+            ? (name == l10n.backupThisDevice
+                  ? null
+                  : HubChip(label: l10n.backupThisDevice))
+            : IconButton(
+                key: Key('backup-member-remove-${m.slotId}'),
+                tooltip: l10n.commonRemove,
+                icon: const Icon(Icons.remove_circle_outline_rounded),
+                onPressed: _busy ? null : () => _removeMember(m.slotId, name),
+              ),
+      );
 }
 
 /// Asks before moving the backup from [from] to [to]; pops whether to

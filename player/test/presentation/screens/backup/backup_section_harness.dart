@@ -36,3 +36,9 @@ Future<void> pumpBackupSection(
   );
   await tester.pumpAndSettle();
 }
+
+/// Opens Manage backup, where the devices, the key, moving and Delete live.
+Future<void> openBackupManage(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('backup-manage')));
+  await tester.pumpAndSettle();
+}

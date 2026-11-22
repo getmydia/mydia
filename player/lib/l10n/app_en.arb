@@ -3045,6 +3045,15 @@
   "@backupIdleNotice": {
     "description": "Note in the Backup & sync section about the backup service's retention."
   },
+  "backupManage": "Manage backup",
+  "@backupManage": {
+    "description": "Row in the Backup & sync section that expands to show the devices in the backup, the recovery key, moving and deleting the backup."
+  },
+  "backupManageDevices": "{count, plural, one{{count} device} other{{count} devices}}",
+  "@backupManageDevices": {
+    "description": "Line under 'Manage backup' with how many devices are in the backup.",
+    "placeholders": {"count": {"type": "int"}}
+  },
   "backupActionFailed": "Couldn't update the backup. Try again.",
   "@backupActionFailed": {
     "description": "Toast when a backup action (remove a device, new key, delete, turn off) failed."
