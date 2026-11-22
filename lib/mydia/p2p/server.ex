@@ -695,6 +695,15 @@ defmodule Mydia.P2p.Server do
             job_id = String.replace_prefix(req.session_id, "download:", "")
             handle_download_stream(resource, stream_id, job_id, scope, req)
 
+          String.starts_with?(req.session_id, "artwork:") ->
+            case resolve_artwork(req.session_id) do
+              {:ok, path} ->
+                stream_hls_file(resource, stream_id, path, req)
+
+              {:error, :not_found} ->
+                HlsResponse.send_error(resource, stream_id, 404, "Not found")
+            end
+
           true ->
             handle_hls_session_stream(resource, stream_id, user, req)
         end
@@ -1264,6 +1273,11 @@ defmodule Mydia.P2p.Server do
         end
     end
   end
+
+  @doc false
+  # Public for its test. `PosterStore.path_for/1` owns the filename check, so a
+  # traversal or a non-poster name answers exactly as a missing file.
+  def resolve_artwork("artwork:" <> filename), do: Mydia.Media.PosterStore.path_for(filename)
 
   @doc false
   # Public for its test. A file outside the caller's scope answers exactly as

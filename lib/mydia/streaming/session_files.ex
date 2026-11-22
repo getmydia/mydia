@@ -83,6 +83,10 @@ defmodule Mydia.Streaming.SessionFiles do
       ".mov" -> "video/quicktime"
       ".webm" -> "video/webm"
       ".vtt" -> "text/vtt"
+      # Hosted posters served on an `artwork:` session.
+      ".jpg" -> "image/jpeg"
+      ".png" -> "image/png"
+      ".webp" -> "image/webp"
       # A bitmap subtitle track alone in a Matroska file, for the player's mpv.
       ".mks" -> "application/x-matroska"
       _ -> "application/octet-stream"
