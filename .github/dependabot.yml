@@ -138,8 +138,10 @@ updates:
   # runs, so its version updates are ignored on both sides and it is bumped by hand.
   #
   # window_manager 0.6 is a rewrite on nativeapi that drops `windowManager` and
-  # `WindowListener`, which lib/core/window/ is built on. Dependabot reads a 0.x
-  # minor as non-breaking, so its minor updates are ignored until that port is done.
+  # `WindowListener`, which lib/core/window/ is built on, and screen_retriever
+  # 0.3 is the same rewrite (`screenRetriever` moves to legacy.dart).
+  # Dependabot reads a 0.x minor as non-breaking, so their minor updates are
+  # ignored until that port is done.
   - package-ecosystem: pub
     directory: /player
     multi-ecosystem-group: player
@@ -148,6 +150,10 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
       - dependency-name: window_manager
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+      - dependency-name: screen_retriever
         update-types:
           - "version-update:semver-minor"
           - "version-update:semver-major"
