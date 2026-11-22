@@ -197,7 +197,9 @@ defmodule Mydia.Media.Posters do
   defp list_folder({lp, dir}) do
     with {:ok, loc} <- Storage.location(lp),
          child = Location.child(loc, dir),
-         {:ok, entries} <- Storage.list(child) do
+         {:ok, entries} <- Storage.list_dir(child) do
+      # list_dir/1 never descends, so a show's season folders are not walked
+      # on every candidate listing (and every thumbnail request).
       for entry <- entries,
           name = entry.relative_path,
           not String.contains?(name, "/"),

@@ -25,6 +25,16 @@ defmodule Mydia.StorageContractCase do
         assert %Entry{size: 3} = by_path["Show/Season 01/ep.mkv"]
       end
 
+      test "list_dir/1 returns only the files directly inside, with size", ctx do
+        put_fixture(ctx, "Show/poster.jpg", "0123456789")
+        put_fixture(ctx, "Show/Season 01/ep.mkv", "abc")
+
+        child = Mydia.Storage.Location.child(ctx.location, "Show")
+        assert {:ok, entries} = Storage.list_dir(child)
+
+        assert [%Entry{relative_path: "poster.jpg", size: 10, mtime: %DateTime{}}] = entries
+      end
+
       test "stat/1 and exists?/1", ctx do
         put_fixture(ctx, "a.mkv", "hello")
         {:ok, source} = Storage.source(ctx.location, "a.mkv")

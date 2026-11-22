@@ -62,7 +62,10 @@ defmodule MydiaWeb.MediaLive.Show.PosterPicker do
        selected_candidate: nil,
        save_error: nil
      )
+     # Save is outside the upload form and waits for a finished entry, so the
+     # transfer has to start on file selection rather than on form submit.
      |> allow_upload(:poster,
+       auto_upload: true,
        accept: ~w(.jpg .jpeg .png .webp),
        max_entries: 1,
        max_file_size: 10_000_000

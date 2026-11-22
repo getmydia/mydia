@@ -348,6 +348,9 @@ class MydiaSource extends MediaSource
     final credentials = await client.credentials();
     final String url;
     if (credentials.isP2p) {
+      // dispose() may have run while credentials loaded. A hold taken now
+      // would never be released and would keep the proxy running.
+      if (_disposed) return null;
       _holdsProxy = true;
       final base = await mydiaProxyBase(_proxy(), credentials,
           owner: this, target: source.account.id);
@@ -487,6 +490,7 @@ class MydiaSource extends MediaSource
       );
 
   bool _holdsProxy = false;
+  bool _disposed = false;
 
   LocalProxyService _proxy() =>
       proxy?.call() ??
@@ -723,6 +727,7 @@ class MydiaSource extends MediaSource
 
   @override
   void dispose() {
+    _disposed = true;
     // Only a p2p download ever took a hold, so a source that never
     // downloaded must not touch the shared proxy.
     if (_holdsProxy) unawaited(_proxy().release(this));

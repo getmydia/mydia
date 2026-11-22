@@ -143,6 +143,20 @@ defmodule MydiaWeb.MediaLive.PosterPickerTest do
     assert has_element?(view, "#poster-upload-form")
   end
 
+  # Save sits outside the upload form and stays disabled until the entry is
+  # done, so a browser only transfers the file if selecting it starts the
+  # upload. render_upload/2 bypasses that trigger, hence the markup checks.
+  test "selecting a file starts the upload in a browser", %{conn: conn} do
+    item = media_item_fixture(%{type: "movie", title: "Copper Lantern"})
+
+    {:ok, view, _html} = live(admin_conn(conn), ~p"/media/#{item.id}")
+    open_picker(view)
+    view |> element("#poster-tab-upload") |> render_click()
+
+    assert has_element?(view, "#poster-upload-form[phx-change][phx-target]")
+    assert has_element?(view, "#poster-upload-form input[type=file][data-phx-auto-upload]")
+  end
+
   test "uploading a PNG sets a hosted override", %{conn: conn} do
     item = media_item_fixture(%{type: "movie", title: "Copper Lantern"})
 

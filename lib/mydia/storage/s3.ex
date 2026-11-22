@@ -67,6 +67,22 @@ defmodule Mydia.Storage.S3 do
     end
   end
 
+  @impl true
+  def list_dir(%Location{backend: b, prefix: prefix}) do
+    with :ok <- Request.check(b),
+         {:ok, objects} <- list_objects(b, prefix, true) do
+      {:ok,
+       for %{key: key, size: size, last_modified: lm} <- objects,
+           not String.ends_with?(key, "/") do
+         %Entry{
+           relative_path: String.replace_prefix(key, prefix, ""),
+           size: size,
+           mtime: Request.parse_time(lm)
+         }
+       end}
+    end
+  end
+
   # Every object under `key_prefix`, following continuation tokens. With
   # `delimiter?` only the objects directly under it (no "subdirectories").
   defp list_objects(b, key_prefix, delimiter?),

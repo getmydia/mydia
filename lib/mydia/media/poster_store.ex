@@ -46,9 +46,30 @@ defmodule Mydia.Media.PosterStore do
 
   # Names are content-addressed, so an existing file already holds these
   # bytes and may be in use by the item. Rewriting it would truncate a file a
-  # client could be reading.
+  # client could be reading. New bytes go to a temporary file first and are
+  # renamed into place, so a crash, a full disk or a concurrent upload never
+  # leaves a truncated file under the final name. The temporary name starts
+  # with a dot and ends in `.tmp`, so `@filename_regex` never serves it.
   defp write_new(path, binary) do
-    if File.regular?(path), do: :ok, else: File.write(path, binary)
+    if File.regular?(path) do
+      :ok
+    else
+      tmp = temp_path(path)
+
+      with :ok <- File.write(tmp, binary),
+           :ok <- File.rename(tmp, path) do
+        :ok
+      else
+        error ->
+          _ = File.rm(tmp)
+          error
+      end
+    end
+  end
+
+  defp temp_path(path) do
+    suffix = :crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)
+    Path.join(Path.dirname(path), ".#{Path.basename(path)}.#{suffix}.tmp")
   end
 
   defp check_size(binary) when byte_size(binary) > @max_bytes, do: {:error, :too_large}

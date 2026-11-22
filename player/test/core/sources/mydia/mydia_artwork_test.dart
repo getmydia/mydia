@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/media_route.dart';
@@ -61,6 +63,29 @@ void main() {
     await s.artwork(_hosted, width: 300);
     expect(proxy.isRunning, isTrue);
     s.dispose();
+    await pumpEventQueue();
+    expect(proxy.isRunning, isFalse);
+  });
+
+  test('disposing while credentials load takes no proxy hold', () async {
+    final creds = Completer<MydiaCredentials>();
+    final s = MydiaSource(
+      source: guest,
+      client: MydiaClient(
+        transport: FakeMydiaTransport(),
+        load: () => creds.future,
+        save: (_) async {},
+        onUnauthorized: () {},
+      ),
+      proxy: () => proxy,
+    );
+
+    final pending = s.artwork(_hosted, width: 300);
+    await pumpEventQueue();
+    s.dispose();
+    creds.complete(_p2p);
+
+    expect(await pending, isNull);
     await pumpEventQueue();
     expect(proxy.isRunning, isFalse);
   });

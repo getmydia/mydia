@@ -72,6 +72,21 @@ defmodule Mydia.Media.PosterStoreTest do
     assert File.read!(path) == "marker"
   end
 
+  test "a failed write leaves no poster file and no temporary file behind" do
+    id = Ecto.UUID.generate()
+    sha8 = :crypto.hash(:sha256, @png) |> Base.encode16(case: :lower) |> binary_part(0, 8)
+    dir = PosterStore.storage_dir()
+    final = Path.join(dir, "#{id}-#{sha8}.png")
+
+    # A non-empty directory under the final name makes the rename fail after
+    # the temporary file is written, whoever runs the suite.
+    File.mkdir_p!(Path.join(final, "occupied"))
+
+    assert {:error, _} = PosterStore.write(id, @png)
+    refute File.regular?(final)
+    assert File.ls!(dir) == [Path.basename(final)]
+  end
+
   test "path_for refuses a name with a trailing newline" do
     id = Ecto.UUID.generate()
     {:ok, url} = PosterStore.write(id, @png)
