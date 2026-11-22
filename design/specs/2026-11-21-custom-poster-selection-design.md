@@ -85,15 +85,21 @@ through unchanged instead of treating it as a TMDB path.
 
 | Function | Effect |
 | --- | --- |
-| `set_provider_poster(item, path)` | Stores the provider path. Deletes a previous hosted file. |
-| `set_uploaded_poster(item, binary)` | Validates, writes `/generated/posters/<id>-<sha8>.<ext>`, stores it, deletes the previous hosted file. |
-| `set_poster_from_library_file(item, rel_path)` | Validates the path, reads the bytes through `Mydia.Storage`, then behaves as `set_uploaded_poster`. |
-| `reset_poster(item)` | Sets the override to nil and deletes a hosted file. |
+| `set_provider_poster(scope, item, path)` | Stores the provider path. Deletes a previous hosted file. |
+| `set_uploaded_poster(scope, item, binary)` | Validates, writes `/generated/posters/<id>-<sha8>.<ext>`, stores it, deletes the previous hosted file. |
+| `set_poster_from_library_file(scope, item, library_path_id, rel_path)` | Validates the path, reads the bytes through `Mydia.Storage`, then behaves as `set_uploaded_poster`. |
+| `reset_poster(scope, item)` | Sets the override to nil and deletes a hosted file. |
 | `list_library_poster_candidates(item)` | Image files in the item's folders, `poster.*`, `folder.*` and `cover.*` first. |
 
-Each write goes through a changeset on `poster_override` only and broadcasts
-the usual media item update so open grids and rails refresh. Deleting a media
-item deletes its hosted poster.
+Every write takes a `Mydia.Accounts.Scope` first and refuses a user who fails
+`can_update_media?` (`{:error, :unauthorized}`) or whose access restriction
+excludes the item (`{:error, :restricted}`). A scope with no user is the
+system and may write.
+
+Each write goes through a changeset on `poster_override` only and records the
+usual `media_item.updated` event. Other open detail pages of the item refresh;
+library grids and dashboard rails show the new poster on their next load.
+Deleting a media item deletes its hosted poster.
 
 ### Validation
 
@@ -128,8 +134,10 @@ Jellyfin re-selects it in Mydia.
   - **Upload.** `allow_upload(:poster, accept: ~w(.jpg .jpeg .png .webp),
     max_file_size: 10_000_000)` with a live preview before saving.
   - **From folder.** Lists `list_library_poster_candidates/1` with thumbnails
-    from an authenticated, admin-only preview route that streams the candidate
-    through `Mydia.Storage`.
+    from an authenticated preview route
+    (`/media/:id/poster-candidates/:library_path_id/*path`) that streams the
+    candidate through `Mydia.Storage`. Any user who may edit media gets
+    thumbnails; the controller checks `can_update_media?` itself.
 - The footer has "Reset to default" (only when an override is set), Cancel
   and Save.
 - Strings go through `gettext`. DOM ids for tests: `#poster-edit-button`,

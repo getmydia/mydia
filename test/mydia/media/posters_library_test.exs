@@ -97,6 +97,71 @@ defmodule Mydia.Media.PostersLibraryTest do
                ["poster.png"]
     end
 
+    test "tv show: Season NN, SNN and Specials folders all walk up to the show root",
+         %{root: root} do
+      write!(root, "Show Name/Season 01/e01.mkv", "video")
+      write!(root, "Show Name/S02/e01.mkv", "video")
+      write!(root, "Show Name/Specials/e00.mkv", "video")
+      write!(root, "Show Name/poster.png", @png)
+      write!(root, "Show Name/S02/s02.jpg", @jpg)
+      write!(root, "Show Name/Specials/specials.jpg", @jpg)
+
+      lp = library_path_fixture(%{path: root, type: "series"})
+      show = media_item_fixture(%{type: "tv_show"})
+
+      for {rel, n} <- Enum.with_index(["Season 01/e01.mkv", "S02/e01.mkv", "Specials/e00.mkv"], 1) do
+        episode = episode_fixture(%{media_item_id: show.id, episode_number: n})
+
+        media_file_fixture(%{
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Show Name/#{rel}"
+        })
+      end
+
+      assert show |> Posters.list_library_poster_candidates() |> Enum.map(& &1.name) ==
+               ["poster.png"]
+    end
+
+    test "tv show: a show folder whose name starts like a season folder is not walked up",
+         %{root: root} do
+      write!(root, "Series Of Odd Events/e01.mkv", "video")
+      write!(root, "Series Of Odd Events/poster.jpg", @jpg)
+
+      lp = library_path_fixture(%{path: root, type: "series"})
+      show = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id})
+
+      media_file_fixture(%{
+        episode_id: episode.id,
+        library_path_id: lp.id,
+        relative_path: "Series Of Odd Events/e01.mkv"
+      })
+
+      assert show |> Posters.list_library_poster_candidates() |> Enum.map(& &1.name) ==
+               ["poster.jpg"]
+    end
+
+    test "a trashed file's folder offers no candidates", %{root: root} do
+      write!(root, "Old Copy (2001)/film.mkv", "video")
+      write!(root, "Old Copy (2001)/poster.jpg", @jpg)
+      lp = library_path_fixture(%{path: root, type: "movies"})
+      item = media_item_fixture(%{type: "movie"})
+
+      file =
+        media_file_fixture(%{
+          media_item_id: item.id,
+          library_path_id: lp.id,
+          relative_path: "Old Copy (2001)/film.mkv"
+        })
+
+      file
+      |> Ecto.Changeset.change(trashed_at: DateTime.utc_now(:second))
+      |> Mydia.Repo.update!()
+
+      assert Posters.list_library_poster_candidates(item) == []
+    end
+
     test "a movie file directly in the library root lists nothing", %{root: root} do
       write!(root, "loose.mkv", "video")
       write!(root, "someone-elses.jpg", @jpg)

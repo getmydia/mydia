@@ -47,17 +47,20 @@ defmodule MydiaWeb.Schema.Resolvers.ItemBuilder do
   end
 
   @doc """
-  Builds the artwork sub-object from an item's metadata.
+  Builds the artwork sub-object from an item's poster override and metadata.
+  Nil when the item has neither.
   """
   @spec artwork(struct()) :: map() | nil
-  def artwork(%{metadata: nil}), do: nil
-
   def artwork(%{metadata: metadata} = item) do
-    %{
-      poster_url: item |> Posters.effective_path() |> ImageUrl.poster_url(),
-      backdrop_url: metadata |> MetadataAccess.get(:backdrop_path) |> ImageUrl.backdrop_url(),
-      thumbnail_url: nil
-    }
+    poster_path = Posters.effective_path(item)
+
+    if poster_path || metadata do
+      %{
+        poster_url: ImageUrl.poster_url(poster_path),
+        backdrop_url: metadata |> MetadataAccess.get(:backdrop_path) |> ImageUrl.backdrop_url(),
+        thumbnail_url: nil
+      }
+    end
   end
 
   def artwork(_), do: nil

@@ -4,9 +4,20 @@ defmodule Mydia.Media.Posters do
 
   A user-chosen `poster_override` (a hosted `/generated/posters/...` path or a
   provider path) wins over the provider's `metadata.poster_path`.
+
+  Every setter (`set_provider_poster/3`, `set_uploaded_poster/3`,
+  `set_poster_from_library_file/4`, `reset_poster/2`) refuses a scope whose
+  user fails `Mydia.Accounts.Authorization.can_update_media?/1` with
+  `{:error, :unauthorized}`, and a restricted user's out-of-scope item with
+  `{:error, :restricted}`. A scope with no user (the system) may write.
   """
 
-  alias Mydia.Accounts.Scope
+  import Ecto.Query, only: [preload: 2]
+
+  require Logger
+
+  alias Mydia.Accounts.{Authorization, Scope}
+  alias Mydia.Library.MediaFile
   alias Mydia.Media.{ItemWrites, MediaItem, PosterStore}
   alias Mydia.Media.Posters.Candidate
   alias Mydia.Metadata.Access, as: MetadataAccess
@@ -17,7 +28,9 @@ defmodule Mydia.Media.Posters do
   @image_extensions ~w(.jpg .jpeg .png .webp)
   @preferred_names ~w(poster folder cover)
   @max_candidate_bytes 10_000_000
-  @season_dir ~r/^(season|series|specials|s\d+)/i
+  # The whole folder name, so a show called "Series Of ..." is not mistaken
+  # for one of its own season folders.
+  @season_dir ~r/^(?:(?:season|series|staffel|saison)[\s._-]*\d+|specials|s\d+)$/i
 
   @doc """
   Returns the effective poster path for a media item, or nil.
@@ -101,7 +114,8 @@ defmodule Mydia.Media.Posters do
   @spec set_poster_from_library_file(Scope.t(), MediaItem.t(), String.t(), String.t()) ::
           {:ok, MediaItem.t()} | {:error, term()}
   def set_poster_from_library_file(%Scope{} = scope, %MediaItem{} = item, lp_id, relative_path) do
-    with {:ok, bytes} <- read_candidate(item, lp_id, relative_path) do
+    with :ok <- authorize(scope, item),
+         {:ok, bytes} <- read_candidate(item, lp_id, relative_path) do
       set_uploaded_poster(scope, item, bytes)
     end
   end
@@ -130,16 +144,34 @@ defmodule Mydia.Media.Posters do
 
     with %{} <- lp,
          {:ok, loc} <- Storage.location(lp),
-         {:ok, source} <- Storage.source(loc, candidate.relative_path) do
-      Storage.read_range(source, 0, size)
+         {:ok, source} <- Storage.source(loc, candidate.relative_path),
+         {:ok, bytes} <- Storage.read_range(source, 0, size) do
+      {:ok, bytes}
     else
-      _ -> {:error, :not_found}
+      error ->
+        warn_storage_error("read #{candidate.relative_path}", error)
+        {:error, :not_found}
     end
   end
 
+  # A missing file or folder is ordinary (moved, renamed, not scanned yet);
+  # anything else (permissions, an unreachable bucket, a bad storage path) is
+  # worth a line in the log, since the picker only shows an empty list.
+  defp warn_storage_error(_what, {:error, %Storage.Error{kind: :not_found}}), do: :ok
+  defp warn_storage_error(_what, nil), do: :ok
+
+  defp warn_storage_error(what, {:error, %Storage.Error{} = error}),
+    do: Logger.warning("Poster candidates: could not #{what}: #{error.kind}: #{error.message}")
+
+  defp warn_storage_error(what, other),
+    do: Logger.warning("Poster candidates: could not #{what}: #{inspect(other)}")
+
   # {library_path, directory} pairs, deduplicated, never the library root.
+  # Only untrashed files count, the same set the detail page shows; the
+  # preload is forced so every caller gets that set whatever it preloaded.
   defp candidate_folders(%MediaItem{} = item) do
-    item = Repo.preload(item, media_files: :library_path, episodes: [media_files: :library_path])
+    files = MediaFile.active() |> preload(:library_path)
+    item = Repo.preload(item, [media_files: files, episodes: [media_files: files]], force: true)
 
     {files, adjust} =
       if item.type == "tv_show",
@@ -180,7 +212,9 @@ defmodule Mydia.Media.Posters do
         }
       end
     else
-      _ -> []
+      error ->
+        warn_storage_error("list #{dir}", error)
+        []
     end
   end
 
@@ -200,8 +234,14 @@ defmodule Mydia.Media.Posters do
   defp reject_hosted(path),
     do: if(PosterStore.hosted?(path), do: {:error, :invalid_poster}, else: :ok)
 
-  defp authorize(scope, item),
-    do: ItemWrites.authorize_write(scope, ItemWrites.merged_write_attrs(item, %{}))
+  # The role check holds for any caller, not only the picker, which checks
+  # too; the content check keeps a restricted user inside their scope. A
+  # scope with no user is the system and passes the role check.
+  defp authorize(%Scope{user: user} = scope, item) do
+    if user == nil or Authorization.can_update_media?(user),
+      do: ItemWrites.authorize_write(scope, ItemWrites.merged_write_attrs(item, %{})),
+      else: {:error, :unauthorized}
+  end
 
   defp persist(scope, %MediaItem{poster_override: previous} = item, value) do
     changeset = MediaItem.poster_override_changeset(item, %{poster_override: value})

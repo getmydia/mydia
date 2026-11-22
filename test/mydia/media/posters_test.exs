@@ -132,6 +132,25 @@ defmodule Mydia.Media.PostersTest do
       refute File.exists?(disk_path(hosted))
     end
 
+    test "a user who may not edit media is refused by every setter" do
+      item = media_item_fixture()
+      scope = Scope.for_user(Mydia.AccountsFixtures.user_fixture(%{role: "readonly"}))
+
+      assert {:error, :unauthorized} = Posters.set_provider_poster(scope, item, "/chosen.jpg")
+      assert {:error, :unauthorized} = Posters.set_uploaded_poster(scope, item, @png)
+      assert {:error, :unauthorized} = Posters.reset_poster(scope, item)
+      assert Repo.reload!(item).poster_override == nil
+      assert File.ls!(PosterStore.storage_dir()) == []
+    end
+
+    test "an editor's scope may set a poster" do
+      item = media_item_fixture()
+      scope = Scope.for_user(Mydia.AccountsFixtures.user_fixture(%{role: "user"}))
+
+      assert {:ok, %{poster_override: "/chosen.jpg"}} =
+               Posters.set_provider_poster(scope, item, "/chosen.jpg")
+    end
+
     test "re-uploading identical bytes keeps the file" do
       item = media_item_fixture()
       {:ok, item} = Posters.set_uploaded_poster(Scope.unrestricted(), item, @png)

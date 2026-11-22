@@ -625,11 +625,17 @@ provider's own answer.
   when set (an empty string counts as unset) and the metadata path otherwise. A
   surface that reads `metadata.poster_path` directly keeps showing the old poster.
 - **Hosted files are named `<media_item_id>-<sha8>.<ext>`**, where `sha8` is the
-  first 8 hex characters of the bytes' SHA-256. `PosterStore.path_for/1` and the
-  p2p `artwork:` session (`Mydia.P2p.FileStream.resolve_artwork/1`) match that shape
-  with a regex, so changing the naming breaks serving. Identical bytes map to the
-  same name, which is why a failed write only deletes a file the item was not
-  already using.
+  first 8 hex characters of the bytes' SHA-256. Only `PosterStore.path_for/1`
+  matches that shape with a regex; the p2p `artwork:` session
+  (`Mydia.P2p.FileStream.resolve_artwork/1`) resolves through it, so changing
+  the naming breaks serving. Identical bytes map to the same name, so
+  `PosterStore.write/2` leaves an existing file alone instead of rewriting a
+  file a client may be reading, and a failed write only deletes a file the item
+  was not already using.
+- **Every setter enforces `can_update_media?`.** The `Posters` setters refuse a
+  scope whose user fails `Mydia.Accounts.Authorization.can_update_media?/1`
+  (`{:error, :unauthorized}`) on top of the access-restriction check
+  (`{:error, :restricted}`). A scope with no user is the system and may write.
 - **A provider path may not name a hosted file.** `set_provider_poster/3` rejects
   one, since it would let an item point at, and later delete, another item's
   upload.
@@ -638,4 +644,6 @@ provider's own answer.
 - **Folder images are copied once.** `set_poster_from_library_file/4` reads a
   listed image from the library (local or S3) and stores the bytes like an
   upload. Later edits or deletion of the folder file do not change the poster.
-  Only files returned by `list_library_poster_candidates/1` are readable.
+  Only files returned by `list_library_poster_candidates/1` are readable. It
+  looks only in the folders of untrashed files (`MediaFile.active/0`), whatever
+  the caller preloaded, so the picker and the thumbnail route agree.

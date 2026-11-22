@@ -11,7 +11,8 @@ defmodule Mydia.Media.PosterStore do
 
   @url_prefix "/generated/posters/"
   @max_bytes 10_000_000
-  @filename_regex ~r/^[0-9a-f-]+-[0-9a-f]{8}\.(jpg|png|webp)$/
+  # \z, not $: $ also matches before a trailing newline.
+  @filename_regex ~r/\A[0-9a-f-]+-[0-9a-f]{8}\.(jpg|png|webp)\z/
 
   @doc "The directory hosted posters are written to."
   @spec storage_dir() :: Path.t()
@@ -37,10 +38,17 @@ defmodule Mydia.Media.PosterStore do
       dir = storage_dir()
 
       with :ok <- File.mkdir_p(dir),
-           :ok <- File.write(Path.join(dir, filename), binary) do
+           :ok <- write_new(Path.join(dir, filename), binary) do
         {:ok, @url_prefix <> filename}
       end
     end
+  end
+
+  # Names are content-addressed, so an existing file already holds these
+  # bytes and may be in use by the item. Rewriting it would truncate a file a
+  # client could be reading.
+  defp write_new(path, binary) do
+    if File.regular?(path), do: :ok, else: File.write(path, binary)
   end
 
   defp check_size(binary) when byte_size(binary) > @max_bytes, do: {:error, :too_large}

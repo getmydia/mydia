@@ -60,6 +60,27 @@ defmodule Mydia.Media.PosterStoreTest do
     refute PosterStore.hosted?(nil)
   end
 
+  test "writing bytes that are already stored leaves the file alone" do
+    id = Ecto.UUID.generate()
+    {:ok, url} = PosterStore.write(id, @png)
+    path = Path.join(PosterStore.storage_dir(), Path.basename(url))
+
+    # Names are content-addressed, so a file under this name already holds
+    # these bytes. A rewrite would truncate a file a client may be reading.
+    File.write!(path, "marker")
+    assert PosterStore.write(id, @png) == {:ok, url}
+    assert File.read!(path) == "marker"
+  end
+
+  test "path_for refuses a name with a trailing newline" do
+    id = Ecto.UUID.generate()
+    {:ok, url} = PosterStore.write(id, @png)
+    name = Path.basename(url) <> "\n"
+    File.write!(Path.join(PosterStore.storage_dir(), name), @png)
+
+    assert PosterStore.path_for(name) == {:error, :not_found}
+  end
+
   test "path_for only serves well-formed existing filenames" do
     id = Ecto.UUID.generate()
     {:ok, url} = PosterStore.write(id, @png)

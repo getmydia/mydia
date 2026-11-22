@@ -89,5 +89,20 @@ defmodule MydiaWeb.Schema.Resolvers.ItemBuilderTest do
 
       assert built.artwork.poster_url == "https://image.tmdb.org/t/p/w500/alt.jpg"
     end
+
+    test "posterUrl follows the override even without metadata" do
+      item = media_item_fixture(%{type: "movie"})
+      item = %{item | metadata: nil, poster_override: "/alt.jpg"}
+
+      built = ItemBuilder.recently_added_item(item)
+
+      assert built.artwork.poster_url == "https://image.tmdb.org/t/p/w500/alt.jpg"
+      assert built.artwork.backdrop_url == nil
+    end
+
+    test "artwork is nil with neither metadata nor an override" do
+      item = media_item_fixture(%{type: "movie"})
+      assert ItemBuilder.artwork(%{item | metadata: nil, poster_override: nil}) == nil
+    end
   end
 end
