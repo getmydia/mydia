@@ -21,13 +21,11 @@
 # What it does to each issue:
 #
 #   - sets milestone vX.Y.Z (the tag without its suffix), creating it if needed
-#   - prerelease: comments "Fixed in <tag>", unless an earlier prerelease of
-#     the same version already did
-#   - stable: comments "Now in the stable release, <tag>" (or "Fixed in <tag>"
-#     when no prerelease carried it)
+#   - comments "Fixed in <tag>." once per version, from the first release
+#     (prerelease or stable) that carries the fix
 #
 # A stable release then closes its milestone. Each comment carries a hidden
-# marker, so re-running for the same tag posts nothing twice.
+# marker, which is how later releases and re-runs know not to comment again.
 #
 # PRs are found from merge commit subjects ("Merge pull request #N", or a
 # squash subject ending "(#N)"), which costs no API call per commit.
@@ -64,8 +62,7 @@ fi
 
 MILESTONE="${TAG%%-*}"
 case "$TAG" in
-  *-beta*) KIND=prerelease; LABEL="a beta release" ;;
-  *-rc*) KIND=prerelease; LABEL="a release candidate" ;;
+  *-beta* | *-rc*) KIND=prerelease ;;
   *) KIND=stable ;;
 esac
 RELEASE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
@@ -169,25 +166,14 @@ for issue in "${ISSUES[@]}"; do
 
   bodies=$(gh api --paginate "repos/${REPO}/issues/${issue}/comments?per_page=100" --jq '.[].body')
 
-  if [[ "$KIND" == prerelease ]]; then
-    if grep -qF "$MARKER_PREFIX" <<<"$bodies"; then
-      echo "  already announced for $MILESTONE"
-      continue
-    fi
-    body="Fixed in [${TAG}](${RELEASE_URL}), ${LABEL}. Thanks for reporting it!"
-  else
-    if grep -qF "${MARKER_PREFIX}stable -->" <<<"$bodies"; then
-      echo "  already announced in stable"
-      continue
-    fi
-    if grep -qF "${MARKER_PREFIX}prerelease -->" <<<"$bodies"; then
-      body="Now in the stable release, [${TAG}](${RELEASE_URL})."
-    else
-      body="Fixed in [${TAG}](${RELEASE_URL}). Thanks for reporting it!"
-    fi
+  # One comment per issue per version, from whichever release carried the fix
+  # first. The milestone is enough to show it reached stable.
+  if grep -qF "$MARKER_PREFIX" <<<"$bodies"; then
+    echo "  already announced for $MILESTONE"
+    continue
   fi
   run gh api -X POST "repos/${REPO}/issues/${issue}/comments" \
-    -f body="${body}"$'\n\n'"${MARKER_PREFIX}${KIND} -->"
+    -f body="Fixed in [${TAG}](${RELEASE_URL})."$'\n\n'"${MARKER_PREFIX}${KIND} -->"
 done
 
 if [[ "$KIND" == stable ]]; then

@@ -77,9 +77,9 @@ betas. Each issue:
 
 - goes on milestone `vX.Y.Z`, which is created by the first beta and closed by
   the stable release
-- gets a comment, which notifies its subscribers: "Fixed in v0.19.0-beta.3"
-  from the first beta that carries the fix, then "Now in the stable release"
-  from the stable one
+- gets one comment, which notifies its subscribers: "Fixed in v0.19.0-beta.3."
+  from the first release that carries the fix, beta or stable. Later releases
+  of the same version only update the milestone.
 
 Only issues linked to a PR are found, through a closing keyword or the
 Development sidebar. Add anything closed by a direct commit to the milestone by
