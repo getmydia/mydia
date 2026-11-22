@@ -3,8 +3,8 @@ defmodule MydiaWeb.PosterCandidateController do
   Serves the image files the poster picker's "From folder" tab shows as
   thumbnails.
 
-  The route sits in the admin scope, and this controller checks
-  `can_update_media?/1` again before reading, because
+  The route only requires a signed-in user, so this controller checks
+  `can_update_media?/1` before reading, because
   `Mydia.Media.Posters.read_candidate/3` does no authorization of its own.
   Only an exact member of the item's candidate list is readable; anything
   else is a 404.

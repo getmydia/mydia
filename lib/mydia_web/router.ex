@@ -217,6 +217,12 @@ defmodule MydiaWeb.Router do
 
     # Redirect /preferences to /profile (merged pages)
     get "/preferences", RedirectController, :profile
+
+    # Thumbnails for the poster picker's "From folder" tab. Any editor may
+    # open the picker, so the controller checks can_update_media? itself.
+    get "/media/:id/poster-candidates/:library_path_id/*path",
+        PosterCandidateController,
+        :show
   end
 
   # Authenticated LiveView routes
@@ -291,11 +297,6 @@ defmodule MydiaWeb.Router do
 
     # The transcode list lives on the Dashboard; this page duplicated it.
     get "/transcodes", RedirectController, :transcodes
-
-    # Thumbnails for the poster picker's "From folder" tab.
-    get "/media/:id/poster-candidates/:library_path_id/*path",
-        PosterCandidateController,
-        :show
   end
 
   # Admin LiveView routes

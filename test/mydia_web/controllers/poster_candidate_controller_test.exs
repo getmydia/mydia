@@ -28,7 +28,7 @@ defmodule MydiaWeb.PosterCandidateControllerTest do
   end
 
   defp candidate_path(item, lp, rel),
-    do: "/admin/media/#{item.id}/poster-candidates/#{lp.id}/" <> rel
+    do: "/media/#{item.id}/poster-candidates/#{lp.id}/" <> rel
 
   test "an admin gets a listed candidate's bytes with its content type",
        %{conn: conn, item: item, lp: lp, dir: dir} do
@@ -60,19 +60,35 @@ defmodule MydiaWeb.PosterCandidateControllerTest do
       conn
       |> log_in_user(create_admin_user())
       |> get(
-        "/admin/media/#{Ecto.UUID.generate()}/poster-candidates/#{lp.id}/" <>
+        "/media/#{Ecto.UUID.generate()}/poster-candidates/#{lp.id}/" <>
           URI.encode(dir) <> "/poster.jpg"
       )
 
     assert response(conn, 404)
   end
 
-  test "a non-admin is refused", %{conn: conn, item: item, lp: lp, dir: dir} do
+  test "a non-admin editor gets the candidate", %{conn: conn, item: item, lp: lp, dir: dir} do
     conn =
       conn
       |> log_in_user(create_test_user(%{role: "user"}))
       |> get(candidate_path(item, lp, URI.encode(dir) <> "/poster.jpg"))
 
-    assert redirected_to(conn) == "/"
+    assert response(conn, 200) == @jpg
+  end
+
+  test "a user who may not edit media is 403", %{conn: conn, item: item, lp: lp, dir: dir} do
+    conn =
+      conn
+      |> log_in_user(create_test_user(%{role: "readonly"}))
+      |> get(candidate_path(item, lp, URI.encode(dir) <> "/poster.jpg"))
+
+    assert response(conn, 403)
+  end
+
+  test "a signed-out request is redirected to log in",
+       %{conn: conn, item: item, lp: lp, dir: dir} do
+    conn = get(conn, candidate_path(item, lp, URI.encode(dir) <> "/poster.jpg"))
+
+    assert redirected_to(conn) =~ "/auth"
   end
 end

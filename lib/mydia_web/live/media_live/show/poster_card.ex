@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.PosterCard do
     <div class="card bg-base-100 shadow-xl mb-4 mx-auto w-48 sm:w-56 md:w-full relative group">
       <figure class="aspect-[2/3] bg-base-300 overflow-hidden rounded-box">
         <img
+          id="media-poster"
           src={get_poster_url(@media_item)}
           alt={@media_item.title}
           class="w-full h-full object-cover"
