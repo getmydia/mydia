@@ -70,5 +70,24 @@ defmodule MydiaWeb.Schema.Resolvers.ItemBuilderTest do
       assert built.latest_season_number == nil
       assert built.latest_episode_number == nil
     end
+
+    test "posterUrl follows the poster override" do
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          metadata: %{
+            provider_id: "9",
+            provider: :tmdb,
+            media_type: :movie,
+            poster_path: "/p.jpg"
+          }
+        })
+
+      item = %{item | poster_override: "/alt.jpg"}
+
+      built = ItemBuilder.recently_added_item(item)
+
+      assert built.artwork.poster_url == "https://image.tmdb.org/t/p/w500/alt.jpg"
+    end
   end
 end

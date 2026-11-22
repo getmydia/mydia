@@ -8,6 +8,7 @@ defmodule Mydia.Streaming do
   alias Mydia.Library
   alias Mydia.Accounts.User
   alias Mydia.Events
+  alias Mydia.Media.Posters
   alias Mydia.Repo
 
   defmodule ActiveSession do
@@ -221,8 +222,8 @@ defmodule Mydia.Streaming do
 
   defp session_media(_), do: nil
 
-  defp poster_path(%{metadata: %{poster_path: path}}), do: path
-  defp poster_path(_), do: nil
+  defp poster_path(nil), do: nil
+  defp poster_path(item), do: Posters.effective_path(item)
 
   defp pad(num), do: String.pad_leading("#{num}", 2, "0")
 end

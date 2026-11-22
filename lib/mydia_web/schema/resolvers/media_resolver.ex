@@ -7,6 +7,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
 
   alias Mydia.{Media, Library, Playback}
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.Posters
   alias Mydia.Playback.WatchStatus
 
   alias Mydia.Metadata.Access, as: MetadataAccess
@@ -126,8 +127,8 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   def resolve_category(_parent, _args, _info), do: {:ok, nil}
 
   @spec resolve_artwork(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def resolve_artwork(%{metadata: metadata} = _parent, _args, _info) do
-    poster_path = MetadataAccess.get(metadata, :poster_path)
+  def resolve_artwork(%{metadata: metadata} = parent, _args, _info) do
+    poster_path = Posters.effective_path(parent)
     backdrop_path = MetadataAccess.get(metadata, :backdrop_path)
 
     artwork = %{

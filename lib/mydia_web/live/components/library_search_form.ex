@@ -50,7 +50,7 @@ defmodule MydiaWeb.Live.Components.LibrarySearchForm do
             >
               <%!-- MediaItem.metadata loads as a %MediaMetadata{}, which has no
               Access implementation — get_in/bracket syntax raises here. --%>
-              <% poster_path = item.metadata && item.metadata.poster_path %>
+              <% poster_path = Mydia.Media.Posters.effective_path(item) %>
               <%= if poster_path do %>
                 <img
                   src={ImageUrl.image_url(poster_path, "w92")}

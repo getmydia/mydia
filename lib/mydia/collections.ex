@@ -31,6 +31,7 @@ defmodule Mydia.Collections do
   alias Mydia.Accounts.Scope
   alias Mydia.Collections.Presets
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.Posters
   alias Mydia.Media.Restrictions
   alias Mydia.Accounts.User
 
@@ -398,12 +399,7 @@ defmodule Mydia.Collections do
     items = list_collection_items(scope, collection, limit: count)
 
     items
-    |> Enum.map(fn item ->
-      case item.metadata do
-        %{poster_path: path} when is_binary(path) -> path
-        _ -> nil
-      end
-    end)
+    |> Enum.map(&Posters.effective_path/1)
     |> Enum.reject(&is_nil/1)
   end
 
