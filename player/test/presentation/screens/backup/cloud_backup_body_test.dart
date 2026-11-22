@@ -48,6 +48,12 @@ void main() {
       find.text('Backing up to Google Drive (ana@example.com)'),
       findsOneWidget,
     );
+    expect(find.text('2 devices'), findsOneWidget);
+    expect(find.byKey(const Key('backup-cloud-device-own')), findsNothing);
+    expect(find.byKey(const Key('backup-delete')), findsNothing);
+    expect(find.byKey(const Key('backup-store-icloud')), findsNothing);
+
+    await openBackupManage(tester);
     expect(find.byKey(const Key('backup-cloud-device-own')), findsOneWidget);
     expect(find.byKey(const Key('backup-cloud-device-tv')), findsOneWidget);
     expect(find.text('Living Room TV'), findsOneWidget);
@@ -229,6 +235,7 @@ void main() {
   ) async {
     final c = _onDrive();
     await pumpBackupSection(tester, c);
+    await openBackupManage(tester);
 
     await tester.tap(find.byKey(const Key('backup-delete')));
     await tester.pumpAndSettle();
@@ -250,6 +257,7 @@ void main() {
   ) async {
     final c = _onDrive();
     await pumpBackupSection(tester, c);
+    await openBackupManage(tester);
 
     await tester.tap(find.byKey(const Key('backup-cloud-device-remove-tv')));
     await tester.pumpAndSettle();
@@ -272,6 +280,7 @@ void main() {
   ) async {
     final c = _onDrive();
     await pumpBackupSection(tester, c);
+    await openBackupManage(tester);
 
     await tester.tap(find.byKey(const Key('backup-store-icloud')));
     await tester.pumpAndSettle();

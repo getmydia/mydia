@@ -1,6 +1,7 @@
 /// Backup & sync while backup is on in iCloud or Google Drive: the switch
-/// and status, the devices in the store, pending sources and deleting the
-/// backup. There is no recovery key: the account is the membership.
+/// and status and pending sources, with the devices in the store, moving
+/// and deleting the backup under Manage backup. There is no recovery key:
+/// the account is the membership.
 library;
 
 import 'dart:async';
@@ -18,6 +19,7 @@ import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../connections/connections_hub_cards.dart' show HubChip;
+import 'backup_manage_disclosure.dart';
 import 'google_device_code_sheet.dart';
 import 'pending_sources_row.dart';
 import 'store_picker.dart';
@@ -85,11 +87,20 @@ String backupAgo(AppLocalizations l10n, int ms) =>
     l10n.relativeTime(DateTime.fromMillisecondsSinceEpoch(ms));
 
 class CloudBackupBody extends ConsumerStatefulWidget {
-  const CloudBackupBody({super.key, required this.kind, required this.service});
+  const CloudBackupBody({
+    super.key,
+    required this.kind,
+    required this.service,
+    this.move,
+  });
 
   /// iCloud or Google Drive.
   final BackupStoreKind kind;
   final CloudBackupService service;
+
+  /// The other stores to move the backup to, shown under Manage backup;
+  /// null when there are none.
+  final Widget? move;
 
   @override
   ConsumerState<CloudBackupBody> createState() => _CloudBackupBodyState();
@@ -229,20 +240,26 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
                 ),
                 warning: true,
               ),
-            for (final slot in _s.slots.value) _device(l10n, slot, names),
             PendingSourcesRow.cloud(service: _s),
-            const Divider(height: 20),
-            Wrap(
-              spacing: 4,
+            BackupManageDisclosure(
+              deviceCount: _s.slots.value.length,
               children: [
-                TextButton.icon(
-                  key: const Key('backup-delete'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  label: Text(l10n.backupDelete),
-                  onPressed: _busy ? null : _delete,
+                for (final slot in _s.slots.value) _device(l10n, slot, names),
+                ?widget.move,
+                const Divider(height: 20),
+                Wrap(
+                  spacing: 4,
+                  children: [
+                    TextButton.icon(
+                      key: const Key('backup-delete'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                      label: Text(l10n.backupDelete),
+                      onPressed: _busy ? null : _delete,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -274,7 +291,9 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
         final ms => l10n.backupMemberLastUpload(backupAgo(l10n, ms)),
       }),
       trailing: own
-          ? HubChip(label: l10n.backupThisDevice)
+          ? (name == l10n.backupThisDevice
+                ? null
+                : HubChip(label: l10n.backupThisDevice))
           : IconButton(
               key: Key('backup-cloud-device-remove-${slot.slotId}'),
               tooltip: l10n.commonRemove,

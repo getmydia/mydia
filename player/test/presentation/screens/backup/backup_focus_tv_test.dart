@@ -82,6 +82,53 @@ void main() {
   });
 
   testWidgets(
+    'Manage backup opens with OK and DOWN reaches what is inside',
+    skip: skipReason != false,
+    (tester) async {
+      tvView(tester);
+      final relay = FakeBackupSyncService()
+        ..isEnabled = true
+        ..keyText = 'ABCD ' * 12 + 'ABCD'
+        ..statusNotifier.value = const BackupIdle(null)
+        ..membersNotifier.value = const [
+          BackupMemberInfo(slotId: 'own', isThisDevice: true),
+          BackupMemberInfo(
+            slotId: 'tv',
+            isThisDevice: false,
+            deviceName: 'Living Room TV',
+          ),
+        ];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            backupSyncServiceProvider.overrideWithValue(relay),
+            backupControllerProvider.overrideWithValue(
+              FakeBackupController(relay: relay),
+            ),
+          ],
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: toastLayerBuilder,
+            home: Scaffold(body: SingleChildScrollView(child: BackupSection())),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(const Key('backup-switch'));
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(const Key('backup-manage'));
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byKey(const Key('backup-member-tv')), findsOneWidget);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(const Key('backup-member-remove-tv'));
+    },
+  );
+
+  testWidgets(
     'the restore summary starts on Back; RIGHT reaches Restore',
     skip: skipReason != false,
     (tester) async {

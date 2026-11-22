@@ -38,6 +38,12 @@ Future<FakeBackupSyncService> _pump(
   return fake;
 }
 
+/// Opens Manage backup, where the devices, the key and Delete live.
+Future<void> _manage(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('backup-manage')));
+  await tester.pumpAndSettle();
+}
+
 FakeBackupSyncService _enabled() => FakeBackupSyncService()
   ..isEnabled = true
   ..keyText = 'ABCD ' * 12 + 'ABCD'
@@ -90,10 +96,29 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
-  testWidgets('enabled shows status, devices and the key actions', (
+  testWidgets('enabled keeps devices, key and delete behind Manage backup', (
     tester,
   ) async {
     await _pump(tester, _enabled());
+    expect(find.text('Last backed up 3 minutes ago'), findsOneWidget);
+    expect(find.byKey(const Key('backup-manage')), findsOneWidget);
+    expect(find.text('2 devices'), findsOneWidget);
+    for (final key in [
+      'backup-member-own',
+      'backup-show-key',
+      'backup-regenerate-key',
+      'backup-delete',
+      'backup-idle-notice',
+    ]) {
+      expect(find.byKey(Key(key)), findsNothing, reason: key);
+    }
+  });
+
+  testWidgets('Manage backup shows status, devices and the key actions', (
+    tester,
+  ) async {
+    await _pump(tester, _enabled());
+    await _manage(tester);
     expect(find.text('Last backed up 3 minutes ago'), findsOneWidget);
     expect(find.byKey(const Key('backup-member-own')), findsOneWidget);
     expect(find.text('Living Room TV'), findsOneWidget);
@@ -103,6 +128,32 @@ void main() {
     expect(find.byKey(const Key('backup-regenerate-key')), findsOneWidget);
     expect(find.byKey(const Key('backup-delete')), findsOneWidget);
     expect(find.byKey(const Key('backup-no-key')), findsNothing);
+    expect(find.byKey(const Key('backup-idle-notice')), findsOneWidget);
+  });
+
+  testWidgets('Off has no Manage backup row', (tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('backup-manage')), findsNothing);
+  });
+
+  testWidgets('a warning stays in view while Manage backup is closed', (
+    tester,
+  ) async {
+    await _pump(tester, _enabled()..mismatchNotifier.value = true);
+    expect(find.byKey(const Key('backup-key-mismatch')), findsOneWidget);
+    expect(find.byKey(const Key('backup-show-key')), findsNothing);
+  });
+
+  testWidgets('the unnamed own device is not labelled twice', (tester) async {
+    await _pump(tester, _enabled());
+    await _manage(tester);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('backup-member-own')),
+        matching: find.text('This device'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an error keeps the last success in view', (tester) async {
@@ -124,6 +175,7 @@ void main() {
   testWidgets('removing a device asks first, then shows the new recovery key '
       'until acknowledged', (tester) async {
     final fake = await _pump(tester, _enabled());
+    await _manage(tester);
     await tester.tap(find.byKey(const Key('backup-member-remove-tv')));
     await tester.pumpAndSettle();
     expect(find.text('Remove Living Room TV from the backup?'), findsOneWidget);
@@ -216,6 +268,7 @@ void main() {
     tester,
   ) async {
     await _pump(tester, _enabled()..keyText = null);
+    await _manage(tester);
     expect(find.byKey(const Key('backup-show-key')), findsNothing);
     expect(find.byKey(const Key('backup-no-key')), findsOneWidget);
     expect(find.byKey(const Key('backup-regenerate-key')), findsOneWidget);
@@ -238,6 +291,7 @@ void main() {
 
   testWidgets('a new recovery key is confirmed, then shown', (tester) async {
     final fake = await _pump(tester, _enabled());
+    await _manage(tester);
     await tester.tap(find.byKey(const Key('backup-regenerate-key')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('backup-regenerate-confirm')));
@@ -248,6 +302,7 @@ void main() {
 
   testWidgets('deleting the backup asks first', (tester) async {
     final fake = await _pump(tester, _enabled());
+    await _manage(tester);
     await tester.tap(find.byKey(const Key('backup-delete')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('backup-delete-confirm')));
