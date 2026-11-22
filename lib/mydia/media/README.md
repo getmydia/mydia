@@ -610,3 +610,32 @@ offers to re-identify it.
 The importer's `MetadataMatcher` searches the other provider when the library's
 finds nothing, and `FileIngest` never auto-promotes such a match under the
 unattended policy: it always waits in review.
+
+## Posters: poster_override outranks the provider's poster
+
+`media_items.poster_override` holds the poster a user chose. It is either a
+provider path (`/abc.jpg`, resolved against the item's provider image base) or a
+hosted file path (`/generated/posters/<file>`). `metadata.poster_path` stays the
+provider's own answer.
+
+- **Refresh never touches `poster_override`.** It rewrites `metadata`, and the
+  override survives so a chosen poster does not revert on the next refresh. Only
+  `Posters.reset_poster/2` clears it.
+- **Read posters through `Posters.effective_path/1`.** It returns the override
+  when set (an empty string counts as unset) and the metadata path otherwise. A
+  surface that reads `metadata.poster_path` directly keeps showing the old poster.
+- **Hosted files are named `<media_item_id>-<sha8>.<ext>`**, where `sha8` is the
+  first 8 hex characters of the bytes' SHA-256. `PosterStore.path_for/1` and the
+  p2p `artwork:` session (`Mydia.P2p.Server.resolve_artwork/1`) match that shape
+  with a regex, so changing the naming breaks serving. Identical bytes map to the
+  same name, which is why a failed write only deletes a file the item was not
+  already using.
+- **A provider path may not name a hosted file.** `set_provider_poster/3` rejects
+  one, since it would let an item point at, and later delete, another item's
+  upload.
+- **Replacing, resetting or deleting an item removes its old hosted file**
+  (`PosterStore.delete/1`; `Deletion` does the same for removed items).
+- **Folder images are copied once.** `set_poster_from_library_file/4` reads a
+  listed image from the library (local or S3) and stores the bytes like an
+  upload. Later edits or deletion of the folder file do not change the poster.
+  Only files returned by `list_library_poster_candidates/1` are readable.
