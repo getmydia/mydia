@@ -9,6 +9,7 @@ defmodule MydiaWeb.Live.Helpers.MediaImagesTest do
 
   use ExUnit.Case, async: true
 
+  alias Mydia.Media.MediaItem
   alias Mydia.Metadata.Structs.MediaMetadata
   alias MydiaWeb.Live.Helpers.MediaImages
 
@@ -59,5 +60,20 @@ defmodule MydiaWeb.Live.Helpers.MediaImagesTest do
     item = media_item(metadata(%{poster_path: ""}))
 
     assert MediaImages.poster_url(item) == @placeholder
+  end
+
+  test "an override is the poster" do
+    item = %MediaItem{
+      poster_override: "/generated/posters/x-0123abcd.png",
+      metadata: metadata(%{poster_path: "/p.jpg"})
+    }
+
+    assert MediaImages.poster_url(item) == "/generated/posters/x-0123abcd.png"
+  end
+
+  test "a provider override becomes a TMDB URL" do
+    item = %MediaItem{poster_override: "/alt.jpg", metadata: metadata(%{poster_path: "/p.jpg"})}
+
+    assert MediaImages.poster_url(item, "w342") == "https://image.tmdb.org/t/p/w342/alt.jpg"
   end
 end

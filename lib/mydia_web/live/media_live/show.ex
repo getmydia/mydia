@@ -24,6 +24,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.RescanResults
   alias MydiaWeb.MediaLive.Show.FixMatchEvents
   alias MydiaWeb.MediaLive.Show.FixMatchModal
+  alias MydiaWeb.MediaLive.Show.PosterPicker
   alias MydiaWeb.MediaLive.Show.FindFileComponents
   alias MydiaWeb.MediaLive.Show.FindFileEvents
   alias MydiaWeb.MediaLive.Show.RenameEvents
@@ -110,6 +111,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:reidentify_provider, nil)
      |> assign(:reidentifying, false)
      |> assign(:fix_match, nil)
+     |> assign(:poster_picker_open, false)
      # Manual search modal state
      |> FindFileEvents.assign_defaults()
      |> assign(:show_manual_search_modal, false)
@@ -276,6 +278,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("fix_match_" <> action, params, socket),
     do: FixMatchEvents.handle_event(action, params, socket)
+
+  def handle_event("open_poster_picker", _params, socket), do: PosterPicker.open(socket)
+  def handle_event("close_poster_picker", _params, socket), do: PosterPicker.close(socket)
 
   def handle_event("refresh_all_file_metadata", params, socket),
     do: FileEvents.refresh_all_file_metadata(params, socket)
@@ -684,20 +689,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:timeline_events, timeline_events)}
   end
 
-  def handle_info(:auto_search_timeout, socket) do
-    # If auto_searching is still true after timeout, reset it and show message
-    # Note: This is now a fallback - the search_completed broadcast should arrive first
-    socket =
-      if socket.assigns.auto_searching do
-        socket
-        |> assign(:auto_searching, false)
-        |> put_flash(:warning, gettext("Search timed out - no response from search job"))
-      else
-        socket
-      end
-
-    {:noreply, socket}
-  end
+  def handle_info(:auto_search_timeout, socket), do: SearchEvents.auto_search_timeout(socket)
 
   def handle_info({:search_completed, media_item_id, stats}, socket) do
     # Only handle if this search was for the current media item
@@ -890,6 +882,8 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FindFileEvents.run_progress(run, socket)
 
   def handle_info(:find_file_refresh, socket), do: FindFileEvents.deferred_refresh(socket)
+
+  def handle_info({:poster_changed, _item}, socket), do: PosterPicker.changed(socket)
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 

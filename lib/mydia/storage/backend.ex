@@ -6,6 +6,7 @@ defmodule Mydia.Storage.Backend do
   @type fold :: (binary(), term() -> {:ok, term()} | {:error, term()})
 
   @callback list(Location.t()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
+  @callback list_dir(Location.t()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
   @callback validate(Location.t()) :: :ok | {:error, Error.t()}
   @callback stat(Location.t(), rel()) :: {:ok, Entry.t()} | {:error, Error.t()}
   @callback input(Location.t(), rel()) :: {:ok, String.t()} | {:error, Error.t()}

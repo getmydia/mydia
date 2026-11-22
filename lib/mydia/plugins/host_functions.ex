@@ -803,7 +803,7 @@ defmodule Mydia.Plugins.HostFunctions do
       "tagline" => md && md.tagline,
       "runtime" => md && md.runtime,
       "genres" => md && md.genres,
-      "poster_path" => md && md.poster_path,
+      "poster_path" => Mydia.Media.Posters.effective_path(item),
       "backdrop_path" => md && md.backdrop_path,
       "rating" => md && md.vote_average
     }

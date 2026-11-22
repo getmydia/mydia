@@ -8,6 +8,7 @@ defmodule Mydia.Playback do
   alias Mydia.Events
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.Posters
   alias Mydia.Repo
   alias Mydia.Playback.Dismissal
   alias Mydia.Playback.Progress
@@ -640,8 +641,7 @@ defmodule Mydia.Playback do
   def progress_poster_path(%Progress{media_item: %MediaItem{} = item}), do: poster_path(item)
   def progress_poster_path(%Progress{}), do: nil
 
-  defp poster_path(%MediaItem{metadata: %{poster_path: path}}), do: path
-  defp poster_path(_), do: nil
+  defp poster_path(%MediaItem{} = item), do: Posters.effective_path(item)
 
   defp episode_label(%Episode{media_item: %MediaItem{title: show_title}} = episode) do
     "#{show_title} - #{season_episode(episode)}"

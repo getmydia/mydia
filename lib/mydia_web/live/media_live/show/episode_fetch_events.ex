@@ -3,6 +3,8 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFetchEvents do
 
   # The show page while a background episode fetch is pending: the notice
   # that replaces the empty episode list, and the reload once the fetch lands.
+  # It also reloads the item when its poster changes elsewhere, since this is
+  # where the page's media_item events arrive.
 
   use MydiaWeb, :html
 
@@ -38,7 +40,8 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFetchEvents do
 
   @doc """
   Reloads everything that depends on the episodes when the fetch announces
-  `media_item.episodes_refreshed`; any other event is a no-op.
+  `media_item.episodes_refreshed`, and reloads the item when a
+  `media_item.updated` changed its poster; any other event is a no-op.
   """
   def maybe_reload(socket, %{type: "media_item.episodes_refreshed"}) do
     media_item =
@@ -53,6 +56,18 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFetchEvents do
     |> assign(:next_episode, next_episode)
     |> assign(:next_episode_state, next_episode_state)
     |> assign(:expanded_seasons, Helpers.default_expanded_seasons(media_item, next_episode))
+  end
+
+  # A poster set from another page (or another browser) shows here too.
+  def maybe_reload(socket, %{
+        type: "media_item.updated",
+        metadata: %{"changes" => %{"poster_override" => _}}
+      }) do
+    assign(
+      socket,
+      :media_item,
+      Loaders.load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+    )
   end
 
   def maybe_reload(socket, _event), do: socket

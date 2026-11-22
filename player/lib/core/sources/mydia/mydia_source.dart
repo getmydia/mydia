@@ -56,7 +56,9 @@ const _searchLimit = 40;
 const _rowLimit = 20;
 const _collectionLimit = 50;
 
-/// Mydia sends artwork as absolute URLs that need no credentials.
+/// Mydia sends artwork as absolute URLs that need no credentials. Server-hosted
+/// posters (`/generated/posters/<file>`) are the one relative exception; they
+/// need the source's server URL or proxy, so [MydiaSource.artwork] handles them.
 ArtworkRequest? absoluteArtworkRequest(SourceId id, ArtworkRef art, int width) {
   final uri = Uri.tryParse(art.path);
   if (uri == null ||
@@ -338,8 +340,42 @@ class MydiaSource extends MediaSource
   }
 
   @override
-  Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async =>
-      absoluteArtworkRequest(id, art, width);
+  Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async {
+    final absolute = absoluteArtworkRequest(id, art, width);
+    if (absolute != null) return absolute;
+    final file = _hostedPosterFile(art.path);
+    if (file == null) return null;
+    final credentials = await client.credentials();
+    final String url;
+    if (credentials.isP2p) {
+      // dispose() may have run while credentials loaded. A hold taken now
+      // would never be released and would keep the proxy running.
+      if (_disposed) return null;
+      _holdsProxy = true;
+      final base = await mydiaProxyBase(_proxy(), credentials,
+          owner: this, target: source.account.id);
+      url = MediaRoutes.artwork(base, file);
+    } else {
+      final server = credentials.serverUrl?.replaceFirst(RegExp(r'/+$'), '');
+      if (server == null) return null;
+      url = '$server${art.path}';
+    }
+    return ArtworkRequest(
+      url: url,
+      headers: const {},
+      cacheKey: '${id.value}|${art.path}|$width',
+    );
+  }
+
+  static const _hostedPosterPrefix = '/generated/posters/';
+
+  /// The file name of a server-hosted poster path, or null for any other
+  /// path, including one whose name breaks the server's naming scheme.
+  static String? _hostedPosterFile(String path) {
+    if (!path.startsWith(_hostedPosterPrefix)) return null;
+    final file = path.substring(_hostedPosterPrefix.length);
+    return MediaRoutes.hostedPosterName.hasMatch(file) ? file : null;
+  }
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) async {
@@ -454,6 +490,7 @@ class MydiaSource extends MediaSource
       );
 
   bool _holdsProxy = false;
+  bool _disposed = false;
 
   LocalProxyService _proxy() =>
       proxy?.call() ??
@@ -690,6 +727,7 @@ class MydiaSource extends MediaSource
 
   @override
   void dispose() {
+    _disposed = true;
     // Only a p2p download ever took a hold, so a source that never
     // downloaded must not touch the shared proxy.
     if (_holdsProxy) unawaited(_proxy().release(this));

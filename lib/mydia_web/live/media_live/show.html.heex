@@ -100,6 +100,7 @@
           target_library={@target_library}
           target_reason={@target_reason}
           target_library_candidates={@target_library_candidates}
+          can_update_media={@can_update_media}
         />
         <%!-- Right Column: Main Content. overflow-x-hidden at @7xl: a scroll
               container clips every side anyway, and without it a hidden
@@ -495,6 +496,14 @@
   <%= if @fix_match do %>
     <FixMatchModal.fix_match_modal fix_match={@fix_match} media_item={@media_item} />
   <% end %>
+  <.live_component
+    :if={@poster_picker_open}
+    module={PosterPicker}
+    id="poster-picker-component"
+    media_item={@media_item}
+    current_scope={@current_scope}
+    metadata_config={@metadata_config}
+  />
   <%= if @find_file_target do %>
     <FindFileComponents.find_file_modal
       title={find_file_title(@find_file_target)}

@@ -98,6 +98,10 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
       "/collections/:id" => "/collections/#{s.collection.id}",
       "/play/:type/:id" => "/play/movie/#{s.movie.id}",
       "/admin/config/*slug" => "/admin/config/general",
+      # No candidate exists for the seeded movie, so this is a 404; the crawl
+      # only needs it not to raise.
+      "/media/:id/poster-candidates/:library_path_id/*path" =>
+        "/media/#{s.movie.id}/poster-candidates/#{Ecto.UUID.generate()}/poster.jpg",
       "/api/v1/media/:id" => "/api/v1/media/#{s.movie.id}",
       "/api/v1/playback/movie/:id" => "/api/v1/playback/movie/#{s.movie.id}",
       "/api/v1/playback/episode/:id" => "/api/v1/playback/episode/#{s.episode.id}",

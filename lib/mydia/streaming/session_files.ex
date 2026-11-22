@@ -85,9 +85,15 @@ defmodule Mydia.Streaming.SessionFiles do
       ".vtt" -> "text/vtt"
       # A bitmap subtitle track alone in a Matroska file, for the player's mpv.
       ".mks" -> "application/x-matroska"
-      _ -> "application/octet-stream"
+      ext -> image_content_type(ext)
     end
   end
+
+  # Hosted posters served on an `artwork:` session.
+  defp image_content_type(".jpg"), do: "image/jpeg"
+  defp image_content_type(".png"), do: "image/png"
+  defp image_content_type(".webp"), do: "image/webp"
+  defp image_content_type(_), do: "application/octet-stream"
 
   @doc """
   Resolves `name` against `temp_dir`, refusing anything that escapes it.

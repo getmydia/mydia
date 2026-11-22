@@ -24,6 +24,22 @@ defmodule Mydia.Storage.Local do
   end
 
   @impl true
+  def list_dir(%Location{root: root}) do
+    case File.ls(root) do
+      {:ok, names} ->
+        {:ok,
+         for name <- names,
+             path = Path.join(root, name),
+             {:ok, %File.Stat{type: :regular} = stat} <- [File.stat(path, time: :posix)] do
+           %Entry{relative_path: name, size: stat.size, mtime: DateTime.from_unix!(stat.mtime)}
+         end}
+
+      {:error, reason} ->
+        {:error, Error.from_posix(reason, root)}
+    end
+  end
+
+  @impl true
   def stat(%Location{root: root}, rel) do
     path = Path.join(root, rel)
 

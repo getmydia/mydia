@@ -995,38 +995,18 @@ defmodule Mydia.Metadata.Provider.Relay do
   defp parse_tvdb_artworks(artworks) when is_list(artworks) do
     {posters, backdrops} =
       Enum.reduce(artworks, {[], []}, fn artwork, {posters, backdrops} ->
-        type_name =
-          case artwork["type"] do
-            %{"name" => name} -> name
-            name when is_binary(name) -> name
-            _ -> nil
-          end
+        img =
+          ImageData.new(
+            file_path: artwork["image"] || artwork["url"],
+            width: artwork["width"],
+            height: artwork["height"],
+            language: artwork["language"]
+          )
 
-        image_url = artwork["image"] || artwork["url"]
-
-        case type_name do
-          "poster" ->
-            img =
-              ImageData.new(
-                file_path: image_url,
-                width: artwork["width"],
-                height: artwork["height"]
-              )
-
-            {[img | posters], backdrops}
-
-          "background" ->
-            img =
-              ImageData.new(
-                file_path: image_url,
-                width: artwork["width"],
-                height: artwork["height"]
-              )
-
-            {posters, [img | backdrops]}
-
-          _ ->
-            {posters, backdrops}
+        case tvdb_artwork_type_name(artwork["type"]) do
+          "poster" -> {[img | posters], backdrops}
+          "background" -> {posters, [img | backdrops]}
+          _ -> {posters, backdrops}
         end
       end)
 
@@ -1038,6 +1018,16 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   defp parse_tvdb_artworks(_), do: ImagesResponse.new(%{posters: [], backdrops: [], logos: []})
+
+  # TVDB sends the artwork type as a name, a %{"name" => _} map, or an integer id.
+  defp tvdb_artwork_type_name(%{"name" => name}), do: name
+  defp tvdb_artwork_type_name(name) when is_binary(name), do: name
+
+  defp tvdb_artwork_type_name(id) when is_integer(id) do
+    Enum.find_value(@tvdb_artwork_type_ids, fn {name, type_id} -> type_id == id && name end)
+  end
+
+  defp tvdb_artwork_type_name(_), do: nil
 
   # TVDB addresses a season by its own id, not by the series ref, so the
   # branch here still keys off `opts[:tvdb_season_id]` rather than the ref's

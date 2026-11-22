@@ -7,7 +7,7 @@ defmodule Mydia.Media.Deletion do
   require Logger
   alias Mydia.Repo
   alias Mydia.Accounts.Scope
-  alias Mydia.Media.{DiskRemoval, Episode, MediaItem, Restrictions}
+  alias Mydia.Media.{DiskRemoval, Episode, MediaItem, PosterStore, Restrictions}
   alias Mydia.Events
   alias Mydia.Library.{MediaFile, MediaFileEpisode}
 
@@ -120,8 +120,12 @@ defmodule Mydia.Media.Deletion do
       end)
 
     case result do
-      {:ok, deleted} -> {:ok, deleted, remove_from_disk(plan)}
-      {:error, changeset} -> {:error, changeset}
+      {:ok, deleted} ->
+        PosterStore.delete(deleted.poster_override)
+        {:ok, deleted, remove_from_disk(plan)}
+
+      {:error, changeset} ->
+        {:error, changeset}
     end
   end
 
@@ -220,6 +224,12 @@ defmodule Mydia.Media.Deletion do
     # before the delete.
     plan = if delete_files, do: DiskRemoval.plan(ids)
 
+    poster_overrides =
+      MediaItem
+      |> where([m], m.id in ^ids and not is_nil(m.poster_override))
+      |> select([m], m.poster_override)
+      |> Repo.all()
+
     result =
       Repo.transaction(fn ->
         # See the comment in `delete_media_item/2`: parking files as
@@ -251,8 +261,12 @@ defmodule Mydia.Media.Deletion do
       end)
 
     case result do
-      {:ok, count} -> {:ok, count, remove_from_disk(plan)}
-      {:error, reason} -> {:error, reason}
+      {:ok, count} ->
+        Enum.each(poster_overrides, &PosterStore.delete/1)
+        {:ok, count, remove_from_disk(plan)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

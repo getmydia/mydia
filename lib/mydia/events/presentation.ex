@@ -658,7 +658,7 @@ defmodule Mydia.Events.Presentation do
   # carry. Shared by changes_summary/1 and
   # MydiaWeb.ActivityLive.Index.format_change_details/1 so the one-line summary
   # and the expanded breakdown always render the same fields.
-  @simple_change_fields ~w(title original_title year monitored monitor_new_seasons category category_override tmdb_id tvdb_id)
+  @simple_change_fields ~w(title original_title year monitored monitor_new_seasons category category_override poster_override tmdb_id tvdb_id)
 
   @doc "Top-level media_item.updated change fields the feed renders."
   @spec simple_change_fields() :: [String.t()]
@@ -704,11 +704,10 @@ defmodule Mydia.Events.Presentation do
   defp field_name(_), do: "field"
 
   # Field labels used by both renderers of a media_item.updated changeset:
-  # this module's own one-line `changes_summary/1` and the expanded
-  # breakdown in `MydiaWeb.ActivityLive.Index.format_change_details/1`. One
-  # map here keeps them from drifting apart on the same field, which is how
-  # the summary ended up rendering the raw `monitor_new_seasons` next to the
-  # expanded view's "New season monitoring" for the same event.
+  # this module's one-line `changes_summary/1` and the expanded breakdown in
+  # `MydiaWeb.ActivityLive.Index.format_change_details/1`. One map keeps them
+  # from drifting apart, which is how the summary once rendered the raw
+  # `monitor_new_seasons` beside the expanded view's "New season monitoring".
   @field_labels %{
     "title" => "Title",
     "original_title" => "Original Title",
@@ -717,6 +716,7 @@ defmodule Mydia.Events.Presentation do
     "monitor_new_seasons" => "New season monitoring",
     "category" => "Category",
     "category_override" => "Category override",
+    "poster_override" => "Poster",
     "tmdb_id" => "TMDB ID",
     "tvdb_id" => "TVDB ID",
     "overview" => "Description",

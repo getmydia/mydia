@@ -99,6 +99,10 @@ rename, trash, delete and item folders.
 - `delete/1` is idempotent. `delete_prefix/2` refuses the whole location; on S3
   it deletes in batches of 1000 with `Content-MD5`.
 - `ls/1` never turns an error into an empty listing.
+- `list/1` walks the whole location; `list_dir/1` returns only the files
+  directly inside it (a `"/"` delimiter on S3), with size and mtime. Use
+  `list_dir/1` when only one folder matters, such as poster candidates beside
+  a show, so season folders are never walked.
 - Path helpers for code that still holds a string: `at/1` (string to `Source`),
   `path_exists?/1`, `read_path/1` and `delete_path/1`. `MediaFile.storage_path/1`
   is the string form of a file's location, local or `s3://`.

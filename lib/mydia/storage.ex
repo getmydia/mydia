@@ -15,6 +15,13 @@ defmodule Mydia.Storage do
   @spec list(Location.t()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
   def list(%Location{} = loc), do: impl(loc).list(loc)
 
+  @doc """
+  The files directly inside the location, with size and mtime. Subdirectories
+  are neither listed nor descended into.
+  """
+  @spec list_dir(Location.t()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
+  def list_dir(%Location{} = loc), do: impl(loc).list_dir(loc)
+
   @spec validate(Location.t()) :: :ok | {:error, Error.t()}
   def validate(%Location{} = loc), do: impl(loc).validate(loc)
 

@@ -67,6 +67,9 @@ abstract final class MediaRoutes {
   static const downloadSessionPrefix = 'download:';
   static const peerFileSessionPrefix = 'peerfile:';
 
+  /// Session id prefix of a server-hosted poster, a single bounded image.
+  static const artworkSessionPrefix = 'artwork:';
+
   /// URL of a session's HLS manifest.
   static String hls(String base, String sessionId) =>
       '$base/hls/$sessionId/index.m3u8';
@@ -88,6 +91,15 @@ abstract final class MediaRoutes {
   static String download(String base, String jobId) =>
       '$base/download/$jobId/file';
 
+  /// URL that proxies a server-hosted poster, named by its file name.
+  static String artwork(String base, String file) => '$base/artwork/$file';
+
+  /// The server's hosted poster naming scheme, `<item id>-<sha8>.<ext>`,
+  /// exactly as `Mydia.Media.PosterStore` matches it. Anything else is never
+  /// a hosted poster, so it is refused before it reaches a URL or the host.
+  static final hostedPosterName =
+      RegExp(r'^[0-9a-f-]+-[0-9a-f]{8}\.(jpg|png|webp)$');
+
   /// How a paired player's file path travels in a URL and to its host:
   /// base64url of its UTF-8, without padding. A path holds spaces, `#`, `?`,
   /// backslashes and non-ASCII letters, none of which survive a URL segment
@@ -102,7 +114,7 @@ abstract final class MediaRoutes {
 
   /// Match [path] against the table. [path] is the request path with any
   /// platform prefix already removed, so it starts at `/hls/`, `/direct/`,
-  /// `/download/` or `/peerfile/`.
+  /// `/download/`, `/peerfile/` or `/artwork/`.
   static MediaRoute resolve(String path) {
     if (path.startsWith('/hls/')) {
       final parts = path.substring('/hls/'.length).split('/');
@@ -159,6 +171,21 @@ abstract final class MediaRoutes {
         idLabel: 'Account ID',
         sessionPrefix: peerFileSessionPrefix,
         remotePath: null,
+      );
+    }
+
+    if (path.startsWith('/artwork/')) {
+      final file = path.substring('/artwork/'.length);
+      if (!hostedPosterName.hasMatch(file)) {
+        return const MediaRouteFailure(
+          _badRequest,
+          'Invalid artwork path format. Expected: /artwork/{file}',
+        );
+      }
+      return MediaRouteMatch(
+        sessionId: '$artworkSessionPrefix$file',
+        path: 'file',
+        kind: MediaRouteKind.hls,
       );
     }
 

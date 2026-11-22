@@ -11,6 +11,7 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Accounts.Scope
   alias Mydia.Auth.Guardian
   alias Mydia.P2p
+  alias Mydia.P2p.FileStream
   alias Mydia.P2p.HlsResponse
   alias Mydia.P2p.StorageStream
   alias Mydia.RemoteAccess
@@ -695,6 +696,9 @@ defmodule Mydia.P2p.Server do
             job_id = String.replace_prefix(req.session_id, "download:", "")
             handle_download_stream(resource, stream_id, job_id, scope, req)
 
+          String.starts_with?(req.session_id, "artwork:") ->
+            FileStream.stream_artwork(resource, stream_id, req.session_id, req)
+
           true ->
             handle_hls_session_stream(resource, stream_id, user, req)
         end
@@ -715,7 +719,7 @@ defmodule Mydia.P2p.Server do
           :ok ->
             case SessionFiles.resolve(pid, session_info, req.path) do
               {:ok, {:file, file_path}} ->
-                stream_hls_file(resource, stream_id, file_path, req)
+                FileStream.stream_file(resource, stream_id, file_path, req)
 
               {:ok, {:content, body}} ->
                 send_hls_content(resource, stream_id, body, req.path)
@@ -763,7 +767,7 @@ defmodule Mydia.P2p.Server do
           track_direct_session(media_file, user, source.path)
 
           case source.location.kind do
-            :local -> stream_hls_file(resource, stream_id, source.path, req)
+            :local -> FileStream.stream_file(resource, stream_id, source.path, req)
             :s3 -> StorageStream.stream(resource, stream_id, source, req)
           end
         else
@@ -795,7 +799,7 @@ defmodule Mydia.P2p.Server do
   defp handle_download_stream(resource, stream_id, job_id, scope, req) do
     case lookup_transcode_job(scope, job_id) do
       {:ok, job} ->
-        stream_hls_file(resource, stream_id, job.output_path, req)
+        FileStream.stream_file(resource, stream_id, job.output_path, req)
 
       {:error, :not_found} ->
         Logger.warning("Download stream: job #{job_id} not found")
@@ -872,149 +876,6 @@ defmodule Mydia.P2p.Server do
 
   defp log_session_file_error(reason, _path),
     do: Logger.warning("HLS file unavailable: #{inspect(reason)}")
-
-  defp stream_hls_file(resource, stream_id, file_path, req) do
-    try do
-      do_stream_hls_file(resource, stream_id, file_path, req)
-    rescue
-      e ->
-        Logger.error(
-          "HLS stream failed for #{file_path}: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
-        )
-
-        :ok
-    end
-  end
-
-  defp do_stream_hls_file(resource, stream_id, file_path, req) do
-    t0 = System.monotonic_time(:millisecond)
-
-    case File.stat(file_path) do
-      {:ok, %File.Stat{size: file_size}} ->
-        file_stat_ms = System.monotonic_time(:millisecond) - t0
-
-        # Determine content type
-        content_type = SessionFiles.content_type(file_path)
-        basename = Path.basename(file_path)
-
-        # Handle range requests
-        case HlsResponse.parse_range(req.range_start, req.range_end, file_size) do
-          {:full, _} ->
-            # Full file request
-            send_full_hls_file(resource, stream_id, file_path, file_size, content_type)
-
-            stream_ms = System.monotonic_time(:millisecond) - t0
-
-            Logger.info(
-              "p2p_metrics_elixir: file_stream file_stat_ms=#{file_stat_ms} stream_ms=#{stream_ms} bytes=#{file_size} path=#{basename} session=#{req.session_id}"
-            )
-
-          {:partial, range_start, range_end, content_length} ->
-            # Partial content (206)
-            send_partial_hls_file(
-              resource,
-              stream_id,
-              file_path,
-              file_size,
-              range_start,
-              range_end,
-              content_length,
-              content_type
-            )
-
-            stream_ms = System.monotonic_time(:millisecond) - t0
-
-            Logger.info(
-              "p2p_metrics_elixir: file_stream file_stat_ms=#{file_stat_ms} stream_ms=#{stream_ms} bytes=#{content_length}/#{file_size} range=#{range_start}-#{range_end} path=#{basename} session=#{req.session_id}"
-            )
-        end
-
-      {:error, :enoent} ->
-        Logger.debug("HLS file not found: #{file_path}")
-        HlsResponse.send_error(resource, stream_id, 404, "Not found")
-
-      {:error, reason} ->
-        Logger.warning("HLS file error: #{inspect(reason)}")
-        HlsResponse.send_error(resource, stream_id, 500, "Internal error")
-    end
-  end
-
-  defp send_full_hls_file(resource, stream_id, file_path, file_size, content_type) do
-    t0 = System.monotonic_time(:millisecond)
-
-    # Send header
-    header = %P2p.HlsResponseHeader{
-      status: 200,
-      content_type: content_type,
-      content_length: file_size,
-      content_range: nil,
-      cache_control: HlsResponse.cache_control(file_path)
-    }
-
-    case P2p.send_hls_header(resource, stream_id, header) do
-      "ok" ->
-        send_header_ms = System.monotonic_time(:millisecond) - t0
-
-        # Stream the file directly from Rust (zero-copy, no per-chunk NIF overhead)
-        case P2p.stream_file_range(resource, stream_id, file_path, 0, file_size) do
-          "ok" ->
-            stream_file_range_ms = System.monotonic_time(:millisecond) - t0 - send_header_ms
-
-            Logger.info(
-              "p2p_metrics_elixir: nif_breakdown send_header_ms=#{send_header_ms} stream_file_range_ms=#{stream_file_range_ms} bytes=#{file_size} path=#{Path.basename(file_path)}"
-            )
-
-          {:error, reason} ->
-            HlsResponse.log_stream_failure(reason, "file")
-        end
-
-      {:error, reason} ->
-        Logger.error("Failed to send HLS header: #{inspect(reason)}")
-    end
-  end
-
-  defp send_partial_hls_file(
-         resource,
-         stream_id,
-         file_path,
-         file_size,
-         range_start,
-         range_end,
-         content_length,
-         content_type
-       ) do
-    t0 = System.monotonic_time(:millisecond)
-
-    # Send header with 206 status
-    header = %P2p.HlsResponseHeader{
-      status: 206,
-      content_type: content_type,
-      content_length: content_length,
-      content_range: "bytes #{range_start}-#{range_end}/#{file_size}",
-      cache_control: HlsResponse.cache_control(file_path)
-    }
-
-    case P2p.send_hls_header(resource, stream_id, header) do
-      "ok" ->
-        send_header_ms = System.monotonic_time(:millisecond) - t0
-
-        # Stream the file range directly from Rust (zero-copy, no per-chunk NIF overhead)
-        case P2p.stream_file_range(resource, stream_id, file_path, range_start, content_length) do
-          "ok" ->
-            stream_file_range_ms = System.monotonic_time(:millisecond) - t0 - send_header_ms
-
-            Logger.info(
-              "p2p_metrics_elixir: nif_breakdown send_header_ms=#{send_header_ms} stream_file_range_ms=#{stream_file_range_ms} bytes=#{content_length} path=#{Path.basename(file_path)}"
-            )
-
-          {:error, reason} ->
-            HlsResponse.log_stream_failure(reason, "file range")
-        end
-
-      {:error, reason} ->
-        Logger.error("Failed to send HLS header: #{inspect(reason)}")
-    end
-  end
 
   # A body held in memory rather than on disk: the playlist a session
   # publishes from its segment plan. Same guard as HlsResponse.send_error/4, since

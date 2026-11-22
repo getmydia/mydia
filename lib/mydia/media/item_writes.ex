@@ -60,6 +60,7 @@ defmodule Mydia.Media.ItemWrites do
     :monitor_new_seasons,
     :category,
     :category_override,
+    :poster_override,
     :tmdb_id,
     :tvdb_id
   ]

@@ -427,6 +427,10 @@ defmodule MydiaWeb.ActivityLive.Index do
   defp format_change_value("monitored", false), do: pgettext("monitoring", "not monitored")
   defp format_change_value("monitor_new_seasons", "all"), do: gettext("all seasons")
   defp format_change_value("monitor_new_seasons", "none"), do: gettext("no seasons")
+
+  defp format_change_value("poster_override", value) when is_binary(value),
+    do: gettext("custom poster")
+
   defp format_change_value(_field, nil), do: gettext("none")
   defp format_change_value(_field, value), do: to_string(value)
 

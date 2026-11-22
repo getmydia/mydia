@@ -14,6 +14,7 @@ defmodule MydiaWeb.CollectionLive.Show do
   alias Mydia.Collections
   alias Mydia.Collections.Collection
   alias Mydia.Media
+  alias Mydia.Media.Posters
   alias MydiaWeb.CollectionLive.{RuleLabels, SmartRulesParams}
 
   import MydiaWeb.CollectionLive.Components,
@@ -809,7 +810,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           title: media_item.title,
           year: media_item.year,
           type: media_item.type,
-          poster_url: build_poster_url(media_item)
+          poster_url: build_poster_url(Posters.effective_path(media_item))
         }
 
         {:noreply,
@@ -911,7 +912,7 @@ defmodule MydiaWeb.CollectionLive.Show do
       title: item.title,
       year: item.year,
       type: item.type,
-      poster_url: build_poster_url(item)
+      poster_url: build_poster_url(Posters.effective_path(item))
     }
   end
 
@@ -938,7 +939,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           title: item.title,
           year: item.year,
           type: item.type,
-          poster_url: build_poster_url(item)
+          poster_url: build_poster_url(Posters.effective_path(item))
         }
       end)
 
@@ -951,17 +952,7 @@ defmodule MydiaWeb.CollectionLive.Show do
     |> stream(:items, items_with_metadata, reset: reset)
   end
 
-  defp build_poster_url(%{metadata: %{"poster_path" => path}}) when is_binary(path) do
-    ImageUrl.poster_url(path, "w342")
-  end
-
-  defp build_poster_url(%{metadata: metadata}) when is_map(metadata) do
-    case Map.get(metadata, "poster_path") || Map.get(metadata, :poster_path) do
-      nil -> nil
-      path -> ImageUrl.poster_url(path, "w342")
-    end
-  end
-
+  defp build_poster_url(path) when is_binary(path), do: ImageUrl.poster_url(path, "w342")
   defp build_poster_url(_), do: nil
 
   defp item_href(%{type: "movie", id: id}), do: ~p"/movies/#{id}"

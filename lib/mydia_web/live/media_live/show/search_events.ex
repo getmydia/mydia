@@ -21,6 +21,23 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   require Logger
 
   @doc """
+  Fallback for a search that never reported back: resets the searching state.
+  The `search_completed` broadcast normally arrives first.
+  """
+  def auto_search_timeout(socket) do
+    socket =
+      if socket.assigns.auto_searching do
+        socket
+        |> assign(:auto_searching, false)
+        |> put_flash(:warning, gettext("Search timed out - no response from search job"))
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  @doc """
   Assigns the initial manual-search state used by the results stream and rows.
   """
   def assign_manual_search_defaults(socket) do

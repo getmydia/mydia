@@ -22,7 +22,8 @@ defmodule Mydia.Metadata.Structs.ImageData do
     :height,
     :aspect_ratio,
     :vote_average,
-    :vote_count
+    :vote_count,
+    :language
   ]
 
   @type t :: %__MODULE__{
@@ -31,7 +32,8 @@ defmodule Mydia.Metadata.Structs.ImageData do
           height: non_neg_integer() | nil,
           aspect_ratio: float() | nil,
           vote_average: float() | nil,
-          vote_count: non_neg_integer() | nil
+          vote_count: non_neg_integer() | nil,
+          language: String.t() | nil
         }
 
   @doc """
@@ -55,7 +57,8 @@ defmodule Mydia.Metadata.Structs.ImageData do
       height: data["height"],
       aspect_ratio: data["aspect_ratio"],
       vote_average: data["vote_average"],
-      vote_count: data["vote_count"]
+      vote_count: data["vote_count"],
+      language: data["iso_639_1"] || data["language"]
     }
   end
 

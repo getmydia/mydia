@@ -70,6 +70,7 @@ defmodule Mydia.LibrarySearch do
   alias Mydia.Collections.Collection
   alias Mydia.LibrarySearch.{Rank, Result, Results, Section, Tokenizer}
   alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Media.Posters
   alias Mydia.Media.Restrictions
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Repo
@@ -191,7 +192,7 @@ defmodule Mydia.LibrarySearch do
       title: item.title,
       year: item.year,
       score: rank / 1,
-      poster_path: MetadataAccess.get_field(item, :poster_path),
+      poster_path: Posters.effective_path(item),
       backdrop_path: MetadataAccess.get_field(item, :backdrop_path),
       tmdb_id: item.tmdb_id,
       tvdb_id: item.tvdb_id,
@@ -249,7 +250,7 @@ defmodule Mydia.LibrarySearch do
       episode_number: episode.episode_number,
       parent_id: show.id,
       still_path: MetadataAccess.get_field(episode, :still_path),
-      poster_path: MetadataAccess.get_field(show, :poster_path),
+      poster_path: Posters.effective_path(show),
       backdrop_path: MetadataAccess.get_field(show, :backdrop_path)
     }
   end

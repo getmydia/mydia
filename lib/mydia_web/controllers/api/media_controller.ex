@@ -10,6 +10,7 @@ defmodule MydiaWeb.Api.MediaController do
   alias Mydia.{Media, Metadata}
   alias Mydia.Accounts.Authorization
   alias Mydia.Auth.Guardian
+  alias Mydia.Media.Posters
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Metadata.ImageUrl
   require Logger
@@ -341,7 +342,7 @@ defmodule MydiaWeb.Api.MediaController do
       tmdb_id: media_item.tmdb_id,
       tvdb_id: media_item.tvdb_id,
       overview: MetadataAccess.get_field(media_item, :overview),
-      poster_url: media_item |> MetadataAccess.get_field(:poster_path) |> ImageUrl.poster_url(),
+      poster_url: media_item |> Posters.effective_path() |> ImageUrl.poster_url(),
       backdrop_url:
         media_item |> MetadataAccess.get_field(:backdrop_path) |> ImageUrl.backdrop_url(),
       genres: MetadataAccess.get_field(media_item, :genres),
