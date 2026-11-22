@@ -1,6 +1,7 @@
 name: Nix CI
 description: >-
-  Free runner disk, install Nix pointed at cache.mydia.dev, and install niks3.
+  Make sure the runner has disk to spare, install Nix pointed at
+  cache.mydia.dev, and install niks3.
   Push built outputs afterwards with push.sh in this directory.
 
 inputs:
@@ -15,9 +16,18 @@ inputs:
     default: ''
   free-disk:
     description: >-
-      'true' to delete preinstalled SDKs and move the store to /mnt. Jobs that
-      only evaluate (the planner) pass 'false' to save the minute it costs.
+      'true' to make sure the runner has min-free-gb free before Nix installs,
+      deleting preinstalled SDKs only when it does not. Jobs that only
+      evaluate (the planner) pass 'false'.
     default: 'true'
+  min-free-gb:
+    description: >-
+      Free space (GB) on / below which free-disk deletes the preinstalled
+      SDKs. ubuntu-latest (145 GB root) showed 110 GB free after a deletion
+      that freed roughly 25 GB, so it starts near 85 GB and the deletion,
+      which took about two minutes per job, normally never runs. The step
+      logs the free space it found either way.
+    default: '40'
 
 runs:
   using: composite
@@ -25,18 +35,30 @@ runs:
     - name: Free disk space
       if: inputs.free-disk == 'true'
       shell: bash
+      env:
+        MIN_FREE_GB: ${{ inputs.min-free-gb }}
       run: |
-        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-        sudo apt-get clean
-        docker image prune --all --force || true
-
-        # x64 runners carry a second, otherwise unused disk at /mnt, so the
-        # store goes there. This must run before install-nix-action creates /nix.
+        # x64 runners used to carry a second, otherwise unused disk at /mnt;
+        # when one is there the store goes on it. This must run before
+        # install-nix-action creates /nix.
         if mountpoint -q /mnt; then
           sudo mkdir -p /mnt/nix /nix
           sudo mount --bind /mnt/nix /nix
           df -h /nix
         fi
+
+        # Builds unpack in /tmp and Gradle, pub and the checkout live under
+        # /home, so / needs room even when the store is on /mnt.
+        free_gb="$(df --output=avail -BG / | tail -n 1 | tr -dc '0-9')"
+        echo "/ has ${free_gb}G free; the floor is ${MIN_FREE_GB}G"
+        if [ "$free_gb" -ge "$MIN_FREE_GB" ]; then
+          echo "Enough free space; skipping the SDK cleanup."
+          exit 0
+        fi
+
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo apt-get clean
+        docker image prune --all --force || true
         df -h /
 
     - name: Install Nix
@@ -48,11 +70,36 @@ runs:
           extra-trusted-public-keys = cache.mydia.dev-1:5zkoQR4Gcrx1EEQ1GvHRPQ7EoHm8gNrrVoeAqX3ioFg= devenv.cachix.org-1:w1cLUi8dvvhaXAsEqJBf2jvG3lOivBMXrVa1V2iupGM=
           max-jobs = auto
 
+    # niks3 v1.19.0, pinned to its commit (tags can move). NIKS3_OUT is that
+    # commit's packages.x86_64-linux.default; after bumping NIKS3_REV, refresh
+    # it with
+    #   nix eval --raw github:Mic92/niks3/<rev>#packages.x86_64-linux.default.outPath
+    # (scripts/nix-cache-push.sh pins the same commit). The path substitutes
+    # from cache.mydia.dev in a second or two. Building it from the flake
+    # instead (fetch, evaluate, Go build) took about 30 seconds per job, so
+    # the fallback below builds it once and pushes it under its own pin.
     - name: Install niks3
       if: inputs.push == 'true'
       shell: bash
-      # niks3 v1.19.0, pinned to its commit (tags can move).
-      run: nix profile install github:Mic92/niks3/3a0b84e4f909726de179b9f210e1ed1e56767b2e
+      env:
+        NIKS3_REV: 3a0b84e4f909726de179b9f210e1ed1e56767b2e
+        NIKS3_OUT: /nix/store/wrkh08mqzlxkl86ixfif0a866kxzv456-niks3-1.19.0
+      run: |
+        if nix-store --realise "$NIKS3_OUT" > /dev/null 2>&1; then
+          echo "$NIKS3_OUT/bin" >> "$GITHUB_PATH"
+          exit 0
+        fi
+
+        echo "::notice::$NIKS3_OUT is not in the caches; building niks3 from source"
+        built="$(nix build --no-link --print-out-paths "github:Mic92/niks3/$NIKS3_REV")"
+        echo "$built/bin" >> "$GITHUB_PATH"
+        if [ "$built" != "$NIKS3_OUT" ]; then
+          echo "::warning::niks3 $NIKS3_REV built $built, not NIKS3_OUT ($NIKS3_OUT); update NIKS3_OUT in .github/actions/nix-ci/action.yml"
+          exit 0
+        fi
+        # Seed the cache for the next job. The pin is not a master-<check>
+        # pin, so any ref may set it: every ref pushes the same path.
+        PATH="$built/bin:$PATH" NIKS3_PIN=ci-tool-niks3 "$GITHUB_ACTION_PATH/push.sh" "$built"
 
     - name: Export push settings
       shell: bash
