@@ -4417,6 +4417,11 @@ name as <code>s3://&lt;name&gt;/&lt;prefix&gt;</code>.</p>
 <td>P2P remote access for the player. Also a toggle under <strong>Admin › System › Remote Access</strong>; when the variable is set it wins and the toggle is locked</td>
 <td><code>true</code></td>
 </tr>
+<tr>
+<td><code>IROH_RELAY_URL</code></td>
+<td>Your own iroh relay, used instead of Mydia's. Comma-separate several, in preference order; each must be an <code>https://</code> URL or startup stops. iroh's public relays stay in the list, and iroh picks whichever relay has the lowest latency. Also a field under <strong>Admin › System › Remote Access</strong>; when the variable is set it wins and the field is locked</td>
+<td>(unset)</td>
+</tr>
 </tbody>
 </table>
 <p><code>ENABLE_PLAYER=false</code> is for servers nobody plays from. Mydia then starts no p2p

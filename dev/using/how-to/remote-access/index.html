@@ -1489,6 +1489,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#custom-relay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Relay
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#direct-urls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3467,6 +3478,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#custom-relay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom Relay
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#direct-urls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3592,6 +3614,15 @@ which then shows an <strong>ENV</strong> badge and cannot be changed.</p>
 <p>Optionally set <code>P2P_BIND_PORT</code> to a fixed UDP port and forward it, which lets peers
 hole-punch a direct connection instead of falling back to a relay. See
 <a href="../../reference/environment-variables/">Environment Variables</a> for all three.</p>
+<h3 id="custom-relay">Custom Relay</h3>
+<p>If you run your own <a href="https://www.iroh.computer/docs/concepts/relay">iroh relay</a>,
+enter its URL under <strong>Admin › System › Remote Access › Custom relay</strong>. It
+replaces Mydia's relays, the p2p node reconnects right away, and paired devices
+follow without being re-paired. Clear the field to go back to Mydia's relays.</p>
+<p><code>IROH_RELAY_URL</code> does the same from the environment and locks the field. Either
+way, iroh's public relays stay in the list as additional candidates. iroh uses
+the lowest-latency relay as its home relay, so a public relay can carry traffic
+when it is closer than yours.</p>
 <h3 id="direct-urls">Direct URLs</h3>
 <p>Direct URLs are automatically detected from your instance's network configuration:
 - Local IP addresses (e.g., <code>https://192.168.1.100:4443</code>)
