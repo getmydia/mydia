@@ -483,6 +483,20 @@ void main() {
     await _pairPlayerA(tester, aClaimCode);
 
     final container = _containerOf(tester);
+
+    // Every assertion below reads `castSessionProvider`, and a `read` is not
+    // a listener. Riverpod 3 pauses a `StreamProvider`'s stream whenever
+    // nothing is actively listening, and the app's own watchers come and go
+    // with the picker dialog. A paused provider buffers the manager's
+    // publishes and a brief resume drains only some of them, so a read could
+    // return the adopted session with B's duration applied but its position
+    // still at the placeholder zero (CI failed exactly that way). Holding a
+    // listener for the whole test keeps the provider live, the way a mounted
+    // cast bar keeps it live in the real app.
+    final castSessionListener =
+        container.listen(castSessionProvider, (_, __) {});
+    addTearDown(castSessionListener.close);
+
     final aNodeId = container.read(p2pServiceProvider).nodeId;
 
     // A dials B by bare node ID, which normally resolves through n0's DNS.
