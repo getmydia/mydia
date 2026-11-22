@@ -26,7 +26,8 @@ defmodule Mydia.Media.Posters do
   @spec set_provider_poster(Scope.t(), MediaItem.t(), String.t()) ::
           {:ok, MediaItem.t()} | {:error, term()}
   def set_provider_poster(%Scope{} = scope, %MediaItem{} = item, path) when is_binary(path) do
-    with :ok <- authorize(scope, item) do
+    with :ok <- authorize(scope, item),
+         :ok <- reject_hosted(path) do
       persist(scope, item, path)
     end
   end
@@ -58,17 +59,26 @@ defmodule Mydia.Media.Posters do
     end
   end
 
+  # A provider path must never name a hosted file: that would let one item
+  # point at, and later delete, another item's upload.
+  defp reject_hosted(path),
+    do: if(PosterStore.hosted?(path), do: {:error, :invalid_poster}, else: :ok)
+
   defp authorize(scope, item),
     do: ItemWrites.authorize_write(scope, ItemWrites.merged_write_attrs(item, %{}))
 
   defp persist(scope, %MediaItem{poster_override: previous} = item, value) do
     changeset = MediaItem.poster_override_changeset(item, %{poster_override: value})
 
-    opts = [
-      actor_type: :user,
-      actor_id: scope.user && scope.user.id,
-      reason: "Poster changed"
-    ]
+    # An event with an actor type needs an actor id, so a scope without a
+    # user is recorded as the system.
+    actor =
+      case scope.user do
+        %{id: id} -> [actor_type: :user, actor_id: id]
+        _ -> [actor_type: :system]
+      end
+
+    opts = [{:reason, "Poster changed"} | actor]
 
     with {:ok, updated} <- ItemWrites.persist_and_audit_media_item(changeset, item, opts) do
       if previous != value, do: PosterStore.delete(previous)

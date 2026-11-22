@@ -658,7 +658,7 @@ defmodule Mydia.Events.Presentation do
   # carry. Shared by changes_summary/1 and
   # MydiaWeb.ActivityLive.Index.format_change_details/1 so the one-line summary
   # and the expanded breakdown always render the same fields.
-  @simple_change_fields ~w(title original_title year monitored monitor_new_seasons category category_override tmdb_id tvdb_id)
+  @simple_change_fields ~w(title original_title year monitored monitor_new_seasons category category_override poster_override tmdb_id tvdb_id)
 
   @doc "Top-level media_item.updated change fields the feed renders."
   @spec simple_change_fields() :: [String.t()]
@@ -717,6 +717,7 @@ defmodule Mydia.Events.Presentation do
     "monitor_new_seasons" => "New season monitoring",
     "category" => "Category",
     "category_override" => "Category override",
+    "poster_override" => "Poster",
     "tmdb_id" => "TMDB ID",
     "tvdb_id" => "TVDB ID",
     "overview" => "Description",

@@ -538,7 +538,7 @@ msgstr ""
 #: lib/mydia_web/components/library_components.ex:97
 #: lib/mydia_web/components/video_player_components.ex:257
 #: lib/mydia_web/components/video_player_components.ex:291
-#: lib/mydia_web/live/activity_live/index.ex:473
+#: lib/mydia_web/live/activity_live/index.ex:477
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:146
 #: lib/mydia_web/live/media_live/index.html.heex:455
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:280
@@ -1846,7 +1846,7 @@ msgid_plural "%{count} files · %{size}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/activity_live/index.ex:438
+#: lib/mydia_web/live/activity_live/index.ex:442
 #, elixir-autogen, elixir-format
 msgid "%{count} genre"
 msgid_plural "%{count} genres"
@@ -1930,8 +1930,8 @@ msgid_plural "%{count} items updated successfully"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/activity_live/index.ex:443
-#: lib/mydia_web/live/activity_live/index.ex:448
+#: lib/mydia_web/live/activity_live/index.ex:447
+#: lib/mydia_web/live/activity_live/index.ex:452
 #, elixir-autogen, elixir-format
 msgid "%{count} member"
 msgid_plural "%{count} members"
@@ -2714,7 +2714,7 @@ msgstr ""
 msgid "After"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:476
+#: lib/mydia_web/live/activity_live/index.ex:480
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:68
 #, elixir-autogen, elixir-format
 msgid "Age"
@@ -3016,7 +3016,7 @@ msgstr ""
 msgid "Attempts"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:491
+#: lib/mydia_web/live/activity_live/index.ex:495
 #: lib/mydia_web/live/activity_live/index.html.heex:312
 #: lib/mydia_web/live/activity_live/index.html.heex:419
 #: lib/mydia_web/live/admin_dashboard_live/components.ex:300
@@ -3029,7 +3029,7 @@ msgstr ""
 msgid "Audio Codec"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:492
+#: lib/mydia_web/live/activity_live/index.ex:496
 #, elixir-autogen, elixir-format
 msgid "Audio assumed"
 msgstr ""
@@ -3136,7 +3136,7 @@ msgstr ""
 msgid "Before"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:457
+#: lib/mydia_web/live/activity_live/index.ex:461
 #, elixir-autogen, elixir-format
 msgid "Below quality"
 msgstr ""
@@ -3162,8 +3162,8 @@ msgstr ""
 msgid "Blacklist this release, remove the download and its data from the download client, and search again. Files already imported to the library are kept."
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:463
-#: lib/mydia_web/live/activity_live/index.ex:479
+#: lib/mydia_web/live/activity_live/index.ex:467
+#: lib/mydia_web/live/activity_live/index.ex:483
 #, elixir-autogen, elixir-format
 msgid "Blocked"
 msgstr ""
@@ -4187,8 +4187,8 @@ msgstr ""
 msgid "Custom"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:480
-#: lib/mydia_web/live/activity_live/index.ex:481
+#: lib/mydia_web/live/activity_live/index.ex:484
+#: lib/mydia_web/live/activity_live/index.ex:485
 #, elixir-autogen, elixir-format
 msgid "Custom format"
 msgstr ""
@@ -5585,7 +5585,7 @@ msgstr ""
 msgid "Identifying files"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:488
+#: lib/mydia_web/live/activity_live/index.ex:492
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:294
 #, elixir-autogen, elixir-format
 msgid "Identity mismatch"
@@ -5756,7 +5756,7 @@ msgstr ""
 msgid "Intro %{span}"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:464
+#: lib/mydia_web/live/activity_live/index.ex:468
 #, elixir-autogen, elixir-format
 msgid "Invalid"
 msgstr ""
@@ -5876,12 +5876,12 @@ msgstr ""
 msgid "Kind: %{kind}"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:490
+#: lib/mydia_web/live/activity_live/index.ex:494
 #, elixir-autogen, elixir-format
 msgid "Language matches"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:489
+#: lib/mydia_web/live/activity_live/index.ex:493
 #, elixir-autogen, elixir-format
 msgid "Language rank"
 msgstr ""
@@ -6798,12 +6798,12 @@ msgstr ""
 msgid "No results found."
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:461
+#: lib/mydia_web/live/activity_live/index.ex:465
 #, elixir-autogen, elixir-format
 msgid "No season"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:458
+#: lib/mydia_web/live/activity_live/index.ex:462
 #, elixir-autogen, elixir-format
 msgid "No season packs"
 msgstr ""
@@ -7412,7 +7412,7 @@ msgstr ""
 msgid "Pre-transcode started for %{resolution}"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:478
+#: lib/mydia_web/live/activity_live/index.ex:482
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:220
 #, elixir-autogen, elixir-format
 msgid "Preferred"
@@ -8767,13 +8767,13 @@ msgstr ""
 msgid "See what is in cinemas and on your streaming services where you live."
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:487
+#: lib/mydia_web/live/activity_live/index.ex:491
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:290
 #, elixir-autogen, elixir-format
 msgid "Seeder penalty"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:474
+#: lib/mydia_web/live/activity_live/index.ex:478
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:152
 #: lib/mydia_web/live/downloads_live/index.html.heex:520
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:263
@@ -9042,7 +9042,7 @@ msgid "Sign-in expired"
 msgstr ""
 
 #: lib/mydia_web/components/library_components.ex:98
-#: lib/mydia_web/live/activity_live/index.ex:475
+#: lib/mydia_web/live/activity_live/index.ex:479
 #: lib/mydia_web/live/admin_plugins_live/logs_modal_components.ex:120
 #: lib/mydia_web/live/admin_system_live/components.ex:120
 #: lib/mydia_web/live/admin_system_live/components.ex:135
@@ -9089,7 +9089,7 @@ msgstr ""
 msgid "Size on disk"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:486
+#: lib/mydia_web/live/activity_live/index.ex:490
 #, elixir-autogen, elixir-format
 msgid "Size penalty"
 msgstr ""
@@ -9486,7 +9486,7 @@ msgstr ""
 msgid "TVDB's %{ordering} is missing %{missing} of this show's episodes, so nothing was changed."
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:477
+#: lib/mydia_web/live/activity_live/index.ex:481
 #, elixir-autogen, elixir-format
 msgid "Tag bonus"
 msgstr ""
@@ -9937,8 +9937,8 @@ msgstr ""
 msgid "Title (Z-A)"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:482
-#: lib/mydia_web/live/activity_live/index.ex:483
+#: lib/mydia_web/live/activity_live/index.ex:486
+#: lib/mydia_web/live/activity_live/index.ex:487
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:245
 #, elixir-autogen, elixir-format
 msgid "Title match"
@@ -9996,7 +9996,7 @@ msgstr ""
 msgid "Torrents in your download clients that Mydia does not manage. They are not tracked and nothing is imported from them."
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:456
+#: lib/mydia_web/live/activity_live/index.ex:460
 #, elixir-autogen, elixir-format
 msgid "Total"
 msgstr ""
@@ -10439,12 +10439,12 @@ msgstr ""
 msgid "Which downloads to show"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:465
+#: lib/mydia_web/live/activity_live/index.ex:469
 #, elixir-autogen, elixir-format
 msgid "Wrong title"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:466
+#: lib/mydia_web/live/activity_live/index.ex:470
 #, elixir-autogen, elixir-format
 msgid "Wrong year"
 msgstr ""
@@ -10575,7 +10575,7 @@ msgstr ""
 msgid "a removed library"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:450
+#: lib/mydia_web/live/activity_live/index.ex:454
 #, elixir-autogen, elixir-format
 msgid "added"
 msgstr ""
@@ -10844,12 +10844,12 @@ msgstr ""
 msgid "no seasons"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:430
-#: lib/mydia_web/live/activity_live/index.ex:433
-#: lib/mydia_web/live/activity_live/index.ex:435
-#: lib/mydia_web/live/activity_live/index.ex:440
-#: lib/mydia_web/live/activity_live/index.ex:445
-#: lib/mydia_web/live/activity_live/index.ex:451
+#: lib/mydia_web/live/activity_live/index.ex:434
+#: lib/mydia_web/live/activity_live/index.ex:437
+#: lib/mydia_web/live/activity_live/index.ex:439
+#: lib/mydia_web/live/activity_live/index.ex:444
+#: lib/mydia_web/live/activity_live/index.ex:449
+#: lib/mydia_web/live/activity_live/index.ex:455
 #, elixir-autogen, elixir-format
 msgid "none"
 msgstr ""
@@ -11878,7 +11878,7 @@ msgctxt "subtitle origin"
 msgid "Uploaded"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/index.ex:460
+#: lib/mydia_web/live/activity_live/index.ex:464
 #, elixir-autogen, elixir-format
 msgctxt "tv"
 msgid "Episode"
@@ -18624,7 +18624,7 @@ msgstr ""
 msgid "TMDB Airing Today"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:90
+#: lib/mydia_web/live/activity_live/event_text.ex:91
 #, elixir-autogen, elixir-format
 msgid "TMDB ID"
 msgstr ""
@@ -18684,7 +18684,7 @@ msgstr ""
 msgid "TV shows"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:91
+#: lib/mydia_web/live/activity_live/event_text.ex:92
 #, elixir-autogen, elixir-format
 msgid "TVDB ID"
 msgstr ""
@@ -20189,13 +20189,13 @@ msgctxt "availability"
 msgid "Upcoming"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:94
+#: lib/mydia_web/live/activity_live/event_text.ex:95
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Backdrop"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:99
+#: lib/mydia_web/live/activity_live/event_text.ex:100
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Cast"
@@ -20207,19 +20207,19 @@ msgctxt "changed field"
 msgid "Category"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:100
+#: lib/mydia_web/live/activity_live/event_text.ex:101
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Crew"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:92
+#: lib/mydia_web/live/activity_live/event_text.ex:93
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Description"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:98
+#: lib/mydia_web/live/activity_live/event_text.ex:99
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Genres"
@@ -20231,25 +20231,26 @@ msgctxt "changed field"
 msgid "Monitoring"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:93
+#: lib/mydia_web/live/activity_live/event_text.ex:90
+#: lib/mydia_web/live/activity_live/event_text.ex:94
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Poster"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:96
+#: lib/mydia_web/live/activity_live/event_text.ex:97
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Rating"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:97
+#: lib/mydia_web/live/activity_live/event_text.ex:98
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Runtime"
 msgstr ""
 
-#: lib/mydia_web/live/activity_live/event_text.ex:95
+#: lib/mydia_web/live/activity_live/event_text.ex:96
 #, elixir-autogen, elixir-format
 msgctxt "changed field"
 msgid "Tagline"
@@ -22459,4 +22460,9 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/list_components.ex:340
 #, elixir-autogen, elixir-format
 msgid "Uploaded"
+msgstr ""
+
+#: lib/mydia_web/live/activity_live/index.ex:432
+#, elixir-autogen, elixir-format
+msgid "custom poster"
 msgstr ""

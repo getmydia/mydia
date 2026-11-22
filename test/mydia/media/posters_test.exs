@@ -100,6 +100,28 @@ defmodule Mydia.Media.PostersTest do
       refute File.exists?(disk_path(hosted))
     end
 
+    test "provider poster rejects hosted-shaped paths without writing" do
+      item = media_item_fixture()
+
+      assert {:error, :invalid_poster} =
+               Posters.set_provider_poster(
+                 Scope.unrestricted(),
+                 item,
+                 "/generated/posters/#{Ecto.UUID.generate()}-deadbeef.png"
+               )
+
+      assert Repo.reload!(item).poster_override == nil
+    end
+
+    test "setting a poster records a media_item.updated event" do
+      item = media_item_fixture()
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "events:all")
+      {:ok, _} = Posters.set_provider_poster(Scope.unrestricted(), item, "/chosen.jpg")
+
+      assert_receive {:event_created, %{type: "media_item.updated"} = event}, 1_000
+      assert event.metadata["changes"]["poster_override"]["new"] == "/chosen.jpg"
+    end
+
     test "reset clears the override and the file" do
       item = media_item_fixture(%{metadata: %{poster_path: "/provider.jpg"}})
       {:ok, item} = Posters.set_uploaded_poster(Scope.unrestricted(), item, @png)

@@ -87,6 +87,7 @@ defmodule MydiaWeb.ActivityLive.EventText do
   def field_label("monitor_new_seasons"), do: gettext("New season monitoring")
   def field_label("category"), do: pgettext("changed field", "Category")
   def field_label("category_override"), do: gettext("Category override")
+  def field_label("poster_override"), do: pgettext("changed field", "Poster")
   def field_label("tmdb_id"), do: gettext("TMDB ID")
   def field_label("tvdb_id"), do: gettext("TVDB ID")
   def field_label("overview"), do: pgettext("changed field", "Description")
