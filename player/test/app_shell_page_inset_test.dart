@@ -23,6 +23,7 @@ import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/router/app_router.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/detail/detail_hero.dart';
+import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/sources/source_search_screen.dart';
 import 'package:player/presentation/widgets/shell_rail_inset.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -68,6 +69,19 @@ Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 20; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
+}
+
+/// The product of every fade between [finder]'s widget and the root, i.e.
+/// how opaque it is painted on this frame.
+double _opacityOf(WidgetTester tester, Finder finder) {
+  var opacity = 1.0;
+  tester.element(finder).visitAncestorElements((ancestor) {
+    final widget = ancestor.widget;
+    if (widget is FadeTransition) opacity *= widget.opacity.value;
+    if (widget is Opacity) opacity *= widget.opacity;
+    return true;
+  });
+  return opacity;
 }
 
 void main() {
@@ -123,6 +137,38 @@ void main() {
     await everyFrame();
     await _settle(tester);
     expect(tester.getTopLeft(page).dx, home);
+  });
+
+  testWidgets('switching rail destinations swaps the page with no fade', (
+    tester,
+  ) async {
+    // Destinations replace one another; a cross-fade between them shows the
+    // empty background for a moment on every rail tap.
+    final (_, router) = await _pumpApp(tester);
+    router.go('/s/$_id/search');
+    await _settle(tester);
+
+    router.go('/settings');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    final settings = find.byType(SettingsScreen);
+    expect(settings, findsOneWidget);
+    expect(_opacityOf(tester, settings), 1.0);
+    await _settle(tester);
+  });
+
+  testWidgets('a page pushed over another still fades in', (tester) async {
+    final (_, router) = await _pumpApp(tester);
+    router.go('/s/$_id/search');
+    await _settle(tester);
+
+    unawaited(router.push<void>('/s/$_id/movie/m1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    final art = find.byType(DetailHeroBackground);
+    expect(art, findsOneWidget);
+    expect(_opacityOf(tester, art), lessThan(1.0));
+    await _settle(tester);
   });
 
   testWidgets('a detail page paints its art to x=0, its back button beside '
