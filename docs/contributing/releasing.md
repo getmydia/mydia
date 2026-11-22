@@ -501,8 +501,9 @@ Trigger the workflow from the GitHub Actions UI ("Player / On-Demand Build") or 
 # Build default mobile platforms (iOS & Android) from master and upload to internal store tracks
 gh workflow run player-ondemand.yml --repo getmydia/mydia
 
-# Build a specific branch or commit
-gh workflow run player-ondemand.yml --repo getmydia/mydia -f ref=feat/my-feature
+# Build a branch: dispatch on the branch itself (see "Branch builds")
+gh workflow run player-ondemand.yml --repo getmydia/mydia \
+  --ref feat/my-feature -f ref=feat/my-feature
 
 # Build all platforms without uploading to stores
 gh workflow run player-ondemand.yml --repo getmydia/mydia \
@@ -578,7 +579,13 @@ leapfrog.
 
 ### Branch builds
 
-Any ref can be dispatched. When the commit is not on `origin/master`'s
+A commit that is not on master must be built from a run dispatched on its
+branch (`--ref`). Dispatched from master, the workflow stops with an error:
+a run's Actions cache scope is the ref it was dispatched on, so a branch build
+started from master could write unreviewed code into the cache that release
+builds restore.
+
+Any ref can be built. When the commit is not on `origin/master`'s
 first-parent history (`scripts/on-mainline.sh`), the run is in branch mode,
 shown in the run summary, and publishes nowhere master's builds do:
 

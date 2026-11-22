@@ -114,6 +114,18 @@ jobs:
             *) echo "::error::Could not check $SHA against origin/master."; exit 1 ;;
           esac
 
+          # Actions cache scope follows the ref a run was dispatched on, not
+          # the commit it checks out. A branch build dispatched from master
+          # would run unreviewed code with write access to master's cache,
+          # which release builds restore (CodeQL
+          # actions/cache-poisoning/poisonable-step). Dispatched on the
+          # branch, its writes stay in the branch's own scope.
+          if [ "$BRANCH_MODE" = "true" ] && [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            echo "::error::$INPUT_REF is not on master. Dispatch this workflow on that branch so the build cannot write to master's Actions cache:"
+            echo "::error::gh workflow run player-ondemand.yml --ref <branch> -f ref=$INPUT_REF"
+            exit 1
+          fi
+
           if [ -n "$INPUT_VERSION" ]; then
             if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
               echo "::error::Invalid version_override '$INPUT_VERSION'. Must match semver (e.g. 1.2.3 or 1.2.3-beta.1)"
