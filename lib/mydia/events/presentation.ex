@@ -704,11 +704,10 @@ defmodule Mydia.Events.Presentation do
   defp field_name(_), do: "field"
 
   # Field labels used by both renderers of a media_item.updated changeset:
-  # this module's own one-line `changes_summary/1` and the expanded
-  # breakdown in `MydiaWeb.ActivityLive.Index.format_change_details/1`. One
-  # map here keeps them from drifting apart on the same field, which is how
-  # the summary ended up rendering the raw `monitor_new_seasons` next to the
-  # expanded view's "New season monitoring" for the same event.
+  # this module's one-line `changes_summary/1` and the expanded breakdown in
+  # `MydiaWeb.ActivityLive.Index.format_change_details/1`. One map keeps them
+  # from drifting apart, which is how the summary once rendered the raw
+  # `monitor_new_seasons` beside the expanded view's "New season monitoring".
   @field_labels %{
     "title" => "Title",
     "original_title" => "Original Title",

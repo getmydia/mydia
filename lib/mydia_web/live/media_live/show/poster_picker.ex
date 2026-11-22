@@ -19,8 +19,31 @@ defmodule MydiaWeb.MediaLive.Show.PosterPicker do
   alias Mydia.Media.Posters
   alias Mydia.Metadata
   alias Mydia.Metadata.ImageUrl
+  alias MydiaWeb.MediaLive.Show.Loaders
 
   @tabs %{"browse" => :browse, "upload" => :upload, "folder" => :folder}
+
+  # Parent-side handlers, called from the media LiveView, which owns whether
+  # the picker is mounted.
+
+  @doc "Mounts the picker, for users who may edit the item."
+  def open(socket),
+    do: {:noreply, assign(socket, :poster_picker_open, socket.assigns.can_update_media)}
+
+  @doc "Unmounts the picker."
+  def close(socket), do: {:noreply, assign(socket, :poster_picker_open, false)}
+
+  @doc "Reloads the item after the picker saved or reset the poster."
+  def changed(socket) do
+    media_item =
+      Loaders.load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+
+    {:noreply,
+     socket
+     |> assign(:media_item, media_item)
+     |> assign(:poster_picker_open, false)
+     |> put_flash(:info, gettext("Poster updated"))}
+  end
 
   @impl true
   def mount(socket) do

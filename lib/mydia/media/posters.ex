@@ -47,17 +47,17 @@ defmodule Mydia.Media.Posters do
   def set_uploaded_poster(%Scope{} = scope, %MediaItem{} = item, binary) when is_binary(binary) do
     with :ok <- authorize(scope, item),
          {:ok, url} <- PosterStore.write(item.id, binary) do
-      case persist(scope, item, url) do
-        {:ok, _} = ok ->
-          ok
-
-        error ->
-          # Identical bytes map to the same file name, which the item may
-          # already be using, so only a fresh file is cleaned up.
-          if url != item.poster_override, do: PosterStore.delete(url)
-          error
-      end
+      scope |> persist(item, url) |> cleanup_on_error(item, url)
     end
+  end
+
+  # Identical bytes map to the same file name, which the item may already be
+  # using, so only a fresh file is cleaned up.
+  defp cleanup_on_error({:ok, _} = ok, _item, _url), do: ok
+
+  defp cleanup_on_error(error, item, url) do
+    if url != item.poster_override, do: PosterStore.delete(url)
+    error
   end
 
   @doc """

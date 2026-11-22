@@ -626,7 +626,7 @@ provider's own answer.
   surface that reads `metadata.poster_path` directly keeps showing the old poster.
 - **Hosted files are named `<media_item_id>-<sha8>.<ext>`**, where `sha8` is the
   first 8 hex characters of the bytes' SHA-256. `PosterStore.path_for/1` and the
-  p2p `artwork:` session (`Mydia.P2p.Server.resolve_artwork/1`) match that shape
+  p2p `artwork:` session (`Mydia.P2p.FileStream.resolve_artwork/1`) match that shape
   with a regex, so changing the naming breaks serving. Identical bytes map to the
   same name, which is why a failed write only deletes a file the item was not
   already using.

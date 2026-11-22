@@ -3,7 +3,7 @@ defmodule Mydia.P2p.ServerArtworkTest do
   use ExUnit.Case, async: false
 
   alias Mydia.Media.PosterStore
-  alias Mydia.P2p.Server
+  alias Mydia.P2p.FileStream
   alias Mydia.Streaming.SessionFiles
 
   @png <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, 0::64>>
@@ -28,7 +28,7 @@ defmodule Mydia.P2p.ServerArtworkTest do
 
   test "a stored poster resolves to its file" do
     {:ok, "/generated/posters/" <> name} = PosterStore.write(Ecto.UUID.generate(), @png)
-    assert {:ok, path} = Server.resolve_artwork("artwork:" <> name)
+    assert {:ok, path} = FileStream.resolve_artwork("artwork:" <> name)
     assert File.read!(path) == @png
   end
 
@@ -40,7 +40,7 @@ defmodule Mydia.P2p.ServerArtworkTest do
           "artwork:#{Ecto.UUID.generate()}-0123abcd.png",
           "artwork:"
         ] do
-      assert Server.resolve_artwork(id) == {:error, :not_found}
+      assert FileStream.resolve_artwork(id) == {:error, :not_found}
     end
   end
 

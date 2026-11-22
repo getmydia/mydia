@@ -57,7 +57,6 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Accounts.Scope
   alias Mydia.Collections
   alias Mydia.Media
-  alias Mydia.Media.Posters
   alias Mydia.Playback
   alias Mydia.Plugins
   alias Mydia.Plugins.AccountLink
@@ -804,7 +803,7 @@ defmodule Mydia.Plugins.HostFunctions do
       "tagline" => md && md.tagline,
       "runtime" => md && md.runtime,
       "genres" => md && md.genres,
-      "poster_path" => Posters.effective_path(item),
+      "poster_path" => Mydia.Media.Posters.effective_path(item),
       "backdrop_path" => md && md.backdrop_path,
       "rating" => md && md.vote_average
     }
