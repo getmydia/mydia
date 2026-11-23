@@ -18,6 +18,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/backup/backup_providers.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/focus/focus_memory.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
@@ -194,6 +195,33 @@ void main() {
       expectFocusIn(const Key('default-quality-row'));
       expect(find.byKey(const Key('paired-devices-row')), findsNothing);
       expect(find.byKey(const Key('manage-sources-row')), findsNothing);
+    });
+
+    testWidgets('playback groups have distinct focus orders', (tester) async {
+      await pumpSettings(tester);
+      final items = find
+          .byType(FocusMemoryItem, skipOffstage: false)
+          .evaluate()
+          .map((e) => e.widget as FocusMemoryItem)
+          .toList();
+      final indices = [for (final item in items) item.index];
+      expect(indices.toSet().length, indices.length, reason: '$indices');
+
+      int indexOf(Key key) => items
+          .firstWhere(
+            (i) => find
+                .descendant(
+                  of: find.byWidget(i, skipOffstage: false),
+                  matching: find.byKey(key, skipOffstage: false),
+                )
+                .evaluate()
+                .isNotEmpty,
+          )
+          .index;
+      expect(
+        indexOf(const Key('language-row')),
+        greaterThan(indexOf(const Key('auto-skip-commercials-switch'))),
+      );
     });
 
     testWidgets('the list is re-entered on the row that left it', (

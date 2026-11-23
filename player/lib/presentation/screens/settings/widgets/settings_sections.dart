@@ -33,22 +33,17 @@ import 'theme_preset_row.dart';
 import 'track_picker_row.dart';
 import 'update_card.dart';
 
-/// Default quality, skipping, the stats overlay and, in the desktop dialog,
-/// whether this device can be controlled.
-class PlaybackSettingsSection extends ConsumerWidget {
-  const PlaybackSettingsSection({
+/// Default quality, subtitle size and the stats overlay, plus the
+/// preferences-failed row.
+class PlaybackVideoSection extends ConsumerWidget {
+  const PlaybackVideoSection({
     super.key,
     required this.settings,
     required this.failed,
-    this.includeRemoteControl = false,
   });
 
   final UserSettings? settings;
   final bool failed;
-
-  /// The dialog has no Manage section, so the remote-control rows join
-  /// Playback there. The mobile screen keeps them under Manage.
-  final bool includeRemoteControl;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,7 +57,7 @@ class PlaybackSettingsSection extends ConsumerWidget {
     final l10n = context.l10n;
 
     return SettingsSection(
-      label: l10n.settingsPlayback,
+      label: l10n.settingsPlaybackVideoSection,
       children: [
         SettingsRow.select(
           key: const Key('default-quality-row'),
@@ -72,28 +67,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
           onTap: current == null
               ? null
               : () => _pickQuality(context, ref, quality),
-        ),
-        SettingsRow.toggle(
-          key: const Key('auto-skip-segments-switch'),
-          title: l10n.settingsAutoSkipTitle,
-          subtitle: l10n.settingsAutoSkipSubtitle,
-          value: current?.autoSkipSegments ?? false,
-          onChanged: current == null
-              ? null
-              : (value) => ref
-                    .read(settingsControllerProvider.notifier)
-                    .setAutoSkipSegments(value),
-        ),
-        SettingsRow.toggle(
-          key: const Key('auto-skip-commercials-switch'),
-          title: l10n.settingsAutoSkipCommercialsTitle,
-          subtitle: l10n.settingsAutoSkipCommercialsSubtitle,
-          value: current?.autoSkipCommercials ?? true,
-          onChanged: current == null
-              ? null
-              : (value) => ref
-                    .read(settingsControllerProvider.notifier)
-                    .setAutoSkipCommercials(value),
         ),
         const SubtitleSizeSettingsRow(),
         Consumer(
@@ -110,7 +83,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
             );
           },
         ),
-        if (includeRemoteControl) ...remoteControlRows(context, ref),
         if (failed)
           SettingsRow.action(
             key: const Key('settings-retry-row'),
@@ -147,6 +119,62 @@ class PlaybackSettingsSection extends ConsumerWidget {
         .read(settingsControllerProvider.notifier)
         .setDefaultQuality(picked.storageKey);
   }
+}
+
+/// Whether intros, credits and commercials skip themselves.
+class PlaybackSkippingSection extends ConsumerWidget {
+  const PlaybackSkippingSection({
+    super.key,
+    required this.settings,
+    required this.failed,
+  });
+
+  final UserSettings? settings;
+  final bool failed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = settings;
+    final l10n = context.l10n;
+    return SettingsSection(
+      label: l10n.settingsPlaybackSkippingSection,
+      footer: l10n.settingsAutoSkipFooter,
+      children: [
+        SettingsRow.toggle(
+          key: const Key('auto-skip-segments-switch'),
+          title: l10n.settingsAutoSkipTitle,
+          value: current?.autoSkipSegments ?? false,
+          onChanged: current == null
+              ? null
+              : (value) => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setAutoSkipSegments(value),
+        ),
+        SettingsRow.toggle(
+          key: const Key('auto-skip-commercials-switch'),
+          title: l10n.settingsAutoSkipCommercialsTitle,
+          value: current?.autoSkipCommercials ?? true,
+          onChanged: current == null
+              ? null
+              : (value) => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setAutoSkipCommercials(value),
+        ),
+      ],
+    );
+  }
+}
+
+/// The desktop dialog's remote-control group. The mobile screen keeps these
+/// rows under Manage, via [remoteControlRows].
+class RemoteControlSection extends ConsumerWidget {
+  const RemoteControlSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SettingsSection(
+    label: context.l10n.settingsRemoteControlSection,
+    children: remoteControlRows(context, ref),
+  );
 }
 
 /// The remote-control switch and, after a failed registration, its retry.

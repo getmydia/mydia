@@ -362,6 +362,22 @@ void main() {
     expect(find.byKey(const Key('manage-sources-row')), findsNothing);
   });
 
+  testWidgets('remote control stays under Manage on the mobile screen', (
+    tester,
+  ) async {
+    await _pump(tester);
+    expect(find.text('Remote control'), findsNothing);
+    expect(
+      find.byKey(
+        const Key('remote-control-enabled-switch'),
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Video', skipOffstage: false), findsOneWidget);
+    expect(find.text('Skipping', skipOffstage: false), findsOneWidget);
+  });
+
   testWidgets('Backup & sync sits between the connections card and playback', (
     tester,
   ) async {

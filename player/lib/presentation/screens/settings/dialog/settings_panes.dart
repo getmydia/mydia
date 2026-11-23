@@ -68,13 +68,17 @@ class _PlaybackPage extends ConsumerWidget {
       child: ListView(
         padding: _bodyPadding,
         children: [
-          PlaybackSettingsSection(
+          PlaybackVideoSection(
             settings: settings.value,
             failed: settings.hasError,
-            includeRemoteControl: true,
           ),
-          const SizedBox(height: 18),
-          const AppearanceSettingsSection(),
+          const SizedBox(height: 22),
+          PlaybackSkippingSection(
+            settings: settings.value,
+            failed: settings.hasError,
+          ),
+          const SizedBox(height: 22),
+          const RemoteControlSection(),
         ],
       ),
     );

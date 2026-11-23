@@ -88,6 +88,22 @@
   "@settingsDefaultQualitySubtitle": {
     "description": "Subtitle of the default quality row. A title here means a movie or episode."
   },
+  "settingsPlaybackVideoSection": "Video",
+  "@settingsPlaybackVideoSection": {
+    "description": "Heading of the settings group holding default quality, subtitle size and the stats overlay."
+  },
+  "settingsPlaybackSkippingSection": "Skipping",
+  "@settingsPlaybackSkippingSection": {
+    "description": "Heading of the settings group holding the switches that skip intros, credits and commercials."
+  },
+  "settingsRemoteControlSection": "Remote control",
+  "@settingsRemoteControlSection": {
+    "description": "Heading of the desktop settings group holding the switch that lets other devices control this one."
+  },
+  "settingsAutoSkipFooter": "When off, a skip button appears instead.",
+  "@settingsAutoSkipFooter": {
+    "description": "Note under the skipping switches: when a switch is off, the player shows a skip button instead."
+  },
   "settingsAutoSkipTitle": "Skip intros and credits",
   "@settingsAutoSkipTitle": {
     "description": "Switch that skips intros and end credits automatically during playback."
