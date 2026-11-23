@@ -12,6 +12,7 @@ import '../../core/sources/sources_providers.dart';
 import '../../domain/models/watch_status.dart';
 import '../../domain/sources/item.dart';
 import 'artwork_image.dart';
+import 'focus_emphasis.dart';
 import 'focus_highlight.dart';
 import 'media_poster.dart';
 
@@ -94,9 +95,13 @@ class SourcePoster extends ConsumerWidget {
     );
     // MediaPoster is a GestureDetector, which a D-pad cannot reach.
     // FocusHighlight makes each poster a focus stop with the app's ring,
-    // and OK on a remote activates it like a tap.
+    // and OK on a remote activates it like a tap. On the television tier it
+    // grows by the poster class instead of taking the thin ring. No glow:
+    // the poster has no tint of its own to give it.
     return FocusHighlight(
       onActivate: onTap,
+      emphasis: true,
+      emphasisSize: FocusSize.poster,
       child: MediaPoster(
         posterUrl: request?.url,
         posterHeaders: request?.headers,

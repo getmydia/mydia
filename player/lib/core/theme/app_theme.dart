@@ -488,18 +488,6 @@ class AppTheme {
         textStyle: TextStyle(color: p.textPrimary, fontSize: 12),
       ),
 
-      // Snackbar: toasts replace it in Frosted; themed to match in case a
-      // stray one shows.
-      snackBarTheme: liquid
-          ? const SnackBarThemeData()
-          : SnackBarThemeData(
-              backgroundColor: p.surfaceHigh,
-              contentTextStyle: TextStyle(color: p.textPrimary, fontSize: 14),
-              behavior: SnackBarBehavior.floating,
-              elevation: 0,
-              shape: hairlineShape(roles.radiusMenu),
-            ),
-
       // Popup Menu
       popupMenuTheme: PopupMenuThemeData(
         color: liquid ? p.surface : p.surfaceHigh,

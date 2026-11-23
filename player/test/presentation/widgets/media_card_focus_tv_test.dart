@@ -88,12 +88,19 @@ List<EpisodeView> _episodes() => [
     ),
 ];
 
-Future<void> _pumpEpisodeRail(WidgetTester tester) async {
+Future<void> _pumpEpisodeRail(
+  WidgetTester tester, {
+  bool watchedMenu = false,
+}) async {
   final episodes = _episodes();
   await mockNetworkImages(() async {
     await tester.pumpWidget(
       _host(
-        EpisodeRail(episodes: episodes, onEpisodeTap: (_) {}),
+        EpisodeRail(
+          episodes: episodes,
+          onEpisodeTap: (_) {},
+          onWatchedAction: watchedMenu ? (_, _) async {} : null,
+        ),
         overrides: [
           for (final e in episodes)
             isItemDownloadedProvider(e.target.ref).overrideWith((ref) => false),
@@ -152,7 +159,7 @@ void _expectRingInsideRail(WidgetTester tester, Finder card) {
     matching: find.byType(FocusEmphasis),
   );
   final scale = tester
-      .widget<AnimatedScale>(
+      .widget<FocusPaintScale>(
         find.descendant(
           of: emphasis,
           matching: find.byKey(FocusEmphasis.scaleKey),
@@ -172,9 +179,15 @@ void _expectRingInsideRail(WidgetTester tester, Finder card) {
           as FocusEmphasisPainter;
   expect(painter.visible, isTrue);
 
-  // getRect goes through the scale transform, so this is the grown card.
-  final grown = tester.getRect(
+  // The growth is painted, not laid out, so getRect is the unscaled card:
+  // grow it about its centre.
+  final laidOut = tester.getRect(
     find.descendant(of: emphasis, matching: find.byKey(FocusEmphasis.ringKey)),
+  );
+  final grown = Rect.fromCenter(
+    center: laidOut.center,
+    width: laidOut.width * scale,
+    height: laidOut.height * scale,
   );
   // The ring's outer edge, also scaled with the card.
   final ring = grown.inflate((painter.gap + FocusEmphasis.ringWidth) * scale);
@@ -198,7 +211,7 @@ void main() {
       await _focus(tester, find.byKey(_cardKeys[1]));
 
       final scale = tester
-          .widget<AnimatedScale>(
+          .widget<FocusPaintScale>(
             find.descendant(
               of: find.byKey(_cardKeys[1]),
               matching: find.byKey(FocusEmphasis.scaleKey),
@@ -240,7 +253,7 @@ void main() {
       await _focus(tester, find.byKey(const ValueKey('ep-1')));
 
       final scale = tester
-          .widget<AnimatedScale>(
+          .widget<FocusPaintScale>(
             find.descendant(
               of: find.byKey(const ValueKey('ep-1')),
               matching: find.byKey(FocusEmphasis.scaleKey),
@@ -276,5 +289,30 @@ void main() {
         keys[0],
       ]);
     });
+
+    testWidgets(
+      'with the watched menu shown, D-pad Right and Left still move card to '
+      'card',
+      (tester) async {
+        _tvView(tester);
+        await _pumpEpisodeRail(tester, watchedMenu: true);
+        expect(find.byType(PopupMenuButton<String>), findsNWidgets(3));
+        const keys = [ValueKey('ep-0'), ValueKey('ep-1'), ValueKey('ep-2')];
+        await _focus(tester, find.byKey(keys[0]));
+
+        expect(await _walk(tester, keys), [
+          keys[0],
+          keys[1],
+          keys[2],
+          keys[1],
+          keys[0],
+        ]);
+        // Every stop was the card itself, never its menu button.
+        expect(
+          FocusManager.instance.primaryFocus?.context?.widget,
+          isNot(isA<IconButton>()),
+        );
+      },
+    );
   }, skip: tvSkipReason);
 }

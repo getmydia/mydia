@@ -7,6 +7,7 @@ import '../../../core/theme/palette.dart';
 import '../sources/continue_watching_card.dart';
 import '../sources/source_home_hero.dart';
 import '../sources/source_poster_row.dart';
+import '../../widgets/horizontal_rail.dart';
 
 /// The home screen's loading state.
 ///
@@ -250,6 +251,12 @@ class _ShimmerRail extends StatelessWidget {
     final railHeight = landscape
         ? ContinueWatchingCard.heightFor(context, hasCaption: true)
         : SourcePosterRow.rowHeight;
+    // The loaded rail leaves room above and below its cards for a focused
+    // poster on the television tier; the skeleton leaves the same.
+    final bleed = HorizontalRail.focusBleed(
+      railHeight,
+      SourcePosterRow.focusSize,
+    );
     final radius = landscape ? AppTheme.radiusCard : 8.0;
     // Overflow the viewport so the rail has no empty tail that fills in later.
     final count =
@@ -272,12 +279,15 @@ class _ShimmerRail extends StatelessWidget {
             ),
           ),
           SizedBox(
-            height: railHeight,
+            height: railHeight + bleed * 2,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               // A skeleton has nothing to scroll to.
               physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: bleed,
+              ),
               itemCount: count,
               itemBuilder: (context, index) => Padding(
                 padding: EdgeInsets.only(

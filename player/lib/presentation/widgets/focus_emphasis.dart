@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/player/input_capabilities.dart';
@@ -143,11 +144,15 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
       canRequestFocus: false,
       skipTraversal: true,
       onFocusChange: _onFocusChange,
-      child: AnimatedScale(
-        key: FocusEmphasis.scaleKey,
-        scale: _focused ? _scale : 1,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: _focused ? _scale : 1),
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
+        builder: (context, scale, child) => FocusPaintScale(
+          key: FocusEmphasis.scaleKey,
+          scale: scale,
+          child: child,
+        ),
         child: CustomPaint(
           key: FocusEmphasis.ringKey,
           // Glow and ring both lie outside the button's bounds, so painting
@@ -164,6 +169,78 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
         ),
       ),
     );
+  }
+}
+
+/// Scales its child about its centre when painting, and nowhere else.
+///
+/// An ordinary transform also moves the child's geometry: a focus node's
+/// rect is measured through it, so a grown poster's rect would reach into the
+/// row above it, and directional traversal, which searches from that rect,
+/// would pick a different neighbour (RIGHT along a grid's first row landed on
+/// the sort chip above it). Painting the growth alone keeps every focus rect,
+/// and so every focus move, what the unscaled layout gives. Hit testing stays
+/// unscaled too, which only a pointer could notice, and the television tier
+/// has none.
+@visibleForTesting
+class FocusPaintScale extends SingleChildRenderObjectWidget {
+  const FocusPaintScale({super.key, required this.scale, super.child});
+
+  final double scale;
+
+  @override
+  RenderFocusPaintScale createRenderObject(BuildContext context) =>
+      RenderFocusPaintScale(scale);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderFocusPaintScale renderObject,
+  ) => renderObject.scale = scale;
+}
+
+/// The render object behind [FocusPaintScale].
+@visibleForTesting
+class RenderFocusPaintScale extends RenderProxyBox {
+  RenderFocusPaintScale(this._scale);
+
+  double _scale;
+  double get scale => _scale;
+  set scale(double value) {
+    if (value == _scale) return;
+    _scale = value;
+    markNeedsPaint();
+  }
+
+  final LayerHandle<TransformLayer> _layer = LayerHandle<TransformLayer>();
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null) return;
+    if (_scale == 1) {
+      _layer.layer = null;
+      context.paintChild(child, offset);
+      return;
+    }
+    final centre = size.center(Offset.zero);
+    final transform = Matrix4.identity()
+      ..translateByDouble(centre.dx, centre.dy, 0, 1)
+      ..scaleByDouble(_scale, _scale, 1, 1)
+      ..translateByDouble(-centre.dx, -centre.dy, 0, 1);
+    _layer.layer = context.pushTransform(
+      needsCompositing,
+      offset,
+      transform,
+      (context, offset) => context.paintChild(child, offset),
+      oldLayer: _layer.layer,
+    );
+  }
+
+  @override
+  void dispose() {
+    _layer.layer = null;
+    super.dispose();
   }
 }
 
