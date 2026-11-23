@@ -29,6 +29,18 @@ defmodule MydiaWeb.MediaLive.Show.AutoSearchBypassTest do
     )
   end
 
+  test "the movie Search button ignores minimum availability", %{conn: conn} do
+    movie = insert(:media_item, %{type: "movie", title: "Glass Harbor", year: 2031})
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+
+    render_click(view, "auto_search_download", %{})
+
+    assert_enqueued(
+      worker: Mydia.Jobs.MovieSearch,
+      args: %{"mode" => "specific", "media_item_id" => movie.id, "ignore_availability" => true}
+    )
+  end
+
   test "the episode and season Search buttons skip the grab delay", %{conn: conn} do
     show = insert(:tv_show, %{title: "Lantern Vale"})
 

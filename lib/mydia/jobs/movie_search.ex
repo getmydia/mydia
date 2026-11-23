@@ -46,6 +46,7 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
   alias Mydia.Media.AudioLanguagePolicy
+  alias Mydia.Media.MinimumAvailability
   alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades
@@ -64,7 +65,8 @@ defmodule Mydia.Jobs.MovieSearch do
       :preferred_tags,
       :reasons,
       bypass_delay: false,
-      recheck: false
+      recheck: false,
+      ignore_availability: false
     ]
 
     @type t :: %__MODULE__{
@@ -77,18 +79,21 @@ defmodule Mydia.Jobs.MovieSearch do
             preferred_tags: [String.t()] | nil,
             reasons: [:quality | :language] | nil,
             bypass_delay: boolean(),
-            recheck: boolean()
+            recheck: boolean(),
+            ignore_availability: boolean()
           }
 
     # bypass_delay is set only by searches the user started (Search buttons,
     # search on add, GraphQL); they skip the profile's grab delay. See
     # Mydia.Indexers.GrabDelay. recheck is set only on the re-check a delayed
-    # grab schedules.
+    # grab schedules. ignore_availability is set only by the Search button on
+    # a movie's page; see Mydia.Media.MinimumAvailability.
     def parse(raw) do
       %{
         do_parse(raw)
         | bypass_delay: Map.get(raw, "bypass_delay") == true,
-          recheck: Map.get(raw, "recheck") == true
+          recheck: Map.get(raw, "recheck") == true,
+          ignore_availability: Map.get(raw, "ignore_availability") == true
       }
     end
 
@@ -228,7 +233,20 @@ defmodule Mydia.Jobs.MovieSearch do
             :skipped
 
           %MediaItem{type: "movie"} = movie ->
-            search_movie_with_stats(movie, args)
+            case availability(movie, args) do
+              :available ->
+                search_movie_with_stats(movie, args)
+
+              {:unavailable, status} ->
+                Logger.info("Skipping search - movie is not available yet",
+                  media_item_id: media_item_id,
+                  level: status.level,
+                  eligible_on: status.eligible_on
+                )
+
+                Events.search_skipped_unavailable(movie, status)
+                :skipped
+            end
 
           %MediaItem{type: type} ->
             Logger.error("Invalid media type for movie search",
@@ -488,8 +506,20 @@ defmodule Mydia.Jobs.MovieSearch do
       |> Repo.all()
 
     movies
+    |> Enum.filter(&MinimumAvailability.available?/1)
     |> filter_movies_in_backoff()
     |> filter_movies_awaiting_recheck()
+  end
+
+  # Automatic searches wait for the movie's minimum availability; the Search
+  # button on its page sets ignore_availability.
+  defp availability(_movie, %Args{ignore_availability: true}), do: :available
+
+  defp availability(movie, _args) do
+    case MinimumAvailability.status(movie) do
+      %{available?: true} -> :available
+      status -> {:unavailable, status}
+    end
   end
 
   # media_item_ids with an in-flight download (still in client, not failed).
