@@ -172,9 +172,18 @@ class SettingsRow extends StatelessWidget {
               // traversal order. It remains clickable by pointer: ExcludeFocus
               // only removes focusability, not hit testing.
               ExcludeFocus(
-                child: Transform.scale(
-                  scale: 0.78,
-                  child: Switch(value: toggleValue, onChanged: onChanged),
+                // A real 40x24 layout box: FittedBox shrinks the themed switch
+                // into it, so the row keeps its 52px height.
+                child: SizedBox(
+                  key: const Key('settings-row-switch-box'),
+                  width: 40,
+                  height: 24,
+                  child: FittedBox(
+                    child: Switch.adaptive(
+                      value: toggleValue,
+                      onChanged: onChanged,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -234,6 +243,7 @@ class _SelectValue extends StatelessWidget {
     final palette = context.palette;
     return Container(
       key: const Key('settings-row-select-value'),
+      constraints: const BoxConstraints(maxWidth: 200),
       height: 30,
       padding: const EdgeInsets.only(left: 10, right: 6),
       decoration: BoxDecoration(
@@ -244,9 +254,13 @@ class _SelectValue extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            value,
-            style: TextStyle(fontSize: 13, color: palette.textPrimary),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: palette.textPrimary),
+            ),
           ),
           const SizedBox(width: 4),
           Icon(Icons.expand_more, size: 16, color: palette.textSecondary),

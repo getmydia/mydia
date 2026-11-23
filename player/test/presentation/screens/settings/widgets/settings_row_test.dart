@@ -170,6 +170,40 @@ void main() {
     });
   });
 
+  group('SettingsRow switch size', () {
+    testWidgets('the switch lays out 40x24 and a title-only toggle is 52', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        SettingsRow.toggle(title: 'Tog', value: false, onChanged: (_) {}),
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('settings-row-switch-box'))),
+        const Size(40, 24),
+      );
+      expect(tester.getSize(find.byType(SettingsRow)).height, 52);
+    });
+
+    testWidgets('a long select value is ellipsized within 200', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'A very long value ' * 10,
+          onTap: () {},
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester
+            .getSize(find.byKey(const Key('settings-row-select-value')))
+            .width,
+        lessThanOrEqualTo(200),
+      );
+    });
+  });
+
   group('SettingsRow.select', () {
     testWidgets('shows value and chevron-down', (tester) async {
       await _pump(
