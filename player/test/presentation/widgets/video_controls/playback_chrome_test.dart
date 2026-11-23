@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
@@ -1345,10 +1346,52 @@ void main() {
           expect(globalSpinner(), findsNothing);
 
           visibility.hide();
+          // The first frame only starts the fade; the global spinner waits
+          // for it to finish.
+          await tester.pump();
           await tester.pump(const Duration(milliseconds: 400));
           expect(globalSpinner(), findsOneWidget);
         });
       }
+
+      testWidgets('one spinner throughout the hide fade: the disc keeps '
+          'its own until the fade ends, then the global one takes over', (
+        tester,
+      ) async {
+        platform.state = platform.state.copyWith(buffering: true);
+        final visibility = ChromeVisibilityController();
+        await pump(tester, size: const Size(390, 844), visibility: visibility);
+
+        visibility.hide();
+        // Mid-fade: `visible` is already false, the chrome is still on
+        // screen, and the fading disc still carries the only spinner.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        final opacity = tester
+            .widgetList<FadeTransition>(
+              find.ancestor(
+                of: find.byKey(TouchTransport.bufferingKey),
+                matching: find.byType(FadeTransition),
+              ),
+            )
+            .map((f) => f.opacity.value)
+            .reduce(math.min);
+        expect(opacity, inExclusiveRange(0.0, 1.0));
+        expect(visibility.visible, isFalse);
+        expect(visibility.fadedOut.value, isFalse);
+        expect(find.byKey(TouchTransport.bufferingKey), findsOneWidget);
+        expect(globalSpinner(), findsNothing);
+
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(visibility.fadedOut.value, isTrue);
+        expect(globalSpinner(), findsOneWidget);
+
+        // Showing again hands straight back to the disc.
+        visibility.show();
+        await tester.pump();
+        expect(globalSpinner(), findsNothing);
+        expect(find.byKey(TouchTransport.bufferingKey), findsOneWidget);
+      });
 
       testWidgets('no spinner anywhere when not buffering', (tester) async {
         await pump(tester, size: const Size(390, 844));

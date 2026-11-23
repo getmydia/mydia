@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -67,16 +68,42 @@ class ChromeVisibilityController extends ChangeNotifier {
   /// and on a remote there is no other way out of it.
   bool get blocksBack => attached && visible;
 
+  final ValueNotifier<bool> _fadedOut = ValueNotifier(false);
+
+  /// Whether the hide fade has finished, so nothing of the chrome is left on
+  /// screen.
+  ///
+  /// [visible] flips the moment a hide starts, while the chrome is still
+  /// fading. Anything that takes over from the chrome and must never share
+  /// the screen with its fading copy (the touch tier's buffering spinner)
+  /// waits for this instead. A separate listenable so the extra transitions do not
+  /// wake [visible]'s listeners. False while detached.
+  ValueListenable<bool> get fadedOut => _fadedOut;
+
   void show() => _state?._show();
 
   void hide() => _state?._hide();
 
   void toggle() => _state?._toggle();
 
-  void _attach(_ChromeVisibilityState state) => _state = state;
+  /// A chrome mounts shown, so attaching also clears [fadedOut], which a
+  /// previous chrome may have left set on a controller that outlived it.
+  void _attach(_ChromeVisibilityState state) {
+    _state = state;
+    _fadedOut.value = false;
+  }
 
   void _detach(_ChromeVisibilityState state) {
-    if (identical(_state, state)) _state = null;
+    if (identical(_state, state)) {
+      _state = null;
+      _fadedOut.value = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _fadedOut.dispose();
+    super.dispose();
   }
 
   /// Called by the state on every real transition. Private because only the
@@ -261,6 +288,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
       curve: DepthTokens.curveStandard,
       reverseCurve: DepthTokens.curveEmphasized,
     );
+    _controller.addStatusListener(_onFadeStatus);
     _restartTimer();
     // `_visible` starts true and `_show()` only calls the bridge on a
     // false -> true transition, so a freshly-mounted ChromeVisibility would
@@ -279,6 +307,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     if (old.controller != widget.controller) {
       old.controller?._detach(this);
       widget.controller?._attach(this);
+      _onFadeStatus(_controller.status);
     }
     if (old.restartOnKeyActivity != widget.restartOnKeyActivity) {
       if (widget.restartOnKeyActivity) {
@@ -320,6 +349,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _curved.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onFadeStatus(AnimationStatus status) {
+    widget.controller?._fadedOut.value = status == AnimationStatus.dismissed;
   }
 
   bool get _mayHide =>
@@ -1143,16 +1176,17 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
             //
             // On touch, while the chrome is up, the play disc shows its own
             // dark spinner instead: this white one would land on that
-            // near-white disc and vanish. Once the chrome hides, this one
-            // takes over again.
+            // near-white disc and vanish. This one takes over only once the
+            // hide fade has finished, not when it starts, so the fading
+            // disc's spinner is never joined by a second one.
             if (touch)
-              ListenableBuilder(
-                listenable: _visibility,
-                builder: (context, _) => _visibility.visible
-                    ? const SizedBox.shrink()
-                    : IgnorePointer(
+              ValueListenableBuilder<bool>(
+                valueListenable: _visibility.fadedOut,
+                builder: (context, fadedOut, _) => fadedOut
+                    ? IgnorePointer(
                         child: BufferingIndicator(player: widget.player),
-                      ),
+                      )
+                    : const SizedBox.shrink(),
               )
             else
               IgnorePointer(child: BufferingIndicator(player: widget.player)),
