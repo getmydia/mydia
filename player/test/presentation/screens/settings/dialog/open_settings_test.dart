@@ -226,6 +226,21 @@ void main() {
     expect(find.byKey(const Key('check-for-updates-row')), findsOneWidget);
   });
 
+  testWidgets('appearance pane holds theme, material and language', (
+    tester,
+  ) async {
+    await pumpApp(tester, dialog: true, initial: SettingsCategory.appearance);
+    await open(tester);
+    expect(find.byKey(const Key('theme-preset-row')), findsOneWidget);
+    expect(find.byKey(const Key('language-row')), findsOneWidget);
+  });
+
+  testWidgets('off desktop, appearance routes to /settings', (tester) async {
+    await pumpApp(tester, dialog: false, initial: SettingsCategory.appearance);
+    await open(tester);
+    expect(find.text('at /settings'), findsOneWidget);
+  });
+
   testWidgets('ctrl-comma opens on connections', (tester) async {
     await pumpApp(tester, dialog: true);
     final host = tester.element(find.text('open'));

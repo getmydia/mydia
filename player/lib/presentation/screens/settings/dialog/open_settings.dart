@@ -128,7 +128,9 @@ Future<void> openSettings(
   if (!enabled) {
     final router = GoRouter.of(context);
     switch (initial) {
-      case SettingsCategory.playback || SettingsCategory.about:
+      case SettingsCategory.playback ||
+          SettingsCategory.appearance ||
+          SettingsCategory.about:
         router.go('/settings');
       case SettingsCategory.backup:
         router.go(backupRequestLocation());

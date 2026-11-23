@@ -135,6 +135,13 @@ void main() {
     await _pumpSection(tester, _playbackDialog());
     expect(find.text('Video'), findsOneWidget);
     expect(find.text('Skipping'), findsOneWidget);
+    // The dialog is 600 tall, so the last section sits below the fold of the
+    // pane's lazy list until it is scrolled to.
+    await tester.scrollUntilVisible(
+      find.text('Remote control'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('Remote control'), findsOneWidget);
     expect(find.byKey(const Key('default-quality-row')), findsOneWidget);
     expect(

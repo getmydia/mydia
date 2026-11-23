@@ -194,6 +194,26 @@
   "@settingsAppearanceSection": {
     "description": "Section heading for language, theme and glass material settings."
   },
+  "settingsBackupDescription": "An encrypted backup of your servers and settings.",
+  "@settingsBackupDescription": {
+    "description": "One-line description under the Backup title in the desktop settings dialog."
+  },
+  "settingsPlaybackDescription": "How titles play on this device.",
+  "@settingsPlaybackDescription": {
+    "description": "One-line description under the Playback title in the desktop settings dialog."
+  },
+  "settingsAppearanceDescription": "The look of Mydia on this device.",
+  "@settingsAppearanceDescription": {
+    "description": "One-line description under the Appearance title in the desktop settings dialog."
+  },
+  "settingsDiagnosticsDescription": "Connection details and logs for troubleshooting.",
+  "@settingsDiagnosticsDescription": {
+    "description": "One-line description under the Diagnostics title in the desktop settings dialog."
+  },
+  "settingsAboutDescription": "Version and updates.",
+  "@settingsAboutDescription": {
+    "description": "One-line description under the About title in the desktop settings dialog."
+  },
   "settingsSubtitleSizeTitle": "Subtitle size",
   "@settingsSubtitleSizeTitle": {
     "description": "Settings row that opens the subtitle text size picker."
