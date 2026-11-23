@@ -10,8 +10,8 @@ Widget _app({required bool tv}) => MaterialApp(
       directionalPrimary: tv,
       child: ListView(
         children: [
-          SettingsRow.navigation(icon: Icons.hd, title: 'First', onTap: () {}),
-          SettingsRow.navigation(icon: Icons.hd, title: 'Second', onTap: () {}),
+          SettingsRow.navigation(title: 'First', onTap: () {}),
+          SettingsRow.navigation(title: 'Second', onTap: () {}),
         ],
       ),
     ),

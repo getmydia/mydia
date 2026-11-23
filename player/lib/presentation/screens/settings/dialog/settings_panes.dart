@@ -20,7 +20,7 @@ import '../settings_nav.dart';
 import '../widgets/settings_sections.dart';
 import 'settings_dialog.dart';
 
-const _bodyPadding = EdgeInsets.fromLTRB(24, 8, 24, 24);
+const _bodyPadding = EdgeInsets.fromLTRB(40, 4, 40, 24);
 
 Widget settingsRootPage(SettingsCategory category) => switch (category) {
   SettingsCategory.connections => const _ConnectionsPage(),
@@ -32,6 +32,13 @@ Widget settingsRootPage(SettingsCategory category) => switch (category) {
     ),
   ),
   SettingsCategory.playback => const _PlaybackPage(),
+  SettingsCategory.appearance => _CategoryPane(
+    category: SettingsCategory.appearance,
+    child: ListView(
+      padding: _bodyPadding,
+      children: const [AppearanceSettingsSection(showLabel: false)],
+    ),
+  ),
   SettingsCategory.diagnostics => const _CategoryPane(
     category: SettingsCategory.diagnostics,
     child: DiagnosticsBody(padding: _bodyPadding),
@@ -53,8 +60,11 @@ class _CategoryPane extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) =>
-      SettingsPane(title: category.label(context.l10n), child: child);
+  Widget build(BuildContext context) => SettingsPane(
+    title: category.label(context.l10n),
+    description: category.description(context.l10n),
+    child: child,
+  );
 }
 
 class _PlaybackPage extends ConsumerWidget {
@@ -68,13 +78,17 @@ class _PlaybackPage extends ConsumerWidget {
       child: ListView(
         padding: _bodyPadding,
         children: [
-          PlaybackSettingsSection(
+          PlaybackVideoSection(
             settings: settings.value,
             failed: settings.hasError,
-            includeRemoteControl: true,
           ),
-          const SizedBox(height: 18),
-          const AppearanceSettingsSection(),
+          const SizedBox(height: 22),
+          PlaybackSkippingSection(
+            settings: settings.value,
+            failed: settings.hasError,
+          ),
+          const SizedBox(height: 22),
+          const RemoteControlSection(),
         ],
       ),
     );

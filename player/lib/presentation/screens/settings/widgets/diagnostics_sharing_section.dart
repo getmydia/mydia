@@ -31,7 +31,6 @@ class DiagnosticsSharingSection extends ConsumerWidget {
       children: [
         SettingsRow.toggle(
           key: const Key('diagnostics-crashes'),
-          icon: Icons.bug_report_outlined,
           title: l10n.settingsDiagnosticsSendCrashReports,
           value: state?.crashes ?? false,
           onChanged: state == null
@@ -44,7 +43,6 @@ class DiagnosticsSharingSection extends ConsumerWidget {
         if (canShareLogs)
           SettingsRow.toggle(
             key: const Key('diagnostics-logs'),
-            icon: Icons.article_outlined,
             title: l10n.settingsDiagnosticsShareLogs,
             value: state?.logs ?? false,
             onChanged: state == null
@@ -68,7 +66,6 @@ class DiagnosticsSharingSection extends ConsumerWidget {
         if (canShareLogs && state != null)
           SettingsRow.action(
             key: const Key('diagnostics-send-logs'),
-            icon: Icons.upload_file_outlined,
             title: l10n.settingsDiagnosticsSendLogsNow,
             subtitle: l10n.settingsDiagnosticsSendLogsNowSubtitle,
             onTap: () => showSendLogsDialog(

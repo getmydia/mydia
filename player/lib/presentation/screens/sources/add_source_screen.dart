@@ -58,7 +58,6 @@ class AddSourceScreen extends ConsumerWidget {
                     children: [
                       SettingsRow.navigation(
                         key: const Key('add-source-mydia'),
-                        icon: Icons.dns_rounded,
                         title: 'Mydia', // l10n-ignore: product name
                         subtitle: switch ((hasMydia, guestsUnavailable)) {
                           (true, true) => l10n.sourcesAddMydiaOnlyInApps,
@@ -80,7 +79,6 @@ class AddSourceScreen extends ConsumerWidget {
                     children: [
                       SettingsRow.navigation(
                         key: const Key('add-source-plex'),
-                        icon: Icons.live_tv_rounded,
                         title: 'Plex', // l10n-ignore: product name
                         subtitle: l10n.sourcesAddPlexSubtitle,
                         onTap: () => open('/sources/add/plex'),
@@ -88,14 +86,12 @@ class AddSourceScreen extends ConsumerWidget {
                       ),
                       SettingsRow.navigation(
                         key: const Key('add-source-jellyfin'),
-                        icon: Icons.smart_display_rounded,
                         title: 'Jellyfin', // l10n-ignore: product name
                         subtitle: l10n.sourcesAddJellyfinSubtitle,
                         onTap: () => open('/sources/add/jellyfin'),
                       ),
                       SettingsRow.navigation(
                         key: const Key('add-source-stash'),
-                        icon: Icons.video_library_rounded,
                         title: 'Stash', // l10n-ignore: product name
                         subtitle: l10n.sourcesAddStashSubtitle,
                         onTap: () => open('/sources/add/stash'),
@@ -110,28 +106,24 @@ class AddSourceScreen extends ConsumerWidget {
                         if (foldersSupported ?? localFoldersSupported)
                           SettingsRow.navigation(
                             key: const Key('add-source-folder'),
-                            icon: Icons.folder_rounded,
                             title: l10n.sourcesAddFolderTitle,
                             subtitle: l10n.sourcesAddFolderSubtitle,
                             onTap: () => open('/sources/add/folder'),
                           ),
                         SettingsRow.navigation(
                           key: const Key('add-source-webdav'),
-                          icon: Icons.folder_shared_rounded,
                           title: 'WebDAV', // l10n-ignore: protocol name
                           subtitle: l10n.sourcesAddWebDavSubtitle,
                           onTap: () => open('/sources/add/webdav'),
                         ),
                         SettingsRow.navigation(
                           key: const Key('add-source-smb'),
-                          icon: Icons.lan_rounded,
                           title: 'SMB', // l10n-ignore: protocol name
                           subtitle: l10n.sourcesAddSmbSubtitle,
                           onTap: () => open('/sources/add/smb'),
                         ),
                         SettingsRow.navigation(
                           key: const Key('add-source-s3'),
-                          icon: Icons.cloud_rounded,
                           title: 'S3', // l10n-ignore: protocol name
                           subtitle: l10n.sourcesAddS3Subtitle,
                           onTap: () => open('/sources/add/s3'),
@@ -144,7 +136,6 @@ class AddSourceScreen extends ConsumerWidget {
                       children: [
                         SettingsRow.navigation(
                           key: const Key('add-source-restore'),
-                          icon: Icons.settings_backup_restore_rounded,
                           title: l10n.backupRestoreTitle,
                           subtitle: l10n.backupRestoreSubtitle,
                           onTap: () => open(restoreBackupLocation),

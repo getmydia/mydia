@@ -27,16 +27,12 @@ FocusNode _node(WidgetTester tester, String title) {
 void main() {
   _focusTests();
   group('SettingsRow.navigation', () {
-    testWidgets('shows its title, subtitle, and trailing value', (
-      tester,
-    ) async {
+    testWidgets('shows its title, subtitle, and chevron', (tester) async {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.hd,
           title: 'Default quality',
           subtitle: 'Used when a title has no saved preference',
-          value: '1080p',
           onTap: () {},
         ),
       );
@@ -46,7 +42,6 @@ void main() {
         find.text('Used when a title has no saved preference'),
         findsOneWidget,
       );
-      expect(find.text('1080p'), findsOneWidget);
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     });
 
@@ -56,7 +51,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: 'Connection details',
           subtitle: 'Connected through a relay',
           subtitleDotColor: const Color(0xFFE8722C),
@@ -77,7 +71,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: 'Connection details',
           subtitle: 'Connected through a relay',
           onTap: () {},
@@ -93,7 +86,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: 'Connection details',
           subtitleDotColor: const Color(0xFFE8722C),
           onTap: () {},
@@ -106,11 +98,7 @@ void main() {
     testWidgets('a null onTap dims the row', (tester) async {
       await _pump(
         tester,
-        const SettingsRow.navigation(
-          icon: Icons.hd,
-          title: 'Default quality',
-          onTap: null,
-        ),
+        const SettingsRow.navigation(title: 'Default quality', onTap: null),
       );
 
       final opacity = tester.widget<Opacity>(
@@ -128,11 +116,7 @@ void main() {
       var taps = 0;
       await _pump(
         tester,
-        SettingsRow.navigation(
-          icon: Icons.devices,
-          title: 'Paired devices',
-          onTap: () => taps++,
-        ),
+        SettingsRow.navigation(title: 'Paired devices', onTap: () => taps++),
       );
 
       await tester.tap(find.text('Paired devices'));
@@ -142,13 +126,181 @@ void main() {
     });
   });
 
+  group('SettingsRow restyle', () {
+    testWidgets('rows are at least 52 tall', (tester) async {
+      for (final row in <Widget>[
+        SettingsRow.navigation(title: 'Nav', onTap: () {}),
+        SettingsRow.toggle(title: 'Tog', value: false, onChanged: (_) {}),
+        SettingsRow.action(title: 'Act', onTap: () {}),
+      ]) {
+        await _pump(tester, row);
+        expect(
+          tester.getSize(find.byType(SettingsRow)).height,
+          greaterThanOrEqualTo(52),
+        );
+      }
+    });
+  });
+
+  group('SettingsRow switch size', () {
+    testWidgets('the switch lays out 40x24 and a title-only toggle is 52', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        SettingsRow.toggle(title: 'Tog', value: false, onChanged: (_) {}),
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('settings-row-switch-box'))),
+        const Size(40, 24),
+      );
+      expect(tester.getSize(find.byType(SettingsRow)).height, 52);
+    });
+
+    testWidgets('a long select value is ellipsized within 200', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'A very long value ' * 10,
+          onTap: () {},
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester
+            .getSize(find.byKey(const Key('settings-row-select-value')))
+            .width,
+        lessThanOrEqualTo(200),
+      );
+    });
+  });
+
+  group('SettingsRow.select', () {
+    testWidgets('the value is 30 tall and grows with large text', (
+      tester,
+    ) async {
+      Size valueSize() =>
+          tester.getSize(find.byKey(const Key('settings-row-select-value')));
+      final row = SettingsRow.select(
+        title: 'Default quality',
+        value: 'Auto',
+        onTap: () {},
+      );
+
+      await _pump(tester, row);
+      expect(valueSize().height, 30);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(3)),
+            child: Scaffold(body: ListView(children: [row])),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(valueSize().height, greaterThan(30));
+    });
+
+    testWidgets('a null value draws no value button', (tester) async {
+      await _pump(
+        tester,
+        const SettingsRow.select(
+          title: 'Default quality',
+          value: null,
+          onTap: null,
+        ),
+      );
+      expect(find.byKey(const Key('settings-row-select-value')), findsNothing);
+      expect(find.byIcon(Icons.expand_more), findsNothing);
+    });
+
+    testWidgets('shows value and chevron-down', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: () {},
+        ),
+      );
+      expect(find.text('Auto'), findsOneWidget);
+      expect(find.byIcon(Icons.expand_more), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(
+        find.byKey(const Key('settings-row-select-value')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('activates by tap and by Enter', (tester) async {
+      var taps = 0;
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: () => taps++,
+        ),
+      );
+      await tester.tap(find.text('Default quality'));
+      await tester.pump();
+      _node(tester, 'Default quality').requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(taps, 2);
+    });
+
+    testWidgets('value button is not a second focus stop', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: () {},
+        ),
+      );
+      final scope = FocusScope.of(
+        tester.element(find.byKey(const Key('settings-row-select-value'))),
+      );
+      final stops = scope.traversalDescendants.where((n) => n.canRequestFocus);
+      expect(stops.length, 1);
+      expect(
+        stops.single,
+        _node(tester, 'Default quality'),
+        reason: 'the only stop is the row itself',
+      );
+    });
+
+    testWidgets('null onTap dims select', (tester) async {
+      await _pump(
+        tester,
+        const SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: null,
+        ),
+      );
+      final opacity = tester.widget<Opacity>(
+        find
+            .descendant(
+              of: find.byType(SettingsRow),
+              matching: find.byType(Opacity),
+            )
+            .first,
+      );
+      expect(opacity.opacity, 0.45);
+    });
+  });
+
   group('SettingsRow.toggle', () {
     testWidgets('reports its value and reports changes', (tester) async {
       bool? received;
       await _pump(
         tester,
         SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros and credits',
           value: false,
           onChanged: (next) => received = next,
@@ -167,7 +319,6 @@ void main() {
       await _pump(
         tester,
         const SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros and credits',
           value: false,
           onChanged: null,
@@ -185,7 +336,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.action(
-          icon: Icons.refresh,
           title: 'Check for updates',
           trailing: const Text('Check now'),
           onTap: () {},
@@ -201,12 +351,7 @@ void main() {
     ) async {
       await _pump(
         tester,
-        SettingsRow.action(
-          icon: Icons.logout,
-          title: 'Sign out',
-          danger: true,
-          onTap: () {},
-        ),
+        SettingsRow.action(title: 'Sign out', danger: true, onTap: () {}),
       );
 
       final context = tester.element(find.text('Sign out'));
@@ -223,11 +368,7 @@ void main() {
       // `.action` and `.navigation` treat a null onTap differently.
       await _pump(
         tester,
-        const SettingsRow.action(
-          icon: Icons.refresh,
-          title: 'Check for updates',
-          onTap: null,
-        ),
+        const SettingsRow.action(title: 'Check for updates', onTap: null),
       );
 
       final inkWell = tester.widget<InkWell>(find.byType(InkWell));
@@ -252,11 +393,7 @@ void _focusTests() {
       var taps = 0;
       await _pump(
         tester,
-        SettingsRow.navigation(
-          icon: Icons.hd,
-          title: 'Default quality',
-          onTap: () => taps++,
-        ),
+        SettingsRow.navigation(title: 'Default quality', onTap: () => taps++),
       );
       _node(tester, 'Default quality').requestFocus();
       await tester.pump();
@@ -270,11 +407,7 @@ void _focusTests() {
     ) async {
       await _pump(
         tester,
-        const SettingsRow.navigation(
-          icon: Icons.hd,
-          title: 'Default quality',
-          onTap: null,
-        ),
+        const SettingsRow.navigation(title: 'Default quality', onTap: null),
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
@@ -286,7 +419,6 @@ void _focusTests() {
       await _pump(
         tester,
         SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros',
           value: false,
           onChanged: (v) => received = v,
@@ -303,17 +435,8 @@ void _focusTests() {
         tester,
         Column(
           children: [
-            SettingsRow.toggle(
-              icon: Icons.fast_forward,
-              title: 'First',
-              value: false,
-              onChanged: (_) {},
-            ),
-            SettingsRow.navigation(
-              icon: Icons.hd,
-              title: 'Second',
-              onTap: () {},
-            ),
+            SettingsRow.toggle(title: 'First', value: false, onChanged: (_) {}),
+            SettingsRow.navigation(title: 'Second', onTap: () {}),
           ],
         ),
       );
@@ -341,7 +464,6 @@ void _focusTests() {
       await _pump(
         tester,
         const SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros',
           value: false,
           onChanged: null,

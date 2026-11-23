@@ -54,6 +54,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(_inRow('Language'), findsOneWidget);
     expect(_inRow('System default'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('language-row')),
+        matching: find.byKey(const Key('settings-row-select-value')),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the picker lists system default and each shipped language', (

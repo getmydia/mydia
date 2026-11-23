@@ -7,6 +7,7 @@ import 'package:player/presentation/screens/settings/dialog/settings_dialog.dart
 Widget _page(SettingsCategory c) => Builder(
   builder: (context) => SettingsPane(
     title: c.label(context.l10n),
+    description: c.description(context.l10n),
     child: TextButton(
       key: Key('push-${c.name}'),
       onPressed: () => Navigator.of(context).push(
@@ -72,14 +73,17 @@ void main() {
   testWidgets('connections is the first sidebar category', (tester) async {
     await _open(tester);
     expect(SettingsCategory.values.first, SettingsCategory.connections);
-    final tiles = tester
-        .widgetList<ListTile>(find.byType(ListTile))
-        .map((t) => t.key)
-        .whereType<ValueKey<String>>()
-        .map((k) => k.value)
-        .where((k) => k.startsWith('settings-category-'))
-        .toList();
-    expect(tiles.first, 'settings-category-connections');
+    final items =
+        SettingsCategory.values
+            .map((c) => Key('settings-category-${c.name}'))
+            .toList()
+          ..sort(
+            (a, b) => tester
+                .getTopLeft(find.byKey(a))
+                .dy
+                .compareTo(tester.getTopLeft(find.byKey(b)).dy),
+          );
+    expect(items.first, const Key('settings-category-connections'));
     expect(find.text('Servers & devices'), findsWidgets);
     final icon = find.descendant(
       of: find.byKey(const Key('settings-category-connections')),
@@ -115,6 +119,27 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('settings-dialog')), findsNothing);
+  });
+
+  testWidgets('pane title is large with its description', (tester) async {
+    await _open(tester);
+    final title = tester.widget<Text>(
+      find.descendant(
+        of: find.byType(SettingsPane),
+        matching: find.text('Playback'),
+      ),
+    );
+    expect(title.style?.fontSize, 26);
+    expect(title.style?.fontWeight, FontWeight.w700);
+    expect(find.text('How titles play on this device.'), findsOneWidget);
+  });
+
+  testWidgets('close is a compact round button', (tester) async {
+    await _open(tester);
+    expect(
+      tester.getSize(find.byKey(const Key('settings-dialog-close'))),
+      const Size(30, 30),
+    );
   });
 
   testWidgets('the close button closes', (tester) async {

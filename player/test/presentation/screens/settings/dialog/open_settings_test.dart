@@ -190,9 +190,13 @@ void main() {
 
   SettingsCategory selected(WidgetTester tester) =>
       SettingsCategory.values.singleWhere(
-        (c) => tester
-            .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
-            .selected,
+        (c) =>
+            tester
+                .widget<Material>(
+                  find.byKey(Key('settings-category-${c.name}')),
+                )
+                .color !=
+            Colors.transparent,
       );
 
   /// The dialog's nav, as a row in the visible pane would find it.
@@ -224,6 +228,33 @@ void main() {
     await open(tester);
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
     expect(find.byKey(const Key('check-for-updates-row')), findsOneWidget);
+  });
+
+  testWidgets('appearance pane holds theme, material and language', (
+    tester,
+  ) async {
+    await pumpApp(tester, dialog: true, initial: SettingsCategory.appearance);
+    await open(tester);
+    expect(find.byKey(const Key('theme-preset-row')), findsOneWidget);
+    expect(find.byKey(const Key('language-row')), findsOneWidget);
+    // The pane title names it; the section adds no second header.
+    expect(
+      find.descendant(
+        of: find.byType(SettingsPane),
+        matching: find.text('Appearance'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('theme-preset-row'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('language-row'))).dy),
+    );
+  });
+
+  testWidgets('off desktop, appearance routes to /settings', (tester) async {
+    await pumpApp(tester, dialog: false, initial: SettingsCategory.appearance);
+    await open(tester);
+    expect(find.text('at /settings'), findsOneWidget);
   });
 
   testWidgets('ctrl-comma opens on connections', (tester) async {

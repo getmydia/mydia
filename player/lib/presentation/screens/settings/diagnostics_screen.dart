@@ -114,13 +114,11 @@ class DiagnosticsBody extends ConsumerWidget {
           label: l10n.settingsDiagnosticsTransport,
           children: [
             SettingsRow.action(
-              icon: Icons.lan_outlined,
               title: l10n.connectionLabel(summary),
               subtitle: l10n.connectionDetail(summary),
               trailing: _Dot(color: connectionToneColor(summary.tone)),
             ),
             SettingsRow.action(
-              icon: Icons.dns_outlined,
               title: l10n.settingsDiagnosticsRelay,
               trailing: _Value(
                 status.isRelayConnected
@@ -130,7 +128,6 @@ class DiagnosticsBody extends ConsumerWidget {
             ),
             if (status.relayUrl != null)
               SettingsRow.action(
-                icon: Icons.link,
                 title: l10n.settingsDiagnosticsRelayServer,
                 subtitle: status.relayUrl,
               ),
@@ -141,7 +138,6 @@ class DiagnosticsBody extends ConsumerWidget {
           label: l10n.settingsDiagnosticsPeers,
           children: [
             SettingsRow.action(
-              icon: Icons.hub_outlined,
               title: l10n.settingsDiagnosticsConnectedPeers,
               trailing: _Value(
                 status.connectedPeersCount == 0
@@ -157,7 +153,6 @@ class DiagnosticsBody extends ConsumerWidget {
             label: l10n.settingsDiagnosticsIdentity,
             children: [
               SettingsRow.action(
-                icon: Icons.fingerprint,
                 title: l10n.settingsDiagnosticsNodeAddress,
                 subtitle: status.nodeAddr,
               ),
@@ -233,7 +228,6 @@ class _PlaybackSection extends ConsumerWidget {
         if (onMac) ..._macVideoOutputRows(context, ref),
         if (report == null)
           SettingsRow.action(
-            icon: Icons.fullscreen,
             title: l10n.settingsDiagnosticsFullscreen,
             subtitle: l10n.settingsDiagnosticsNothingPlayed,
           )
@@ -243,17 +237,9 @@ class _PlaybackSection extends ConsumerWidget {
             // so a browser's rejection text laid out there overflows the row
             // on a phone. The subtitle is inside that column and wraps.
             if (label == FullscreenReport.lastFailureLabel)
-              SettingsRow.action(
-                icon: Icons.fullscreen,
-                title: label,
-                subtitle: value,
-              )
+              SettingsRow.action(title: label, subtitle: value)
             else
-              SettingsRow.action(
-                icon: Icons.fullscreen,
-                title: label,
-                trailing: _Value(value),
-              ),
+              SettingsRow.action(title: label, trailing: _Value(value)),
       ],
     );
   }
@@ -294,7 +280,6 @@ extension on _PlaybackSection {
     return [
       SettingsRow.toggle(
         key: const Key('legacy-mac-video-output'),
-        icon: Icons.movie_filter_outlined,
         title: l10n.settingsDiagnosticsLegacyVideoOutput,
         subtitle: l10n.settingsDiagnosticsLegacyVideoOutputHint,
         value: legacy ?? false,
@@ -305,7 +290,6 @@ extension on _PlaybackSection {
       if (bothRead)
         SettingsRow.action(
           key: const Key('mac-video-output-status'),
-          icon: Icons.tv_outlined,
           title: failedVersion == appVersion
               ? l10n.settingsDiagnosticsVideoOutputFallback(output)
               : l10n.settingsDiagnosticsVideoOutput(output),

@@ -63,7 +63,6 @@ class ConnectionsConstellationCard extends ConsumerWidget {
         children: [
           SettingsRow.navigation(
             key: const Key('connections-card-fallback'),
-            icon: Icons.hub_outlined,
             title: l10n.connectionsTitle,
             onTap: open,
           ),

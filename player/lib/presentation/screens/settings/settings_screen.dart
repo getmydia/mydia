@@ -177,15 +177,23 @@ class SettingsScreen extends ConsumerWidget {
                           const SizedBox(height: 18),
                           section(
                             1,
-                            PlaybackSettingsSection(
+                            PlaybackVideoSection(
                               settings: settings,
                               failed: settingsAsync.hasError,
                             ),
                           ),
                           const SizedBox(height: 18),
-                          section(2, const AppearanceSettingsSection()),
+                          section(
+                            2,
+                            PlaybackSkippingSection(
+                              settings: settings,
+                              failed: settingsAsync.hasError,
+                            ),
+                          ),
                           const SizedBox(height: 18),
-                          section(3, _ManageSection(connection: summary)),
+                          section(3, const AppearanceSettingsSection()),
+                          const SizedBox(height: 18),
+                          section(4, _ManageSection(connection: summary)),
                           VersionFooter(version: currentVersion),
                         ],
                       ),
@@ -302,7 +310,6 @@ class _ManageSection extends ConsumerWidget {
       label: context.l10n.settingsManageSection,
       children: [
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: context.l10n.settingsDiagnostics,
           subtitle: context.l10n.connectionLabel(connection),
           subtitleDotColor: connectionToneColor(connection.tone),
