@@ -20,3 +20,11 @@ const String kWindowChromeChannelName = 'dev.mydia.player/window_chrome';
 /// installs that channel's only Dart handler and a second one would replace
 /// it.
 const String kWindowFrameChannelName = 'dev.mydia.player/window_frame';
+
+/// The macOS window channel: every window call and event the app uses on
+/// macOS, served on the main thread by `macos/Runner/WindowPlugin.swift`
+/// (`WindowPlugin.channelName`). Changing this string requires updating it.
+///
+/// Exists because Dart runs off the main thread on macOS, where nativeapi
+/// cannot reach the window. See `mac_window_channel.dart`.
+const String kMacWindowChannelName = 'dev.mydia.player/window';
