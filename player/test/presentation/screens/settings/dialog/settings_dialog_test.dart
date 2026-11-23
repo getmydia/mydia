@@ -73,14 +73,17 @@ void main() {
   testWidgets('connections is the first sidebar category', (tester) async {
     await _open(tester);
     expect(SettingsCategory.values.first, SettingsCategory.connections);
-    final tiles = tester
-        .widgetList<ListTile>(find.byType(ListTile))
-        .map((t) => t.key)
-        .whereType<ValueKey<String>>()
-        .map((k) => k.value)
-        .where((k) => k.startsWith('settings-category-'))
-        .toList();
-    expect(tiles.first, 'settings-category-connections');
+    final items =
+        SettingsCategory.values
+            .map((c) => Key('settings-category-${c.name}'))
+            .toList()
+          ..sort(
+            (a, b) => tester
+                .getTopLeft(find.byKey(a))
+                .dy
+                .compareTo(tester.getTopLeft(find.byKey(b)).dy),
+          );
+    expect(items.first, const Key('settings-category-connections'));
     expect(find.text('Servers & devices'), findsWidgets);
     final icon = find.descendant(
       of: find.byKey(const Key('settings-category-connections')),

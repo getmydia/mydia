@@ -76,6 +76,10 @@
   "@settingsAbout": {
     "description": "Desktop settings category and page title showing the app version and updates."
   },
+  "settingsUpdateBadge": "Update",
+  "@settingsUpdateBadge": {
+    "description": "Small pill beside About in the desktop settings sidebar when an app update is available."
+  },
   "commonServer": "Server",
   "@commonServer": {
     "description": "The word Server on its own: page title for one server's settings when the server has no display name, and the row label for the server's version in the version mismatch dialog."

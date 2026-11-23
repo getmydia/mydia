@@ -77,17 +77,29 @@ const Size kSettingsDialogCompactBelow = Size(640, 420);
 const Size kSettingsDialogSize = Size(880, 600);
 const double kSettingsDialogInset = 24;
 
+typedef SettingsSidebarBuilder = Widget Function(
+  SettingsCategory selected,
+  bool compact,
+  ValueChanged<SettingsCategory> onSelect,
+);
+
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
     required this.controller,
     required this.rootPage,
     this.wrapPane,
+    this.sidebar,
   });
 
   final SettingsDialogController controller;
   final Widget Function(SettingsCategory category) rootPage;
   final Widget Function(BuildContext context, Widget child)? wrapPane;
+
+  /// Builds the sidebar. `openSettings` passes one that wires the account,
+  /// connection and update status; without it the dialog draws the plain
+  /// sidebar, so it pumps without a `ProviderScope`.
+  final SettingsSidebarBuilder? sidebar;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
@@ -126,6 +138,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 
   void _close() => Navigator.of(context).pop();
+
+  void _select(SettingsCategory c) => widget.controller.value = c;
 
   /// Esc: one level back in the pane, or out of the dialog at a root.
   void _escape() {
@@ -176,11 +190,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SettingsDialogSidebar(
-                    selected: selected,
-                    compact: compact,
-                    onSelect: (c) => widget.controller.value = c,
-                  ),
+                  widget.sidebar?.call(selected, compact, _select) ??
+                      SettingsDialogSidebar(
+                        selected: selected,
+                        compact: compact,
+                        onSelect: _select,
+                      ),
                   VerticalDivider(
                     width: 1,
                     thickness: 1,

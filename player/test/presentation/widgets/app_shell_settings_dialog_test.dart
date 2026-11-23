@@ -282,9 +282,13 @@ void main() {
 
   SettingsCategory selectedCategory(WidgetTester tester) =>
       SettingsCategory.values.singleWhere(
-        (c) => tester
-            .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
-            .selected,
+        (c) =>
+            tester
+                .widget<Material>(
+                  find.byKey(Key('settings-category-${c.name}')),
+                )
+                .color !=
+            Colors.transparent,
       );
 
   Future<void> pressCtrlComma(WidgetTester tester) async {

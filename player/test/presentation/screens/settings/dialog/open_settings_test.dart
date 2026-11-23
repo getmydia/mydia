@@ -190,9 +190,13 @@ void main() {
 
   SettingsCategory selected(WidgetTester tester) =>
       SettingsCategory.values.singleWhere(
-        (c) => tester
-            .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
-            .selected,
+        (c) =>
+            tester
+                .widget<Material>(
+                  find.byKey(Key('settings-category-${c.name}')),
+                )
+                .color !=
+            Colors.transparent,
       );
 
   /// The dialog's nav, as a row in the visible pane would find it.

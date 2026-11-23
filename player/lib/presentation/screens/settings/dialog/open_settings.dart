@@ -13,6 +13,7 @@ import '../../../../core/player/platform_features.dart';
 import '../settings_nav.dart';
 import 'settings_dialog.dart';
 import 'settings_panes.dart';
+import 'settings_sidebar_status.dart';
 
 /// Whether settings opens as a dialog. A provider rather than a direct
 /// platform check so widget tests, which always run on the host OS, can pick.
@@ -162,6 +163,9 @@ Future<void> openSettings(
     connectionsSection: connectionsSection,
   );
   final router = GoRouter.of(context);
+  // The shell location settings opened over: the sidebar's connection dot
+  // describes that location's source, as the shell's own dot does.
+  final location = router.routeInformationProvider.value.uri.toString();
   _open = controller;
   try {
     await showDialog<void>(
@@ -169,6 +173,12 @@ Future<void> openSettings(
       builder: (_) => SettingsDialog(
         controller: controller,
         rootPage: settingsRootPage,
+        sidebar: (selected, compact, onSelect) => SettingsSidebarStatus(
+          selected: selected,
+          compact: compact,
+          onSelect: onSelect,
+          location: location,
+        ),
         wrapPane: (context, child) => SettingsNavScope(
           nav: DialogSettingsNav(
             scope: SettingsDialogScope.of(context),
