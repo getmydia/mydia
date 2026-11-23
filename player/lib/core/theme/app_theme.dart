@@ -454,6 +454,9 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusCard),
         ),
+        // Frosted: every showDialog gets the scrim without its caller
+        // passing a barrierColor.
+        barrierColor: liquid ? null : roles.scrim,
       ),
 
       // Divider

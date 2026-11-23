@@ -32,7 +32,7 @@ class CertTrustDialog extends StatelessWidget {
         children: [
           const Icon(Icons.security, color: AppColors.warning),
           const SizedBox(width: 12),
-          Text(context.l10n.certTrustTitle),
+          Flexible(child: Text(context.l10n.certTrustTitle)),
         ],
       ),
       content: Column(

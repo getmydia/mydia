@@ -303,6 +303,10 @@ void main() {
     await tester.tap(find.byKey(const Key('lock-choice-locked')));
     await tester.pumpAndSettle();
     for (var round = 0; round < 2; round++) {
+      // The setup dialog scrolls; at the test's 800x600 the pad's last row
+      // sits below the fold.
+      await tester.ensureVisible(find.byKey(const Key('pin-pad-ok')).last);
+      await tester.pumpAndSettle();
       for (final d in '4821'.split('')) {
         await tester.tap(find.byKey(Key('pin-pad-$d')).last);
       }

@@ -26,7 +26,7 @@ class CompatibilityDetailsDialog extends StatelessWidget {
         children: [
           const Icon(Icons.system_update, color: AppColors.warning),
           const SizedBox(width: 12),
-          Text(context.l10n.compatDetailsTitle),
+          Flexible(child: Text(context.l10n.compatDetailsTitle)),
         ],
       ),
       content: Column(
