@@ -142,6 +142,113 @@ void main() {
     });
   });
 
+  group('SettingsRow restyle', () {
+    testWidgets('no icon tile is drawn', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.navigation(
+          icon: Icons.hd,
+          title: 'Default quality',
+          onTap: () {},
+        ),
+      );
+      expect(find.byIcon(Icons.hd), findsNothing);
+    });
+
+    testWidgets('rows are at least 52 tall', (tester) async {
+      for (final row in <Widget>[
+        SettingsRow.navigation(title: 'Nav', onTap: () {}),
+        SettingsRow.toggle(title: 'Tog', value: false, onChanged: (_) {}),
+        SettingsRow.action(title: 'Act', onTap: () {}),
+      ]) {
+        await _pump(tester, row);
+        expect(
+          tester.getSize(find.byType(SettingsRow)).height,
+          greaterThanOrEqualTo(52),
+        );
+      }
+    });
+  });
+
+  group('SettingsRow.select', () {
+    testWidgets('shows value and chevron-down', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: () {},
+        ),
+      );
+      expect(find.text('Auto'), findsOneWidget);
+      expect(find.byIcon(Icons.expand_more), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(
+        find.byKey(const Key('settings-row-select-value')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('activates by tap and by Enter', (tester) async {
+      var taps = 0;
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: () => taps++,
+        ),
+      );
+      await tester.tap(find.text('Default quality'));
+      await tester.pump();
+      _node(tester, 'Default quality').requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(taps, 2);
+    });
+
+    testWidgets('value button is not a second focus stop', (tester) async {
+      await _pump(
+        tester,
+        SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: () {},
+        ),
+      );
+      final scope = FocusScope.of(
+        tester.element(find.byKey(const Key('settings-row-select-value'))),
+      );
+      final stops = scope.traversalDescendants.where((n) => n.canRequestFocus);
+      expect(stops.length, 1);
+      expect(
+        stops.single,
+        _node(tester, 'Default quality'),
+        reason: 'the only stop is the row itself',
+      );
+    });
+
+    testWidgets('null onTap dims select', (tester) async {
+      await _pump(
+        tester,
+        const SettingsRow.select(
+          title: 'Default quality',
+          value: 'Auto',
+          onTap: null,
+        ),
+      );
+      final opacity = tester.widget<Opacity>(
+        find
+            .descendant(
+              of: find.byType(SettingsRow),
+              matching: find.byType(Opacity),
+            )
+            .first,
+      );
+      expect(opacity.opacity, 0.45);
+    });
+  });
+
   group('SettingsRow.toggle', () {
     testWidgets('reports its value and reports changes', (tester) async {
       bool? received;

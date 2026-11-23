@@ -3,20 +3,23 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../widgets/focus_highlight.dart';
 
-enum _RowKind { navigation, toggle, action }
+enum _RowKind { navigation, toggle, action, select }
 
 /// One row inside a [SettingsCard].
 ///
-/// Three named constructors rather than a pile of optional flags, so a call
-/// site reads as its intent: navigate somewhere, flip something, or do
+/// Four named constructors rather than a pile of optional flags, so a call
+/// site reads as its intent: navigate somewhere, flip something, pick a value, or do
 /// something.
 class SettingsRow extends StatelessWidget {
   final _RowKind _kind;
-  final IconData icon;
+
+  /// Ignored. Rows no longer draw an icon tile; Task 3 removes this.
+  final IconData? icon;
   final String title;
   final String? subtitle;
 
-  /// Muted trailing text. `.navigation` only.
+  /// Muted trailing text on `.navigation`; the select button's text on
+  /// `.select`.
   final String? valueLabel;
 
   /// Colour of a small status dot drawn before the subtitle. `.navigation`
@@ -42,7 +45,7 @@ class SettingsRow extends StatelessWidget {
   /// preferences are unavailable.
   const SettingsRow.navigation({
     super.key,
-    required this.icon,
+    this.icon,
     required this.title,
     this.subtitle,
     String? value,
@@ -62,7 +65,7 @@ class SettingsRow extends StatelessWidget {
   /// degraded Playback section is expressed when preferences fail to load.
   const SettingsRow.toggle({
     super.key,
-    required this.icon,
+    this.icon,
     required this.title,
     this.subtitle,
     required bool value,
@@ -83,7 +86,7 @@ class SettingsRow extends StatelessWidget {
   /// would make a healthy screen look broken.
   const SettingsRow.action({
     super.key,
-    required this.icon,
+    this.icon,
     required this.title,
     this.subtitle,
     this.trailing,
@@ -96,27 +99,43 @@ class SettingsRow extends StatelessWidget {
        subtitleDotColor = null,
        autofocus = false;
 
+  /// A row that picks one value from a list, shown as a button at the trailing
+  /// edge. Activating the row (not just the button) opens the picker.
+  ///
+  /// A null [onTap] dims the row, like `.navigation`.
+  const SettingsRow.select({
+    super.key,
+    this.icon,
+    required this.title,
+    this.subtitle,
+    required String value,
+    required this.onTap,
+  }) : _kind = _RowKind.select,
+       valueLabel = value,
+       trailing = null,
+       danger = false,
+       toggleValue = false,
+       onChanged = null,
+       subtitleDotColor = null,
+       autofocus = false;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final scheme = Theme.of(context).colorScheme;
     final isToggle = _kind == _RowKind.toggle;
     final dimmed =
-        (_kind == _RowKind.navigation && onTap == null) ||
+        ((_kind == _RowKind.navigation || _kind == _RowKind.select) &&
+            onTap == null) ||
         (isToggle && onChanged == null);
     final subtitleText = subtitle;
 
     final content = Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: isToggle ? 8 : 13,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 26),
+        constraints: const BoxConstraints(minHeight: 52 - 24),
         child: Row(
           children: [
-            _IconTile(icon: icon, danger: danger),
-            const SizedBox(width: 13),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,9 +144,8 @@ class SettingsRow extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 14.5,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      letterSpacing: -0.1,
                       color: danger ? scheme.error : palette.textPrimary,
                     ),
                   ),
@@ -138,9 +156,14 @@ class SettingsRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (valueLabel != null) ...[
+            if (valueLabel != null && _kind == _RowKind.navigation) ...[
               const SizedBox(width: 12),
               _ValueText(valueLabel!),
+            ],
+            if (_kind == _RowKind.select) ...[
+              const SizedBox(width: 12),
+              // The row is the focus target; the button is only a look.
+              ExcludeFocus(child: _SelectValue(valueLabel!)),
             ],
             if (trailing != null) ...[const SizedBox(width: 12), trailing!],
             if (isToggle) ...[
@@ -149,7 +172,10 @@ class SettingsRow extends StatelessWidget {
               // traversal order. It remains clickable by pointer: ExcludeFocus
               // only removes focusability, not hit testing.
               ExcludeFocus(
-                child: Switch(value: toggleValue, onChanged: onChanged),
+                child: Transform.scale(
+                  scale: 0.78,
+                  child: Switch(value: toggleValue, onChanged: onChanged),
+                ),
               ),
             ],
             if (_kind == _RowKind.navigation) ...[
@@ -198,29 +224,33 @@ class SettingsRow extends StatelessWidget {
   }
 }
 
-class _IconTile extends StatelessWidget {
-  const _IconTile({required this.icon, required this.danger});
+class _SelectValue extends StatelessWidget {
+  const _SelectValue(this.value);
 
-  final IconData icon;
-  final bool danger;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: 30,
+      key: const Key('settings-row-select-value'),
       height: 30,
+      padding: const EdgeInsets.only(left: 10, right: 6),
       decoration: BoxDecoration(
-        color: danger
-            ? scheme.error.withValues(alpha: 0.1)
-            : Colors.white.withValues(alpha: 0.05),
+        color: palette.surfaceHigh,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: palette.border),
       ),
-      child: Icon(
-        icon,
-        size: 16,
-        color: danger ? scheme.error : palette.textSecondary,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: TextStyle(fontSize: 13, color: palette.textPrimary),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.expand_more, size: 16, color: palette.textSecondary),
+        ],
       ),
     );
   }

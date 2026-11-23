@@ -430,6 +430,8 @@ class AppTheme {
 
       // Switch
       switchTheme: SwitchThemeData(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        thumbIcon: WidgetStateProperty.all<Icon?>(null),
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return p.primary;
