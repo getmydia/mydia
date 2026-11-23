@@ -300,18 +300,30 @@ void main() {
         const keys = [ValueKey('ep-0'), ValueKey('ep-1'), ValueKey('ep-2')];
         await _focus(tester, find.byKey(keys[0]));
 
-        expect(await _walk(tester, keys), [
-          keys[0],
-          keys[1],
-          keys[2],
-          keys[1],
-          keys[0],
-        ]);
-        // Every stop was the card itself, never its menu button.
-        expect(
-          FocusManager.instance.primaryFocus?.context?.widget,
-          isNot(isA<IconButton>()),
+        // The card's own node, not anything inside it such as the menu.
+        FocusNode cardNode(Key key) => Focus.of(
+          tester.element(
+            find.descendant(
+              of: find.byKey(key),
+              matching: find.byKey(FocusHighlight.ringKey),
+            ),
+          ),
         );
+
+        final visited = <FocusNode?>[FocusManager.instance.primaryFocus];
+        for (final key in [
+          LogicalKeyboardKey.arrowRight,
+          LogicalKeyboardKey.arrowRight,
+          LogicalKeyboardKey.arrowLeft,
+          LogicalKeyboardKey.arrowLeft,
+        ]) {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+          visited.add(FocusManager.instance.primaryFocus);
+        }
+        expect(visited, [
+          for (final i in [0, 1, 2, 1, 0]) cardNode(keys[i]),
+        ]);
       },
     );
   }, skip: tvSkipReason);

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../widgets/browse_grid.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../widgets/source_artwork.dart';
@@ -18,6 +19,7 @@ import '../../../core/focus/focus_memory.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/cache/invalidation_target.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
@@ -328,17 +330,28 @@ class CollectionDetailScreen extends ConsumerWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
+          // On the television tier the first row's focused poster grows
+          // under the glass bar unless the grid starts lower, as BrowseGrid
+          // does.
+          final topBleed = InputCapabilities.directionalPrimary
+              ? BrowseGrid.posterFocusBleed(
+                  width: constraints.maxWidth,
+                  columns: crossAxisCount,
+                  horizontalPadding: horizontalPadding,
+                  spacing: cardSpacing,
+                )
+              : 0.0;
 
           return GridView.builder(
             padding: EdgeInsets.fromLTRB(
               horizontalPadding,
-              topPadding,
+              topPadding + topBleed,
               horizontalPadding,
               bottomPadding,
             ),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: crossAxisCount,
-              childAspectRatio: 0.58,
+              childAspectRatio: BrowseGrid.posterAspectRatio,
               crossAxisSpacing: cardSpacing,
               mainAxisSpacing: cardSpacing + 4,
             ),
