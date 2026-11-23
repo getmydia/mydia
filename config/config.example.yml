@@ -115,7 +115,7 @@ media:
 
   # When automatic search may start looking for a movie:
   # announced (as soon as it is added), in_cinemas (theatrical release date) or
-  # released (earliest digital/physical release, else theatrical + 90 days).
+  # released (earliest of digital release, physical release, or theatrical + 90 days).
   # Each movie can override this.
   minimum_availability: released
 

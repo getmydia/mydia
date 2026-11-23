@@ -9,6 +9,8 @@ defmodule MydiaWeb.AdminSettingsLiveMinimumAvailabilityTest do
 
   setup %{conn: conn} do
     original_config = Application.get_env(:mydia, :runtime_config)
+    # Start from the schema defaults, whatever an earlier test left behind.
+    Application.put_env(:mydia, :runtime_config, Mydia.Config.Schema.defaults())
 
     on_exit(fn ->
       if original_config,

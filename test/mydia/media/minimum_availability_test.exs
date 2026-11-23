@@ -109,6 +109,11 @@ defmodule Mydia.Media.MinimumAvailabilityTest do
                )
     end
 
+    test "returns a Status struct" do
+      assert %MinimumAvailability.Status{level: "released"} =
+               MinimumAvailability.status(movie(%{}), "released", ~D[2031-01-01])
+    end
+
     test "a movie with nothing to wait for is available" do
       assert %{eligible_on: nil, available?: true} =
                MinimumAvailability.status(movie(%{}), "released", ~D[2031-01-01])

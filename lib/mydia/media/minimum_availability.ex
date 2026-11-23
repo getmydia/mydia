@@ -23,12 +23,12 @@ defmodule Mydia.Media.MinimumAvailability do
   """
 
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.MinimumAvailability.Status
 
   @fallback_days 90
   @unreleased_statuses ["Rumored", "Planned", "In Production", "Post Production"]
 
   @type level :: String.t()
-  @type status :: %{level: level(), eligible_on: Date.t() | nil, available?: boolean()}
 
   @doc "The level that applies to `item`: its override, else `global`."
   @spec effective(MediaItem.t(), level()) :: level()
@@ -52,11 +52,11 @@ defmodule Mydia.Media.MinimumAvailability do
   def eligible_on(%MediaItem{}, _unknown_level), do: nil
 
   @doc "Where `item` stands under the configured global level, today."
-  @spec status(MediaItem.t()) :: status()
+  @spec status(MediaItem.t()) :: Status.t()
   def status(%MediaItem{} = item), do: status(item, global_level(), Date.utc_today())
 
   @doc "Where `item` stands under `global` on `today`."
-  @spec status(MediaItem.t(), level(), Date.t()) :: status()
+  @spec status(MediaItem.t(), level(), Date.t()) :: Status.t()
   def status(%MediaItem{} = item, global, %Date{} = today) do
     level = effective(item, global)
     eligible_on = eligible_on(item, level)
@@ -66,7 +66,7 @@ defmodule Mydia.Media.MinimumAvailability do
         do: Date.compare(eligible_on, today) != :gt,
         else: not awaiting_date?(item, level)
 
-    %{level: level, eligible_on: eligible_on, available?: available?}
+    %Status{level: level, eligible_on: eligible_on, available?: available?}
   end
 
   # No date to wait for, but TMDB says the film is not out yet.
@@ -85,8 +85,8 @@ defmodule Mydia.Media.MinimumAvailability do
   Records a `search.skipped_unavailable` event: an automatic search for `item`
   waited because of `status` (from `status/1`).
   """
-  @spec record_skip(MediaItem.t(), status()) :: :ok
-  def record_skip(%MediaItem{} = item, %{level: level, eligible_on: eligible_on}) do
+  @spec record_skip(MediaItem.t(), Status.t()) :: :ok
+  def record_skip(%MediaItem{} = item, %Status{level: level, eligible_on: eligible_on}) do
     Mydia.Events.create_event_async(%{
       category: "search",
       type: "search.skipped_unavailable",

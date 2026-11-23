@@ -64,7 +64,7 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   def description("media.minimum_availability"),
     do:
       gettext(
-        "When automatic search may start looking for a movie. Announced searches as soon as it is added. In cinemas waits for its theatrical release date. Released waits for its earliest digital or physical release, or 90 days after the theatrical date when neither is known. Releases offered before then are almost always fakes. Each movie can override this, and the Search button on a movie's page ignores it."
+        "When automatic search may start looking for a movie. Announced searches as soon as it is added. In cinemas waits for its theatrical release date. Released waits for the earliest of its digital release, its physical release, and 90 days after its theatrical date. A movie with no dates waits while it is still unreleased. Releases offered before then are almost always fakes. Each movie can override this, and Search buttons you click ignore it."
       )
 
   def description("downloads.min_seeders"),
